@@ -1,14 +1,14 @@
-using System.Text;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
 using Harbor.Tui.CellForge.Rendering;
-
 namespace Harbor.Tui.CellForge.Tests;
 
-/// <summary>OSC 777 desktop notifications (osc-sprint §777): encoder goldens,
-/// envelope sanitization, urxvt-family detection, and the kitty OSC 99 probe
-/// answer intercepted by the parser as a capability event.</summary>
+/// <summary>
+///     OSC 777 desktop notifications (osc-sprint §777): encoder goldens,
+///     envelope sanitization, urxvt-family detection, and the kitty OSC 99 probe
+///     answer intercepted by the parser as a capability event.
+/// </summary>
 public class Osc777NotifyTests
 {
     // ── Encoder ────────────────────────────────────────────────────────────

@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-
 namespace Harbor.Abstractions.Permissions;
 
 /// <summary>
@@ -32,8 +31,8 @@ public enum ToolCategory
 }
 
 /// <summary>
-///     Classification of builtin tool names into <see cref="ToolCategory"/>,
-///     plus lookup of category names used inside <see cref="PermissionRule"/>
+///     Classification of builtin tool names into <see cref="ToolCategory" />,
+///     plus lookup of category names used inside <see cref="PermissionRule" />
 ///     permission fields.
 /// </summary>
 public static class ToolCategories
@@ -63,19 +62,19 @@ public static class ToolCategories
             .ToFrozenDictionary(c => c.ToString(), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    ///     The category of a builtin tool name; <see langword="false"/> for
+    ///     The category of a builtin tool name; <see langword="false" /> for
     ///     unknown (plugin) tools.
     /// </summary>
     public static bool TryClassify(string toolName, out ToolCategory category)
         => ByTool.TryGetValue(toolName, out category);
 
     /// <summary>
-    ///     True when <paramref name="rulePermission"/> names a category that
-    ///     contains <paramref name="toolName"/>.
+    ///     True when <paramref name="rulePermission" /> names a category that
+    ///     contains <paramref name="toolName" />.
     /// </summary>
     public static bool CategoryMatches(string rulePermission, string toolName)
     {
-        if (!ByName.TryGetValue(rulePermission, out ToolCategory category)) return false;
-        return ByTool.TryGetValue(toolName, out ToolCategory toolCategory) && toolCategory == category;
+        if (!ByName.TryGetValue(rulePermission, out var category)) return false;
+        return ByTool.TryGetValue(toolName, out var toolCategory) && toolCategory == category;
     }
 }

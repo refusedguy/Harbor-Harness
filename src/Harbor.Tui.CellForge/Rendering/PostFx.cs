@@ -1,11 +1,11 @@
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
-/// One frame's glow source, published by widgets during paint (renderer-moat
-/// T3): the screen-space region, the accent color the surface painted this
-/// frame (captured, never re-derived — no drift), and the effect intensity
-/// in [0..1]. Warning/error surfaces only by publisher contract (pending
-/// approval gates, error banners).
+///     One frame's glow source, published by widgets during paint (renderer-moat
+///     T3): the screen-space region, the accent color the surface painted this
+///     frame (captured, never re-derived — no drift), and the effect intensity
+///     in [0..1]. Warning/error surfaces only by publisher contract (pending
+///     approval gates, error banners).
 /// </summary>
 public readonly struct GlowRegion
 {
@@ -19,8 +19,10 @@ public readonly struct GlowRegion
     /// <summary>Screen-space region the glow applies to.</summary>
     public Rect Bounds { get; }
 
-    /// <summary>Accent color painted this frame — cells whose foreground
-    /// matches exactly are lifted toward the hot glow tone.</summary>
+    /// <summary>
+    ///     Accent color painted this frame — cells whose foreground
+    ///     matches exactly are lifted toward the hot glow tone.
+    /// </summary>
     public PackedColor Accent { get; }
 
     /// <summary>Effect strength this frame (0 = no glow — identity transform).</summary>
@@ -28,28 +30,30 @@ public readonly struct GlowRegion
 }
 
 /// <summary>
-/// Shader-like post-render stage (renderer-moat T3): transforms cells AFTER
-/// the diff selected them and right BEFORE the SGR automaton encodes them.
-/// Implementations must be pure functions of (position, cell, internal
-/// per-frame state) and allocation-free.
+///     Shader-like post-render stage (renderer-moat T3): transforms cells AFTER
+///     the diff selected them and right BEFORE the SGR automaton encodes them.
+///     Implementations must be pure functions of (position, cell, internal
+///     per-frame state) and allocation-free.
 /// </summary>
 public interface IPostEffect
 {
     /// <summary>Screen-space region the effect applies to (callers clip by it).</summary>
-    Rect Region { get; }
+    public Rect Region { get; }
 
-    /// <summary>Transforms one cell. Identity results cost nothing downstream
-    /// (the SGR automaton emits no delta for an unchanged style).</summary>
-    Cell Transform(int x, int y, in Cell cell);
+    /// <summary>
+    ///     Transforms one cell. Identity results cost nothing downstream
+    ///     (the SGR automaton emits no delta for an unchanged style).
+    /// </summary>
+    public Cell Transform(int x, int y, in Cell cell);
 }
 
 /// <summary>
-/// TachyonFX-style bloom/glow for warning/error states only: cells whose
-/// foreground matches the published accent (the warning/error tone the
-/// surface actually painted) blend toward a fixed "hot" tone — the accent
-/// burned toward white — proportional to the frame intensity. Every other
-/// cell in the region passes through untouched, so the bloom reads as a
-/// halo around the warning text, not a panel-wide wash.
+///     TachyonFX-style bloom/glow for warning/error states only: cells whose
+///     foreground matches the published accent (the warning/error tone the
+///     surface actually painted) blend toward a fixed "hot" tone — the accent
+///     burned toward white — proportional to the frame intensity. Every other
+///     cell in the region passes through untouched, so the bloom reads as a
+///     halo around the warning text, not a panel-wide wash.
 /// </summary>
 public sealed class GlowEffect : IPostEffect
 {
@@ -58,39 +62,13 @@ public sealed class GlowEffect : IPostEffect
 
     /// <summary>Fraction of the way to white the hot tone sits (fixed burn).</summary>
     private const double HotBurn = 0.65;
-
-    private Rect _region;
     private PackedColor _accent;
     private PackedColor _hot;
     private double _intensity;
 
+    private Rect _region;
+
     public Rect Region => _region;
-
-    /// <summary>
-    /// Per-frame refresh — zero-alloc. The hot tone is derived once per frame
-    /// from the accent (accent lerped <see cref="HotBurn"/> toward white), so
-    /// the transform itself stays two integer compares plus one color lerp.
-    /// </summary>
-    public void Update(in GlowRegion region)
-    {
-        _region = region.Bounds;
-        _accent = region.Accent;
-        _intensity = region.Intensity;
-
-        if (_accent.IsRgb)
-        {
-            var (r, g, b) = _accent.RgbChannels;
-            _hot = PackedColor.Rgb(Burn(r), Burn(g), Burn(b));
-        }
-        else
-        {
-            // Palette-index accents don't glow (publisher contract: accents
-            // are truecolor ChatPalette projections).
-            _hot = _accent;
-        }
-
-        static byte Burn(byte channel) => (byte)(channel + ((255 - channel) * HotBurn));
-    }
 
     public Cell Transform(int x, int y, in Cell cell)
     {
@@ -106,29 +84,56 @@ public sealed class GlowEffect : IPostEffect
         var glow = PanelFx.Lerp(style.Fg, _hot, _intensity * PeakStrength);
         return Cell.FromRaw(cell.Rune, glow.Value, cell.Bg, cell.Flags, cell.Width);
     }
+
+    /// <summary>
+    ///     Per-frame refresh — zero-alloc. The hot tone is derived once per frame
+    ///     from the accent (accent lerped <see cref="HotBurn" /> toward white), so
+    ///     the transform itself stays two integer compares plus one color lerp.
+    /// </summary>
+    public void Update(in GlowRegion region)
+    {
+        _region = region.Bounds;
+        _accent = region.Accent;
+        _intensity = region.Intensity;
+
+        if (_accent.IsRgb)
+        {
+            (byte r, byte g, byte b) = _accent.RgbChannels;
+            _hot = PackedColor.Rgb(Burn(r), Burn(g), Burn(b));
+        }
+        else
+        {
+            // Palette-index accents don't glow (publisher contract: accents
+            // are truecolor ChatPalette projections).
+            _hot = _accent;
+        }
+
+        static byte Burn(byte channel) => (byte)(channel + (255 - channel) * HotBurn);
+    }
 }
 
 /// <summary>
-/// Composable effect pipeline (renderer-moat T3): a fixed slot table of
-/// post-render stages applied in slot order after the diff selects a cell
-/// and before the ANSI write. The empty pipeline (the steady state on
-/// non-effect frames) short-circuits to a single null/zero check — zero
-/// perf regression, byte-identical output. All state lives in the fixed
-/// slot array; the steady path allocates nothing.
+///     Composable effect pipeline (renderer-moat T3): a fixed slot table of
+///     post-render stages applied in slot order after the diff selects a cell
+///     and before the ANSI write. The empty pipeline (the steady state on
+///     non-effect frames) short-circuits to a single null/zero check — zero
+///     perf regression, byte-identical output. All state lives in the fixed
+///     slot array; the steady path allocates nothing.
 /// </summary>
 public sealed class PostFxPipeline
 {
     public const int MaxEffects = 8;
 
     private readonly IPostEffect?[] _slots = new IPostEffect?[MaxEffects];
-    private int _count;
 
     /// <summary>Number of armed effects (0 → the pipeline is a no-op).</summary>
-    public int Count => _count;
+    public int Count { get; private set; }
 
-    /// <summary>Installs (or removes with null) an effect in one slot. The
-    /// same effect instance is refreshed per frame via its own Update-like
-    /// method — arming the pipeline never allocates.</summary>
+    /// <summary>
+    ///     Installs (or removes with null) an effect in one slot. The
+    ///     same effect instance is refreshed per frame via its own Update-like
+    ///     method — arming the pipeline never allocates.
+    /// </summary>
     public void Set(int slot, IPostEffect? effect)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(slot);
@@ -141,11 +146,13 @@ public sealed class PostFxPipeline
     public void Clear()
     {
         Array.Clear(_slots, 0, _slots.Length);
-        _count = 0;
+        Count = 0;
     }
 
-    /// <summary>Runs <paramref name="cell"/> through every armed effect whose
-    /// region contains the position, in slot order.</summary>
+    /// <summary>
+    ///     Runs <paramref name="cell" /> through every armed effect whose
+    ///     region contains the position, in slot order.
+    /// </summary>
     public Cell Transform(int x, int y, in Cell cell)
     {
         var current = cell;
@@ -174,6 +181,6 @@ public sealed class PostFxPipeline
             }
         }
 
-        _count = count;
+        Count = count;
     }
 }

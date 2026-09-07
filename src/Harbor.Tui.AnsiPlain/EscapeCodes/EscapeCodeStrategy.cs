@@ -1,7 +1,7 @@
+using Harbor.Terminal.Abstractions.Renderers;
 namespace Harbor.Tui.AnsiPlain.EscapeCodes;
 
-using Harbor.Terminal.Abstractions.Renderers;
-using Terminal = Harbor.Terminal.Abstractions;
+using Terminal = Terminal.Abstractions;
 
 /// <summary>
 ///     Escape-code strategy for the unified <c>AnsiPlain</c> renderer
@@ -12,8 +12,8 @@ using Terminal = Harbor.Terminal.Abstractions;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Strategy pattern (GoF): <see cref="AnsiEscapeStrategy"/> produces
-///         ECMA-48 SGR/CSI sequences; <see cref="NullEscapeStrategy"/> returns
+///         Strategy pattern (GoF): <see cref="AnsiEscapeStrategy" /> produces
+///         ECMA-48 SGR/CSI sequences; <see cref="NullEscapeStrategy" /> returns
 ///         empty strings for every code, collapsing all styling to raw text.
 ///         All members are pure string factories — no Console side effects —
 ///         which keeps the strategy AOT-safe and unit-testable.
@@ -22,35 +22,35 @@ using Terminal = Harbor.Terminal.Abstractions;
 public interface IEscapeCodeStrategy
 {
     /// <summary>Whether this strategy actually styles output.</summary>
-    bool SupportsColor { get; }
+    public bool SupportsColor { get; }
 
     /// <summary>SGR reset (or empty for the null strategy).</summary>
-    string Reset { get; }
+    public string Reset { get; }
 
-    /// <summary>SGR 24-bit foreground sequence for <paramref name="color"/>.</summary>
-    string Foreground(TuiColor color);
+    public string HideCursor { get; }
+    public string ShowCursor { get; }
+    public string ClearLine { get; }
+    public string ClearScreen { get; }
+    public string EnterAlternateScreen { get; }
+    public string ExitAlternateScreen { get; }
 
-    /// <summary>SGR 24-bit background sequence for <paramref name="color"/>.</summary>
-    string Background(TuiColor color);
+    /// <summary>SGR 24-bit foreground sequence for <paramref name="color" />.</summary>
+    public string Foreground(TuiColor color);
+
+    /// <summary>SGR 24-bit background sequence for <paramref name="color" />.</summary>
+    public string Background(TuiColor color);
 
     /// <summary>
-    ///     SGR parameter list for <paramref name="style"/> (e.g. <c>"1;3"</c>),
+    ///     SGR parameter list for <paramref name="style" /> (e.g. <c>"1;3"</c>),
     ///     or empty when the style is empty / unsupported.
     /// </summary>
-    string Style(TuiStyle style);
-
-    string HideCursor { get; }
-    string ShowCursor { get; }
-    string ClearLine { get; }
-    string ClearScreen { get; }
-    string EnterAlternateScreen { get; }
-    string ExitAlternateScreen { get; }
+    public string Style(TuiStyle style);
 
     /// <summary>
     ///     CUP cursor positioning (<c>ESC[row;colH</c>, 1-based) or empty when
     ///     the sink cannot move the cursor.
     /// </summary>
-    string CursorPosition(int row, int col);
+    public string CursorPosition(int row, int col);
 }
 
 /// <summary>
@@ -61,6 +61,13 @@ public interface IEscapeCodeStrategy
 /// </summary>
 public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
 {
+
+    private const string HideCursorSeq = "\x1b[?25l";
+    private const string ShowCursorSeq = "\x1b[?25h";
+    private const string ClearLineSeq = "\x1b[2K\r";
+    private const string ClearScreenSeq = "\x1b[2J\x1b[H";
+    private const string EnterAlternateScreenSeq = "\x1b[?1049h";
+    private const string ExitAlternateScreenSeq = "\x1b[?1049l";
     /// <summary>Singleton instance — the strategy is stateless.</summary>
     public static readonly AnsiEscapeStrategy Instance = new();
 
@@ -94,7 +101,7 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
     /// </summary>
     private static string SgrParams(TuiStyle style)
     {
-        StyleFlag flags = MapStyle(style);
+        var flags = MapStyle(style);
         if (flags == StyleFlag.None)
             return string.Empty;
 
@@ -117,16 +124,9 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
         sb.Append(code);
     }
 
-    private const string HideCursorSeq = "\x1b[?25l";
-    private const string ShowCursorSeq = "\x1b[?25h";
-    private const string ClearLineSeq = "\x1b[2K\r";
-    private const string ClearScreenSeq = "\x1b[2J\x1b[H";
-    private const string EnterAlternateScreenSeq = "\x1b[?1049h";
-    private const string ExitAlternateScreenSeq = "\x1b[?1049l";
-
     private static StyleFlag MapStyle(TuiStyle style)
     {
-        StyleFlag flags = StyleFlag.None;
+        var flags = StyleFlag.None;
         if (style.HasFlag(TuiStyle.Bold)) flags |= StyleFlag.Bold;
         if (style.HasFlag(TuiStyle.Dim)) flags |= StyleFlag.Dim;
         if (style.HasFlag(TuiStyle.Italic)) flags |= StyleFlag.Italic;

@@ -1,12 +1,11 @@
-using System.Diagnostics;
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Diagnostics;
-
+using System.Diagnostics;
+using System.Text.Json;
 namespace Harbor.Telemetry;
 
 /// <summary>
@@ -23,7 +22,7 @@ public sealed class InstrumentedToolRegistry(IToolRegistry inner, IMetrics metri
 
     public Result<ITool> GetTool(ToolName name)
     {
-        Result<ITool> resolved = inner.GetTool(name);
+        var resolved = inner.GetTool(name);
         return resolved.IsSuccess
             ? Result.Success<ITool>(new TelemetryToolDecorator(resolved.Value, metrics, tracer))
             : Result.Failure<ITool>(resolved.Error);
@@ -62,13 +61,13 @@ public sealed class TelemetryToolDecorator(ITool inner, IMetrics metrics, ITrace
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        using Harbor.Diagnostics.ITelemetrySpan? span = tracer.StartSpan(
+        using var span = tracer.StartSpan(
             "tool.execute",
             new KeyValuePair<string, object?>(TelemetryTagNames.ToolName, inner.Name.Value));
         long start = Stopwatch.GetTimestamp();
         try
         {
-            ToolResult result = await inner.ExecuteAsync(args, context, cancellationToken).ConfigureAwait(false);
+            var result = await inner.ExecuteAsync(args, context, cancellationToken).ConfigureAwait(false);
             Record(span, result.IsError ? "error" : "ok", start);
             return result;
         }
@@ -85,7 +84,7 @@ public sealed class TelemetryToolDecorator(ITool inner, IMetrics metrics, ITrace
         }
     }
 
-    private void Record(Harbor.Diagnostics.ITelemetrySpan? span, string status, long start)
+    private void Record(ITelemetrySpan? span, string status, long start)
     {
         double elapsedMs = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
         metrics.Counter(

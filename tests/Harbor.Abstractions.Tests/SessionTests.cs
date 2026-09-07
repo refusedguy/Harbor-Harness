@@ -1,6 +1,7 @@
-using System.Text.Json;
 using Harbor.Abstractions.Models;
+using System.Text.Json;
 namespace Harbor.Abstractions.Tests;
+
 public class SessionTests
 {
     [Test]

@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 namespace Harbor.Abstractions.Providers;
+
 /// <summary>
 ///     Strategy interface for LLM providers (Strategy pattern, GOF).
 ///     Each provider (Anthropic, OpenAI, OpenAI-compatible, etc.) implements this.

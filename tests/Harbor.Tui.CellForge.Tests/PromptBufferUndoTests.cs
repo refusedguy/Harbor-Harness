@@ -1,12 +1,11 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Composer undo/redo core: every effective text edit checkpoints the
-/// pre-edit state; no-op edits never pollute the timeline; clear purges
-/// history so undo cannot cross draft boundaries.
+///     Composer undo/redo core: every effective text edit checkpoints the
+///     pre-edit state; no-op edits never pollute the timeline; clear purges
+///     history so undo cannot cross draft boundaries.
 /// </summary>
 public class PromptBufferUndoTests
 {
@@ -63,7 +62,7 @@ public class PromptBufferUndoTests
         var buf = new PromptBuffer();
         _ = buf.InsertText("abc");
         _ = buf.Backspace(); // draft "ab"
-        _ = buf.Undo();      // restored "abc"
+        _ = buf.Undo(); // restored "abc"
 
         _ = buf.Insert(new Rune('!')); // fork: redo history must die
         await Assert.That(buf.Redo()).IsEqualTo(EditOutcome.Unchanged);
@@ -77,7 +76,7 @@ public class PromptBufferUndoTests
     {
         var buf = new PromptBuffer();
 
-        for (var i = 0; i < 5; i++)
+        for (int i = 0; i < 5; i++)
         {
             await Assert.That(buf.Backspace()).IsEqualTo(EditOutcome.Unchanged);
         }

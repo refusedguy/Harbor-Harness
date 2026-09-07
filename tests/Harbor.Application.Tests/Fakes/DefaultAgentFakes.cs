@@ -2,25 +2,19 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-
 namespace Harbor.Application.Tests.Fakes;
 
 public sealed class FakeSessionStore(Session session) : ISessionStore
 {
     private readonly object _lock = new();
     private readonly List<AgentMessage> _messages = [];
-    private TaskCompletionSource? _gatedAppend;
     private int _appends;
+    private TaskCompletionSource? _gatedAppend;
 
     public int Appends => Volatile.Read(ref _appends);
 
     /// <summary>Working directory last passed to <see cref="CreateAsync" /> (null = never called).</summary>
     public string? LastCreatedDirectory { get; private set; }
-
-    public void GateNextAppend(TaskCompletionSource gate)
-    {
-        _gatedAppend = gate;
-    }
 
     public Task<Result<Session>> CreateAsync(
         string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
@@ -67,7 +61,7 @@ public sealed class FakeSessionStore(Session session) : ISessionStore
     {
         lock (_lock)
         {
-            return Task.FromResult(Result.Success<IReadOnlyList<AgentMessage>>([.. _messages]));
+            return Task.FromResult(Result.Success<IReadOnlyList<AgentMessage>>([.._messages]));
         }
     }
 
@@ -85,6 +79,8 @@ public sealed class FakeSessionStore(Session session) : ISessionStore
 
     public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
         => Task.FromResult(Result.Success());
+
+    public void GateNextAppend(TaskCompletionSource gate) => _gatedAppend = gate;
 
     private async Task<Result> AwaitGateThenAppend(TaskCompletionSource gate, AgentMessage message)
     {

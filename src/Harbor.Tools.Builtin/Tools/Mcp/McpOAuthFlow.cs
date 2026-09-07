@@ -1,7 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
-
 namespace Harbor.Tools.Mcp;
 
 /// <summary>
@@ -208,7 +206,7 @@ public static class McpOAuthFlow
             new("code", code),
             new("redirect_uri", redirectUri),
             new("code_verifier", verifier),
-            new("client_id", clientId),
+            new("client_id", clientId)
         };
         if (!string.IsNullOrEmpty(clientSecret))
             fields.Add(new KeyValuePair<string, string>("client_secret", clientSecret));
@@ -228,7 +226,7 @@ public static class McpOAuthFlow
         {
             new("grant_type", "refresh_token"),
             new("refresh_token", refreshToken),
-            new("client_id", clientId),
+            new("client_id", clientId)
         };
         if (!string.IsNullOrEmpty(clientSecret))
             fields.Add(new KeyValuePair<string, string>("client_secret", clientSecret));
@@ -261,7 +259,9 @@ public static class McpOAuthFlow
                 ? rt.GetString()
                 : null;
             long expiresIn = root.TryGetProperty("expires_in", out var ei) && ei.ValueKind == JsonValueKind.Number
-                && ei.TryGetInt64(out long s) ? s : 3600;
+                                                                           && ei.TryGetInt64(out long s)
+                ? s
+                : 3600;
             return Result.Success(new McpOAuthTokens(
                 at.GetString()!, refresh, DateTimeOffset.UtcNow.AddSeconds(Math.Max(0, expiresIn))));
         }

@@ -1,12 +1,11 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-
 namespace Harbor.DesignSystem;
 
 /// <summary>
-/// Outcome of parsing theme JSON — never throws. Carries the parsed theme on
-/// success, the (joined) fatal error on failure, and non-fatal lint warnings
-/// in both cases (unknown properties, WCAG contrast concerns).
+///     Outcome of parsing theme JSON — never throws. Carries the parsed theme on
+///     success, the (joined) fatal error on failure, and non-fatal lint warnings
+///     in both cases (unknown properties, WCAG contrast concerns).
 /// </summary>
 public sealed record ThemeParseResult
 {
@@ -30,7 +29,7 @@ public sealed record ThemeParseResult
     {
         IsSuccess = true,
         Theme = theme,
-        Warnings = warnings,
+        Warnings = warnings
     };
 
     /// <summary>Failed outcome — <paramref name="errors" /> is joined into <see cref="Error" />.</summary>
@@ -39,7 +38,7 @@ public sealed record ThemeParseResult
         IsSuccess = false,
         Error = string.Join("; ", errors),
         Errors = errors,
-        Warnings = warnings,
+        Warnings = warnings
     };
 }
 
@@ -71,15 +70,14 @@ internal sealed record ThemeDto(
 internal sealed partial class ThemeJsonContext : JsonSerializerContext;
 
 /// <summary>
-/// Canonical theme-JSON codec of the HDS marketplace format: every color slot
-/// is optional — omitted slots merge over a fallback theme, so an override
-/// file can tweak two accents without redefining the catalog. Hex colors
-/// accept <c>#RGB</c> and <c>#RRGGBB</c> (leading <c>#</c> optional). AOT-safe
-/// via <see cref="ThemeJsonContext" /> source generation.
-///
-/// On top of fatal validation (malformed JSON, invalid hex) the parser LINTS:
-/// unknown properties and WCAG contrast concerns surface as non-fatal
-/// <see cref="ThemeParseResult.Warnings" /> — the theme still loads.
+///     Canonical theme-JSON codec of the HDS marketplace format: every color slot
+///     is optional — omitted slots merge over a fallback theme, so an override
+///     file can tweak two accents without redefining the catalog. Hex colors
+///     accept <c>#RGB</c> and <c>#RRGGBB</c> (leading <c>#</c> optional). AOT-safe
+///     via <see cref="ThemeJsonContext" /> source generation.
+///     On top of fatal validation (malformed JSON, invalid hex) the parser LINTS:
+///     unknown properties and WCAG contrast concerns surface as non-fatal
+///     <see cref="ThemeParseResult.Warnings" /> — the theme still loads.
 /// </summary>
 public static class ThemeJson
 {
@@ -89,7 +87,7 @@ public static class ThemeJson
     private static readonly JsonDocumentOptions DocumentOptions = new()
     {
         AllowTrailingCommas = true,
-        CommentHandling = JsonCommentHandling.Skip,
+        CommentHandling = JsonCommentHandling.Skip
     };
 
     private static readonly (string Key, Func<HarborTheme, RgbColor> Get)[] Slots =
@@ -107,19 +105,19 @@ public static class ThemeJson
         ("surface2", t => t.Surface2),
         ("border", t => t.Border),
         ("muted", t => t.Muted),
-        ("text", t => t.Text),
+        ("text", t => t.Text)
     ];
 
     private static readonly HashSet<string> KnownKeys =
     [
         "name",
-        .. Slots.Select(s => s.Key),
+        ..Slots.Select(s => s.Key)
     ];
 
     /// <summary>
-    /// Parses theme JSON, merging omitted slots over <paramref name="fallback" />.
-    /// Never throws — malformed input returns a failed
-    /// <see cref="ThemeParseResult" /> carrying the reason.
+    ///     Parses theme JSON, merging omitted slots over <paramref name="fallback" />.
+    ///     Never throws — malformed input returns a failed
+    ///     <see cref="ThemeParseResult" /> carrying the reason.
     /// </summary>
     public static ThemeParseResult Parse(string json, HarborTheme fallback)
     {
@@ -145,7 +143,7 @@ public static class ThemeJson
 
         var errors = new List<string>();
         var values = new Dictionary<string, RgbColor>(StringComparer.Ordinal);
-        foreach (var (key, get) in Slots)
+        foreach ((string key, var get) in Slots)
         {
             string? hex = GetDtoSlot(dto, key);
             if (string.IsNullOrWhiteSpace(hex))
@@ -175,7 +173,7 @@ public static class ThemeJson
             values["background"], values["panel"], values["surface"], values["surface2"],
             values["border"], values["muted"], values["text"]);
 
-        warnings = [.. warnings, .. LintContrast(theme)];
+        warnings = [..warnings, ..LintContrast(theme)];
         return ThemeParseResult.Ok(theme, warnings);
     }
 
@@ -193,8 +191,8 @@ public static class ThemeJson
     }
 
     /// <summary>
-    /// Parses <c>#RGB</c> / <c>#RRGGBB</c> hex (leading <c>#</c> optional,
-    /// case-insensitive). Canonical port shared by every theme loader.
+    ///     Parses <c>#RGB</c> / <c>#RRGGBB</c> hex (leading <c>#</c> optional,
+    ///     case-insensitive). Canonical port shared by every theme loader.
     /// </summary>
     public static bool TryParseHex(string hex, out RgbColor color)
     {
@@ -217,9 +215,9 @@ public static class ThemeJson
         if (s.Length == 6 && s.All(char.IsAsciiHexDigit))
         {
             color = new RgbColor(
-                (byte)((HexVal(s[0]) << 4) | HexVal(s[1])),
-                (byte)((HexVal(s[2]) << 4) | HexVal(s[3])),
-                (byte)((HexVal(s[4]) << 4) | HexVal(s[5])));
+                (byte)(HexVal(s[0]) << 4 | HexVal(s[1])),
+                (byte)(HexVal(s[2]) << 4 | HexVal(s[3])),
+                (byte)(HexVal(s[4]) << 4 | HexVal(s[5])));
             return true;
         }
 
@@ -245,7 +243,7 @@ public static class ThemeJson
         "border" => dto.Border,
         "muted" => dto.Muted,
         "text" => dto.Text,
-        _ => throw new InvalidOperationException($"unknown theme slot: {key}"),
+        _ => throw new InvalidOperationException($"unknown theme slot: {key}")
     };
 
     private static IReadOnlyList<string> LintUnknownKeys(JsonElement root)
@@ -268,9 +266,9 @@ public static class ThemeJson
     }
 
     /// <summary>
-    /// WCAG lint (§Accessibility): body text below 4.5:1 and muted text below
-    /// 3:1 against the background are flagged as warnings, never fatal — a
-    /// theme author may deliberately trade contrast for style.
+    ///     WCAG lint (§Accessibility): body text below 4.5:1 and muted text below
+    ///     3:1 against the background are flagged as warnings, never fatal — a
+    ///     theme author may deliberately trade contrast for style.
     /// </summary>
     private static IReadOnlyList<string> LintContrast(HarborTheme theme)
     {
@@ -295,6 +293,6 @@ public static class ThemeJson
         >= '0' and <= '9' => c - '0',
         >= 'a' and <= 'f' => c - 'a' + 10,
         >= 'A' and <= 'F' => c - 'A' + 10,
-        _ => 0,
+        _ => 0
     };
 }

@@ -1,8 +1,6 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class CellForgeViewportTests
@@ -18,13 +16,13 @@ public class CellForgeViewportTests
         var transcript = new UiTranscriptModel(Array.Empty<UiBlock>(), lines, null);
         var header = new UiHeaderModel(
             string.Empty, string.Empty, string.Empty,
-            IsAgentRunning: false, IsStreaming: false, ShouldQuit: false,
+            false, false, false,
             new CostSnapshot(0, 0, 0m), string.Empty);
         return new UiScreenModel(
             header,
             transcript,
             new UiStatusBarModel(Array.Empty<UiStatusSegment>()),
-            new UiInputModel(string.Empty, 0, IsEnabled: true, string.Empty),
+            new UiInputModel(string.Empty, 0, true, string.Empty),
             FocusMode.Input,
             "rev");
     }

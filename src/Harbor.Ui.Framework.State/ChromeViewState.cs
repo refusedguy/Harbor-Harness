@@ -1,6 +1,5 @@
-using System.Collections.Immutable;
 using Harbor.Abstractions.Models.Identifiers;
-
+using System.Collections.Immutable;
 namespace Harbor.Ui.Framework.State;
 
 /// <summary>
@@ -20,6 +19,16 @@ namespace Harbor.Ui.Framework.State;
 /// </remarks>
 public sealed record ChromeViewState
 {
+
+    /// <summary>Toast severity levels.</summary>
+    public enum ToastSeverity
+    {
+        Info,
+        Success,
+        Warning,
+        Error
+    }
+
     /// <summary>Id of the currently active session, or null if none.</summary>
     public SessionId? ActiveSessionId { get; init; }
 
@@ -104,13 +113,4 @@ public sealed record ChromeViewState
     /// <param name="CreatedAt">UTC timestamp when the toast was created.</param>
     /// <param name="Id">Stable unique identifier for the toast.</param>
     public sealed record Toast(string Message, ToastSeverity Severity, DateTimeOffset CreatedAt, string Id);
-
-    /// <summary>Toast severity levels.</summary>
-    public enum ToastSeverity
-    {
-        Info,
-        Success,
-        Warning,
-        Error
-    }
 }

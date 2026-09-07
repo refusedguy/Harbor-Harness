@@ -1,37 +1,42 @@
-namespace Harbor.Hosting.Rendering;
-
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Tui;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using Microsoft.Extensions.Logging;
+namespace Harbor.Hosting.Rendering;
 
 /// <summary>
 ///     Lock-free hot-swappable renderer runtime (renderer-unification sprint
-///     Phase 6.3). Mirrors <see cref="UiStore"/>'s CAS discipline:
+///     Phase 6.3). Mirrors <see cref="UiStore" />'s CAS discipline:
 ///     <list type="bullet">
-///         <item><description>a <c>volatile</c> slot reference holds the
-///             published (renderer, backend id) pair — readers see either the
-///             old or the new renderer, never a torn state;</description></item>
-///         <item><description>an <c>Interlocked.CompareExchange</c> gate
-///             serializes swaps — concurrent swap requests fail fast instead of
-///             blocking the agent loop;</description></item>
-///         <item><description>the old renderer is disposed exactly once, after
-///             the new one is published.</description></item>
+///         <item>
+///             <description>
+///                 a <c>volatile</c> slot reference holds the
+///                 published (renderer, backend id) pair — readers see either the
+///                 old or the new renderer, never a torn state;
+///             </description>
+///         </item>
+///         <item>
+///             <description>
+///                 an <c>Interlocked.CompareExchange</c> gate
+///                 serializes swaps — concurrent swap requests fail fast instead of
+///                 blocking the agent loop;
+///             </description>
+///         </item>
+///         <item>
+///             <description>
+///                 the old renderer is disposed exactly once, after
+///                 the new one is published.
+///             </description>
+///         </item>
 ///     </list>
-///     The <see cref="UiStore"/> is only READ here (state snapshot restore);
+///     The <see cref="UiStore" /> is only READ here (state snapshot restore);
 ///     the store itself is never modified by the pipeline — agent loop and
 ///     swap are fully decoupled.
 /// </summary>
 public sealed class RendererPipeline : IRendererPipeline
 {
-    /// <summary>Immutable published state — the CAS target.</summary>
-    private sealed record Slot(ITuiRenderer Renderer, string BackendId);
+    private readonly Dictionary<string, Func<ITuiRenderer>> _factories = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ILogger _logger;
 
     private readonly object _registrationsGate = new();
-    private readonly Dictionary<string, Func<ITuiRenderer>> _factories = new(StringComparer.OrdinalIgnoreCase);
     private readonly UiStore? _store;
-    private readonly ILogger _logger;
 
     private volatile Slot? _current;
     private int _swapGate; // 0 = idle, 1 = swapping
@@ -64,7 +69,7 @@ public sealed class RendererPipeline : IRendererPipeline
         {
             lock (_registrationsGate)
             {
-                return [.. _factories.Keys];
+                return [.._factories.Keys];
             }
         }
     }
@@ -81,7 +86,7 @@ public sealed class RendererPipeline : IRendererPipeline
     /// <inheritdoc />
     public async Task<bool> SwapRendererAsync(string backendId, CancellationToken ct = default)
     {
-        Slot? published = _current;
+        var published = _current;
         if (published is null)
         {
             return false;
@@ -123,8 +128,8 @@ public sealed class RendererPipeline : IRendererPipeline
                 return false;
             }
 
-            ITuiRenderer next = factory();
-            Result init = await next.InitializeAsync(ct).ConfigureAwait(false);
+            var next = factory();
+            var init = await next.InitializeAsync(ct).ConfigureAwait(false);
             if (init.IsFailure)
             {
                 _logger.LogError("Swap to {Backend} aborted: initialization failed ({Error})", backendId, init.Error);
@@ -153,23 +158,33 @@ public sealed class RendererPipeline : IRendererPipeline
         }
     }
 
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        // The pipeline itself holds only the published slot; disposing it
+        // tears down the active renderer (the swap-gate is not a resource).
+        var published = _current;
+        published?.Renderer.Dispose();
+        _current = null;
+    }
+
     /// <summary>
-    ///     Restores the current <see cref="UiStore.State"/> chat history into
-    ///     <paramref name="renderer"/> — the swap-invariant that no streamed
+    ///     Restores the current <see cref="UiStore.State" /> chat history into
+    ///     <paramref name="renderer" /> — the swap-invariant that no streamed
     ///     token is lost across a swap. The store is only read, never written.
     /// </summary>
     private async Task RestoreStateIntoAsync(ITuiRenderer renderer, CancellationToken ct)
     {
-        UiState? snapshot = _store?.State;
+        var snapshot = _store?.State;
         if (snapshot is null || snapshot.Lines.IsEmpty)
         {
             return;
         }
 
-        foreach (ChatLine line in snapshot.Lines)
+        foreach (var line in snapshot.Lines)
         {
             ct.ThrowIfCancellationRequested();
-            Result written = await renderer.WriteLineAsync(line.Text, ct).ConfigureAwait(false);
+            var written = await renderer.WriteLineAsync(line.Text, ct).ConfigureAwait(false);
             if (written.IsFailure)
             {
                 // A failed line write is logged, not thrown — a partial
@@ -179,13 +194,6 @@ public sealed class RendererPipeline : IRendererPipeline
         }
     }
 
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        // The pipeline itself holds only the published slot; disposing it
-        // tears down the active renderer (the swap-gate is not a resource).
-        Slot? published = _current;
-        published?.Renderer.Dispose();
-        _current = null;
-    }
+    /// <summary>Immutable published state — the CAS target.</summary>
+    private sealed record Slot(ITuiRenderer Renderer, string BackendId);
 }

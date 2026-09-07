@@ -1,8 +1,9 @@
-using System.Collections.Immutable;
-using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Collections.Immutable;
+using System.Runtime.InteropServices;
 namespace Harbor.Abstractions.Events;
+
 /// <summary>
 ///     In-memory pub/sub event bus. Implements Observer pattern (GOF).
 ///     Thread-safe. Bounded scrollback backed by a fixed-capacity ring
@@ -57,12 +58,14 @@ namespace Harbor.Abstractions.Events;
 /// </remarks>
 public sealed class InMemoryEventBus : IEventBus
 {
-    /// <summary>Default per-handler budget (A4): one slow subscriber may hold
-    /// the fan-out for at most this long before it is left behind.</summary>
-    public static readonly TimeSpan DefaultHandlerBudget = TimeSpan.FromMilliseconds(250);
 
     /// <summary>Consecutive over-budget dispatches before a subscriber is evicted.</summary>
     private const int MaxSlowStrikes = 3;
+    /// <summary>
+    ///     Default per-handler budget (A4): one slow subscriber may hold
+    ///     the fan-out for at most this long before it is left behind.
+    /// </summary>
+    public static readonly TimeSpan DefaultHandlerBudget = TimeSpan.FromMilliseconds(250);
 
     /// <summary>Per-dispatch budget; TimeSpan.Zero disables the budget entirely.</summary>
     private readonly TimeSpan _handlerBudget;
@@ -81,6 +84,9 @@ public sealed class InMemoryEventBus : IEventBus
     /// </summary>
     private readonly IReadOnlyList<IEventBusMiddleware> _middlewares = Array.Empty<IEventBusMiddleware>();
 
+    /// <summary>Guards <see cref="_scrollbackRing" />, <see cref="_ringHead" /> and <see cref="_ringCount" />.</summary>
+    private readonly object _scrollbackLock = new();
+
     /// <summary>
     ///     Pre-allocated scrollback slots. Fixed capacity
     ///     (<see cref="_maxScrollback" />); entries are overwritten oldest-first
@@ -90,14 +96,11 @@ public sealed class InMemoryEventBus : IEventBus
     /// </summary>
     private readonly AgentEvent[] _scrollbackRing;
 
-    /// <summary>Guards <see cref="_scrollbackRing" />, <see cref="_ringHead"/> and <see cref="_ringCount"/>.</summary>
-    private readonly object _scrollbackLock = new();
-
-    /// <summary>Index of the OLDEST entry currently held in <see cref="_scrollbackRing"/>.</summary>
-    private int _ringHead;
-
-    /// <summary>Number of valid entries in <see cref="_scrollbackRing"/> (≤ <see cref="_maxScrollback"/>).</summary>
+    /// <summary>Number of valid entries in <see cref="_scrollbackRing" /> (≤ <see cref="_maxScrollback" />).</summary>
     private int _ringCount;
+
+    /// <summary>Index of the OLDEST entry currently held in <see cref="_scrollbackRing" />.</summary>
+    private int _ringHead;
 
     /// <summary>
     ///     Subscriptions collection. <see cref="ImmutableArray{T}" /> gives us O(1) lock-free
@@ -110,16 +113,22 @@ public sealed class InMemoryEventBus : IEventBus
     ///     Construct an <see cref="InMemoryEventBus" /> with a bounded scrollback buffer of the
     ///     supplied capacity.
     /// </summary>
-    /// <param name="maxScrollback">Maximum number of events retained for late-attaching subscribers. Zero or negative disables scrollback.</param>
-    public InMemoryEventBus(int maxScrollback = 1000) : this(NullLogger<InMemoryEventBus>.Instance, maxScrollback) { }
+    /// <param name="maxScrollback">
+    ///     Maximum number of events retained for late-attaching subscribers. Zero or negative disables
+    ///     scrollback.
+    /// </param>
+    public InMemoryEventBus(int maxScrollback = 1000) : this(NullLogger<InMemoryEventBus>.Instance, maxScrollback) {}
 
     /// <summary>
     ///     Construct an <see cref="InMemoryEventBus" /> with a logger and bounded scrollback buffer.
     /// </summary>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="maxScrollback">Maximum number of events retained for late-attaching subscribers. Zero or negative disables scrollback.</param>
+    /// <param name="maxScrollback">
+    ///     Maximum number of events retained for late-attaching subscribers. Zero or negative disables
+    ///     scrollback.
+    /// </param>
     public InMemoryEventBus(ILogger<InMemoryEventBus> logger, int maxScrollback = 1000)
-        : this(logger, maxScrollback, handlerBudget: DefaultHandlerBudget)
+        : this(logger, maxScrollback, DefaultHandlerBudget)
     {
     }
 
@@ -128,7 +137,10 @@ public sealed class InMemoryEventBus : IEventBus
     ///     scrollback buffer, and a middleware pipeline.
     /// </summary>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="maxScrollback">Maximum number of events retained for late-attaching subscribers. Zero or negative disables scrollback.</param>
+    /// <param name="maxScrollback">
+    ///     Maximum number of events retained for late-attaching subscribers. Zero or negative disables
+    ///     scrollback.
+    /// </param>
     /// <param name="middlewares">Middleware pipeline evaluated before scrollback + fan-out.</param>
     public InMemoryEventBus(ILogger<InMemoryEventBus> logger, int maxScrollback, IEnumerable<IEventBusMiddleware> middlewares)
         : this(logger, maxScrollback, DefaultHandlerBudget, middlewares)
@@ -144,11 +156,11 @@ public sealed class InMemoryEventBus : IEventBus
     ///     Per-subscriber dispatch budget. A handler exceeding it is no longer
     ///     awaited by the publisher (its task stays observed), the strike
     ///     counter increments, and after <c>MaxSlowStrikes</c> consecutive
-    ///     strikes the subscriber is evicted. <see cref="Timeout.InfiniteTimeSpan"/>-like
-    ///     semantics via <see cref="TimeSpan.Zero"/> (budget disabled).
+    ///     strikes the subscriber is evicted. <see cref="Timeout.InfiniteTimeSpan" />-like
+    ///     semantics via <see cref="TimeSpan.Zero" /> (budget disabled).
     /// </param>
     public InMemoryEventBus(ILogger<InMemoryEventBus> logger, int maxScrollback, TimeSpan handlerBudget)
-        : this(logger, maxScrollback, handlerBudget, middlewares: null)
+        : this(logger, maxScrollback, handlerBudget, null)
     {
     }
 
@@ -229,7 +241,7 @@ public sealed class InMemoryEventBus : IEventBus
         {
             int snapshotLength = snapshot.Length;
             bool budgetEnabled = _handlerBudget > TimeSpan.Zero;
-            using CancellationTokenSource? budgetCts = budgetEnabled
+            using var budgetCts = budgetEnabled
                 ? CancellationTokenSource.CreateLinkedTokenSource(ct)
                 : null;
 
@@ -280,15 +292,15 @@ public sealed class InMemoryEventBus : IEventBus
                     }
 
                     budgetCts!.CancelAfter(_handlerBudget);
-                    ValueTask dispatch = sub.Handler(@event, budgetCts.Token);
+                    var dispatch = sub.Handler(@event, budgetCts.Token);
                     if (dispatch.IsCompletedSuccessfully)
                     {
                         sub.ResetSlowStrikes();
                         continue;
                     }
 
-                    Task handlerTask = dispatch.AsTask();
-                    Task winner = await Task.WhenAny(handlerTask, Task.Delay(Timeout.InfiniteTimeSpan, ct))
+                    var handlerTask = dispatch.AsTask();
+                    var winner = await Task.WhenAny(handlerTask, Task.Delay(Timeout.InfiniteTimeSpan, ct))
                         .ConfigureAwait(false);
                     if (winner != handlerTask)
                     {

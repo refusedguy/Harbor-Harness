@@ -1,9 +1,7 @@
-using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -15,12 +13,12 @@ internal sealed class StubAgent : IAgent
 {
     private readonly List<Func<AgentEvent, CancellationToken, ValueTask>> _listeners = new();
     private readonly object _listenersLock = new();
-
-    public CancellationTokenSource AbortSource { get; private set; } = new();
-    public AgentState State { get; private set; } = null!;
     public string? LastPrompt { get; private set; }
     public string? LastSessionId { get; private set; }
     public string? LastAgentName { get; private set; }
+
+    public CancellationTokenSource AbortSource { get; private set; } = new();
+    public AgentState State { get; private set; } = null!;
 
     public Task<Result> PromptAsync(string text, CancellationToken ct = default)
     {
@@ -31,7 +29,7 @@ internal sealed class StubAgent : IAgent
         State = State with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
         // Emit a minimal AgentStartEvent so event-subscription tests can observe it.
         // Use Task.Run + ContinueWith to await PublishAsync without making PromptAsync async.
-        _ = PublishAsync(new AgentStartEvent(State.SessionId, Array.Empty<AgentMessage>(), null), ct)
+        _ = PublishAsync(new AgentStartEvent(State.SessionId, Array.Empty<AgentMessage>()), ct)
             .AsTask();
         State = State with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
         return Task.FromResult(Result.Success());
@@ -57,7 +55,10 @@ internal sealed class StubAgent : IAgent
 
     public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener)
     {
-        lock (_listenersLock) _listeners.Add(listener);
+        lock (_listenersLock)
+        {
+            _listeners.Add(listener);
+        }
         return new Unsub(this, listener);
     }
 
@@ -68,12 +69,11 @@ internal sealed class StubAgent : IAgent
         State = AgentState.Idle(session.Id, agent);
     }
 
-    public void Steer(AgentMessage message) { /* no-op */ }
-
-    public void Dispose()
-    {
-        AbortSource.Dispose();
+    public void Steer(AgentMessage message)
+    { /* no-op */
     }
+
+    public void Dispose() => AbortSource.Dispose();
 
     internal async ValueTask PublishAsync(AgentEvent evt, CancellationToken ct)
     {
@@ -90,8 +90,8 @@ internal sealed class StubAgent : IAgent
 
     private sealed class Unsub : IDisposable
     {
-        private readonly StubAgent _owner;
         private readonly Func<AgentEvent, CancellationToken, ValueTask> _listener;
+        private readonly StubAgent _owner;
 
         public Unsub(StubAgent owner, Func<AgentEvent, CancellationToken, ValueTask> listener)
         {
@@ -101,7 +101,10 @@ internal sealed class StubAgent : IAgent
 
         public void Dispose()
         {
-            lock (_owner._listenersLock) _owner._listeners.Remove(_listener);
+            lock (_owner._listenersLock)
+            {
+                _owner._listeners.Remove(_listener);
+            }
         }
     }
 }

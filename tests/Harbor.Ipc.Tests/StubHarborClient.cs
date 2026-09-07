@@ -1,9 +1,9 @@
-using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Tools;
-
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -15,10 +15,10 @@ internal sealed class StubHarborClient : IHarborClient
 {
     private readonly Channel<HarborEvent> _events = Channel.CreateUnbounded<HarborEvent>(
         new UnboundedChannelOptions { SingleReader = true });
-    private readonly TaskCompletionSource _promptSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _listStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private TaskCompletionSource? _promptGate;
+    private readonly TaskCompletionSource _promptSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private TaskCompletionSource? _listGate;
+    private TaskCompletionSource? _promptGate;
     private CancellationTokenSource? _runCts;
 
     public List<Session> Sessions { get; set; } = [];
@@ -29,28 +29,9 @@ internal sealed class StubHarborClient : IHarborClient
 
     public bool LastPromptAborted { get; private set; }
 
-    public bool IsConnected { get; private set; }
-
     public Session? BoundSession { get; set; }
 
-    /// <summary>Blocks subsequent <see cref="SendPromptAsync" /> calls until released.</summary>
-    public void GatePrompt() => _promptGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-    public void ReleasePrompt() => _promptGate?.TrySetResult();
-
-    /// <summary>Blocks subsequent <see cref="ListSessionsAsync" /> calls until released.</summary>
-    public void GateListSessions() => _listGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-    public void ReleaseListSessions() => _listGate?.TrySetResult();
-
-    public Task WaitPromptAsync(TimeSpan timeout) => _promptSignal.Task.WaitAsync(timeout);
-
-    public Task WaitListSessionsStartedAsync(TimeSpan timeout) => _listStarted.Task.WaitAsync(timeout);
-
-    public async ValueTask PublishEventAsync(HarborEvent evt)
-    {
-        await _events.Writer.WriteAsync(evt).ConfigureAwait(false);
-    }
+    public bool IsConnected { get; private set; }
 
     public Task<Result> StartAgentAsync(string sessionId, string agentName, CancellationToken ct = default)
         => Task.FromResult(Result.Success());
@@ -63,7 +44,7 @@ internal sealed class StubHarborClient : IHarborClient
         _promptSignal.TrySetResult();
         try
         {
-            TaskCompletionSource? gate = _promptGate;
+            var gate = _promptGate;
             if (gate is not null)
             {
                 await gate.Task.WaitAsync(runCts.Token).ConfigureAwait(false);
@@ -92,7 +73,7 @@ internal sealed class StubHarborClient : IHarborClient
 
     public Task<Result<Session>> CreateSessionAsync(string dir, string agent, string provider, string model, CancellationToken ct = default)
     {
-        Session session = Session.Create(dir, agent, provider, model);
+        var session = Session.Create(dir, agent, provider, model);
         Sessions.Add(session);
         return Task.FromResult(Result.Success(session));
     }
@@ -105,21 +86,13 @@ internal sealed class StubHarborClient : IHarborClient
             return WaitGateAsync(_listGate, Sessions);
         }
 
-        IReadOnlyList<Session> snapshot = [.. Sessions];
+        IReadOnlyList<Session> snapshot = [..Sessions];
         return Task.FromResult(Result.Success(snapshot));
-    }
-
-    private static async Task<Result<IReadOnlyList<Session>>> WaitGateAsync(
-        TaskCompletionSource gate, List<Session> sessions)
-    {
-        await gate.Task.ConfigureAwait(false);
-        IReadOnlyList<Session> snapshot = [.. sessions];
-        return Result.Success(snapshot);
     }
 
     public Task<Result<Session>> GetSessionAsync(string sessionId, CancellationToken ct = default)
     {
-        Session? match = Sessions.FirstOrDefault(s => s.Id == sessionId) ?? BoundSession;
+        var match = Sessions.FirstOrDefault(s => s.Id == sessionId) ?? BoundSession;
         return Task.FromResult(
             match is not null ? Result.Success(match) : Result.Failure<Session>($"Session '{sessionId}' not found."));
     }
@@ -140,9 +113,9 @@ internal sealed class StubHarborClient : IHarborClient
         => Task.FromResult(Result.Success<IReadOnlyList<ToolDescriptor>>([]));
 
     public async IAsyncEnumerable<HarborEvent> SubscribeToEventsAsync(
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
-        await foreach (HarborEvent evt in _events.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        await foreach (var evt in _events.Reader.ReadAllAsync(ct).ConfigureAwait(false))
         {
             yield return evt;
         }
@@ -164,5 +137,29 @@ internal sealed class StubHarborClient : IHarborClient
     {
         _events.Writer.TryComplete();
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>Blocks subsequent <see cref="SendPromptAsync" /> calls until released.</summary>
+    public void GatePrompt() => _promptGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public void ReleasePrompt() => _promptGate?.TrySetResult();
+
+    /// <summary>Blocks subsequent <see cref="ListSessionsAsync" /> calls until released.</summary>
+    public void GateListSessions() => _listGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public void ReleaseListSessions() => _listGate?.TrySetResult();
+
+    public Task WaitPromptAsync(TimeSpan timeout) => _promptSignal.Task.WaitAsync(timeout);
+
+    public Task WaitListSessionsStartedAsync(TimeSpan timeout) => _listStarted.Task.WaitAsync(timeout);
+
+    public async ValueTask PublishEventAsync(HarborEvent evt) => await _events.Writer.WriteAsync(evt).ConfigureAwait(false);
+
+    private static async Task<Result<IReadOnlyList<Session>>> WaitGateAsync(
+        TaskCompletionSource gate, List<Session> sessions)
+    {
+        await gate.Task.ConfigureAwait(false);
+        IReadOnlyList<Session> snapshot = [..sessions];
+        return Result.Success(snapshot);
     }
 }

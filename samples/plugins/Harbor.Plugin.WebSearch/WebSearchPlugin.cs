@@ -1,13 +1,14 @@
-using System.Text;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 namespace Harbor.Plugin.WebSearch;
+
 /// <summary>
 ///     Sample plugin that adds web search capability.
 ///     Uses DuckDuckGo HTML endpoint — no API key required.

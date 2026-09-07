@@ -5,6 +5,7 @@ using Harbor.Plugins.Instantiation;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Plugins.Runtime.Tests.Instantiation;
+
 /// <summary>
 ///     Tests for the Instantiation layer: <see cref="ReflectionPluginInstantiator" />
 ///     and <see cref="PluginLifecycle" />.
@@ -111,7 +112,7 @@ public sealed class InstantiationLayerTests
         public Version Version => new(1, 0, 0);
         public Version RequiredHarborVersion => new(0, 4, 0);
         public string Description => "fake";
-        public void Initialize(PluginContext context) { }
+        public void Initialize(PluginContext context) {}
         public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

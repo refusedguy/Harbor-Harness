@@ -4,6 +4,7 @@ using Harbor.Build.Meta;
 using Nuke.Common.IO;
 using Nuke.Common.Tools.DotNet;
 namespace Harbor.Build.Targets;
+
 /// <summary>
 ///     IPC publish targets — produce two thin CLI variants for the
 ///     two-process Harbor deployment:
@@ -70,7 +71,7 @@ public static class IpcPublishTarget
         output.Cmd("PublishIpc", DotNetArgv.RenderPublish(publishSettings));
         if (output.IsDryRun)
         {
-            output.Artifact("PublishIpc", outputDir.ToString(), bytes: null, planned: true);
+            output.Artifact("PublishIpc", outputDir.ToString(), null, true);
             return outputDir;
         }
         DotNetTasks.DotNetPublish(publishSettings);

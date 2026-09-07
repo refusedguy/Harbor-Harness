@@ -1,7 +1,6 @@
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Application.Agents.Pipeline;
+
 /// <summary>
 ///     Mid-run steering injection (audit v2 §3.5 concern #4), extracted verbatim
 ///     from <c>AgentLoop</c>: drains the session's steering channel into the
@@ -16,7 +15,7 @@ public sealed class SteeringDrainBehavior(
     /// <summary>Drain the whole steering queue into the session history.</summary>
     public async Task DrainAsync(ISessionContext session, CancellationToken ct)
     {
-        while (session.SteeringQueue.Reader.TryRead(out AgentMessage? steerMsg))
+        while (session.SteeringQueue.Reader.TryRead(out var steerMsg))
         {
             // G2: the steering channel is one-per-agent and outlives session
             // rebinds. A message authored against another session must never

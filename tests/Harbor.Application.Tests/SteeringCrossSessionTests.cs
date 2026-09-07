@@ -5,14 +5,12 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Providers;
-using Harbor.Application.Tests.Fakes;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
+using Harbor.Application.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
 namespace Harbor.Application.Tests;
@@ -44,20 +42,16 @@ public class SteeringCrossSessionTests
     public async Task Drain_ForeignSessionSteer_IsDroppedNotAppended()
     {
         var counter = new CountingTool();
-        var client = new ScriptedLlmClient(
-        [
-            new LlmEvent[]
-            {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
-            },
-            new LlmEvent[]
-            {
-                new TextDeltaEvent("t", "done"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
-            }
-        ]);
+        var client = new ScriptedLlmClient(new LlmEvent[]
+        {
+            new ToolCallStartEvent("call-1", "counter"),
+            new ToolCallDeltaEvent("call-1", """{"n":1}"""),
+            new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+        }, new LlmEvent[]
+        {
+            new TextDeltaEvent("t", "done"),
+            new StepFinishEvent(1, "stop", new Usage(1, 1))
+        });
         var agentDef = AllowAllAgent();
         var agents = new FakeAgentRegistry(agentDef);
         var loop = new AgentLoop(
@@ -88,20 +82,16 @@ public class SteeringCrossSessionTests
         // Steering drains only at tool-result boundaries / turn ends reached
         // through the execution path — script one tool call to get there.
         var counter = new CountingTool();
-        var client = new ScriptedLlmClient(
-        [
-            new LlmEvent[]
-            {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
-            },
-            new LlmEvent[]
-            {
-                new TextDeltaEvent("t", "done"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
-            }
-        ]);
+        var client = new ScriptedLlmClient(new LlmEvent[]
+        {
+            new ToolCallStartEvent("call-1", "counter"),
+            new ToolCallDeltaEvent("call-1", """{"n":1}"""),
+            new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+        }, new LlmEvent[]
+        {
+            new TextDeltaEvent("t", "done"),
+            new StepFinishEvent(1, "stop", new Usage(1, 1))
+        });
         var agentDef = AllowAllAgent();
         var agents = new FakeAgentRegistry(agentDef);
         var loop = new AgentLoop(
@@ -138,8 +128,7 @@ public class SteeringCrossSessionTests
         var sessionA = Session.Create("/tmp/harbor-steering-rebind-a", "code", "test", "test-model");
         var sessionB = Session.Create("/tmp/harbor-steering-rebind-b", "code", "test", "test-model");
         var store = new MultiSessionStore(sessionA, sessionB);
-        var client = new ScriptedLlmClient(
-            [[new TextDeltaEvent("t", "done"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
+        var client = new ScriptedLlmClient([new TextDeltaEvent("t", "done"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
         var agents = new FakeAgentRegistry(AllowAllAgent());
         var realLoop = new AgentLoop(
             new FakeProviderRegistry(client),
@@ -182,27 +171,24 @@ public class SteeringCrossSessionTests
 /// <summary>In-memory ISessionStore holding several sessions independently.</summary>
 public sealed class MultiSessionStore(params Session[] sessions) : ISessionStore
 {
-    private readonly Dictionary<string, Session> _sessions = sessions.ToDictionary(s => s.Id, StringComparer.Ordinal);
     private readonly Dictionary<string, List<AgentMessage>> _messages = [];
-
-    public IReadOnlyList<AgentMessage> MessagesOf(string sessionId) =>
-        _messages.TryGetValue(sessionId, out List<AgentMessage>? list) ? [.. list] : [];
+    private readonly Dictionary<string, Session> _sessions = sessions.ToDictionary(s => s.Id, StringComparer.Ordinal);
 
     public Task<Result<Session>> CreateAsync(
         string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
         => Task.FromResult(Result.Failure<Session>("CreateAsync is not part of this fake."));
 
     public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
-        => Task.FromResult(_sessions.TryGetValue(sessionId, out Session? session)
+        => Task.FromResult(_sessions.TryGetValue(sessionId, out var session)
             ? Result.Success(session)
             : Result.Failure<Session>($"Session '{sessionId}' was not found."));
 
     public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
-        => Task.FromResult(Result.Success<IReadOnlyList<Session>>([.. _sessions.Values]));
+        => Task.FromResult(Result.Success<IReadOnlyList<Session>>([.._sessions.Values]));
 
     public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
-        if (!_messages.TryGetValue(sessionId, out List<AgentMessage>? list))
+        if (!_messages.TryGetValue(sessionId, out var list))
         {
             list = [];
             _messages[sessionId] = list;
@@ -232,4 +218,7 @@ public sealed class MultiSessionStore(params Session[] sessions) : ISessionStore
 
     public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
         => Task.FromResult(Result.Success());
+
+    public IReadOnlyList<AgentMessage> MessagesOf(string sessionId) =>
+        _messages.TryGetValue(sessionId, out var list) ? [..list] : [];
 }

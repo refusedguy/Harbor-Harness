@@ -1,12 +1,12 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Panel-mode mascot (mascot-brand T2): a 3-row cat beside the composer via
-/// LayoutTree.Split, toggled by HARBOR_MASCOT_MODE=panel. Footer mode must be
-/// byte-unchanged and the HARBOR_MASCOT=off kill-switch must keep winning.
+///     Panel-mode mascot (mascot-brand T2): a 3-row cat beside the composer via
+///     LayoutTree.Split, toggled by HARBOR_MASCOT_MODE=panel. Footer mode must be
+///     byte-unchanged and the HARBOR_MASCOT=off kill-switch must keep winning.
 /// </summary>
 public class MascotPanelTests
 {
@@ -22,7 +22,7 @@ public class MascotPanelTests
 
     private static string Paint(ChatScreen screen, ScreenBuffer buffer, int frames = 1)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         for (int i = 0; i < frames; i++)
         {
             foreach (var panel in screen.Tree.Panels)
@@ -115,7 +115,7 @@ public class MascotPanelTests
         await Assert.That(screen.Status.FooterMascotEnabled).IsFalse();
 
         string art = Paint(screen, buffer, 2);
-        foreach (var frame in AmbientMascot.WorkingFrames)
+        foreach (string frame in AmbientMascot.WorkingFrames)
         {
             await Assert.That(art.Contains(frame)).IsFalse();
         }
@@ -126,9 +126,9 @@ public class MascotPanelTests
     {
         foreach (var mood in Enum.GetValues<MascotMood>())
         {
-            var face = AmbientMascot.FramesOf(mood);
-            var ears = AmbientMascot.PanelEars(mood);
-            var paws = AmbientMascot.PanelPaws(mood);
+            string[] face = AmbientMascot.FramesOf(mood);
+            string[] ears = AmbientMascot.PanelEars(mood);
+            string[] paws = AmbientMascot.PanelPaws(mood);
 
             for (int i = 0; i < face.Length; i++)
             {
@@ -160,7 +160,7 @@ public class MascotPanelTests
             panel.Paint(buffer); // detection frame paints the new mood settled
         }
 
-        Rect face = mascot.Rect;
+        var face = mascot.Rect;
         int fx = face.X + 3; // inside the 8-cell face art
         int fy = face.Y + 1;
 
@@ -204,7 +204,7 @@ public class MascotPanelTests
 
         GC.WaitForPendingFinalizers();
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
+        long before = GC.GetAllocatedBytesForCurrentThread();
         const int iterations = 200;
         for (int i = 0; i < iterations; i++)
         {
@@ -212,7 +212,7 @@ public class MascotPanelTests
             mascot.Paint(buffer);
         }
 
-        var after = GC.GetAllocatedBytesForCurrentThread();
+        long after = GC.GetAllocatedBytesForCurrentThread();
 
         await Assert.That(after - before).IsEqualTo(0);
     }

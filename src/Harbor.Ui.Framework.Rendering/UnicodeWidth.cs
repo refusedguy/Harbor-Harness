@@ -1,21 +1,19 @@
 using System.Buffers;
 using System.Text;
-
 namespace Harbor.Ui.Framework.Rendering;
 
 /// <summary>
-/// Display-width lookup for terminal cells (perf-audit §3.2): two sorted
-/// range tables — East-Asian Wide/Fullwidth → 2, combining/format marks → 0,
-/// everything else → 1. Binary search ≈ 10 ns per rune; the tables are
-/// compile-time constants (AOT-friendly, no runtime data files).
-///
-/// Known simplification: width is resolved per rune, not per grapheme
-/// cluster. U+FE0F (VS16) and ZWJ sequences are zero-width no-ops here; a
-/// cluster-aware pass can layer on top without changing this table.
+///     Display-width lookup for terminal cells (perf-audit §3.2): two sorted
+///     range tables — East-Asian Wide/Fullwidth → 2, combining/format marks → 0,
+///     everything else → 1. Binary search ≈ 10 ns per rune; the tables are
+///     compile-time constants (AOT-friendly, no runtime data files).
+///     Known simplification: width is resolved per rune, not per grapheme
+///     cluster. U+FE0F (VS16) and ZWJ sequences are zero-width no-ops here; a
+///     cluster-aware pass can layer on top without changing this table.
 /// </summary>
 public static class UnicodeWidth
 {
-    private static (int Lo, int Hi)[] _wide = Merge(
+    private static readonly (int Lo, int Hi)[] _wide = Merge(
     [
         (0x1100, 0x115F), // Hangul Jamo initial
         (0x2329, 0x232A),
@@ -46,10 +44,10 @@ public static class UnicodeWidth
         (0x1F680, 0x1F6FC), // transport/map
         (0x1F900, 0x1FAFF), // supplemental symbols & pictographs + extended-A
         (0x20000, 0x2FFFD), // CJK extensions B..F
-        (0x30000, 0x3FFFD), // extensions G..
+        (0x30000, 0x3FFFD) // extensions G..
     ]);
 
-    private static (int Lo, int Hi)[] _zeroWidth = Merge(
+    private static readonly (int Lo, int Hi)[] _zeroWidth = Merge(
     [
         (0x0300, 0x036F), // combining diacritical marks
         (0x0483, 0x0489),
@@ -93,7 +91,7 @@ public static class UnicodeWidth
         (0xFEFF, 0xFEFF), // BOM/ZWNBSP
         (0x1AB0, 0x1AFF), // combining extended
         (0x1DC0, 0x1DFF), // combining extended supplemental
-        (0xE0100, 0xE01EF), // variation selectors supplement
+        (0xE0100, 0xE01EF) // variation selectors supplement
     ]);
 
     /// <summary>Display width in terminal cells: 0 (combining/format/control), 1 or 2.</summary>
@@ -138,7 +136,7 @@ public static class UnicodeWidth
     {
         Array.Sort(ranges);
         var merged = new List<(int Lo, int Hi)>(ranges.Length);
-        foreach (var (lo, hi) in ranges)
+        foreach ((int lo, int hi) in ranges)
         {
             if (merged.Count > 0 && lo <= merged[^1].Hi + 1)
             {
@@ -151,7 +149,7 @@ public static class UnicodeWidth
             }
         }
 
-        return [.. merged];
+        return [..merged];
     }
 
     private static bool In((int Lo, int Hi)[] ranges, int v)
@@ -159,7 +157,7 @@ public static class UnicodeWidth
         int lo = 0, hi = ranges.Length - 1;
         while (lo <= hi)
         {
-            int mid = (lo + hi) >> 1;
+            int mid = lo + hi >> 1;
             if (v < ranges[mid].Lo)
             {
                 hi = mid - 1;

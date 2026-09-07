@@ -1,8 +1,9 @@
-using System.Diagnostics;
-using System.Text;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using System.Text;
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Executes shell commands. Captures stdout/stderr/exit code.
 /// </summary>

@@ -1,17 +1,12 @@
-namespace Harbor.Tui.Tests;
-
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Hosting.Rendering;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
-using Harbor.Abstractions.Tui;
-using Harbor.Hosting.Rendering;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
+namespace Harbor.Tui.Tests;
 
 /// <summary>
 ///     Lock-free hot-swappable renderer runtime tests (renderer-unification
@@ -65,8 +60,8 @@ public class RendererPipelineTests
         using var pipeline = new RendererPipeline(initial, "initial", store, NullLogger<RendererPipeline>.Instance);
         pipeline.Register("next", () => new CountingRenderer());
 
-        Task<bool> first = pipeline.SwapRendererAsync("next");
-        Task<bool> second = pipeline.SwapRendererAsync("next");
+        var first = pipeline.SwapRendererAsync("next");
+        var second = pipeline.SwapRendererAsync("next");
 
         bool[] results = await Task.WhenAll(first, second);
         // Both target the same backend: the winner swaps, the loser fails
@@ -95,7 +90,7 @@ public class RendererPipelineTests
     public async Task Swap_UnknownBackend_ReturnsFalse()
     {
         var initial = new CountingRenderer();
-        using var pipeline = new RendererPipeline(initial, "initial", store: null, NullLogger<RendererPipeline>.Instance);
+        using var pipeline = new RendererPipeline(initial, "initial", null, NullLogger<RendererPipeline>.Instance);
 
         bool swapped = await pipeline.SwapRendererAsync("does-not-exist");
 
@@ -150,17 +145,17 @@ public class RendererPipelineTests
         public int Width => 80;
         public int Height => 24;
         public bool SupportsColor => false;
-        public void Write(string text) { }
-        public void WriteLine(string? text = null) { }
-        public void WriteColored(string text, TuiColor foreground, TuiColor? background = null) { }
-        public void WriteStyled(string text, TuiStyle style) { }
-        public void SetCursorPosition(int row, int col) { }
-        public void ClearLine() { }
-        public void Clear() { }
-        public void HideCursor() { }
-        public void ShowCursor() { }
-        public void EnterAlternateScreen() { }
-        public void ExitAlternateScreen() { }
-        public void Flush() { }
+        public void Write(string text) {}
+        public void WriteLine(string? text = null) {}
+        public void WriteColored(string text, TuiColor foreground, TuiColor? background = null) {}
+        public void WriteStyled(string text, TuiStyle style) {}
+        public void SetCursorPosition(int row, int col) {}
+        public void ClearLine() {}
+        public void Clear() {}
+        public void HideCursor() {}
+        public void ShowCursor() {}
+        public void EnterAlternateScreen() {}
+        public void ExitAlternateScreen() {}
+        public void Flush() {}
     }
 }

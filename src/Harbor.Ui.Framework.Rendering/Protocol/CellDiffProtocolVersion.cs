@@ -15,7 +15,7 @@ namespace Harbor.Ui.Framework.Rendering.Protocol;
 ///     <para>
 ///         Decoders must accept every version &lt;= their own max supported
 ///         version (backward compatibility is enforced by
-///         <see cref="CellDiffBatchCodec"/> tests).
+///         <see cref="CellDiffBatchCodec" /> tests).
 ///     </para>
 /// </remarks>
 public enum CellDiffProtocolVersion : byte
@@ -27,5 +27,5 @@ public enum CellDiffProtocolVersion : byte
     V2 = 2,
 
     /// <summary>Latest version this assembly emits.</summary>
-    Latest = V2,
+    Latest = V2
 }

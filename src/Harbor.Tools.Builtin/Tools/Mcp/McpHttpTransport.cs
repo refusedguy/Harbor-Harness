@@ -1,16 +1,14 @@
+using Microsoft.Extensions.Logging;
 using System.Net;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Tools.Mcp;
 
 /// <summary>Round-trip contract shared by the remote MCP transports (streamable HTTP and legacy SSE).</summary>
 internal interface IMcpRemoteTransport : IAsyncDisposable
 {
     /// <summary>Send one JSON-RPC request and return the matching response (caller disposes), or null when none arrived.</summary>
-    Task<JsonDocument?> RoundTripAsync(
+    public Task<JsonDocument?> RoundTripAsync(
         JsonElement request,
         int? expectedId = null,
         CancellationToken cancellationToken = default);
@@ -36,12 +34,12 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
 
     private readonly Uri _endpoint;
     private readonly IReadOnlyDictionary<string, string>? _headers;
-    private readonly Func<CancellationToken, Task<string?>>? _oauthTokenProvider;
     private readonly ILogger? _logger;
+    private readonly Func<CancellationToken, Task<string?>>? _oauthTokenProvider;
     private readonly TimeSpan _requestTimeout;
     private HttpClient? _client;
-    private string? _sessionId;
     private bool _disposed;
+    private string? _sessionId;
 
     public McpHttpTransport(
         Uri endpoint,
@@ -69,7 +67,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        HttpClient client = GetClient();
+        var client = GetClient();
         string body = request.GetRawText();
         string? oauthToken = _oauthTokenProvider is not null
             ? await _oauthTokenProvider(cancellationToken).ConfigureAwait(false)
@@ -82,8 +80,8 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             attemptCts.CancelAfter(_requestTimeout);
             try
             {
-                using HttpRequestMessage httpRequest = BuildRequest(body, oauthToken);
-                using HttpResponseMessage httpResponse = await client
+                using var httpRequest = BuildRequest(body, oauthToken);
+                using var httpResponse = await client
                     .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, attemptCts.Token)
                     .ConfigureAwait(false);
 
@@ -137,19 +135,19 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         => ex is HttpRequestException or IOException or TimeoutException;
 
     private async Task BackoffAsync(int attempt, CancellationToken cancellationToken)
-        => await Task.Delay(FirstRetryDelay * (1 << (attempt - 1)), cancellationToken).ConfigureAwait(false);
+        => await Task.Delay(FirstRetryDelay * (1 << attempt - 1), cancellationToken).ConfigureAwait(false);
 
     private HttpRequestMessage BuildRequest(string body, string? oauthToken)
     {
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, _endpoint)
         {
-            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
 
         bool hasAuthorization = false;
         if (_headers is { Count: > 0 })
         {
-            foreach (KeyValuePair<string, string> header in _headers)
+            foreach (var header in _headers)
             {
                 if (httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value))
                 {
@@ -174,7 +172,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     private void CaptureSession(HttpResponseMessage response)
     {
         if (_sessionId is null
-            && response.Headers.TryGetValues("Mcp-Session-Id", out IEnumerable<string>? values)
+            && response.Headers.TryGetValues("Mcp-Session-Id", out var values)
             && values.FirstOrDefault() is { Length: > 0 } sessionId)
         {
             _sessionId = sessionId;
@@ -204,7 +202,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         foreach (string line in payload.Split('\n'))
         {
             if (reader.Feed(line) is { Event: "message" } ev
-                && McpSse.TryParseResponse(ev.Data, expectedId) is { } doc)
+                && McpSse.TryParseResponse(ev.Data, expectedId) is {} doc)
             {
                 return doc;
             }
@@ -215,7 +213,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
 
     private HttpClient GetClient()
     {
-        if (_client is { } existing)
+        if (_client is {} existing)
         {
             return existing;
         }
@@ -223,7 +221,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         var handler = new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) };
         var client = new HttpClient(handler)
         {
-            Timeout = _requestTimeout,
+            Timeout = _requestTimeout
         };
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));

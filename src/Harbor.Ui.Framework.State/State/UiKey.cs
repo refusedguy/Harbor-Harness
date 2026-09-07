@@ -1,4 +1,5 @@
 namespace Harbor.Ui.Framework.State;
+
 /// <summary>
 ///     Abstract key code, free of any specific TUI framework so every renderer
 ///     (Spectre, Plain, Fullscreen, ANSI) maps its native key onto the same type.

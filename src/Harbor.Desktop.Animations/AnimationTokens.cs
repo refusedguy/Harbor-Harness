@@ -1,4 +1,5 @@
 namespace Harbor.Desktop.Animations;
+
 /// <summary>
 ///     Animation tokens — durations and easing-curve names shared by every
 ///     desktop app. The actual easing-function implementations live in

@@ -1,10 +1,9 @@
-namespace Harbor.Ui.Framework.Rendering.Protocol;
-
 using System.Buffers.Binary;
 using System.Collections.Immutable;
+namespace Harbor.Ui.Framework.Rendering.Protocol;
 
 /// <summary>
-///     Compact binary codec for <see cref="CellDiffBatch"/> (renderer-unification
+///     Compact binary codec for <see cref="CellDiffBatch" /> (renderer-unification
 ///     sprint Phase 6.2) — the transport form for out-of-process backends and
 ///     remote surfaces (UDS, SignalR). Fixed-size fields, no reflection, AOT-safe.
 /// </summary>
@@ -28,23 +27,23 @@ public static class CellDiffBatchCodec
 {
     private const uint Magic = 0x46494443u; // 'CDIF' little-endian
 
-    /// <summary>Encodes <paramref name="batch"/> into a newly allocated byte array.</summary>
+    /// <summary>Encodes <paramref name="batch" /> into a newly allocated byte array.</summary>
     public static byte[] Encode(in CellDiffBatch batch)
     {
         int hintCount = batch.Version >= CellDiffProtocolVersion.V2 ? batch.FrameHints.Length : 0;
         int size = 4 + 1 + 8 + 8 + 4
-            + (batch.Changes.Length * CellDiffMessage.EncodedSize)
-            + 4 + (hintCount * 16);
+                   + batch.Changes.Length * CellDiffMessage.EncodedSize
+                   + 4 + hintCount * 16;
         byte[] buffer = new byte[size];
         Write(buffer, batch);
         return buffer;
     }
 
-    /// <summary>Writes <paramref name="batch"/> into <paramref name="buffer"/>; returns bytes written.</summary>
+    /// <summary>Writes <paramref name="batch" /> into <paramref name="buffer" />; returns bytes written.</summary>
     public static int Write(Span<byte> buffer, in CellDiffBatch batch)
     {
         int hintCount = batch.Version >= CellDiffProtocolVersion.V2 ? batch.FrameHints.Length : 0;
-        int required = 25 + (batch.Changes.Length * CellDiffMessage.EncodedSize) + 4 + (hintCount * 16);
+        int required = 25 + batch.Changes.Length * CellDiffMessage.EncodedSize + 4 + hintCount * 16;
         if (buffer.Length < required)
         {
             throw new ArgumentException($"Buffer too small for batch: need {required}, got {buffer.Length}.", nameof(buffer));
@@ -91,7 +90,7 @@ public static class CellDiffBatchCodec
     }
 
     /// <summary>
-    ///     Decodes a batch produced by <see cref="Encode"/>. Accepts every
+    ///     Decodes a batch produced by <see cref="Encode" />. Accepts every
     ///     protocol version this assembly knows (backward-compatible with V1).
     /// </summary>
     public static CellDiffBatch Decode(ReadOnlySpan<byte> buffer)
@@ -127,7 +126,7 @@ public static class CellDiffBatchCodec
         var changes = ImmutableArray.CreateBuilder<CellDiffMessage>(changeCount);
         for (int i = 0; i < changeCount; i++)
         {
-            (int x, int y, Cell oldCell, Cell newCell) = ReadCellMessage(buffer, ref o);
+            (int x, int y, var oldCell, var newCell) = ReadCellMessage(buffer, ref o);
             changes.Add(new CellDiffMessage(x, y, oldCell, newCell));
         }
 
@@ -188,8 +187,8 @@ public static class CellDiffBatchCodec
         o += 4;
         int y = BinaryPrimitives.ReadInt32LittleEndian(buffer[o..]);
         o += 4;
-        Cell oldCell = ReadCell(buffer, ref o);
-        Cell newCell = ReadCell(buffer, ref o);
+        var oldCell = ReadCell(buffer, ref o);
+        var newCell = ReadCell(buffer, ref o);
         return (x, y, oldCell, newCell);
     }
 

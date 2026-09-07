@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 namespace Harbor.Ipc;
+
 /// <summary>
 ///     Out-of-process <see cref="IHarborClient" /> implementation. Talks to
 ///     a remote <c>HarborIpcServer</c> via MessagePack-over-pipe (Windows)
@@ -48,7 +49,7 @@ public sealed class IpcHarborClient : IHarborClient
     ///     Construct an IPC client with a pre-built transport (advanced — for tests).
     /// </summary>
     public IpcHarborClient(ClientPipeTransport transport, ILogger<IpcHarborClient> logger)
-        : this(transport, logger, psk: null)
+        : this(transport, logger, null)
     {
     }
 
@@ -70,8 +71,8 @@ public sealed class IpcHarborClient : IHarborClient
     /// </summary>
     public IpcHarborClient(string host, int port, ILogger<IpcHarborClient> logger, string? psk)
         : this(new TcpClientTransport(host, port,
-                  (ILogger)logger ?? throw new ArgumentNullException(nameof(logger))),
-              logger, psk)
+                (ILogger)logger ?? throw new ArgumentNullException(nameof(logger))),
+            logger, psk)
     {
     }
 

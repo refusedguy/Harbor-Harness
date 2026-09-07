@@ -1,6 +1,6 @@
 using System.IO.Pipelines;
-
 namespace Harbor.Ipc.Protocol;
+
 /// <summary>
 ///     MessagePack RPC client. Sends <see cref="HarborRequest" />s over a
 ///     <see cref="ClientPipeTransport" /> stream and awaits the matching
@@ -41,16 +41,16 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
             FullMode = BoundedChannelFullMode.DropOldest
         });
     private readonly ILogger _logger;
-    private readonly string? _psk;
 
     private readonly Dictionary<Guid, TaskCompletionSource<HarborResponse>> _pending = new();
     private readonly Lock _pendingLock = new();
+    private readonly string? _psk;
     private readonly IIpcClientTransport _transport;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private int _disposed;
     private Task? _readLoopTask;
-    private Stream? _stream;
     private PipeReader? _reader;
+    private Stream? _stream;
 
     /// <summary>
     ///     Construct an RPC client over the given transport.
@@ -74,12 +74,6 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
     ///     envelope sequence so reconnecting clients can dedup and bookkeep.
     /// </summary>
     public ChannelReader<EventFrame> EventFrames => _frameChannel.Reader;
-
-    /// <summary>
-    ///     Raised when the read loop dies from EOF/IO error (NOT on Dispose).
-    ///     Reconnecting callers use this as the "dial again" trigger.
-    /// </summary>
-    public event EventHandler ConnectionLost = delegate { };
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
@@ -114,6 +108,12 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
     }
 
     /// <summary>
+    ///     Raised when the read loop dies from EOF/IO error (NOT on Dispose).
+    ///     Reconnecting callers use this as the "dial again" trigger.
+    /// </summary>
+    public event EventHandler ConnectionLost = delegate {};
+
+    /// <summary>
     ///     Connect to the server and start the background read loop.
     ///     Idempotent — calling twice is a no-op.
     /// </summary>
@@ -126,7 +126,7 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
 
         if (_psk is not null)
         {
-            HarborResponse authResponse = await SendAsync(new PskAuthRequest(_psk), ct).ConfigureAwait(false);
+            var authResponse = await SendAsync(new PskAuthRequest(_psk), ct).ConfigureAwait(false);
             if (authResponse is ErrorResponse authError)
             {
                 throw new IOException($"PSK authentication failed: {authError.Message}");

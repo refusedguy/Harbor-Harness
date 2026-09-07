@@ -1,10 +1,11 @@
-using System.Collections.ObjectModel;
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using System.Collections.ObjectModel;
+using System.Globalization;
 namespace Harbor.Terminal.Abstractions.ViewModels;
+
 /// <summary>
 ///     Status bar view model — shows model, agent, cost, tokens, status.
 ///     Uses CommunityToolkit.Mvvm source generators for INPC.

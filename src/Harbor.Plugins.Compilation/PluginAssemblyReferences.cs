@@ -1,12 +1,13 @@
-using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Plugins;
 using Harbor.Terminal.Abstractions.Plugins;
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text.Json;
 namespace Harbor.Plugins.Compilation;
+
 /// <summary>
 ///     Collects <see cref="MetadataReference" />s for the Roslyn compilation by snapshotting
 ///     the assemblies already loaded into the current <see cref="AppDomain" /> plus a small
@@ -157,7 +158,9 @@ public sealed class PluginAssemblyReferences
                 if (File.Exists(path) && seen.Add(path))
                 {
                     try
-                    { refs.Add(MetadataReference.CreateFromFile(path)); }
+                    {
+                        refs.Add(MetadataReference.CreateFromFile(path));
+                    }
                     catch (IOException)
                     { /* best-effort */
                     }

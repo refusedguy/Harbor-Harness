@@ -1,12 +1,10 @@
-using System.Text;
-using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Vim composer layer: toggle contract, normal-mode chords over readline
-/// primitives, insert/normal transitions, history recall via j/k.
+///     Vim composer layer: toggle contract, normal-mode chords over readline
+///     primitives, insert/normal transitions, history recall via j/k.
 /// </summary>
 public class VimComposerModeTests
 {
@@ -22,7 +20,7 @@ public class VimComposerModeTests
     [Test]
     public async Task Disabled_IsPurePassThrough()
     {
-        (var vim, var composer) = New(enabled: false);
+        var (vim, composer) = New(enabled: false);
         _ = vim.HandleKey(Char('h'), composer);
 
         await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("h");
@@ -32,7 +30,7 @@ public class VimComposerModeTests
     [Test]
     public async Task Enabled_StartsInInsert_UntilEsc()
     {
-        (var vim, var composer) = New(enabled: true);
+        var (vim, composer) = New(enabled: true);
         _ = vim.HandleKey(Char('h'), composer); // insert-mode typing
 
         await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("h");
@@ -44,7 +42,7 @@ public class VimComposerModeTests
     [Test]
     public async Task NormalMode_H_MovesCaret_WithoutInsertingOrEditing()
     {
-        (var vim, var composer) = New(enabled: true);
+        var (vim, composer) = New(enabled: true);
         _ = composer.Buffer.InsertText("ab");
         _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
         await Assert.That(composer.Buffer.Cursor).IsEqualTo(2);
@@ -58,7 +56,7 @@ public class VimComposerModeTests
     [Test]
     public async Task NormalMode_UnboundLetter_FallsThroughToInsertAtCaret()
     {
-        (var vim, var composer) = New(enabled: true);
+        var (vim, composer) = New(enabled: true);
         _ = composer.Buffer.InsertText("ab");
         _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
         _ = vim.HandleKey(Char('h'), composer); // caret between a and b
@@ -71,7 +69,7 @@ public class VimComposerModeTests
     [Test]
     public async Task NormalMode_X_DeletesForward()
     {
-        (var vim, var composer) = New(enabled: true);
+        var (vim, composer) = New(enabled: true);
         _ = composer.Buffer.InsertText("ab");
         _ = composer.Buffer.MoveLeft(); // over 'b'
         _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
@@ -84,7 +82,7 @@ public class VimComposerModeTests
     [Test]
     public async Task NormalMode_I_A_ReturnToInsert()
     {
-        (var vim, var composer) = New(enabled: true);
+        var (vim, composer) = New(enabled: true);
         _ = composer.Buffer.InsertText("bc");
         _ = composer.Buffer.MoveLeft(); // over 'c' → between b and c
         _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
@@ -103,7 +101,7 @@ public class VimComposerModeTests
     [Test]
     public async Task NormalMode_A_MovesPastEnd_Clamped()
     {
-        (var vim, var composer) = New(enabled: true);
+        var (vim, composer) = New(enabled: true);
         _ = composer.Buffer.InsertText("ab");
         _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer); // caret at end
 
@@ -116,7 +114,7 @@ public class VimComposerModeTests
     [Test]
     public async Task NormalMode_JK_RecallHistory()
     {
-        (var vim, var composer) = New(enabled: true);
+        var (vim, composer) = New(enabled: true);
         composer.History.Push("older draft");
         composer.History.Push("newest draft");
         _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
@@ -134,7 +132,7 @@ public class VimComposerModeTests
     [Test]
     public async Task NormalMode_Enter_Submits()
     {
-        (var vim, var composer) = New(enabled: true);
+        var (vim, composer) = New(enabled: true);
         _ = composer.Buffer.InsertText("do it");
         _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer);
 
@@ -146,7 +144,7 @@ public class VimComposerModeTests
     [Test]
     public async Task NormalMode_LineJumps_0_Dollar()
     {
-        (var vim, var composer) = New(enabled: true);
+        var (vim, composer) = New(enabled: true);
         _ = composer.Buffer.InsertText("one\ntwo");
         _ = vim.HandleKey(KeyEvent.Simple(KeyCode.Escape), composer); // caret at end
         await Assert.That(composer.Buffer.Cursor).IsEqualTo(7);

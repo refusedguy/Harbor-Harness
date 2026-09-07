@@ -1,27 +1,28 @@
 using Harbor.Tui.CellForge.Input;
-
 namespace Harbor.Tui.CellForge.Capabilities;
 
-/// <summary>Transport seam so probing is testable without a real terminal:
-/// writes sequences to the tty, waits for capability events routed by the
-/// parser out of the input stream.</summary>
+/// <summary>
+///     Transport seam so probing is testable without a real terminal:
+///     writes sequences to the tty, waits for capability events routed by the
+///     parser out of the input stream.
+/// </summary>
 public interface ICapabilityProbeTransport
 {
-    Task SendAsync(string sequence, CancellationToken cancellationToken = default);
+    public Task SendAsync(string sequence, CancellationToken cancellationToken = default);
 
     /// <summary>Returns the next capability event or null on timeout.</summary>
-    Task<CapabilityEvent?> WaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
+    public Task<CapabilityEvent?> WaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
-/// Kitty detection with explicit degradation ladder (design §2.4):
-/// 1. send CSI ? u and wait (default 150 ms, configurable for slow SSH);
-/// 2. answer → kitty active, remember reported flags;
-/// 3. silence → fallback DECRQM ?2004$p: answer ⇒ VT-responsive legacy
-///    terminal (degradation is deliberate and recorded, never silent);
-/// 4. nothing ⇒ conservative defaults.
-/// Multiplexer guardrail: inside tmux/screen the kitty push is skipped
-/// entirely — passthrough wrappers are out of scope (§2.5).
+///     Kitty detection with explicit degradation ladder (design §2.4):
+///     1. send CSI ? u and wait (default 150 ms, configurable for slow SSH);
+///     2. answer → kitty active, remember reported flags;
+///     3. silence → fallback DECRQM ?2004$p: answer ⇒ VT-responsive legacy
+///     terminal (degradation is deliberate and recorded, never silent);
+///     4. nothing ⇒ conservative defaults.
+///     Multiplexer guardrail: inside tmux/screen the kitty push is skipped
+///     entirely — passthrough wrappers are out of scope (§2.5).
 /// </summary>
 public sealed class CapabilityProber
 {
@@ -38,8 +39,8 @@ public sealed class CapabilityProber
     /// <summary>True inside tmux/screen — kitty must not be pushed (§2.5/§6).</summary>
     public bool IsInsideMultiplexer()
     {
-        var tmux = _environmentLookup("TMUX");
-        var screen = _environmentLookup("STY");
+        string? tmux = _environmentLookup("TMUX");
+        string? screen = _environmentLookup("STY");
         return !string.IsNullOrEmpty(tmux) || !string.IsNullOrEmpty(screen);
     }
 
@@ -56,11 +57,11 @@ public sealed class CapabilityProber
                     caps = caps with { Kitty = true, VtResponsive = true, KittyFlags = response.Flags };
                     break;
                 case CapabilityEventKind.DecRqmReport when response.Mode == TerminalQueries.BracketedPasteMode:
-                    var confirmed = response.Value is 1 or 2;
+                    bool confirmed = response.Value is 1 or 2;
                     caps = caps with { VtResponsive = true, BracketedPasteConfirmed = confirmed };
                     break;
                 case CapabilityEventKind.DecRqmReport when response.Mode == TerminalQueries.SyncUpdatesMode:
-                    var syncConfirmed = response.Value is 1 or 2;
+                    bool syncConfirmed = response.Value is 1 or 2;
                     caps = caps with { VtResponsive = true, SyncUpdates = syncConfirmed };
                     break;
                 case CapabilityEventKind.DecRqmReport:

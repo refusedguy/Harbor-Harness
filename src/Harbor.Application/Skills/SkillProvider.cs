@@ -1,5 +1,3 @@
-using Harbor.Abstractions.Sessions;
-
 namespace Harbor.Application.Sessions;
 
 /// <summary>

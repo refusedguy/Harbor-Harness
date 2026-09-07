@@ -1,9 +1,10 @@
-using System.Runtime.InteropServices;
-using System.Text;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Runtime.InteropServices;
+using System.Text;
 namespace Harbor.Application.Sessions;
+
 /// <summary>
 ///     Default system prompt builder. Implements Builder pattern (GOF).
 ///     Assembles: identity + tool policy + constraints + env + agent + tools + MCP + skills + context files.
@@ -34,7 +35,7 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
                                        """;
     private readonly ILogger<SystemPromptBuilder> _logger;
 
-    public SystemPromptBuilder() : this(NullLogger<SystemPromptBuilder>.Instance) { }
+    public SystemPromptBuilder() : this(NullLogger<SystemPromptBuilder>.Instance) {}
 
     public SystemPromptBuilder(ILogger<SystemPromptBuilder> logger)
     {

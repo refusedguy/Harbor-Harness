@@ -1,8 +1,9 @@
-using System.Text;
 using Microsoft.Extensions.Logging;
+using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Writes/overwrites a text file. Sequential. Creates parent dirs by default.
 /// </summary>

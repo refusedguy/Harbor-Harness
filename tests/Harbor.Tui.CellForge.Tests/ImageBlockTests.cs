@@ -1,14 +1,12 @@
-using System.Buffers.Binary;
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
+using System.Buffers.Binary;
 namespace Harbor.Tui.CellForge.Tests;
 
 public class ImageBlockTests
 {
     private static byte[] PngHeader(uint width, uint height)
     {
-        var data = new byte[24];
+        byte[] data = new byte[24];
         Signature(data);
         data[12] = (byte)'I';
         data[13] = (byte)'H';
@@ -34,7 +32,7 @@ public class ImageBlockTests
     [Test]
     public async Task Probe_Reads_IhdrDimensions()
     {
-        bool ok = PngProbe.TryReadDimensions(PngHeader(1920, 1080), out var w, out var h);
+        bool ok = PngProbe.TryReadDimensions(PngHeader(1920, 1080), out int w, out int h);
         await Assert.That(ok).IsTrue();
         await Assert.That(w).IsEqualTo(1920);
         await Assert.That(h).IsEqualTo(1080);
@@ -43,7 +41,7 @@ public class ImageBlockTests
     [Test]
     public async Task Probe_Rejects_SignatureMismatch_AndShortData()
     {
-        var bad = PngHeader(10, 10);
+        byte[] bad = PngHeader(10, 10);
         bad[1] = 0x51; // ломаем сигнатуру
         await Assert.That(PngProbe.TryReadDimensions(bad, out _, out _)).IsFalse();
         await Assert.That(PngProbe.TryReadDimensions([1, 2, 3], out _, out _)).IsFalse();
@@ -117,19 +115,19 @@ public class JpegProbeTests
         data.Add((byte)(width >> 8));
         data.Add((byte)width);
         data.AddRange([0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01, 0xFF, 0xDA, 0xFF, 0xD9]);
-        return [.. data];
+        return [..data];
     }
 
     [Test]
     public async Task Probe_ReadsBaselineAndProgressiveDimensions()
     {
-        bool baseline = JpegProbe.TryReadDimensions(Jpeg(1920, 1080), out var w, out var h);
+        bool baseline = JpegProbe.TryReadDimensions(Jpeg(1920, 1080), out int w, out int h);
         await Assert.That(baseline).IsTrue();
         await Assert.That(w).IsEqualTo(1920);
         await Assert.That(h).IsEqualTo(1080);
 
         // SOF0 хранит height раньше width — проверяем перепутывание порядка.
-        await Assert.That(JpegProbe.TryReadDimensions(Jpeg(480, 700, sofMarker: 0xC2), out w, out h)).IsTrue();
+        await Assert.That(JpegProbe.TryReadDimensions(Jpeg(480, 700, 0xC2), out w, out h)).IsTrue();
         await Assert.That(w).IsEqualTo(480);
         await Assert.That(h).IsEqualTo(700);
     }
@@ -137,7 +135,7 @@ public class JpegProbeTests
     [Test]
     public async Task Probe_ToleratesFillBytes_AndSkipsSegments()
     {
-        await Assert.That(JpegProbe.TryReadDimensions(Jpeg(640, 480, padBeforeSof: true), out var w, out _)).IsTrue();
+        await Assert.That(JpegProbe.TryReadDimensions(Jpeg(640, 480, padBeforeSof: true), out int w, out _)).IsTrue();
         await Assert.That(w).IsEqualTo(640);
     }
 

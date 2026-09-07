@@ -1,6 +1,7 @@
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using System.Globalization;
 namespace Harbor.Ui.Framework.ViewModels;
+
 /// <summary>
 ///     Dense projection of one session for a shell rail or sidebar list.
 /// </summary>

@@ -1,6 +1,4 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
-
 namespace Harbor.Tools.Mcp;
 
 /// <summary>
@@ -77,7 +75,7 @@ public sealed class McpOAuthTokenCache
                 ? rt.GetString()
                 : null;
             if (!root.TryGetProperty("expires_at_utc", out var exp) || exp.ValueKind != JsonValueKind.String
-                || !DateTimeOffset.TryParse(exp.GetString(), out var expires))
+                                                                    || !DateTimeOffset.TryParse(exp.GetString(), out var expires))
                 return null;
             return new McpOAuthTokens(at.GetString()!, refresh, expires);
         }

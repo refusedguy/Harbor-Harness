@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -17,15 +15,15 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
     public async Task DragAndReleaseWithoutPress_IgnoredGracefully()
     {
         Server.SetResponse("test-model", "EDGE-OK");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
         // Drag with button held (motion flag) + a bare release — no press
         // ever anchored a selection. Must be swallowed silently.
-        Session.SendKey("\x1b[<32;10;5M");  // SGR drag, button 0, col10 row5
-        Session.SendKey("\x1b[<32;14;9M");  // drag moved
-        Session.SendKey("\x1b[<0;14;9m");   // release without prior press
+        Session.SendKey("\x1b[<32;10;5M"); // SGR drag, button 0, col10 row5
+        Session.SendKey("\x1b[<32;14;9M"); // drag moved
+        Session.SendKey("\x1b[<0;14;9m"); // release without prior press
         await Task.Delay(400).ConfigureAwait(false);
 
         // No crash, no LLM turn, app still processes normal input.
@@ -41,7 +39,7 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
     public async Task WheelDown_AfterWheelUp_ReturnsToLiveBottom()
     {
         Server.SetChunkDelay(TimeSpan.FromMilliseconds(10));
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -58,7 +56,7 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
                     l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
                     TimeSpan.FromSeconds(5)).ConfigureAwait(false);
             }
-            catch { }
+            catch {}
             SubmitLine($"u{turns}");
             try
             {

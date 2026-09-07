@@ -1,6 +1,6 @@
 namespace Harbor.Tui.CellForge.Input;
 
-/// <summary>Discriminator for the <see cref="InputEvent"/> union.</summary>
+/// <summary>Discriminator for the <see cref="InputEvent" /> union.</summary>
 public enum InputEventKind : byte
 {
     None = 0,
@@ -10,15 +10,17 @@ public enum InputEventKind : byte
     Resize = 4,
     Capability = 5,
 
-    /// <summary>A malformed/unparseable sequence was discarded (resync signal
-    /// for diagnostics; carries no payload).</summary>
-    Unknown = 6,
+    /// <summary>
+    ///     A malformed/unparseable sequence was discarded (resync signal
+    ///     for diagnostics; carries no payload).
+    /// </summary>
+    Unknown = 6
 }
 
 /// <summary>
-/// Typed terminal input event (struct union). Produced by
-/// <see cref="Parsing.EscapeSequenceParser"/>; zero-allocation on the
-/// key/mouse/resize paths — only <see cref="Paste"/> carries a heap string.
+///     Typed terminal input event (struct union). Produced by
+///     <see cref="Parsing.EscapeSequenceParser" />; zero-allocation on the
+///     key/mouse/resize paths — only <see cref="Paste" /> carries a heap string.
 /// </summary>
 public readonly struct InputEvent
 {
@@ -54,6 +56,6 @@ public readonly struct InputEvent
         InputEventKind.Resize => Resize.ToString(),
         InputEventKind.Capability => $"Capability({Capability.Kind})",
         InputEventKind.Unknown => "Unknown(malformed sequence)",
-        _ => "None",
+        _ => "None"
     };
 }

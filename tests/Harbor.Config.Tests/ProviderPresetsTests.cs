@@ -1,6 +1,7 @@
-using System.Text.Json;
 using Harbor.Application.Configuration;
+using System.Text.Json;
 namespace Harbor.Config.Tests;
+
 /// <summary>
 ///     Tests for ProviderPresets — the built-in catalog of provider templates.
 /// </summary>
@@ -144,7 +145,7 @@ public class ProviderPresetsTests
         string? dir = FindProvidersDirectory();
         await Assert.That(dir).IsNotNull();
 
-        HashSet<string> presetIds = ProviderPresets.All.Select(p => p.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var presetIds = ProviderPresets.All.Select(p => p.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (string file in Directory.EnumerateFiles(dir!, "*.json"))
         {
             string id = Path.GetFileNameWithoutExtension(file);

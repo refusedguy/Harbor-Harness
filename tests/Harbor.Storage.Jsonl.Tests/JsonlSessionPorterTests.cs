@@ -1,8 +1,6 @@
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Storage.Jsonl.Tests;
 
 /// <summary>
@@ -51,7 +49,7 @@ public class JsonlSessionPorterTests
         var source = await CreateStoreWithFixtureAsync();
         try
         {
-            Session fixture = (await source.ListAsync()).Value[0];
+            var fixture = (await source.ListAsync()).Value[0];
             var porter = CreatePorter();
             var target = CreateMemoryStore();
 
@@ -100,7 +98,7 @@ public class JsonlSessionPorterTests
         var source = await CreateStoreWithFixtureAsync();
         try
         {
-            Session fixture = (await source.ListAsync()).Value[0];
+            var fixture = (await source.ListAsync()).Value[0];
             var porter = CreatePorter();
             var target = CreateMemoryStore();
 
@@ -159,7 +157,7 @@ public class JsonlSessionPorterTests
         var source = await CreateStoreWithFixtureAsync();
         try
         {
-            Session fixture = (await source.ListAsync()).Value[0];
+            var fixture = (await source.ListAsync()).Value[0];
             var porter = CreatePorter();
             var target = CreateMemoryStore();
 

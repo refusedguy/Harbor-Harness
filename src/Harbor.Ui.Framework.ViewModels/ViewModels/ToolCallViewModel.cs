@@ -1,6 +1,7 @@
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using System.Globalization;
 namespace Harbor.Ui.Framework.ViewModels;
+
 /// <summary>
 ///     One tool call projected for the chat UI. Combines start + result
 ///     events for the same tool invocation into a single card state.
@@ -32,18 +33,28 @@ namespace Harbor.Ui.Framework.ViewModels;
 /// </remarks>
 public sealed partial class ToolCallViewModel : ObservableObject
 {
-    /// <summary>Timeline discriminator (Ф-A1b): tool cards render the card view.</summary>
-    public bool IsToolCard => true;
 
 
     [ObservableProperty]
     private string _argsPreview = string.Empty;
 
     [ObservableProperty]
+    private string? _diffFilePath;
+
+    [ObservableProperty]
+    private string? _diffFull;
+
+    [ObservableProperty]
+    private string? _diffPreview;
+
+    [ObservableProperty]
     private TimeSpan _duration = TimeSpan.Zero;
 
     [ObservableProperty]
     private string _iconText = "?";
+
+    [ObservableProperty]
+    private bool _isDiffTool;
 
     [ObservableProperty]
     private bool _isExpanded;
@@ -56,18 +67,8 @@ public sealed partial class ToolCallViewModel : ObservableObject
 
     [ObservableProperty]
     private string _toolName = string.Empty;
-
-    [ObservableProperty]
-    private bool _isDiffTool;
-
-    [ObservableProperty]
-    private string? _diffFilePath;
-
-    [ObservableProperty]
-    private string? _diffPreview;
-
-    [ObservableProperty]
-    private string? _diffFull;
+    /// <summary>Timeline discriminator (Ф-A1b): tool cards render the card view.</summary>
+    public bool IsToolCard => true;
 
     /// <summary>Stable identifier used to coalesce start/end events.</summary>
     public string Id { get; init; } = string.Empty;
@@ -118,8 +119,8 @@ public sealed partial class ToolCallViewModel : ObservableObject
         ResultPreview = resultPreview;
         Duration = duration;
         // Trigger re-evaluation of computed properties.
-        this.OnPropertyChanged(nameof(StatusPill));
-        this.OnPropertyChanged(nameof(DurationText));
-        this.OnPropertyChanged(nameof(StatusBrushKey));
+        OnPropertyChanged(nameof(StatusPill));
+        OnPropertyChanged(nameof(DurationText));
+        OnPropertyChanged(nameof(StatusBrushKey));
     }
 }

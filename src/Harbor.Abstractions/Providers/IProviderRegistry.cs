@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 namespace Harbor.Abstractions.Providers;
+
 /// <summary>
 ///     Registry of LLM providers. Implements Registry pattern.
 ///     Provides lazy-loading and lookup by provider ID.

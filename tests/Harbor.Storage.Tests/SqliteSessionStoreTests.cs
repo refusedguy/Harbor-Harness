@@ -3,6 +3,7 @@ using Harbor.Storage.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Storage.Tests;
+
 /// <summary>
 ///     Tests for SqliteSessionStore — uses a temp file per test and deletes it in finally.
 ///     Verifies CRUD, message ordering, and cascading delete of messages.

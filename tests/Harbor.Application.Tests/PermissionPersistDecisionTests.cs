@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
@@ -6,8 +5,7 @@ using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
 using Harbor.Application.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
+using System.Text.Json;
 namespace Harbor.Application.Tests;
 
 public class PermissionPersistDecisionTests
@@ -36,6 +34,7 @@ public class PermissionPersistDecisionTests
         if (OperatingSystem.IsWindows())
             return;
         int prompts = 0;
+
         Task<PermissionResponse> Asker(PermissionRequest req, CancellationToken ct)
         {
             prompts++;
@@ -60,6 +59,7 @@ public class PermissionPersistDecisionTests
     public async Task CheckAsync_NonPersistedAllowDecision_PromptsAgainOnNextCall()
     {
         int prompts = 0;
+
         Task<PermissionResponse> Asker(PermissionRequest req, CancellationToken ct)
         {
             prompts++;
@@ -82,6 +82,7 @@ public class PermissionPersistDecisionTests
     public async Task CheckAsync_PersistedDenyDecision_SecondCallDeniedWithoutPrompt()
     {
         int prompts = 0;
+
         Task<PermissionResponse> Asker(PermissionRequest req, CancellationToken ct)
         {
             prompts++;
@@ -113,7 +114,7 @@ public class PermissionPersistDecisionTests
             var config = new HarborConfig
             {
                 Provider = "kilocode",
-                Model = "kilocode/tencent/hy3:free",
+                Model = "kilocode/tencent/hy3:free"
             };
             config.Permissions["code"] = new List<PermissionRule>
             {
@@ -164,6 +165,7 @@ public class PermissionPersistDecisionTests
             var svc = new PermissionService(registry, NullLogger<PermissionService>.Instance, configStore: store);
 
             int prompts = 0;
+
             Task<PermissionResponse> Asker(PermissionRequest req, CancellationToken ct)
             {
                 prompts++;

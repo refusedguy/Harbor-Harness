@@ -1,23 +1,21 @@
-using System.Text;
-using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Widgets;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CF-E-017 (TOP-1 #27): the palette is fed by cell-local mirrors of
-/// <c>SlashCommands.All</c> (10) and <c>BuiltInCommands.Templates</c> (10).
-/// Pins all 10+10 reachable via exact <c>Find</c> (slash strips "/" +
-/// ignore-case + aliases), icon keys mapped (ASCII + Nerd Font, unknown →
-/// plain-text without throw), and the pre-existing fuzzy/groups/navigation/
-/// OnCommit behavior intact (only item sources added).
+///     CF-E-017 (TOP-1 #27): the palette is fed by cell-local mirrors of
+///     <c>SlashCommands.All</c> (10) and <c>BuiltInCommands.Templates</c> (10).
+///     Pins all 10+10 reachable via exact <c>Find</c> (slash strips "/" +
+///     ignore-case + aliases), icon keys mapped (ASCII + Nerd Font, unknown →
+///     plain-text without throw), and the pre-existing fuzzy/groups/navigation/
+///     OnCommit behavior intact (only item sources added).
 /// </summary>
 public class PaletteCatalogTests
 {
     private static readonly string[] ExpectedSlashTitles =
     [
         "/help", "/clear", "/quit", "/sessions", "/branch",
-        "/providers", "/tokens", "/theme", "/editor", "/diff",
+        "/providers", "/tokens", "/theme", "/editor", "/diff"
     ];
 
     private static readonly (string Title, string Id)[] ExpectedBuiltin =
@@ -31,7 +29,7 @@ public class PaletteCatalogTests
         ("Open Token Usage", "tokenUsage"),
         ("Open Settings", "settings"),
         ("Open Provider Browser", "providerBrowser"),
-        ("Quit", "quit"),
+        ("Quit", "quit")
     ];
 
     private static readonly (string Key, string Ascii)[] ExpectedIcons =
@@ -45,7 +43,7 @@ public class PaletteCatalogTests
         ("ChartIcon", "#"),
         ("SettingsIcon", "@"),
         ("ProviderIcon", "o"),
-        ("QuitIcon", "*"),
+        ("QuitIcon", "*")
     ];
 
     private static void Type(CommandPaletteView palette, string text)
@@ -80,7 +78,7 @@ public class PaletteCatalogTests
         var builtin = CommandPaletteCatalog.GetBuiltinCatalog();
 
         await Assert.That(builtin.Count).IsEqualTo(10);
-        foreach (var (title, id) in ExpectedBuiltin)
+        foreach ((string title, string id) in ExpectedBuiltin)
         {
             await Assert.That(builtin.Any(i => i.Id == id)).IsTrue();
             await Assert.That(builtin.Any(i => i.Title.EndsWith(title, StringComparison.Ordinal))).IsTrue();
@@ -127,7 +125,7 @@ public class PaletteCatalogTests
     [Test]
     public async Task FindBuiltin_AllTen_ByTitleAndId()
     {
-        foreach (var (title, id) in ExpectedBuiltin)
+        foreach ((string title, string id) in ExpectedBuiltin)
         {
             await Assert.That(CommandPaletteCatalog.FindBuiltin(title)).IsNotNull();
             await Assert.That(CommandPaletteCatalog.FindBuiltin(id)).IsNotNull();
@@ -153,7 +151,7 @@ public class PaletteCatalogTests
     [Test]
     public async Task Icons_Ascii_MapsAllTenKeys()
     {
-        foreach (var (key, ascii) in ExpectedIcons)
+        foreach ((string key, string ascii) in ExpectedIcons)
         {
             await Assert.That(PaletteIconMap.ToAscii(key)).IsEqualTo(ascii);
             await Assert.That(PaletteIconMap.Resolve(key)).IsEqualTo(ascii);
@@ -164,11 +162,11 @@ public class PaletteCatalogTests
     public async Task Icons_Nerd_MapsAllTenKeys_Distinct()
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (key, _) in ExpectedIcons)
+        foreach ((string key, string _) in ExpectedIcons)
         {
             string nerd = PaletteIconMap.ToNerdFont(key);
             await Assert.That(nerd.Length > 0).IsTrue();
-            await Assert.That(PaletteIconMap.Resolve(key, useNerdFont: true)).IsEqualTo(nerd);
+            await Assert.That(PaletteIconMap.Resolve(key, true)).IsEqualTo(nerd);
             seen.Add(nerd);
         }
 
@@ -185,7 +183,7 @@ public class PaletteCatalogTests
         await Assert.That(PaletteIconMap.Resolve("foldericon")).IsEqualTo(string.Empty);
         await Assert.That(PaletteIconMap.ToAscii("NopeIcon")).IsEqualTo(string.Empty);
         await Assert.That(PaletteIconMap.ToNerdFont("NopeIcon")).IsEqualTo(string.Empty);
-        await Assert.That(PaletteIconMap.Resolve("NopeIcon", useNerdFont: true)).IsEqualTo(string.Empty);
+        await Assert.That(PaletteIconMap.Resolve("NopeIcon", true)).IsEqualTo(string.Empty);
     }
 
     [Test]

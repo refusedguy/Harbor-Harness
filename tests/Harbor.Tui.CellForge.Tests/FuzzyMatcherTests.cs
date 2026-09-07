@@ -1,18 +1,14 @@
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Fuzzy matcher contract for the command palette: subsequence matching,
-/// boundary/consecutive bonuses, stable ranking, empty-query passthrough.
+///     Fuzzy matcher contract for the command palette: subsequence matching,
+///     boundary/consecutive bonuses, stable ranking, empty-query passthrough.
 /// </summary>
 public class FuzzyMatcherTests
 {
     [Test]
-    public async Task Score_EmptyQuery_MatchesNeutrally()
-    {
-        await Assert.That(FuzzyMatcher.Score("", "anything")).IsEqualTo(0);
-    }
+    public async Task Score_EmptyQuery_MatchesNeutrally() => await Assert.That(FuzzyMatcher.Score("", "anything")).IsEqualTo(0);
 
     [Test]
     public async Task Score_NotASubsequence_ReturnsNull()
@@ -62,8 +58,8 @@ public class FuzzyMatcherTests
     [Test]
     public async Task Filter_KeepsOnlyMatches_AndRanksBestFirst()
     {
-        var items = new[] { "quit session", "clear", "session fork", "help" };
-        List<string> ranked = FuzzyMatcher.Filter("ses", items, static s => s);
+        string[] items = new[] { "quit session", "clear", "session fork", "help" };
+        var ranked = FuzzyMatcher.Filter("ses", items, static s => s);
 
         await Assert.That(ranked).Count().IsEqualTo(2);
         await Assert.That(ranked[0]).IsEqualTo("session fork"); // boundary hit beats mid-word
@@ -72,8 +68,8 @@ public class FuzzyMatcherTests
     [Test]
     public async Task Filter_EmptyQuery_ReturnsAllInOrder()
     {
-        var items = new[] { "b", "a", "c" };
-        List<string> ranked = FuzzyMatcher.Filter("", items, static s => s);
+        string[] items = new[] { "b", "a", "c" };
+        var ranked = FuzzyMatcher.Filter("", items, static s => s);
 
         await Assert.That(ranked).IsEquivalentTo(["b", "a", "c"]);
     }
@@ -81,8 +77,8 @@ public class FuzzyMatcherTests
     [Test]
     public async Task Filter_EqualScores_StableByInputOrder()
     {
-        var items = new[] { "aa", "ab" };
-        List<string> ranked = FuzzyMatcher.Filter("a", items, static s => s);
+        string[] items = new[] { "aa", "ab" };
+        var ranked = FuzzyMatcher.Filter("a", items, static s => s);
 
         await Assert.That(ranked[0]).IsEqualTo("aa");
         await Assert.That(ranked[1]).IsEqualTo("ab");

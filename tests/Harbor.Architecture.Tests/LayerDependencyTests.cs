@@ -1,20 +1,19 @@
 using Harbor.Abstractions.Models;
 using Harbor.Application.Agents;
-using Harbor.Registries.Tools;
 using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Runtime;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.Registries.Tools;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
+using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Tools.Builtin;
 using Harbor.Tui.AnsiPlain;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using Harbor.Terminal.Abstractions.Renderers;
 using FacadeMarker = Harbor.Core.FacadeMarker;
 // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Application.Agents namespace for backward compat
 // InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Registries.Tools namespace for backward compat
@@ -22,6 +21,7 @@ using FacadeMarker = Harbor.Core.FacadeMarker;
 // moved to contrib/tui in sprint 2 — outside the main solution's layer scope.
 
 namespace Harbor.Architecture.Tests;
+
 /// <summary>
 ///     Layer-dependency tests — mechanically enforce the layering invariants
 ///     declared in <c>docs/ARCHITECTURE_LAYERS.md</c> §2 (the canonical
@@ -464,10 +464,12 @@ public class LayerDependencyTests
         yield return typeof(SqliteSessionStore).Assembly;
     }
 
-    /// <summary>TUI renderer assemblies to test, sourced as method data for TUnit.
-    /// Only main-solution renderers are probed; contrib renderers (Spectre,
-    /// Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole) moved out of
-    /// scope in sprint 2.</summary>
+    /// <summary>
+    ///     TUI renderer assemblies to test, sourced as method data for TUnit.
+    ///     Only main-solution renderers are probed; contrib renderers (Spectre,
+    ///     Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole) moved out of
+    ///     scope in sprint 2.
+    /// </summary>
     public static IEnumerable<Assembly> TuiRendererAssemblies()
     {
         yield return typeof(AnsiTuiRenderer).Assembly;

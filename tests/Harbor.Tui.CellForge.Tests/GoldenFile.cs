@@ -1,27 +1,27 @@
 using System.Globalization;
 using System.Text;
-using Harbor.Tui.CellForge.Rendering;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Golden-file plumbing: fixtures live in <c>tests/fixtures/celldiff</c> and are
-/// located by walking up from the test binaries to the repo root
-/// (<c>Harbor.slnx</c> marker, same approach as ThemeParityTests).
-///
-/// Regeneration contract: run with <c>HARBOR_UPDATE_GOLDENS=1</c> to overwrite
-/// goldens (and emit companion SVGs for human review) — CI never regenerates;
-/// without the flag a mismatching golden fails the test.
+///     Golden-file plumbing: fixtures live in <c>tests/fixtures/celldiff</c> and are
+///     located by walking up from the test binaries to the repo root
+///     (<c>Harbor.slnx</c> marker, same approach as ThemeParityTests).
+///     Regeneration contract: run with <c>HARBOR_UPDATE_GOLDENS=1</c> to overwrite
+///     goldens (and emit companion SVGs for human review) — CI never regenerates;
+///     without the flag a mismatching golden fails the test.
 /// </summary>
 internal static class Golden
 {
     private static readonly Lazy<string> _fixtureDir = new(ResolveFixtureDir);
 
+    /// <summary>Shared fixture directory (celldiff goldens + baselines manifest).</summary>
+    internal static string FixtureDir => _fixtureDir.Value;
+
     /// <summary>
-    /// Verifies the named golden against <paramref name="actualContent"/>.
-    /// With HARBOR_UPDATE_GOLDENS=1 the file is (re)written and an optional
-    /// SVG artifact is dropped next to it; otherwise returns the expected
-    /// content for the caller to assert.
+    ///     Verifies the named golden against <paramref name="actualContent" />.
+    ///     With HARBOR_UPDATE_GOLDENS=1 the file is (re)written and an optional
+    ///     SVG artifact is dropped next to it; otherwise returns the expected
+    ///     content for the caller to assert.
     /// </summary>
     public static string Verify(string name, string actualContent, string? svgContent = null)
     {
@@ -58,9 +58,6 @@ internal static class Golden
 
     public static bool IsUpdateMode() =>
         Environment.GetEnvironmentVariable("HARBOR_UPDATE_GOLDENS") == "1";
-
-    /// <summary>Shared fixture directory (celldiff goldens + baselines manifest).</summary>
-    internal static string FixtureDir => _fixtureDir.Value;
 
     private static string ResolveFixtureDir()
     {

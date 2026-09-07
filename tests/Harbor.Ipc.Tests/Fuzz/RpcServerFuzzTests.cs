@@ -1,10 +1,8 @@
-using System.Net.Sockets;
-using Harbor.Ipc.Client;
 using Harbor.Ipc.Protocol;
-using Harbor.Ipc.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
+using System.IO.Pipes;
+using System.Net.Sockets;
 namespace Harbor.Ipc.Tests.Fuzz;
 
 /// <summary>
@@ -19,7 +17,9 @@ internal sealed class SkipUnlessIpcFuzzEnabledAttribute : SkipAttribute
     public SkipUnlessIpcFuzzEnabledAttribute() : base(
         "Real-server fuzz disabled by default (named-pipe tests deadlock under TUnit "
         + "parallel scheduling on Linux; project excluded from solution). "
-        + "Set HARBOR_IPC_FUZZ=1 to enable.") { }
+        + "Set HARBOR_IPC_FUZZ=1 to enable.")
+    {
+    }
 
     /// <inheritdoc />
     public override Task<bool> ShouldSkip(TestRegisteredContext context)
@@ -47,16 +47,16 @@ public class RpcServerFuzzTests
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         // 1. Raw adversarial connection.
-        await using (Stream raw = await ConnectRawAsync(pipe, timeoutCts.Token))
+        await using (var raw = await ConnectRawAsync(pipe, timeoutCts.Token))
         {
             byte[] garbagePayload = [0xC1, 0xDE, 0xAD, 0xBE, 0xEF]; // never-valid msgpack start
             for (int i = 0; i < 3; i++)
-                await raw.WriteAsync(new byte[4], timeoutCts.Token);          // zero-length frame
+                await raw.WriteAsync(new byte[4], timeoutCts.Token); // zero-length frame
 
             for (int i = 0; i < 3; i++)
             {
                 await raw.WriteAsync(ResilientFrameReaderProbe.LengthHeader((uint)garbagePayload.Length), timeoutCts.Token);
-                await raw.WriteAsync(garbagePayload, timeoutCts.Token);       // undecodable frame
+                await raw.WriteAsync(garbagePayload, timeoutCts.Token); // undecodable frame
             }
 
             // 2. Same connection must still complete a valid request/response round-trip.
@@ -90,9 +90,9 @@ public class RpcServerFuzzTests
     {
         if (OperatingSystem.IsWindows())
         {
-            var pipe = new System.IO.Pipes.NamedPipeClientStream(
-                ".", pipeName, System.IO.Pipes.PipeDirection.InOut,
-                System.IO.Pipes.PipeOptions.Asynchronous);
+            var pipe = new NamedPipeClientStream(
+                ".", pipeName, PipeDirection.InOut,
+                PipeOptions.Asynchronous);
             await pipe.ConnectAsync(5000, ct);
             return pipe;
         }
@@ -101,6 +101,6 @@ public class RpcServerFuzzTests
         var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         await socket.ConnectAsync(new UnixDomainSocketEndPoint(socketPath), ct)
             .AsTask().WaitAsync(TimeSpan.FromSeconds(5), ct);
-        return new NetworkStream(socket, ownsSocket: true);
+        return new NetworkStream(socket, true);
     }
 }

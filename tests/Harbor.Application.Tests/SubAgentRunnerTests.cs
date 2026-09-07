@@ -1,4 +1,3 @@
-using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
@@ -8,7 +7,6 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
 using Harbor.Application.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Application.Tests;
 
 /// <summary>
@@ -46,37 +44,6 @@ public class SubAgentRunnerTests
         new Usage(0, 0),
         "test-model");
 
-    /// <summary>Loop fake that appends scripted replies into the context and captures calls.</summary>
-    private sealed class ScriptedLoop : IAgentLoop
-    {
-        private readonly AgentMessage[] _replies;
-        private readonly Result? _outcome;
-
-        public ScriptedLoop(Result? outcome = null, params AgentMessage[] replies)
-        {
-            _outcome = outcome;
-            _replies = replies;
-        }
-
-        public ISessionContext? LastContext { get; private set; }
-        public AgentDefinition? LastAgent { get; private set; }
-        public CancellationToken LastCt { get; private set; }
-        public Func<Task>? MidRun { get; set; }
-
-        public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
-        {
-            LastContext = session;
-            LastAgent = agent;
-            LastCt = ct;
-            foreach (AgentMessage message in _replies)
-                await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
-
-            if (MidRun is not null)
-                await MidRun().ConfigureAwait(false);
-            return _outcome ?? Result.Success();
-        }
-    }
-
     [Test]
     public async Task RunAsync_HappyPath_ReturnsFinalAssistantOutput()
     {
@@ -84,7 +51,7 @@ public class SubAgentRunnerTests
         var loop = new ScriptedLoop(replies: Assistant("found 3 TODOs in src/"));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
-        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("find the todos", ParentSessionId: "parent-1"));
+        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("find the todos", "parent-1"));
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.FinalOutput).IsEqualTo("found 3 TODOs in src/");
@@ -142,7 +109,7 @@ public class SubAgentRunnerTests
     public async Task RunAsync_LoopFailure_SurfacesErrorWithSessionId()
     {
         var store = new FakeSessionStore(NewSession());
-        var loop = new ScriptedLoop(outcome: Result.Failure("model exploded"), replies: []);
+        var loop = new ScriptedLoop(Result.Failure("model exploded"), []);
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
         var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go"));
@@ -171,7 +138,7 @@ public class SubAgentRunnerTests
         // SubAgentRunner.MaxOutputChars is internal (not visible to this project);
         // the cap constant itself is asserted indirectly by the lengths below.
         const int maxChars = 32_000;
-        var longText = new string('x', maxChars + 500);
+        string longText = new('x', maxChars + 500);
         var store = new FakeSessionStore(NewSession());
         var loop = new ScriptedLoop(replies: Assistant(longText));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
@@ -265,7 +232,7 @@ public class SubAgentRunnerTests
         Guid.NewGuid().ToString("N"),
         "session-1",
         DateTimeOffset.UtcNow,
-        [.. texts.Select(t => (ContentPart)new TextPart(t))],
+        [..texts.Select(t => (ContentPart)new TextPart(t))],
         StopReason.Stop,
         new Usage(0, 0),
         "test-model");
@@ -297,14 +264,14 @@ public class SubAgentRunnerTests
         var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go"));
 
         await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.FinalOutput).IsEqualTo($"part one\npart two");
+        await Assert.That(result.Value.FinalOutput).IsEqualTo("part one\npart two");
     }
 
     [Test]
     public async Task RunAsync_NonAssistantTailMessages_StillResolveFinalText()
     {
         var store = new FakeSessionStore(NewSession());
-        var session1 = "session-1";
+        string session1 = "session-1";
         var loop = new ScriptedLoop(replies:
         [
             Assistant("final prose"),
@@ -358,5 +325,36 @@ public class SubAgentRunnerTests
         await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", WorkingDirectory: " "));
 
         await Assert.That(store.LastCreatedDirectory).IsEqualTo(Environment.CurrentDirectory);
+    }
+
+    /// <summary>Loop fake that appends scripted replies into the context and captures calls.</summary>
+    private sealed class ScriptedLoop : IAgentLoop
+    {
+        private readonly Result? _outcome;
+        private readonly AgentMessage[] _replies;
+
+        public ScriptedLoop(Result? outcome = null, params AgentMessage[] replies)
+        {
+            _outcome = outcome;
+            _replies = replies;
+        }
+
+        public ISessionContext? LastContext { get; private set; }
+        public AgentDefinition? LastAgent { get; private set; }
+        public CancellationToken LastCt { get; private set; }
+        public Func<Task>? MidRun { get; set; }
+
+        public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        {
+            LastContext = session;
+            LastAgent = agent;
+            LastCt = ct;
+            foreach (var message in _replies)
+                await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
+
+            if (MidRun is not null)
+                await MidRun().ConfigureAwait(false);
+            return _outcome ?? Result.Success();
+        }
     }
 }

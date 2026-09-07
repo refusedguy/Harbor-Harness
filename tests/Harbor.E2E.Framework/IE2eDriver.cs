@@ -1,7 +1,5 @@
-using System.IO;
-using System;
-
 namespace Harbor.E2E.Framework;
+
 /// <summary>
 ///     Common contract for driving a Harbor app (CLI, TUI, or desktop) from
 ///     outside the process. Each driver wraps a real subprocess (or, for
@@ -117,7 +115,7 @@ public static class E2EHelpers
     public static string FindRepoRoot()
     {
         // Try multiple starting points
-        string[] startDirs = 
+        string[] startDirs =
         [
             Directory.GetCurrentDirectory(),
             AppContext.BaseDirectory,
@@ -129,13 +127,13 @@ public static class E2EHelpers
             string dir = startDir;
             while (dir is not null && !File.Exists(Path.Combine(dir, "Harbor.sln")))
             {
-                DirectoryInfo? parent = Directory.GetParent(dir);
+                var parent = Directory.GetParent(dir);
                 dir = parent?.FullName;
             }
-            
+
             if (dir is not null) return dir;
         }
-        
+
         // Last resort: return current directory even if .sln not found
         return Directory.GetCurrentDirectory();
     }

@@ -2,6 +2,7 @@ using Markdig;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 namespace Harbor.Desktop.Shared.Services;
+
 /// <summary>
 ///     Converts Markdown to plain text using Markdig. Used by the command
 ///     palette to fuzzy-search chat messages and by the toast notifications

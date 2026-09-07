@@ -1,15 +1,13 @@
-using System.Text;
-using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Services;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Cell-native toast overlay (CellForge EPIC H).
-/// Renders queued toast notifications above the chat feed, stacked
-/// top-to-bottom, with a 3-cell accent strip on the left edge and a
-/// 280-380 px content area (capped to the terminal width).
-/// Pure over its queue state — no layout side effects.
+///     Cell-native toast overlay (CellForge EPIC H).
+///     Renders queued toast notifications above the chat feed, stacked
+///     top-to-bottom, with a 3-cell accent strip on the left edge and a
+///     280-380 px content area (capped to the terminal width).
+///     Pure over its queue state — no layout side effects.
 /// </summary>
 public sealed class ToastOverlay
 {
@@ -24,14 +22,12 @@ public sealed class ToastOverlay
     private readonly Queue<ToastNotification> _pending = new();
     private long _tick;
 
-    public ToastOverlay()
-    {
-    }
-
     /// <summary>Number of toasts currently painted (visible + queued).</summary>
     public int Count => _active.Count + _pending.Count;
 
     public bool IsEmpty => _active.Count == 0 && _pending.Count == 0;
+
+    public IReadOnlyList<ToastNotification> Active => _active;
 
     public void Show(string message, ToastKind kind = ToastKind.Info)
     {
@@ -72,8 +68,6 @@ public sealed class ToastOverlay
             DrainPending();
         }
     }
-
-    public IReadOnlyList<ToastNotification> Active => _active;
 
     public void Paint(ScreenBuffer buffer, Rect rect)
     {
@@ -118,7 +112,7 @@ public sealed class ToastOverlay
             ToastKind.Success => ChatPalette.Success,
             ToastKind.Warning => ChatPalette.Warning,
             ToastKind.Error => ChatPalette.Error,
-            _ => ChatPalette.Accent,
+            _ => ChatPalette.Accent
         };
         var accentStyle = new CellStyle(accentColor);
         var fillStyle = new CellStyle(ChatPalette.Panel);
@@ -156,6 +150,6 @@ public sealed class ToastOverlay
         ToastKind.Success => "✓",
         ToastKind.Warning => "!",
         ToastKind.Error => "✗",
-        _ => "ℹ",
+        _ => "ℹ"
     };
 }

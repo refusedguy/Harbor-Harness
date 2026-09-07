@@ -1,13 +1,12 @@
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Tools.Mcp;
 
 public sealed class McpToolAdapter : ITool
 {
+    private readonly ILogger<McpToolAdapter>? _logger;
     private readonly IMcpRegistry _registry;
     private readonly string _server;
     private readonly string _toolName;
-    private readonly ILogger<McpToolAdapter>? _logger;
 
     public McpToolAdapter(IMcpRegistry registry, string server, string toolName, ILogger<McpToolAdapter>? logger = null)
     {
@@ -24,13 +23,13 @@ public sealed class McpToolAdapter : ITool
     public string? PromptSnippet => $"mcp {_server}/{_toolName}: {Description}";
     public IReadOnlyList<string> PromptGuidelines { get; } = Array.Empty<string>();
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "arguments": { "type": "object", "description": "Tool arguments" }
-          }
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "arguments": { "type": "object", "description": "Tool arguments" }
+                                                                        }
+                                                                      }
+                                                                      """);
 
     public Result ValidateArguments(JsonElement args)
     {
@@ -41,7 +40,7 @@ public sealed class McpToolAdapter : ITool
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
     {
-        JsonElement methodArgs = args.TryGetProperty("arguments", out var a) && a.ValueKind == JsonValueKind.Object
+        var methodArgs = args.TryGetProperty("arguments", out var a) && a.ValueKind == JsonValueKind.Object
             ? a
             : default;
 

@@ -3,6 +3,7 @@ using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Plugins.Runtime.Tests.Compilation;
+
 /// <summary>
 ///     Tests for the Compilation layer: <see cref="RoslynPluginCompiler" /> and
 ///     <see cref="CachingCompiler" />.

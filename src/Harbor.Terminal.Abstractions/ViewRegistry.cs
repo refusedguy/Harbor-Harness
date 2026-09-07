@@ -1,8 +1,9 @@
-using System.Collections.Frozen;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
 using Microsoft.Extensions.Logging;
+using System.Collections.Frozen;
 namespace Harbor.Terminal.Abstractions;
+
 /// <summary>
 ///     Registry of TUI views. Implements Registry pattern (GOF).
 ///     Allows plugins to register custom views (status bars, panels, overlays).

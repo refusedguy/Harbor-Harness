@@ -1,7 +1,6 @@
-using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-
+using System.Threading.Channels;
 namespace Harbor.TestKit;
 
 /// <summary>Message builders with sensible defaults (P.6: −15 fixture copies).</summary>
@@ -34,14 +33,14 @@ public static class TestMessages
 /// <summary>In-memory <see cref="ISessionContext" /> with steering helpers.</summary>
 public sealed class TestSessionContext(Session session, IReadOnlyList<AgentMessage>? seedMessages = null) : ISessionContext
 {
-    private readonly List<AgentMessage> _messages = [.. seedMessages ?? []];
+    private readonly List<AgentMessage> _messages = [..seedMessages ?? []];
 
     public Session Session { get; } = session;
 
     public IReadOnlyList<AgentMessage> Messages => _messages;
 
-    public System.Threading.Channels.Channel<AgentMessage> SteeringQueue { get; } =
-        System.Threading.Channels.Channel.CreateUnbounded<AgentMessage>();
+    public Channel<AgentMessage> SteeringQueue { get; } =
+        Channel.CreateUnbounded<AgentMessage>();
 
     public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default)
     {
@@ -53,7 +52,7 @@ public sealed class TestSessionContext(Session session, IReadOnlyList<AgentMessa
 
     public void EnqueueSteering(params AgentMessage[] messages)
     {
-        foreach (AgentMessage message in messages)
+        foreach (var message in messages)
         {
             SteeringQueue.Writer.TryWrite(message);
         }

@@ -1,8 +1,7 @@
-namespace Harbor.Tui.RendererTests.Support;
-
-using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using System.Text.Json;
+namespace Harbor.Tui.RendererTests.Support;
 
 /// <summary>
 ///     The canonical event stream every renderer golden frame is built from
@@ -30,7 +29,7 @@ public static class CanonicalStreams
 
         var toolPartial = AssistantMessage.Empty("s1", "stub-2");
         yield return new ToolExecutionStartEvent("tc_1", "read", args);
-        yield return new ToolExecutionEndEvent("tc_1", ToolResult.Success("[0001] # Harbor"), IsError: false);
+        yield return new ToolExecutionEndEvent("tc_1", ToolResult.Success("[0001] # Harbor"), false);
         yield return new MessageStartEvent(toolPartial);
         yield return new MessageUpdateEvent(new TextDeltaEvent("1", "Done."), toolPartial);
         yield return new MessageEndEvent(toolPartial);

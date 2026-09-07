@@ -1,5 +1,6 @@
 using MessagePack;
 namespace Harbor.Ipc.Protocol;
+
 /// <summary>
 ///     Base type for all Harbor IPC responses. The server always echoes the
 ///     <see cref="RequestId" /> from the originating <see cref="HarborRequest" />.
@@ -101,7 +102,7 @@ public sealed record EventEnvelope : HarborResponse
     /// <summary>
     ///     Server-assigned monotonic delivery sequence (1, 2, 3…). Clients
     ///     use it for dedup and reconnect replay bookkeeping
-    ///     (<see cref="SubscribeToEventsRequest.LastSequence"/>).
+    ///     (<see cref="SubscribeToEventsRequest.LastSequence" />).
     /// </summary>
     [Key(2)]
     public ulong Sequence { get; init; }

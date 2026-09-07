@@ -1,12 +1,12 @@
 namespace Harbor.DesignSystem;
 
 /// <summary>
-/// Live-reload for the theme marketplace: polls a themes directory on a fixed
-/// interval and applies changed theme JSON files through
-/// <see cref="TerminalColorPalette.Apply" />. Polling (not FileSystemWatcher)
-/// keeps behaviour deterministic across terminals, network mounts and CI.
-/// Invalid files report through the onError callback and keep the last
-/// applied theme. Expose <see cref="Poll" /> for deterministic tests.
+///     Live-reload for the theme marketplace: polls a themes directory on a fixed
+///     interval and applies changed theme JSON files through
+///     <see cref="TerminalColorPalette.Apply" />. Polling (not FileSystemWatcher)
+///     keeps behaviour deterministic across terminals, network mounts and CI.
+///     Invalid files report through the onError callback and keep the last
+///     applied theme. Expose <see cref="Poll" /> for deterministic tests.
 /// </summary>
 public sealed class ThemeDirectoryWatcher : IDisposable
 {
@@ -16,11 +16,8 @@ public sealed class ThemeDirectoryWatcher : IDisposable
     private readonly string _directory;
     private readonly Action<HarborTheme>? _onApplied;
     private readonly Action<string>? _onError;
-    private readonly Timer _timer;
     private readonly Dictionary<string, DateTime> _stamps = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>Theme applied by the most recent successful reload (null until the first change).</summary>
-    public HarborTheme? LastApplied { get; private set; }
+    private readonly Timer _timer;
 
     public ThemeDirectoryWatcher(
         string? directory = null,
@@ -34,7 +31,12 @@ public sealed class ThemeDirectoryWatcher : IDisposable
         _timer = autoStart ? new Timer(_ => Poll(), null, Interval, Interval) : DisabledTimer();
     }
 
-    private static Timer DisabledTimer() => new(_ => { }, null, Timeout.Infinite, Timeout.Infinite);
+    /// <summary>Theme applied by the most recent successful reload (null until the first change).</summary>
+    public HarborTheme? LastApplied { get; private set; }
+
+    public void Dispose() => _timer.Dispose();
+
+    private static Timer DisabledTimer() => new(_ => {}, null, Timeout.Infinite, Timeout.Infinite);
 
     /// <summary>One poll cycle — exposed for deterministic testing.</summary>
     public void Poll()
@@ -105,6 +107,4 @@ public sealed class ThemeDirectoryWatcher : IDisposable
             _onError?.Invoke($"{Path.GetFileName(path)}: {ex.Message}");
         }
     }
-
-    public void Dispose() => _timer.Dispose();
 }

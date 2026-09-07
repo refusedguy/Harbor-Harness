@@ -1,6 +1,6 @@
 namespace Harbor.Tui.CellForge.Widgets;
 
-/// <summary>What <see cref="TimelineLayoutCache.PrepareLayout"/> did this frame.</summary>
+/// <summary>What <see cref="TimelineLayoutCache.PrepareLayout" /> did this frame.</summary>
 public enum LayoutOutcome : byte
 {
     /// <summary>Nothing changed — reuse everything.</summary>
@@ -10,113 +10,100 @@ public enum LayoutOutcome : byte
     Patched = 1,
 
     /// <summary>Width change — measurements reset, estimates rebuilt, anchor re-pins the viewport.</summary>
-    FullRebuild = 2,
+    FullRebuild = 2
 }
 
 /// <summary>
-/// Virtual-timeline layout math (widgets §3.3, grok prepare_layout ×3-case):
-/// cheap estimates everywhere, EXACT heights settled only for blocks inside
-/// the viewport, monotonic virtual_y prefix array for binary search, scroll
-/// anchor against width-change jumps. Arrays grow geometrically and are
-/// reused — steady-state frames allocate nothing.
-///
-/// Case 1 — width changed: forget measurements, re-estimate all, rebuild.
-/// Case 2 — appends / dirty heights / replacements: re-estimate the affected
-///          suffix, patch virtual_y from the first touched index (O(1) for
-///          the streaming tail).
-/// Case 3 — nothing structural: totals and ranges served from cache, settle
-///          any newly visible blocks.
+///     Virtual-timeline layout math (widgets §3.3, grok prepare_layout ×3-case):
+///     cheap estimates everywhere, EXACT heights settled only for blocks inside
+///     the viewport, monotonic virtual_y prefix array for binary search, scroll
+///     anchor against width-change jumps. Arrays grow geometrically and are
+///     reused — steady-state frames allocate nothing.
+///     Case 1 — width changed: forget measurements, re-estimate all, rebuild.
+///     Case 2 — appends / dirty heights / replacements: re-estimate the affected
+///     suffix, patch virtual_y from the first touched index (O(1) for
+///     the streaming tail).
+///     Case 3 — nothing structural: totals and ranges served from cache, settle
+///     any newly visible blocks.
 /// </summary>
 public sealed class TimelineLayoutCache
 {
     private const int InitialSlots = 64;
-
-    private readonly struct Slot(int exactH, int estH, bool measured)
-    {
-        public int ExactH { get; } = exactH;
-        public int EstH { get; } = estH;
-        public bool Measured { get; } = measured;
-
-        public static Slot Estimated(int est) => new(-1, Math.Max(1, est), false);
-        public static Slot ExactMeasured(int h) => new(h, h, true);
-    }
-
-    private IChatBlock[] _blocks = [];
-    private Slot[] _slots = [];
-    private long[] _virtual = [0]; // _virtual[i] = top row of block i; [_count] = total height
-    private int _count;
-
-    private int _width = -1;
-    private int _unmeasuredFrom;               // first index lacking any height info
-    private int _dirtyFrom = int.MaxValue;     // first index whose cached height may be stale
-    private int _measureCallsThisFrame;
 
     // Scroll anchor: block identity + row within it, captured before rebuilds.
     private IChatBlock? _anchorBlock;
     private int _anchorRow;
     private long _anchorY;
 
-    public int Count => _count;
+    private IChatBlock[] _blocks = [];
+    private int _dirtyFrom = int.MaxValue; // first index whose cached height may be stale
+    private Slot[] _slots = [];
+    private int _unmeasuredFrom; // first index lacking any height info
+    private long[] _virtual = [0]; // _virtual[i] = top row of block i; [_count] = total height
 
-    public long TotalHeight => _virtual[_count];
+    private int _width = -1;
+
+    public int Count { get; private set; }
+
+    public long TotalHeight => _virtual[Count];
+
+    /// <summary>Measure() calls issued during the last <see cref="PrepareLayout" />.</summary>
+    public int MeasureCallsLastFrame { get; private set; }
 
     /// <summary>
-    /// Largest legal timeline-space scroll offset for the given viewport height
-    /// (CF-B-006 store bridge): <c>max(0, TotalHeight - viewportH)</c>. The host
-    /// feeds this into <c>UiMsg.ScrollClamp</c> after layout so the store's
-    /// <c>ScrollOffset</c> stays inside the freshly measured range. Pure and
-    /// allocation-free; never mutates layout state.
+    ///     Largest legal timeline-space scroll offset for the given viewport height
+    ///     (CF-B-006 store bridge): <c>max(0, TotalHeight - viewportH)</c>. The host
+    ///     feeds this into <c>UiMsg.ScrollClamp</c> after layout so the store's
+    ///     <c>ScrollOffset</c> stays inside the freshly measured range. Pure and
+    ///     allocation-free; never mutates layout state.
     /// </summary>
     public long MaxScrollFor(int viewportH) => Math.Max(0, TotalHeight - Math.Max(0, viewportH));
 
     /// <summary>
-    /// Clamps a timeline-space scroll offset to <c>[0 .. MaxScrollFor(viewportH)]</c>.
-    /// Same range the store enforces via <c>UiState.SetScroll</c>; kept here so the
-    /// widget and the reducer can never disagree on the bounds formula.
+    ///     Clamps a timeline-space scroll offset to <c>[0 .. MaxScrollFor(viewportH)]</c>.
+    ///     Same range the store enforces via <c>UiState.SetScroll</c>; kept here so the
+    ///     widget and the reducer can never disagree on the bounds formula.
     /// </summary>
     public long ClampScrollY(long scrollY, int viewportH) => Math.Clamp(scrollY, 0, MaxScrollFor(viewportH));
 
     public IChatBlock BlockAt(int index)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, _count);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, Count);
         return _blocks[index];
     }
-
-    /// <summary>Measure() calls issued during the last <see cref="PrepareLayout"/>.</summary>
-    public int MeasureCallsLastFrame => _measureCallsThisFrame;
 
     public void Append(IChatBlock block)
     {
         ArgumentNullException.ThrowIfNull(block);
 
-        EnsureCapacity(_count + 1);
-        _blocks[_count] = block;
-        _slots[_count] = default;
-        _count++;
-        EnsureVirtualLength(_count + 1);
+        EnsureCapacity(Count + 1);
+        _blocks[Count] = block;
+        _slots[Count] = default;
+        Count++;
+        EnsureVirtualLength(Count + 1);
 
-        _unmeasuredFrom = Math.Min(_unmeasuredFrom, _count - 1);
-        _dirtyFrom = Math.Min(_dirtyFrom, _count - 1);
+        _unmeasuredFrom = Math.Min(_unmeasuredFrom, Count - 1);
+        _dirtyFrom = Math.Min(_dirtyFrom, Count - 1);
     }
 
     /// <summary>Drops the oldest block; subsequent indices shift one left.</summary>
     public bool EvictFirst()
     {
-        if (_count == 0)
+        if (Count == 0)
         {
             return false;
         }
 
         var evicted = _blocks[0];
-        if (_count > 1)
+        if (Count > 1)
         {
-            Array.Copy(_blocks, 1, _blocks, 0, _count - 1);
-            Array.Copy(_slots, 1, _slots, 0, _count - 1);
+            Array.Copy(_blocks, 1, _blocks, 0, Count - 1);
+            Array.Copy(_slots, 1, _slots, 0, Count - 1);
         }
 
-        _count--;
-        _blocks[_count] = null!;
+        Count--;
+        _blocks[Count] = null!;
         _unmeasuredFrom = Math.Max(0, _unmeasuredFrom - 1);
         _dirtyFrom = Math.Min(_dirtyFrom, 0);
 
@@ -128,17 +115,19 @@ public sealed class TimelineLayoutCache
         return true;
     }
 
-    /// <summary>Streaming tail grew or a mutable card mutated — heights from
-    /// here are stale. Already-measured slots in the range are demoted back
-    /// to estimates so the next settle re-measures them.</summary>
+    /// <summary>
+    ///     Streaming tail grew or a mutable card mutated — heights from
+    ///     here are stale. Already-measured slots in the range are demoted back
+    ///     to estimates so the next settle re-measures them.
+    /// </summary>
     public void MarkHeightsDirty(int fromIndex)
     {
-        if ((uint)fromIndex > (uint)_count)
+        if ((uint)fromIndex > (uint)Count)
         {
             return;
         }
 
-        for (int i = fromIndex; i < _count; i++)
+        for (int i = fromIndex; i < Count; i++)
         {
             ref var s = ref _slots[i];
             if (s.Measured)
@@ -155,7 +144,7 @@ public sealed class TimelineLayoutCache
     public void Replace(int index, IChatBlock block)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, _count);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, Count);
         ArgumentNullException.ThrowIfNull(block);
 
         _blocks[index] = block;
@@ -167,7 +156,7 @@ public sealed class TimelineLayoutCache
     /// <summary>Captures the viewport top so a width-change rebuild can restore it.</summary>
     public void PinAnchor(long scrollTopY)
     {
-        if (_count == 0)
+        if (Count == 0)
         {
             return;
         }
@@ -180,20 +169,20 @@ public sealed class TimelineLayoutCache
     }
 
     /// <summary>
-    /// Runs the 3-case layout for the frame. After a full rebuild call
-    /// <see cref="RestoreAnchor"/> to de-jump the viewport.
+    ///     Runs the 3-case layout for the frame. After a full rebuild call
+    ///     <see cref="RestoreAnchor" /> to de-jump the viewport.
     /// </summary>
     public LayoutOutcome PrepareLayout(int width, int viewportH, long scrollY)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(width);
         ArgumentOutOfRangeException.ThrowIfNegative(viewportH);
-        _measureCallsThisFrame = 0;
+        MeasureCallsLastFrame = 0;
 
         // ── Case 1: width changed ───────────────────────────────────────────
         if (width != _width)
         {
             _width = width;
-            Array.Clear(_slots, 0, _count); // wrapped heights are invalid at the new width
+            Array.Clear(_slots, 0, Count); // wrapped heights are invalid at the new width
             _unmeasuredFrom = 0;
             _dirtyFrom = 0;
             ComputeEstimates();
@@ -207,7 +196,7 @@ public sealed class TimelineLayoutCache
         if (_dirtyFrom != int.MaxValue)
         {
             ComputeEstimates();
-            PatchVirtualFrom(Math.Min(_dirtyFrom, _count));
+            PatchVirtualFrom(Math.Min(_dirtyFrom, Count));
             _dirtyFrom = int.MaxValue;
             SettleVisible(viewportH, scrollY);
             return LayoutOutcome.Patched;
@@ -220,12 +209,12 @@ public sealed class TimelineLayoutCache
     /// <summary>Post-rebuild scroll fix-up: keeps the anchored block at its row.</summary>
     public long RestoreAnchor()
     {
-        if (_anchorBlock is null || _count == 0)
+        if (_anchorBlock is null || Count == 0)
         {
             return _anchorY;
         }
 
-        for (int i = 0; i < _count; i++)
+        for (int i = 0; i < Count; i++)
         {
             if (ReferenceEquals(_blocks[i], _anchorBlock))
             {
@@ -236,18 +225,18 @@ public sealed class TimelineLayoutCache
         return _anchorY; // anchored block was evicted — caller clamps
     }
 
-    /// <summary>Index of the block whose span contains row <paramref name="y"/> (binary search).</summary>
+    /// <summary>Index of the block whose span contains row <paramref name="y" /> (binary search).</summary>
     public int EntryAtY(long y)
     {
-        if (_count == 0)
+        if (Count == 0)
         {
             return -1;
         }
 
-        int lo = 0, hi = _count - 1;
+        int lo = 0, hi = Count - 1;
         while (lo < hi)
         {
-            int mid = (lo + hi + 1) >> 1;
+            int mid = lo + hi + 1 >> 1;
             if (_virtual[mid] <= y)
             {
                 lo = mid;
@@ -264,14 +253,14 @@ public sealed class TimelineLayoutCache
     /// <summary>Inclusive range of blocks intersecting rows [scrollY, scrollY+viewportH).</summary>
     public (int First, int Last) VisibleRange(long scrollY, int viewportH)
     {
-        if (_count == 0 || viewportH <= 0)
+        if (Count == 0 || viewportH <= 0)
         {
             return (-1, -2);
         }
 
         int first = EntryAtY(Math.Max(0, scrollY));
         int last = first;
-        while (last < _count && _virtual[last] < scrollY + viewportH)
+        while (last < Count && _virtual[last] < scrollY + viewportH)
         {
             last++;
         }
@@ -289,7 +278,7 @@ public sealed class TimelineLayoutCache
 
     private void ComputeEstimates()
     {
-        for (int i = _unmeasuredFrom; i < _count; i++)
+        for (int i = _unmeasuredFrom; i < Count; i++)
         {
             ref var s = ref _slots[i];
             if (!s.Measured && s.EstH == 0)
@@ -298,14 +287,14 @@ public sealed class TimelineLayoutCache
             }
         }
 
-        _unmeasuredFrom = _count;
+        _unmeasuredFrom = Count;
     }
 
     private void PatchVirtualFrom(int from)
     {
-        if (from >= _count)
+        if (from >= Count)
         {
-            if (_count >= 0)
+            if (Count >= 0)
             {
                 RecomputeTailTotal();
             }
@@ -314,31 +303,31 @@ public sealed class TimelineLayoutCache
         }
 
         long sum = from == 0 ? 0 : _virtual[from - 1] + EffectiveHeight(from - 1);
-        for (int i = from; i < _count; i++)
+        for (int i = from; i < Count; i++)
         {
             _virtual[i] = sum;
             sum += EffectiveHeight(i);
         }
 
-        _virtual[_count] = sum;
+        _virtual[Count] = sum;
     }
 
     /// <summary>Total-only fix-up when the suffix start is past the end (e.g. pure eviction).</summary>
     private void RecomputeTailTotal()
     {
-        long sum = _count > 0 ? _virtual[_count - 1] + EffectiveHeight(_count - 1) : 0;
-        _virtual[_count] = sum;
+        long sum = Count > 0 ? _virtual[Count - 1] + EffectiveHeight(Count - 1) : 0;
+        _virtual[Count] = sum;
     }
 
     /// <summary>Measures previously-unmeasured blocks inside the viewport; patches if any.</summary>
     private bool SettleVisible(int viewportH, long scrollY)
     {
-        if (_count == 0 || viewportH <= 0)
+        if (Count == 0 || viewportH <= 0)
         {
             return false;
         }
 
-        var (first, last) = VisibleRange(scrollY, viewportH);
+        (int first, int last) = VisibleRange(scrollY, viewportH);
         if (first < 0)
         {
             return false;
@@ -346,14 +335,14 @@ public sealed class TimelineLayoutCache
 
         bool changed = false;
         int patchFrom = int.MaxValue;
-        for (int i = first; i <= last && i < _count; i++)
+        for (int i = first; i <= last && i < Count; i++)
         {
             ref var s = ref _slots[i];
             if (!s.Measured)
             {
                 var m = _blocks[i].Measure(_width);
                 s = m.IsExact ? Slot.ExactMeasured(m.MaxLines) : Slot.Estimated(m.BestGuess);
-                _measureCallsThisFrame++;
+                MeasureCallsLastFrame++;
                 changed = true;
                 patchFrom = Math.Min(patchFrom, i);
             }
@@ -398,5 +387,15 @@ public sealed class TimelineLayoutCache
         }
 
         Array.Resize(ref _virtual, cap);
+    }
+
+    private readonly struct Slot(int exactH, int estH, bool measured)
+    {
+        public int ExactH { get; } = exactH;
+        public int EstH { get; } = estH;
+        public bool Measured { get; } = measured;
+
+        public static Slot Estimated(int est) => new(-1, Math.Max(1, est), false);
+        public static Slot ExactMeasured(int h) => new(h, h, true);
     }
 }

@@ -1,7 +1,5 @@
 namespace Harbor.Hosting.Rendering;
 
-using Harbor.Abstractions.Tui;
-
 /// <summary>
 ///     Contract of the lock-free hot-swappable renderer runtime
 ///     (renderer-unification sprint Phase 6.3): swap the active renderer
@@ -19,32 +17,32 @@ public interface IRendererPipeline : IDisposable
 {
     /// <inheritdoc cref="IDisposable.Dispose" />
     /// <summary>The currently published renderer (never null after construction).</summary>
-    ITuiRenderer Current { get; }
+    public ITuiRenderer Current { get; }
 
     /// <summary>Backend id of the currently published renderer.</summary>
-    string CurrentBackendId { get; }
+    public string CurrentBackendId { get; }
 
     /// <summary>Backend ids registered for runtime swap.</summary>
-    IReadOnlyCollection<string> AvailableBackends { get; }
+    public IReadOnlyCollection<string> AvailableBackends { get; }
 
     /// <summary>
     ///     Raised before the swap is applied. Handlers may cancel (e.g. a
     ///     renderer that cannot safely flush right now).
     /// </summary>
-    event EventHandler<RendererSwappingEventArgs>? RendererSwapping;
+    public event EventHandler<RendererSwappingEventArgs>? RendererSwapping;
 
     /// <summary>Raised after the new renderer is published and the old one disposed.</summary>
-    event EventHandler<RendererSwappedEventArgs>? RendererSwapped;
+    public event EventHandler<RendererSwappedEventArgs>? RendererSwapped;
 
     /// <summary>Registers a swap target. The initial renderer's id is pre-registered by the pipeline.</summary>
-    void Register(string backendId, Func<ITuiRenderer> factory);
+    public void Register(string backendId, Func<ITuiRenderer> factory);
 
     /// <summary>
     ///     Atomically replaces the active renderer. Returns false when the
     ///     backend is unknown, the swap was cancelled by a handler, or
     ///     another swap is in flight.
     /// </summary>
-    Task<bool> SwapRendererAsync(string backendId, CancellationToken ct = default);
+    public Task<bool> SwapRendererAsync(string backendId, CancellationToken ct = default);
 }
 
 /// <summary>Cancelable pre-swap event payload.</summary>

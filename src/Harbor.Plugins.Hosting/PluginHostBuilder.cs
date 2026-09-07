@@ -2,6 +2,7 @@ using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Plugins.Hosting;
+
 /// <summary>
 ///     Fluent builder for <see cref="PluginHost" />. Wires up the four layers
 ///     (storage / compilation / instantiation / registration) with sensible defaults and

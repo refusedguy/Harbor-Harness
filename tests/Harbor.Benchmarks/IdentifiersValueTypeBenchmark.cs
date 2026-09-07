@@ -4,7 +4,7 @@ namespace Harbor.Benchmarks;
 
 /// <summary>
 ///     Benchmarks the strongly-typed identifier value objects
-///     (<see cref=\"SessionId\" />, <see cref=\"MessageId\" />, <see cref=\"ToolName\" />,
+///     (<see cref=\"SessionId" />, <see cref=\"MessageId\" />, <see cref=\"ToolName\" />,
 ///     <see cref=\"ProviderId\" />) to verify they do not box when used in
 ///     dictionaries, hash-sets, and serialization paths.
 /// </summary>
@@ -12,13 +12,13 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class IdentifiersValueTypeBenchmark
 {
-    private SessionId[] _sessionIds = null!;
-    private MessageId[] _messageIds = null!;
-    private ToolName[] _toolNames = null!;
-    private ProviderId[] _providerIds = null!;
 
     [Params(100, 1000, 10000)]
     public int Count;
+    private MessageId[] _messageIds = null!;
+    private ProviderId[] _providerIds = null!;
+    private SessionId[] _sessionIds = null!;
+    private ToolName[] _toolNames = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -72,10 +72,7 @@ public class IdentifiersValueTypeBenchmark
     }
 
     [Benchmark(Description = "ProviderId.TryCreate parse")]
-    public Result<ProviderId> ProviderId_TryCreate()
-    {
-        return ProviderId.TryCreate("test-provider");
-    }
+    public Result<ProviderId> ProviderId_TryCreate() => ProviderId.TryCreate("test-provider");
 
     [Benchmark(Description = "ToolName.Create + ToString roundtrip")]
     public string ToolName_Roundtrip()

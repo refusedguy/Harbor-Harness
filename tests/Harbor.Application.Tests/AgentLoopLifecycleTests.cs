@@ -4,13 +4,12 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
-using Harbor.Application.Tests.Fakes;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
+using Harbor.Application.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
 namespace Harbor.Application.Tests;
@@ -81,8 +80,7 @@ public class AgentLoopLifecycleTests
     [Test]
     public async Task RunAsync_CancelledBeforeFirstTurn_ReturnsFailure()
     {
-        var client = new ScriptedLlmClient(
-            [[new TextDeltaEvent("t", "never reached"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
+        var client = new ScriptedLlmClient([new TextDeltaEvent("t", "never reached"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
         var loop = CreateLoop(client, new FakeToolRegistry(), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
         var session = NewSession();
 
@@ -98,20 +96,16 @@ public class AgentLoopLifecycleTests
     public async Task RunAsync_StopReasonStopWithPendingToolCalls_ExecutesPendingToolCalls()
     {
         var counter = new CountingTool();
-        var client = new ScriptedLlmClient(
-        [
-            new LlmEvent[]
-            {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":7}"""),
-                new StepFinishEvent(0, "stop", new Usage(4, 2))
-            },
-            new LlmEvent[]
-            {
-                new TextDeltaEvent("t", "finished"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
-            }
-        ]);
+        var client = new ScriptedLlmClient(new LlmEvent[]
+        {
+            new ToolCallStartEvent("call-1", "counter"),
+            new ToolCallDeltaEvent("call-1", """{"n":7}"""),
+            new StepFinishEvent(0, "stop", new Usage(4, 2))
+        }, new LlmEvent[]
+        {
+            new TextDeltaEvent("t", "finished"),
+            new StepFinishEvent(1, "stop", new Usage(1, 1))
+        });
         var loop = CreateLoop(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
         var session = NewSession();
 
@@ -119,27 +113,23 @@ public class AgentLoopLifecycleTests
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(counter.Executions).IsEqualTo(1);
-        await Assert.That(System.Linq.Enumerable.Count(session.Messages.OfType<ToolResultMessage>())).IsEqualTo(1);
+        await Assert.That(session.Messages.OfType<ToolResultMessage>().Count()).IsEqualTo(1);
     }
 
     [Test]
     public async Task RunAsync_MalformedToolCallArgs_ReturnsErrorResultWithoutExecutingTool()
     {
         var counter = new CountingTool();
-        var client = new ScriptedLlmClient(
-        [
-            new LlmEvent[]
-            {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", "{ this is not json"),
-                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
-            },
-            new LlmEvent[]
-            {
-                new TextDeltaEvent("t", "recovered"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
-            }
-        ]);
+        var client = new ScriptedLlmClient(new LlmEvent[]
+        {
+            new ToolCallStartEvent("call-1", "counter"),
+            new ToolCallDeltaEvent("call-1", "{ this is not json"),
+            new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+        }, new LlmEvent[]
+        {
+            new TextDeltaEvent("t", "recovered"),
+            new StepFinishEvent(1, "stop", new Usage(1, 1))
+        });
         var loop = CreateLoop(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
         var session = NewSession();
 
@@ -156,10 +146,9 @@ public class AgentLoopLifecycleTests
     public async Task RunAsync_CompactionFails_FallsBackAndContinuesWithTruncatedContext()
     {
         var session = NewSession();
-        var seed = SeedHistory(session.Session.Id, userAssistantPairs: 6);
+        var seed = SeedHistory(session.Session.Id, 6);
         var context = new TestSessionContext(session.Session, seed);
-        var client = new ScriptedLlmClient(
-            [[new TextDeltaEvent("t", "ok"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
+        var client = new ScriptedLlmClient([new TextDeltaEvent("t", "ok"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
         var compaction = new FakeCompactionService();
         var loop = CreateLoop(
             client,
@@ -180,29 +169,27 @@ public class AgentLoopLifecycleTests
     public async Task RunAsync_SteeringMessagesQueued_AllDrainedAtTurnBoundary()
     {
         var counter = new CountingTool();
-        var client = new ScriptedLlmClient(
-        [
-            new LlmEvent[]
-            {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
-            },
-            new LlmEvent[]
-            {
-                new TextDeltaEvent("t", "done"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
-            }
-        ]);
+        var client = new ScriptedLlmClient(new LlmEvent[]
+        {
+            new ToolCallStartEvent("call-1", "counter"),
+            new ToolCallDeltaEvent("call-1", """{"n":1}"""),
+            new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+        }, new LlmEvent[]
+        {
+            new TextDeltaEvent("t", "done"),
+            new StepFinishEvent(1, "stop", new Usage(1, 1))
+        });
         var loop = CreateLoop(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
         var session = NewSession();
-        session.EnqueueSteering([.. Enumerable.Range(0, 5).Select(i => (AgentMessage)new UserMessage(
-            Guid.NewGuid().ToString("N"),
-            session.Session.Id,
-            DateTimeOffset.UtcNow,
-            $"steer-{i}",
-            "user",
-            "test-model"))]);
+        session.EnqueueSteering([
+            ..Enumerable.Range(0, 5).Select(i => (AgentMessage)new UserMessage(
+                Guid.NewGuid().ToString("N"),
+                session.Session.Id,
+                DateTimeOffset.UtcNow,
+                $"steer-{i}",
+                "user",
+                "test-model"))
+        ]);
 
         var result = await loop.RunAsync(session, AllowAllAgent());
 

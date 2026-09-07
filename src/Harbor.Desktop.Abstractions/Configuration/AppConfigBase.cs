@@ -13,6 +13,7 @@
 // (app-specific). See docs/CONFIGURATION.md for the full guide.
 
 namespace Harbor.Desktop.Abstractions.Configuration;
+
 /// <summary>
 ///     Abstract base for per-app configuration records. Each Harbor app
 ///     (CLI, Avalonia, WPF, MAUI, Blazor) derives its own <c>sealed record</c>
@@ -68,7 +69,7 @@ public abstract record AppConfigBase
     ///     for tests.
     /// </summary>
     /// <remarks>
-    ///     Uses <see cref="CommonConfig.HarborHome"/> (process-wide snapshot)
+    ///     Uses <see cref="CommonConfig.HarborHome" /> (process-wide snapshot)
     ///     instead of calling GetFolderPath lazily: on Linux a mid-process
     ///     HOME change makes GetFolderPath return the EMPTY string, which
     ///     silently turns this into a CWD-relative '.harbor'.

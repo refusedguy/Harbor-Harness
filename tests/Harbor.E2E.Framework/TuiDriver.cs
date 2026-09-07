@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 namespace Harbor.E2E.Framework;
+
 /// <summary>
 ///     <see cref="IE2eDriver" /> implementation for interactive TUI renderers.
 ///     Allocates a pseudo-terminal (PTY) via Python's <c>pty.openpty()</c> and
@@ -182,19 +184,19 @@ public sealed class TuiDriver : IE2eDriver
         "python3 and unrestricted openpty. See docs/E2E_TESTING.md.";
 
     private readonly string _projectRelativePath;
-    private readonly string _tuiName;
     private readonly string? _screenshotDir;
-    private Process? _process;
-    private Process? _xvfbProcess;
-    private Process? _terminalProcess;
+    private readonly AnsiTerminalBuffer _terminalBuffer = new();
+    private readonly string _tuiName;
     private string? _display;
+    private Process? _process;
+    private StringBuilder _rawAnsi = new(); // Keep raw ANSI for screenshot rendering
     private CancellationTokenSource? _readerCts;
     private StringBuilder _screen = new();
-    private StringBuilder _rawAnsi = new(); // Keep raw ANSI for screenshot rendering
-    private readonly AnsiTerminalBuffer _terminalBuffer = new(120, 50);
     private StreamReader? _stderrReader;
     private StreamWriter? _stdinWriter;
     private StreamReader? _stdoutReader;
+    private Process? _terminalProcess;
+    private Process? _xvfbProcess;
 
     /// <summary>
     ///     Create a TUI driver.
@@ -224,8 +226,8 @@ public sealed class TuiDriver : IE2eDriver
 
     /// <inheritdoc />
     public bool IsRunning =>
-        (_process is { HasExited: false }) ||
-        (_terminalProcess is { HasExited: false });
+        _process is { HasExited: false } ||
+        _terminalProcess is { HasExited: false };
 
     /// <inheritdoc />
     public async Task StartAsync(string[] args, IDictionary<string, string>? env = null, CancellationToken ct = default)
@@ -251,6 +253,227 @@ public sealed class TuiDriver : IE2eDriver
             // Use original PTY approach for non-screenshot mode
             await StartPtyModeAsync(args, env, ct).ConfigureAwait(false);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task SendInputAsync(string input, CancellationToken ct = default)
+    {
+        if (_terminalProcess is not null)
+        {
+            await SendInputToTerminalWindowAsync(input, ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (_stdinWriter is null)
+            throw new InvalidOperationException("TuiDriver not started.");
+        await _stdinWriter.WriteAsync(input.AsMemory(), ct).ConfigureAwait(false);
+        await _stdinWriter.FlushAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SendKeyAsync(ConsoleKey key, ConsoleModifiers modifiers = ConsoleModifiers.None, CancellationToken ct = default)
+    {
+        if (_terminalProcess is not null)
+        {
+            string xKey = ToXdotoolKey(key, modifiers);
+            await ExecuteXdotoolAsync(xKey, ct).ConfigureAwait(false);
+            return;
+        }
+
+        string seq = KeyToAnsi(key, modifiers);
+        await SendInputAsync(seq, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public Task<string> ReadScreenAsync(CancellationToken ct = default)
+    {
+        lock (_screen)
+        {
+            return Task.FromResult(_screen.ToString());
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> WaitForTextAsync(string pattern, TimeSpan? timeout = null, CancellationToken ct = default)
+    {
+        if (_terminalProcess is not null)
+        {
+            // Terminal emulator mode: poll for text via xdotool window title,
+            // then fallback to ReadScreenAsync (PTY buffer) with a delay.
+            Console.WriteLine($"DEBUG [TuiDriver] WaitForTextAsync: polling for '{pattern}' in terminal-emulator mode");
+            var deadline = timeout ?? TimeSpan.FromSeconds(10);
+            var sw = Stopwatch.StartNew();
+            while (sw.Elapsed < deadline)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                // Try xdotool getwindowfocus getwindowname first
+                string? windowTitle = await TryGetWindowTitleAsync(ct).ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(windowTitle) && windowTitle.Contains(pattern, StringComparison.Ordinal))
+                    return true;
+
+                // Fallback: try ReadScreenAsync (works in PTY mode, may be empty in terminal emulator mode)
+                string screen = await ReadScreenAsync(ct).ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(screen) && screen.Contains(pattern, StringComparison.Ordinal))
+                    return true;
+
+                await Task.Delay(100, ct).ConfigureAwait(false);
+            }
+
+            // Pattern was not found within the deadline. In terminal emulator mode
+            // we can't reliably read the screen, so report failure honestly.
+            Console.WriteLine($"WARN [TuiDriver] terminal-emulator text polling unavailable, pattern '{pattern}' not found within timeout");
+            return false;
+        }
+
+        var ptyDeadline = TimeSpan.FromSeconds(10);
+        if (timeout is {} t) ptyDeadline = t;
+        var ptySw = Stopwatch.StartNew();
+        while (ptySw.Elapsed < ptyDeadline)
+        {
+            ct.ThrowIfCancellationRequested();
+            string screen = await ReadScreenAsync(ct).ConfigureAwait(false);
+            if (screen.Contains(pattern, StringComparison.Ordinal))
+                return true;
+            // Also check the AnsiTerminalBuffer 2D grid — renderers like
+            // Spectre.Console use cursor positioning to overwrite text, so the
+            // flat ANSI-stripped buffer may not contain text that IS visible
+            // on the actual screen.
+            lock (_terminalBuffer)
+            {
+                if (_terminalBuffer.ContainsText(pattern))
+                    return true;
+            }
+            await Task.Delay(100, ct).ConfigureAwait(false);
+
+            // Wrap/tear-tolerant fallback (last): renderers whose panels word-wrap
+            // or repaint mid-line split the pattern across grid rows / leave
+            // interleaved repaint artifacts in the flat log. Collapsing ALL
+            // whitespace on both sides matches when every character is present
+            // in order, regardless of layout. Only consulted after exact matching
+            // fails, so strict tests are unaffected.
+            string needle = CollapseWhitespace(pattern);
+            if (needle.Length == 0)
+                continue;
+
+            lock (_terminalBuffer)
+            {
+                string visible = _terminalBuffer.GetVisibleText();
+                if (CollapseWhitespace(visible).Contains(needle, StringComparison.Ordinal))
+                    return true;
+            }
+
+            if (CollapseWhitespace(screen).Contains(needle, StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> WaitForExitAsync(TimeSpan? timeout = null, CancellationToken ct = default)
+    {
+        var deadline = TimeSpan.FromSeconds(30);
+        if (timeout is {} t) deadline = t;
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(deadline);
+
+        // Use terminal process if in screenshot mode, otherwise use PTY process
+        var targetProcess = _terminalProcess ?? _process;
+        if (targetProcess is null)
+            throw new InvalidOperationException("TuiDriver not started.");
+
+        try
+        {
+            await targetProcess.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+            return targetProcess.ExitCode;
+        }
+        catch (OperationCanceledException)
+        {
+            try { targetProcess.Kill(entireProcessTree: true); }
+            catch
+            { /* ignore */
+            }
+            try { targetProcess.WaitForExit(2000); }
+            catch
+            { /* ignore */
+            }
+            return -1;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task StopAsync(CancellationToken ct = default)
+    {
+        if (_process is { HasExited: false } proc)
+        {
+            try { proc.Kill(entireProcessTree: true); }
+            catch
+            { /* ignore */
+            }
+            try { proc.WaitForExit(2000); }
+            catch
+            { /* ignore */
+            }
+        }
+
+        if (_terminalProcess is { HasExited: false } termProc)
+        {
+            try { termProc.Kill(entireProcessTree: true); }
+            catch
+            { /* ignore */
+            }
+            try { termProc.WaitForExit(2000); }
+            catch
+            { /* ignore */
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public ValueTask DisposeAsync()
+    {
+        _readerCts?.Cancel();
+        _readerCts?.Dispose();
+
+        // Close stdin/stdout/stderr readers + writers defensively
+        try { _stdinWriter?.Dispose(); }
+        catch
+        { /* pipe broken — ignore */
+        }
+        try { _stdoutReader?.Dispose(); }
+        catch
+        { /* pipe broken — ignore */
+        }
+        try { _stderrReader?.Dispose(); }
+        catch
+        { /* pipe broken — ignore */
+        }
+        _process?.Dispose();
+        _terminalProcess?.Dispose();
+
+        // Cleanup Xvfb
+        if (_xvfbProcess is not null)
+        {
+            try
+            {
+                if (!_xvfbProcess.HasExited)
+                {
+                    _xvfbProcess.Kill(entireProcessTree: true);
+                    _xvfbProcess.WaitForExit(2000);
+                }
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+            _xvfbProcess.Dispose();
+            _xvfbProcess = null;
+        }
+
+        return ValueTask.CompletedTask;
     }
 
     private async Task StartXvfbAsync(CancellationToken ct)
@@ -453,54 +676,13 @@ public sealed class TuiDriver : IE2eDriver
         return Task.CompletedTask;
     }
 
-    /// <inheritdoc />
-    public async Task SendInputAsync(string input, CancellationToken ct = default)
-    {
-        if (_terminalProcess is not null)
-        {
-            await SendInputToTerminalWindowAsync(input, ct).ConfigureAwait(false);
-            return;
-        }
-
-        if (_stdinWriter is null)
-            throw new InvalidOperationException("TuiDriver not started.");
-        await _stdinWriter.WriteAsync(input.AsMemory(), ct).ConfigureAwait(false);
-        await _stdinWriter.FlushAsync(ct).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async Task SendKeyAsync(ConsoleKey key, ConsoleModifiers modifiers = ConsoleModifiers.None, CancellationToken ct = default)
-    {
-        if (_terminalProcess is not null)
-        {
-            string xKey = ToXdotoolKey(key, modifiers);
-            await ExecuteXdotoolAsync(xKey, ct).ConfigureAwait(false);
-            return;
-        }
-
-        string seq = KeyToAnsi(key, modifiers);
-        await SendInputAsync(seq, ct).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public Task<string> ReadScreenAsync(CancellationToken ct = default)
-    {
-        lock (_screen)
-        {
-            return Task.FromResult(_screen.ToString());
-        }
-    }
-
     /// <summary>
     ///     Read the current visible terminal grid (2D screen buffer). Unlike
     ///     <see cref="ReadScreenAsync" /> which returns the append-only log of
     ///     all output, this returns only what is currently visible on screen —
     ///     reflecting cursor positioning, scrolling, and overwrites.
     /// </summary>
-    public Task<string> ReadGridAsync(CancellationToken ct = default)
-    {
-        return Task.FromResult(_terminalBuffer.GetVisibleText());
-    }
+    public Task<string> ReadGridAsync(CancellationToken ct = default) => Task.FromResult(_terminalBuffer.GetVisibleText());
 
     /// <summary>
     ///     Get the raw ANSI output from the PTY (without stripping escape sequences).
@@ -663,7 +845,7 @@ public sealed class TuiDriver : IE2eDriver
                 {
                     if ((line.Contains("xterm") || line.Contains("XTerm")) && line.Contains("0x"))
                     {
-                        var match = System.Text.RegularExpressions.Regex.Match(line, @"(0x[0-9a-f]+)");
+                        var match = Regex.Match(line, @"(0x[0-9a-f]+)");
                         if (match.Success)
                         {
                             windowId = match.Groups[1].Value;
@@ -698,201 +880,18 @@ public sealed class TuiDriver : IE2eDriver
         return null; // Screenshot failed
     }
 
-    /// <inheritdoc />
-    public async Task<bool> WaitForTextAsync(string pattern, TimeSpan? timeout = null, CancellationToken ct = default)
-    {
-        if (_terminalProcess is not null)
-        {
-            // Terminal emulator mode: poll for text via xdotool window title,
-            // then fallback to ReadScreenAsync (PTY buffer) with a delay.
-            Console.WriteLine($"DEBUG [TuiDriver] WaitForTextAsync: polling for '{pattern}' in terminal-emulator mode");
-            var deadline = timeout ?? TimeSpan.FromSeconds(10);
-            var sw = Stopwatch.StartNew();
-            while (sw.Elapsed < deadline)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                // Try xdotool getwindowfocus getwindowname first
-                string? windowTitle = await TryGetWindowTitleAsync(ct).ConfigureAwait(false);
-                if (!string.IsNullOrEmpty(windowTitle) && windowTitle.Contains(pattern, StringComparison.Ordinal))
-                    return true;
-
-                // Fallback: try ReadScreenAsync (works in PTY mode, may be empty in terminal emulator mode)
-                string screen = await ReadScreenAsync(ct).ConfigureAwait(false);
-                if (!string.IsNullOrEmpty(screen) && screen.Contains(pattern, StringComparison.Ordinal))
-                    return true;
-
-                await Task.Delay(100, ct).ConfigureAwait(false);
-            }
-
-            // Pattern was not found within the deadline. In terminal emulator mode
-            // we can't reliably read the screen, so report failure honestly.
-            Console.WriteLine($"WARN [TuiDriver] terminal-emulator text polling unavailable, pattern '{pattern}' not found within timeout");
-            return false;
-        }
-
-        var ptyDeadline = TimeSpan.FromSeconds(10);
-        if (timeout is { } t) ptyDeadline = t;
-        var ptySw = Stopwatch.StartNew();
-        while (ptySw.Elapsed < ptyDeadline)
-        {
-            ct.ThrowIfCancellationRequested();
-            string screen = await ReadScreenAsync(ct).ConfigureAwait(false);
-            if (screen.Contains(pattern, StringComparison.Ordinal))
-                return true;
-            // Also check the AnsiTerminalBuffer 2D grid — renderers like
-            // Spectre.Console use cursor positioning to overwrite text, so the
-            // flat ANSI-stripped buffer may not contain text that IS visible
-            // on the actual screen.
-            lock (_terminalBuffer)
-            {
-                if (_terminalBuffer.ContainsText(pattern))
-                    return true;
-            }
-            await Task.Delay(100, ct).ConfigureAwait(false);
-
-            // Wrap/tear-tolerant fallback (last): renderers whose panels word-wrap
-            // or repaint mid-line split the pattern across grid rows / leave
-            // interleaved repaint artifacts in the flat log. Collapsing ALL
-            // whitespace on both sides matches when every character is present
-            // in order, regardless of layout. Only consulted after exact matching
-            // fails, so strict tests are unaffected.
-            string needle = CollapseWhitespace(pattern);
-            if (needle.Length == 0)
-                continue;
-
-            lock (_terminalBuffer)
-            {
-                string visible = _terminalBuffer.GetVisibleText();
-                if (CollapseWhitespace(visible).Contains(needle, StringComparison.Ordinal))
-                    return true;
-            }
-
-            if (CollapseWhitespace(screen).Contains(needle, StringComparison.Ordinal))
-                return true;
-        }
-        return false;
-    }
-
     /// <summary>Removes every whitespace character, used by the tear-tolerant matcher.</summary>
     private static string CollapseWhitespace(string input)
     {
         if (input.IndexOf(' ') < 0 && input.IndexOf('\n') < 0 && input.IndexOf('\r') < 0 && input.IndexOf('\t') < 0)
             return input;
-        var sb = new System.Text.StringBuilder(input.Length);
+        var sb = new StringBuilder(input.Length);
         foreach (char ch in input)
         {
             if (!char.IsWhiteSpace(ch))
                 sb.Append(ch);
         }
         return sb.ToString();
-    }
-
-    /// <inheritdoc />
-    public async Task<int> WaitForExitAsync(TimeSpan? timeout = null, CancellationToken ct = default)
-    {
-        var deadline = TimeSpan.FromSeconds(30);
-        if (timeout is { } t) deadline = t;
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(deadline);
-
-        // Use terminal process if in screenshot mode, otherwise use PTY process
-        Process? targetProcess = _terminalProcess ?? _process;
-        if (targetProcess is null)
-            throw new InvalidOperationException("TuiDriver not started.");
-
-        try
-        {
-            await targetProcess.WaitForExitAsync(cts.Token).ConfigureAwait(false);
-            return targetProcess.ExitCode;
-        }
-        catch (OperationCanceledException)
-        {
-            try { targetProcess.Kill(entireProcessTree: true); }
-            catch
-            { /* ignore */
-            }
-            try { targetProcess.WaitForExit(2000); }
-            catch
-            { /* ignore */
-            }
-            return -1;
-        }
-    }
-
-    /// <inheritdoc />
-    public Task StopAsync(CancellationToken ct = default)
-    {
-        if (_process is { HasExited: false } proc)
-        {
-            try { proc.Kill(entireProcessTree: true); }
-            catch
-            { /* ignore */
-            }
-            try { proc.WaitForExit(2000); }
-            catch
-            { /* ignore */
-            }
-        }
-
-        if (_terminalProcess is { HasExited: false } termProc)
-        {
-            try { termProc.Kill(entireProcessTree: true); }
-            catch
-            { /* ignore */
-            }
-            try { termProc.WaitForExit(2000); }
-            catch
-            { /* ignore */
-            }
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
-    public ValueTask DisposeAsync()
-    {
-        _readerCts?.Cancel();
-        _readerCts?.Dispose();
-
-        // Close stdin/stdout/stderr readers + writers defensively
-        try { _stdinWriter?.Dispose(); }
-        catch
-        { /* pipe broken — ignore */
-        }
-        try { _stdoutReader?.Dispose(); }
-        catch
-        { /* pipe broken — ignore */
-        }
-        try { _stderrReader?.Dispose(); }
-        catch
-        { /* pipe broken — ignore */
-        }
-        _process?.Dispose();
-        _terminalProcess?.Dispose();
-
-        // Cleanup Xvfb
-        if (_xvfbProcess is not null)
-        {
-            try
-            {
-                if (!_xvfbProcess.HasExited)
-                {
-                    _xvfbProcess.Kill(entireProcessTree: true);
-                    _xvfbProcess.WaitForExit(2000);
-                }
-            }
-            catch
-            {
-                // Ignore cleanup errors
-            }
-            _xvfbProcess.Dispose();
-            _xvfbProcess = null;
-        }
-
-        return ValueTask.CompletedTask;
     }
 
     /// <summary>
@@ -1129,7 +1128,7 @@ public sealed class TuiDriver : IE2eDriver
                  line.Contains("XTerm", StringComparison.OrdinalIgnoreCase)) &&
                 line.Contains("0x", StringComparison.Ordinal))
             {
-                var match = System.Text.RegularExpressions.Regex.Match(line, @"(0x[0-9a-f]+)");
+                var match = Regex.Match(line, @"(0x[0-9a-f]+)");
                 if (match.Success)
                     return match.Groups[1].Value;
             }

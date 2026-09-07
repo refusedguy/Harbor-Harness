@@ -1,28 +1,9 @@
-using System.Text;
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 public class VirtualizedChatTimelineTests
 {
-    private sealed class FixedBlock : IChatBlock
-    {
-        public FixedBlock(string text, int lines) => Text = text;
-        public string Text { get; }
-        public string Kind => "fixed";
-        public bool IsStreamContinuation => false;
-        public int BudgetBytes => 64;
-        public BlockMeasure Measure(int width) => BlockMeasure.Exact(1);
-        public int CheapEstimate(int width) => 1;
-
-        public void Paint(in BlockPaintContext ctx)
-        {
-            ctx.Buffer.SetText(ctx.Rect.X, ctx.Rect.Y, Text, CellStyle.Plain);
-        }
-
-        public string RawText() => Text;
-    }
 
     [Test]
     public async Task FollowTail_SticksToBottomOnAppend()
@@ -31,7 +12,7 @@ public class VirtualizedChatTimelineTests
         for (int i = 0; i < 30; i++)
         {
             tl.Append(new UserBlock($"m{i}"));
-            _ = tl.PrepareFrame(width: 40, viewportH: 10);
+            _ = tl.PrepareFrame(40, 10);
         }
 
         await Assert.That(tl.FollowTail).IsTrue();
@@ -85,13 +66,13 @@ public class VirtualizedChatTimelineTests
         tl.Paint(buffer, rect);
 
         string art = GridDump.Art(buffer);
-        var rows = art.Split('\n');
+        string[] rows = art.Split('\n');
 
         // Rows above the rect stay untouched filler.
         await Assert.That(rows[0].Contains("TOP")).IsFalse();
         await Assert.That(rows[7].Contains("mid")).IsFalse();
         // First visible row paints inside the rect columns.
-        await Assert.That(rows[8]).DoesNotStartWith("mid");   // col 0-1 untouched
+        await Assert.That(rows[8]).DoesNotStartWith("mid"); // col 0-1 untouched
         await Assert.That(rows[8].Contains("mid7")).IsTrue();
         await Assert.That(rows[11].Contains("BOTTOM")).IsTrue();
         // Nothing painted beyond the rect's right edge.
@@ -110,11 +91,11 @@ public class VirtualizedChatTimelineTests
         tl.ScrollUp(1000); // unpin & go somewhere mid-history
         _ = tl.PrepareFrame(60, 8);
         int topBefore = tl.VisibleRange(8).First;
-        var anchorText = tl.BlockAt(topBefore).RawText();
+        string anchorText = tl.BlockAt(topBefore).RawText();
 
-        _ = tl.PrepareFrame(25, 8);          // width change
+        _ = tl.PrepareFrame(25, 8); // width change
         int topAfter = tl.VisibleRange(8).First;
-        var afterText = tl.BlockAt(topAfter).RawText();
+        string afterText = tl.BlockAt(topAfter).RawText();
 
         await Assert.That(afterText).IsEqualTo(anchorText);
     }
@@ -149,5 +130,23 @@ public class VirtualizedChatTimelineTests
         await Assert.That(tl.Count).IsEqualTo(1);
         await Assert.That(tl.TotalHeight).IsEqualTo(1);
         await Assert.That(tl.BlockAt(0).Kind).IsEqualTo("assistant");
+    }
+
+    private sealed class FixedBlock : IChatBlock
+    {
+        public FixedBlock(string text, int lines)
+        {
+            Text = text;
+        }
+        public string Text { get; }
+        public string Kind => "fixed";
+        public bool IsStreamContinuation => false;
+        public int BudgetBytes => 64;
+        public BlockMeasure Measure(int width) => BlockMeasure.Exact(1);
+        public int CheapEstimate(int width) => 1;
+
+        public void Paint(in BlockPaintContext ctx) => ctx.Buffer.SetText(ctx.Rect.X, ctx.Rect.Y, Text, CellStyle.Plain);
+
+        public string RawText() => Text;
     }
 }

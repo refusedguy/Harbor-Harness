@@ -1,9 +1,10 @@
-using System.Text;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.AnsiPlain;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text;
 namespace Harbor.Tui.E2E.Tests;
+
 /// <summary>
 ///     End-to-end renderer tests: feed a realistic event stream to each concrete
 ///     renderer (ANSI, Plain) and assert that the rendered output contains the

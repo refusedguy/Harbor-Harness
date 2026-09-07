@@ -1,10 +1,8 @@
+using System.Runtime.CompilerServices;
 namespace Harbor.Tui.AnsiPlain;
 
-using System.Buffers;
-using System.Runtime.CompilerServices;
-
 /// <summary>
-///     Renders a <see cref="Uri"/> as a QR code using Unicode half-blocks
+///     Renders a <see cref="Uri" /> as a QR code using Unicode half-blocks
 ///     (█ ▀ ▄) — no GDI, no System.Drawing, no external packages.
 /// </summary>
 /// <remarks>
@@ -14,12 +12,27 @@ using System.Runtime.CompilerServices;
 /// </remarks>
 public static class TerminalQrRenderer
 {
-    private readonly record struct QrSpec(int ModuleCount, int DataCodewords, int EccLen, int[] AlignmentCenters);
 
     // v2-L: 44 total codewords = 34 data + 26 ecc, one block, alignment {6,18}.
     private static readonly QrSpec SpecV2 = new(25, 34, 26, [6, 18]);
     // v4-L: 80 total codewords = 64 data + 16 ecc, one block, alignment {6,26}.
     private static readonly QrSpec SpecV4 = new(33, 64, 16, [6, 26]);
+
+    private static readonly byte[] GLog = new byte[256];
+    private static readonly byte[] GTable = new byte[256];
+
+    static TerminalQrRenderer()
+    {
+        int x = 1;
+        for (int i = 0; i < 255; i++)
+        {
+            GTable[i] = (byte)x;
+            GLog[x] = (byte)i;
+            x <<= 1;
+            if ((x & 0x100) != 0) x ^= 0x11d;
+        }
+        GTable[255] = 0;
+    }
 
     public static string Render(Uri uri)
     {
@@ -31,17 +44,17 @@ public static class TerminalQrRenderer
     {
         if (text.Length == 0) return string.Empty;
 
-        int bytes = System.Text.Encoding.UTF8.GetByteCount(text);
+        int bytes = Encoding.UTF8.GetByteCount(text);
         // Header costs one codeword (mode + 8-bit count).
-        QrSpec spec = bytes <= SpecV2.DataCodewords - 1 ? SpecV2 : SpecV4;
+        var spec = bytes <= SpecV2.DataCodewords - 1 ? SpecV2 : SpecV4;
 
-        var matrix = Encode(text, spec);
+        bool[,] matrix = Encode(text, spec);
         return RenderMatrix(matrix);
     }
 
     private static bool[,] Encode(string text, QrSpec spec)
     {
-        byte[] data = System.Text.Encoding.UTF8.GetBytes(text);
+        byte[] data = Encoding.UTF8.GetBytes(text);
         int capacity = spec.DataCodewords - 1;
         if (data.Length > capacity) data = data[..capacity];
 
@@ -63,7 +76,7 @@ public static class TerminalQrRenderer
         RsEncode(codewords, spec.DataCodewords, ecc, spec.EccLen);
 
         int m = spec.ModuleCount;
-        var result = new bool[m, m];
+        bool[,] result = new bool[m, m];
 
         // Finder patterns
         AddFinderPattern(result, 0, 0);
@@ -90,9 +103,9 @@ public static class TerminalQrRenderer
             foreach (int cx in spec.AlignmentCenters)
             {
                 bool overlapsFinder =
-                    (cx < 9 && cy < 9) ||
-                    (cx >= m - 8 && cy < 9) ||
-                    (cx < 9 && cy >= m - 8);
+                    cx < 9 && cy < 9 ||
+                    cx >= m - 8 && cy < 9 ||
+                    cx < 9 && cy >= m - 8;
                 if (!overlapsFinder)
                 {
                     AddAlignmentPattern(result, cx, cy);
@@ -167,7 +180,7 @@ public static class TerminalQrRenderer
                     if (byteIndex < codewords.Length)
                     {
                         int b = codewords[byteIndex];
-                        bit = ((b >> (7 - bitIndex)) & 1) == 1;
+                        bit = (b >> 7 - bitIndex & 1) == 1;
                         bitIndex++;
                         if (bitIndex >= 8)
                         {
@@ -184,9 +197,9 @@ public static class TerminalQrRenderer
 
         // Apply mask (pattern 000)
         for (int y = 0; y < m; y++)
-            for (int x = 0; x < m; x++)
-                if (!IsReserved(m, x, y, spec.AlignmentCenters) && (x + y) % 2 == 0)
-                    result[x, y] = !result[x, y];
+        for (int x = 0; x < m; x++)
+            if (!IsReserved(m, x, y, spec.AlignmentCenters) && (x + y) % 2 == 0)
+                result[x, y] = !result[x, y];
 
         return result;
     }
@@ -194,7 +207,7 @@ public static class TerminalQrRenderer
     private static bool IsReserved(int m, int x, int y, int[] alignmentCenters)
     {
         // Finder patterns (+ separators + format areas hugging the corners)
-        if ((x < 9 && y < 9) || (x >= m - 8 && y < 9) || (x < 9 && y >= m - 8))
+        if (x < 9 && y < 9 || x >= m - 8 && y < 9 || x < 9 && y >= m - 8)
             return true;
         // Timing
         if (x == 6 || y == 6)
@@ -217,21 +230,21 @@ public static class TerminalQrRenderer
     private static void AddFinderPattern(bool[,] m, int x, int y)
     {
         for (int r = 0; r < 7; r++)
-            for (int c = 0; c < 7; c++)
-                m[x + c, y + r] = (r == 0 || r == 6 || c == 0 || c == 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4));
+        for (int c = 0; c < 7; c++)
+            m[x + c, y + r] = r == 0 || r == 6 || c == 0 || c == 6 || r >= 2 && r <= 4 && c >= 2 && c <= 4;
     }
 
     private static void AddAlignmentPattern(bool[,] m, int cx, int cy)
     {
         for (int r = -2; r <= 2; r++)
-            for (int c = -2; c <= 2; c++)
-                m[cx + c, cy + r] = (r == 0 || c == 0 || r == c || r == -c);
+        for (int c = -2; c <= 2; c++)
+            m[cx + c, cy + r] = r == 0 || c == 0 || r == c || r == -c;
     }
 
     private static string RenderMatrix(bool[,] m)
     {
         int count = m.GetLength(0);
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         int height = (count + 1) / 2;
 
         for (int y = 0; y < height; y++)
@@ -251,8 +264,8 @@ public static class TerminalQrRenderer
     private static void RsEncode(byte[] data, int dataLen, byte[] ecc, int eccLen)
     {
         // Reed-Solomon over GF(2^8), primitive 0x11d
-        ReadOnlySpan<byte> generator = GetGeneratorPolynomial(eccLen);
-        Span<byte> buffer = eccLen <= 64 ? stackalloc byte[64] : new byte[eccLen];
+        var generator = GetGeneratorPolynomial(eccLen);
+        var buffer = eccLen <= 64 ? stackalloc byte[64] : new byte[eccLen];
         buffer.Clear();
 
         for (int i = 0; i < dataLen; i++)
@@ -261,7 +274,7 @@ public static class TerminalQrRenderer
             if (feedback != 0)
             {
                 for (int j = 1; j < eccLen; j++)
-                    buffer[j - 1] = (byte)(buffer[j] ^ (feedback * generator[generator.Length - eccLen + j - 1] & 0xFF));
+                    buffer[j - 1] = (byte)(buffer[j] ^ feedback * generator[generator.Length - eccLen + j - 1] & 0xFF);
             }
             else
             {
@@ -297,14 +310,14 @@ public static class TerminalQrRenderer
 
     private static ReadOnlySpan<byte> GenerateGeneratorPolynomial(int eccLen)
     {
-        var gen = new byte[eccLen + 1];
+        byte[] gen = new byte[eccLen + 1];
         gen[0] = 1;
         for (int i = 1; i <= eccLen; i++)
         {
             int coeff = 1;
             for (int j = i - 1; j > 0; j--)
             {
-                int val = (gen[j] ^ (coeff * gen[j - 1] & 0xFF));
+                int val = gen[j] ^ coeff * gen[j - 1] & 0xFF;
                 gen[j] = (byte)(val != 0 ? GTable[GLoc(val)] : 0);
                 coeff = GLoc(coeff);
             }
@@ -314,21 +327,7 @@ public static class TerminalQrRenderer
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int GLoc(int x) => x == 0 ? 0 : (255 ^ GLog[x & 0xFF]);
+    private static int GLoc(int x) => x == 0 ? 0 : 255 ^ GLog[x & 0xFF];
 
-    private static readonly byte[] GLog = new byte[256];
-    private static readonly byte[] GTable = new byte[256];
-
-    static TerminalQrRenderer()
-    {
-        int x = 1;
-        for (int i = 0; i < 255; i++)
-        {
-            GTable[i] = (byte)x;
-            GLog[x] = (byte)i;
-            x <<= 1;
-            if ((x & 0x100) != 0) x ^= 0x11d;
-        }
-        GTable[255] = 0;
-    }
+    private readonly record struct QrSpec(int ModuleCount, int DataCodewords, int EccLen, int[] AlignmentCenters);
 }

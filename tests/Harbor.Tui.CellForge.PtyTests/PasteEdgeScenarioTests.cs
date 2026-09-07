@@ -1,5 +1,4 @@
-using TUnit.Assertions;
-
+using System.Text.Json;
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -17,7 +16,7 @@ public sealed class PasteEdgeScenarioTests : CellForgePtyScenarioBase
     public async Task MultilinePaste_InsertsVerbatim_NeverSubmitsPerLine()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -43,7 +42,7 @@ public sealed class PasteEdgeScenarioTests : CellForgePtyScenarioBase
             _ => Server.ReceivedRequests.Count > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(submitted).IsTrue();
 
-        var body = Server.ReceivedRequests[^1].RawBody;
+        string body = Server.ReceivedRequests[^1].RawBody;
         await Assert.That(body).Contains("alpha\\nbravo");
     }
 
@@ -52,7 +51,7 @@ public sealed class PasteEdgeScenarioTests : CellForgePtyScenarioBase
     public async Task LargePasteAcrossChunkBoundaries_LandsVerbatim()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -90,7 +89,7 @@ public sealed class PasteEdgeScenarioTests : CellForgePtyScenarioBase
     /// <summary>Last user-message content of a chat-completions body (JSON-aware).</summary>
     private static string LastUserContent(string rawBody)
     {
-        using var doc = System.Text.Json.JsonDocument.Parse(rawBody);
+        using var doc = JsonDocument.Parse(rawBody);
         foreach (var msg in doc.RootElement.GetProperty("messages").EnumerateArray().Reverse())
         {
             if (msg.GetProperty("role").GetString() == "user")

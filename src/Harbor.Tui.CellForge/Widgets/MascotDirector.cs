@@ -1,7 +1,4 @@
 using Harbor.Tui.CellForge.Rendering;
-using Harbor.Ui.Framework.Rendering;
-using Harbor.Ui.Framework.Rendering.Widgets;
-
 namespace Harbor.Tui.CellForge.Widgets;
 
 public sealed class MascotDirector
@@ -10,13 +7,19 @@ public sealed class MascotDirector
 
     private const byte NoMood = 0xFF;
 
+    public const int ReactionFrameTicks = 3;
+    public const int ReactionFrames = 3;
+    private readonly SpringFx _crossfadeSpring = new(1.0);
+
     private long _lastActiveMs = Environment.TickCount64;
+    private byte _lastPhase;
+    private long _latchEndTick;
+    private byte _latched = NoMood;
     private byte _mood = NoMood;
     private long _moodFlipTick = long.MinValue;
-    private byte _latched = NoMood;
-    private long _latchEndTick;
-    private byte _lastPhase;
-    private readonly SpringFx _crossfadeSpring = new(1.0);
+
+    private int _reaction;
+    private long _reactionStartTick;
 
     public MascotMood Advance(StatusViewModel vm, long tick)
     {
@@ -39,7 +42,7 @@ public sealed class MascotDirector
 
         _lastPhase = phase;
 
-        MascotMood mood = _latched != NoMood ? (MascotMood)_latched : Derive(vm);
+        var mood = _latched != NoMood ? (MascotMood)_latched : Derive(vm);
 
         if (_mood == NoMood)
         {
@@ -79,12 +82,6 @@ public sealed class MascotDirector
         PanelFx.BlendRegion(buffer, region, Math.Clamp(ramp, 0.0, 1.0));
         return true;
     }
-
-    public const int ReactionFrameTicks = 3;
-    public const int ReactionFrames = 3;
-
-    private int _reaction;
-    private long _reactionStartTick;
 
     public void Notify(MascotReaction reaction, long tick)
     {
@@ -146,7 +143,7 @@ public sealed class MascotDirector
     {
         MascotReaction.ErrorBlink => ChatPalette.ToolError,
         MascotReaction.SuccessBounce => ChatPalette.ToolOk,
-        _ => ChatPalette.ToolRunning,
+        _ => ChatPalette.ToolRunning
     };
 
     private MascotMood Derive(StatusViewModel vm) => vm.Mode switch
@@ -155,12 +152,12 @@ public sealed class MascotDirector
         {
             AgentPhase.Thinking => MascotMood.Thinking,
             AgentPhase.ToolCall => MascotMood.ToolCall,
-            _ => MascotMood.Working,
+            _ => MascotMood.Working
         },
         StatusBarMode.Compacting => MascotMood.Working,
         StatusBarMode.AwaitingApproval => MascotMood.Awaiting,
         _ => Environment.TickCount64 - _lastActiveMs > StatusPanel.MascotSleepAfterMs
             ? MascotMood.Sleeping
-            : MascotMood.Idle,
+            : MascotMood.Idle
     };
 }

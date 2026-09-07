@@ -1,7 +1,6 @@
+using Harbor.Diagnostics;
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
-using Harbor.Diagnostics;
-
 namespace Harbor.Telemetry;
 
 /// <summary>
@@ -16,15 +15,9 @@ public sealed class MeterMetrics : IMetrics
     private readonly ConcurrentDictionary<string, Counter<double>> _counters = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Histogram<double>> _histograms = new(StringComparer.Ordinal);
 
-    public void Counter(string name, double value = 1, params KeyValuePair<string, object?>[] tags)
-    {
-        GetCounter(name).Add(value, tags ?? []);
-    }
+    public void Counter(string name, double value = 1, params KeyValuePair<string, object?>[] tags) => GetCounter(name).Add(value, tags ?? []);
 
-    public void Histogram(string name, double value, params KeyValuePair<string, object?>[] tags)
-    {
-        GetHistogram(name).Record(value, tags ?? []);
-    }
+    public void Histogram(string name, double value, params KeyValuePair<string, object?>[] tags) => GetHistogram(name).Record(value, tags ?? []);
 
     private Counter<double> GetCounter(string name) =>
         _counters.GetOrAdd(name, static n => HarborTelemetrySources.Instruments.CreateCounter<double>(n));

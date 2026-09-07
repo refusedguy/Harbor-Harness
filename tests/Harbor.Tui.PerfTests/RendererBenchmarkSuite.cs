@@ -1,11 +1,5 @@
-namespace Harbor.Tui.PerfTests;
-
-using System.Diagnostics;
-using System.Globalization;
-using System.Text;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Tui;
 using Harbor.Terminal.Abstractions;
 using Harbor.Tui.AnsiPlain;
 using Harbor.Tui.CellForge;
@@ -14,12 +8,16 @@ using Harbor.Tui.NickConsoleEx;
 using Harbor.Ui.Framework.Rendering.PerformanceContracts;
 using Microsoft.Extensions.Logging.Abstractions;
 using SharpConsoleUI.Drivers;
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
+namespace Harbor.Tui.PerfTests;
 
 /// <summary>
 ///     Synthetic-load benchmark harness (renderer-unification sprint Phase
 ///     6.1): every backend renders the SAME synthetic stream on a 24×80
 ///     surface; throughput, p99 latency and allocation rate are measured and
-///     checked against <see cref="RendererPerformanceContract.Defaults"/>.
+///     checked against <see cref="RendererPerformanceContract.Defaults" />.
 /// </summary>
 /// <remarks>
 ///     Locally reproducible: <c>dotnet run --project tests/Harbor.Tui.PerfTests -- --renderer all</c>
@@ -36,7 +34,7 @@ public static class RendererBenchmarkSuite
     public static async Task<IReadOnlyList<RendererBenchmarkResult>> RunAllAsync(
         CancellationToken ct = default)
     {
-        IReadOnlyList<RendererBenchmarkResult> results = await RunAsync("all", ct);
+        var results = await RunAsync("all", ct);
         WriteReport(results);
         return results;
     }
@@ -56,7 +54,7 @@ public static class RendererBenchmarkSuite
 
         var sb = new StringBuilder();
         sb.AppendLine("# backend;events;events_per_sec;p99_ms;mb_per_1k_events");
-        foreach (RendererBenchmarkResult r in results)
+        foreach (var r in results)
         {
             sb.Append(r.BackendId).Append(';')
                 .Append(r.EventsRendered).Append(';')
@@ -111,7 +109,7 @@ public static class RendererBenchmarkSuite
         CancellationToken ct)
     {
         // Warmup: absorb JIT/dispatch cost (docs/BENCHMARKS.md methodology).
-        ITuiRenderer warm = factory();
+        var warm = factory();
         try
         {
             await StreamAsync(warm, WarmupEvents, "warm", ct);
@@ -121,12 +119,12 @@ public static class RendererBenchmarkSuite
             warm.Dispose();
         }
 
-        ITuiRenderer renderer = factory();
+        var renderer = factory();
         try
         {
             long before = GC.GetAllocatedBytesForCurrentThread();
             var sw = Stopwatch.StartNew();
-            List<long> ticks = await StreamAsync(renderer, EventCount, "tok", ct);
+            var ticks = await StreamAsync(renderer, EventCount, "tok", ct);
             sw.Stop();
             long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 

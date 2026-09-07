@@ -1,6 +1,7 @@
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 namespace Harbor.Terminal.Abstractions.Views;
+
 /// <summary>
 ///     Builtin input view — renders <see cref="InputViewModel" /> state: the user prompt line
 ///     with a green <c>&gt;</c> prefix, a dim placeholder when empty, and a reverse-video
@@ -32,7 +33,7 @@ public sealed class InputView : TuiViewBase<InputViewModel>
     /// <inheritdoc />
     public override Task RenderAsync(ITuiRenderContext context, CancellationToken ct = default)
     {
-        var vm = this.ViewModel;
+        var vm = ViewModel;
         if (vm is null)
         {
             return Task.CompletedTask;

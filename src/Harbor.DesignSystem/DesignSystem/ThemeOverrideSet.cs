@@ -1,8 +1,8 @@
 namespace Harbor.DesignSystem;
 
 /// <summary>
-/// Partial theme patch — any slot left null inherits the base theme.
-/// Used by <see cref="ThemeOverrideSet" /> for per-component overrides.
+///     Partial theme patch — any slot left null inherits the base theme.
+///     Used by <see cref="ThemeOverrideSet" /> for per-component overrides.
 /// </summary>
 public sealed record PartialTheme(
     RgbColor? Accent = null,
@@ -42,36 +42,41 @@ public sealed record PartialTheme(
             Surface2 = Surface2 ?? @base.Surface2,
             Border = Border ?? @base.Border,
             Muted = Muted ?? @base.Muted,
-            Text = Text ?? @base.Text,
+            Text = Text ?? @base.Text
         };
     }
 }
 
 /// <summary>
-/// Per-component theme overrides (sprint UI-V2 P3.4): named scopes
-/// («sidebar», «composer», «status», …) each patch the active theme with a
-/// <see cref="PartialTheme" />. Immutable — install a new set via
-/// <see cref="TerminalColorPalette.SetOverrides" />; unresolved scopes and an
-/// absent set fall through to the unpatched theme.
+///     Per-component theme overrides (sprint UI-V2 P3.4): named scopes
+///     («sidebar», «composer», «status», …) each patch the active theme with a
+///     <see cref="PartialTheme" />. Immutable — install a new set via
+///     <see cref="TerminalColorPalette.SetOverrides" />; unresolved scopes and an
+///     absent set fall through to the unpatched theme.
 /// </summary>
 public sealed class ThemeOverrideSet
 {
     private readonly Dictionary<string, PartialTheme> _scopes;
 
-    public ThemeOverrideSet(IReadOnlyDictionary<string, PartialTheme>? scopes = null) =>
+    public ThemeOverrideSet(IReadOnlyDictionary<string, PartialTheme>? scopes = null)
+    {
         _scopes = scopes is null ? [] : new Dictionary<string, PartialTheme>(scopes, StringComparer.OrdinalIgnoreCase);
+    }
 
     /// <summary>Registered scope names (order unspecified).</summary>
     public IEnumerable<string> Scopes => _scopes.Keys;
 
-    /// <summary>Returns a copy with <paramref name="patch" /> installed for <paramref name="scope" /> (replaces any previous patch).</summary>
+    /// <summary>
+    ///     Returns a copy with <paramref name="patch" /> installed for <paramref name="scope" /> (replaces any previous
+    ///     patch).
+    /// </summary>
     public ThemeOverrideSet With(string scope, PartialTheme patch)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scope);
         ArgumentNullException.ThrowIfNull(patch);
         var scopes = new Dictionary<string, PartialTheme>(_scopes, StringComparer.OrdinalIgnoreCase)
         {
-            [scope] = patch,
+            [scope] = patch
         };
         return new ThemeOverrideSet(scopes);
     }
@@ -85,8 +90,8 @@ public sealed class ThemeOverrideSet
         scope is not null && _scopes.TryGetValue(scope, out var patch) ? patch : null;
 
     /// <summary>
-    /// Effective theme for a scope: the scope's patch merged over
-    /// <paramref name="base" />; no scope / no patch → base unchanged.
+    ///     Effective theme for a scope: the scope's patch merged over
+    ///     <paramref name="base" />; no scope / no patch → base unchanged.
     /// </summary>
     public HarborTheme Merge(string? scope, HarborTheme @base) =>
         PatchFor(scope)?.Merge(@base) ?? @base;

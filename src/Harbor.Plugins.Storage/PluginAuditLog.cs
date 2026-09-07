@@ -1,9 +1,7 @@
-using System.Buffers;
-using System.Text;
-using System.Text.Json;
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
-
+using System.Buffers;
+using System.Text.Json;
 namespace Harbor.Plugins.Storage;
 
 /// <summary>
@@ -14,7 +12,6 @@ namespace Harbor.Plugins.Storage;
 /// </summary>
 public sealed class PluginAuditLog : IPluginAuditLog
 {
-    private readonly string _logPath;
     private readonly ILogger<PluginAuditLog> _logger;
     private readonly object _sync = new();
 
@@ -27,12 +24,12 @@ public sealed class PluginAuditLog : IPluginAuditLog
     {
         if (string.IsNullOrWhiteSpace(harborDir))
             throw new ArgumentException("Harbor directory cannot be empty.", nameof(harborDir));
-        _logPath = Path.Combine(harborDir, "logs", "plugin-audit.jsonl");
+        LogPath = Path.Combine(harborDir, "logs", "plugin-audit.jsonl");
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>Absolute path of the audit log file.</summary>
-    public string LogPath => _logPath;
+    public string LogPath { get; }
 
     /// <inheritdoc />
     public Task WriteAsync(
@@ -52,9 +49,9 @@ public sealed class PluginAuditLog : IPluginAuditLog
             result = result switch
             {
                 "allow" or "deny" => result,
-                _ => "allow",
+                _ => "allow"
             },
-            detail,
+            detail
         };
 
         // Utf8JsonWriter on a rented buffer: per-line JSON without reflection (AOT-safe).
@@ -84,9 +81,9 @@ public sealed class PluginAuditLog : IPluginAuditLog
             {
                 try
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(_logPath)!);
+                    Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
                     using var stream = new FileStream(
-                        _logPath,
+                        LogPath,
                         FileMode.Append,
                         FileAccess.Write,
                         FileShare.Read);
@@ -95,7 +92,7 @@ public sealed class PluginAuditLog : IPluginAuditLog
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    _logger.LogWarning(ex, "Failed to append plugin audit entry to {Log}", _logPath);
+                    _logger.LogWarning(ex, "Failed to append plugin audit entry to {Log}", LogPath);
                 }
             }
 

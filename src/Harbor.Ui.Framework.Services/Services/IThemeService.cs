@@ -1,5 +1,4 @@
 using CSharpFunctionalExtensions;
-
 namespace Harbor.Ui.Framework.Services;
 
 /// <summary>

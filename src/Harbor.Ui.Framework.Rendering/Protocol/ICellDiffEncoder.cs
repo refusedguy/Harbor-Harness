@@ -1,9 +1,7 @@
 namespace Harbor.Ui.Framework.Rendering.Protocol;
 
-using System.Collections.Immutable;
-
 /// <summary>
-///     Produces portable <see cref="CellDiffBatch"/>es from consecutive frame
+///     Produces portable <see cref="CellDiffBatch" />es from consecutive frame
 ///     buffers (renderer-unification sprint Phase 6.2).
 /// </summary>
 /// <remarks>
@@ -14,12 +12,12 @@ using System.Collections.Immutable;
 public interface ICellDiffEncoder
 {
     /// <summary>
-    ///     Encodes the delta between <paramref name="prev"/> (previous frame)
-    ///     and <paramref name="next"/> (current frame). Both buffers must have
-    ///     equal dimensions. <paramref name="hints"/> may be null or empty —
+    ///     Encodes the delta between <paramref name="prev" /> (previous frame)
+    ///     and <paramref name="next" /> (current frame). Both buffers must have
+    ///     equal dimensions. <paramref name="hints" /> may be null or empty —
     ///     the encoder then emits a V1-equivalent batch (full-scan, no hints).
     /// </summary>
-    CellDiffBatch Encode(
+    public CellDiffBatch Encode(
         ScreenBuffer prev,
         ScreenBuffer next,
         IReadOnlyList<Rect>? hints,
@@ -27,17 +25,17 @@ public interface ICellDiffEncoder
 }
 
 /// <summary>
-///     Applies a <see cref="CellDiffBatch"/> to a render surface. Decoders
+///     Applies a <see cref="CellDiffBatch" /> to a render surface. Decoders
 ///     must accept batches of any version &lt;= their declared max version —
 ///     this is the protocol's backward-compatibility contract.
 /// </summary>
 public interface ICellDiffDecoder
 {
     /// <summary>Highest protocol version this decoder understands.</summary>
-    CellDiffProtocolVersion MaxVersion { get; }
+    public CellDiffProtocolVersion MaxVersion { get; }
 
-    /// <summary>Applies every change of <paramref name="batch"/> to the surface.</summary>
-    void Apply(in CellDiffBatch batch);
+    /// <summary>Applies every change of <paramref name="batch" /> to the surface.</summary>
+    public void Apply(in CellDiffBatch batch);
 }
 
 /// <summary>
@@ -46,5 +44,5 @@ public interface ICellDiffDecoder
 /// </summary>
 public interface ICellDiffSink
 {
-    void Accept(in CellDiffBatch batch);
+    public void Accept(in CellDiffBatch batch);
 }

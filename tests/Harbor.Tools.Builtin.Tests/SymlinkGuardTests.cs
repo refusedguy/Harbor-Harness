@@ -1,7 +1,3 @@
-using CSharpFunctionalExtensions;
-using Harbor.Tools.Builtin;
-using TUnit.Core.Enums;
-
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
@@ -28,13 +24,13 @@ public class SymlinkGuardTests
             string file = Path.Combine(root, "note.txt");
             File.WriteAllText(file, "x");
 
-            Result result = SymlinkGuard.Check(file, root);
+            var result = SymlinkGuard.Check(file, root);
 
             await Assert.That(result.IsSuccess).IsTrue();
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(root, true);
         }
     }
 
@@ -49,14 +45,14 @@ public class SymlinkGuardTests
             string link = Path.Combine(root, "link.txt");
             File.CreateSymbolicLink(link, outside);
 
-            Result result = SymlinkGuard.Check(link, root);
+            var result = SymlinkGuard.Check(link, root);
 
             await Assert.That(result.IsFailure).IsTrue();
             File.Delete(outside);
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(root, true);
         }
     }
 
@@ -71,15 +67,15 @@ public class SymlinkGuardTests
             string linkDir = Path.Combine(root, "sub");
             Directory.CreateSymbolicLink(linkDir, realDir);
 
-            Result result = SymlinkGuard.Check(
+            var result = SymlinkGuard.Check(
                 Path.Combine(linkDir, "payload.txt"), root);
 
             await Assert.That(result.IsFailure).IsTrue();
-            Directory.Delete(realDir, recursive: true);
+            Directory.Delete(realDir, true);
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(root, true);
         }
     }
 
@@ -95,15 +91,15 @@ public class SymlinkGuardTests
             Directory.CreateSymbolicLink(linkDir, Path.Combine(realDir));
 
             // lvl1 is a symlink; payload sits two levels under it.
-            Result result = SymlinkGuard.Check(
+            var result = SymlinkGuard.Check(
                 Path.Combine(linkDir, "deep", "payload.txt"), root);
 
             await Assert.That(result.IsFailure).IsTrue();
-            Directory.Delete(realDir, recursive: true);
+            Directory.Delete(realDir, true);
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(root, true);
         }
     }
 
@@ -122,15 +118,15 @@ public class SymlinkGuardTests
             string linkDir = Path.Combine(root, "sub");
             Directory.CreateSymbolicLink(linkDir, realDir);
 
-            Result result = SymlinkGuard.Check(
+            var result = SymlinkGuard.Check(
                 Path.Combine(linkDir, "payload.txt"), root + Path.DirectorySeparatorChar);
 
             await Assert.That(result.IsFailure).IsTrue();
-            Directory.Delete(realDir, recursive: true);
+            Directory.Delete(realDir, true);
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(root, true);
         }
     }
 }

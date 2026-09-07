@@ -1,6 +1,7 @@
 using Nuke.Common.IO;
 using Nuke.Common.Tools.DotNet;
 namespace Harbor.Build.Components;
+
 /// <summary>
 ///     Builds the <c>DotNetPublishSettings</c> for each <see cref="PublishVariant" />.
 ///     Knows which <c>dotnet publish</c> properties to set for framework-dependent

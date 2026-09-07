@@ -1,9 +1,10 @@
+using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Text;
-using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Wraps the <c>rg</c> (ripgrep) binary for fast content search. Falls back to
 ///     <see cref="GrepTool" /> semantics (returns a hint) when <c>rg</c> is not on PATH.
@@ -99,7 +100,7 @@ public sealed class RipGrepTool : ITool
         bool ignoreCase = JsonArgs.GetBool(args, "ignoreCase");
         // §ARCH-007: absent or weird type → default true (regex mode on).
         bool regex = JsonArgs.GetBoolOrNull(args, "regex") ?? true;
-        int maxResults = JsonArgs.GetInt(args, "maxResults") is { } results
+        int maxResults = JsonArgs.GetInt(args, "maxResults") is {} results
             ? Math.Clamp(results, 1, HardMaxResults)
             : DefaultMaxResults;
 
@@ -190,7 +191,7 @@ public sealed class RipGrepTool : ITool
             // kill-and-message branches; kill semantics live in KillQuietly.
             ToolErrors.KillQuietly(process);
             return ToolResult.Error(ToolErrors.Handler("ripgrep", cancellationToken,
-                timeout: TimeSpan.FromSeconds(TimeoutSeconds))(oce));
+                TimeSpan.FromSeconds(TimeoutSeconds))(oce));
         }
 
         // rg exit codes: 0 = matches, 1 = no matches, 2 = error.

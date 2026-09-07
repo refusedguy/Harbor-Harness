@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
 using System.Text;
-using Harbor.Abstractions.Tools;
-
 namespace Harbor.Application.Sessions;
 
 /// <summary>
@@ -35,19 +33,14 @@ namespace Harbor.Application.Sessions;
 /// </remarks>
 public static class WorkspaceContextSource
 {
-    /// <summary>Project context files probed in the working directory.</summary>
-    public static readonly string[] ContextFileNames = ["AGENTS.md", "CLAUDE.md"];
 
     private const string ProjectSkillsDir = ".harbor/skills";
     private const string SkillFileName = "SKILL.md";
     private const int MaxDescriptionLength = 160;
     // Safety valve so a stray huge file cannot swallow the model's context window.
     private const long MaxContextFileBytes = 256 * 1024;
-
-    private sealed record CachedSnapshot(
-        IReadOnlyList<ContextFile> Files,
-        IReadOnlyList<SkillDescriptor> Skills,
-        long Version);
+    /// <summary>Project context files probed in the working directory.</summary>
+    public static readonly string[] ContextFileNames = ["AGENTS.md", "CLAUDE.md"];
 
     private static readonly ConcurrentDictionary<string, CachedSnapshot> _cache = new(StringComparer.Ordinal);
 
@@ -78,7 +71,9 @@ public static class WorkspaceContextSource
                     version ^= new DirectoryInfo(globalSkillsDir).LastWriteTimeUtc.Ticks;
             }
         }
-        catch { /* best-effort version */ }
+        catch
+        { /* best-effort version */
+        }
 
         if (_cache.TryGetValue(workingDirectory, out var snap) && snap.Version == version)
             return (snap.Files, snap.Skills);
@@ -137,10 +132,10 @@ public static class WorkspaceContextSource
         }
 
         var sb = new StringBuilder("Instructions from connected MCP servers:");
-        foreach (McpServerInstructions server in servers)
+        foreach (var server in servers)
         {
             sb.Append("\n- ").Append(server.ServerName).Append(": ")
-              .Append(server.Instructions.ReplaceLineEndings(" "));
+                .Append(server.Instructions.ReplaceLineEndings(" "));
         }
 
         return sb.ToString();
@@ -277,7 +272,7 @@ public static class WorkspaceContextSource
             using var reader = new StreamReader(filePath);
             bool inFrontMatter = false;
             int linesRead = 0;
-            while (linesRead++ < 20 && reader.ReadLine() is { } line)
+            while (linesRead++ < 20 && reader.ReadLine() is {} line)
             {
                 if (linesRead == 1 && line.TrimEnd() == "---")
                 {
@@ -323,7 +318,7 @@ public static class WorkspaceContextSource
             using var reader = new StreamReader(filePath);
             bool inFrontMatter = false;
             int linesRead = 0;
-            while (linesRead++ < 20 && reader.ReadLine() is { } line)
+            while (linesRead++ < 20 && reader.ReadLine() is {} line)
             {
                 if (linesRead == 1 && line.TrimEnd() == "---")
                 {
@@ -371,4 +366,9 @@ public static class WorkspaceContextSource
 
     private static string Cap(string description) =>
         description.Length <= MaxDescriptionLength ? description : description[..MaxDescriptionLength];
+
+    private sealed record CachedSnapshot(
+        IReadOnlyList<ContextFile> Files,
+        IReadOnlyList<SkillDescriptor> Skills,
+        long Version);
 }

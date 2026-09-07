@@ -1,10 +1,5 @@
-using System.Linq;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Projection;
-
+using Harbor.Ui.Framework.State;
 namespace Harbor.Tui.Tests;
 
 public class StatusProjectorTests
@@ -96,7 +91,7 @@ public class StatusProjectorTests
     public async Task ProjectFooter_JoinsSegmentsWithDoubleSpace()
     {
         var state = new UiState();
-        var footer = StatusProjector.ProjectFooter(state);
+        string footer = StatusProjector.ProjectFooter(state);
 
         await Assert.That(footer).IsEqualTo("/  ○ idle  0.0000  live");
     }

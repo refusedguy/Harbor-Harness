@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Contracts;
-
 namespace Harbor.Terminal.Abstractions;
 
 /// <summary>
@@ -51,5 +50,5 @@ public enum Color8Bit : byte
     /// <summary>First grayscale color (232).</summary>
     Gray0 = 232,
     /// <summary>Last grayscale color (255).</summary>
-    GrayMax = 255,
+    GrayMax = 255
 }

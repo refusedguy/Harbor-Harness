@@ -3,11 +3,7 @@
 // chat-completions chunk parser for both the native client and the generic
 // adapter, with stable tool-call ids (ROP-A ПР.3).
 
-using System.Text.Json;
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Providers.Internal;
 
 /// <summary>
@@ -28,7 +24,7 @@ internal static class OpenAiWire
     {
         if (!root.TryGetProperty("choices", out var choicesEl) || choicesEl.ValueKind != JsonValueKind.Array)
         {
-            Usage? usageOnly = ReadUsage(root);
+            var usageOnly = ReadUsage(root);
             if (usageOnly is not null)
             {
                 yield return new StepFinishEvent(0, "stop", usageOnly);

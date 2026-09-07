@@ -2,6 +2,7 @@ using Harbor.Providers.OpenAiCompatible.Compat;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Providers.OpenAiCompatible;
+
 /// <summary>
 ///     Provider configuration loaded from JSON.
 /// </summary>
@@ -95,7 +96,7 @@ public sealed class ModelMapping
 /// <summary>
 ///     Default auth resolver — CLI override → conventional env var
 ///     (<c>PROVIDER_ID</c> upper-cased with dashes replaced) → failure hint.
-///     The env twin of the single <see cref = "Harbor.Abstractions.Providers.IAuthResolver" />
+///     The env twin of the single <see cref="Harbor.Abstractions.Providers.IAuthResolver" />
 ///     abstraction (ROP-A ПР.6): the former IOpenAIAuthResolver /
 ///     IAnthropicAuthResolver interfaces and their per-provider resolvers
 ///     collapsed into this pair.
@@ -168,11 +169,11 @@ public sealed class DynamicModelCatalog : IModelCatalog
         // stale cache. Each fallback fires only when the previous source
         // failed; the headline error stays the FETCH failure, not a cache miss.
         string cachePath = Path.Combine(_cacheDir, $"{config.Id}.json");
-        TimeSpan maxAge = TimeSpan.FromHours(config.ModelsRefreshHours);
+        var maxAge = TimeSpan.FromHours(config.ModelsRefreshHours);
 
-        return await ReadCacheAsync(cachePath, config, ct, freshOnly: true, maxAge: maxAge)
+        return await ReadCacheAsync(cachePath, config, ct, true, maxAge)
             .Compensate(_ => FetchAndCacheAsync(config, config.ModelsUrl!, cachePath, ct))
-            .Compensate(fetchError => ReadCacheAsync(cachePath, config, ct, freshOnly: false, maxAge: maxAge)
+            .Compensate(fetchError => ReadCacheAsync(cachePath, config, ct, false, maxAge)
                 .MapError(_ => fetchError))
             .ConfigureAwait(false);
     }

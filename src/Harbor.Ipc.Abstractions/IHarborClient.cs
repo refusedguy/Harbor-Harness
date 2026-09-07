@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Tools;
 namespace Harbor.Ipc;
+
 /// <summary>
 ///     Client-facing Harbor API. Every UI layer (CLI, Avalonia, WPF, Blazor,
 ///     MAUI, mobile, web, out-of-process Python/JS/Rust script) talks to

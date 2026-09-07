@@ -1,10 +1,7 @@
+using Harbor.Abstractions.Events;
+using Harbor.Application.Resilience;
 using System.Net;
 using System.Text.Json;
-using Harbor.Abstractions.Events;
-using Harbor.Application.Agents;
-using Harbor.Application.Resilience;
-using TUnit.Assertions;
-
 namespace Harbor.Application.Tests;
 
 /// <summary>
@@ -41,14 +38,14 @@ public class RetryPolicyTests
     {
         // DNS / connection reset / TLS failures carry no status code.
         await Assert.That(
-            RetryPolicy.IsTransient(new HttpRequestException("boom", inner: null), out _)).IsTrue();
+            RetryPolicy.IsTransient(new HttpRequestException("boom", null), out _)).IsTrue();
     }
 
     [Test]
     public async Task IsTransient_StatusCodes_Classified()
     {
         static HttpRequestException WithStatus(HttpStatusCode code)
-            => new($"status {code}", inner: null, code);
+            => new($"status {code}", null, code);
 
         await Assert.That(RetryPolicy.IsTransient(WithStatus(HttpStatusCode.TooManyRequests), out _)).IsTrue();
         await Assert.That(RetryPolicy.IsTransient(WithStatus(HttpStatusCode.RequestTimeout), out _)).IsTrue();
@@ -129,7 +126,7 @@ public class RetryPolicyTests
                 throw new LlmStreamErrorException(
                     new ErrorEvent("429", Kind: ProviderErrorKind.RateLimit, StatusCode: 429));
             },
-            Opts(max: 3, delayMs: 1), CancellationToken.None));
+            Opts(3, 1), CancellationToken.None));
 
         await Assert.That(calls).IsEqualTo(3);
     }
@@ -183,7 +180,7 @@ public class RetryPolicyTests
             _ =>
             {
                 calls++;
-                throw new HttpRequestException("reset", inner: null, HttpStatusCode.BadGateway);
+                throw new HttpRequestException("reset", null, HttpStatusCode.BadGateway);
             },
             Opts(max: 3), CancellationToken.None));
 
@@ -199,7 +196,7 @@ public class RetryPolicyTests
         await Assert.ThrowsAsync<TaskCanceledException>(async () => await policy.ExecuteAsync<HttpResponseMessage>(
             _ => throw new TaskCanceledException(),
             Opts(max: 3),
-            onRetry: (ex, attempt) => seen.Add((attempt, ex.GetType().Name)),
+            (ex, attempt) => seen.Add((attempt, ex.GetType().Name)),
             CancellationToken.None));
 
         await Assert.That(seen.Count).IsEqualTo(2);
@@ -211,16 +208,16 @@ public class RetryPolicyTests
     public async Task ExecuteAsync_Jitter_DelayNeverExceedsBaseDelay()
     {
         var policy = new RetryPolicy();
-        var options = Opts(max: 4, delayMs: 40, jitter: true);
+        var options = Opts(4, 40, true);
         var delays = new List<double>();
         long lastTicks = 0;
 
         try
         {
             await policy.ExecuteAsync<HttpResponseMessage>(
-                _ => throw new HttpRequestException("reset", inner: null, HttpStatusCode.ServiceUnavailable),
+                _ => throw new HttpRequestException("reset", null, HttpStatusCode.ServiceUnavailable),
                 options,
-                onRetry: (_, _) =>
+                (_, _) =>
                 {
                     long now = Environment.TickCount64;
                     if (lastTicks != 0)
@@ -255,9 +252,9 @@ public class RetryPolicyTests
         try
         {
             await policy.ExecuteAsync<HttpResponseMessage>(
-                _ => throw new HttpRequestException("timeout", inner: null, HttpStatusCode.RequestTimeout),
-                Opts(max: 3, delayMs: 80),
-                onRetry: (_, _) =>
+                _ => throw new HttpRequestException("timeout", null, HttpStatusCode.RequestTimeout),
+                Opts(3, 80),
+                (_, _) =>
                 {
                     long now = Environment.TickCount64;
                     if (last != 0) gaps.Add(now - last);
@@ -265,7 +262,9 @@ public class RetryPolicyTests
                 },
                 CancellationToken.None);
         }
-        catch (HttpRequestException) { /* exhausted */ }
+        catch (HttpRequestException)
+        { /* exhausted */
+        }
 
         // Without jitter the delay is exactly BaseDelay; timer granularity is
         // coarse but never shorter and rarely more than +50ms.
@@ -294,10 +293,10 @@ public class RetryPolicyTests
             {
                 calls++;
                 cts.Cancel(); // cancel while "deciding"
-                throw new HttpRequestException("reset", inner: null, HttpStatusCode.ServiceUnavailable);
+                throw new HttpRequestException("reset", null, HttpStatusCode.ServiceUnavailable);
             },
             Opts(max: 5),
-            ct: cts.Token));
+            cts.Token));
 
         await Assert.That(calls).IsEqualTo(1);
     }
@@ -311,7 +310,7 @@ public class RetryPolicyTests
 public class RetryPolicySafeAdapterTests
 {
     private static RetryOptions Opts(int max, int delayMs = 1) =>
-        new(max, TimeSpan.FromMilliseconds(delayMs), UseJitter: false);
+        new(max, TimeSpan.FromMilliseconds(delayMs), false);
 
     [Test]
     public async Task ExecuteSafeAsync_Success_ReturnsValue()
@@ -333,7 +332,7 @@ public class RetryPolicySafeAdapterTests
             {
                 calls++;
                 return calls < 3
-                    ? throw new HttpRequestException("503", inner: null, HttpStatusCode.ServiceUnavailable)
+                    ? throw new HttpRequestException("503", null, HttpStatusCode.ServiceUnavailable)
                     : Task.FromResult<object?>(new object());
             },
             Opts(max: 5), CancellationToken.None);
@@ -351,7 +350,7 @@ public class RetryPolicySafeAdapterTests
             _ =>
             {
                 calls++;
-                throw new HttpRequestException("401", inner: null, HttpStatusCode.Unauthorized);
+                throw new HttpRequestException("401", null, HttpStatusCode.Unauthorized);
             },
             Opts(max: 5), CancellationToken.None);
 

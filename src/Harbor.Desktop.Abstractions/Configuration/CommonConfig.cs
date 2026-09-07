@@ -23,6 +23,7 @@
 // different TUI renderer in the CLI vs. a different window size in Avalonia.
 
 namespace Harbor.Desktop.Abstractions.Configuration;
+
 /// <summary>
 ///     Shared configuration that is common to every Harbor app (CLI, Avalonia,
 ///     WPF, MAUI, Blazor). Persisted as a single JSON file at
@@ -52,6 +53,8 @@ namespace Harbor.Desktop.Abstractions.Configuration;
 /// </remarks>
 public sealed record CommonConfig
 {
+
+    private static string? _harborHomeOverride;
     /// <summary>
     ///     Process-wide snapshot of the Harbor home directory (<c>~/.harbor</c>).
     ///     Resolved lazily at first access; test hosts may pin it via
@@ -61,21 +64,6 @@ public sealed record CommonConfig
     ///     later class, cross-wiring their config files).
     /// </summary>
     public static string HarborHome => _harborHomeOverride ?? ComputeDefaultHarborHome();
-
-    private static string? _harborHomeOverride;
-
-    /// <summary>Pin the harbor home for the current test scope. Not for production use.</summary>
-    public static void OverrideHarborHomeForTests(string harborDirectory)
-        => _harborHomeOverride = harborDirectory;
-
-    private static string ComputeDefaultHarborHome() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) is { Length: > 0 } profile
-                ? profile
-                : Environment.GetEnvironmentVariable("HOME") is { Length: > 0 } homeEnv
-                    ? homeEnv
-                    : AppContext.BaseDirectory,
-            ".harbor");
 
     /// <summary>
     ///     Schema version of the common config file. Bumped whenever the JSON
@@ -272,7 +260,7 @@ public sealed record CommonConfig
     ///     tests can override via <c>new CommonConfig { ConfigDirectory = ... }</c>.
     /// </summary>
     /// <remarks>
-    ///     Resolved through <see cref="HarborHome"/> so the HOME lookup happens
+    ///     Resolved through <see cref="HarborHome" /> so the HOME lookup happens
     ///     exactly once per process. Calling Environment.GetFolderPath(UserProfile)
     ///     lazily is a trap: on Linux it re-resolves $HOME on every call, and after
     ///     a mid-process HOME change (E2E driver, su, systemd unit) it can return
@@ -292,4 +280,17 @@ public sealed record CommonConfig
     ///     <c>~/.harbor/config.json</c>.
     /// </summary>
     public string ConfigFilePath => Path.Combine(ConfigDirectory, ConfigFileName);
+
+    /// <summary>Pin the harbor home for the current test scope. Not for production use.</summary>
+    public static void OverrideHarborHomeForTests(string harborDirectory)
+        => _harborHomeOverride = harborDirectory;
+
+    private static string ComputeDefaultHarborHome() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) is { Length: > 0 } profile
+                ? profile
+                : Environment.GetEnvironmentVariable("HOME") is { Length: > 0 } homeEnv
+                    ? homeEnv
+                    : AppContext.BaseDirectory,
+            ".harbor");
 }

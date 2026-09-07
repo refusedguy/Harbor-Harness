@@ -1,8 +1,7 @@
-using System.Reflection;
-using System.Collections.Concurrent;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Collections.Concurrent;
+using System.Reflection;
 namespace Harbor.Storage.Jsonl.Tests;
 
 public class JsonlSessionStoreConcurrencyTests
@@ -24,7 +23,7 @@ public class JsonlSessionStoreConcurrencyTests
             const int messagesPerSession = 10;
 
             var tasks = new Task[sessionCount];
-            var sessionIds = new string[sessionCount];
+            string[] sessionIds = new string[sessionCount];
 
             for (int i = 0; i < sessionCount; i++)
             {
@@ -51,7 +50,7 @@ public class JsonlSessionStoreConcurrencyTests
 
             await Task.WhenAll(tasks);
 
-            foreach (var sid in sessionIds)
+            foreach (string sid in sessionIds)
             {
                 var messages = await store.GetMessagesAsync(sid);
                 await Assert.That(messages.IsSuccess).IsTrue();

@@ -1,8 +1,9 @@
-using System.Collections.Immutable;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
+using System.Collections.Immutable;
 namespace Harbor.Ui.Framework.State;
+
 /// <summary>
 ///     Default <see cref="ITuiEffectRunner" />. The ONLY place that touches
 ///     <see cref="IAgentRunner" /> / the slash handler. Renderers stay free of
@@ -46,12 +47,6 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         _logger = logger;
     }
 
-    public void RebindStore(UiStore newStore)
-    {
-        ArgumentNullException.ThrowIfNull(newStore);
-        _store = newStore;
-    }
-
     /// <summary>Slash command list for input autocomplete.</summary>
     public static ImmutableArray<string> KnownSlashCommands => ChatCommands.Slash;
 
@@ -92,6 +87,12 @@ public sealed class TuiEffectHost : ITuiEffectRunner
                 _store.Dispatch(new UiMsg.Quit());
                 break;
         }
+    }
+
+    public void RebindStore(UiStore newStore)
+    {
+        ArgumentNullException.ThrowIfNull(newStore);
+        _store = newStore;
     }
 
 

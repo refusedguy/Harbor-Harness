@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 namespace Harbor.Core.Tests;
+
 public class EventBusTests
 {
     [Test]

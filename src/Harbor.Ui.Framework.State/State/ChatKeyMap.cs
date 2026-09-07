@@ -1,4 +1,5 @@
 namespace Harbor.Ui.Framework.State;
+
 /// <summary>
 ///     Central registry of key bindings + human-readable labels for the chat UI.
 ///     Both the input handler (per-renderer, ~5 lines) and the footer/help text

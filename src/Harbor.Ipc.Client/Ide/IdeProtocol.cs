@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-
 namespace Harbor.Ipc.Ide;
 
 /// <summary>
@@ -144,27 +143,6 @@ public static class IdeStreamKinds
 /// </summary>
 public sealed class IdeRpcException : Exception
 {
-    /// <summary>JSON-RPC error code.</summary>
-    public int Code { get; }
-
-    /// <summary>Create a <see cref="IdeRpcException.HandlerError" /> failure with no message.</summary>
-    public IdeRpcException() : this(HandlerError, "IDE bridge request failed.")
-    {
-    }
-
-    /// <summary>Create a typed bridge error.</summary>
-    public IdeRpcException(int code, string message) : base(message) => Code = code;
-
-    /// <summary>Create a <see cref="IdeRpcException.HandlerError" /> failure.</summary>
-    public IdeRpcException(string message) : base(message) => Code = HandlerError;
-
-    /// <summary>Create a <see cref="IdeRpcException.HandlerError" /> failure wrapping an inner exception.</summary>
-    public IdeRpcException(string message, Exception innerException) : base(message, innerException)
-        => Code = HandlerError;
-
-    /// <summary>Create a typed bridge error wrapping an inner exception.</summary>
-    public IdeRpcException(int code, string message, Exception innerException) : base(message, innerException)
-        => Code = code;
 
     /// <summary>Standard JSON-RPC code: invalid request envelope (-32600).</summary>
     public const int InvalidRequest = -32600;
@@ -177,11 +155,42 @@ public sealed class IdeRpcException : Exception
 
     /// <summary>Harbor code: request execution failed (-32000).</summary>
     public const int HandlerError = -32000;
+
+    /// <summary>Create a <see cref="IdeRpcException.HandlerError" /> failure with no message.</summary>
+    public IdeRpcException() : this(HandlerError, "IDE bridge request failed.")
+    {
+    }
+
+    /// <summary>Create a typed bridge error.</summary>
+    public IdeRpcException(int code, string message) : base(message)
+    {
+        Code = code;
+    }
+
+    /// <summary>Create a <see cref="IdeRpcException.HandlerError" /> failure.</summary>
+    public IdeRpcException(string message) : base(message)
+    {
+        Code = HandlerError;
+    }
+
+    /// <summary>Create a <see cref="IdeRpcException.HandlerError" /> failure wrapping an inner exception.</summary>
+    public IdeRpcException(string message, Exception innerException) : base(message, innerException)
+    {
+        Code = HandlerError;
+    }
+
+    /// <summary>Create a typed bridge error wrapping an inner exception.</summary>
+    public IdeRpcException(int code, string message, Exception innerException) : base(message, innerException)
+    {
+        Code = code;
+    }
+    /// <summary>JSON-RPC error code.</summary>
+    public int Code { get; }
 }
 
 /// <summary>
 ///     AOT-safe System.Text.Json contract for the bridge protocol. All
-///     serialization goes through this <see cref="JsonSerializerContext"/> —
+///     serialization goes through this <see cref="JsonSerializerContext" /> —
 ///     no reflection-based <c>Serialize&lt;object&gt;</c> anywhere (§PERF-002).
 /// </summary>
 [JsonSourceGenerationOptions(

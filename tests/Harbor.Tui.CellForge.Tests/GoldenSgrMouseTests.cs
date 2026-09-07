@@ -1,14 +1,13 @@
-using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Golden-byte vectors for SGR mouse (design §3.1–§3.3): modes 1000/1002 with
-/// 1006 encoding, zero-based coordinate conversion, modifier bits, Click vs
-/// Drag vs Release synthesis, wheel mapping and the >223-column case that
-/// legacy X10 encoding cannot represent.
+///     Golden-byte vectors for SGR mouse (design §3.1–§3.3): modes 1000/1002 with
+///     1006 encoding, zero-based coordinate conversion, modifier bits, Click vs
+///     Drag vs Release synthesis, wheel mapping and the >223-column case that
+///     legacy X10 encoding cannot represent.
 /// </summary>
 public class GoldenSgrMouseTests
 {

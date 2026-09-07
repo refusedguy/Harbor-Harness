@@ -1,6 +1,5 @@
 using Harbor.Abstractions.Lsp;
 using Microsoft.Extensions.DependencyInjection;
-
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>Recording <see cref="ILspService" /> stub for read/edit hook tests.</summary>

@@ -7,6 +7,7 @@ using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tui.Tests;
+
 public class StatusBarViewTests
 {
     [Test]

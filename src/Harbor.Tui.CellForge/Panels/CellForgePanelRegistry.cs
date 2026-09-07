@@ -1,8 +1,6 @@
-using System.Collections.Immutable;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
+using System.Collections.Immutable;
 namespace Harbor.Tui.CellForge.Panels;
 
 /// <summary>

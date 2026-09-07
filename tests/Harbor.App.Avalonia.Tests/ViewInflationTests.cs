@@ -1,26 +1,19 @@
 // CI integration note: run this class as a separate job-step in CI using:
 //   dotnet test tests/Harbor.App.Avalonia.Tests --treenode-filter "/*/*/ViewInflationTests/*"
 // Use --treenode-filter (NOT --filter) per project memory.
-using System.Collections.ObjectModel;
-using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
-using Avalonia.Markup.Xaml;
-using Avalonia.Media;
-using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Harbor.App.Avalonia;
-using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
 using Harbor.App.Avalonia.Views.Board;
+using Harbor.App.Avalonia.Views.Chrome;
+using Harbor.App.Avalonia.Views.Dev;
 using Harbor.App.Avalonia.Views.Shell;
-using Microsoft.Extensions.Hosting;
-using TUnit;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
+using Harbor.Ui.Framework.Services;
+using System.Collections.ObjectModel;
+using System.Text.Json;
 namespace Harbor.App.Avalonia.Tests;
 
 /// <summary>
@@ -43,35 +36,35 @@ public class ViewInflationTests
     [Test]
     public async Task TitleBarView_Inflates()
     {
-        var view = new Views.Chrome.TitleBarView();
+        var view = new TitleBarView();
         await Assert.That(view).IsNotNull();
     }
 
     [Test]
     public async Task ActivityRailView_Inflates()
     {
-        var view = new Views.Shell.ActivityRailView();
+        var view = new ActivityRailView();
         await Assert.That(view).IsNotNull();
     }
 
     [Test]
     public async Task StatusBarView_Inflates()
     {
-        var view = new Views.Shell.StatusBarView();
+        var view = new StatusBarView();
         await Assert.That(view).IsNotNull();
     }
 
     [Test]
     public async Task RightDrawerView_Inflates()
     {
-        var view = new Views.Shell.RightDrawerView();
+        var view = new RightDrawerView();
         await Assert.That(view).IsNotNull();
     }
 
     [Test]
     public async Task SessionsFlyoutView_Inflates()
     {
-        var view = new Views.Shell.SessionsFlyoutView();
+        var view = new SessionsFlyoutView();
         await Assert.That(view).IsNotNull();
     }
 
@@ -89,7 +82,7 @@ public class ViewInflationTests
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
         await session.Dispatch(async () =>
         {
-            var view = new Views.ChatView();
+            var view = new ChatView();
             await Assert.That(view).IsNotNull();
         }, CancellationToken.None);
     }
@@ -97,7 +90,7 @@ public class ViewInflationTests
     [Test]
     public async Task ComposerView_Inflates()
     {
-        var view = new Views.Shell.ComposerView();
+        var view = new ComposerView();
         await Assert.That(view).IsNotNull();
     }
 
@@ -105,11 +98,11 @@ public class ViewInflationTests
     public async Task ToastNotificationsView_Inflates_ThreeToasts()
     {
         var vm = new ToastVm();
-        vm.Toasts.Add(new Harbor.Ui.Framework.Services.ToastNotification("Success toast", Harbor.Ui.Framework.Services.ToastKind.Success));
-        vm.Toasts.Add(new Harbor.Ui.Framework.Services.ToastNotification("Warning toast", Harbor.Ui.Framework.Services.ToastKind.Warning));
-        vm.Toasts.Add(new Harbor.Ui.Framework.Services.ToastNotification("Error toast", Harbor.Ui.Framework.Services.ToastKind.Error));
+        vm.Toasts.Add(new ToastNotification("Success toast", ToastKind.Success));
+        vm.Toasts.Add(new ToastNotification("Warning toast", ToastKind.Warning));
+        vm.Toasts.Add(new ToastNotification("Error toast", ToastKind.Error));
 
-        var view = new Views.ToastNotificationsView
+        var view = new ToastNotificationsView
         {
             DataContext = vm
         };
@@ -121,7 +114,7 @@ public class ViewInflationTests
     [Test]
     public async Task CommandPaletteView_Inflates()
     {
-        var view = new Views.CommandPaletteView();
+        var view = new CommandPaletteView();
         await Assert.That(view).IsNotNull();
     }
 
@@ -138,7 +131,7 @@ public class ViewInflationTests
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
         await session.Dispatch(async () =>
         {
-            var view = new Views.SettingsView();
+            var view = new SettingsView();
             await Assert.That(view).IsNotNull();
         }, CancellationToken.None);
     }
@@ -146,14 +139,14 @@ public class ViewInflationTests
     [Test]
     public async Task DiffView_Inflates()
     {
-        var view = new Views.DiffView();
+        var view = new DiffView();
         await Assert.That(view).IsNotNull();
     }
 
     [Test]
     public async Task ComponentGalleryView_Inflates()
     {
-        var view = new Views.Dev.ComponentGalleryView();
+        var view = new ComponentGalleryView();
         await Assert.That(view).IsNotNull();
     }
 
@@ -175,9 +168,9 @@ public class ViewInflationTests
     [Skip("Known flake: headless Avalonia dispose race / virtualization timing in CI is non-deterministic. See issue #14.")]
     public async Task MainWindow_Inflates_Without_Cast_Errors()
     {
-        var tempHome = Path.Combine(Path.GetTempPath(), "harbor-avalonia-mw-" + Guid.NewGuid().ToString("N"));
+        string tempHome = Path.Combine(Path.GetTempPath(), "harbor-avalonia-mw-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempHome);
-        var harborDir = Path.Combine(tempHome, ".harbor");
+        string harborDir = Path.Combine(tempHome, ".harbor");
         Directory.CreateDirectory(harborDir);
         await File.WriteAllTextAsync(
             Path.Combine(harborDir, "config.json"),
@@ -192,7 +185,7 @@ public class ViewInflationTests
                 defaultAgent = "code"
             }));
 
-        var originalHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string originalHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         try
         {
             Environment.SetEnvironmentVariable("HOME", tempHome);
@@ -215,21 +208,21 @@ public class ViewInflationTests
                     .SetupWithLifetime(lifetime);
 
                 window = lifetime.MainWindow
-                    ?? throw new InvalidOperationException("MainWindow was not created by App.OnFrameworkInitializationCompleted");
+                         ?? throw new InvalidOperationException("MainWindow was not created by App.OnFrameworkInitializationCompleted");
                 window.Show();
                 window.UpdateLayout();
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             }, CancellationToken.None);
 
             await Assert.That(window.IsVisible).IsTrue();
-            await Assert.That(FindDescendantOfType(window, typeof(Views.Shell.ActivityRailView))).IsNotNull();
-            await Assert.That(FindDescendantOfType(window, typeof(Views.Shell.StatusBarView))).IsNotNull();
+            await Assert.That(FindDescendantOfType(window, typeof(ActivityRailView))).IsNotNull();
+            await Assert.That(FindDescendantOfType(window, typeof(StatusBarView))).IsNotNull();
         }
         finally
         {
             Environment.SetEnvironmentVariable("HOME", originalHome);
             if (Directory.Exists(tempHome))
-                Directory.Delete(tempHome, recursive: true);
+                Directory.Delete(tempHome, true);
         }
     }
 
@@ -276,7 +269,7 @@ public class ViewInflationTests
 /// <summary>
 ///     Simple VM for toast inflation test.
 /// </summary>
-file sealed class ToastVm
+sealed file class ToastVm
 {
-    public ObservableCollection<Harbor.Ui.Framework.Services.ToastNotification> Toasts { get; } = new();
+    public ObservableCollection<ToastNotification> Toasts { get; } = new();
 }

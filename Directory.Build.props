@@ -129,7 +129,7 @@
     class in BannedSymbols.txt itself.
   -->
   <ItemGroup>
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt"/>
   </ItemGroup>
 
   <!--
@@ -148,7 +148,8 @@
     <NoWarn>$(NoWarn);RS0030</NoWarn>
   </PropertyGroup>
 
-  <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->  <ItemGroup>
+  <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->
+  <ItemGroup>
     <!-- Code style + quality -->
     <PackageReference Include="Roslynator.Analyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -222,10 +223,10 @@
     <PropertyGroup>
       <HarborArchGateLog>$(IntermediateOutputPath)harbor-arch-gate.log</HarborArchGateLog>
     </PropertyGroup>
-    <Message Importance="high" Text="[arch-gate] Harbor architecture tests: $(TargetFileName)" />
+    <Message Importance="high" Text="[arch-gate] Harbor architecture tests: $(TargetFileName)"/>
     <Exec Command="dotnet exec &quot;$(TargetPath)&quot; > &quot;$(HarborArchGateLog)&quot; 2>&amp;1 || { tail -30 &quot;$(HarborArchGateLog)&quot;; exit 1; }"
           IgnoreExitCode="false"
-          ConsoleToMSBuild="false" />
+          ConsoleToMSBuild="false"/>
   </Target>
 
 </Project>

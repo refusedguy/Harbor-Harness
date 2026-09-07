@@ -1,15 +1,13 @@
 using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Event reactions (mascot-brand T3): error blink, success bounce, approval
-/// wiggle — short overlay sequences that override the mood frames, tinted by
-/// event accent, played exactly once per signal. Deterministic ticks only.
+///     Event reactions (mascot-brand T3): error blink, success bounce, approval
+///     wiggle — short overlay sequences that override the mood frames, tinted by
+///     event accent, played exactly once per signal. Deterministic ticks only.
 /// </summary>
 public class MascotReactionTests
 {
@@ -127,7 +125,7 @@ public class MascotReactionTests
                  {
                      MascotReaction.ErrorBlink,
                      MascotReaction.SuccessBounce,
-                     MascotReaction.ApprovalWiggle,
+                     MascotReaction.ApprovalWiggle
                  })
         {
             string[] faces = AmbientMascot.ReactionFramesOf(reaction);
@@ -230,7 +228,7 @@ public class MascotReactionTests
                  {
                      MascotReaction.ErrorBlink,
                      MascotReaction.SuccessBounce,
-                     MascotReaction.ApprovalWiggle,
+                     MascotReaction.ApprovalWiggle
                  })
         {
             status.SignalMascot(reaction);
@@ -260,22 +258,22 @@ public class MascotReactionTests
         {
             MascotReaction.ErrorBlink,
             MascotReaction.SuccessBounce,
-            MascotReaction.ApprovalWiggle,
+            MascotReaction.ApprovalWiggle
         };
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
+        long before = GC.GetAllocatedBytesForCurrentThread();
         const int iterations = 150;
         for (int i = 0; i < iterations; i++)
         {
             if (i % 15 == 0)
             {
-                status.SignalMascot(reactions[(i / 15) % reactions.Length]);
+                status.SignalMascot(reactions[i / 15 % reactions.Length]);
             }
 
             mascot.Paint(buffer);
         }
 
-        var after = GC.GetAllocatedBytesForCurrentThread();
+        long after = GC.GetAllocatedBytesForCurrentThread();
 
         await Assert.That(after - before).IsEqualTo(0);
     }

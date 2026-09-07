@@ -23,7 +23,7 @@ public interface IToolDispatcher
     ///     synthesized so the loop keeps going.
     /// </param>
     /// <returns>A tool-result message ready to append to the session history.</returns>
-    Task<ToolResultMessage> ExecuteAsync(
+    public Task<ToolResultMessage> ExecuteAsync(
         IReadOnlyList<ToolCallPart> toolCalls,
         ISessionContext session,
         AssistantMessage partial,

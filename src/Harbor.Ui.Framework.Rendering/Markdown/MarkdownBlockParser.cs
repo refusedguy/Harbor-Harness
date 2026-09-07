@@ -5,13 +5,13 @@ internal enum MdBlockKind : byte
     Paragraph,
     Heading,
     Fence,
-    ListItem,
+    ListItem
 }
 
 /// <summary>
-/// One parsed markdown block spanning source chars [Start, End). Only
-/// complete, newline-terminated blocks are freezable; a trailing partial
-/// region always stays in the re-rendered tail.
+///     One parsed markdown block spanning source chars [Start, End). Only
+///     complete, newline-terminated blocks are freezable; a trailing partial
+///     region always stays in the re-rendered tail.
 /// </summary>
 internal readonly struct MdBlock(MdBlockKind kind, int start, int end, bool complete, int level)
 {
@@ -32,15 +32,15 @@ internal enum LineKind : byte
     Text,
     Heading,
     FenceOpen,
-    ListItem,
+    ListItem
 }
 
 /// <summary>
-/// Context-free line-oriented parser over the simplified CE-3 dialect:
-/// fenced code blocks, ATX headings, «- »/«1. » lists and blank-line
-/// separated paragraphs. A paragraph/list run also terminates cleanly when a
-/// new block type starts (heading/fence/list) so mid-document freezes never
-/// swallow later structure. Pure function of the input text.
+///     Context-free line-oriented parser over the simplified CE-3 dialect:
+///     fenced code blocks, ATX headings, «- »/«1. » lists and blank-line
+///     separated paragraphs. A paragraph/list run also terminates cleanly when a
+///     new block type starts (heading/fence/list) so mid-document freezes never
+///     swallow later structure. Pure function of the input text.
 /// </summary>
 internal static class MarkdownBlockParser
 {
@@ -51,7 +51,7 @@ internal static class MarkdownBlockParser
 
         while (pos < source.Length)
         {
-            var (lineEnd, terminated) = LineBounds(source, pos);
+            (int lineEnd, bool terminated) = LineBounds(source, pos);
             var trimmed = source.Slice(pos, lineEnd - pos).TrimStart(' ');
             var kind = Classify(trimmed);
 
@@ -63,106 +63,106 @@ internal static class MarkdownBlockParser
                     continue;
 
                 case LineKind.FenceOpen:
+                {
+                    int closePos = FindFenceClose(source, lineEnd);
+                    if (closePos >= 0)
                     {
-                        int closePos = FindFenceClose(source, lineEnd);
-                        if (closePos >= 0)
-                        {
-                            var (closeEnd, closeTerm) = LineBounds(source, closePos);
-                            _ = closeTerm;
-                            blocks.Add(new MdBlock(MdBlockKind.Fence, pos, closeEnd, true, 0));
-                            pos = closeEnd < source.Length ? closeEnd + 1 : source.Length;
-                        }
-                        else
-                        {
-                            blocks.Add(new MdBlock(MdBlockKind.Fence, pos, source.Length, false, 0));
-                            return blocks;
-                        }
-
-                        break;
+                        (int closeEnd, bool closeTerm) = LineBounds(source, closePos);
+                        _ = closeTerm;
+                        blocks.Add(new MdBlock(MdBlockKind.Fence, pos, closeEnd, true, 0));
+                        pos = closeEnd < source.Length ? closeEnd + 1 : source.Length;
                     }
+                    else
+                    {
+                        blocks.Add(new MdBlock(MdBlockKind.Fence, pos, source.Length, false, 0));
+                        return blocks;
+                    }
+
+                    break;
+                }
 
                 case LineKind.Heading:
-                    {
-                        int end = terminated ? lineEnd + 1 : source.Length;
-                        blocks.Add(new MdBlock(MdBlockKind.Heading, pos, end, terminated, HeadingLevel(trimmed)));
-                        pos = end;
-                        break;
-                    }
+                {
+                    int end = terminated ? lineEnd + 1 : source.Length;
+                    blocks.Add(new MdBlock(MdBlockKind.Heading, pos, end, terminated, HeadingLevel(trimmed)));
+                    pos = end;
+                    break;
+                }
 
                 case LineKind.ListItem:
+                {
+                    int end = pos;
+                    bool complete = false;
+                    int cursor = pos;
+                    while (cursor < source.Length)
                     {
-                        int end = pos;
-                        bool complete = false;
-                        int cursor = pos;
-                        while (cursor < source.Length)
+                        (int le, bool term) = LineBounds(source, cursor);
+                        var t = source.Slice(cursor, le - cursor).TrimStart(' ');
+                        var k = Classify(t);
+
+                        if (k == LineKind.ListItem)
                         {
-                            var (le, term) = LineBounds(source, cursor);
-                            var t = source.Slice(cursor, le - cursor).TrimStart(' ');
-                            var k = Classify(t);
-
-                            if (k == LineKind.ListItem)
-                            {
-                                end = term ? le + 1 : le;
-                                cursor = term ? le + 1 : source.Length;
-                                continue;
-                            }
-
-                            // Blank line or a foreign block start terminates the
-                            // run; the blank is consumed (symmetric with paragraphs)
-                            // so freeze-time spacer detection sees it.
-                            complete = true;
-                            if (k == LineKind.Blank)
-                            {
-                                end = term ? le + 1 : le;
-                            }
-
-                            break;
+                            end = term ? le + 1 : le;
+                            cursor = term ? le + 1 : source.Length;
+                            continue;
                         }
 
-                        // Only an explicit terminator (blank line / foreign
-                        // start) completes a list run; EOF-with-newline must
-                        // not — a later chunk may still add its separator.
-                        blocks.Add(new MdBlock(MdBlockKind.ListItem, pos, end, complete, 2));
-                        pos = end;
+                        // Blank line or a foreign block start terminates the
+                        // run; the blank is consumed (symmetric with paragraphs)
+                        // so freeze-time spacer detection sees it.
+                        complete = true;
+                        if (k == LineKind.Blank)
+                        {
+                            end = term ? le + 1 : le;
+                        }
+
                         break;
                     }
+
+                    // Only an explicit terminator (blank line / foreign
+                    // start) completes a list run; EOF-with-newline must
+                    // not — a later chunk may still add its separator.
+                    blocks.Add(new MdBlock(MdBlockKind.ListItem, pos, end, complete, 2));
+                    pos = end;
+                    break;
+                }
 
                 case LineKind.Text:
                 default:
+                {
+                    int end = pos;
+                    bool complete = false;
+                    int cursor = pos;
+                    while (cursor < source.Length)
                     {
-                        int end = pos;
-                        bool complete = false;
-                        int cursor = pos;
-                        while (cursor < source.Length)
+                        (int le, bool term) = LineBounds(source, cursor);
+                        var t = source.Slice(cursor, le - cursor).TrimStart(' ');
+                        var k = Classify(t);
+
+                        if (k == LineKind.Blank)
                         {
-                            var (le, term) = LineBounds(source, cursor);
-                            var t = source.Slice(cursor, le - cursor).TrimStart(' ');
-                            var k = Classify(t);
-
-                            if (k == LineKind.Blank)
-                            {
-                                end = term ? le + 1 : le; // blank consumed as terminator
-                                complete = true;
-                                break;
-                            }
-
-                            if (k != LineKind.Text)
-                            {
-                                end = cursor; // foreign block starts here — exclude
-                                complete = true;
-                                break;
-                            }
-
-                            end = term ? le + 1 : le;
-                            cursor = term ? le + 1 : source.Length;
+                            end = term ? le + 1 : le; // blank consumed as terminator
+                            complete = true;
+                            break;
                         }
 
-                        // Same strictness as lists: only blank-line/foreign
-                        // terminators complete a paragraph.
-                        blocks.Add(new MdBlock(MdBlockKind.Paragraph, pos, end, complete, 0));
-                        pos = Math.Max(end, pos + 1);
-                        break;
+                        if (k != LineKind.Text)
+                        {
+                            end = cursor; // foreign block starts here — exclude
+                            complete = true;
+                            break;
+                        }
+
+                        end = term ? le + 1 : le;
+                        cursor = term ? le + 1 : source.Length;
                     }
+
+                    // Same strictness as lists: only blank-line/foreign
+                    // terminators complete a paragraph.
+                    blocks.Add(new MdBlock(MdBlockKind.Paragraph, pos, end, complete, 0));
+                    pos = Math.Max(end, pos + 1);
+                    break;
+                }
             }
         }
 
@@ -208,7 +208,7 @@ internal static class MarkdownBlockParser
         int cursor = searchFrom;
         while (cursor < source.Length)
         {
-            var (le, term) = LineBounds(source, cursor);
+            (int le, bool term) = LineBounds(source, cursor);
             var t = source.Slice(cursor, le - cursor).TrimStart(' ');
             if (t.StartsWith("```"))
             {

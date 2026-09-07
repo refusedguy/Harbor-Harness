@@ -3,13 +3,13 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Reducers;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
+using System.Text.Json;
 namespace Harbor.Benchmarks;
 
 /// <summary>
 ///     Benchmarks <see cref=\"AppStore.Dispatch\" /> — the Redux-style
-///     dispatch loop that applies <see cref=\"AgentEvent\" />s through
-///     <see cref=\"AppReducer\" /> to produce an immutable <see cref=\"AppState\" />.
+///     dispatch loop that applies <see cref=\"AgentEvent" />s through
+///     <see cref=\"AppReducer" /> to produce an immutable <see cref=\"AppState\" />.
 ///     Measures the per-event overhead of pattern-matching + record cloning
 ///     (<c>with</c> expressions) on state trees of varying size.
 /// </summary>
@@ -17,11 +17,11 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class AppStoreDispatchBenchmark
 {
-    private AppStore _store = null!;
-    private AgentEvent[] _events = null!;
 
     [Params(10, 100, 1000)]
     public int LineCount;
+    private AgentEvent[] _events = null!;
+    private AppStore _store = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -56,7 +56,7 @@ public class AppStoreDispatchBenchmark
             events[i] = new ToolExecutionStartEvent(
                 $"tc_{i}",
                 $"tool_{i}",
-                System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone());
+                JsonDocument.Parse("{}").RootElement.Clone());
         }
         for (int i = 0; i < events.Length; i++)
             store.Dispatch(events[i]);

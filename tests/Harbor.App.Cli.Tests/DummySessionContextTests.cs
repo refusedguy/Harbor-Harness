@@ -1,7 +1,5 @@
-using System.Threading.Channels;
 using Harbor.Abstractions.Models;
 using Harbor.App.Cli.Hosting;
-
 namespace Harbor.App.Cli.Tests;
 
 /// <summary>
@@ -20,8 +18,8 @@ public class DummySessionContextTests
     {
         var context = NewContext();
 
-        Channel<AgentMessage> first = context.SteeringQueue;
-        Channel<AgentMessage> second = context.SteeringQueue;
+        var first = context.SteeringQueue;
+        var second = context.SteeringQueue;
 
         await Assert.That(ReferenceEquals(first, second)).IsTrue();
     }
@@ -41,7 +39,7 @@ public class DummySessionContextTests
         bool written = context.SteeringQueue.Writer.TryWrite(message);
 
         await Assert.That(written).IsTrue();
-        bool read = context.SteeringQueue.Reader.TryRead(out AgentMessage? readBack);
+        bool read = context.SteeringQueue.Reader.TryRead(out var readBack);
         await Assert.That(read).IsTrue();
         await Assert.That(ReferenceEquals(readBack, message)).IsTrue();
     }

@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 namespace Harbor.Ui.Framework.Services;
+
 /// <summary>
 ///     Tracks <see cref="SessionStatus" /> (idle / working / done / error) per
 ///     session, keyed on session id. Subscribers (e.g.

@@ -1,4 +1,5 @@
 namespace Harbor.Plugins.Abstractions;
+
 /// <summary>
 ///     Reflects over a <see cref="CompiledPluginAssembly" />, finds public
 ///     <see cref="Harbor.Abstractions.Plugins.IPlugin" /> implementations with parameterless

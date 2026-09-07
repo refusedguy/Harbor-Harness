@@ -1,4 +1,5 @@
 namespace Harbor.Ipc.Protocol;
+
 /// <summary>
 ///     MessagePack RPC server. Accepts client streams from the
 ///     <see cref="ServerPipeTransport" />, reads length-prefixed frames of
@@ -54,11 +55,11 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
     private readonly EventBroadcaster _broadcaster;
     private readonly CancellationTokenSource _cts = new();
     private readonly RequestDispatcher _dispatcher;
-    private readonly ILogger<MessagePackRpcServer> _logger;
     private readonly string? _expectedPsk;
+    private readonly ILogger<MessagePackRpcServer> _logger;
     private readonly IIpcServerTransport _transport;
-    private int _connectionSequence;
     private Task? _acceptTask;
+    private int _connectionSequence;
     private int _disposed;
 
     /// <summary>
@@ -142,7 +143,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
     {
         // Per-connection identity for addressed delivery + session leases (A3).
         int connectionNumber = Interlocked.Increment(ref _connectionSequence);
-        var clientId = $"c-{connectionNumber:x8}";
+        string clientId = $"c-{connectionNumber:x8}";
 
         // Per-stream write lock so dispatcher responses and broadcaster
         // events never interleave half-frames on the wire.
@@ -161,7 +162,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         // connection-scoped token that tears the whole handler down when the
         // server stops or a fatal write failure occurs.
         using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        CancellationToken connectionCt = connectionCts.Token;
+        var connectionCt = connectionCts.Token;
         var runs = new Dictionary<Guid, PromptRun>();
         var runsLock = new Lock();
 
@@ -218,7 +219,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                         {
                             _logger.LogWarning("PSK auth failed; closing connection");
                             await TryWriteErrorResponse(
-                                stream, writeLock, pskRequest.RequestId, "PSK_AUTH_FAILED", connectionCt)
+                                    stream, writeLock, pskRequest.RequestId, "PSK_AUTH_FAILED", connectionCt)
                                 .ConfigureAwait(false);
                             return;
                         }
@@ -226,7 +227,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                         authenticated = true;
                         _logger.LogInformation("PSK auth succeeded");
                         await WriteResponseAsync(
-                            stream, writeLock, new OkResponse { RequestId = pskRequest.RequestId }, connectionCt)
+                                stream, writeLock, new OkResponse { RequestId = pskRequest.RequestId }, connectionCt)
                             .ConfigureAwait(false);
                         continue;
                     }
@@ -318,7 +319,9 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
             foreach (var pending in pendingTasks)
             {
                 try { await pending.ConfigureAwait(false); }
-                catch (OperationCanceledException) { /* cancelled by the drain above */ }
+                catch (OperationCanceledException)
+                { /* cancelled by the drain above */
+                }
                 catch (Exception drainEx)
                 {
                     _logger.LogDebug(drainEx, "Suppressed fault from prompt task during connection drain");
@@ -359,7 +362,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         // never faults, so it is always observed.
         lock (runsLock)
         {
-            Task worker = Task.Run(async () =>
+            var worker = Task.Run(async () =>
             {
                 try
                 {

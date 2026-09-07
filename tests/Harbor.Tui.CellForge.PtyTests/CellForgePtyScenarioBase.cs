@@ -1,7 +1,6 @@
-using System.Text;
 using Harbor.E2E.Framework;
-using Harbor.E2E.Framework.Pty;
-
+using System.Diagnostics;
+using System.Text;
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -10,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     CHILD's environment — the test process env stays untouched), a spawned
 ///     <c>HARBOR_TUI=consoleex</c> app inside a <see cref="PtySession" />, and
 ///     an ANSI screen emulation fed incrementally from the raw master stream.
-///
 ///     All scenario classes share the "pty" NotInParallel constraint key:
 ///     process spawn + real PTYs are serialized by design.
 /// </summary>
@@ -20,10 +18,10 @@ public abstract class CellForgePtyScenarioBase
     private const string CliProjectRelativePath = "apps/Harbor.App.Cli/Harbor.App.Cli.csproj";
 
     private readonly object _screenLock = new();
-    private AnsiTerminalBuffer _screen = new(100, 30);
-    private Decoder _decoder = Encoding.UTF8.GetDecoder();
     private int _consumedRaw;
+    private Decoder _decoder = Encoding.UTF8.GetDecoder();
     private CancellationTokenSource? _pumpCts;
+    private AnsiTerminalBuffer _screen = new(100, 30);
 
     protected MockLlmServer Server { get; private set; } = null!;
 
@@ -37,6 +35,18 @@ public abstract class CellForgePtyScenarioBase
 
     /// <summary>Probe escape hatch: Information-level app logging for diagnostics.</summary>
     protected bool VerboseLogging { get; set; }
+
+    /// <summary>Current visible grid as raw text (emulated terminal state).</summary>
+    protected string ScreenText
+    {
+        get
+        {
+            lock (_screenLock)
+            {
+                return _screen.GetVisibleText();
+            }
+        }
+    }
 
     [Before(Test)]
     public async Task SetUpScenarioAsync()
@@ -134,11 +144,11 @@ public abstract class CellForgePtyScenarioBase
 
         string dll = ResolveCliDllPath();
         var spec = new PtyStartSpec(
-            FileName: HarborAppLocator.ResolveDotnetHost(),
-            Args: ["exec", dll],
-            Cols: cols,
-            Rows: rows,
-            Environment: ChildEnv());
+            HarborAppLocator.ResolveDotnetHost(),
+            ["exec", dll],
+            cols,
+            rows,
+            ChildEnv());
         Session = PtySession.Start(spec);
 
         _pumpCts = new CancellationTokenSource();
@@ -146,28 +156,13 @@ public abstract class CellForgePtyScenarioBase
         return Task.CompletedTask;
     }
 
-    /// <summary>Current visible grid as raw text (emulated terminal state).</summary>
-    protected string ScreenText
-    {
-        get
-        {
-            lock (_screenLock)
-            {
-                return _screen.GetVisibleText();
-            }
-        }
-    }
-
     /// <summary>Visible grid normalized: trailing whitespace trimmed per line.</summary>
-    protected string[] NormalizedLines()
-    {
-        return NormalizeLines(ScreenText);
-    }
+    protected string[] NormalizedLines() => NormalizeLines(ScreenText);
 
     /// <summary>Normalization contract: TrimEnd each line, drop trailing empty lines.</summary>
     internal static string[] NormalizeLines(string visibleText)
     {
-        var lines = visibleText.Split('\n');
+        string[] lines = visibleText.Split('\n');
         for (int i = 0; i < lines.Length; i++)
         {
             lines[i] = lines[i].TrimEnd();
@@ -189,12 +184,12 @@ public abstract class CellForgePtyScenarioBase
     protected async Task<string[]> WaitForScreenAsync(Func<string[], bool> predicate, TimeSpan? timeout = null)
     {
         var deadline = TimeSpan.FromSeconds(10);
-        if (timeout is { } t)
+        if (timeout is {} t)
         {
             deadline = t;
         }
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         while (sw.Elapsed < deadline)
         {
             string[] lines = NormalizedLines();
@@ -222,7 +217,7 @@ public abstract class CellForgePtyScenarioBase
     private void PumpLoop(CancellationToken ct)
     {
         // Decoder state is pump-thread-private; only screen writes take the lock.
-        var chunkBuf = new char[8192];
+        char[] chunkBuf = new char[8192];
         bool drainedAfterExit = false;
         while (!ct.IsCancellationRequested)
         {
@@ -260,10 +255,7 @@ public abstract class CellForgePtyScenarioBase
         }
     }
 
-    private static string Tail(string text, int max)
-    {
-        return text.Length <= max ? text : text[^max..];
-    }
+    private static string Tail(string text, int max) => text.Length <= max ? text : text[^max..];
 
     private Dictionary<string, string> ChildEnv() => new()
     {
@@ -277,7 +269,7 @@ public abstract class CellForgePtyScenarioBase
         ["HARBOR_MASCOT"] = "off", // ambient cat blinks per tick — byte-exact goldens need it out of the frame
         ["TERM"] = "xterm-256color",
         ["LANG"] = "C.UTF-8",
-        ["LC_ALL"] = "C.UTF-8",
+        ["LC_ALL"] = "C.UTF-8"
     };
 
     private static string ResolveCliDllPath()

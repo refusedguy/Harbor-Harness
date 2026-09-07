@@ -1,13 +1,4 @@
 #if HARBOR_WITH_PLUGINS
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Tools;
-using Harbor.Plugins.Hosting;
-using Harbor.Ui.Framework.Panels;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 namespace Harbor.Hosting;
 
 /// <summary>Outcome summary of one reload pass.</summary>
@@ -42,10 +33,12 @@ public sealed record PluginReloadSummary(int Loaded, IReadOnlyList<string> Notes
 /// </remarks>
 public sealed class PluginReloadService
 {
-    private readonly IServiceProvider _sp;
+
+    private readonly IConfiguration _configuration;
+    private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly string _harborDir;
     private readonly ILogger<PluginReloadService> _logger;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly IServiceProvider _sp;
 
     /// <summary>
     ///     Construct the service. Registered by <see cref="RegistriesModule" /> with the
@@ -62,8 +55,6 @@ public sealed class PluginReloadService
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
-
-    private readonly IConfiguration _configuration;
 
     /// <summary>
     ///     Run one full load pass over both plugin scopes. Serialized — concurrent
@@ -107,7 +98,7 @@ public sealed class PluginReloadService
             panels,
             globalPluginsDir,
             projectPluginsDir,
-            trustPrompt: null);
+            null);
 
         var result = await runtime.LoadAllAsync(loadHost, ct).ConfigureAwait(false);
 

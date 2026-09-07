@@ -1,16 +1,11 @@
-using System.Threading.Channels;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Tui;
-using Harbor.Application.Configuration;
+using System.Threading.Channels;
 #if HARBOR_WITH_ALL_PROVIDERS
-using Harbor.Providers.Anthropic;
-using Harbor.Providers.OpenAI;
-using Harbor.Providers.OpenAiCompatible;
 #endif
 namespace Harbor.App.Cli.Hosting;
 

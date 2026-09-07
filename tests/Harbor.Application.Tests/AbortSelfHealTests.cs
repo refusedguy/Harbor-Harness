@@ -4,11 +4,9 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
-using Harbor.Application.Tests.Fakes;
 using Harbor.Application.Agents;
+using Harbor.Application.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
 namespace Harbor.Application.Tests;
 
 /// <summary>
@@ -20,21 +18,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class AbortSelfHealTests
 {
-    /// <summary>Mirrors AgentLoop's contract: refuses to run on an already-cancelled token.</summary>
-    private sealed class TokenObservingLoop : IAgentLoop
-    {
-        private int _runs;
-
-        public int Runs => Volatile.Read(ref _runs);
-
-        public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
-        {
-            Interlocked.Increment(ref _runs);
-            return Task.FromResult(ct.IsCancellationRequested
-                ? Result.Failure("loop observed pre-cancelled token")
-                : Result.Success());
-        }
-    }
 
     private static (DefaultAgent Agent, TokenObservingLoop Loop) CreateAgent()
     {
@@ -58,7 +41,7 @@ public class AbortSelfHealTests
     [Test]
     public async Task PromptAsync_AfterExternalCancelWithoutReset_RunSucceeds()
     {
-        (DefaultAgent agent, TokenObservingLoop loop) = CreateAgent();
+        var (agent, loop) = CreateAgent();
         try
         {
             var first = await agent.PromptAsync("first");
@@ -83,7 +66,7 @@ public class AbortSelfHealTests
     [Test]
     public async Task ResetAbortSource_ConcurrentResetsAfterAbort_SwapStaysConsistent()
     {
-        (DefaultAgent agent, _) = CreateAgent();
+        var (agent, _) = CreateAgent();
         try
         {
             var run = await agent.PromptAsync("prime");
@@ -101,6 +84,22 @@ public class AbortSelfHealTests
         finally
         {
             agent.Dispose();
+        }
+    }
+
+    /// <summary>Mirrors AgentLoop's contract: refuses to run on an already-cancelled token.</summary>
+    private sealed class TokenObservingLoop : IAgentLoop
+    {
+        private int _runs;
+
+        public int Runs => Volatile.Read(ref _runs);
+
+        public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _runs);
+            return Task.FromResult(ct.IsCancellationRequested
+                ? Result.Failure("loop observed pre-cancelled token")
+                : Result.Success());
         }
     }
 }

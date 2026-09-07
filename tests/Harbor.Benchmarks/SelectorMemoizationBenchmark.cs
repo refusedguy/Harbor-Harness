@@ -1,13 +1,13 @@
 using BenchmarkDotNet.Attributes;
-using System.Collections.Immutable;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
+using System.Collections.Immutable;
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks selector-style computations over <see cref=\"AppState\" /> —
+///     Benchmarks selector-style computations over <see cref=\"AppState" /> —
 ///     the derived-data extractions that run on every dispatch to decide
 ///     what the UI should render. Measures the cost of scanning immutable
 ///     arrays, computing aggregates, and cloning sub-snapshots.
@@ -16,10 +16,10 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class SelectorMemoizationBenchmark
 {
-    private AppState _state = null!;
 
     [Params(0, 100, 1000, 10000)]
     public int LineCount;
+    private AppState _state = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -29,10 +29,8 @@ public class SelectorMemoizationBenchmark
         {
             lines[i] = new ChatLine(
                 i % 3 == 0 ? ChatRole.User : i % 3 == 1 ? ChatRole.Assistant : ChatRole.Tool,
-                $"Line {i}: " + new string('x', 20 + (i % 50)),
-                i % 3 == 2 ? $"tc_{i}" : null,
-                null,
-                default);
+                $"Line {i}: " + new string('x', 20 + i % 50),
+                i % 3 == 2 ? $"tc_{i}" : null);
         }
 
         _state = new AppState

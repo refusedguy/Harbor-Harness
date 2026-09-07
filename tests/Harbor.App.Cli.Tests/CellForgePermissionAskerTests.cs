@@ -1,27 +1,25 @@
-using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Permissions;
 using Harbor.App.Cli.Repl;
-using Harbor.Tui.CellForge.Input;
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering.Widgets;
-
+using System.Text;
+using System.Text.Json;
 namespace Harbor.App.Cli.Tests;
 
 /// <summary>
-/// Юнит-тесты asker'а разрешений CellForge: маппинг решений гейта на
-/// PermissionResponse, потоковый контракт (queue→Tick→роут-клавиша) и
-/// отмену-как-deny.
+///     Юнит-тесты asker'а разрешений CellForge: маппинг решений гейта на
+///     PermissionResponse, потоковый контракт (queue→Tick→роут-клавиша) и
+///     отмену-как-deny.
 /// </summary>
 public class CellForgePermissionAskerTests
 {
     private static ChatScreenBridge MakeBridge(out ChatTimelinePanel panel)
     {
         panel = new ChatTimelinePanel("chat", 40, 6);
-        return new ChatScreenBridge(new InMemoryEventBus(), panel, new StatusViewModel(), autoSubscribe: false);
+        return new ChatScreenBridge(new InMemoryEventBus(), panel, new StatusViewModel(), false);
     }
 
     private static PermissionRequest Request(string tool, string json) => new(
@@ -37,7 +35,7 @@ public class CellForgePermissionAskerTests
         bridge.Tick(0);
         await Assert.That(panel.Timeline.Count).IsEqualTo(1); // gate landed on the timeline
 
-        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new System.Text.Rune('a')))).IsTrue();
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('a')))).IsTrue();
         var response = await ask;
         await Assert.That(response.Action).IsEqualTo(PermissionAction.Allow);
         await Assert.That(response.PersistDecision).IsTrue();
@@ -52,7 +50,7 @@ public class CellForgePermissionAskerTests
         var ask = asker.AskAsync(Request("write", "{\"path\":\"out.cs\",\"x\":1}"), CancellationToken.None);
         bridge.Tick(0);
 
-        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new System.Text.Rune('n')))).IsTrue();
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('n')))).IsTrue();
         var response = await ask;
         await Assert.That(response.Action).IsEqualTo(PermissionAction.Deny);
         await Assert.That(response.PersistDecision).IsFalse();

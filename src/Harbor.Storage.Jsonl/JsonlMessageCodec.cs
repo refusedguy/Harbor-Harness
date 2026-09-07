@@ -1,4 +1,5 @@
 namespace Harbor.Storage.Jsonl;
+
 /// <summary>
 ///     Stateless JSON codec for <see cref="AgentMessage" /> / <see cref="ContentPart" />
 ///     serialization to/from the JSONL wire format. Extracted from
@@ -47,12 +48,12 @@ internal static class JsonlMessageCodec
         {
             UserMessage u => new UserPayload(u.Content, u.Agent, u.Model),
             AssistantMessage a => new AssistantPayload(
-                Parts: a.Parts.Select(SerializePart).ToArray(),
-                StopReason: a.StopReason.ToString().ToLowerInvariant(),
-                Usage: a.Usage,
-                Model: a.Model,
-                IsSummary: a.IsSummary,
-                SummaryFirstKeptId: a.SummaryFirstKeptId),
+                a.Parts.Select(SerializePart).ToArray(),
+                a.StopReason.ToString().ToLowerInvariant(),
+                a.Usage,
+                a.Model,
+                a.IsSummary,
+                a.SummaryFirstKeptId),
             ToolResultMessage tr => new ToolResultPayload(tr.Results.ToArray()),
             _ => new UnknownPartPayload("unknown")
         };
@@ -193,9 +194,9 @@ internal static class JsonlMessageCodec
         return new Usage(
             input,
             output,
-            ReasoningTokens: Num(u, "reasoningTokens", "ReasoningTokens"),
-            CacheReadTokens: Num(u, "cacheReadTokens", "CacheReadTokens"),
-            CacheWriteTokens: Num(u, "cacheWriteTokens", "CacheWriteTokens"));
+            Num(u, "reasoningTokens", "ReasoningTokens"),
+            Num(u, "cacheReadTokens", "CacheReadTokens"),
+            Num(u, "cacheWriteTokens", "CacheWriteTokens"));
     }
 
     private static Result<string> RequiredModel(JsonElement payload, string id)

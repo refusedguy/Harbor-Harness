@@ -1,10 +1,10 @@
-using System.Diagnostics;
-using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
@@ -15,7 +15,9 @@ namespace Harbor.Tools.Builtin.Tests;
 internal sealed class SkipWhenNotLinuxAttribute : SkipAttribute
 {
     public SkipWhenNotLinuxAttribute() : base(
-        "BashTool process-behaviour tests require Linux (/bin/bash + /proc).") { }
+        "BashTool process-behaviour tests require Linux (/bin/bash + /proc).")
+    {
+    }
 
     /// <inheritdoc />
     public override Task<bool> ShouldSkip(TestRegisteredContext context)
@@ -30,16 +32,22 @@ internal sealed class SkipWhenNotLinuxAttribute : SkipAttribute
 /// <remarks>
 ///     Documented contract being pinned here (from committed BashTool):
 ///     <list type="bullet">
-///       <item>Timeout → <c>Kill(entireProcessTree: true)</c> + error result containing
-///           "timed out".</item>
-///       <item>Output cap is a hardcoded const (<c>MaxOutputChars = 100_000</c> chars per
-///           stream, drop-silently past the cap) followed by a final hard truncate of the
-///           combined output to 50_000 chars. Dropped/truncated counters are logged only —
-///           they are NOT surfaced in <see cref="ToolResult" />, so tests assert the
-///           observable length/content instead.</item>
-///       <item><c>env</c> entries are merged over the inherited environment
-///           (<c>psi.Environment[k] = v</c>).</item>
-///       <item><c>cwd</c> overrides the working directory.</item>
+///         <item>
+///             Timeout → <c>Kill(entireProcessTree: true)</c> + error result containing
+///             "timed out".
+///         </item>
+///         <item>
+///             Output cap is a hardcoded const (<c>MaxOutputChars = 100_000</c> chars per
+///             stream, drop-silently past the cap) followed by a final hard truncate of the
+///             combined output to 50_000 chars. Dropped/truncated counters are logged only —
+///             they are NOT surfaced in <see cref="ToolResult" />, so tests assert the
+///             observable length/content instead.
+///         </item>
+///         <item>
+///             <c>env</c> entries are merged over the inherited environment
+///             (<c>psi.Environment[k] = v</c>).
+///         </item>
+///         <item><c>cwd</c> overrides the working directory.</item>
 ///     </list>
 /// </remarks>
 public class BashToolBehaviorTests
@@ -69,8 +77,8 @@ public class BashToolBehaviorTests
         // Poll-retry: give the kernel a moment to reap the killed children.
         bool markerGone = await WaitForAsync(
             () => Task.FromResult(!CmdlineScanContains(marker)),
-            deadline: TimeSpan.FromSeconds(2),
-            pollInterval: TimeSpan.FromMilliseconds(100));
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromMilliseconds(100));
 
         await Assert.That(markerGone).IsTrue();
     }
@@ -124,7 +132,9 @@ public class BashToolBehaviorTests
         finally
         {
             try { Directory.Delete(emptyPathDir); }
-            catch { /* temp dir best-effort cleanup */ }
+            catch
+            { /* temp dir best-effort cleanup */
+            }
         }
     }
 
@@ -151,7 +161,9 @@ public class BashToolBehaviorTests
         finally
         {
             try { Directory.Delete(workDir); }
-            catch { /* temp dir best-effort cleanup */ }
+            catch
+            { /* temp dir best-effort cleanup */
+            }
         }
     }
 
@@ -191,7 +203,7 @@ public class BashToolBehaviorTests
     /// </summary>
     private static bool CmdlineScanContains(string needle)
     {
-        byte[] needleBytes = System.Text.Encoding.UTF8.GetBytes(needle);
+        byte[] needleBytes = Encoding.UTF8.GetBytes(needle);
         foreach (string procDir in Directory.EnumerateDirectories("/proc"))
         {
             string pid = Path.GetFileName(procDir);

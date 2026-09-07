@@ -1,4 +1,5 @@
 namespace Harbor.Abstractions.Models.Identifiers;
+
 /// <summary>
 ///     Internal char-validation helpers for identifier normalization. Replaces per-call
 ///     <see cref="System.Text.RegularExpressions.Regex.IsMatch" /> on hot paths (every tool

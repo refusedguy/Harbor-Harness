@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Text;
 namespace Harbor.Abstractions.Extensions;
+
 /// <summary>
 ///     Pooling helpers for reducing allocations in hot paths.
 ///     All methods are safe (no unsafe code).

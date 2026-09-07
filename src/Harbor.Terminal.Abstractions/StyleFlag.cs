@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Contracts;
-
 namespace Harbor.Terminal.Abstractions;
 
 /// <summary>
@@ -34,5 +33,5 @@ public enum StyleFlag : byte
     Hidden = 8,
 
     /// <summary>Strikethrough (SGR 9).</summary>
-    Strike = 9,
+    Strike = 9
 }

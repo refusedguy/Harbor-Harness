@@ -1,8 +1,7 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Text.Json.Serialization;
 namespace Harbor.Lsp.Tests;
 
 /// <summary>
@@ -12,12 +11,12 @@ namespace Harbor.Lsp.Tests;
 /// </summary>
 public sealed class MemPipeStream : Stream
 {
-    private readonly Lock _sync = new();
     private readonly List<byte[]> _chunks = [];
-    private TaskCompletionSource<bool> _dataOrClose = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly Lock _sync = new();
     private int _chunkIndex;
-    private int _offset;
     private bool _closed;
+    private TaskCompletionSource<bool> _dataOrClose = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _offset;
 
     public override bool CanRead => true;
     public override bool CanSeek => false;
@@ -101,15 +100,20 @@ public sealed class MemPipeStream : Stream
 }
 
 /// <summary>
-///     In-process fake language server for <see cref="LspClient"/> tests:
+///     In-process fake language server for <see cref="LspClient" /> tests:
 ///     speaks the same Content-Length protocol over in-memory pipes and
 ///     answers requests through scriptable delegates.
 /// </summary>
 public sealed class FakeLspServer : IAsyncDisposable
 {
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
     private readonly MemPipeStream _clientToServer = new();
-    private readonly MemPipeStream _serverToClient = new();
     private readonly CancellationTokenSource _cts = new();
+    private readonly MemPipeStream _serverToClient = new();
 
     public FakeLspServer()
     {
@@ -125,13 +129,21 @@ public sealed class FakeLspServer : IAsyncDisposable
     /// <summary>Per-test error injector: (method, params) → error message. Takes precedence over <see cref="OnRequest" />.</summary>
     public Func<string, JsonElement?, string?>? OnError { get; set; }
 
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _serverToClient.End();
+        _clientToServer.End();
+        await Client.DisposeAsync().ConfigureAwait(false);
+    }
+
     /// <summary>Push a raw server notification to the client.</summary>
     public Task NotifyAsync(string method, object? parameters, CancellationToken ct = default)
         => WriteFrameAsync(new Dictionary<string, object?>
         {
             ["jsonrpc"] = "2.0",
             ["method"] = method,
-            ["params"] = parameters,
+            ["params"] = parameters
         }, _serverToClient, ct);
 
     /// <summary>Run the request loop (call once).</summary>
@@ -147,12 +159,12 @@ public sealed class FakeLspServer : IAsyncDisposable
                 if (body is null) return;
 
                 using var doc = JsonDocument.Parse(body);
-                JsonElement root = doc.RootElement;
-                if (!root.TryGetProperty("method", out JsonElement methodEl)) continue;
-                if (!root.TryGetProperty("id", out JsonElement idEl)) continue; // client notification — ignore
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("method", out var methodEl)) continue;
+                if (!root.TryGetProperty("id", out var idEl)) continue; // client notification — ignore
 
                 string method = methodEl.GetString()!;
-                JsonElement? parameters = root.TryGetProperty("params", out JsonElement p) ? p.Clone() : null;
+                JsonElement? parameters = root.TryGetProperty("params", out var p) ? p.Clone() : null;
 
                 string? error = OnError?.Invoke(method, parameters);
                 if (error is not null)
@@ -161,7 +173,7 @@ public sealed class FakeLspServer : IAsyncDisposable
                     {
                         ["jsonrpc"] = "2.0",
                         ["id"] = idEl.GetInt32(),
-                        ["error"] = new Dictionary<string, object?> { ["code"] = -32603, ["message"] = error },
+                        ["error"] = new Dictionary<string, object?> { ["code"] = -32603, ["message"] = error }
                     }, _serverToClient, ct).ConfigureAwait(false);
                     continue;
                 }
@@ -171,7 +183,7 @@ public sealed class FakeLspServer : IAsyncDisposable
                 {
                     ["jsonrpc"] = "2.0",
                     ["id"] = idEl.GetInt32(),
-                    ["result"] = result,
+                    ["result"] = result
                 }, _serverToClient, ct).ConfigureAwait(false);
             }
         }
@@ -194,7 +206,7 @@ public sealed class FakeLspServer : IAsyncDisposable
         var headerBytes = new List<byte>(64);
         while (true)
         {
-            var one = new byte[1];
+            byte[] one = new byte[1];
             int n = await input.ReadAsync(one, ct).ConfigureAwait(false);
             if (n == 0) return null;
             headerBytes.Add(one[0]);
@@ -204,7 +216,7 @@ public sealed class FakeLspServer : IAsyncDisposable
                 break;
         }
 
-        string header = Encoding.ASCII.GetString([.. headerBytes]);
+        string header = Encoding.ASCII.GetString([..headerBytes]);
         int length = -1;
         foreach (string line in header.Split("\r\n", StringSplitOptions.RemoveEmptyEntries))
         {
@@ -241,18 +253,5 @@ public sealed class FakeLspServer : IAsyncDisposable
         await output.WriteAsync(header, ct).ConfigureAwait(false);
         await output.WriteAsync(body, ct).ConfigureAwait(false);
         await output.FlushAsync(ct).ConfigureAwait(false);
-    }
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
-
-    public async ValueTask DisposeAsync()
-    {
-        await _cts.CancelAsync().ConfigureAwait(false);
-        _serverToClient.End();
-        _clientToServer.End();
-        await Client.DisposeAsync().ConfigureAwait(false);
     }
 }

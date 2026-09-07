@@ -1,12 +1,9 @@
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Sessions;
-using Harbor.Application.Sessions;
-using System.Diagnostics;
-using System.Text;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using System.Text;
 namespace Harbor.Application.Sessions;
+
 /// <summary>
 ///     Default compaction service using anchored-summary strategy.
 ///     Generates a structured Markdown summary of compacted messages.
@@ -27,89 +24,8 @@ public sealed class CompactionService(
     ILogger<CompactionService> logger,
     string? secondaryModel = null) : ICompactionService
 {
-    /// <summary>
-    ///     A successfully resolved secondary (cheap) summarization client+model pair.
-    /// </summary>
-    private sealed record ResolvedSecondary(ILlmClient Client, ModelInfo Model);
 
-    // Ф8/A3: lazily resolved secondary client; successes are cached for the
-    // service lifetime, failures are NOT cached (a transient provider outage
-    // must not pin the fallback forever). Reference writes are atomic, so two
-    // concurrent first calls may both resolve once (benign and idempotent),
-    // while every later call reads the cached pair without locking.
-    private readonly ModelRef? _secondaryRef = ParseSecondary(secondaryModel);
-
-    /// <summary>Parse the configured reference; an invalid value silently disables the feature.</summary>
-    private static ModelRef? ParseSecondary(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        Result<ModelRef> parsed = ModelRef.TryParse(value);
-        return parsed.IsSuccess ? parsed.Value : null;
-    }
-
-    private ResolvedSecondary? _resolvedSecondary;
-
-    /// <summary>
-    ///     Resolve the secondary summarization client+model asynchronously, or
-    ///     null when no secondary is configured / it cannot be resolved right now.
-    /// </summary>
-    /// <remarks>
-    ///     ROP-B П.22: cache hit short-circuits up front; the miss path is one
-    ///     railway (client → catalog → matching model) with memoization as a
-    ///     <c>Tap</c> and every failure funneling into a single logged fallback.
-    /// </remarks>
-    private async Task<ResolvedSecondary?> TryResolveSecondaryAsync(ModelInfo primaryModel, CancellationToken ct)
-    {
-        if (_secondaryRef is null)
-        {
-            return null;
-        }
-
-        ResolvedSecondary? cached = _resolvedSecondary;
-        if (cached is not null)
-        {
-            return cached;
-        }
-
-        ModelRef secondaryRef = _secondaryRef;
-        Result<ResolvedSecondary> outcome = await providers.GetClient(secondaryRef.ProviderId)
-            .Bind(client => client.GetModelsAsync(ct).Bind(models =>
-                MatchById(models, secondaryRef.ModelId)
-                    .ToResult($"model '{secondaryRef.ModelId}' is not in provider '{secondaryRef.ProviderId}' catalog")
-                    .Map(model => new ResolvedSecondary(client, model))))
-            .ConfigureAwait(false);
-
-        ResolvedSecondary? resolved = outcome
-            .Tap(r => _resolvedSecondary = r)
-            .Match(static r => (ResolvedSecondary?)r, _ => LogSecondaryFallback(primaryModel));
-        return resolved;
-    }
-
-    private Maybe<ModelInfo> MatchById(IReadOnlyList<ModelInfo> models, string modelId)
-    {
-        for (int i = 0; i < models.Count; i++)
-        {
-            if (string.Equals(models[i].Id, modelId, StringComparison.Ordinal))
-                return models[i];
-        }
-
-        return Maybe<ModelInfo>.None;
-    }
-
-    /// <summary>Log the fallback once per unresolved attempt and return null.</summary>
-    private ResolvedSecondary? LogSecondaryFallback(ModelInfo primaryModel)
-    {
-        logger.LogWarning(
-            "Secondary compaction model '{Secondary}' could not be resolved; falling back to primary model '{Primary}'",
-            _secondaryRef, primaryModel.Id);
-        return null;
-    }
-
-    private const string SummarizationPrompt = 
+    private const string SummarizationPrompt =
         "You are creating a summary of the conversation so far to provide context to a teammate who is taking over the task.\n" +
         "\n" +
         "The summary should preserve ALL important information needed to continue the work, including:\n" +
@@ -161,6 +77,27 @@ public sealed class CompactionService(
         "- Be concise but complete — every detail matters.";
 
     /// <summary>
+    ///     Default token reserve used by <see cref="TruncateToFit" /> when the
+    ///     caller does not supply one (mirrors <see cref="ReserveTokens" />).
+    /// </summary>
+    public const int DefaultReserveTokens = 16384;
+
+    /// <summary>
+    ///     Floor for the truncation budget so very small context windows still
+    ///     keep a usable slice of history instead of an effectively empty one.
+    /// </summary>
+    private const int MinimumTruncationBudget = 4096;
+
+    // Ф8/A3: lazily resolved secondary client; successes are cached for the
+    // service lifetime, failures are NOT cached (a transient provider outage
+    // must not pin the fallback forever). Reference writes are atomic, so two
+    // concurrent first calls may both resolve once (benign and idempotent),
+    // while every later call reads the cached pair without locking.
+    private readonly ModelRef? _secondaryRef = ParseSecondary(secondaryModel);
+
+    private ResolvedSecondary? _resolvedSecondary;
+
+    /// <summary>
     ///     Token reserve below the model's context window that triggers compaction.
     /// </summary>
     public int ReserveTokens { get; set; } = 16384;
@@ -175,17 +112,112 @@ public sealed class CompactionService(
     /// </summary>
     public int TailTurns { get; set; } = 2;
 
-    /// <summary>
-    ///     Default token reserve used by <see cref="TruncateToFit" /> when the
-    ///     caller does not supply one (mirrors <see cref="ReserveTokens" />).
-    /// </summary>
-    public const int DefaultReserveTokens = 16384;
+    /// <inheritdoc />
+    public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
+    {
+        int estimated = tokenTracker.EstimateTokens(messages);
+        return estimated > model.ContextWindow - ReserveTokens;
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<CompactionResult>> CompactAsync(
+        string sessionId,
+        IReadOnlyList<AgentMessage> messages,
+        ModelInfo model,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            // 1. Find cut point (index-based; no List allocations)
+            int tailStart = FindCutPoint(messages, KeepRecentTokens, TailTurns);
+
+            if (tailStart == 0)
+            {
+                return Result.Failure<CompactionResult>("No messages to compact.");
+            }
+
+            // 2. Build summarization request — name parse → registry lookup ride
+            // one Bind chain (ROP-B П.12 pattern); a passthrough ladder here would
+            // just re-raise each Error verbatim.
+            return await ProviderId.TryCreate(model.ProviderId)
+                .Bind(providers.GetClient)
+                .Bind(client => CompactCoreAsync(sessionId, messages, model, client, tailStart, ct))
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Compaction failed for session {SessionId}", sessionId);
+            return Result.Failure<CompactionResult>($"Compaction failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>Parse the configured reference; an invalid value silently disables the feature.</summary>
+    private static ModelRef? ParseSecondary(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var parsed = ModelRef.TryParse(value);
+        return parsed.IsSuccess ? parsed.Value : null;
+    }
 
     /// <summary>
-    ///     Floor for the truncation budget so very small context windows still
-    ///     keep a usable slice of history instead of an effectively empty one.
+    ///     Resolve the secondary summarization client+model asynchronously, or
+    ///     null when no secondary is configured / it cannot be resolved right now.
     /// </summary>
-    private const int MinimumTruncationBudget = 4096;
+    /// <remarks>
+    ///     ROP-B П.22: cache hit short-circuits up front; the miss path is one
+    ///     railway (client → catalog → matching model) with memoization as a
+    ///     <c>Tap</c> and every failure funneling into a single logged fallback.
+    /// </remarks>
+    private async Task<ResolvedSecondary?> TryResolveSecondaryAsync(ModelInfo primaryModel, CancellationToken ct)
+    {
+        if (_secondaryRef is null)
+        {
+            return null;
+        }
+
+        var cached = _resolvedSecondary;
+        if (cached is not null)
+        {
+            return cached;
+        }
+
+        var secondaryRef = _secondaryRef;
+        var outcome = await providers.GetClient(secondaryRef.ProviderId)
+            .Bind(client => client.GetModelsAsync(ct).Bind(models =>
+                MatchById(models, secondaryRef.ModelId)
+                    .ToResult($"model '{secondaryRef.ModelId}' is not in provider '{secondaryRef.ProviderId}' catalog")
+                    .Map(model => new ResolvedSecondary(client, model))))
+            .ConfigureAwait(false);
+
+        var resolved = outcome
+            .Tap(r => _resolvedSecondary = r)
+            .Match(static r => (ResolvedSecondary?)r, _ => LogSecondaryFallback(primaryModel));
+        return resolved;
+    }
+
+    private Maybe<ModelInfo> MatchById(IReadOnlyList<ModelInfo> models, string modelId)
+    {
+        for (int i = 0; i < models.Count; i++)
+        {
+            if (string.Equals(models[i].Id, modelId, StringComparison.Ordinal))
+                return models[i];
+        }
+
+        return Maybe<ModelInfo>.None;
+    }
+
+    /// <summary>Log the fallback once per unresolved attempt and return null.</summary>
+    private ResolvedSecondary? LogSecondaryFallback(ModelInfo primaryModel)
+    {
+        logger.LogWarning(
+            "Secondary compaction model '{Secondary}' could not be resolved; falling back to primary model '{Primary}'",
+            _secondaryRef, primaryModel.Id);
+        return null;
+    }
 
     /// <summary>
     ///     Aggressive fallback for when LLM-based compaction fails: keep only
@@ -366,8 +398,12 @@ public sealed class CompactionService(
     ///         Compaction is lazy: the raw history keeps every message, and the
     ///         newest <see cref="AssistantMessage.IsSummary" /> message anchors
     ///         the cut through its <see cref="AssistantMessage.SummaryFirstKeptId" />.
-    ///         The returned view is <c>[summary] + tail-from-anchor +
-    ///         messages-appended-after-the-summary</c> — everything folded into
+    ///         The returned view is
+    ///         <c>
+    ///             [summary] + tail-from-anchor +
+    ///             messages-appended-after-the-summary
+    ///         </c>
+    ///         — everything folded into
     ///         the summary is dropped, so token estimation and LLM requests see
     ///         the compacted history instead of an ever-growing raw list.
     ///     </para>
@@ -435,45 +471,6 @@ public sealed class CompactionService(
         return view;
     }
 
-    /// <inheritdoc />
-    public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
-    {
-        int estimated = tokenTracker.EstimateTokens(messages);
-        return estimated > model.ContextWindow - ReserveTokens;
-    }
-
-    /// <inheritdoc />
-    public async Task<Result<CompactionResult>> CompactAsync(
-        string sessionId,
-        IReadOnlyList<AgentMessage> messages,
-        ModelInfo model,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            // 1. Find cut point (index-based; no List allocations)
-            int tailStart = FindCutPoint(messages, KeepRecentTokens, TailTurns);
-
-            if (tailStart == 0)
-            {
-                return Result.Failure<CompactionResult>("No messages to compact.");
-            }
-
-            // 2. Build summarization request — name parse → registry lookup ride
-            // one Bind chain (ROP-B П.12 pattern); a passthrough ladder here would
-            // just re-raise each Error verbatim.
-            return await ProviderId.TryCreate(model.ProviderId)
-                .Bind(providers.GetClient)
-                .Bind(client => CompactCoreAsync(sessionId, messages, model, client, tailStart, ct))
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Compaction failed for session {SessionId}", sessionId);
-            return Result.Failure<CompactionResult>($"Compaction failed: {ex.Message}");
-        }
-    }
-
     /// <summary>Secondary-model selection + summarization call + tail splice.</summary>
     private async Task<Result<CompactionResult>> CompactCoreAsync(
         string sessionId,
@@ -485,12 +482,12 @@ public sealed class CompactionService(
     {
         var stopwatch = Stopwatch.StartNew();
         try
-            {
+        {
             // Ф8/A3: prefer the configured cheap secondary model for the
             // summarization call; fall back to the primary client/model when
             // no secondary is configured or it cannot be resolved.
-            ILlmClient summaryClient = client;
-            ModelInfo summaryModel = model;
+            var summaryClient = client;
+            var summaryModel = model;
             var secondary = await TryResolveSecondaryAsync(model, ct).ConfigureAwait(false);
             if (secondary is not null)
             {
@@ -703,4 +700,9 @@ public sealed class CompactionService(
                 break;
         }
     }
+
+    /// <summary>
+    ///     A successfully resolved secondary (cheap) summarization client+model pair.
+    /// </summary>
+    private sealed record ResolvedSecondary(ILlmClient Client, ModelInfo Model);
 }

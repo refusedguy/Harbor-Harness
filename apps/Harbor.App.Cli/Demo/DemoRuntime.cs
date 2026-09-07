@@ -1,11 +1,10 @@
 using Harbor.Abstractions.Agents;
-using Harbor.Application.Permissions;
 using Harbor.Abstractions.Permissions;
+using Harbor.Application.Permissions;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-
 namespace Harbor.App.Cli.Demo;
 
 /// <summary>
@@ -24,7 +23,7 @@ internal static class DemoRuntime
                 sp.GetRequiredService<IAgentRegistry>(),
                 sp.GetRequiredService<ILogger<PermissionService>>(),
                 (request, ct) => sp.GetRequiredService<DemoApprovalGate>().AskAsync(request, ct),
-                workspaceRoot: Directory.GetCurrentDirectory()));
+                Directory.GetCurrentDirectory()));
 }
 
 /// <summary>
@@ -57,6 +56,6 @@ internal sealed class DemoApprovalGate(IServiceProvider services, ILogger<DemoAp
         await Task.Delay(HoldDelay, ct).ConfigureAwait(false);
         await renderer.WriteLineAsync("└─ approved (demo)").ConfigureAwait(false);
 
-        return new PermissionResponse(PermissionAction.Allow, PersistDecision: false);
+        return new PermissionResponse(PermissionAction.Allow, false);
     }
 }

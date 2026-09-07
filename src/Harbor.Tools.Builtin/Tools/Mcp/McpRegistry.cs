@@ -1,11 +1,6 @@
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Text.Json;
-using Harbor.Abstractions.Results;
 using Microsoft.Extensions.Logging;
-
+using System.Collections.Concurrent;
+using System.Diagnostics;
 namespace Harbor.Tools.Mcp;
 
 /// <summary>A remote MCP endpoint served over HTTP instead of a stdio subprocess.</summary>
@@ -28,14 +23,26 @@ public sealed record McpRemoteRegistration(
 
 public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 {
-    private readonly ConcurrentDictionary<string, ServerEntry> _servers = new();
     private readonly ILogger<McpRegistry>? _logger;
-    private int _nextId;
+    private readonly ConcurrentDictionary<string, ServerEntry> _servers = new();
     private bool _disposed;
+    private int _nextId;
 
     public McpRegistry(ILogger<McpRegistry>? logger = null)
     {
         _logger = logger;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        foreach (var kv in _servers)
+        {
+            await kv.Value.DisposeAsync().ConfigureAwait(false);
+            _servers.TryRemove(kv.Key, out _);
+        }
     }
 
     /// <summary>
@@ -54,216 +61,6 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             .Bind(startInfo => Register(name, startInfo));
     }
 
-    /// <summary>
-    ///     Register an MCP server by name with an explicit spawn description. This is the
-    ///     preferred form — it supports arguments, working directory, and environment overrides
-    ///     without shell-quoting the command line.
-    /// </summary>
-    public Result Register(string name, McpServerStartInfo startInfo)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            return Result.Failure("Server name cannot be empty.");
-        if (startInfo is null)
-            return Result.Failure("startInfo cannot be null.");
-        if (string.IsNullOrWhiteSpace(startInfo.Command))
-            return Result.Failure("startInfo.Command cannot be empty.");
-
-        return RegisterInternal(name, startInfo, null);
-    }
-
-    /// <summary>
-    ///     Register a remote MCP server reachable over HTTP (streamable HTTP, or the
-    ///     legacy HTTP+SSE transport when <paramref name="transport" /> is <c>"sse"</c>).
-    ///     Nothing is connected until the first call — transports connect lazily.
-    /// </summary>
-    /// <param name="name">Stable server name.</param>
-    /// <param name="url">Absolute http(s) endpoint URL.</param>
-    /// <param name="transport">Transport kind: <c>"http"</c> or <c>"sse"</c>.</param>
-    /// <param name="headers">Extra headers (an explicit Authorization wins over OAuth).</param>
-    /// <param name="oauth">Optional OAuth2 settings (else the HARBOR_MCP_OAUTH_TOKEN env fallback applies).</param>
-    public Result Register(
-        string name,
-        string url,
-        string transport = "http",
-        IReadOnlyDictionary<string, string>? headers = null,
-        McpOAuthConfig? oauth = null)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            return Result.Failure("Server name cannot be empty.");
-        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)
-            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-            return Result.Failure($"Server url '{url}' is not a valid absolute http(s) URL.");
-        if (!string.Equals(transport, "http", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(transport, "sse", StringComparison.OrdinalIgnoreCase))
-            return Result.Failure($"MCP transport '{transport}' is not supported (expected 'http' or 'sse').");
-
-        return RegisterInternal(name, null, new McpRemoteEndpoint(url, transport.ToLowerInvariant(), headers, oauth));
-    }
-
-    private Result RegisterInternal(string name, McpServerStartInfo? startInfo, McpRemoteEndpoint? remote)
-    {
-        if (_servers.ContainsKey(name))
-            return Result.Failure($"MCP server '{name}' is already registered.");
-
-        _servers[name] = new ServerEntry(name, startInfo, remote);
-        _logger?.LogInformation(
-            "Registered MCP server: {Name} -> {Target}",
-            name,
-            remote is not null ? $"{remote.Transport}:{remote.Url}" : startInfo!.Command);
-        return Result.Success();
-    }
-
-    /// <summary>
-    ///     Load servers from a standard mcp.json file. Supports both the legacy flat map
-    ///     (<c>"name": "command"</c> / <c>"name": {"command": ...}</c>) and the industry
-    ///     <c>mcpServers</c> map (with <c>args</c>, <c>cwd</c>, <c>env</c>, <c>disabled</c>).
-    ///     Missing file → treated as empty config. <c>${projectRoot}</c>, <c>${home}</c>,
-    ///     <c>${harborHome}</c> macros in command/args/cwd/env are expanded. Unknown fields
-    ///     are ignored.
-    /// </summary>
-    public Result RegisterFromConfig(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            return Result.Failure("MCP config path cannot be empty.");
-
-        if (!File.Exists(path))
-        {
-            _logger?.LogInformation("MCP config file not found: {Path}", path);
-            return Result.Success();
-        }
-
-        try
-        {
-            var json = File.ReadAllText(path);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
-            {
-                _logger?.LogWarning("MCP config root is not an object: {Path}", path);
-                return Result.Failure("MCP config root must be an object.");
-            }
-
-            JsonElement servers = root;
-            if (root.TryGetProperty("mcpServers", out var mcpServers) && mcpServers.ValueKind == JsonValueKind.Object)
-                servers = mcpServers;
-
-            int loaded = 0;
-            foreach (var property in servers.EnumerateObject())
-            {
-                string name = property.Name;
-                JsonElement value = property.Value;
-
-                // Legacy flat form: "name": "command line" — kept for backward compatibility.
-                if (value.ValueKind == JsonValueKind.String)
-                {
-                    // ROP-A Z1 п.18: the log is glued to the result and the
-                    // counter falls out of one Match expression.
-                    var registered = Register(name, value.GetString() ?? string.Empty)
-                        .TapError(e => _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, e));
-                    loaded += registered.IsSuccess ? 1 : 0;
-                    continue;
-                }
-
-                if (value.ValueKind != JsonValueKind.Object)
-                {
-                    _logger?.LogWarning("MCP server '{Name}' config is not an object", name);
-                    continue;
-                }
-
-                if (value.TryGetProperty("disabled", out var dis) && dis.ValueKind == JsonValueKind.True)
-                {
-                    _logger?.LogInformation("MCP server '{Name}' is disabled; skipping", name);
-                    continue;
-                }
-
-                // Static instructions hint (ROP-D Z3): surfaced to the system
-                // prompt via IMcpRegistry.GetInstructions() without any
-                // connection — the dynamic source is the `initialize`
-                // response harvested in InvokeAsync.
-                string? staticInstructions =
-                    value.TryGetProperty("instructions", out var insEl) && insEl.ValueKind == JsonValueKind.String
-                        ? insEl.GetString()
-                        : null;
-
-                Result registration;
-                if (value.TryGetProperty("url", out var urlEl) && urlEl.ValueKind == JsonValueKind.String)
-                {
-                    // Remote form: {"url": "...", "transport": "http"|"sse", "headers": {...}, "auth": {...}}
-                    string? transport =
-                        value.TryGetProperty("transport", out var transportEl) && transportEl.ValueKind == JsonValueKind.String
-                            ? transportEl.GetString()
-                            : "http";
-
-                    Dictionary<string, string>? headers = null;
-                    if (value.TryGetProperty("headers", out var headersEl) && headersEl.ValueKind == JsonValueKind.Object)
-                    {
-                        headers = new Dictionary<string, string>(StringComparer.Ordinal);
-                        foreach (var h in headersEl.EnumerateObject())
-                            if (h.Value.ValueKind == JsonValueKind.String)
-                                headers[h.Name] = h.Value.GetString()!;
-                    }
-
-                    McpOAuthConfig? oauth = McpOAuthConfig.Parse(value);
-                    registration = Register(name, urlEl.GetString() ?? string.Empty, transport ?? "http", headers, oauth);
-                }
-                else
-                {
-                    if (!value.TryGetProperty("command", out var commandEl) || commandEl.ValueKind != JsonValueKind.String)
-                    {
-                        _logger?.LogWarning("MCP server '{Name}' config has neither 'url' nor 'command'", name);
-                        continue;
-                    }
-
-                    var command = commandEl.GetString() ?? string.Empty;
-                    var args = new List<string>();
-                    if (value.TryGetProperty("args", out var argsEl) && argsEl.ValueKind == JsonValueKind.Array)
-                        foreach (var a in argsEl.EnumerateArray())
-                            if (a.ValueKind == JsonValueKind.String) args.Add(a.GetString()!);
-
-                    string? cwd = value.TryGetProperty("cwd", out var cwdEl) && cwdEl.ValueKind == JsonValueKind.String
-                        ? cwdEl.GetString()
-                        : null;
-
-                    Dictionary<string, string>? env = null;
-                    if (value.TryGetProperty("env", out var envEl) && envEl.ValueKind == JsonValueKind.Object)
-                    {
-                        env = new Dictionary<string, string>(StringComparer.Ordinal);
-                        foreach (var e in envEl.EnumerateObject())
-                            if (e.Value.ValueKind == JsonValueKind.String)
-                                env[e.Name] = e.Value.GetString()!;
-                    }
-
-                    registration = Register(name, new McpServerStartInfo
-                    {
-                        Command = command,
-                        Args = args,
-                        WorkingDirectory = cwd,
-                        Environment = env
-                    });
-                }
-
-                if (registration.IsSuccess)
-                {
-                    loaded++;
-                    if (!string.IsNullOrWhiteSpace(staticInstructions))
-                        _servers[name].SetInstructions(staticInstructions);
-                }
-                else
-                {
-                    _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, registration.Error);
-                }
-            }
-
-            _logger?.LogInformation("Loaded {Count} MCP server(s) from config", loaded);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Failed to load MCP config from {Path}", path);
-            return Result.Failure($"Failed to load MCP config: {ex.Message}");
-        }
-    }
-
     public Result Unregister(string name)
     {
         if (_servers.TryRemove(name, out var entry))
@@ -276,17 +73,6 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     }
 
     public IReadOnlyList<string> GetServerNames() => _servers.Keys.ToArray();
-
-    /// <summary>
-    ///     Remote coordinates for a registered remote server (used by
-    ///     <c>harbor mcp login</c> to run OAuth without opening a transport).
-    /// </summary>
-    public Result<McpRemoteRegistration> GetRemoteRegistration(string server)
-    {
-        if (!_servers.TryGetValue(server, out var entry) || !entry.IsRemote)
-            return Result.Failure<McpRemoteRegistration>($"MCP server '{server}' is not a registered remote server.");
-        return Result.Success(entry.RemoteRegistration);
-    }
 
     /// <inheritdoc />
     public IReadOnlyList<McpServerInstructions> GetInstructions()
@@ -354,6 +140,228 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    ///     Register an MCP server by name with an explicit spawn description. This is the
+    ///     preferred form — it supports arguments, working directory, and environment overrides
+    ///     without shell-quoting the command line.
+    /// </summary>
+    public Result Register(string name, McpServerStartInfo startInfo)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Result.Failure("Server name cannot be empty.");
+        if (startInfo is null)
+            return Result.Failure("startInfo cannot be null.");
+        if (string.IsNullOrWhiteSpace(startInfo.Command))
+            return Result.Failure("startInfo.Command cannot be empty.");
+
+        return RegisterInternal(name, startInfo, null);
+    }
+
+    /// <summary>
+    ///     Register a remote MCP server reachable over HTTP (streamable HTTP, or the
+    ///     legacy HTTP+SSE transport when <paramref name="transport" /> is <c>"sse"</c>).
+    ///     Nothing is connected until the first call — transports connect lazily.
+    /// </summary>
+    /// <param name="name">Stable server name.</param>
+    /// <param name="url">Absolute http(s) endpoint URL.</param>
+    /// <param name="transport">Transport kind: <c>"http"</c> or <c>"sse"</c>.</param>
+    /// <param name="headers">Extra headers (an explicit Authorization wins over OAuth).</param>
+    /// <param name="oauth">Optional OAuth2 settings (else the HARBOR_MCP_OAUTH_TOKEN env fallback applies).</param>
+    public Result Register(
+        string name,
+        string url,
+        string transport = "http",
+        IReadOnlyDictionary<string, string>? headers = null,
+        McpOAuthConfig? oauth = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Result.Failure("Server name cannot be empty.");
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                                           || uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            return Result.Failure($"Server url '{url}' is not a valid absolute http(s) URL.");
+        if (!string.Equals(transport, "http", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(transport, "sse", StringComparison.OrdinalIgnoreCase))
+            return Result.Failure($"MCP transport '{transport}' is not supported (expected 'http' or 'sse').");
+
+        return RegisterInternal(name, null, new McpRemoteEndpoint(url, transport.ToLowerInvariant(), headers, oauth));
+    }
+
+    private Result RegisterInternal(string name, McpServerStartInfo? startInfo, McpRemoteEndpoint? remote)
+    {
+        if (_servers.ContainsKey(name))
+            return Result.Failure($"MCP server '{name}' is already registered.");
+
+        _servers[name] = new ServerEntry(name, startInfo, remote);
+        _logger?.LogInformation(
+            "Registered MCP server: {Name} -> {Target}",
+            name,
+            remote is not null ? $"{remote.Transport}:{remote.Url}" : startInfo!.Command);
+        return Result.Success();
+    }
+
+    /// <summary>
+    ///     Load servers from a standard mcp.json file. Supports both the legacy flat map
+    ///     (<c>"name": "command"</c> / <c>"name": {"command": ...}</c>) and the industry
+    ///     <c>mcpServers</c> map (with <c>args</c>, <c>cwd</c>, <c>env</c>, <c>disabled</c>).
+    ///     Missing file → treated as empty config. <c>${projectRoot}</c>, <c>${home}</c>,
+    ///     <c>${harborHome}</c> macros in command/args/cwd/env are expanded. Unknown fields
+    ///     are ignored.
+    /// </summary>
+    public Result RegisterFromConfig(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return Result.Failure("MCP config path cannot be empty.");
+
+        if (!File.Exists(path))
+        {
+            _logger?.LogInformation("MCP config file not found: {Path}", path);
+            return Result.Success();
+        }
+
+        try
+        {
+            string json = File.ReadAllText(path);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                _logger?.LogWarning("MCP config root is not an object: {Path}", path);
+                return Result.Failure("MCP config root must be an object.");
+            }
+
+            var servers = root;
+            if (root.TryGetProperty("mcpServers", out var mcpServers) && mcpServers.ValueKind == JsonValueKind.Object)
+                servers = mcpServers;
+
+            int loaded = 0;
+            foreach (var property in servers.EnumerateObject())
+            {
+                string name = property.Name;
+                var value = property.Value;
+
+                // Legacy flat form: "name": "command line" — kept for backward compatibility.
+                if (value.ValueKind == JsonValueKind.String)
+                {
+                    // ROP-A Z1 п.18: the log is glued to the result and the
+                    // counter falls out of one Match expression.
+                    var registered = Register(name, value.GetString() ?? string.Empty)
+                        .TapError(e => _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, e));
+                    loaded += registered.IsSuccess ? 1 : 0;
+                    continue;
+                }
+
+                if (value.ValueKind != JsonValueKind.Object)
+                {
+                    _logger?.LogWarning("MCP server '{Name}' config is not an object", name);
+                    continue;
+                }
+
+                if (value.TryGetProperty("disabled", out var dis) && dis.ValueKind == JsonValueKind.True)
+                {
+                    _logger?.LogInformation("MCP server '{Name}' is disabled; skipping", name);
+                    continue;
+                }
+
+                // Static instructions hint (ROP-D Z3): surfaced to the system
+                // prompt via IMcpRegistry.GetInstructions() without any
+                // connection — the dynamic source is the `initialize`
+                // response harvested in InvokeAsync.
+                string? staticInstructions =
+                    value.TryGetProperty("instructions", out var insEl) && insEl.ValueKind == JsonValueKind.String
+                        ? insEl.GetString()
+                        : null;
+
+                Result registration;
+                if (value.TryGetProperty("url", out var urlEl) && urlEl.ValueKind == JsonValueKind.String)
+                {
+                    // Remote form: {"url": "...", "transport": "http"|"sse", "headers": {...}, "auth": {...}}
+                    string? transport =
+                        value.TryGetProperty("transport", out var transportEl) && transportEl.ValueKind == JsonValueKind.String
+                            ? transportEl.GetString()
+                            : "http";
+
+                    Dictionary<string, string>? headers = null;
+                    if (value.TryGetProperty("headers", out var headersEl) && headersEl.ValueKind == JsonValueKind.Object)
+                    {
+                        headers = new Dictionary<string, string>(StringComparer.Ordinal);
+                        foreach (var h in headersEl.EnumerateObject())
+                            if (h.Value.ValueKind == JsonValueKind.String)
+                                headers[h.Name] = h.Value.GetString()!;
+                    }
+
+                    var oauth = McpOAuthConfig.Parse(value);
+                    registration = Register(name, urlEl.GetString() ?? string.Empty, transport ?? "http", headers, oauth);
+                }
+                else
+                {
+                    if (!value.TryGetProperty("command", out var commandEl) || commandEl.ValueKind != JsonValueKind.String)
+                    {
+                        _logger?.LogWarning("MCP server '{Name}' config has neither 'url' nor 'command'", name);
+                        continue;
+                    }
+
+                    string command = commandEl.GetString() ?? string.Empty;
+                    var args = new List<string>();
+                    if (value.TryGetProperty("args", out var argsEl) && argsEl.ValueKind == JsonValueKind.Array)
+                        foreach (var a in argsEl.EnumerateArray())
+                            if (a.ValueKind == JsonValueKind.String)
+                                args.Add(a.GetString()!);
+
+                    string? cwd = value.TryGetProperty("cwd", out var cwdEl) && cwdEl.ValueKind == JsonValueKind.String
+                        ? cwdEl.GetString()
+                        : null;
+
+                    Dictionary<string, string>? env = null;
+                    if (value.TryGetProperty("env", out var envEl) && envEl.ValueKind == JsonValueKind.Object)
+                    {
+                        env = new Dictionary<string, string>(StringComparer.Ordinal);
+                        foreach (var e in envEl.EnumerateObject())
+                            if (e.Value.ValueKind == JsonValueKind.String)
+                                env[e.Name] = e.Value.GetString()!;
+                    }
+
+                    registration = Register(name, new McpServerStartInfo
+                    {
+                        Command = command,
+                        Args = args,
+                        WorkingDirectory = cwd,
+                        Environment = env
+                    });
+                }
+
+                if (registration.IsSuccess)
+                {
+                    loaded++;
+                    if (!string.IsNullOrWhiteSpace(staticInstructions))
+                        _servers[name].SetInstructions(staticInstructions);
+                }
+                else
+                {
+                    _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, registration.Error);
+                }
+            }
+
+            _logger?.LogInformation("Loaded {Count} MCP server(s) from config", loaded);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to load MCP config from {Path}", path);
+            return Result.Failure($"Failed to load MCP config: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Remote coordinates for a registered remote server (used by
+    ///     <c>harbor mcp login</c> to run OAuth without opening a transport).
+    /// </summary>
+    public Result<McpRemoteRegistration> GetRemoteRegistration(string server)
+    {
+        if (!_servers.TryGetValue(server, out var entry) || !entry.IsRemote)
+            return Result.Failure<McpRemoteRegistration>($"MCP server '{server}' is not a registered remote server.");
+        return Result.Success(entry.RemoteRegistration);
+    }
+
     /// <summary>Remote (HTTP/SSE) call path: per-entry cached transport, same JSON-RPC framing as the stdio path.</summary>
     private async Task<Result<string>> InvokeRemoteAsync(
         ServerEntry entry,
@@ -362,7 +370,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         JsonElement args,
         CancellationToken cancellationToken)
     {
-        IMcpRemoteTransport? transport = entry.GetTransport(_logger);
+        var transport = entry.GetTransport(_logger);
         if (transport is null)
             return Result.Failure<string>($"MCP server '{server}' transport could not be created.");
 
@@ -370,7 +378,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         {
             int id = ++_nextId;
             using var requestDoc = JsonDocument.Parse($"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"{method}\",\"params\":{args.GetRawText()}}}");
-            JsonDocument? response = await transport
+            var response = await transport
                 .RoundTripAsync(requestDoc.RootElement.Clone(), id, cancellationToken)
                 .ConfigureAwait(false);
             if (response is null)
@@ -411,28 +419,16 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         return Result.Success(resultElement.GetRawText());
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        if (_disposed) return;
-        _disposed = true;
-
-        foreach (var kv in _servers)
-        {
-            await kv.Value.DisposeAsync().ConfigureAwait(false);
-            _servers.TryRemove(kv.Key, out _);
-        }
-    }
-
     private sealed class ServerEntry : IAsyncDisposable
     {
         private readonly string _name;
-        private readonly McpServerStartInfo? _startInfo;
         private readonly McpRemoteEndpoint? _remote;
+        private readonly McpServerStartInfo? _startInfo;
         private readonly object _transportGate = new();
+        private volatile string? _instructions;
+        private McpOAuthHandler? _oauth;
         private McpProcessClient? _process;
         private IMcpRemoteTransport? _transport;
-        private McpOAuthHandler? _oauth;
-        private volatile string? _instructions;
 
         public ServerEntry(string name, McpServerStartInfo? startInfo, McpRemoteEndpoint? remote)
         {
@@ -452,6 +448,15 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             _remote.Headers,
             _remote.OAuth);
 
+        public ValueTask DisposeAsync()
+        {
+            if (_process is not null)
+                return _process.DisposeAsync();
+            if (_transport is not null)
+                return _transport.DisposeAsync();
+            return ValueTask.CompletedTask;
+        }
+
         /// <summary>
         ///     Lazily create the remote transport (first writer wins under the gate);
         ///     the instance is cached so streamable-HTTP session ids survive across calls.
@@ -469,15 +474,15 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
             lock (_transportGate)
             {
-                if (_transport is { } cached)
+                if (_transport is {} cached)
                 {
                     return cached;
                 }
 
                 Uri endpoint = new(_remote.Url, UriKind.Absolute);
                 Func<CancellationToken, Task<string?>> oauthTokenProvider = _remote.OAuth is not null
-                    ? (ct => OAuthFor(_remote, logger).TryGetAccessTokenAsync(ct))
-                    : (_ => Task.FromResult(Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN")));
+                    ? ct => OAuthFor(_remote, logger).TryGetAccessTokenAsync(ct)
+                    : _ => Task.FromResult(Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN"));
                 _transport = string.Equals(_remote.Transport, "sse", StringComparison.OrdinalIgnoreCase)
                     ? new McpSseTransport(endpoint, _remote.Headers, oauthTokenProvider, logger)
                     : new McpHttpTransport(endpoint, _remote.Headers, oauthTokenProvider, logger);
@@ -531,14 +536,14 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             };
 
             if (_startInfo.Args is { Count: > 0 })
-                foreach (var a in _startInfo.Args)
+                foreach (string a in _startInfo.Args)
                     psi.ArgumentList.Add(a);
 
             if (!string.IsNullOrWhiteSpace(_startInfo.WorkingDirectory))
                 psi.WorkingDirectory = _startInfo.WorkingDirectory;
 
             if (_startInfo.Environment is { Count: > 0 })
-                foreach (var (k, v) in _startInfo.Environment)
+                foreach ((string k, string v) in _startInfo.Environment)
                     psi.Environment[k] = v;
 
             try
@@ -550,15 +555,6 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             {
                 return null;
             }
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            if (_process is not null)
-                return _process.DisposeAsync();
-            if (_transport is not null)
-                return _transport.DisposeAsync();
-            return ValueTask.CompletedTask;
         }
 
         /// <summary>

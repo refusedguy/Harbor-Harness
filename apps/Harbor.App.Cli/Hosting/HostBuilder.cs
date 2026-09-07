@@ -2,12 +2,13 @@ using Harbor.Abstractions.Events;
 using Harbor.App.Cli.Configuration;
 using Harbor.App.Cli.Demo;
 using Harbor.Application.Configuration;
-using Harbor.Registries.Events;
-using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Hosting;
+using Harbor.Registries.Events;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 // A3 (DI analyzers): one deliberate temporary provider for the bootstrap
 // logger factory (the Avalonia CreateBootstrapLoggerFactory pattern) — the
@@ -73,17 +74,17 @@ internal static partial class HostBuilder
             string path = Path.Combine(home, ".harbor", "config.json");
             if (!File.Exists(path))
                 return CellForgeUiConfig.Default;
-            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
             if (!doc.RootElement.TryGetProperty("consoleEx", out var el)
-                || el.ValueKind != System.Text.Json.JsonValueKind.Object)
+                || el.ValueKind != JsonValueKind.Object)
             {
                 return CellForgeUiConfig.Default;
             }
 
             bool enabled = !el.TryGetProperty("enabled", out var enabledEl)
-                           || enabledEl.ValueKind != System.Text.Json.JsonValueKind.False;
+                           || enabledEl.ValueKind != JsonValueKind.False;
             bool syncUpdates = el.TryGetProperty("syncUpdates", out var syncEl)
-                ? syncEl.ValueKind != System.Text.Json.JsonValueKind.False
+                ? syncEl.ValueKind != JsonValueKind.False
                 : CellForgeUiConfig.Default.SyncUpdates;
             return new CellForgeUiConfig(enabled, syncUpdates);
         }
@@ -98,7 +99,7 @@ internal static partial class HostBuilder
     private static HarborComposeOptions CliOptions(
         string harborDir,
         CliConfig cliConfig,
-        Microsoft.Extensions.Configuration.IConfiguration configuration) => new()
+        IConfiguration configuration) => new()
     {
         HarborDir = harborDir,
         DefaultStorageBackend = "jsonl",
@@ -108,7 +109,7 @@ internal static partial class HostBuilder
         DefaultTuiRenderer = cliConfig.DefaultTuiRenderer,
         RuntimeSwappable = cliConfig.RuntimeSwappable,
         Configuration = configuration,
-        BootstrapLoggerFactory = () => _loggerFactory,
+        BootstrapLoggerFactory = () => _loggerFactory
     };
 
     /// <summary>Create ~/.harbor and its session/cache subdirectories.</summary>

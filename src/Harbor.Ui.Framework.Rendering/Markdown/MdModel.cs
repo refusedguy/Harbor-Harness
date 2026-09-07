@@ -16,7 +16,7 @@ public enum MdStyle : byte
     Fence,
 
     /// <summary>List bullet prefix («- » / «1. »); item text stays Normal.</summary>
-    Bullet,
+    Bullet
 }
 
 /// <summary>A styled run of text inside one display line.</summary>
@@ -27,7 +27,10 @@ public sealed class MdLine
 {
     public static readonly MdLine Empty = new([new MdSpan(string.Empty, MdStyle.Normal)]);
 
-    public MdLine(IReadOnlyList<MdSpan> spans) => Spans = spans;
+    public MdLine(IReadOnlyList<MdSpan> spans)
+    {
+        Spans = spans;
+    }
 
     public IReadOnlyList<MdSpan> Spans { get; }
 
@@ -38,7 +41,7 @@ public sealed class MdLine
             int total = 0;
             for (int i = 0; i < Spans.Count; i++)
             {
-                total += Rendering.UnicodeWidth.Width(Spans[i].Text);
+                total += UnicodeWidth.Width(Spans[i].Text);
             }
 
             return total;

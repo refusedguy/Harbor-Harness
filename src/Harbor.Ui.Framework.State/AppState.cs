@@ -1,8 +1,7 @@
-using System.Collections.Immutable;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.Panels;
-
+using System.Collections.Immutable;
 namespace Harbor.Ui.Framework.State;
 
 /// <summary>
@@ -23,6 +22,15 @@ namespace Harbor.Ui.Framework.State;
 /// </remarks>
 public sealed record AppState
 {
+
+    /// <summary>Toast severity levels.</summary>
+    public enum ToastSeverity
+    {
+        Info,
+        Success,
+        Warning,
+        Error
+    }
     // ── Transcript ────────────────────────────────────────────────────────
 
     /// <summary>The full transcript (user/assistant/tool/… lines), oldest first.</summary>
@@ -251,15 +259,6 @@ public sealed record AppState
     /// <param name="CreatedAt">UTC timestamp when the toast was created.</param>
     /// <param name="Id">Stable unique identifier for the toast.</param>
     public sealed record Toast(string Message, ToastSeverity Severity, DateTimeOffset CreatedAt, string Id);
-
-    /// <summary>Toast severity levels.</summary>
-    public enum ToastSeverity
-    {
-        Info,
-        Success,
-        Warning,
-        Error
-    }
 
     /// <summary>
     ///     One tool call in the current turn, projected for the UI.

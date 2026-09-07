@@ -3,13 +3,10 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
-using Harbor.Ipc.Client;
 using Harbor.Ipc.Protocol;
-using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -36,7 +33,7 @@ public class MultiClientIsolationTests
         var transport = new ClientPipeTransport(pipe, lf.CreateLogger<ClientPipeTransport>());
         var client = new MessagePackRpcClient(transport, lf.CreateLogger<MessagePackRpcClient>());
         await client.ConnectAsync();
-        HarborResponse response = await client.SendAsync(new StartAgentRequest(sessionId, "code"));
+        var response = await client.SendAsync(new StartAgentRequest(sessionId, "code"));
         return (response, client, transport);
     }
 
@@ -58,28 +55,28 @@ public class MultiClientIsolationTests
 
             async Task<string> CreateAndIdAsync(MessagePackRpcClient c)
             {
-                HarborResponse created = await c.SendAsync(
+                var created = await c.SendAsync(
                     new CreateSessionRequest("/tmp/test", "code", "ollama", "test-model"));
                 await Assert.That(created).IsTypeOf<OkResponse>();
-                Session session = WireCodec.DeserializeDomain<Session>(((OkResponse)created).Payload)!;
+                var session = WireCodec.DeserializeDomain<Session>(((OkResponse)created).Payload)!;
                 return session.Id;
             }
 
             string sid = await CreateAndIdAsync(bootstrap);
 
             // Client A owns the session.
-            (HarborResponse respA, MessagePackRpcClient clientA, ClientPipeTransport transportA) =
+            var (respA, clientA, transportA) =
                 await StartAgentAsync(sp, pipe, sid);
             await Assert.That(respA).IsTypeOf<OkResponse>();
 
             // Client B is refused with the structured error.
-            (HarborResponse respB, MessagePackRpcClient clientB, ClientPipeTransport transportB) =
+            var (respB, clientB, transportB) =
                 await StartAgentAsync(sp, pipe, sid);
             await Assert.That(respB).IsTypeOf<ErrorResponse>();
             await Assert.That(((ErrorResponse)respB).Message).Contains("SESSION_BUSY:" + sid);
 
             // Same client re-acquiring its OWN lease is idempotent.
-            HarborResponse respA2 = await clientA.SendAsync(new StartAgentRequest(sid, "code"));
+            var respA2 = await clientA.SendAsync(new StartAgentRequest(sid, "code"));
             await Assert.That(respA2).IsTypeOf<OkResponse>();
 
             await transportA.DisposeAsync();
@@ -112,13 +109,13 @@ public class MultiClientIsolationTests
                 await c.ConnectAsync();
                 // Awaited ack ⇒ registration is COMPLETE when this returns
                 // (SubscriptionReady only signals once for the FIRST registrant).
-                HarborResponse ack = await c.SendAsync(new SubscribeToEventsRequest());
+                var ack = await c.SendAsync(new SubscribeToEventsRequest());
                 await Assert.That(ack).IsTypeOf<OkResponse>();
                 return c;
             }
 
-            MessagePackRpcClient owner = await SubscribeAsync();
-            MessagePackRpcClient outsider = await SubscribeAsync();
+            var owner = await SubscribeAsync();
+            var outsider = await SubscribeAsync();
 
             // Session must exist; owner then leases it.
             var seeder = new MessagePackRpcClient(
@@ -127,13 +124,13 @@ public class MultiClientIsolationTests
             await seeder.ConnectAsync();
             var seeded = await seeder.SendAsync(new CreateSessionRequest("/tmp/test", "code", "ollama", "test-model"));
             await Assert.That(seeded).IsTypeOf<OkResponse>();
-            Session ownedSession = WireCodec.DeserializeDomain<Session>(((OkResponse)seeded).Payload)!;
+            var ownedSession = WireCodec.DeserializeDomain<Session>(((OkResponse)seeded).Payload)!;
 
-            HarborResponse leaseResp = await owner.SendAsync(new StartAgentRequest(ownedSession.Id, "code"));
+            var leaseResp = await owner.SendAsync(new StartAgentRequest(ownedSession.Id, "code"));
             await Assert.That(leaseResp).IsTypeOf<OkResponse>();
 
             // Run-scoped event on the owned session.
-            await bus.PublishAsync(new AgentStartEvent(ownedSession.Id, Array.Empty<AgentMessage>(), null));
+            await bus.PublishAsync(new AgentStartEvent(ownedSession.Id, Array.Empty<AgentMessage>()));
 
             bool ownerGotIt = await ReadOneFrameWithin(owner, TimeSpan.FromSeconds(5));
             await Assert.That(ownerGotIt).IsTrue();

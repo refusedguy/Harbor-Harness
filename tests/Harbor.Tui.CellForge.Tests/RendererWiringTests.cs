@@ -1,5 +1,3 @@
-using System.Collections.Immutable;
-using System.Reflection;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
@@ -7,17 +5,17 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Collections.Immutable;
+using System.Reflection;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CF-F-001 + CF-B-011 wiring: the placement-filter override is gone, the base
-/// filter paints ChatHistory/Input, <see cref="InputViewModel"/> is projected
-/// from <see cref="UiState"/> and bound two-way with the composer buffer,
-/// session snapshots are captured, and a full <c>RenderAsync</c> pass lands in
-/// <see cref="RecordingBackend"/>.
+///     CF-F-001 + CF-B-011 wiring: the placement-filter override is gone, the base
+///     filter paints ChatHistory/Input, <see cref="InputViewModel" /> is projected
+///     from <see cref="UiState" /> and bound two-way with the composer buffer,
+///     session snapshots are captured, and a full <c>RenderAsync</c> pass lands in
+///     <see cref="RecordingBackend" />.
 /// </summary>
 public class RendererWiringTests
 {

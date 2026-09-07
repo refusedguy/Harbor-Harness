@@ -1,17 +1,15 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CF-D-002: the status footer projects from <see cref="UiState"/> via
-/// <see cref="StatusProjectorPanel"/> (glyphs + scroll from
-/// <c>StatusProjector</c>, numbers via <c>StatusMappers</c>) instead of
-/// hand-assembled view-model strings. Panel geometry and truncation behavior
-/// are unchanged — only the data source moves.
+///     CF-D-002: the status footer projects from <see cref="UiState" /> via
+///     <see cref="StatusProjectorPanel" /> (glyphs + scroll from
+///     <c>StatusProjector</c>, numbers via <c>StatusMappers</c>) instead of
+///     hand-assembled view-model strings. Panel geometry and truncation behavior
+///     are unchanged — only the data source moves.
 /// </summary>
 public class StatusProjectorPanelTests
 {
@@ -26,16 +24,16 @@ public class StatusProjectorPanelTests
         int scrollOffset = 0,
         int viewportLines = 0,
         int totalLines = 0) => new()
-        {
-            Status = status,
-            Provider = provider,
-            Model = model,
-            AgentName = agent,
-            Cost = new CostSnapshot(tokensIn, tokensOut, costUsd),
-            ScrollOffset = scrollOffset,
-            ViewportLines = viewportLines,
-            TotalLines = totalLines,
-        };
+    {
+        Status = status,
+        Provider = provider,
+        Model = model,
+        AgentName = agent,
+        Cost = new CostSnapshot(tokensIn, tokensOut, costUsd),
+        ScrollOffset = scrollOffset,
+        ViewportLines = viewportLines,
+        TotalLines = totalLines
+    };
 
     private static int Build(UiState state, StatusSeg[] workspace, string? retry = null, TimeSpan? elapsed = null) =>
         StatusProjectorPanel.BuildSegments(state, workspace, retry, elapsed);
@@ -90,7 +88,7 @@ public class StatusProjectorPanelTests
     public async Task Idle_ProjectsIdleGlyph_AndNoSpinner()
     {
         var ws = new StatusSeg[12];
-        int n = Build(MockState("idle"), ws);
+        int n = Build(MockState(), ws);
 
         await Assert.That(Joined(ws, n)).Contains("○ idle");
         await Assert.That(StatusProjectorPanel.MapMode("idle")).IsEqualTo(StatusBarMode.Idle);
@@ -134,7 +132,7 @@ public class StatusProjectorPanelTests
     public async Task ZeroTokens_HidesTokenSegment()
     {
         var ws = new StatusSeg[12];
-        int n = Build(MockState("idle"), ws);
+        int n = Build(MockState(), ws);
 
         await Assert.That(Joined(ws, n)).DoesNotContain("↑");
     }
@@ -154,7 +152,7 @@ public class StatusProjectorPanelTests
     public async Task RetryLine_BecomesFixedWarningSegment()
     {
         var ws = new StatusSeg[12];
-        int n = Build(MockState("running"), ws, retry: RetryCountdown.Line(2, 5, 4));
+        int n = Build(MockState("running"), ws, RetryCountdown.Line(2, 5, 4));
 
         int idx = Find(ws, n, "retry 2/5 in 4s");
         await Assert.That(idx >= 0).IsTrue();
@@ -186,7 +184,7 @@ public class StatusProjectorPanelTests
     public async Task EmptyProviderAndModel_HidesChromeSegment()
     {
         var ws = new StatusSeg[12];
-        int n = Build(MockState("idle", provider: string.Empty, model: string.Empty), ws);
+        int n = Build(MockState("idle", string.Empty, string.Empty), ws);
 
         await Assert.That(Joined(ws, n)).DoesNotContain("/");
     }
@@ -224,7 +222,7 @@ public class StatusProjectorPanelTests
     [Test]
     public async Task Panel_SetProjectedRetry_FeedsRetrySlot()
     {
-        var panel = new StatusPanel("s", new StatusViewModel(), minWidth: 10, minHeight: 1);
+        var panel = new StatusPanel("s", new StatusViewModel(), 10, 1);
         panel.SetProjectedRetry(2, 5, 4);
 
         await Assert.That(panel.ProjectedRetry).IsEqualTo("retry 2/5 in 4s");

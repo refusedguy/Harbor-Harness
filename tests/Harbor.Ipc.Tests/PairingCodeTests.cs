@@ -1,5 +1,5 @@
 using Harbor.Ipc.Protocol;
-
+using System.Net;
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -58,17 +58,17 @@ public class PairingCodeTests
     [Test]
     public async Task TailscaleRange_Classification()
     {
-        await Assert.That(DaemonBindPolicy.IsTailscaleAddress(System.Net.IPAddress.Parse("100.64.0.1"))).IsTrue();
-        await Assert.That(DaemonBindPolicy.IsTailscaleAddress(System.Net.IPAddress.Parse("100.127.255.254"))).IsTrue();
-        await Assert.That(DaemonBindPolicy.IsTailscaleAddress(System.Net.IPAddress.Parse("100.128.0.1"))).IsFalse();
-        await Assert.That(DaemonBindPolicy.IsTailscaleAddress(System.Net.IPAddress.Parse("100.63.255.255"))).IsFalse();
-        await Assert.That(DaemonBindPolicy.IsTailscaleAddress(System.Net.IPAddress.Parse("192.168.88.42"))).IsFalse();
+        await Assert.That(DaemonBindPolicy.IsTailscaleAddress(IPAddress.Parse("100.64.0.1"))).IsTrue();
+        await Assert.That(DaemonBindPolicy.IsTailscaleAddress(IPAddress.Parse("100.127.255.254"))).IsTrue();
+        await Assert.That(DaemonBindPolicy.IsTailscaleAddress(IPAddress.Parse("100.128.0.1"))).IsFalse();
+        await Assert.That(DaemonBindPolicy.IsTailscaleAddress(IPAddress.Parse("100.63.255.255"))).IsFalse();
+        await Assert.That(DaemonBindPolicy.IsTailscaleAddress(IPAddress.Parse("192.168.88.42"))).IsFalse();
 
-        await Assert.That(DaemonBindPolicy.IsPrivateLanAddress(System.Net.IPAddress.Parse("192.168.88.42"))).IsTrue();
-        await Assert.That(DaemonBindPolicy.IsPrivateLanAddress(System.Net.IPAddress.Parse("10.1.2.3"))).IsTrue();
-        await Assert.That(DaemonBindPolicy.IsPrivateLanAddress(System.Net.IPAddress.Parse("172.20.0.5"))).IsTrue();
-        await Assert.That(DaemonBindPolicy.IsPrivateLanAddress(System.Net.IPAddress.Parse("8.8.8.8"))).IsFalse();
-        await Assert.That(DaemonBindPolicy.IsPrivateLanAddress(System.Net.IPAddress.Parse("100.64.0.1"))).IsFalse();
+        await Assert.That(DaemonBindPolicy.IsPrivateLanAddress(IPAddress.Parse("192.168.88.42"))).IsTrue();
+        await Assert.That(DaemonBindPolicy.IsPrivateLanAddress(IPAddress.Parse("10.1.2.3"))).IsTrue();
+        await Assert.That(DaemonBindPolicy.IsPrivateLanAddress(IPAddress.Parse("172.20.0.5"))).IsTrue();
+        await Assert.That(DaemonBindPolicy.IsPrivateLanAddress(IPAddress.Parse("8.8.8.8"))).IsFalse();
+        await Assert.That(DaemonBindPolicy.IsPrivateLanAddress(IPAddress.Parse("100.64.0.1"))).IsFalse();
     }
 
     [Test]
@@ -76,7 +76,7 @@ public class PairingCodeTests
     {
         var loopback = DaemonBindPolicy.ResolveBindAddress("loopback");
         await Assert.That(loopback.IsSuccess).IsTrue();
-        await Assert.That(loopback.Value).IsEqualTo(System.Net.IPAddress.Loopback);
+        await Assert.That(loopback.Value).IsEqualTo(IPAddress.Loopback);
 
         var all = DaemonBindPolicy.ResolveBindAddress("ALL");
         await Assert.That(all.IsSuccess).IsTrue();

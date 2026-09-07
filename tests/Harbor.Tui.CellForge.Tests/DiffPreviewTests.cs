@@ -1,13 +1,12 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CF-E-011: <see cref="DiffPreview"/> port of the Avalonia
-/// <c>DiffPreviewHelper</c> — edit/write/patch extraction, file-path
-/// fallback, preview/full budgets, sentinels — plus the
-/// <c>ToolCallBlock.DiffRenderer</c> 6-line preview cap.
+///     CF-E-011: <see cref="DiffPreview" /> port of the Avalonia
+///     <c>DiffPreviewHelper</c> — edit/write/patch extraction, file-path
+///     fallback, preview/full budgets, sentinels — plus the
+///     <c>ToolCallBlock.DiffRenderer</c> 6-line preview cap.
 /// </summary>
 public class DiffPreviewTests
 {
@@ -16,7 +15,7 @@ public class DiffPreviewTests
     private static string PaintCard(string diffText, out int measuredLines, int width = 40)
     {
         var block = new ToolCallBlock(new ToolCallInfo("t1", "edit", "big.cs"));
-        block.Complete(new ToolResultBody("ok", isError: false, TimeSpan.FromMilliseconds(3), diffText));
+        block.Complete(new ToolResultBody("ok", false, TimeSpan.FromMilliseconds(3), diffText));
         measuredLines = block.Measure(width).MinLines;
         var buffer = new ScreenBuffer(width, measuredLines);
         block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, width, measuredLines), 0));
@@ -27,10 +26,10 @@ public class DiffPreviewTests
     public async Task Edit_Produces_ContextDiff_With_FilePath()
     {
         const string args = """
-            {"path":"src/a.cs","oldString":"a\nb\nc","newString":"a\nB\nc"}
-            """;
+                            {"path":"src/a.cs","oldString":"a\nb\nc","newString":"a\nB\nc"}
+                            """;
 
-        var (isDiff, path, preview, full) = DiffPreview.ExtractDiff("edit", args, resultText: null);
+        (bool isDiff, string? path, string? preview, string? full) = DiffPreview.ExtractDiff("edit", args, null);
 
         await Assert.That(isDiff).IsTrue();
         await Assert.That(path).IsEqualTo("src/a.cs");
@@ -45,10 +44,10 @@ public class DiffPreviewTests
     public async Task Edit_Identical_Returns_NoLineDiff_Sentinel()
     {
         const string args = """
-            {"path":"src/a.cs","oldString":"a\nb","newString":"a\nb"}
-            """;
+                            {"path":"src/a.cs","oldString":"a\nb","newString":"a\nb"}
+                            """;
 
-        var (isDiff, path, preview, full) = DiffPreview.ExtractDiff("edit", args, resultText: null);
+        (bool isDiff, string? path, string? preview, string? full) = DiffPreview.ExtractDiff("edit", args, null);
 
         await Assert.That(isDiff).IsTrue();
         await Assert.That(path).IsEqualTo("src/a.cs");
@@ -60,10 +59,10 @@ public class DiffPreviewTests
     public async Task Write_Produces_PlusPrefixed_Content()
     {
         const string args = """
-            {"file":"notes.txt","content":"x\ny"}
-            """;
+                            {"file":"notes.txt","content":"x\ny"}
+                            """;
 
-        var (isDiff, path, preview, full) = DiffPreview.ExtractDiff("write", args, resultText: null);
+        (bool isDiff, string? path, string? preview, string? full) = DiffPreview.ExtractDiff("write", args, null);
 
         await Assert.That(isDiff).IsTrue();
         await Assert.That(path).IsEqualTo("notes.txt");
@@ -77,10 +76,10 @@ public class DiffPreviewTests
     {
         const string patch = "@@ -1 +1 @@\n-old\n+new";
         const string args = """
-            {"path":"f.cs","patch":"@@ -1 +1 @@\n-old\n+new"}
-            """;
+                            {"path":"f.cs","patch":"@@ -1 +1 @@\n-old\n+new"}
+                            """;
 
-        var (isDiff, path, preview, full) = DiffPreview.ExtractDiff("patch", args, resultText: null);
+        (bool isDiff, string? path, string? preview, string? full) = DiffPreview.ExtractDiff("patch", args, null);
 
         await Assert.That(isDiff).IsTrue();
         await Assert.That(path).IsEqualTo("f.cs");
@@ -91,7 +90,7 @@ public class DiffPreviewTests
     [Test]
     public async Task UnknownTool_Returns_NotDiff()
     {
-        var (isDiff, path, preview, full) = DiffPreview.ExtractDiff("bash", """{"command":"ls"}""", resultText: null);
+        (bool isDiff, string? path, string? preview, string? full) = DiffPreview.ExtractDiff("bash", """{"command":"ls"}""", null);
 
         await Assert.That(isDiff).IsFalse();
         await Assert.That(path is null).IsTrue();
@@ -102,20 +101,20 @@ public class DiffPreviewTests
     [Test]
     public async Task MissingPayload_Returns_NotDiff()
     {
-        var edit = DiffPreview.ExtractDiff("edit", """{"path":"f.cs"}""", resultText: null);
+        var edit = DiffPreview.ExtractDiff("edit", """{"path":"f.cs"}""", null);
         await Assert.That(edit.IsDiffTool).IsFalse();
 
-        var write = DiffPreview.ExtractDiff("write", """{"path":"f.cs"}""", resultText: null);
+        var write = DiffPreview.ExtractDiff("write", """{"path":"f.cs"}""", null);
         await Assert.That(write.IsDiffTool).IsFalse();
 
-        var malformed = DiffPreview.ExtractDiff("edit", "{oops", resultText: null);
+        var malformed = DiffPreview.ExtractDiff("edit", "{oops", null);
         await Assert.That(malformed.IsDiffTool).IsFalse();
     }
 
     [Test]
     public async Task UnknownPath_When_NoFileField()
     {
-        var (isDiff, path, preview, _) = DiffPreview.ExtractDiff("write", """{"content":"hi"}""", resultText: null);
+        (bool isDiff, string? path, string? preview, _) = DiffPreview.ExtractDiff("write", """{"content":"hi"}""", null);
 
         await Assert.That(isDiff).IsTrue();
         await Assert.That(path).IsEqualTo(DiffPreview.UnknownPath);
@@ -136,17 +135,17 @@ public class DiffPreviewTests
     [Test]
     public async Task Truncate_Edit_Preview_Capped_Full_Intact()
     {
-        var oldLines = new string[20];
-        var newLines = new string[20];
+        string[] oldLines = new string[20];
+        string[] newLines = new string[20];
         for (int i = 0; i < 20; i++)
         {
             oldLines[i] = "old" + i;
             newLines[i] = "new" + i;
         }
         string args = "{\"path\":\"big.cs\",\"oldString\":\"" + string.Join("\\n", oldLines)
-            + "\",\"newString\":\"" + string.Join("\\n", newLines) + "\"}";
+                                                              + "\",\"newString\":\"" + string.Join("\\n", newLines) + "\"}";
 
-        var (isDiff, _, preview, full) = DiffPreview.ExtractDiff("edit", args, resultText: null);
+        (bool isDiff, _, string? preview, string? full) = DiffPreview.ExtractDiff("edit", args, null);
 
         await Assert.That(isDiff).IsTrue();
         await Assert.That(preview!.EndsWith(DiffPreview.DiffTruncatedSentinel, StringComparison.Ordinal)).IsTrue();
@@ -159,12 +158,12 @@ public class DiffPreviewTests
     [Test]
     public async Task Truncate_Patch_Keeps_Head_Plus_Marker()
     {
-        var patchLines = new string[10];
+        string[] patchLines = new string[10];
         for (int i = 0; i < 10; i++)
             patchLines[i] = " line" + i;
         string args = "{\"path\":\"f.cs\",\"patch\":\"" + string.Join("\\n", patchLines) + "\"}";
 
-        var (isDiff, _, preview, full) = DiffPreview.ExtractDiff("patch", args, resultText: null);
+        (bool isDiff, _, string? preview, string? full) = DiffPreview.ExtractDiff("patch", args, null);
 
         await Assert.That(isDiff).IsTrue();
         await Assert.That(LineCount(preview!)).IsEqualTo(DiffPreview.MaxPreviewLines + 1);
@@ -176,12 +175,12 @@ public class DiffPreviewTests
     [Test]
     public async Task Truncate_Write_Uses_Content_Sentinel()
     {
-        var contentLines = new string[10];
+        string[] contentLines = new string[10];
         for (int i = 0; i < 10; i++)
             contentLines[i] = "row" + i;
         string args = "{\"path\":\"f.txt\",\"content\":\"" + string.Join("\\n", contentLines) + "\"}";
 
-        var (isDiff, _, preview, full) = DiffPreview.ExtractDiff("write", args, resultText: null);
+        (bool isDiff, _, string? preview, string? full) = DiffPreview.ExtractDiff("write", args, null);
 
         await Assert.That(isDiff).IsTrue();
         await Assert.That(preview!.EndsWith(DiffPreview.ContentTruncatedSentinel, StringComparison.Ordinal)).IsTrue();
@@ -194,11 +193,11 @@ public class DiffPreviewTests
     public async Task ToolCallInfo_Carries_Preview_Fields()
     {
         const string args = """
-            {"path":"src/a.cs","oldString":"a\nb","newString":"a\nB"}
-            """;
-        var (_, path, preview, full) = DiffPreview.ExtractDiff("edit", args, resultText: null);
+                            {"path":"src/a.cs","oldString":"a\nb","newString":"a\nB"}
+                            """;
+        (_, string? path, string? preview, string? full) = DiffPreview.ExtractDiff("edit", args, null);
 
-        var info = new ToolCallInfo("t1", "edit", "src/a.cs", FilePath: path, DiffPreview: preview, DiffFull: full);
+        var info = new ToolCallInfo("t1", "edit", "src/a.cs", path, preview, full);
 
         await Assert.That(info.Id).IsEqualTo("t1");
         await Assert.That(info.FilePath).IsEqualTo("src/a.cs");
@@ -215,7 +214,7 @@ public class DiffPreviewTests
     [Test]
     public async Task DiffRenderer_Caps_Long_Diff_At_Six_Plus_Overflow()
     {
-        var lines = new string[10];
+        string[] lines = new string[10];
         for (int i = 0; i < 10; i++)
             lines[i] = "- old" + i;
         string art = PaintCard(string.Join("\n", lines), out int measured);

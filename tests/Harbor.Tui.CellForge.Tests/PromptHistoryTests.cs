@@ -1,5 +1,4 @@
 using Harbor.Tui.CellForge.Rendering;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class PromptHistoryTests
@@ -25,17 +24,17 @@ public class PromptHistoryTests
         h.Push("second");
 
         // Up from draft «wip» → newest, then oldest.
-        await Assert.That(h.TryRecallPrevious("wip", out var e1)).IsTrue();
+        await Assert.That(h.TryRecallPrevious("wip", out string e1)).IsTrue();
         await Assert.That(e1).IsEqualTo("second");
-        await Assert.That(h.TryRecallPrevious(string.Empty, out var e2)).IsTrue();
+        await Assert.That(h.TryRecallPrevious(string.Empty, out string e2)).IsTrue();
         await Assert.That(e2).IsEqualTo("first");
         // Oldest boundary.
         await Assert.That(h.TryRecallPrevious(string.Empty, out _)).IsFalse();
 
         // Down walks back forward and finally restores the draft.
-        await Assert.That(h.TryRecallNext(out var e3)).IsTrue();
+        await Assert.That(h.TryRecallNext(out string e3)).IsTrue();
         await Assert.That(e3).IsEqualTo("second");
-        await Assert.That(h.TryRecallNext(out var e4)).IsTrue();
+        await Assert.That(h.TryRecallNext(out string e4)).IsTrue();
         await Assert.That(e4).IsEqualTo("wip");
         // Walk ended — further Down is plain caret movement.
         await Assert.That(h.TryRecallNext(out _)).IsFalse();
@@ -59,14 +58,14 @@ public class PromptHistoryTests
         h.Push("d");
 
         await Assert.That(h.Count).IsEqualTo(3);
-        await Assert.That(h.TryRecallPrevious("latest draft", out var newest)).IsTrue();
+        await Assert.That(h.TryRecallPrevious("latest draft", out string newest)).IsTrue();
         await Assert.That(newest).IsEqualTo("d");
-        await Assert.That(h.TryRecallPrevious(string.Empty, out var mid)).IsTrue();
+        await Assert.That(h.TryRecallPrevious(string.Empty, out string mid)).IsTrue();
         await Assert.That(mid).IsEqualTo("c");
         // Forward again: newest entry again, then the captured draft.
-        await Assert.That(h.TryRecallNext(out var newestAgain)).IsTrue();
+        await Assert.That(h.TryRecallNext(out string newestAgain)).IsTrue();
         await Assert.That(newestAgain).IsEqualTo("d");
-        await Assert.That(h.TryRecallNext(out var draft)).IsTrue();
+        await Assert.That(h.TryRecallNext(out string draft)).IsTrue();
         await Assert.That(draft).IsEqualTo("latest draft");
     }
 
@@ -81,7 +80,7 @@ public class PromptHistoryTests
 
         await Assert.That(h.TryRecallNext(out _)).IsFalse();
         h.Push("two");
-        await Assert.That(h.TryRecallPrevious(string.Empty, out var entry)).IsTrue();
+        await Assert.That(h.TryRecallPrevious(string.Empty, out string entry)).IsTrue();
         await Assert.That(entry).IsEqualTo("two");
     }
 }

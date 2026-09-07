@@ -1,6 +1,6 @@
-using System.Collections.Concurrent;
 using Harbor.Plugins.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Collections.Concurrent;
 namespace Harbor.Plugins.Runtime.Tests.Hosting;
 
 /// <summary>
@@ -10,8 +10,8 @@ namespace Harbor.Plugins.Runtime.Tests.Hosting;
 /// </summary>
 public sealed class DebouncedPluginWatcherTests : IDisposable
 {
-    private readonly string _dir;
     private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(120);
+    private readonly string _dir;
 
     public DebouncedPluginWatcherTests()
     {
@@ -21,7 +21,7 @@ public sealed class DebouncedPluginWatcherTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_dir, recursive: true); }
+        try { Directory.Delete(_dir, true); }
         catch (IOException)
         { /* best-effort cleanup */
         }

@@ -29,7 +29,7 @@ public interface IEventBusMiddleware
     ///     Human-readable name used in log messages to identify which middleware
     ///     filtered or transformed an event.
     /// </summary>
-    string Name { get; }
+    public string Name { get; }
 
     /// <summary>
     ///     Process an event. Return <c>true</c> to continue the pipeline,
@@ -38,5 +38,5 @@ public interface IEventBusMiddleware
     /// <param name="event">The event to process. May be replaced in-place via the <c>ref</c> parameter.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns><c>true</c> to pass the event to the next middleware or fan-out; <c>false</c> to drop.</returns>
-    ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default);
+    public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default);
 }

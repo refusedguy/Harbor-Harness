@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Diagnostics;
+
 /// <summary>
 ///     One immutable log entry held by <see cref="IDiagnosticsPanel" />.
 /// </summary>

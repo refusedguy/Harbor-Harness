@@ -1,5 +1,6 @@
 using MemoryPack;
 namespace Harbor.Abstractions.Models;
+
 /// <summary>
 ///     Custom MemoryPack formatter for <see cref="JsonElement" />.
 ///     Stores the JSON as a length-prefixed string (UTF-16), parsed back on deserialize.

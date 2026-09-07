@@ -26,6 +26,7 @@ using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tools;
 namespace Harbor.Architecture.Tests;
+
 /// <summary>
 ///     Layer-dependency rules for the Harbor.Abstractions contract split.
 ///     See file header for the canonical allowed/forbidden matrix and
@@ -35,8 +36,11 @@ namespace Harbor.Architecture.Tests;
 ///     <para>
 ///         The tests probe by assembly (via <c>typeof(...).Assembly</c>), not by
 ///         namespace: the moved files keep their original
-///         <c>namespace Harbor.Abstractions.{Models,Events,Permissions,
-///         Models.Identifiers,Extensions};</c> declarations so consumer code
+///         <c>
+///             namespace Harbor.Abstractions.{Models,Events,Permissions,
+///             Models.Identifiers,Extensions};
+///         </c>
+///         declarations so consumer code
 ///         keeps compiling without <c>using</c> changes.
 ///     </para>
 /// </remarks>

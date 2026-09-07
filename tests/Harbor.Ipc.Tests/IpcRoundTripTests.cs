@@ -1,9 +1,5 @@
-using Harbor.Abstractions.Agents;
-using Harbor.Ipc.Client;
-using Harbor.Ipc.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -11,8 +7,10 @@ namespace Harbor.Ipc.Tests;
 ///     <see cref="HarborIpcServer" /> on a unique pipe name, connects a
 ///     real <see cref="IpcHarborClient" />, calls methods, and asserts
 ///     the response. These tests exercise the full
-///     <c>MessagePack → frame → pipe → frame → MessagePack → dispatch →
-///     service → MessagePack → frame → pipe → frame → MessagePack</c>
+///     <c>
+///         MessagePack → frame → pipe → frame → MessagePack → dispatch →
+///         service → MessagePack → frame → pipe → frame → MessagePack
+///     </c>
 ///     pipeline.
 /// </summary>
 /// <remarks>
@@ -30,7 +28,7 @@ namespace Harbor.Ipc.Tests;
 ///     </para>
 /// </remarks>
 [NotInParallel]
-    public class IpcRoundTripTests
+public class IpcRoundTripTests
 {
     /// <summary>
     ///     CreateSession should round-trip through the server and return

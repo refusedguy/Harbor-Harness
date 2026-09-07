@@ -1,5 +1,6 @@
 using System.Text;
 namespace Harbor.Abstractions.Permissions;
+
 /// <summary>
 ///     Quote-aware shell command analysis used when evaluating <c>bash</c> permission rules.
 /// </summary>
@@ -30,8 +31,8 @@ public static class BashArgMatcher
 {
     /// <summary>
     ///     Returns <see langword="true" /> if the command contains any of <c>; | &amp; ` $(&lt; &gt;</c>
-    ///   or a newline <b>outside quotes</b>, or command-substitution / escape constructs
-    ///   (<c>$()</c>, backticks, backslashes) <b>inside double quotes</b>, or has an
+    ///     or a newline <b>outside quotes</b>, or command-substitution / escape constructs
+    ///     (<c>$()</c>, backticks, backslashes) <b>inside double quotes</b>, or has an
     ///     unterminated quote / trailing escape. Single-quoted content stays safe: POSIX
     ///     single quotes are fully literal. Such commands must never be silently allowed
     ///     by a glob rule.
@@ -65,7 +66,7 @@ public static class BashArgMatcher
                 // and process backslash escapes there, so these must be flagged exactly
                 // like unquoted metacharacters (Allow rules must not match).
                 if (c == '\\' || c == '`'
-                    || (c == '$' && i + 1 < n && command[i + 1] == '('))
+                              || c == '$' && i + 1 < n && command[i + 1] == '(')
                 {
                     return true;
                 }
@@ -216,7 +217,7 @@ public static class BashArgMatcher
             }
         }
 
-        return targets.Count == 0 ? Array.Empty<string>() : (IReadOnlyList<string>)targets;
+        return targets.Count == 0 ? Array.Empty<string>() : targets;
     }
 
     /// <summary>

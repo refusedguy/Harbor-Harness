@@ -13,8 +13,8 @@
 - [x] Tool-call support
 - [x] Live `/models` catalog mapping via `DynamicModelCatalog` / `ModelMapping` (PROD-UI-0 preset work)
 - [x] Provider-specific quirk flags as a Strategy instead of string switches:
-      `Compat/IProviderCompatFlag.cs` with `DeepSeekReasonerCompatFlag` (:49) and
-      `GroqMaxTokensCompatFlag` (:71), cataloged in `ProviderCompatFlags`
+  `Compat/IProviderCompatFlag.cs` with `DeepSeekReasonerCompatFlag` (:49) and
+  `GroqMaxTokensCompatFlag` (:71), cataloged in `ProviderCompatFlags`
 - [x] Usage forwarding from stream end events (`OpenAiCompatibleLlmClient.cs:84`)
 
 ## TODO

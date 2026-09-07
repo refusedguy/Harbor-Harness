@@ -1,4 +1,5 @@
 namespace Harbor.Terminal.Abstractions.Rendering;
+
 /// <summary>
 ///     Alignment of a GFM table column, derived from the separator row
 ///     (<c>:---</c>, <c>:--:</c>, <c>---:</c>).

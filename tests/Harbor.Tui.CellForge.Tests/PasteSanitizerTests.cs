@@ -1,10 +1,11 @@
 using Harbor.Tui.CellForge.Input;
-
 namespace Harbor.Tui.CellForge.Tests;
 
-/// <summary>Bracketed-paste anti-injection (osc-sprint): golden vectors for
-/// the span-based sanitizer — escape stripping, control-byte stripping,
-/// \r normalization, and the zero-allocation clean fast path.</summary>
+/// <summary>
+///     Bracketed-paste anti-injection (osc-sprint): golden vectors for
+///     the span-based sanitizer — escape stripping, control-byte stripping,
+///     \r normalization, and the zero-allocation clean fast path.
+/// </summary>
 public class PasteSanitizerTests
 {
     [Test]

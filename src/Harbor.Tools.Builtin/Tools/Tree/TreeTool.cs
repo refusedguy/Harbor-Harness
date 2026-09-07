@@ -1,11 +1,12 @@
-using System.Diagnostics;
-using System.Text;
 using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Results;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Renders an ASCII directory tree. Respects <c>.gitignore</c> when <c>git</c> is
 ///     available; otherwise falls back to a built-in heavy-dir prune list. Caps depth and
@@ -100,12 +101,12 @@ public sealed class TreeTool : ITool
     private ToolResult ExecuteCore(JsonElement args, CancellationToken ct)
     {
         string path = JsonArgs.GetString(args, "path") ?? Environment.CurrentDirectory;
-        int maxDepth = JsonArgs.GetInt(args, "maxDepth") is { } depth
+        int maxDepth = JsonArgs.GetInt(args, "maxDepth") is {} depth
             ? Math.Clamp(depth, 1, HardMaxDepth)
             : DefaultMaxDepth;
         bool includeHidden = JsonArgs.GetBool(args, "includeHidden");
         bool useGitignore = JsonArgs.GetBoolOrNull(args, "gitignore") ?? true;
-        int maxEntries = JsonArgs.GetInt(args, "maxEntries") is { } entries
+        int maxEntries = JsonArgs.GetInt(args, "maxEntries") is {} entries
             ? Math.Clamp(entries, 1, HardMaxEntries)
             : DefaultMaxEntries;
 

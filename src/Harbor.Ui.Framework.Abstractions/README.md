@@ -8,11 +8,11 @@ Contracts and abstractions for the Harbor UI Framework — configuration, diagno
 
 ## What's in it
 
-| Subfolder | Contents |
-|-----------|----------|
-| `Configuration/` | `ICommonConfigReader` — reads provider/model overrides from common config. |
-| `Diagnostics/` | `IDiagnosticsPanel`, `InMemoryDiagnosticsPanel`, `DiagnosticEntry`, `DiagnosticsPanelLoggerProvider` (ILoggerProvider that forwards logs into the panel). |
-| `Navigation/` | `IContentHost`, `IShellChrome`, `IWorkspaceCommands`, `OverlayIds` (palette, settings, diff, token usage, provider browser, model picker, sessions flyout, focus session). |
+| Subfolder        | Contents                                                                                                                                                                   |
+|------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Configuration/` | `ICommonConfigReader` — reads provider/model overrides from common config.                                                                                                 |
+| `Diagnostics/`   | `IDiagnosticsPanel`, `InMemoryDiagnosticsPanel`, `DiagnosticEntry`, `DiagnosticsPanelLoggerProvider` (ILoggerProvider that forwards logs into the panel).                  |
+| `Navigation/`    | `IContentHost`, `IShellChrome`, `IWorkspaceCommands`, `OverlayIds` (palette, settings, diff, token usage, provider browser, model picker, sessions flyout, focus session). |
 
 ## Public API summary
 
@@ -24,12 +24,12 @@ Contracts and abstractions for the Harbor UI Framework — configuration, diagno
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
+| Package                                     | Purpose           |
+|---------------------------------------------|-------------------|
 | `Microsoft.Extensions.Logging.Abstractions` | ILogger contracts |
 
-| Project | Purpose |
-|---------|---------|
+| Project               | Purpose                  |
+|-----------------------|--------------------------|
 | `Harbor.Abstractions` | `AgentEvent`, `KeyPress` |
 
 ## Tests

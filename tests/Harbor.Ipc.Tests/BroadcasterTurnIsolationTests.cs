@@ -1,12 +1,9 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Ipc.Client;
 using Harbor.Ipc.Protocol;
-using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -75,7 +72,7 @@ public class BroadcasterTurnIsolationTests
             await bus.PublishAsync(new TurnEndEvent(TurnAssistant, NoToolResults, runA));
 
             // 2 AgentStart + 4 TurnStart + 2 TurnEnd = 8 projected frames.
-            List<EventFrame> frames = await CollectFramesAsync(client, 8, subscribeCts);
+            var frames = await CollectFramesAsync(client, 8, subscribeCts);
 
             var endB = frames[6].Event as HarborEvent.TurnEnd;
             var endA = frames[7].Event as HarborEvent.TurnEnd;
@@ -122,7 +119,7 @@ public class BroadcasterTurnIsolationTests
             await bus.PublishAsync(new TurnEndEvent(TurnAssistant, NoToolResults, session));
 
             // 2 AgentStart + 2 TurnStart + 2 TurnEnd = 6 projected frames.
-            List<EventFrame> frames = await CollectFramesAsync(client, 6, subscribeCts);
+            var frames = await CollectFramesAsync(client, 6, subscribeCts);
 
             var firstEnd = frames[2].Event as HarborEvent.TurnEnd;
             var secondEnd = frames[5].Event as HarborEvent.TurnEnd;

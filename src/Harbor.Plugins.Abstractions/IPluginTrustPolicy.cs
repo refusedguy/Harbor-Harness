@@ -11,7 +11,7 @@ public enum PluginTrustDecision
     /// <summary>
     ///     The plugin must not be run. The loader skips it with a warning — fail-closed.
     /// </summary>
-    Untrusted,
+    Untrusted
 }
 
 /// <summary>
@@ -36,7 +36,7 @@ public interface IPluginTrustPolicy
     /// <param name="script">The discovered plugin script (path, source, SHA-256 hash).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns><see cref="PluginTrustDecision.Trusted" /> to allow loading.</returns>
-    Task<PluginTrustDecision> DecideAsync(PluginScript script, CancellationToken ct = default);
+    public Task<PluginTrustDecision> DecideAsync(PluginScript script, CancellationToken ct = default);
 
     /// <summary>
     ///     Capabilities the user approved for this exact plugin (path + hash must both
@@ -46,5 +46,5 @@ public interface IPluginTrustPolicy
     /// </summary>
     /// <param name="script">The trusted plugin script being loaded.</param>
     /// <returns>The approved capability subset (possibly empty).</returns>
-    IReadOnlySet<PluginCapability> GetGrantedCapabilities(PluginScript script);
+    public IReadOnlySet<PluginCapability> GetGrantedCapabilities(PluginScript script);
 }

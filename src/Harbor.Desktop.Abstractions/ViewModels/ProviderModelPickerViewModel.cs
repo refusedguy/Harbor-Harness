@@ -1,19 +1,11 @@
-using System.Collections.ObjectModel;
-using System.Collections.Immutable;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Providers;
-using Harbor.Desktop.Abstractions.Messages;
-using Harbor.Ui.Framework.Sessions;
-using Harbor.Ui.Framework.Services;
-using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Harbor.Application.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
-using Microsoft.Extensions.Logging;
-using CommunityToolkit.Mvvm.Messaging;
-
+using Harbor.Desktop.Abstractions.Messages;
+using Harbor.Ui.Framework.Sessions;
+using Harbor.Ui.Framework.State;
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -36,11 +28,11 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 public partial class ProviderModelPickerViewModel : ObservableObject
 {
     public static readonly TimeSpan ModelFetchTimeout = TimeSpan.FromSeconds(5);
-
-    private readonly AsyncFeed<IReadOnlyList<ProviderGroupViewModel>> _modelsFeed;
     private readonly ICommonConfigStore _configStore;
     private readonly ILogger<ProviderModelPickerViewModel> _logger;
     private readonly IMessenger _messenger;
+
+    private readonly AsyncFeed<IReadOnlyList<ProviderGroupViewModel>> _modelsFeed;
     private readonly IProviderRegistry _providers;
     private readonly ISessionManager _sessions;
     private readonly IToastService _toasts;
@@ -81,10 +73,7 @@ public partial class ProviderModelPickerViewModel : ObservableObject
     partial void OnSearchTextChanged(string value) => ApplyFilter();
 
     [RelayCommand]
-    private async Task LoadAsync()
-    {
-        await _modelsFeed.RefreshAsync().ConfigureAwait(true);
-    }
+    private async Task LoadAsync() => await _modelsFeed.RefreshAsync().ConfigureAwait(true);
 
     private void OnModelsChanged(AsyncData<IReadOnlyList<ProviderGroupViewModel>> data)
     {
@@ -183,7 +172,7 @@ public partial class ProviderModelPickerViewModel : ObservableObject
 
     private async Task RefreshCurrentModelLabelAsync()
     {
-        if (_sessions.Active is { } active)
+        if (_sessions.Active is {} active)
         {
             CurrentModelLabel = $"{active.ProviderId}/{active.Model}";
             return;

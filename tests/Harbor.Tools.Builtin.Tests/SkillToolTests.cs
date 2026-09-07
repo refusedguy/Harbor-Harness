@@ -1,9 +1,10 @@
-using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
+
 /// <summary>
 ///     Tests for <see cref="SkillTool" /> — argument validation, name safety,
 ///     project-over-global shadowing, legacy flat files, scope filtering and
@@ -18,9 +19,9 @@ public class SkillToolTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        try { Directory.Delete(_root, true); }
+        catch (IOException) {}
+        catch (UnauthorizedAccessException) {}
     }
 
     [Test]

@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Benchmarks;
 
 /// <summary>
@@ -12,10 +11,10 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class TerminalScreenBufferBlitBenchmark
 {
-    private string[] _ansiLines = null!;
-    private string[] _plainLines = null!;
     private byte[] _ansiBytes = null!;
+    private string[] _ansiLines = null!;
     private byte[] _plainBytes = null!;
+    private string[] _plainLines = null!;
 
     [GlobalSetup]
     public void Setup()

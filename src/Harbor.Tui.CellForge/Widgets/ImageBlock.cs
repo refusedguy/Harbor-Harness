@@ -1,13 +1,11 @@
 using System.Buffers.Binary;
 using System.Text;
-using Harbor.Tui.CellForge.Rendering;
-
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Проверка PNG-заголовка без декодера: сигнатура + размеры из IHDR.
-/// Хватает для превью-карточки («name · W×H»); полноценную растеризацию
-/// позже отдают графику-протоколам терминала (sixel/kitty).
+///     Проверка PNG-заголовка без декодера: сигнатура + размеры из IHDR.
+///     Хватает для превью-карточки («name · W×H»); полноценную растеризацию
+///     позже отдают графику-протоколам терминала (sixel/kitty).
 /// </summary>
 public static class PngProbe
 {
@@ -42,9 +40,9 @@ public static class PngProbe
 }
 
 /// <summary>
-/// Карточка изображения в таймлайне: имя, формат по MIME, «W×H» при живом
-/// PNG-заголовке и объём. Рисуется текстовой картой — инлайн-графику
-/// (sixel/kitty/iTerm2) добавит будущий бэкенд с passthrough-эскейпами.
+///     Карточка изображения в таймлайне: имя, формат по MIME, «W×H» при живом
+///     PNG-заголовке и объём. Рисуется текстовой картой — инлайн-графику
+///     (sixel/kitty/iTerm2) добавит будущий бэкенд с passthrough-эскейпами.
 /// </summary>
 public sealed class ImageBlock : IChatBlock
 {
@@ -90,7 +88,7 @@ public sealed class ImageBlock : IChatBlock
 
     public bool IsStreamContinuation => false;
 
-    public int BudgetBytes => 96 + (Name.Length * 2) + MimeType.Length;
+    public int BudgetBytes => 96 + Name.Length * 2 + MimeType.Length;
 
     public BlockMeasure Measure(int width) => BlockMeasure.Exact(2);
 
@@ -112,6 +110,10 @@ public sealed class ImageBlock : IChatBlock
             Truncate(SummaryLine(), ctx.Rect.Width - LeftPad), ChatPalette.Dim);
     }
 
+    public string RawText() =>
+        new StringBuilder(Name.Length + MimeType.Length + 32)
+            .Append(Name).Append(' ').AppendLine(MimeType).Append(SummaryLine()).ToString();
+
     internal string SummaryLine()
     {
         string dims = Dimensions ?? MimeType;
@@ -122,12 +124,8 @@ public sealed class ImageBlock : IChatBlock
     {
         >= 1024 * 1024 => $"{bytes / (1024d * 1024):0.#} MB",
         >= 1024 => $"{bytes / 1024d:0.#} KB",
-        _ => $"{bytes} B",
+        _ => $"{bytes} B"
     };
-
-    public string RawText() =>
-        new StringBuilder(Name.Length + MimeType.Length + 32)
-            .Append(Name).Append(' ').AppendLine(MimeType).Append(SummaryLine()).ToString();
 
     private static string Truncate(string s, int max) =>
         max <= 0 ? string.Empty : s.Length <= max ? s : s[..max];

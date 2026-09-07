@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -17,7 +15,7 @@ public sealed class CtrlCGestureScenarioTests : CellForgePtyScenarioBase
     public async Task CtrlC_WithNonEmptyBuffer_ClearsBuffer_NotQuitGesture()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -49,7 +47,7 @@ public sealed class CtrlCGestureScenarioTests : CellForgePtyScenarioBase
     public async Task QuitGesture_SecondPressAfterWindowExpires_HintsAgain()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 

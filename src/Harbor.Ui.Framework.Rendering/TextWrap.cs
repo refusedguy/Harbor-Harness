@@ -1,17 +1,16 @@
 using System.Buffers;
 using System.Text;
-
 namespace Harbor.Ui.Framework.Rendering;
 
 /// <summary>
-/// Display-width aware greedy wrapper (inline mode): fills each output line up
-/// to the given cell width, preferring the last word boundary inside
-/// the window; wide runes never split across lines; zero-width runes attach to
-/// the preceding rune's line.
+///     Display-width aware greedy wrapper (inline mode): fills each output line up
+///     to the given cell width, preferring the last word boundary inside
+///     the window; wide runes never split across lines; zero-width runes attach to
+///     the preceding rune's line.
 /// </summary>
 public static class TextWrap
 {
-    /// <summary>Wraps <paramref name="text"/> appending produced lines to <paramref name="output"/>.</summary>
+    /// <summary>Wraps <paramref name="text" /> appending produced lines to <paramref name="output" />.</summary>
     public static void WrapTo(ReadOnlySpan<char> text, int width, List<string> output)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
@@ -64,8 +63,8 @@ public static class TextWrap
     }
 
     /// <summary>
-    /// Number of UTF-16 units that fit into <paramref name="width"/> cells
-    /// without splitting a rune cluster; wide runes need both cells free.
+    ///     Number of UTF-16 units that fit into <paramref name="width" /> cells
+    ///     without splitting a rune cluster; wide runes need both cells free.
     /// </summary>
     private static int MeasureFit(ReadOnlySpan<char> slice, int width, out int cellsUsed)
     {

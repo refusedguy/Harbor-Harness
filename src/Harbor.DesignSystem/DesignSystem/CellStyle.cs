@@ -1,8 +1,8 @@
 namespace Harbor.Ui.Framework.Rendering;
 
 /// <summary>
-/// Attribute bits of a cell style (celldiff §1.1). Low byte holds the eight
-/// SGR attributes; bits 8..10 are reserved for underline styles.
+///     Attribute bits of a cell style (celldiff §1.1). Low byte holds the eight
+///     SGR attributes; bits 8..10 are reserved for underline styles.
 /// </summary>
 [Flags]
 public enum StyleAttr : ushort
@@ -15,15 +15,15 @@ public enum StyleAttr : ushort
     Blink = 1 << 4,
     Reverse = 1 << 5,
     Hidden = 1 << 6,
-    Strike = 1 << 7,
+    Strike = 1 << 7
 }
 
 /// <summary>
-/// Packed terminal color (celldiff §1.1, adapted): <c>default</c> value (all
-/// zero bits) = terminal default (emit 39/49); bit 31 = RGB24 in bits 23..0;
-/// otherwise a 1-biased palette index 0..255 in bits 8..0 (the bias makes the
-/// all-zero struct the default color — plain field initializers never need an
-/// explicit factory call). One branch per emit — no class hierarchy of color types.
+///     Packed terminal color (celldiff §1.1, adapted): <c>default</c> value (all
+///     zero bits) = terminal default (emit 39/49); bit 31 = RGB24 in bits 23..0;
+///     otherwise a 1-biased palette index 0..255 in bits 8..0 (the bias makes the
+///     all-zero struct the default color — plain field initializers never need an
+///     explicit factory call). One branch per emit — no class hierarchy of color types.
 /// </summary>
 public readonly struct PackedColor : IEquatable<PackedColor>
 {
@@ -32,7 +32,10 @@ public readonly struct PackedColor : IEquatable<PackedColor>
 
     public readonly uint Value;
 
-    private PackedColor(uint value) => Value = value;
+    private PackedColor(uint value)
+    {
+        Value = value;
+    }
 
     /// <summary>Terminal-default foreground/background.</summary>
     public static PackedColor Default { get; } = default;
@@ -45,19 +48,19 @@ public readonly struct PackedColor : IEquatable<PackedColor>
 
     /// <summary>Direct truecolor.</summary>
     public static PackedColor Rgb(byte r, byte g, byte b) =>
-        new(RgbFlag | ((uint)r << 16) | ((uint)g << 8) | b);
+        new(RgbFlag | (uint)r << 16 | (uint)g << 8 | b);
 
     /// <summary>All-zero struct means terminal-default color.</summary>
     public bool IsDefault => Value == 0;
 
     public bool IsRgb => (Value & RgbFlag) != 0;
 
-    public byte Index => (byte)(((Value & 0x1FF) - 1) & 0xFF);
+    public byte Index => (byte)((Value & 0x1FF) - 1 & 0xFF);
 
     /// <summary>Decomposes an RGB24 color into channel bytes.</summary>
     public (byte R, byte G, byte B) RgbChannels => (
-        (byte)((Value >> 16) & 0xFF),
-        (byte)((Value >> 8) & 0xFF),
+        (byte)(Value >> 16 & 0xFF),
+        (byte)(Value >> 8 & 0xFF),
         (byte)(Value & 0xFF));
 
     public bool Equals(PackedColor other) => Value == other.Value;
@@ -71,9 +74,9 @@ public readonly struct PackedColor : IEquatable<PackedColor>
 }
 
 /// <summary>
-/// Foreground/background/attribute triple shared by the ANSI writer
-/// (phase CE-1) and the cell grid (phase CE-2). Equality is field-wise so the
-/// SGR automaton can diff styles with plain integer compares.
+///     Foreground/background/attribute triple shared by the ANSI writer
+///     (phase CE-1) and the cell grid (phase CE-2). Equality is field-wise so the
+///     SGR automaton can diff styles with plain integer compares.
 /// </summary>
 public readonly struct CellStyle : IEquatable<CellStyle>
 {

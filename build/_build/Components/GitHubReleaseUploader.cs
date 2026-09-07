@@ -1,9 +1,10 @@
+using Harbor.Build.Meta;
+using Nuke.Common.IO;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Harbor.Build.Meta;
-using Nuke.Common.IO;
 namespace Harbor.Build.Components;
+
 /// <summary>
 ///     Uploads archive assets to a GitHub release using the GitHub REST API
 ///     (v3). Requires <c>GH_TOKEN</c> environment variable to be set with a

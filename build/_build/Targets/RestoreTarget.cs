@@ -2,6 +2,7 @@ using Harbor.Build.Meta;
 using Nuke.Common.ProjectModel;
 using Nuke.Common.Tools.DotNet;
 namespace Harbor.Build.Targets;
+
 /// <summary>
 ///     Restore target — runs <c>dotnet restore</c> against the entire
 ///     solution. Uses <c>--locked-mode</c> when a <c>packages.lock.json</c>
@@ -15,7 +16,7 @@ public static class RestoreTarget
     /// </summary>
     public static void Execute(Solution solution, BuildOutput output)
     {
-        var solutionPath = solution.Path.ToString();
+        string solutionPath = solution.Path.ToString();
         output.Cmd("Restore", ["dotnet", "restore", solutionPath]);
         if (output.IsDryRun)
         {

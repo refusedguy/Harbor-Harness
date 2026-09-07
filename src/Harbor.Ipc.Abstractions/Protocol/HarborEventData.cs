@@ -1,5 +1,6 @@
 using MessagePack;
 namespace Harbor.Ipc.Protocol;
+
 /// <summary>
 ///     MessagePack [Union] for <see cref="Harbor.HarborEvent" />. Declared
 ///     separately so non-.NET clients can mirror just this small tag table

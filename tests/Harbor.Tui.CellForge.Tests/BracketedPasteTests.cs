@@ -1,14 +1,13 @@
-using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Golden-byte vectors for bracketed paste (design §4) with the mandatory
-/// anti-injection invariants of §4.2: markers never leak, content is never
-/// interpreted as commands/keys, newlines never synthesize Enter, embedded
-/// escape bytes stay literal, split blocks reassemble across chunks.
+///     Golden-byte vectors for bracketed paste (design §4) with the mandatory
+///     anti-injection invariants of §4.2: markers never leak, content is never
+///     interpreted as commands/keys, newlines never synthesize Enter, embedded
+///     escape bytes stay literal, split blocks reassemble across chunks.
 /// </summary>
 public class BracketedPasteTests
 {
@@ -96,7 +95,7 @@ public class BracketedPasteTests
         var events = T.FeedBytes(
             parser,
             Encoding.UTF8.GetBytes(Open + "x"),
-            [(byte)0x1B, (byte)'['],
+            [0x1B, (byte)'['],
             [(byte)'2', (byte)'0', (byte)'1', (byte)'~']);
 
         await Assert.That(events.Length).IsEqualTo(1);
@@ -112,7 +111,7 @@ public class BracketedPasteTests
         var events = T.FeedBytes(
             parser,
             Encoding.UTF8.GetBytes(Open + "y"),
-            [(byte)0x1B],
+            [0x1B],
             Encoding.UTF8.GetBytes("[201~"));
 
         await Assert.That(events.Length).IsEqualTo(1);
@@ -133,7 +132,7 @@ public class BracketedPasteTests
     public async Task Oversize_Paste_Is_Truncated_At_Cap()
     {
         var parser = new EscapeSequenceParser(new ParserOptions { MaxPasteBytes = 16 });
-        var payload = new string('x', 40);
+        string payload = new('x', 40);
         var events = T.Feed(parser, $"{Open}{payload}{Close}");
 
         await Assert.That(events.Length).IsEqualTo(1);

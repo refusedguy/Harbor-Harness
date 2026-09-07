@@ -1,20 +1,19 @@
+using System.Collections.Immutable;
 namespace Harbor.Ui.Framework.Rendering.Protocol;
 
-using System.Collections.Immutable;
-
 /// <summary>
-///     Portable cell-diff encoder over the shared <see cref="ScreenBuffer"/>
+///     Portable cell-diff encoder over the shared <see cref="ScreenBuffer" />
 ///     (renderer-unification sprint Phase 6.2). Implements the same
 ///     accelerations as CellForge's DiffEngine — row-hash fast path plus
 ///     FrameHint damage rects with the same 25 % fallback threshold — while
-///     emitting portable <see cref="CellDiffBatch"/>es instead of ANSI, so any
+///     emitting portable <see cref="CellDiffBatch" />es instead of ANSI, so any
 ///     backend can adopt differential rendering without touching CellForge
 ///     internals (hard rule: CellForge optimizations stay untouched behind
 ///     adapters).
 /// </summary>
 /// <remarks>
 ///     Steady-state allocation behavior: the changed-cell staging array is
-///     retained across <see cref="Encode"/> calls and only grows (amortized),
+///     retained across <see cref="Encode" /> calls and only grows (amortized),
 ///     so repeated frames with a bounded change count do not allocate beyond
 ///     the returned batch's immutable backing store.
 /// </remarks>
@@ -52,7 +51,7 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
             rowEnd = 0;
             for (int i = 0; i < hints!.Count; i++)
             {
-                Rect r = hints[i];
+                var r = hints[i];
                 int top = Math.Clamp(r.Y, 0, rows);
                 int bottom = Math.Clamp(r.Y + r.Height, 0, rows);
                 if (top < rowStart)
@@ -92,11 +91,11 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
             }
         }
 
-        ImmutableArray<CellDiffMessage> changes = count == 0
+        var changes = count == 0
             ? ImmutableArray<CellDiffMessage>.Empty
             : _staging[..count].ToImmutableArray();
 
-        ImmutableArray<Rect> hintArray = useHints
+        var hintArray = useHints
             ? hints!.ToImmutableArray()
             : ImmutableArray<Rect>.Empty;
 
@@ -120,7 +119,7 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
         long area = 0;
         for (int i = 0; i < hints.Count; i++)
         {
-            Rect r = hints[i];
+            var r = hints[i];
             area += (long)Math.Max(0, r.Width) * Math.Max(0, r.Height);
         }
 

@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Tools;
-using Harbor.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.Hosting.Tests;
 
@@ -29,7 +28,7 @@ public class PluginReloadServiceTests
         using var sp = Compose(new HarborComposeOptions
         {
             HarborDir = harborDir,
-            DefaultStorageBackend = "memory",
+            DefaultStorageBackend = "memory"
         });
 
         var registryBefore = sp.GetRequiredService<IToolRegistry>()
@@ -49,7 +48,7 @@ public class PluginReloadServiceTests
         var summary = await service.ReloadAsync();
 
         await Assert.That(summary.Loaded).IsGreaterThanOrEqualTo(1);
-        var toolsNow = sp.GetRequiredService<IToolRegistry>().GetAllTools()
+        string[] toolsNow = sp.GetRequiredService<IToolRegistry>().GetAllTools()
             .Select(t => t.Name.Value)
             .ToArray();
         await Assert.That(toolsNow).Contains($"hello_{uniqueSuffix}");
@@ -68,7 +67,7 @@ public class PluginReloadServiceTests
         using var sp = Compose(new HarborComposeOptions
         {
             HarborDir = harborDir,
-            DefaultStorageBackend = "memory",
+            DefaultStorageBackend = "memory"
         });
 
         string pluginsDir = Path.Combine(harborDir, "plugins");
@@ -88,40 +87,40 @@ public class PluginReloadServiceTests
     }
 
     private static string SamplePluginText(string suffix) => $$"""
-                                                             using System;
-                                                             using System.Collections.Generic;
-                                                             using System.Text.Json;
-                                                             using System.Threading;
-                                                             using System.Threading.Tasks;
-                                                             using CSharpFunctionalExtensions;
-                                                             using Harbor.Abstractions.Models;
-                                                             using Harbor.Abstractions.Models.Identifiers;
-                                                             using Harbor.Abstractions.Plugins;
-                                                             using Harbor.Abstractions.Tools;
-                                                             using Microsoft.Extensions.Logging;
+                                                               using System;
+                                                               using System.Collections.Generic;
+                                                               using System.Text.Json;
+                                                               using System.Threading;
+                                                               using System.Threading.Tasks;
+                                                               using CSharpFunctionalExtensions;
+                                                               using Harbor.Abstractions.Models;
+                                                               using Harbor.Abstractions.Models.Identifiers;
+                                                               using Harbor.Abstractions.Plugins;
+                                                               using Harbor.Abstractions.Tools;
+                                                               using Microsoft.Extensions.Logging;
 
-                                                             public sealed class ReloadProbePlugin{{suffix}} : IToolPlugin
-                                                             {
-                                                                 public string Name => "reload-probe-{{suffix}}";
-                                                                 public Version Version => new(1, 0, 0);
-                                                                 public Version RequiredHarborVersion => new(0, 4, 0);
-                                                                 public string Description => "Reload probe {{suffix}}";
-                                                                 public void Initialize(PluginContext context) { }
-                                                                 public void RegisterTools(IToolRegistryBuilder builder) => builder.AddTool<ProbeTool{{suffix}}>();
-                                                                 public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-                                                             }
+                                                               public sealed class ReloadProbePlugin{{suffix}} : IToolPlugin
+                                                               {
+                                                                   public string Name => "reload-probe-{{suffix}}";
+                                                                   public Version Version => new(1, 0, 0);
+                                                                   public Version RequiredHarborVersion => new(0, 4, 0);
+                                                                   public string Description => "Reload probe {{suffix}}";
+                                                                   public void Initialize(PluginContext context) { }
+                                                                   public void RegisterTools(IToolRegistryBuilder builder) => builder.AddTool<ProbeTool{{suffix}}>();
+                                                                   public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+                                                               }
 
-                                                             public sealed class ProbeTool{{suffix}} : ITool
-                                                             {
-                                                                 public ToolName Name => ToolName.Create("hello_{{suffix}}");
-                                                                 public string DisplayName => "Probe {{suffix}}";
-                                                                 public string Description => "Returns a greeting";
-                                                                 public JsonDocument ParameterSchema => JsonDocument.Parse("{\"type\":\"object\"}");
-                                                                 public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-                                                                 public string? PromptSnippet => null;
-                                                                 public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
-                                                                 public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-                                                                     => Task.FromResult(ToolResult.Success("Hello from probe!"));
-                                                             }
-                                                             """;
+                                                               public sealed class ProbeTool{{suffix}} : ITool
+                                                               {
+                                                                   public ToolName Name => ToolName.Create("hello_{{suffix}}");
+                                                                   public string DisplayName => "Probe {{suffix}}";
+                                                                   public string Description => "Returns a greeting";
+                                                                   public JsonDocument ParameterSchema => JsonDocument.Parse("{\"type\":\"object\"}");
+                                                                   public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+                                                                   public string? PromptSnippet => null;
+                                                                   public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
+                                                                   public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
+                                                                       => Task.FromResult(ToolResult.Success("Hello from probe!"));
+                                                               }
+                                                               """;
 }

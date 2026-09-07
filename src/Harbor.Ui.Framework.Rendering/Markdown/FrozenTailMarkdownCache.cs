@@ -3,19 +3,19 @@ namespace Harbor.Ui.Framework.Rendering.Markdown;
 /// <summary>
 ///     Thread-safe frozen-tail markdown cache (renderer-unification sprint
 ///     Phase 6.4): completed markdown blocks are stored as immutable
-///     <see cref="Cell"/> snapshots keyed by block id, so re-rendering a
+///     <see cref="Cell" /> snapshots keyed by block id, so re-rendering a
 ///     finished block is an O(1) restore instead of a re-parse + re-style.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Contract</b> (see <c>MarkdownRenderPerformanceContract</c>):
-///         capacity-bounded (LRU eviction at <see cref="DefaultCapacity"/>,
+///         capacity-bounded (LRU eviction at <see cref="DefaultCapacity" />,
 ///         override via constructor) so the cache cannot grow unbounded on
 ///         long documents; restores are a single array copy (&lt;1 ms per
 ///         block, enforced by benchmark).
 ///     </para>
 ///     <para>
-///         <b>Observable:</b> <see cref="BlockFrozen"/> lets other backends
+///         <b>Observable:</b> <see cref="BlockFrozen" /> lets other backends
 ///         invalidate their own derived state when a block freezes (e.g. a
 ///         SpectreTui panel dropping a precomputed widget).
 ///     </para>
@@ -24,10 +24,10 @@ public sealed class FrozenTailMarkdownCache
 {
     /// <summary>Default maximum number of retained frozen blocks.</summary>
     public const int DefaultCapacity = 500;
+    private readonly Dictionary<int, Cell[]> _blocks;
+    private readonly int _capacity;
 
     private readonly object _gate = new();
-    private readonly int _capacity;
-    private readonly Dictionary<int, Cell[]> _blocks;
     private readonly LinkedList<int> _lru; // MRU at front
 
     public FrozenTailMarkdownCache(int capacity = DefaultCapacity)
@@ -42,9 +42,6 @@ public sealed class FrozenTailMarkdownCache
         _lru = new LinkedList<int>();
     }
 
-    /// <summary>Raised when a block freezes (or re-freezes) — after the snapshot is stored.</summary>
-    public event EventHandler<BlockFrozenEventArgs>? BlockFrozen;
-
     /// <summary>Number of retained frozen blocks.</summary>
     public int Count
     {
@@ -57,6 +54,9 @@ public sealed class FrozenTailMarkdownCache
         }
     }
 
+    /// <summary>Raised when a block freezes (or re-freezes) — after the snapshot is stored.</summary>
+    public event EventHandler<BlockFrozenEventArgs>? BlockFrozen;
+
     /// <summary>
     ///     Attempts an O(1) restore of a frozen block. Touches the LRU order.
     /// </summary>
@@ -64,7 +64,7 @@ public sealed class FrozenTailMarkdownCache
     {
         lock (_gate)
         {
-            if (_blocks.TryGetValue(blockId, out Cell[]? found))
+            if (_blocks.TryGetValue(blockId, out var found))
             {
                 TouchLocked(blockId);
                 snapshot = found;
@@ -78,7 +78,7 @@ public sealed class FrozenTailMarkdownCache
 
     /// <summary>
     ///     Stores (or overwrites) the immutable snapshot for
-    ///     <paramref name="blockId"/> and raises <see cref="BlockFrozen"/>.
+    ///     <paramref name="blockId" /> and raises <see cref="BlockFrozen" />.
     ///     Evicts the least-recently-used block when at capacity.
     /// </summary>
     public void Freeze(int blockId, Cell[] snapshot)
@@ -126,7 +126,7 @@ public sealed class FrozenTailMarkdownCache
     {
         // Relink to MRU front if not already there (dictionary hit implies
         // the node exists; find is O(n) worst case but n == capacity ≤ 500).
-        LinkedListNode<int>? node = _lru.First;
+        var node = _lru.First;
         while (node is not null && node.Value != blockId)
         {
             node = node.Next;
@@ -140,7 +140,7 @@ public sealed class FrozenTailMarkdownCache
     }
 }
 
-/// <summary>Payload of <see cref="FrozenTailMarkdownCache.BlockFrozen"/>.</summary>
+/// <summary>Payload of <see cref="FrozenTailMarkdownCache.BlockFrozen" />.</summary>
 public sealed class BlockFrozenEventArgs(int blockId, Cell[] snapshot) : EventArgs
 {
     public int BlockId { get; } = blockId;

@@ -1,4 +1,5 @@
 namespace Harbor.Plugins.Runtime.Tests.TestSupport;
+
 /// <summary>
 ///     Per-test fixture: creates a unique temp <c>~/.harbor</c>-like directory with a
 ///     <c>plugins/</c> subdirectory. Disposes on test completion.

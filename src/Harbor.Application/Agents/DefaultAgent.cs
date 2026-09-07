@@ -1,7 +1,8 @@
-using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Threading.Channels;
 namespace Harbor.Application.Agents;
+
 /// <summary>
 ///     Default IAgent implementation. Stateful wrapper around <see cref="AgentLoop" />.
 ///     Implements Command pattern (GOF) — encapsulates prompt submission and execution.
@@ -147,14 +148,14 @@ public sealed class DefaultAgent : IAgent
         // linked to. The CAS below makes the read→swap→dispose sequence
         // atomic (F2): two concurrent resets can no longer double-dispose or
         // publish two sources with a lost window in between.
-        CancellationTokenSource observed = Volatile.Read(ref _abortSource);
+        var observed = Volatile.Read(ref _abortSource);
         if (!observed.IsCancellationRequested)
         {
             return;
         }
 
         var fresh = new CancellationTokenSource();
-        CancellationTokenSource winner = Interlocked.CompareExchange(ref _abortSource, fresh, observed);
+        var winner = Interlocked.CompareExchange(ref _abortSource, fresh, observed);
         if (ReferenceEquals(winner, observed))
         {
             observed.Dispose();
@@ -290,7 +291,7 @@ public sealed class DefaultAgent : IAgent
             // the reloaded context lacked the user's message (model answered
             // stale history), and memory/disk/model diverged silently. Fail
             // the run BEFORE any completion-source/state swap instead.
-            Result persisted = await _sessionStore.AppendMessageAsync(State.SessionId, message, ct)
+            var persisted = await _sessionStore.AppendMessageAsync(State.SessionId, message, ct)
                 .ConfigureAwait(false);
             if (persisted.IsFailure) // §4.6-ok: F14-политика — специфичный лог + текст провала, одиночный шаг.
             {
@@ -479,9 +480,9 @@ public sealed class DefaultAgent : IAgent
 /// </summary>
 internal sealed class DefaultSessionContext : ISessionContext
 {
+    private readonly ILogger _logger;
     private readonly List<AgentMessage> _messages;
     private readonly ISessionStore _store;
-    private readonly ILogger _logger;
 
     public DefaultSessionContext(
         Session session,
@@ -518,7 +519,7 @@ internal sealed class DefaultSessionContext : ISessionContext
         // lose its Result silently — a failed write means disk diverges from
         // memory/model, so surface it in the log keyed by session.
         _messages.Add(message);
-        Result persisted = await _store.AppendMessageAsync(Session.Id, message, ct).ConfigureAwait(false);
+        var persisted = await _store.AppendMessageAsync(Session.Id, message, ct).ConfigureAwait(false);
         if (persisted.IsFailure) // §4.6-ok: best-effort persist, ветка только логирует (F14 detail).
         {
             _logger.LogError(

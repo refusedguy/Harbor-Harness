@@ -1,6 +1,3 @@
-using System.Net;
-using System.Text;
-
 namespace Harbor.E2E.Framework;
 
 /// <summary>

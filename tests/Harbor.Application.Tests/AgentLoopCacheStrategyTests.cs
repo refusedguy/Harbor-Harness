@@ -1,4 +1,3 @@
-using Harbor.Application.Tests.Fakes;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -9,9 +8,9 @@ using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
+using Harbor.Application.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
+using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 namespace Harbor.Application.Tests;
 
 /// <summary>
@@ -48,22 +47,18 @@ public class AgentLoopCacheStrategyTests
     [Test]
     public async Task RunAsync_TwoTurnRunWithSameTools_RequestsCarryEphemeralCacheStrategy()
     {
-        var client = new ScriptedLlmClient(
-        [
-            new LlmEvent[]
-            {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", "{}"),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
-            },
-            new LlmEvent[]
-            {
-                new TextDeltaEvent("t", "finished"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
-            }
-        ]);
+        var client = new ScriptedLlmClient(new LlmEvent[]
+        {
+            new ToolCallStartEvent("call-1", "counter"),
+            new ToolCallDeltaEvent("call-1", "{}"),
+            new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+        }, new LlmEvent[]
+        {
+            new TextDeltaEvent("t", "finished"),
+            new StepFinishEvent(1, "stop", new Usage(1, 1))
+        });
         var loop = CreateLoop(client);
-        var session = new Fakes.TestSessionContext(
+        var session = new TestSessionContext(
             Session.Create("/tmp/harbor-cache-strategy-tests", "code", "test", "test-model"));
 
         var result = await loop.RunAsync(session, AllowAllAgent());

@@ -1,28 +1,28 @@
+using Harbor.Providers.Internal;
+using Harbor.Providers.OpenAiCompatible.Compat;
+using Microsoft.Extensions.Logging;
 using System.Buffers;
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Channels;
-using Harbor.Providers.Internal;
-using Harbor.Providers.OpenAiCompatible.Compat;
-using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.OpenAiCompatible;
 
 public sealed class OpenAiCompatibleLlmClient : ILlmClient
 {
+    private const string ProviderNameTag = "gen_ai.provider.name";
+    private const string RequestModelTag = "gen_ai.request.model";
+    private const string PromptTokensTag = "gen_ai.prompt.tokens";
+    private const string CompletionTokensTag = "gen_ai.completion.tokens";
+
+    private static readonly ActivitySource Source = new("Harbor");
     private readonly IAuthResolver _auth;
     private readonly ProviderConfig _config;
 
     private readonly HttpClient _http;
     private readonly ILogger<OpenAiCompatibleLlmClient> _logger;
     private readonly IModelCatalog _modelCatalog;
-
-    private static readonly ActivitySource Source = new("Harbor");
-    private const string ProviderNameTag = "gen_ai.provider.name";
-    private const string RequestModelTag = "gen_ai.request.model";
-    private const string PromptTokensTag = "gen_ai.prompt.tokens";
-    private const string CompletionTokensTag = "gen_ai.completion.tokens";
 
     public OpenAiCompatibleLlmClient(
         HttpClient http,
@@ -90,8 +90,8 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                         }
                     },
                     "API", _logger, cancellationToken,
-                    onResponse: response => activity?.SetTag("http.status_code", (int)response.StatusCode),
-                    mapSendFailure: (ex, _) =>
+                    response => activity?.SetTag("http.status_code", (int)response.StatusCode),
+                    (ex, _) =>
                     {
                         activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                         activity?.AddException(ex);
@@ -99,12 +99,12 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                             $"HTTP request failed: {ex.Message}", ex.ToString(),
                             ProviderErrors.FromException(ex, cancellationToken));
                     },
-                    onTransportError: ex =>
+                    ex =>
                     {
                         activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                         activity?.AddException(ex);
                     },
-                    onComplete: () =>
+                    () =>
                     {
                         activity?.SetStatus(ActivityStatusCode.Ok);
                         if (chunkState.MalformedChunks > 0)
@@ -260,7 +260,8 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
     {
         if (quirks is null || quirks.Count == 0) return false;
         for (int i = 0; i < quirks.Count; i++)
-            if (quirks[i].IsPropertyOmitted(propertyName, request)) return true;
+            if (quirks[i].IsPropertyOmitted(propertyName, request))
+                return true;
         return false;
     }
 
@@ -301,7 +302,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                 writer.WriteStartObject();
                 writer.WriteString("role", "assistant");
 
-                var textBlock = a.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault();
+                string? textBlock = a.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault();
                 if (textBlock is not null)
                 {
                     writer.WriteString("content", textBlock);
@@ -342,4 +343,3 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         }
     }
 }
-

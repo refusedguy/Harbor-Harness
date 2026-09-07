@@ -4,6 +4,7 @@ using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Providers.Tests;
+
 /// <summary>
 ///     Tests that each ILlmClient implementation reports the correct ProviderId.
 ///     No HTTP requests are made — ProviderId is set in the constructor.

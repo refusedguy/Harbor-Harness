@@ -2,12 +2,13 @@ using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Events;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text;
 namespace Harbor.Benchmarks;
 
 /// <summary>
 ///     Benchmarks <see cref=\"OpenAiSseParser.ParseChunk\" /> — the SSE
 ///     chunk parser used by OpenAI-compatible providers. Measures the cost
-///     of parsing server-sent event data lines into <see cref=\"LlmEvent\" />
+///     of parsing server-sent event data lines into <see cref=\"LlmEvent" />
 ///     sequences, focusing on zero-allocation span-based extraction of the
 ///     <c>content</c> and <c>tool_calls</c> fields.
 /// </summary>
@@ -15,21 +16,21 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class OpenAiSseParserBenchmark
 {
-    private string _smallChunk = null!;
-    private string _mediumChunk = null!;
-    private string _largeChunk = null!;
     private Dictionary<int, string> _indexToId = null!;
+    private string _largeChunk = null!;
+    private string _mediumChunk = null!;
+    private string _smallChunk = null!;
 
     [GlobalSetup]
     public void Setup()
     {
         _indexToId = new Dictionary<int, string>();
-        _smallChunk = BuildSseChunk("Hello!", 1, 32);
+        _smallChunk = BuildSseChunk("Hello!", 1);
         _mediumChunk = BuildSseChunk("This is a medium-length response from the model with multiple sentences and some reasoning content.", 1, 256);
         _largeChunk = BuildSseChunk(
             new string('x', 512),
-            toolCalls: 3,
-            tokenCount: 4096);
+            3,
+            4096);
     }
 
     [Benchmark(Description = "ParseChunk small (32B)", Baseline = true)]
@@ -43,7 +44,7 @@ public class OpenAiSseParserBenchmark
 
     private static string BuildSseChunk(string content, int toolCalls = 0, int tokenCount = 32)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         sb.Append("data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1234567890,\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"");
         sb.Append(content.Replace("\"", "\\\""));
         sb.Append("\"},\"finish_reason\":null}]}");

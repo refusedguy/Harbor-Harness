@@ -2,6 +2,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 namespace Harbor.Abstractions.Tools;
+
 /// <summary>
 ///     Strategy interface for tools (Strategy pattern, GOF).
 ///     Each tool (read, write, bash, etc.) implements this.

@@ -2,6 +2,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tools;
 namespace Harbor.Abstractions.Sessions;
+
 /// <summary>
 ///     Builds system prompt from agent definition, tools, context files, etc.
 ///     Implements Builder pattern (GOF).
@@ -71,9 +72,9 @@ public sealed record SkillDescriptor(
 public interface ISkillProvider
 {
     /// <summary>List all available skills for the given working directory.</summary>
-    IReadOnlyList<SkillDescriptor> GetSkills(string workingDirectory);
+    public IReadOnlyList<SkillDescriptor> GetSkills(string workingDirectory);
 
     /// <summary>Read the full content of a skill by name.</summary>
     /// <returns>The skill's Markdown content, or null if not found.</returns>
-    string? ReadSkill(string workingDirectory, string name);
+    public string? ReadSkill(string workingDirectory, string name);
 }

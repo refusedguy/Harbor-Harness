@@ -1,8 +1,5 @@
-using System.Text.Json;
-using Harbor.Abstractions.Events;
 using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Providers.OpenAiCompatible;
 
 /// <summary>

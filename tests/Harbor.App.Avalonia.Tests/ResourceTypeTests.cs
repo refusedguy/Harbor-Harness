@@ -1,8 +1,4 @@
-using System.Xml;
 using System.Xml.Linq;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.App.Avalonia.Tests;
 
 /// <summary>
@@ -17,24 +13,24 @@ public class ResourceTypeTests
     [Test]
     public async Task Duration_Resources_Are_TimeSpan()
     {
-        var axamlFiles = Directory.GetFiles(
+        string[] axamlFiles = Directory.GetFiles(
             Path.Combine(FindRepoRoot(), "apps", "Harbor.App.Avalonia"),
             "*.axaml",
             SearchOption.AllDirectories);
 
         var violations = new List<string>();
-        foreach (var file in axamlFiles)
+        foreach (string file in axamlFiles)
         {
             var doc = XDocument.Load(file);
             foreach (var elem in doc.Descendants()
-                .Where(e => e.Attribute(XName.Get("Key", XNamespace)) is not null))
+                         .Where(e => e.Attribute(XName.Get("Key", XNamespace)) is not null))
             {
-                var key = elem.Attribute(XName.Get("Key", XNamespace))?.Value;
+                string? key = elem.Attribute(XName.Get("Key", XNamespace))?.Value;
                 if (key is null) continue;
 
                 if (key.Contains("Motion") || key.Contains("Ease") || key.Contains("Transition"))
                 {
-                    var sysNs = "clr-namespace:System;assembly=mscorlib";
+                    string sysNs = "clr-namespace:System;assembly=mscorlib";
                     if (elem.Name.NamespaceName != sysNs)
                     {
                         violations.Add($"{file}: {key} is {elem.Name.LocalName} (expected sys:TimeSpan)");
@@ -43,7 +39,7 @@ public class ResourceTypeTests
             }
         }
 
-        foreach (var v in violations)
+        foreach (string v in violations)
             Console.WriteLine(v);
         await Assert.That(violations.Count).IsEqualTo(0);
     }
@@ -51,19 +47,19 @@ public class ResourceTypeTests
     [Test]
     public async Task CornerRadius_Resources_Are_CornerRadius()
     {
-        var axamlFiles = Directory.GetFiles(
+        string[] axamlFiles = Directory.GetFiles(
             Path.Combine(FindRepoRoot(), "apps", "Harbor.App.Avalonia"),
             "*.axaml",
             SearchOption.AllDirectories);
 
         var violations = new List<string>();
-        foreach (var file in axamlFiles)
+        foreach (string file in axamlFiles)
         {
             var doc = XDocument.Load(file);
             foreach (var elem in doc.Descendants()
-                .Where(e => e.Attribute(XName.Get("Key", XNamespace)) is not null))
+                         .Where(e => e.Attribute(XName.Get("Key", XNamespace)) is not null))
             {
-                var key = elem.Attribute(XName.Get("Key", XNamespace))?.Value;
+                string? key = elem.Attribute(XName.Get("Key", XNamespace))?.Value;
                 if (key is null) continue;
 
                 if (key.Contains("Radius") && !key.Contains("RadiusFull") && !key.Contains("RadiusNone"))
@@ -76,7 +72,7 @@ public class ResourceTypeTests
             }
         }
 
-        foreach (var v in violations)
+        foreach (string v in violations)
             Console.WriteLine(v);
         await Assert.That(violations.Count).IsEqualTo(0);
     }
@@ -84,20 +80,20 @@ public class ResourceTypeTests
     [Test]
     public async Task PointerOver_Selectors_Use_Concrete_Type_Prefix()
     {
-        var axamlFiles = Directory.GetFiles(
+        string[] axamlFiles = Directory.GetFiles(
             Path.Combine(FindRepoRoot(), "apps", "Harbor.App.Avalonia"),
             "*.axaml",
             SearchOption.AllDirectories);
 
         var violations = new List<string>();
-        foreach (var file in axamlFiles)
+        foreach (string file in axamlFiles)
         {
             var doc = XDocument.Load(file);
             foreach (var style in doc.Descendants()
-                .Where(e => e.Name.LocalName == "Style"
-                         && e.Attribute(XName.Get("Selector", XNamespace)) is not null))
+                         .Where(e => e.Name.LocalName == "Style"
+                                     && e.Attribute(XName.Get("Selector", XNamespace)) is not null))
             {
-                var selector = style.Attribute(XName.Get("Selector", XNamespace))?.Value ?? string.Empty;
+                string selector = style.Attribute(XName.Get("Selector", XNamespace))?.Value ?? string.Empty;
                 if (selector.Contains(":pointerover") && selector.StartsWith('.'))
                 {
                     violations.Add($"{file}: {selector}");
@@ -105,7 +101,7 @@ public class ResourceTypeTests
             }
         }
 
-        foreach (var v in violations)
+        foreach (string v in violations)
             Console.WriteLine(v);
         await Assert.That(violations.Count).IsEqualTo(0);
     }

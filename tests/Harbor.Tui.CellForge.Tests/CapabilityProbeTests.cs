@@ -1,13 +1,12 @@
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Capability detection tests (design §2.4): probe sequence golden strings,
-/// response routing, Evaluate mapping, timeout fallback ladder and the
-/// tmux/screen guardrail.
+///     Capability detection tests (design §2.4): probe sequence golden strings,
+///     response routing, Evaluate mapping, timeout fallback ladder and the
+///     tmux/screen guardrail.
 /// </summary>
 public class CapabilityProbeTests
 {

@@ -1,26 +1,33 @@
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Plugins;
+using Harbor.Plugins.Abstractions;
 using System.Reflection;
 using System.Runtime.Loader;
-using Harbor.Plugins.Abstractions;
-
 namespace Harbor.Plugins.Compilation;
 
 /// <summary>
 ///     Collectible <see cref="AssemblyLoadContext" /> that isolates a single plugin
 ///     assembly from the host. Defence in depth on top of the trust policy:
 ///     <list type="bullet">
-///         <item><b>Collectible</b> — <c>isCollectible: true</c>; after
-///         <see cref="AssemblyLoadContext.Unload" /> the plugin's code and metadata are
-///         reclaimable by GC (no leak when a plugin is re-loaded or removed).</item>
-///         <item><b>Deny-list</b> — resolves of sensitive framework assemblies
-///         (<c>System.IO.FileSystem</c>, <c>System.Diagnostics.Process</c>,
-///         <c>System.Net.Http</c>) fail with <see cref="FileNotFoundException" /> at the
-///         call site unless the plugin's manifest declares the matching capability and
-///         the user approved it. Fail-closed: unknown capability = deny.</item>
-///         <item><b>Shared types</b> — host-owned assemblies
-///         (<c>Harbor.Abstractions</c>, <c>Harbor.Abstractions.Contracts</c>,
-///         <c>Harbor.Plugins.Abstractions</c>) resolve from the default ALC so plugin
-///         instances can be cast to host interfaces (<see cref="Harbor.Abstractions.Plugins.IPlugin" />
-///         is type-identical, not structurally matched).</item>
+///         <item>
+///             <b>Collectible</b> — <c>isCollectible: true</c>; after
+///             <see cref="AssemblyLoadContext.Unload" /> the plugin's code and metadata are
+///             reclaimable by GC (no leak when a plugin is re-loaded or removed).
+///         </item>
+///         <item>
+///             <b>Deny-list</b> — resolves of sensitive framework assemblies
+///             (<c>System.IO.FileSystem</c>, <c>System.Diagnostics.Process</c>,
+///             <c>System.Net.Http</c>) fail with <see cref="FileNotFoundException" /> at the
+///             call site unless the plugin's manifest declares the matching capability and
+///             the user approved it. Fail-closed: unknown capability = deny.
+///         </item>
+///         <item>
+///             <b>Shared types</b> — host-owned assemblies
+///             (<c>Harbor.Abstractions</c>, <c>Harbor.Abstractions.Contracts</c>,
+///             <c>Harbor.Plugins.Abstractions</c>) resolve from the default ALC so plugin
+///             instances can be cast to host interfaces (<see cref="Harbor.Abstractions.Plugins.IPlugin" />
+///             is type-identical, not structurally matched).
+///         </item>
 ///     </list>
 /// </summary>
 public sealed class CollectiblePluginLoadContext : AssemblyLoadContext, IDisposable
@@ -31,7 +38,7 @@ public sealed class CollectiblePluginLoadContext : AssemblyLoadContext, IDisposa
         {
             ["System.IO.FileSystem"] = PluginCapability.ReadFiles,
             ["System.Diagnostics.Process"] = PluginCapability.RunProcesses,
-            ["System.Net.Http"] = PluginCapability.HttpRequests,
+            ["System.Net.Http"] = PluginCapability.HttpRequests
         };
 
     private static readonly IReadOnlySet<PluginCapability> EmptyCapabilities =
@@ -59,13 +66,21 @@ public sealed class CollectiblePluginLoadContext : AssemblyLoadContext, IDisposa
         string pluginName,
         IReadOnlySet<PluginCapability> granted,
         IEnumerable<Assembly>? sharedAssemblies = null)
-        : base(name: $"harbor-plugin:{pluginName}", isCollectible: true)
+        : base($"harbor-plugin:{pluginName}", true)
     {
         _granted = granted ?? throw new ArgumentNullException(nameof(granted));
         _sharedAssembliesWideOpen = (sharedAssemblies ?? [])
             .Where(a => a is not null)
             .ToArray();
     }
+
+    /// <summary>
+    ///     Start unloading this collectible sandbox. Implemented explicitly so the
+    ///     method name is unambiguous about the underlying mechanism: the actual
+    ///     memory reclamation is GC-driven and happens once no references into the
+    ///     context remain (see <see cref="AssemblyLoadContext.Unload" />).
+    /// </summary>
+    void IDisposable.Dispose() => Unload();
 
     /// <inheritdoc />
     protected override Assembly? Load(AssemblyName assemblyName)
@@ -109,14 +124,6 @@ public sealed class CollectiblePluginLoadContext : AssemblyLoadContext, IDisposa
             : LoadFromStream(new MemoryStream(assemblyBytes), new MemoryStream(pdbBytes));
 
     /// <summary>
-    ///     Start unloading this collectible sandbox. Implemented explicitly so the
-    ///     method name is unambiguous about the underlying mechanism: the actual
-    ///     memory reclamation is GC-driven and happens once no references into the
-    ///     context remain (see <see cref="AssemblyLoadContext.Unload" />).
-    /// </summary>
-    void IDisposable.Dispose() => Unload();
-
-    /// <summary>
     ///     Load a cached plugin assembly file into this collectible context.
     /// </summary>
     public Assembly LoadFromPluginPath(string assemblyPath) =>
@@ -143,9 +150,9 @@ public sealed class CollectiblePluginLoadContext : AssemblyLoadContext, IDisposa
             script.Path,
             script.DeclaredCapabilities,
             [
-                typeof(Harbor.Abstractions.Plugins.IPlugin).Assembly,
-                typeof(Harbor.Abstractions.Models.AgentMessage).Assembly,
-                typeof(PluginScript).Assembly,
+                typeof(IPlugin).Assembly,
+                typeof(AgentMessage).Assembly,
+                typeof(PluginScript).Assembly
             ]);
     }
 }

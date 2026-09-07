@@ -1,7 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
@@ -67,7 +66,7 @@ public static class SessionTreeRunner
         var roots = new List<Session>();
         foreach (var s in sessions)
         {
-            if (s.ParentSessionId is { } parent && byId.ContainsKey(parent))
+            if (s.ParentSessionId is {} parent && byId.ContainsKey(parent))
             {
                 if (!children.TryGetValue(parent, out var list))
                     children[parent] = list = [];
@@ -110,7 +109,7 @@ public static class SessionTreeRunner
         string title = string.IsNullOrWhiteSpace(node.Title) ? "(untitled)" : node.Title;
         string branch = prefix.Length == 0 ? "* " : prefix + (isLast ? "└─ " : "├─ ");
         string note = string.Empty;
-        if (node.ParentSessionId is { } parent && !byId.ContainsKey(parent))
+        if (node.ParentSessionId is {} parent && !byId.ContainsKey(parent))
             note = $" (parent {parent} not found)";
         if (node.Id.Equals(currentSessionId, StringComparison.Ordinal))
             note += " (current)";

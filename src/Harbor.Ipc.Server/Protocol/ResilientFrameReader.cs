@@ -20,13 +20,17 @@ internal enum FrameReadOutcome
     /// <summary>Zero-length frame. The stream stays in sync — safe to skip and continue.</summary>
     EmptyFrame,
 
-    /// <summary>Payload bytes were fully consumed but failed to decode as a
-    /// <see cref="HarborRequest" />. The stream stays in sync — safe to skip and continue.</summary>
+    /// <summary>
+    ///     Payload bytes were fully consumed but failed to decode as a
+    ///     <see cref="HarborRequest" />. The stream stays in sync — safe to skip and continue.
+    /// </summary>
     UndecodableFrame,
 
-    /// <summary>Declared frame length exceeds the per-frame cap, or the connection's
-    /// outstanding-buffered-bytes budget would be violated. Framing is treated as a
-    /// protocol error; close this connection (the server keeps serving others).</summary>
+    /// <summary>
+    ///     Declared frame length exceeds the per-frame cap, or the connection's
+    ///     outstanding-buffered-bytes budget would be violated. Framing is treated as a
+    ///     protocol error; close this connection (the server keeps serving others).
+    /// </summary>
     OversizedFrame
 }
 
@@ -100,15 +104,15 @@ internal sealed class ResilientFrameReader
         byte[] header = new byte[4];
         int headerBytes = await ReadExactAsync(stream, header, ct).ConfigureAwait(false);
         if (headerBytes < header.Length)
-            return new(FrameReadOutcome.StreamEnded, null, null);
+            return new FrameReadResult(FrameReadOutcome.StreamEnded, null, null);
 
         uint length = BinaryPrimitives.ReadUInt32BigEndian(header);
         if (length == 0)
-            return new(FrameReadOutcome.EmptyFrame, null, null);
+            return new FrameReadResult(FrameReadOutcome.EmptyFrame, null, null);
 
         if (length > _maxFrameBytes)
         {
-            return new(
+            return new FrameReadResult(
                 FrameReadOutcome.OversizedFrame,
                 null,
                 new InvalidOperationException($"Incoming frame length {length} exceeds frame cap {_maxFrameBytes}"));
@@ -118,7 +122,7 @@ internal sealed class ResilientFrameReader
         // so a flood of concurrent large frames on one connection cannot exhaust memory.
         if (Interlocked.Read(ref _outstandingBytes) + length > _maxOutstandingBytes)
         {
-            return new(
+            return new FrameReadResult(
                 FrameReadOutcome.OversizedFrame,
                 null,
                 new InvalidOperationException(
@@ -132,12 +136,12 @@ internal sealed class ResilientFrameReader
         {
             int payloadBytes = await ReadExactAsync(stream, payload.AsMemory(0, payloadLength), ct).ConfigureAwait(false);
             if (payloadBytes < payloadLength)
-                return new(FrameReadOutcome.StreamEnded, null, null);
+                return new FrameReadResult(FrameReadOutcome.StreamEnded, null, null);
 
             try
             {
                 var request = MessagePackSerializer.Deserialize<HarborRequest>(payload.AsMemory(0, payloadLength), cancellationToken: ct);
-                return new(FrameReadOutcome.Request, request, null);
+                return new FrameReadResult(FrameReadOutcome.Request, request, null);
             }
             catch (OperationCanceledException)
             {
@@ -145,7 +149,7 @@ internal sealed class ResilientFrameReader
             }
             catch (Exception ex)
             {
-                return new(FrameReadOutcome.UndecodableFrame, null, ex);
+                return new FrameReadResult(FrameReadOutcome.UndecodableFrame, null, ex);
             }
         }
         finally

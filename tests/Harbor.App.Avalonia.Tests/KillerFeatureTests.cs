@@ -2,15 +2,14 @@ using Avalonia.Media;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.Views.Controls;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.ViewModels;
-using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 using Microsoft.Extensions.Logging.Abstractions;
+using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 using ToastNotification = Harbor.Ui.Framework.Services.ToastNotification;
 using ToastKind = Harbor.Ui.Framework.Services.ToastKind;
-using TUnit;
 
 namespace Harbor.App.Avalonia.Tests;
+
 /// <summary>
 ///     Unit tests for the Task R1 killer-feature controls. Covers:
 ///     <list type="bullet">

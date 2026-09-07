@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 namespace Harbor.Abstractions.Events;
 
 /// <summary>
@@ -48,7 +50,7 @@ public static class ProviderErrors
             or ProviderErrorKind.Network or ProviderErrorKind.ServerError;
 
     /// <summary>Classify an HTTP status code returned by a provider endpoint.</summary>
-    public static ProviderErrorKind FromStatus(System.Net.HttpStatusCode status)
+    public static ProviderErrorKind FromStatus(HttpStatusCode status)
     {
         int code = (int)status;
         if (code == 429) return ProviderErrorKind.RateLimit;
@@ -76,9 +78,9 @@ public static class ProviderErrors
 
         return ex switch
         {
-            System.Net.Http.HttpRequestException => ProviderErrorKind.Network,
+            HttpRequestException => ProviderErrorKind.Network,
             IOException => ProviderErrorKind.Network,
-            System.Net.Sockets.SocketException => ProviderErrorKind.Network,
+            SocketException => ProviderErrorKind.Network,
             _ => ProviderErrorKind.Unknown
         };
     }

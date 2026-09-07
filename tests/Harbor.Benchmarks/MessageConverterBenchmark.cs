@@ -1,9 +1,10 @@
-using System.Text.Json;
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 namespace Harbor.Benchmarks;
+
 /// <summary>
 ///     Benchmarks the <see cref="MessageConverter" /> JSON hot path used by
 ///     <see cref="JsonlSessionStore" />: every turn serializes each

@@ -1,4 +1,5 @@
 namespace Harbor.Desktop.Animations;
+
 /// <summary>
 ///     Fade transition — opacity 0 ↔ 1. The simplest transition; used by
 ///     toasts, the command palette, and modal dialogs.
@@ -10,7 +11,7 @@ public sealed record FadeTransition(
     string EasingName = AnimationTokens.EasingEaseOut)
 {
     /// <summary>Construct a <see cref="FadeTransition" /> with the default duration.</summary>
-    public FadeTransition() : this(AnimationDurations.Fade) { }
+    public FadeTransition() : this(AnimationDurations.Fade) {}
 }
 
 /// <summary>
@@ -29,7 +30,7 @@ public sealed record SlideTransition(
     string EasingName = AnimationTokens.EasingCubicInOut)
 {
     /// <summary>Construct a <see cref="SlideTransition" /> with the default duration and zero offsets.</summary>
-    public SlideTransition() : this(AnimationDurations.Slide, 0, 0) { }
+    public SlideTransition() : this(AnimationDurations.Slide, 0, 0) {}
 }
 
 /// <summary>
@@ -45,7 +46,7 @@ public sealed record ScaleTransition(
     string EasingName = AnimationTokens.EasingSpring)
 {
     /// <summary>Construct a <see cref="ScaleTransition" /> with the default duration.</summary>
-    public ScaleTransition() : this(AnimationDurations.Scale) { }
+    public ScaleTransition() : this(AnimationDurations.Scale) {}
 }
 
 /// <summary>

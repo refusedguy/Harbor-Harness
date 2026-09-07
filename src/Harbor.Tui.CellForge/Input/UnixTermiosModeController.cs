@@ -1,17 +1,16 @@
-using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
-
+using System.Runtime.InteropServices;
 namespace Harbor.Tui.CellForge.Input;
 
 /// <summary>
-/// Raw mode via direct termios P/Invoke (design §5.2) — replaces the spec-07
-/// `stty`-spawn approach (process spawn per toggle, coreutils dependency,
-/// restore race). Classic [DllImport] with fully blittable signatures
-/// (AOT-safe, zero marshalling): the design doc prefers [LibraryImport], but
-/// its source generator requires AllowUnsafeBlocks=true which the repo
-/// forbids project-wide — same resolution as Mcp ProcessTree.cs.
-/// Flag layout targets Linux (the CE-0 host platform); BSD/macOS share the
-/// core ICANON/ECHO/ISIG bits, exotic-bit tuning is a follow-up.
+///     Raw mode via direct termios P/Invoke (design §5.2) — replaces the spec-07
+///     `stty`-spawn approach (process spawn per toggle, coreutils dependency,
+///     restore race). Classic [DllImport] with fully blittable signatures
+///     (AOT-safe, zero marshalling): the design doc prefers [LibraryImport], but
+///     its source generator requires AllowUnsafeBlocks=true which the repo
+///     forbids project-wide — same resolution as Mcp ProcessTree.cs.
+///     Flag layout targets Linux (the CE-0 host platform); BSD/macOS share the
+///     core ICANON/ECHO/ISIG bits, exotic-bit tuning is a follow-up.
 /// </summary>
 public sealed class UnixTermiosModeController : ITerminalModeController
 {
@@ -39,11 +38,11 @@ public sealed class UnixTermiosModeController : ITerminalModeController
     private const uint Csize = 0x030;
     private const uint Parenb = 0x100;
     private const uint Cs8 = 0x030;
-
-    public bool IsRaw { get; private set; }
+    private bool _hasOriginal;
 
     private Termios _original;
-    private bool _hasOriginal;
+
+    public bool IsRaw { get; private set; }
 
     public void Enter()
     {
@@ -98,10 +97,10 @@ public sealed class UnixTermiosModeController : ITerminalModeController
     }
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int tcgetattr(int fileDescriptor, ref Termios termios);
+    private extern static int tcgetattr(int fileDescriptor, ref Termios termios);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int tcsetattr(int fileDescriptor, int optionalActions, ref Termios termios);
+    private extern static int tcsetattr(int fileDescriptor, int optionalActions, ref Termios termios);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Termios

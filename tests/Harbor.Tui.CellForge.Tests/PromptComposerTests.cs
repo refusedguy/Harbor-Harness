@@ -1,7 +1,5 @@
-using System.Text;
-using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 public class PromptBufferTests
@@ -152,8 +150,8 @@ public class PromptBufferTests
         // line1: a中b  (4 cells), line2: xyzw
         _ = b.InsertText("a中b\nxyzw");
         _ = b.MoveToStart();
-        _ = b.MoveRight();      // after 'a' → cell 1
-        _ = b.MoveRight();      // after 中 → cell 3
+        _ = b.MoveRight(); // after 'a' → cell 1
+        _ = b.MoveRight(); // after 中 → cell 3
         int colBefore = PromptBuffer.DisplayCells(b.SnapshotText().AsSpan(0, b.Cursor));
         _ = b.MoveDown();
         int colAfter = PromptBuffer.DisplayCells(b.SnapshotText().AsSpan(b.LineStartOf(b.Cursor), b.Cursor - b.LineStartOf(b.Cursor)));
@@ -205,8 +203,8 @@ public class PromptBufferTests
     {
         var b = new PromptBuffer();
         _ = b.InsertText("alpha beta gamma");
-        _ = b.MoveWordLeft();      // before "gamma"
-        _ = b.MoveWordLeft();      // before "beta"
+        _ = b.MoveWordLeft(); // before "gamma"
+        _ = b.MoveWordLeft(); // before "beta"
         await Assert.That(b.SnapshotText()[b.Cursor..]).StartsWith("beta");
         _ = b.DeleteWordForward();
         await Assert.That(b.SnapshotText()).IsEqualTo("alpha  gamma");
@@ -337,7 +335,7 @@ public class PromptViewportTests
     public async Task WideRunes_WindowSnapsToRuneBoundary()
     {
         const string line = "中中中中中中"; // 6 chars = 12 cells, width 5
-        var vp = PromptViewport.ScrollIntoView(line, caretInLine: 6, widthCells: 5);
+        var vp = PromptViewport.ScrollIntoView(line, 6, 5);
         int visibleCells = PromptBuffer.DisplayCells(line.AsSpan(vp.Start));
         await Assert.That(visibleCells).IsLessThanOrEqualTo(6);
         // Window starts on a rune lead char — never mid-surrogate/mid-cluster.
@@ -365,7 +363,7 @@ public class ComposerControllerTests
     {
         var composer = new ComposerController();
         _ = composer.Buffer.InsertText("line");
-        var action = composer.HandleKey(KeyEvent.Simple(KeyCode.Enter, KeyModifiers.Shift, isKittyEncoded: true));
+        var action = composer.HandleKey(KeyEvent.Simple(KeyCode.Enter, KeyModifiers.Shift, true));
 
         await Assert.That(action).IsEqualTo(ComposerAction.Edited);
         await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("line\n");
@@ -379,7 +377,7 @@ public class ComposerControllerTests
     public async Task AltEnter_AlsoInsertsNewline()
     {
         var composer = new ComposerController();
-        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Enter, KeyModifiers.Alt, isKittyEncoded: true));
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Enter, KeyModifiers.Alt, true));
         await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("\n");
     }
 
@@ -407,7 +405,7 @@ public class ComposerControllerTests
     public async Task CtrlU_DeletesLinePrefix()
     {
         var composer = new ComposerController();
-        foreach (var c in "hello")
+        foreach (char c in "hello")
         {
             _ = composer.HandleKey(CharKey(c));
         }
@@ -420,7 +418,7 @@ public class ComposerControllerTests
     public async Task CtrlZ_Undoes_Last_Edit_CtrlShiftZ_Redoes()
     {
         var composer = new ComposerController();
-        foreach (var c in "abc")
+        foreach (char c in "abc")
         {
             _ = composer.HandleKey(CharKey(c));
         }
@@ -444,7 +442,7 @@ public class ComposerControllerTests
         await Assert.That(composer.Buffer.IsEmpty).IsTrue();
 
         // Redo is ignored even after edits — nothing undone yet, fork rule.
-        foreach (var c in "draft")
+        foreach (char c in "draft")
         {
             _ = composer.HandleKey(CharKey(c));
         }
@@ -458,7 +456,7 @@ public class ComposerControllerTests
     public async Task ArrowsAndHomeEnd_MoveCaret()
     {
         var composer = new ComposerController();
-        foreach (var c in "abc")
+        foreach (char c in "abc")
         {
             _ = composer.HandleKey(CharKey(c));
         }
@@ -483,7 +481,7 @@ public class ComposerControllerTests
     public async Task CtrlA_CtrlE_JumpLineBoundaries_LikeReadline()
     {
         var composer = new ComposerController();
-        foreach (var c in "abc")
+        foreach (char c in "abc")
         {
             _ = composer.HandleKey(CharKey(c));
         }
@@ -498,19 +496,19 @@ public class ComposerControllerTests
     public async Task CtrlK_KillsToEndOfLine_MultilineSafe()
     {
         var composer = new ComposerController();
-        foreach (var c in "first")
+        foreach (char c in "first")
         {
             _ = composer.HandleKey(CharKey(c));
         }
 
-        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Enter, KeyModifiers.Shift, isKittyEncoded: true));
-        foreach (var c in "second")
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Enter, KeyModifiers.Shift, true));
+        foreach (char c in "second")
         {
             _ = composer.HandleKey(CharKey(c));
         }
 
         // Park mid-line on row 0 (deterministic column 2), then kill to its end.
-        _ = composer.Buffer.MoveUp();           // clamps to end of the shorter row 0
+        _ = composer.Buffer.MoveUp(); // clamps to end of the shorter row 0
         await Assert.That(composer.Buffer.LineIndexOf(composer.Buffer.Cursor)).IsEqualTo(0);
         _ = composer.Buffer.MoveToStart();
         _ = composer.Buffer.MoveRight();
@@ -523,7 +521,7 @@ public class ComposerControllerTests
     public async Task CtrlArrows_WordHop_MetaBD_DeleteForward()
     {
         var composer = new ComposerController();
-        foreach (var c in "one two")
+        foreach (char c in "one two")
         {
             _ = composer.HandleKey(CharKey(c));
         }
@@ -540,7 +538,7 @@ public class ComposerControllerTests
 
         // Alt+D from a word start kills the word itself, keeping separators ahead.
         var altD = new ComposerController();
-        foreach (var c in "one two")
+        foreach (char c in "one two")
         {
             _ = altD.HandleKey(CharKey(c));
         }
@@ -559,7 +557,7 @@ public class ComposerControllerTests
     public async Task AltS_AltI_AltC_MarkdownWrapChords()
     {
         var bold = new ComposerController();
-        foreach (var c in "pay")
+        foreach (char c in "pay")
         {
             _ = bold.HandleKey(CharKey(c));
         }
@@ -572,7 +570,7 @@ public class ComposerControllerTests
         await Assert.That(bold.Buffer.SnapshotText()).IsEqualTo("pay");
 
         var italic = new ComposerController();
-        foreach (var c in "soft")
+        foreach (char c in "soft")
         {
             _ = italic.HandleKey(CharKey(c));
         }
@@ -590,7 +588,7 @@ public class ComposerControllerTests
     public async Task AltH_AltL_LinePrefixChords()
     {
         var heading = new ComposerController();
-        foreach (var c in "notes")
+        foreach (char c in "notes")
         {
             _ = heading.HandleKey(CharKey(c));
         }
@@ -599,7 +597,7 @@ public class ComposerControllerTests
         await Assert.That(heading.Buffer.SnapshotText()).IsEqualTo("# notes");
 
         var list = new ComposerController();
-        foreach (var c in "notes")
+        foreach (char c in "notes")
         {
             _ = list.HandleKey(CharKey(c));
         }
@@ -619,7 +617,7 @@ public class ComposerControllerTests
     public async Task AltD_KillsWord_CtrlY_YanksItBackAtCaret()
     {
         var composer = new ComposerController();
-        foreach (var c in "one two")
+        foreach (char c in "one two")
         {
             _ = composer.HandleKey(CharKey(c));
         }
@@ -653,7 +651,7 @@ public class ComposerControllerTests
     public async Task CtrlU_Then_CtrlY_RestoresDraftLinePrefix()
     {
         var composer = new ComposerController();
-        foreach (var c in "keep\ndrop-me")
+        foreach (char c in "keep\ndrop-me")
         {
             _ = composer.HandleKey(CharKey(c));
         }
@@ -674,7 +672,7 @@ public class ComposerHistoryRecallTests
     /// <summary>Type one letter + Enter, mimicking the host's post-submit TakeText.</summary>
     private static void TypeAndSubmit(ComposerController composer, string text)
     {
-        foreach (var c in text)
+        foreach (char c in text)
         {
             _ = composer.HandleKey(CharKey(c));
         }
@@ -700,7 +698,7 @@ public class ComposerHistoryRecallTests
         var composer = new ComposerController();
         TypeAndSubmit(composer, "one");
         TypeAndSubmit(composer, "two");
-        TypeAndSubmit(composer, "wip");     // becomes the saved draft
+        TypeAndSubmit(composer, "wip"); // becomes the saved draft
 
         _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Up));
         await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("wip");
@@ -734,13 +732,13 @@ public class ComposerHistoryRecallTests
         TypeAndSubmit(composer, "history-entry");
 
         // Caret parked on the LAST logical line ⇒ Up must not hijack the key.
-        foreach (var c in "alpha")
+        foreach (char c in "alpha")
         {
             _ = composer.HandleKey(CharKey(c));
         }
 
-        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Enter, KeyModifiers.Shift, isKittyEncoded: true));
-        foreach (var c in "beta")
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Enter, KeyModifiers.Shift, true));
+        foreach (char c in "beta")
         {
             _ = composer.HandleKey(CharKey(c));
         }
@@ -765,8 +763,8 @@ public class ComposerHistoryRecallTests
         _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Up));
         await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("kept");
 
-        _ = composer.Buffer.InsertText("!");   // edit breaks nothing by contract below
-        _ = composer.HandleKey(CharKey('c', KeyModifiers.Ctrl));  // clear-all
+        _ = composer.Buffer.InsertText("!"); // edit breaks nothing by contract below
+        _ = composer.HandleKey(CharKey('c', KeyModifiers.Ctrl)); // clear-all
         await Assert.That(composer.Buffer.IsEmpty).IsTrue();
 
         _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Down));

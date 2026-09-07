@@ -1,8 +1,7 @@
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Abstractions.Tools;
 
 public interface IToolFactory
 {
-    ITool CreateTool(ILoggerFactory loggerFactory);
+    public ITool CreateTool(ILoggerFactory loggerFactory);
 }

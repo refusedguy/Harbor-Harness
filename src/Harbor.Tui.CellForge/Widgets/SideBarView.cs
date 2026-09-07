@@ -1,10 +1,8 @@
-using System.Text;
 using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.ViewModels;
-
+using System.Globalization;
+using System.Text;
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>MCP server connectivity for the sidebar widget.</summary>
@@ -12,16 +10,16 @@ public enum McpServerState : byte
 {
     Connected = 0,
     Connecting = 1,
-    Error = 2,
+    Error = 2
 }
 
 /// <summary>One MCP server row of the sidebar.</summary>
 public sealed record McpServerStatus(string Name, McpServerState State);
 
 /// <summary>
-/// Immutable sidebar snapshot — session info, token counter, model, modified
-/// files, LSP/MCP health, and the full session list. The host refreshes the
-/// instance; the sidebar itself holds no state (pure paint function).
+///     Immutable sidebar snapshot — session info, token counter, model, modified
+///     files, LSP/MCP health, and the full session list. The host refreshes the
+///     instance; the sidebar itself holds no state (pure paint function).
 /// </summary>
 public sealed record SideBarState(
     string? SessionTitle = null,
@@ -45,18 +43,18 @@ public sealed record SideBarState(
 public sealed record SideBarLine(string Title, string Value);
 
 /// <summary>
-/// Plugin-extensible sidebar slot (widgets §3.x): a section title plus a
-/// pure line provider evaluated per paint. Providers must not allocate
-/// heavily — they run every paint frame while the sidebar is visible.
+///     Plugin-extensible sidebar slot (widgets §3.x): a section title plus a
+///     pure line provider evaluated per paint. Providers must not allocate
+///     heavily — they run every paint frame while the sidebar is visible.
 /// </summary>
 public sealed record SideBarSlot(string Title, Func<SideBarState, IReadOnlyList<SideBarLine>> Lines);
 
 /// <summary>
-/// Right sidebar (OpenCode/Kilo pattern): a 42-column context panel shown
-/// automatically on wide terminals. Pure paint over <see cref="SideBarState" />
-/// — the host decides placement via <see cref="SideBarLayout.ComputeArea" />
-/// and refreshes state; the view draws session info, token counter, model,
-/// modified files, LSP health, MCP servers, and any registered slots.
+///     Right sidebar (OpenCode/Kilo pattern): a 42-column context panel shown
+///     automatically on wide terminals. Pure paint over <see cref="SideBarState" />
+///     — the host decides placement via <see cref="SideBarLayout.ComputeArea" />
+///     and refreshes state; the view draws session info, token counter, model,
+///     modified files, LSP health, MCP servers, and any registered slots.
 /// </summary>
 public static class SideBarView
 {
@@ -156,11 +154,11 @@ public static class SideBarView
             for (int i = 0; i < serverRows; i++)
             {
                 var server = servers[i];
-                (char glyph, PackedColor color) = server.State switch
+                (char glyph, var color) = server.State switch
                 {
                     McpServerState.Connected => (ServerConnected, ChatPalette.Success),
                     McpServerState.Connecting => (ServerConnecting, ChatPalette.Warning),
-                    _ => (ServerError, ChatPalette.Error),
+                    _ => (ServerError, ChatPalette.Error)
                 };
                 var style = new CellStyle(color);
                 if (y < rect.Bottom - 1)
@@ -243,10 +241,10 @@ public static class SideBarView
         new(terminalWidth - SideBarLayout.DefaultWidth, 0, SideBarLayout.DefaultWidth, Math.Max(0, terminalHeight - 1));
 
     /// <summary>
-    ///     Projects <see cref="UiState"/> session data into a <see cref="SideBarState"/>.
+    ///     Projects <see cref="UiState" /> session data into a <see cref="SideBarState" />.
     ///     The active session's chrome (title, id, model, tokens, cost) populates the
     ///     top-level sidebar fields; the full session list is attached for the
-    ///     sessions section rendered by <see cref="Paint"/>.
+    ///     sessions section rendered by <see cref="Paint" />.
     /// </summary>
     public static SideBarState ProjectFromStore(UiState state)
     {
@@ -262,26 +260,26 @@ public static class SideBarView
 
         var sessions = state.Sessions.Length == 0 ? null : state.Sessions.ToArray();
         return new SideBarState(
-            SessionTitle: active?.Title,
-            SessionId: active?.SessionId?.Value,
-            Model: string.IsNullOrEmpty(state.Model) ? null : state.Model,
-            TokensIn: state.Cost.TokensIn,
-            TokensOut: state.Cost.TokensOut,
-            CostUsd: (double)state.Cost.CostUsd,
-            ModifiedFiles: null,
-            LspErrors: 0,
-            LspWarnings: 0,
-            McpServers: null,
-            ActiveSessionId: state.ActiveSessionId,
-            Sessions: sessions);
+            active?.Title,
+            active?.SessionId?.Value,
+            string.IsNullOrEmpty(state.Model) ? null : state.Model,
+            state.Cost.TokensIn,
+            state.Cost.TokensOut,
+            (double)state.Cost.CostUsd,
+            null,
+            0,
+            0,
+            null,
+            state.ActiveSessionId,
+            sessions);
     }
 
     /// <summary>Compact token figure: 999 → «999», 12 345 → «12.3k», 1 234 567 → «1.2M».</summary>
     public static string FormatTokens(long tokens) => tokens switch
     {
-        < 1_000 => tokens.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        < 1_000_000 => (tokens / 1000.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "k",
-        _ => (tokens / 1_000_000.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "M",
+        < 1_000 => tokens.ToString(CultureInfo.InvariantCulture),
+        < 1_000_000 => (tokens / 1000.0).ToString("0.#", CultureInfo.InvariantCulture) + "k",
+        _ => (tokens / 1_000_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "M"
     };
 
     private static Rect ClampTo(ScreenBuffer buffer, Rect rect)
@@ -342,7 +340,10 @@ public static class SideBarView
         return id.AsSpan(0, Math.Min(8, id.Length));
     }
 
-    /// <summary>Writes «<paramref name="prefix" /><paramref name="value" /><paramref name="suffix" />» into the buffer; returns length.</summary>
+    /// <summary>
+    ///     Writes «<paramref name="prefix" /><paramref name="value" /><paramref name="suffix" />» into the buffer;
+    ///     returns length.
+    /// </summary>
     private static int FormatSectionTitle(string prefix, int value, char suffix, Span<char> into)
     {
         int len = 0;
@@ -367,9 +368,9 @@ public static class SideBarView
     }
 
     /// <summary>
-    /// Allocation-free twin of the interpolated token line
-    /// «<c>{in}↑ {out}↓</c>»: both figures formatted into one buffer so the
-    /// every-frame sidebar paint stays zero-alloc. Returns the written length.
+    ///     Allocation-free twin of the interpolated token line
+    ///     «<c>{in}↑ {out}↓</c>»: both figures formatted into one buffer so the
+    ///     every-frame sidebar paint stays zero-alloc. Returns the written length.
     /// </summary>
     private static int FormatTokensLine(long tokensIn, long tokensOut, Span<char> into)
     {
@@ -463,8 +464,8 @@ public static class SideBarView
     }
 
     /// <summary>
-    /// Span twin of <c>cost.ToString("0.####")</c> prefixed with «$»: integer
-    /// part plus up to four decimals without trailing zeros, invariant style.
+    ///     Span twin of <c>cost.ToString("0.####")</c> prefixed with «$»: integer
+    ///     part plus up to four decimals without trailing zeros, invariant style.
     /// </summary>
     private static int FormatCostUsd(double cost, Span<char> into)
     {

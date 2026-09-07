@@ -1,6 +1,7 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 namespace Harbor.Ui.Framework.Services;
+
 /// <summary>
 ///     Fetches git status for a working directory — branch name + dirty/clean.
 ///     Runs `git rev-parse --abbrev-ref HEAD` and `git status --porcelain`.

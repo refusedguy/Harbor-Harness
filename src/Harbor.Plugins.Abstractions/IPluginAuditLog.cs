@@ -1,5 +1,3 @@
-using Harbor.Plugins.Abstractions;
-
 namespace Harbor.Plugins.Abstractions;
 
 /// <summary>
@@ -38,7 +36,7 @@ public interface IPluginAuditLog
     /// <param name="result"><c>allow</c> or <c>deny</c>.</param>
     /// <param name="detail">Optional extra context.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task WriteAsync(
+    public Task WriteAsync(
         string pluginName,
         PluginCapability capability,
         string target,

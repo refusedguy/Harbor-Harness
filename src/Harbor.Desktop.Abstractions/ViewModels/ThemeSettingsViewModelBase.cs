@@ -1,7 +1,4 @@
-using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -56,10 +53,7 @@ public abstract partial class ThemeSettingsViewModelBase : StoreSubscriberViewMo
     ///     Apply all declared selectors against the current store snapshot.
     /// </summary>
     /// <param name="state">The new <see cref="UiState" /> snapshot.</param>
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 
     /// <summary>
     ///     Apply the current theme immediately (without saving). Used by the

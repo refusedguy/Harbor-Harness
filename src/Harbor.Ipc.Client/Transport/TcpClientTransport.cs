@@ -1,5 +1,4 @@
 namespace Harbor.Ipc.Transport;
-using System.Net.Sockets;
 
 /// <summary>
 ///     Client-side TCP transport: opens an outbound connection to a
@@ -9,13 +8,13 @@ using System.Net.Sockets;
 /// </summary>
 public sealed class TcpClientTransport : IIpcClientTransport
 {
-    private readonly ILogger _logger;
     private readonly string _host;
+    private readonly ILogger _logger;
     private readonly int _port;
     private bool _disposed;
     private Stream? _stream;
 
-    /// <summary>Construct a client transport targeting <paramref name="host"/>:<paramref name="port"/>.</summary>
+    /// <summary>Construct a client transport targeting <paramref name="host" />:<paramref name="port" />.</summary>
     public TcpClientTransport(string host, int port, ILogger logger)
     {
         _host = host;
@@ -60,7 +59,7 @@ public sealed class TcpClientTransport : IIpcClientTransport
             throw;
         }
 
-        _stream = new NetworkStream(socket, ownsSocket: true);
+        _stream = new NetworkStream(socket, true);
         _logger.LogInformation("Connected to {Endpoint}", Endpoint);
         return _stream;
     }

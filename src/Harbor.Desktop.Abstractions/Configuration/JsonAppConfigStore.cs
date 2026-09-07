@@ -13,11 +13,12 @@
 // optional constructor parameter; without it the store falls back to the
 // reflection-based resolver, which logs a warning and only works on JIT.
 
+using CSharpFunctionalExtensions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
-using CSharpFunctionalExtensions;
 namespace Harbor.Desktop.Abstractions.Configuration;
+
 /// <summary>
 ///     JSON-backed <see cref="IAppConfigStore{T}" />. Reads and writes the
 ///     per-app config file at <see cref="AppConfigBase.ConfigFilePath" />.
@@ -62,9 +63,9 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
     };
 
     private readonly T _default;
+    private readonly JsonTypeInfo<T>? _jsonTypeInfo;
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly ILogger<JsonAppConfigStore<T>> _logger;
-    private readonly JsonTypeInfo<T>? _jsonTypeInfo;
 
     /// <summary>
     ///     Construct a JSON-backed store.
@@ -219,7 +220,7 @@ internal sealed class ImmutableListConverter<T> : JsonConverter<ImmutableList<T>
     /// <summary>Singleton instance — the converter is stateless.</summary>
     public static readonly ImmutableListConverter<T> Instance = new();
 
-    private ImmutableListConverter() { }
+    private ImmutableListConverter() {}
 
     /// <inheritdoc />
     public override ImmutableList<T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

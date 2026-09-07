@@ -1,11 +1,11 @@
-using System.Text.Json;
 using Harbor.Abstractions.Lsp;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
+
 /// <summary>
 ///     Tests for the LSP-aware read/edit hooks: reads auto-open supported
 ///     files in the language server, edits push changes and summarize fresh
@@ -18,9 +18,9 @@ public class LspHookTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        try { Directory.Delete(_root, true); }
+        catch (IOException) {}
+        catch (UnauthorizedAccessException) {}
     }
 
     [Test]

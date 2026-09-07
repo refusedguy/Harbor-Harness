@@ -1,15 +1,14 @@
 using BenchmarkDotNet.Attributes;
-using System.IO.Pipelines;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ipc.Protocol;
-using Harbor.Ipc.Server;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.IO.Pipelines;
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks <see cref=\"EventBroadcaster\" /> throughput — the cost of
-///     projecting <see cref=\"AgentEvent\" />s to <see cref=\"HarborEventData\" />,
+///     Benchmarks <see cref=\"EventBroadcaster" /> throughput — the cost of
+///     projecting <see cref=\"AgentEvent" />s to <see cref=\"HarborEventData\" />,
 ///     MessagePack-serializing them, and writing the framed envelopes to N
 ///     connected client streams. Measures the hot path of IPC event dispatch
 ///     under concurrent subscriber load.
@@ -18,13 +17,13 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 2, iterationCount: 3)]
 public class EventBroadcasterThroughputBenchmark
 {
-    private EventBroadcaster _broadcaster = null!;
-    private InMemoryEventBus _eventBus = null!;
-    private List<PipeStream> _clientStreams = null!;
-    private List<SemaphoreSlim> _writeLocks = null!;
 
     [Params(4, 16, 64)]
     public int ClientCount;
+    private EventBroadcaster _broadcaster = null!;
+    private List<PipeStream> _clientStreams = null!;
+    private InMemoryEventBus _eventBus = null!;
+    private List<SemaphoreSlim> _writeLocks = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -41,7 +40,7 @@ public class EventBroadcasterThroughputBenchmark
             var pipe = new Pipe();
             var stream = new PipeStream(pipe);
             var writeLock = new SemaphoreSlim(1, 1);
-            _broadcaster.RegisterAsync(stream, writeLock, lastSequence: null, clientId: $"bench-{i}")
+            _broadcaster.RegisterAsync(stream, writeLock, null, $"bench-{i}")
                 .GetAwaiter().GetResult();
             _clientStreams.Add(stream);
             _writeLocks.Add(writeLock);

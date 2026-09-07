@@ -1,9 +1,8 @@
-using System.Text.Json;
-using System.Threading.Channels;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
-
+using System.Text.Json;
+using System.Threading.Channels;
 namespace Harbor.Providers.Anthropic;
 
 /// <summary>

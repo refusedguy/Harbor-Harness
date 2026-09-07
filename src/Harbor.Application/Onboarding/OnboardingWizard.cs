@@ -1,8 +1,7 @@
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Configuration;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Application.Onboarding;
+
 /// <summary>
 ///     First-run onboarding wizard. Walks user through:
 ///     1. Pick a provider (from presets)
@@ -14,14 +13,14 @@ namespace Harbor.Application.Onboarding;
 /// </summary>
 public sealed class OnboardingWizard
 {
-    private readonly AuthStore _authStore;
-    private readonly IConfigStore _configStore;
-    private readonly Abstractions.Providers.IProviderHealthCheck? _healthCheck;
-    private readonly Abstractions.Providers.IProviderRegistry? _providers;
-    private readonly ILogger<OnboardingWizard>? _logger;
 
     /// <summary>Cap on the numbered live-model list shown during setup.</summary>
     public const int MaxListedModels = 15;
+    private readonly AuthStore _authStore;
+    private readonly IConfigStore _configStore;
+    private readonly IProviderHealthCheck? _healthCheck;
+    private readonly ILogger<OnboardingWizard>? _logger;
+    private readonly IProviderRegistry? _providers;
 
     /// <summary>
     ///     Construct an <see cref="OnboardingWizard" /> wired to the supplied config and auth stores.
@@ -43,8 +42,8 @@ public sealed class OnboardingWizard
         IConfigStore configStore,
         AuthStore authStore,
         ILogger<OnboardingWizard>? logger = null,
-        Abstractions.Providers.IProviderHealthCheck? healthCheck = null,
-        Abstractions.Providers.IProviderRegistry? providers = null)
+        IProviderHealthCheck? healthCheck = null,
+        IProviderRegistry? providers = null)
     {
         _configStore = configStore;
         _authStore = authStore;
@@ -241,7 +240,7 @@ public sealed class OnboardingWizard
     {
         // PROD-UI-0 З.4: try a live model list first; degrade explicitly to
         // free-text when the provider is unreachable or the registry absent.
-        IReadOnlyList<string>? liveModels = await TryFetchLiveModelsAsync(provider, writer, ct).ConfigureAwait(false);
+        var liveModels = await TryFetchLiveModelsAsync(provider, writer, ct).ConfigureAwait(false);
         if (liveModels is not null)
             return await PickFromLiveListAsync(reader, writer, provider, liveModels).ConfigureAwait(false);
 
@@ -259,7 +258,7 @@ public sealed class OnboardingWizard
         if (_providers is null)
             return null;
 
-        var pid = Abstractions.Models.Identifiers.ProviderId.TryCreate(provider.Id);
+        var pid = ProviderId.TryCreate(provider.Id);
         if (pid.IsFailure)
             return null;
 
@@ -271,7 +270,7 @@ public sealed class OnboardingWizard
         }
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(Abstractions.Providers.IProviderHealthCheck.DefaultTimeout);
+        cts.CancelAfter(IProviderHealthCheck.DefaultTimeout);
         try
         {
             var result = await clientResult.Value.GetModelsAsync(cts.Token).ConfigureAwait(false);

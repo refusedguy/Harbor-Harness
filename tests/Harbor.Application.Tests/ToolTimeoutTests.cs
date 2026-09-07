@@ -1,21 +1,20 @@
-using System.Text.Json;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Application.Tests.Fakes;
-using CSharpFunctionalExtensions;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
+using Harbor.Application.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
+using System.Text;
+using System.Text.Json;
+using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 namespace Harbor.Application.Tests;
 
 /// <summary>
@@ -25,29 +24,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class ToolTimeoutTests
 {
-    /// <summary>Tool whose ExecuteAsync never completes unless cancelled.</summary>
-    private sealed class HangingTool : ITool
-    {
-        public ToolName Name => ToolName.Create("hang");
-        public string DisplayName => "Hang";
-        public string Description => "Never returns.";
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-        public string? PromptSnippet => null;
-        public IReadOnlyList<string> PromptGuidelines => [];
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public async Task<ToolResult> ExecuteAsync(
-            JsonElement args,
-            ToolContext context,
-            CancellationToken cancellationToken = default)
-        {
-            // Wait forever, but observe cancellation so the dispatcher's
-            // deadline can actually interrupt us.
-            await Task.Delay(Timeout.Infinite, context.Abort).ConfigureAwait(false);
-            return ToolResult.Success("unreachable");
-        }
-    }
 
     private static AgentDefinition Agent(int timeoutSeconds) => new(
         AgentName.Create("code"),
@@ -56,25 +32,21 @@ public class ToolTimeoutTests
         "test-model",
         "test",
         new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }),
-        MaxSteps: 10,
+        10,
         ToolTimeoutSeconds: timeoutSeconds);
 
     private static (AgentLoop Loop, ScriptedLlmClient Client) CreateLoop(AgentDefinition agent)
     {
-        var client = new ScriptedLlmClient(
-        [
-            new LlmEvent[]
-            {
-                new ToolCallStartEvent("call-1", "hang"),
-                new ToolCallDeltaEvent("call-1", "{}"),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
-            },
-            new LlmEvent[]
-            {
-                new TextDeltaEvent("t", "recovered after timeout"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
-            }
-        ]);
+        var client = new ScriptedLlmClient(new LlmEvent[]
+        {
+            new ToolCallStartEvent("call-1", "hang"),
+            new ToolCallDeltaEvent("call-1", "{}"),
+            new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+        }, new LlmEvent[]
+        {
+            new TextDeltaEvent("t", "recovered after timeout"),
+            new StepFinishEvent(1, "stop", new Usage(1, 1))
+        });
         var agents = new FakeAgentRegistry(agent);
         var loop = new AgentLoop(
             new FakeProviderRegistry(client),
@@ -96,7 +68,7 @@ public class ToolTimeoutTests
     {
         var agent = Agent(timeoutSeconds: 1);
         var (loop, client) = CreateLoop(agent);
-        var session = new Fakes.TestSessionContext(
+        var session = new TestSessionContext(
             Session.Create("/tmp/harbor-tool-timeout-tests", "code", "test", "test-model"));
 
         long started = Environment.TickCount64;
@@ -125,14 +97,11 @@ public class ToolTimeoutTests
         // Use null via `with` to express the default.
         agent = agent with { ToolTimeoutSeconds = null };
 
-        var client = new ScriptedLlmClient(
-        [
-            new LlmEvent[]
-            {
-                new TextDeltaEvent("t", "plain answer"),
-                new StepFinishEvent(0, "stop", new Usage(1, 1))
-            }
-        ]);
+        var client = new ScriptedLlmClient(new LlmEvent[]
+        {
+            new TextDeltaEvent("t", "plain answer"),
+            new StepFinishEvent(0, "stop", new Usage(1, 1))
+        });
         var agents = new FakeAgentRegistry(agent);
         var loop = new AgentLoop(
             new FakeProviderRegistry(client),
@@ -146,7 +115,7 @@ public class ToolTimeoutTests
             new PermissionService(agents, NullLogger<PermissionService>.Instance),
             new MessageConverter(),
             NullLogger<AgentLoop>.Instance);
-        var session = new Fakes.TestSessionContext(
+        var session = new TestSessionContext(
             Session.Create("/tmp/harbor-tool-timeout-tests", "code", "test", "test-model"));
 
         var result = await loop.RunAsync(session, agent);
@@ -156,12 +125,12 @@ public class ToolTimeoutTests
 
     private static string RenderText(LlmRequest request)
     {
-        var sb = new System.Text.StringBuilder();
-        foreach (LlmMessage message in request.Messages)
+        var sb = new StringBuilder();
+        foreach (var message in request.Messages)
         {
             if (message is LlmUserMessage user)
             {
-                foreach (LlmContentBlock block in user.Content)
+                foreach (var block in user.Content)
                 {
                     if (block is LlmTextBlock text)
                     {
@@ -175,5 +144,29 @@ public class ToolTimeoutTests
             }
         }
         return sb.ToString();
+    }
+
+    /// <summary>Tool whose ExecuteAsync never completes unless cancelled.</summary>
+    private sealed class HangingTool : ITool
+    {
+        public ToolName Name => ToolName.Create("hang");
+        public string DisplayName => "Hang";
+        public string Description => "Never returns.";
+        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
+        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+        public string? PromptSnippet => null;
+        public IReadOnlyList<string> PromptGuidelines => [];
+        public Result ValidateArguments(JsonElement args) => Result.Success();
+
+        public async Task<ToolResult> ExecuteAsync(
+            JsonElement args,
+            ToolContext context,
+            CancellationToken cancellationToken = default)
+        {
+            // Wait forever, but observe cancellation so the dispatcher's
+            // deadline can actually interrupt us.
+            await Task.Delay(Timeout.Infinite, context.Abort).ConfigureAwait(false);
+            return ToolResult.Success("unreachable");
+        }
     }
 }

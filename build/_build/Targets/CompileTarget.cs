@@ -2,6 +2,7 @@ using Harbor.Build.Meta;
 using Nuke.Common.ProjectModel;
 using Nuke.Common.Tools.DotNet;
 namespace Harbor.Build.Targets;
+
 /// <summary>
 ///     Compile target — runs <c>dotnet build</c> against the entire solution
 ///     in the configured <see cref="BuildConfiguration" />. Uses
@@ -17,8 +18,8 @@ public static class CompileTarget
     /// </summary>
     public static void Execute(Solution solution, BuildSettings settings, BuildOutput output)
     {
-        var configuration = settings.ConfigurationString;
-        var solutionPath = solution.Path.ToString();
+        string configuration = settings.ConfigurationString;
+        string solutionPath = solution.Path.ToString();
         output.Cmd("Compile", ["dotnet", "build", solutionPath, "-c", configuration, "--no-restore", "-p:MaxCpuCount=0"]);
         if (output.IsDryRun)
         {

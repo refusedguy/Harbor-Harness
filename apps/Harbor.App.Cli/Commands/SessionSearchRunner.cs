@@ -1,6 +1,5 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
@@ -66,7 +65,7 @@ public static class SessionSearchRunner
     /// </summary>
     private static async Task<(int MatchCount, bool Capped)> PrintSessionMatchesAsync(
         TextWriter output,
-        Harbor.Abstractions.Models.Session session,
+        Session session,
         IReadOnlyList<AgentMessage> messages,
         string query,
         int matchCount)
@@ -103,7 +102,7 @@ public static class SessionSearchRunner
         UserMessage user => user.Content,
         AssistantMessage assistant => JoinTextParts(assistant.Parts),
         ToolResultMessage toolResult => string.Join("\n", toolResult.Results.Select(r => r.Output)),
-        _ => null,
+        _ => null
     };
 
     /// <summary>

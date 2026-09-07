@@ -1,6 +1,5 @@
-using System.Text.RegularExpressions;
 using Harbor.Application.Sessions;
-
+using System.Text.RegularExpressions;
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
@@ -16,9 +15,9 @@ namespace Harbor.App.Cli.Commands;
 /// </summary>
 public sealed partial class SkillsCommand : ICommand
 {
-    private readonly TextWriter _output;
     private readonly TextWriter _error;
     private readonly string _globalRoot;
+    private readonly TextWriter _output;
     private readonly string _projectRoot;
 
     public SkillsCommand(TextWriter output, TextWriter error, string? globalRoot = null, string? projectRoot = null)
@@ -155,10 +154,10 @@ public sealed partial class SkillsCommand : ICommand
         foreach (string root in new[] { _projectRoot, _globalRoot })
         {
             string rootFull = Path.GetFullPath(root);
-            var candidates = new[]
+            string[] candidates = new[]
             {
                 ConfinementSafeResolve(root, Path.Combine(nameArg, "SKILL.md")),
-                ConfinementSafeResolve(root, nameArg + ".md"),
+                ConfinementSafeResolve(root, nameArg + ".md")
             };
             foreach (string candidate in candidates)
             {

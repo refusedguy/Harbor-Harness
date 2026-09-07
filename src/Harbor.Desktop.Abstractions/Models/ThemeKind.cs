@@ -1,4 +1,5 @@
 namespace Harbor.Desktop.Abstractions.Models;
+
 /// <summary>
 ///     Selects which theme a desktop app should render. <see cref="System" />
 ///     means "follow the OS preference" — each platform app resolves it to

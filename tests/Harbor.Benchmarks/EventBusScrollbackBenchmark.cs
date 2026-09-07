@@ -1,10 +1,9 @@
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Events;
-
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks <see cref="InMemoryEventBus.GetScrollback"/> — the cold
+///     Benchmarks <see cref="InMemoryEventBus.GetScrollback" /> — the cold
 ///     diagnostic path not covered by <c>EventBusBenchmark</c> (which measures
 ///     <c>PublishAsync</c>). Scrollback is a fixed-capacity ring buffer;
 ///     <c>GetScrollback</c> copies the requested tail under a short lock into
@@ -58,15 +57,12 @@ public class EventBusScrollbackBenchmark
     ///     read above; together they bound the scrollback contention cost.
     /// </summary>
     [Benchmark(Description = "Publish_AfterFull_TailCopyUnderLock")]
-    public async Task Publish_AfterFull()
-    {
-        await _bus.PublishAsync(new TurnStartEvent(1001)).ConfigureAwait(false);
-    }
+    public async Task Publish_AfterFull() => await _bus.PublishAsync(new TurnStartEvent(1001)).ConfigureAwait(false);
 }
 
 /// <summary>
 ///     Parallel-publish contention benchmark. Four concurrent publishers each
-///     push 250 events through the same <see cref="InMemoryEventBus"/> — the
+///     push 250 events through the same <see cref="InMemoryEventBus" /> — the
 ///     scrollback lock is contended on every publish. Uses <c>Task.WhenAll</c>
 ///     over <c>Task.Run</c> workers so BenchmarkDotNet observes real thread
 ///     contention rather than cooperative async interleaving alone.
@@ -78,10 +74,7 @@ public class EventBusContentionBenchmark
     private InMemoryEventBus _bus = null!;
 
     [GlobalSetup]
-    public void Setup()
-    {
-        _bus = new InMemoryEventBus(maxScrollback: 1000);
-    }
+    public void Setup() => _bus = new InMemoryEventBus(maxScrollback: 1000);
 
     [Benchmark(Description = "Publish_Parallel_4x250")]
     public async Task Publish_Parallel_4x250()

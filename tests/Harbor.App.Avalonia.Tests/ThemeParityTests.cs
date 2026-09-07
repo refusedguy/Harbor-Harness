@@ -1,8 +1,4 @@
-using System.Xml;
 using System.Xml.Linq;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.App.Avalonia.Tests;
 
 /// <summary>
@@ -43,17 +39,17 @@ public class ThemeParityTests
         var baseline = ExtractKeys(Path.Combine(HdsThemesDir, "CatppuccinMocha.axaml"));
         await Assert.That(baseline.Count > 0).IsTrue();
 
-        foreach (var theme in ThemeFiles)
+        foreach (string theme in ThemeFiles)
         {
-            var path = Path.Combine(HdsThemesDir, theme);
+            string path = Path.Combine(HdsThemesDir, theme);
             if (!File.Exists(path))
             {
                 throw new FileNotFoundException($"Theme file not found: {path}");
             }
 
             var keys = ExtractKeys(path);
-            var missing = baseline.Except(keys).ToArray();
-            var extra = keys.Except(baseline).ToArray();
+            string[] missing = baseline.Except(keys).ToArray();
+            string[] extra = keys.Except(baseline).ToArray();
 
             await Assert.That(missing.Length).IsEqualTo(0);
             await Assert.That(extra.Length).IsEqualTo(0);
@@ -63,10 +59,11 @@ public class ThemeParityTests
     [Test]
     public async Task BaseTokens_Axaml_Defines_Expected_Structural_Tokens()
     {
-        var path = Path.Combine(HdsThemesDir, "BaseTokens.axaml");
+        string path = Path.Combine(HdsThemesDir, "BaseTokens.axaml");
         var keys = ExtractKeys(path);
 
-        string[] expected = {
+        string[] expected =
+        {
             "Space1", "Space6", "Space12",
             "RadiusXs", "RadiusSm", "RadiusMd", "RadiusLg", "RadiusXl",
             "RadiusFull", "RadiusNone",
@@ -76,7 +73,7 @@ public class ThemeParityTests
             "FontWeightNormal", "FontWeightSemiBold", "FontWeightBold"
         };
 
-        foreach (var key in expected)
+        foreach (string key in expected)
         {
             await Assert.That(keys.Contains(key)).IsTrue();
         }
@@ -85,14 +82,15 @@ public class ThemeParityTests
     [Test]
     public async Task Elevation_Axaml_Defines_Shadow_Tokens()
     {
-        var path = Path.Combine(HdsThemesDir, "Elevation.axaml");
+        string path = Path.Combine(HdsThemesDir, "Elevation.axaml");
         var keys = ExtractKeys(path);
 
-        string[] expected = {
+        string[] expected =
+        {
             "ShadowNone", "ShadowSm", "ShadowMd", "ShadowLg", "ShadowXl"
         };
 
-        foreach (var key in expected)
+        foreach (string key in expected)
         {
             await Assert.That(keys.Contains(key)).IsTrue();
         }
@@ -101,13 +99,13 @@ public class ThemeParityTests
     private static HashSet<string> ExtractKeys(string path)
     {
         var doc = XDocument.Load(path);
-        var xNs = "http://schemas.microsoft.com/winfx/2006/xaml";
+        string xNs = "http://schemas.microsoft.com/winfx/2006/xaml";
 
         var keys = new HashSet<string>();
         foreach (var elem in doc.Descendants()
-            .Where(e => e.Attribute(XName.Get("Key", xNs)) is not null))
+                     .Where(e => e.Attribute(XName.Get("Key", xNs)) is not null))
         {
-            var key = elem.Attribute(XName.Get("Key", xNs))?.Value;
+            string? key = elem.Attribute(XName.Get("Key", xNs))?.Value;
             if (!string.IsNullOrEmpty(key))
                 keys.Add(key);
         }

@@ -1,5 +1,4 @@
 using Harbor.Ui.Framework.Services;
-
 namespace Harbor.Desktop.Shared.Locators;
 
 /// <summary>
@@ -12,7 +11,7 @@ namespace Harbor.Desktop.Shared.Locators;
 public interface IShowPlaceholderOverlay
 {
     /// <summary>Stable overlay identifier pushed onto <see cref="IOverlayStack" />.</summary>
-    string OverlayId { get; }
+    public string OverlayId { get; }
 }
 
 /// <summary>
@@ -30,11 +29,11 @@ public interface IShowPlaceholderFactory
     ///     return the placeholder overlay for it.
     /// </summary>
     /// <param name="modalToken">The modal token from XAML args or a command parameter.</param>
-    IShowPlaceholderOverlay CreatePlaceholder(string modalToken);
+    public IShowPlaceholderOverlay CreatePlaceholder(string modalToken);
 
     /// <summary>Create a placeholder for a view-model type directly.</summary>
     /// <typeparam name="TViewModel">The view-model the modal binds to.</typeparam>
-    IShowPlaceholderOverlay CreateForViewModel<TViewModel>() where TViewModel : class;
+    public IShowPlaceholderOverlay CreateForViewModel<TViewModel>() where TViewModel : class;
 }
 
 /// <summary>
@@ -46,17 +45,16 @@ public interface IShowPlaceholderFactory
 /// </summary>
 public sealed class ShowPlaceholderFactory : IShowPlaceholderFactory
 {
-    private readonly IViewModelLocator _locator;
 
     /// <summary>Construct a <see cref="ShowPlaceholderFactory" />.</summary>
     /// <param name="locator">The central view-model locator.</param>
     public ShowPlaceholderFactory(IViewModelLocator locator)
     {
-        _locator = locator;
+        Locator = locator;
     }
 
     /// <summary>The locator a parsed modal uses to resolve its view-model on inflation.</summary>
-    public IViewModelLocator Locator => _locator;
+    public IViewModelLocator Locator { get; }
 
     /// <inheritdoc />
     public IShowPlaceholderOverlay CreatePlaceholder(string modalToken)

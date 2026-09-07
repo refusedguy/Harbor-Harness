@@ -1,32 +1,27 @@
 using System.Text;
-
 namespace Harbor.Ui.Framework.Rendering.Markdown;
 
 /// <summary>Checkpoint into the frozen prefix (grok streaming.rs).</summary>
 public readonly record struct MdCheckpoint(int OutputLines, int SourceChars);
 
 /// <summary>
-/// Frozen-tail streaming markdown renderer (widgets §3.2, simplified CE-3
-/// dialect): complete blocks freeze into immutable styled lines; the unstable
-/// tail (open paragraph/list, open fence, unterminated last line) re-renders
-/// on every <see cref="RenderTail"/>. Cost: O(tail) per push, O(N) total.
-///
-/// Main invariant, pinned by tests: token-by-token pushes produce styled
-/// lines identical to a one-shot render of the final document.
-///
-/// Width changes invalidate frozen geometry (grok set_max_table_width
-/// policy): the next render rebuilds everything from source. Wrapping is a
-/// greedy hard cut at the width cell — wide-rune safe; word-boundary
-/// preference stays in <c>TextWrap</c> for plain-text paths.
+///     Frozen-tail streaming markdown renderer (widgets §3.2, simplified CE-3
+///     dialect): complete blocks freeze into immutable styled lines; the unstable
+///     tail (open paragraph/list, open fence, unterminated last line) re-renders
+///     on every <see cref="RenderTail" />. Cost: O(tail) per push, O(N) total.
+///     Main invariant, pinned by tests: token-by-token pushes produce styled
+///     lines identical to a one-shot render of the final document.
+///     Width changes invalidate frozen geometry (grok set_max_table_width
+///     policy): the next render rebuilds everything from source. Wrapping is a
+///     greedy hard cut at the width cell — wide-rune safe; word-boundary
+///     preference stays in <c>TextWrap</c> for plain-text paths.
 /// </summary>
 public sealed class StreamingMarkdownRenderer
 {
-    private readonly StringBuilder _source = new();
     private readonly List<MdLine> _frozenLines = [];
+    private readonly StringBuilder _source = new();
     private readonly List<MdLine> _tailLines = [];
     private int _frozenSourceChars;
-    private int _width = -1;
-    private bool _complete;
 
     public int LineCount => _frozenLines.Count + _tailLines.Count;
 
@@ -34,13 +29,13 @@ public sealed class StreamingMarkdownRenderer
 
     public MdCheckpoint Checkpoint => new(_frozenLines.Count, _frozenSourceChars);
 
-    public int Width => _width;
+    public int Width { get; private set; } = -1;
 
-    public bool IsComplete => _complete;
+    public bool IsComplete { get; private set; }
 
     public void Push(ReadOnlySpan<char> chunk)
     {
-        if (_complete || chunk.IsEmpty)
+        if (IsComplete || chunk.IsEmpty)
         {
             return;
         }
@@ -49,7 +44,7 @@ public sealed class StreamingMarkdownRenderer
     }
 
     /// <summary>No more deltas will arrive; trailing partial content becomes final.</summary>
-    public void Complete() => _complete = true;
+    public void Complete() => IsComplete = true;
 
     /// <summary>Combined view for callers that want a plain list (tests/paint).</summary>
     public IReadOnlyList<MdLine> GetLines()
@@ -69,9 +64,9 @@ public sealed class StreamingMarkdownRenderer
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
 
         bool rebuiltAll = false;
-        if (width != _width)
+        if (width != Width)
         {
-            _width = width;
+            Width = width;
             _frozenLines.Clear();
             _frozenSourceChars = 0;
             rebuiltAll = true;
@@ -99,7 +94,7 @@ public sealed class StreamingMarkdownRenderer
                 break;
             }
 
-            _frozenLines.AddRange(RenderRange(tail, b.Start, b.End, _width));
+            _frozenLines.AddRange(RenderRange(tail, b.Start, b.End, Width));
             if ((b.Kind == MdBlockKind.Paragraph || b.Kind == MdBlockKind.ListItem) && HasBlankTerminator(tail, b.End))
             {
                 _frozenLines.Add(MdLine.Empty); // breathing room between blocks
@@ -119,15 +114,15 @@ public sealed class StreamingMarkdownRenderer
         // A completed document freezes its trailing region wholesale — the
         // source can never grow again, so the last (possibly unterminated)
         // block becomes immutable too and steady-state renders are free.
-        if (_complete && frozenInThisTail < tail.Length)
+        if (IsComplete && frozenInThisTail < tail.Length)
         {
-            _frozenLines.AddRange(RenderRange(tail, frozenInThisTail, tail.Length, _width));
+            _frozenLines.AddRange(RenderRange(tail, frozenInThisTail, tail.Length, Width));
             _frozenSourceChars += tail.Length - frozenInThisTail;
             frozenInThisTail = tail.Length;
         }
 
         RenderFreshTail(tail, frozenInThisTail);
-        return rebuiltAll || frozeAny || _complete;
+        return rebuiltAll || frozeAny || IsComplete;
     }
 
     private void RenderFreshTail(string tail, int from)
@@ -138,7 +133,7 @@ public sealed class StreamingMarkdownRenderer
             return;
         }
 
-        _tailLines.AddRange(RenderRange(tail, from, tail.Length, _width));
+        _tailLines.AddRange(RenderRange(tail, from, tail.Length, Width));
     }
 
     /// <summary>The block ended right before a blank separator line («\n\n» boundary).</summary>
@@ -184,26 +179,26 @@ public sealed class StreamingMarkdownRenderer
                     break;
 
                 case LineKind.Heading:
-                    {
-                        int level = MarkdownBlockParser.HeadingLevel(trimmed);
-                        int textStart = level + (level < trimmed.Length ? 1 : 0);
-                        var text = trimmed.Slice(textStart).TrimEnd('\r');
-                        AddWrapped(lines, [new MdSpan(text.ToString(), MdStyle.Heading)], width);
-                        break;
-                    }
+                {
+                    int level = MarkdownBlockParser.HeadingLevel(trimmed);
+                    int textStart = level + (level < trimmed.Length ? 1 : 0);
+                    var text = trimmed.Slice(textStart).TrimEnd('\r');
+                    AddWrapped(lines, [new MdSpan(text.ToString(), MdStyle.Heading)], width);
+                    break;
+                }
 
                 case LineKind.ListItem:
+                {
+                    _ = MarkdownBlockParser.IsListItem(trimmed, out int markerWidth);
+                    var bodySpans = ScanInline(trimmed.Slice(markerWidth).TrimEnd('\r'));
+                    var withBullet = new List<MdSpan>(bodySpans.Count + 1)
                     {
-                        _ = MarkdownBlockParser.IsListItem(trimmed, out int markerWidth);
-                        var bodySpans = ScanInline(trimmed.Slice(markerWidth).TrimEnd('\r'));
-                        var withBullet = new List<MdSpan>(bodySpans.Count + 1)
-                        {
-                            new(trimmed.Slice(0, markerWidth).ToString(), MdStyle.Bullet),
-                        };
-                        withBullet.AddRange(bodySpans);
-                        AddWrapped(lines, withBullet, width);
-                        break;
-                    }
+                        new(trimmed.Slice(0, markerWidth).ToString(), MdStyle.Bullet)
+                    };
+                    withBullet.AddRange(bodySpans);
+                    AddWrapped(lines, withBullet, width);
+                    break;
+                }
 
                 default:
                     AddWrapped(lines, ScanInline(trimmed.TrimEnd('\r')), width);
@@ -280,9 +275,9 @@ public sealed class StreamingMarkdownRenderer
     }
 
     /// <summary>
-    /// Greedy hard wrap of styled spans to <paramref name="width"/> cells.
-    /// Wide runes never split; zero-width runes attach forward. An empty span
-    /// list yields one empty line (keeps blank paragraphs representable).
+    ///     Greedy hard wrap of styled spans to <paramref name="width" /> cells.
+    ///     Wide runes never split; zero-width runes attach forward. An empty span
+    ///     list yields one empty line (keeps blank paragraphs representable).
     /// </summary>
     internal static void AddWrapped(List<MdLine> output, IReadOnlyList<MdSpan> spans, int width)
     {
@@ -294,7 +289,7 @@ public sealed class StreamingMarkdownRenderer
 
         var line = new List<MdSpan>(4);
         var work = new StringBuilder(Math.Min(width, 64));
-        MdStyle workStyle = MdStyle.Normal;
+        var workStyle = MdStyle.Normal;
         bool hasWork = false;
         int cells = 0;
 
@@ -321,8 +316,8 @@ public sealed class StreamingMarkdownRenderer
             var rest = s.Text.AsSpan();
             while (!rest.IsEmpty)
             {
-                System.Text.Rune.DecodeFromUtf16(rest, out var rune, out int size);
-                int rw = Rendering.UnicodeWidth.Width(rune);
+                Rune.DecodeFromUtf16(rest, out var rune, out int size);
+                int rw = UnicodeWidth.Width(rune);
                 if (cells > 0 && cells + rw > width)
                 {
                     FlushLine();

@@ -1,6 +1,7 @@
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Hosting;
+
 /// <summary>
 ///     Composition root for the layered plugin runtime. Iterates the supplied
 ///     <see cref="IPluginSource" />, compiles each script via <see cref="IPluginCompiler" />,

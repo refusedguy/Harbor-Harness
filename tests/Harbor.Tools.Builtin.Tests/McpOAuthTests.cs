@@ -1,10 +1,8 @@
+using Harbor.Tools.Mcp;
+using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Harbor.Tools.Mcp;
-using Microsoft.Extensions.Logging;
-using TUnit.Assertions;
-
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
@@ -19,18 +17,9 @@ public class McpOAuthTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
-    }
-
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage> _respond;
-        public StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) => _respond = respond;
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
-            Task.FromResult(_respond(request));
+        try { Directory.Delete(_root, true); }
+        catch (IOException) {}
+        catch (UnauthorizedAccessException) {}
     }
 
     private static HttpResponseMessage Json(object payload, HttpStatusCode status = HttpStatusCode.OK) =>
@@ -46,9 +35,9 @@ public class McpOAuthTests : IDisposable
     public async Task OAuthConfig_Parse_ReadsAuthBlock()
     {
         using var doc = JsonDocument.Parse("""
-            {"url": "https://mcp.example.com/mcp", "transport": "sse",
-             "auth": {"clientId": "cid", "scopes": ["a", "b"], "tokenEndpoint": "https://x/token"}}
-            """);
+                                           {"url": "https://mcp.example.com/mcp", "transport": "sse",
+                                            "auth": {"clientId": "cid", "scopes": ["a", "b"], "tokenEndpoint": "https://x/token"}}
+                                           """);
         var cfg = McpOAuthConfig.Parse(doc.RootElement);
 
         await Assert.That(cfg).IsNotNull();
@@ -68,7 +57,11 @@ public class McpOAuthTests : IDisposable
     public async Task Flow_DiscoverAsync_PrefersExplicitEndpoints_NoHttp()
     {
         bool called = false;
-        using var http = StubClient(_ => { called = true; return Json(new { }); });
+        using var http = StubClient(_ =>
+        {
+            called = true;
+            return Json(new {});
+        });
         var cfg = new McpOAuthConfig { AuthorizationEndpoint = "https://x/auth", TokenEndpoint = "https://x/token" };
 
         var endpoints = await McpOAuthFlow.DiscoverAsync(http, new Uri("https://mcp.example.com/mcp"), cfg);
@@ -108,7 +101,7 @@ public class McpOAuthTests : IDisposable
     [Test]
     public async Task Flow_PkcePair_VerifierAndChallengeDiffer()
     {
-        var (verifier, challenge) = McpOAuthFlow.NewPkcePair();
+        (string verifier, string challenge) = McpOAuthFlow.NewPkcePair();
         await Assert.That(verifier.Length).IsGreaterThanOrEqualTo(43);
         await Assert.That(challenge).IsNotEqualTo(verifier);
         await Assert.That(McpOAuthFlow.NewState()).IsNotEqualTo(McpOAuthFlow.NewState());
@@ -191,7 +184,11 @@ public class McpOAuthTests : IDisposable
         bool called = false;
         var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig(), cache,
-            () => { called = true; return new HttpClient(new StubHandler(_ => Json(new { }))); });
+            () =>
+            {
+                called = true;
+                return new HttpClient(new StubHandler(_ => Json(new {})));
+            });
 
         string token = await handler.GetAccessTokenAsync();
 
@@ -229,17 +226,17 @@ public class McpOAuthTests : IDisposable
     public async Task Loopback_ParseQuery_ValidatesState()
     {
         await Assert.That(
-            McpLoopbackListener.ParseQuery("GET /callback?code=abc&state=s1 HTTP/1.1", "code", "s1"))
+                McpLoopbackListener.ParseQuery("GET /callback?code=abc&state=s1 HTTP/1.1", "code", "s1"))
             .IsEqualTo("abc");
         await Assert.That(
-            McpLoopbackListener.ParseQuery("GET /callback?code=abc&state=evil HTTP/1.1", "code", "s1"))
+                McpLoopbackListener.ParseQuery("GET /callback?code=abc&state=evil HTTP/1.1", "code", "s1"))
             .IsNull();
     }
 
     [Test]
     public async Task Registry_RemoteWithAuth_ExposesRegistration()
     {
-        using var loggerFactory = LoggerFactory.Create(b => { });
+        using var loggerFactory = LoggerFactory.Create(b => {});
         var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>());
         var oauth = new McpOAuthConfig { ClientId = "cid" };
         var registered = registry.Register("cloud", "https://mcp.example.com/mcp", "http", null, oauth);
@@ -258,13 +255,13 @@ public class McpOAuthTests : IDisposable
         try
         {
             File.WriteAllText(tempFile, """
-                {"mcpServers": {"cloud": {
-                    "url": "https://mcp.example.com/mcp",
-                    "transport": "sse",
-                    "headers": {"X-Tenant": "t"},
-                    "auth": {"clientId": "cid", "scopes": ["r"]}
-                }}}
-                """);
+                                        {"mcpServers": {"cloud": {
+                                            "url": "https://mcp.example.com/mcp",
+                                            "transport": "sse",
+                                            "headers": {"X-Tenant": "t"},
+                                            "auth": {"clientId": "cid", "scopes": ["r"]}
+                                        }}}
+                                        """);
             var loader = new McpServersConfigLoader(_root);
             var entries = loader.Load(tempFile);
 
@@ -279,5 +276,17 @@ public class McpOAuthTests : IDisposable
         {
             File.Delete(tempFile);
         }
+    }
+
+    private sealed class StubHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _respond;
+        public StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond)
+        {
+            _respond = respond;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+            Task.FromResult(_respond(request));
     }
 }

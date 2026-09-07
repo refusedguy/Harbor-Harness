@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -13,7 +11,10 @@ using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 namespace Harbor.Core.Tests;
+
 /// <summary>
 ///     Tests for <see cref="AgentLoop" /> using a mock <see cref="ILlmClient" /> that yields
 ///     a scripted sequence of <see cref="LlmEvent" />s. Verifies the happy-path event sequence
@@ -28,6 +29,25 @@ public class AgentLoopTests
         "Test Model",
         200_000,
         4096,
+        false,
+        false,
+        true,
+        Pricing.Unknown,
+        "openai");
+
+    /// <summary>
+    ///     Model with a 32k window: the compaction threshold
+    ///     (window − default 16_384 reserve) is 15_616 estimated tokens, so a
+    ///     seeded history of twenty ~850-token messages (17_000) triggers
+    ///     compaction while the compacted view (~4 tail messages + summary)
+    ///     stays comfortably below it.
+    /// </summary>
+    private static readonly ModelInfo CompactibleModel = new(
+        "test-model",
+        "test",
+        "Test Model",
+        32_000,
+        1024,
         false,
         false,
         true,
@@ -80,25 +100,6 @@ public class AgentLoopTests
         var session = Session.Create("/tmp", "code", "test", "test-model");
         return new TestSessionContext(session, messages);
     }
-
-    /// <summary>
-    ///     Model with a 32k window: the compaction threshold
-    ///     (window − default 16_384 reserve) is 15_616 estimated tokens, so a
-    ///     seeded history of twenty ~850-token messages (17_000) triggers
-    ///     compaction while the compacted view (~4 tail messages + summary)
-    ///     stays comfortably below it.
-    /// </summary>
-    private static readonly ModelInfo CompactibleModel = new(
-        "test-model",
-        "test",
-        "Test Model",
-        32_000,
-        1024,
-        false,
-        false,
-        true,
-        Pricing.Unknown,
-        "openai");
 
     /// <summary>
     ///     Session pre-seeded with <paramref name="seedCount" /> user messages of
@@ -268,7 +269,7 @@ public class AgentLoopTests
 
         var (loop, _, _, _, bus) = CreateLoop(client, ConfigureAggressiveCompaction);
         var session = CreateSeededSession(seedCount: 20);
-        var seedIds = session.Messages.Select(m => m.Id).ToArray();
+        string[] seedIds = session.Messages.Select(m => m.Id).ToArray();
         var completed = new List<CompactionCompletedEvent>();
         bus.Subscribe<CompactionCompletedEvent>(async (evt, ct) => completed.Add(evt));
 
@@ -384,11 +385,10 @@ public class AgentLoopTests
     /// </summary>
     private sealed class ScriptedLlmClient(params LlmEvent[][] calls) : ILlmClient
     {
-        private int _callIndex;
 
         public List<int> RequestSizes { get; } = [];
 
-        public int StreamCalls => _callIndex;
+        public int StreamCalls { get; private set; }
 
         public ProviderId ProviderId => ProviderId.Create("test");
 
@@ -397,8 +397,8 @@ public class AgentLoopTests
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             RequestSizes.Add(request.Messages.Count);
-            var events = calls[Math.Min(_callIndex, calls.Length - 1)];
-            _callIndex++;
+            var events = calls[Math.Min(StreamCalls, calls.Length - 1)];
+            StreamCalls++;
             foreach (var e in events)
             {
                 yield return e;

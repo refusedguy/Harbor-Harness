@@ -12,16 +12,13 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class GfmTableParserAndFormatBenchmark
 {
-    private string[] _tableLines = null!;
 
     [Params(5, 50, 500)]
     public int RowCount;
+    private string[] _tableLines = null!;
 
     [GlobalSetup]
-    public void Setup()
-    {
-        _tableLines = BuildGfmTable(RowCount);
-    }
+    public void Setup() => _tableLines = BuildGfmTable(RowCount);
 
     [Benchmark(Description = "Parse GFM table lines", Baseline = true)]
     public GfmTable Parse_Table()

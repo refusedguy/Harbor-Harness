@@ -1,21 +1,24 @@
 using Harbor.Abstractions.Events;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Streaming;
 
 /// <summary>
-/// Bridges the agent event bus to the inline renderer (CE-1 З.4): text deltas
-/// stream through <see cref="StreamBlock"/> (StreamingSync flush policy +
-/// CommitTickPacer hysteresis), finalized content commits above the
-/// scrollback via <see cref="InlineSession"/>, the composer stays live below.
-///
-/// CellForge never touches AgentLoop directly — the event bus is the seam.
+///     Bridges the agent event bus to the inline renderer (CE-1 З.4): text deltas
+///     stream through <see cref="StreamBlock" /> (StreamingSync flush policy +
+///     CommitTickPacer hysteresis), finalized content commits above the
+///     scrollback via <see cref="InlineSession" />, the composer stays live below.
+///     CellForge never touches AgentLoop directly — the event bus is the seam.
 /// </summary>
 public sealed class InlineAgentStreamBridge : IDisposable
 {
     private readonly IEventBus _bus;
-    private readonly InlineSession _session;
     private readonly ComposerController _composer;
+    private readonly List<string> _revealed = new();
+    private readonly InlineSession _session;
+
+    private readonly AnsiWriter _writer;
+    private long _lastNowMs;
     private StreamBlock? _stream;
 
     public InlineAgentStreamBridge(
@@ -31,10 +34,6 @@ public sealed class InlineAgentStreamBridge : IDisposable
         Subscription = bus.Subscribe(HandleEvent);
     }
 
-    private readonly AnsiWriter _writer;
-    private readonly List<string> _revealed = new();
-    private long _lastNowMs;
-
     /// <summary>Terminal width used for wrapping (updated on resize).</summary>
     public int Width { get; set; } = 80;
 
@@ -42,6 +41,8 @@ public sealed class InlineAgentStreamBridge : IDisposable
 
     /// <summary>Prompt buffer passthrough for input handling before rendering.</summary>
     public PromptBuffer Prompt => _composer.Buffer;
+
+    public void Dispose() => Subscription.Dispose();
 
     // ── Event side ─────────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ public sealed class InlineAgentStreamBridge : IDisposable
             Tick(_lastNowMs);
         }
 
-        var full = BuildStreamText();
+        string full = BuildStreamText();
         if (full.Length > 0)
         {
             _session.EraseLiveRegion();
@@ -116,24 +117,24 @@ public sealed class InlineAgentStreamBridge : IDisposable
     // ── Painting ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Repaints the live region: revealed stream lines + partial tail above,
-    /// composer below. Returns rows occupied (also recorded in the session).
-    /// The terminal cursor ends at the prompt caret — inline mode parks it by
-    /// construction, no absolute addressing needed.
+    ///     Repaints the live region: revealed stream lines + partial tail above,
+    ///     composer below. Returns rows occupied (also recorded in the session).
+    ///     The terminal cursor ends at the prompt caret — inline mode parks it by
+    ///     construction, no absolute addressing needed.
     /// </summary>
     public int RenderLiveRegion(string? placeholder = null)
     {
         _session.EraseLiveRegion();
         _session.SetLiveLines(0);
 
-        var text = BuildStreamText();
+        string text = BuildStreamText();
         var lines = new List<string>(64);
         if (text.Length > 0)
         {
             TextWrap.WrapDocument(text, Width, lines);
         }
 
-        foreach (var line in lines)
+        foreach (string line in lines)
         {
             _writer.WriteText(line);
             _writer.WriteLineBreak();
@@ -157,8 +158,8 @@ public sealed class InlineAgentStreamBridge : IDisposable
             return string.Empty;
         }
 
-        var sb = new System.Text.StringBuilder();
-        foreach (var line in _revealed)
+        var sb = new StringBuilder();
+        foreach (string line in _revealed)
         {
             sb.Append(line).Append('\n');
         }
@@ -174,9 +175,9 @@ public sealed class InlineAgentStreamBridge : IDisposable
 
     private int CountPromptLines()
     {
-        var text = _composer.Buffer.SnapshotText();
+        string text = _composer.Buffer.SnapshotText();
         int lines = 1;
-        foreach (var c in text)
+        foreach (char c in text)
         {
             if (c == '\n')
             {
@@ -192,6 +193,4 @@ public sealed class InlineAgentStreamBridge : IDisposable
         _session.EraseLiveRegion();
         _session.WriteFinalizedBlock(text, Width, new CellStyle(attrs: attrs));
     }
-
-    public void Dispose() => Subscription.Dispose();
 }

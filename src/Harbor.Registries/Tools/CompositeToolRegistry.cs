@@ -1,18 +1,10 @@
 using System.Collections.Frozen;
-using Microsoft.Extensions.Logging;
-using NonBlocking;
 namespace Harbor.Registries.Tools;
 
 public sealed class CompositeToolRegistry : IToolRegistry
 {
     private readonly List<IToolSource> _sources = new();
     private volatile FrozenDictionary<ToolName, ITool>? _frozenTools;
-
-    public void AddSource(IToolSource source)
-    {
-        _sources.Add(source);
-        InvalidateFrozenSnapshot();
-    }
 
     public IReadOnlyList<ToolDescriptor> GetAllTools()
     {
@@ -100,6 +92,12 @@ public sealed class CompositeToolRegistry : IToolRegistry
 
     public Result Unregister(ToolName name) => Result.Failure("CompositeToolRegistry is read-only.");
 
+    public void AddSource(IToolSource source)
+    {
+        _sources.Add(source);
+        InvalidateFrozenSnapshot();
+    }
+
     public void Freeze()
     {
         var dict = new Dictionary<ToolName, ITool>();
@@ -118,10 +116,7 @@ public sealed class CompositeToolRegistry : IToolRegistry
         _frozenTools = dict.ToFrozenDictionary();
     }
 
-    private void InvalidateFrozenSnapshot()
-    {
-        Interlocked.Exchange(ref _frozenTools, null);
-    }
+    private void InvalidateFrozenSnapshot() => Interlocked.Exchange(ref _frozenTools, null);
 
     private static ToolDescriptor[] ResolveAllFromFrozen(FrozenDictionary<ToolName, ITool> frozen)
     {

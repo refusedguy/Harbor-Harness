@@ -1,19 +1,16 @@
-using System.Text;
-using Harbor.Tui.CellForge.Input;
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Navigation;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>One actionable entry of the command palette.</summary>
 public sealed record CommandItem(string Id, string Title, string Detail = "", string Shortcut = "", string Group = "");
 
 /// <summary>
-/// Command palette overlay (ctrl+p pattern): fuzzy-filtered command list
-/// with keyboard navigation and suggested defaults. The view is UI-only —
-/// hosts subscribe via <see cref="OnCommit" /> and keep command semantics
-/// out of the widget. Paint draws a bordered box; the host decides overlay
-/// placement by passing a <see cref="Rect" />.
+///     Command palette overlay (ctrl+p pattern): fuzzy-filtered command list
+///     with keyboard navigation and suggested defaults. The view is UI-only —
+///     hosts subscribe via <see cref="OnCommit" /> and keep command semantics
+///     out of the widget. Paint draws a bordered box; the host decides overlay
+///     placement by passing a <see cref="Rect" />.
 /// </summary>
 /// <remarks>
 ///     Items sharing a non-empty <see cref="CommandItem.Group" /> are
@@ -26,35 +23,33 @@ public sealed class CommandPaletteView
     private const int PageRows = 5;
 
     private IReadOnlyList<CommandItem> _commands = [];
-    private List<CommandItem> _results = [];
     private List<(bool IsHeader, string Text)> _flatView = new();
-    private List<int> _selectableIndices = new();
-    private string _query = string.Empty;
-    private int _selected;
-    private int _offset;
 
     /// <summary>Rows the last Paint actually showed — drives list scrolling on move.</summary>
     private int _lastRows = 8;
+    private int _offset;
+    private List<CommandItem> _results = [];
+    private List<int> _selectableIndices = new();
 
     /// <summary>Invoked with the chosen item on Enter; the palette hides itself first.</summary>
     public Action<CommandItem>? OnCommit { get; set; }
 
     public bool Visible { get; private set; }
 
-    public string Query => _query;
+    public string Query { get; private set; } = string.Empty;
 
     /// <summary>Current filtered+ranked result set (all suggestions when the query is empty).</summary>
     public IReadOnlyList<CommandItem> Results => _results;
 
     /// <summary>Index into the selectable subset of <see cref="_flatView" />.</summary>
-    public int SelectedIndex => _selected;
+    public int SelectedIndex { get; private set; }
 
     public void Show(IReadOnlyList<CommandItem> commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
         _commands = commands;
-        _query = string.Empty;
-        _selected = 0;
+        Query = string.Empty;
+        SelectedIndex = 0;
         _offset = 0;
         Refilter();
         Visible = true;
@@ -64,16 +59,16 @@ public sealed class CommandPaletteView
     {
         Visible = false;
         _results = [];
-        _flatView = new();
-        _selectableIndices = new();
-        _query = string.Empty;
-        _selected = 0;
+        _flatView = new List<(bool IsHeader, string Text)>();
+        _selectableIndices = new List<int>();
+        Query = string.Empty;
+        SelectedIndex = 0;
         _offset = 0;
     }
 
     /// <summary>
-    /// Handles a key while visible. Returns true when consumed — hosts must
-    /// stop routing the event (notably Enter/Escape) to other handlers.
+    ///     Handles a key while visible. Returns true when consumed — hosts must
+    ///     stop routing the event (notably Enter/Escape) to other handlers.
     /// </summary>
     public bool HandleKey(in KeyEvent key)
     {
@@ -91,7 +86,7 @@ public sealed class CommandPaletteView
             case KeyCode.Enter:
                 if (_selectableIndices.Count > 0)
                 {
-                    int resultIndex = Math.Min(_selected, _selectableIndices.Count - 1);
+                    int resultIndex = Math.Min(SelectedIndex, _selectableIndices.Count - 1);
                     var chosen = _results[resultIndex];
                     Hide();
                     OnCommit?.Invoke(chosen);
@@ -116,16 +111,16 @@ public sealed class CommandPaletteView
                 return true;
 
             case KeyCode.Backspace:
-                if (_query.Length > 0)
+                if (Query.Length > 0)
                 {
-                    _query = _query[..^1];
+                    Query = Query[..^1];
                     Refilter();
                 }
 
                 return true;
 
             case KeyCode.Char when key.Modifiers is KeyModifiers.None or KeyModifiers.Shift:
-                _query += key.Character.ToString();
+                Query += key.Character.ToString();
                 Refilter();
                 return true;
 
@@ -136,13 +131,13 @@ public sealed class CommandPaletteView
 
     private void Move(int delta)
     {
-        _selected = Math.Clamp(_selected + delta, 0, _selectableIndices.Count - 1);
+        SelectedIndex = Math.Clamp(SelectedIndex + delta, 0, _selectableIndices.Count - 1);
         EnsureVisible();
     }
 
     private void Refilter()
     {
-        _results = FuzzyMatcher.Filter(_query, _commands, static c => c.Title + " " + c.Detail);
+        _results = FuzzyMatcher.Filter(Query, _commands, static c => c.Title + " " + c.Detail);
         _flatView = new List<(bool, string)>(_results.Count + 8);
         _selectableIndices = new List<int>(_results.Count);
 
@@ -160,7 +155,7 @@ public sealed class CommandPaletteView
             _flatView.Add((false, item.Title));
         }
 
-        _selected = 0;
+        SelectedIndex = 0;
         _offset = 0;
         EnsureVisible();
     }
@@ -172,7 +167,7 @@ public sealed class CommandPaletteView
             return;
         }
 
-        int targetVisual = _selectableIndices[Math.Min(_selected, _selectableIndices.Count - 1)];
+        int targetVisual = _selectableIndices[Math.Min(SelectedIndex, _selectableIndices.Count - 1)];
         if (targetVisual < _offset)
         {
             _offset = targetVisual;
@@ -184,9 +179,9 @@ public sealed class CommandPaletteView
     }
 
     /// <summary>
-    /// Paints the palette inside <paramref name="rect" /> (host-computed,
-    /// typically a centered box): border, query prompt, the rows that fit,
-    /// and a hint footer. Pure over state — no layout side effects.
+    ///     Paints the palette inside <paramref name="rect" /> (host-computed,
+    ///     typically a centered box): border, query prompt, the rows that fit,
+    ///     and a hint footer. Pure over state — no layout side effects.
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect rect)
     {
@@ -199,7 +194,7 @@ public sealed class CommandPaletteView
         int innerW = rect.Width - 2;
 
         var queryStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
-        var queryText = "> " + _query;
+        string queryText = "> " + Query;
         buffer.SetText(rect.X + 1, rect.Y + 1, queryText.AsSpan(0, Math.Min(queryText.Length, innerW)), queryStyle);
 
         int listTop = rect.Y + 2;
@@ -208,7 +203,7 @@ public sealed class CommandPaletteView
         EnsureVisible();
 
         int selectedVisualIndex = _selectableIndices.Count > 0
-            ? _selectableIndices[Math.Min(_selected, _selectableIndices.Count - 1)]
+            ? _selectableIndices[Math.Min(SelectedIndex, _selectableIndices.Count - 1)]
             : -1;
 
         var selectedStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
@@ -223,7 +218,7 @@ public sealed class CommandPaletteView
                 continue;
             }
 
-            var (isHeader, text) = _flatView[i];
+            (bool isHeader, string text) = _flatView[i];
             int y = listTop + painted;
             if (isHeader)
             {
@@ -241,14 +236,14 @@ public sealed class CommandPaletteView
         int selectableCount = _selectableIndices.Count;
         if (selectableCount > availableRows)
         {
-            var more = $"… +{selectableCount - availableRows}";
+            string more = $"… +{selectableCount - availableRows}";
             buffer.SetText(rect.X + 1, rect.Bottom - 2, more.AsSpan(0, Math.Min(more.Length, innerW)), detailStyle);
         }
 
         const string hints = "↑↓ move · enter run · esc close";
         if (innerW > hints.Length)
         {
-            int hintX = (rect.X + 1 + innerW) - hints.Length;
+            int hintX = rect.X + 1 + innerW - hints.Length;
             buffer.SetText(hintX, rect.Bottom - 2, hints, ChatPalette.Dim);
         }
     }
@@ -278,23 +273,20 @@ public sealed class CommandPaletteView
     }
 
     /// <summary>
-    /// Shows the CF-E-017 default catalog (slash + builtin) without the host
-    /// assembling item lists by hand. Behavior of <see cref="Show" />,
-    /// filtering, groups, navigation and <see cref="OnCommit" /> is unchanged.
+    ///     Shows the CF-E-017 default catalog (slash + builtin) without the host
+    ///     assembling item lists by hand. Behavior of <see cref="Show" />,
+    ///     filtering, groups, navigation and <see cref="OnCommit" /> is unchanged.
     /// </summary>
     /// <param name="useNerdFont">When true, builtin titles use Nerd Font glyphs; otherwise ASCII fallbacks.</param>
-    public void ShowDefaultCatalog(bool useNerdFont = false)
-    {
-        Show(CommandPaletteCatalog.GetDefaultCatalog(useNerdFont));
-    }
+    public void ShowDefaultCatalog(bool useNerdFont = false) => Show(CommandPaletteCatalog.GetDefaultCatalog(useNerdFont));
 }
 
 /// <summary>
-/// CF-E-017: icon-key → glyph mapping for builtin palette items.
-/// Mirrors the spirit of <see cref="ToolCallBlock" /> (const glyphs + plain
-/// ASCII fallbacks for terminals without Nerd Font). Unknown / missing keys
-/// map to <see cref="string.Empty" /> (plain-text, no throw) so a foreign
-/// template can never crash the palette.
+///     CF-E-017: icon-key → glyph mapping for builtin palette items.
+///     Mirrors the spirit of <see cref="ToolCallBlock" /> (const glyphs + plain
+///     ASCII fallbacks for terminals without Nerd Font). Unknown / missing keys
+///     map to <see cref="string.Empty" /> (plain-text, no throw) so a foreign
+///     template can never crash the palette.
 /// </summary>
 public static class PaletteIconMap
 {
@@ -311,7 +303,7 @@ public static class PaletteIconMap
         "SettingsIcon" => "@",
         "ProviderIcon" => "o",
         "QuitIcon" => "*",
-        _ => string.Empty,
+        _ => string.Empty
     };
 
     /// <summary>Nerd Font (FontAwesome PUA) glyph per icon key.</summary>
@@ -327,12 +319,12 @@ public static class PaletteIconMap
         "SettingsIcon" => "",
         "ProviderIcon" => "",
         "QuitIcon" => "",
-        _ => string.Empty,
+        _ => string.Empty
     };
 
     /// <summary>
-    /// Resolves an icon key to a single-glyph prefix. Unknown, null or
-    /// whitespace keys return <see cref="string.Empty" /> (plain-text fallback).
+    ///     Resolves an icon key to a single-glyph prefix. Unknown, null or
+    ///     whitespace keys return <see cref="string.Empty" /> (plain-text fallback).
     /// </summary>
     /// <param name="iconKey">Icon key from the builtin template (e.g. <c>FolderIcon</c>).</param>
     /// <param name="useNerdFont">When true and a Nerd glyph exists, return it; otherwise the ASCII fallback.</param>
@@ -358,21 +350,18 @@ public static class PaletteIconMap
 }
 
 /// <summary>
-/// CF-E-017: cell-local mirror of the desktop command catalogs.
-/// Literals are kept 1:1 with
-/// <c>src/Harbor.Desktop.Shared/Commands/SlashCommands.cs</c> (<c>All</c>, 10 entries)
-/// and <c>src/Harbor.Desktop.Shared/Commands/BuiltInCommands.cs</c> (<c>Templates()</c>, 10 entries).
-/// No project reference to <c>Harbor.Desktop.Shared</c> is taken on purpose:
-/// the architecture matrix forbids a <c>Harbor.Tui.CellForge → Harbor.Desktop.Shared</c> edge,
-/// so the palette owns a literal copy and documents the source.
-/// Existing palette behavior (fuzzy via <see cref="FuzzyMatcher" />, groups,
-/// navigation, <see cref="CommandPaletteView.OnCommit" />) is untouched — only item sources are added.
+///     CF-E-017: cell-local mirror of the desktop command catalogs.
+///     Literals are kept 1:1 with
+///     <c>src/Harbor.Desktop.Shared/Commands/SlashCommands.cs</c> (<c>All</c>, 10 entries)
+///     and <c>src/Harbor.Desktop.Shared/Commands/BuiltInCommands.cs</c> (<c>Templates()</c>, 10 entries).
+///     No project reference to <c>Harbor.Desktop.Shared</c> is taken on purpose:
+///     the architecture matrix forbids a <c>Harbor.Tui.CellForge → Harbor.Desktop.Shared</c> edge,
+///     so the palette owns a literal copy and documents the source.
+///     Existing palette behavior (fuzzy via <see cref="FuzzyMatcher" />, groups,
+///     navigation, <see cref="CommandPaletteView.OnCommit" />) is untouched — only item sources are added.
 /// </summary>
 public static class CommandPaletteCatalog
 {
-    private sealed record SlashDef(string Name, string Description, string[] Aliases);
-
-    private sealed record BuiltinDef(string Title, string Subtitle, string IconKey, string Id);
 
     private static readonly SlashDef[] SlashDefs =
     [
@@ -385,7 +374,7 @@ public static class CommandPaletteCatalog
         new("/tokens", "Show token usage for the current session", []),
         new("/theme", "Toggle between dark and light theme", []),
         new("/editor", "Open the code editor", []),
-        new("/diff", "Open the diff viewer", []),
+        new("/diff", "Open the diff viewer", [])
     ];
 
     private static readonly BuiltinDef[] BuiltinDefs =
@@ -399,7 +388,7 @@ public static class CommandPaletteCatalog
         new("Open Token Usage", "Show per-session token usage and cost", "ChartIcon", OverlayIds.TokenUsage),
         new("Open Settings", "Configure providers, theme, fonts", "SettingsIcon", OverlayIds.Settings),
         new("Open Provider Browser", "Browse and configure LLM providers", "ProviderIcon", OverlayIds.ProviderBrowser),
-        new("Quit", "Exit Harbor", "QuitIcon", "quit"),
+        new("Quit", "Exit Harbor", "QuitIcon", "quit")
     ];
 
     /// <summary>Slash catalog (10 items, group "Slash"). Mirrors <c>SlashCommands.All</c>.</summary>
@@ -409,8 +398,8 @@ public static class CommandPaletteCatalog
     public static IReadOnlyList<CommandItem> GetSlashCatalog() => SlashCatalog;
 
     /// <summary>
-    /// Builds the builtin catalog (10 items, group "Commands").
-    /// Titles carry the icon prefix (<c>"&lt;glyph&gt; &lt;title&gt;"</c>); unknown icons stay plain-text.
+    ///     Builds the builtin catalog (10 items, group "Commands").
+    ///     Titles carry the icon prefix (<c>"&lt;glyph&gt; &lt;title&gt;"</c>); unknown icons stay plain-text.
     /// </summary>
     /// <param name="useNerdFont">When true, titles use Nerd Font glyphs; otherwise ASCII fallbacks.</param>
     public static IReadOnlyList<CommandItem> GetBuiltinCatalog(bool useNerdFont = false)
@@ -425,8 +414,8 @@ public static class CommandPaletteCatalog
     }
 
     /// <summary>
-    /// Combined default catalog: slash (10) + builtin (10), in that order.
-    /// Empty query lists all 20 via the unchanged fuzzy path.
+    ///     Combined default catalog: slash (10) + builtin (10), in that order.
+    ///     Empty query lists all 20 via the unchanged fuzzy path.
     /// </summary>
     /// <param name="useNerdFont">Glyph set for the builtin half.</param>
     public static IReadOnlyList<CommandItem> GetDefaultCatalog(bool useNerdFont = false)
@@ -440,8 +429,8 @@ public static class CommandPaletteCatalog
     }
 
     /// <summary>
-    /// Exact lookup mirroring <c>SlashCommands.Find</c>: strips leading slashes,
-    /// case-insensitive, alias-aware (<c>cls → /clear</c>, <c>exit → /quit</c>).
+    ///     Exact lookup mirroring <c>SlashCommands.Find</c>: strips leading slashes,
+    ///     case-insensitive, alias-aware (<c>cls → /clear</c>, <c>exit → /quit</c>).
     /// </summary>
     /// <param name="command">User-typed command (e.g. <c>/help</c>, <c>help</c>, <c>cls</c>).</param>
     /// <returns>The matching slash item, or null.</returns>
@@ -474,8 +463,8 @@ public static class CommandPaletteCatalog
     }
 
     /// <summary>
-    /// Exact builtin lookup by id slug (<c>open-session</c>) or pure title
-    /// (<c>Open Session</c>), case-insensitive. The glyph prefix is not part of the query.
+    ///     Exact builtin lookup by id slug (<c>open-session</c>) or pure title
+    ///     (<c>Open Session</c>), case-insensitive. The glyph prefix is not part of the query.
     /// </summary>
     public static CommandItem? FindBuiltin(string? query, bool useNerdFont = false)
     {
@@ -499,13 +488,10 @@ public static class CommandPaletteCatalog
     }
 
     /// <summary>
-    /// Combined exact lookup: slash first (slash/alias rules), then builtin (id/title).
-    /// Fuzzy filtering itself stays inside <see cref="CommandPaletteView" /> via <see cref="FuzzyMatcher" />.
+    ///     Combined exact lookup: slash first (slash/alias rules), then builtin (id/title).
+    ///     Fuzzy filtering itself stays inside <see cref="CommandPaletteView" /> via <see cref="FuzzyMatcher" />.
     /// </summary>
-    public static CommandItem? Find(string? query, bool useNerdFont = false)
-    {
-        return FindSlash(query) ?? FindBuiltin(query, useNerdFont);
-    }
+    public static CommandItem? Find(string? query, bool useNerdFont = false) => FindSlash(query) ?? FindBuiltin(query, useNerdFont);
 
     private static IReadOnlyList<CommandItem> BuildSlashCatalog()
     {
@@ -528,5 +514,8 @@ public static class CommandPaletteCatalog
         string title = glyph.Length == 0 ? def.Title : $"{glyph} {def.Title}";
         return new CommandItem(def.Id, title, def.Subtitle, string.Empty, "Commands");
     }
-}
 
+    private sealed record SlashDef(string Name, string Description, string[] Aliases);
+
+    private sealed record BuiltinDef(string Title, string Subtitle, string IconKey, string Id);
+}

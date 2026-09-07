@@ -1,8 +1,8 @@
+using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Tools.Mcp;
 
 /// <summary>
@@ -14,13 +14,13 @@ namespace Harbor.Tools.Mcp;
 /// </summary>
 public sealed class McpOAuthHandler
 {
-    private readonly string _server;
-    private readonly Uri _serverUrl;
-    private readonly McpOAuthConfig _config;
     private readonly McpOAuthTokenCache _cache;
+    private readonly McpOAuthConfig _config;
+    private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Func<HttpClient> _httpFactory;
     private readonly ILogger? _logger;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly string _server;
+    private readonly Uri _serverUrl;
 
     /// <summary>
     ///     Construct a per-server OAuth handler.
@@ -64,7 +64,7 @@ public sealed class McpOAuthHandler
 
             if (cached?.RefreshToken is { Length: > 0 } refresh)
             {
-                var refreshed = await TryRefreshAsync(refresh, cancellationToken).ConfigureAwait(false);
+                string? refreshed = await TryRefreshAsync(refresh, cancellationToken).ConfigureAwait(false);
                 if (refreshed is not null)
                     return refreshed;
             }
@@ -143,7 +143,7 @@ public sealed class McpOAuthHandler
         if (string.IsNullOrEmpty(clientId))
             clientId = "harbor-mcp";
 
-        var (verifier, challenge) = McpOAuthFlow.NewPkcePair();
+        (string verifier, string challenge) = McpOAuthFlow.NewPkcePair();
         string state = McpOAuthFlow.NewState();
         var listener = new McpLoopbackListener(_config.RedirectPort);
         string redirectUri = listener.RedirectUri;
@@ -191,7 +191,7 @@ public sealed class McpOAuthHandler
     {
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
         catch (Exception ex)
         {
@@ -253,6 +253,15 @@ public sealed class McpLoopbackListener : IAsyncDisposable
     /// <summary>Redirect URI to register with the OAuth server.</summary>
     public string RedirectUri { get; }
 
+    public ValueTask DisposeAsync()
+    {
+        if (_disposed)
+            return ValueTask.CompletedTask;
+        _disposed = true;
+        _listener.Stop();
+        return ValueTask.CompletedTask;
+    }
+
     /// <summary>Wait for one redirect carrying a state-matched code (60s cap).</summary>
     public async Task<string?> WaitForCodeAsync(string expectedState, CancellationToken cancellationToken = default)
     {
@@ -262,7 +271,7 @@ public sealed class McpLoopbackListener : IAsyncDisposable
         {
             using var client = await _listener.AcceptTcpClientAsync(timeout.Token).ConfigureAwait(false);
             using var stream = client.GetStream();
-            var buffer = new byte[8192];
+            byte[] buffer = new byte[8192];
             int read = await stream.ReadAsync(buffer, timeout.Token).ConfigureAwait(false);
             string request = Encoding.ASCII.GetString(buffer, 0, read);
             string? code = ParseQuery(request, "code", expectedState);
@@ -303,14 +312,5 @@ public sealed class McpLoopbackListener : IAsyncDisposable
         }
 
         return state == expectedState ? code : null;
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        if (_disposed)
-            return ValueTask.CompletedTask;
-        _disposed = true;
-        _listener.Stop();
-        return ValueTask.CompletedTask;
     }
 }

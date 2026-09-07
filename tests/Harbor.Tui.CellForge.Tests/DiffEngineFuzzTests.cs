@@ -1,24 +1,23 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Fuzz invariant (celldiff §8): after ANY flush FRONT == BACK, unconditionally.
-/// Deterministic seeds drive random mutations (narrow/wide runes, styled fills,
-/// text runs) plus paired resizes; every step flushes through the real engine
-/// and asserts the mirror property.
+///     Fuzz invariant (celldiff §8): after ANY flush FRONT == BACK, unconditionally.
+///     Deterministic seeds drive random mutations (narrow/wide runes, styled fills,
+///     text runs) plus paired resizes; every step flushes through the real engine
+///     and asserts the mirror property.
 /// </summary>
 public class DiffEngineFuzzTests
 {
     private static readonly Rune[] RunePool =
     [
         new('a'), new('Z'), new('9'), new(' '), new('─'), new('│'),
-        new(0x00E9),   // é — narrow
-        new(0x4E2D),   // 中 — wide CJK
-        new(0x3042),   // あ — wide kana
-        new(0x1F44D),  // 👍 — wide past BMP
-        new(0x2713),   // ✓ — narrow dingbat
+        new(0x00E9), // é — narrow
+        new(0x4E2D), // 中 — wide CJK
+        new(0x3042), // あ — wide kana
+        new(0x1F44D), // 👍 — wide past BMP
+        new(0x2713) // ✓ — narrow dingbat
     ];
 
     [Test]
@@ -34,7 +33,7 @@ public class DiffEngineFuzzTests
     {
         var rng = new Random(seed);
         var backend = new RecordingBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var writer = new AnsiWriter(backend, true);
         var engine = new DiffEngine(24, 8);
         var back = new ScreenBuffer(24, 8);
 
@@ -104,6 +103,6 @@ public class DiffEngineFuzzTests
         1 => new CellStyle(PackedColor.Indexed((byte)rng.Next(256))),
         2 => new CellStyle(PackedColor.Rgb((byte)rng.Next(256), (byte)rng.Next(256), (byte)rng.Next(256))),
         3 => new CellStyle(attrs: StyleAttr.Bold | StyleAttr.Underline),
-        _ => new CellStyle(PackedColor.Indexed((byte)rng.Next(256)), PackedColor.Indexed((byte)rng.Next(256)), StyleAttr.Reverse),
+        _ => new CellStyle(PackedColor.Indexed((byte)rng.Next(256)), PackedColor.Indexed((byte)rng.Next(256)), StyleAttr.Reverse)
     };
 }

@@ -3,8 +3,6 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Reducers;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Benchmarks;
 
 /// <summary>
@@ -27,10 +25,10 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 10)]
 public class AppReducerStreamingBenchmark
 {
-    private AgentEvent[] _events = null!;
 
     [Params(1000)]
     public int DeltaCount;
+    private AgentEvent[] _events = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -42,7 +40,7 @@ public class AppReducerStreamingBenchmark
         {
             // ~19 chars per delta — matches the O(N²) baseline scenario.
             _events[i + 1] = new MessageUpdateEvent(
-                new TextDeltaEvent($"msg-1", $"Token {i:00000} — "),
+                new TextDeltaEvent("msg-1", $"Token {i:00000} — "),
                 partial);
         }
 
@@ -52,7 +50,7 @@ public class AppReducerStreamingBenchmark
     [Benchmark(Description = "MessageStart + N TextDelta + MessageEnd through AppReducer", Baseline = true)]
     public AppState Stream_OneMessage()
     {
-        AppState state = new AppState();
+        var state = new AppState();
         for (int i = 0; i < _events.Length; i++)
         {
             state = AppReducer.Reduce(_events[i], state);
@@ -67,7 +65,7 @@ public class AppReducerStreamingBenchmark
         // A realistic mid-session state: populated transcript and streaming
         // buffers, so the clone cost matches what the full-stream benchmark
         // pays per event. Only the pending buffer changes per clone.
-        AppState state = new AppState
+        var state = new AppState
         {
             Status = "running",
             IsAgentRunning = true,
@@ -76,7 +74,7 @@ public class AppReducerStreamingBenchmark
             Provider = "anthropic",
             AgentName = "code",
             StreamingBuffer = new string('x', DeltaCount * 19),
-            Lines = [new ChatLine(ChatRole.User, "Write a C# function that reverses a string.")],
+            Lines = [new ChatLine(ChatRole.User, "Write a C# function that reverses a string.")]
         };
 
         for (int i = 0; i < DeltaCount; i++)

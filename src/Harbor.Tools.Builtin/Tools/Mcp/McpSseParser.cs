@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace Harbor.Tools.Mcp;
 
 /// <summary>A single Server-Sent-Events frame parsed from a line stream.</summary>
@@ -16,7 +14,10 @@ internal sealed class SseEventReader
     private readonly List<string> _data = [];
     private string _eventName = "message";
 
-    /// <summary>Feed one raw line (without its terminator). Returns the completed event, or null when the line does not close one.</summary>
+    /// <summary>
+    ///     Feed one raw line (without its terminator). Returns the completed event, or null when the line does not close
+    ///     one.
+    /// </summary>
     public SseEvent? Feed(string line)
     {
         line = line.TrimEnd('\r');
@@ -82,13 +83,13 @@ internal static class McpSse
             return null;
         }
 
-        if (expectedId is not { } id)
+        if (expectedId is not {} id)
         {
             return doc;
         }
 
         if (doc.RootElement.ValueKind == JsonValueKind.Object
-            && doc.RootElement.TryGetProperty("id", out JsonElement idEl)
+            && doc.RootElement.TryGetProperty("id", out var idEl)
             && idEl.ValueKind == JsonValueKind.Number
             && idEl.TryGetInt32(out int actual)
             && actual == id)

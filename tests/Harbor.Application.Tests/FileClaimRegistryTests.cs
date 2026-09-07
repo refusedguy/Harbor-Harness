@@ -1,9 +1,8 @@
+using CSharpFunctionalExtensions;
+using Harbor.Application.Sessions;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
-using CSharpFunctionalExtensions;
-using Harbor.Application.Sessions;
-
 namespace Harbor.Application.Tests;
 
 public class FileClaimRegistryTests : IDisposable
@@ -14,7 +13,7 @@ public class FileClaimRegistryTests : IDisposable
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            Directory.Delete(_dir, true);
         }
         catch (DirectoryNotFoundException)
         {
@@ -146,11 +145,11 @@ public class FileClaimRegistryTests : IDisposable
     }
 
     /// <summary>
-    /// E2E concurrent stress — phase A: 12 workers race one scope in parallel;
-    /// atomic CreateNew guarantees a winner exists and releases cleanly.
-    /// Phase B: while one holder keeps the slot every other worker is rejected
-    /// (the true double-grant guard). Phase C: deterministic handoff — each
-    /// worker claims exactly once in sequence; zero orphaned files remain.
+    ///     E2E concurrent stress — phase A: 12 workers race one scope in parallel;
+    ///     atomic CreateNew guarantees a winner exists and releases cleanly.
+    ///     Phase B: while one holder keeps the slot every other worker is rejected
+    ///     (the true double-grant guard). Phase C: deterministic handoff — each
+    ///     worker claims exactly once in sequence; zero orphaned files remain.
     /// </summary>
     [Test]
     public async Task ConcurrentStress_OneWinner_NoDoubleGrant_CleanHandoff()
@@ -209,7 +208,8 @@ public class FileClaimRegistryTests : IDisposable
     }
 
     /// <summary>
-    /// Spawns a short-lived child process and returns its (reaped) pid.</summary>
+    ///     Spawns a short-lived child process and returns its (reaped) pid.
+    /// </summary>
     private static int StartChildAndReap()
     {
         bool isWindows = OperatingSystem.IsWindows();
@@ -223,10 +223,10 @@ public class FileClaimRegistryTests : IDisposable
     }
 
     /// <summary>
-    /// E2E multi-"process" simulation: independent registry instances share
-    /// NOTHING but the claims directory, so every grant/fail decision rides
-    /// on CreateNew atomicity alone. Each parallel round admits exactly one
-    /// winner; serialized hand-off rounds terminate with zero orphan files.
+    ///     E2E multi-"process" simulation: independent registry instances share
+    ///     NOTHING but the claims directory, so every grant/fail decision rides
+    ///     on CreateNew atomicity alone. Each parallel round admits exactly one
+    ///     winner; serialized hand-off rounds terminate with zero orphan files.
     /// </summary>
     [Test]
     public async Task IndependentRegistries_Race_OneWinner_PerRound_ZeroOrphans()
@@ -275,10 +275,10 @@ public class FileClaimRegistryTests : IDisposable
     }
 
     /// <summary>
-    /// E2E steal storm: K independent instances hammer one dead-owner claim
-    /// past grace. Deterministic outcome for same-process contenders — the
-    /// first recreated stamp carries OUR live pid, freezing all later
-    /// candidates — so at most one simultaneous grant and no leftovers.
+    ///     E2E steal storm: K independent instances hammer one dead-owner claim
+    ///     past grace. Deterministic outcome for same-process contenders — the
+    ///     first recreated stamp carries OUR live pid, freezing all later
+    ///     candidates — so at most one simultaneous grant and no leftovers.
     /// </summary>
     [Test]
     public async Task StealStorm_DeadOwner_AtMostOneGrant_NoOrphans()

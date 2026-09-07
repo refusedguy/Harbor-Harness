@@ -1,6 +1,6 @@
 using Harbor.Abstractions.Models.Identifiers;
-
 namespace Harbor.Abstractions.Providers;
+
 /// <summary>
 ///     Cheap "test connection" probe for a registered provider: resolves the
 ///     provider's model list (a low-cost metadata call) and reports latency +
@@ -21,8 +21,9 @@ public interface IProviderHealthCheck
     /// </summary>
     /// <param name="providerId">Registered provider id to probe.</param>
     /// <param name="cancellationToken">Cooperative cancellation for the caller (wizard close, etc.).</param>
-    Task<Result<ProviderHealth>> CheckAsync(ProviderId providerId, CancellationToken cancellationToken = default);
+    public Task<Result<ProviderHealth>> CheckAsync(ProviderId providerId, CancellationToken cancellationToken = default);
 }
+
 /// <summary>Outcome of a successful <see cref="IProviderHealthCheck.CheckAsync" /> probe.</summary>
 /// <param name="LatencyMs">Round-trip latency of the models request, in milliseconds.</param>
 /// <param name="ModelsCount">Number of models reported by the provider.</param>

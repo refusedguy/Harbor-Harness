@@ -2,10 +2,10 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Configuration;
-using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Sessions;
+
 /// <summary>
 ///     Creates <see cref="Session" /> objects with the correct provider/model
 ///     resolved from <see cref="ICommonConfigReader" /> (with HARBOR_MODEL

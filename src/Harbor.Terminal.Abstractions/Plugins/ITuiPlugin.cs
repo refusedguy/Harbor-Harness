@@ -1,6 +1,7 @@
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
 namespace Harbor.Terminal.Abstractions.Plugins;
+
 /// <summary>
 ///     Plugin contract for extending the Harbor TUI layer with custom views, view models,
 ///     and render-time behavior. This is the TUI analogue of <c>IToolPlugin</c> /

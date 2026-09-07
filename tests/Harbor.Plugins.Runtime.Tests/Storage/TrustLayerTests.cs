@@ -13,9 +13,9 @@ namespace Harbor.Plugins.Runtime.Tests.Storage;
 /// </summary>
 public sealed class TrustLayerTests : IDisposable
 {
-    private readonly string _root;
     private readonly string _globalDir;
     private readonly string _projectDir;
+    private readonly string _root;
 
     public TrustLayerTests()
     {
@@ -28,7 +28,7 @@ public sealed class TrustLayerTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); }
+        try { Directory.Delete(_root, true); }
         catch (IOException)
         { /* best-effort cleanup */
         }
@@ -100,7 +100,11 @@ public sealed class TrustLayerTests : IDisposable
 
         var first = new FileTrustPolicy(
             new[] { _globalDir }, store, NullLogger<FileTrustPolicy>.Instance,
-            trustPrompt: s => { promptedOnFirstInstance = true; return Task.FromResult(true); });
+            s =>
+            {
+                promptedOnFirstInstance = true;
+                return Task.FromResult(true);
+            });
         var d1 = await first.DecideAsync(new PluginScript(path, sourceText));
 
         // Fresh instance simulates the next app start: decision comes from the store,
@@ -108,7 +112,11 @@ public sealed class TrustLayerTests : IDisposable
         int promptsOnSecondInstance = 0;
         var second = new FileTrustPolicy(
             new[] { _globalDir }, store, NullLogger<FileTrustPolicy>.Instance,
-            trustPrompt: s => { promptsOnSecondInstance++; return Task.FromResult(true); });
+            s =>
+            {
+                promptsOnSecondInstance++;
+                return Task.FromResult(true);
+            });
         var d2 = await second.DecideAsync(new PluginScript(path, sourceText));
 
         await Assert.That(d1).IsEqualTo(PluginTrustDecision.Trusted);
@@ -127,12 +135,12 @@ public sealed class TrustLayerTests : IDisposable
 
         var declined = new FileTrustPolicy(
             new[] { _globalDir }, store, NullLogger<FileTrustPolicy>.Instance,
-            trustPrompt: _ => Task.FromResult(false));
+            _ => Task.FromResult(false));
         var d1 = await declined.DecideAsync(new PluginScript(path, sourceText));
 
         var reopened = new FileTrustPolicy(
             new[] { _globalDir }, store, NullLogger<FileTrustPolicy>.Instance,
-            trustPrompt: _ => Task.FromResult(false));
+            _ => Task.FromResult(false));
         var d2 = await reopened.DecideAsync(new PluginScript(path, sourceText));
 
         await Assert.That(d1).IsEqualTo(PluginTrustDecision.Untrusted);
@@ -149,7 +157,11 @@ public sealed class TrustLayerTests : IDisposable
 
         var approver = new FileTrustPolicy(
             new[] { _globalDir }, store, NullLogger<FileTrustPolicy>.Instance,
-            trustPrompt: _ => { promptCount++; return Task.FromResult(true); });
+            _ =>
+            {
+                promptCount++;
+                return Task.FromResult(true);
+            });
         var accepted = await approver.DecideAsync(new PluginScript(path, "// v1"));
 
         File.WriteAllText(path, "// v2 — patched source");
@@ -158,7 +170,11 @@ public sealed class TrustLayerTests : IDisposable
         var staleVerdict = await verifier.DecideAsync(new PluginScript(path, "// v2 — patched source"));
         var reAsk = new FileTrustPolicy(
             new[] { _globalDir }, store, NullLogger<FileTrustPolicy>.Instance,
-            trustPrompt: _ => { promptCount++; return Task.FromResult(true); });
+            _ =>
+            {
+                promptCount++;
+                return Task.FromResult(true);
+            });
         var staleWithPrompt = await reAsk.DecideAsync(new PluginScript(path, "// v2 — patched source"));
 
         await Assert.That(accepted).IsEqualTo(PluginTrustDecision.Trusted);
@@ -209,7 +225,7 @@ public sealed class TrustLayerTests : IDisposable
                     {
                         PluginCapability.ReadFiles,
                         PluginCapability.RunProcesses,
-                        PluginCapability.HttpRequests,
+                        PluginCapability.HttpRequests
                     })),
             NullLogger<TrustingPluginSource>.Instance);
 

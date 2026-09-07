@@ -8,7 +8,7 @@ public sealed record HarborFeatureSet(bool Plugins, bool SpectreTui, bool AllPro
 
 /// <summary>
 ///     The ONLY place that maps HARBOR_WITH_* compile symbols into
-///     <see cref="HarborFeatureSet"/> values — the rest of the hosting code
+///     <see cref="HarborFeatureSet" /> values — the rest of the hosting code
 ///     branches on the feature record, not on #if.
 /// </summary>
 internal static class HarborBuildFeatures
@@ -17,19 +17,19 @@ internal static class HarborBuildFeatures
     {
         get
         {
-            var plugins = false;
+            bool plugins = false;
 #if HARBOR_WITH_PLUGINS
             plugins = true;
 #endif
-            var spectreTui = false;
+            bool spectreTui = false;
 #if HARBOR_WITH_SPECTRE_TUI
             spectreTui = true;
 #endif
-            var allProviders = false;
+            bool allProviders = false;
 #if HARBOR_WITH_ALL_PROVIDERS
             allProviders = true;
 #endif
-            var allTools = false;
+            bool allTools = false;
 #if HARBOR_WITH_ALL_TOOLS
             allTools = true;
 #endif

@@ -1,9 +1,9 @@
 namespace Harbor.Tui.CellForge.Parsing;
 
 /// <summary>
-/// States of the escape-sequence state machine (design §5.3).
-/// UTF-8 multibyte tails are tracked inside <see cref="Ground"/> by the
-/// incremental decoder rather than as a dedicated protocol state.
+///     States of the escape-sequence state machine (design §5.3).
+///     UTF-8 multibyte tails are tracked inside <see cref="Ground" /> by the
+///     incremental decoder rather than as a dedicated protocol state.
 /// </summary>
 public enum ParserState : byte
 {
@@ -35,5 +35,5 @@ public enum ParserState : byte
     StringUntilSt,
 
     /// <summary>Inside bracketed paste — everything literal until ESC [ 201 ~.</summary>
-    PastePayload,
+    PastePayload
 }

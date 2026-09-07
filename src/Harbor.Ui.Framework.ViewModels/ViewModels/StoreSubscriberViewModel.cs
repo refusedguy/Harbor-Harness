@@ -1,49 +1,13 @@
-using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ui.Framework.ViewModels;
 
 public abstract class StoreSubscriberViewModel : ObservableObject, IDisposable
 {
     protected readonly IDispatcherAdapter Dispatcher;
-    private readonly ILogger _logger;
     private readonly EventHandler<UiState> _onStoreChanged;
-
-    protected ILogger Logger => _logger;
-
-    private interface ISelector { void Apply(UiState s); void Reset(); }
-
-    private sealed class Selector<T> : ISelector
-    {
-        private readonly Func<UiState, T> _read;
-        private readonly Action<T> _apply;
-        private readonly IEqualityComparer<T> _cmp;
-        private T _last;
-        private bool _has;
-
-        public Selector(Func<UiState, T> read, Action<T> apply, IEqualityComparer<T>? cmp)
-        {
-            _read = read;
-            _apply = apply;
-            _cmp = cmp ?? EqualityComparer<T>.Default;
-            _last = default!;
-        }
-
-        public void Apply(UiState s)
-        {
-            var v = _read(s);
-            if (_has && _cmp.Equals(_last, v)) return;
-            _last = v;
-            _has = true;
-            _apply(v);
-        }
-
-        public void Reset() => _has = false;
-    }
 
     private readonly List<ISelector> _selectors = new();
 
@@ -52,7 +16,7 @@ public abstract class StoreSubscriberViewModel : ObservableObject, IDisposable
         ILogger logger)
     {
         Dispatcher = dispatcher;
-        _logger = logger;
+        Logger = logger;
         _onStoreChanged = (_, state) =>
         {
             OnStoreChanged(state);
@@ -61,6 +25,10 @@ public abstract class StoreSubscriberViewModel : ObservableObject, IDisposable
         Dispatcher.StateChanged += _onStoreChanged;
     }
 
+    protected ILogger Logger { get; }
+
+    public virtual void Dispose() => Dispatcher.StateChanged -= _onStoreChanged;
+
     protected abstract void OnStoreChanged(UiState state);
 
     /// <summary>
@@ -68,7 +36,7 @@ public abstract class StoreSubscriberViewModel : ObservableObject, IDisposable
     ///     Override in platform-specific ViewModels to execute platform-specific logic
     ///     (e.g., Avalonia Dispatcher.UIThread.Post, WPF Dispatcher.Invoke).
     /// </summary>
-    protected virtual void OnAfterSelectorsApplied(UiState state) { }
+    protected virtual void OnAfterSelectorsApplied(UiState state) {}
 
     /// <summary>
     ///     Declare a state→VM projection. Applied only when the slice actually changes.
@@ -91,8 +59,37 @@ public abstract class StoreSubscriberViewModel : ObservableObject, IDisposable
             _selectors[i].Reset();
     }
 
-    public virtual void Dispose()
+    private interface ISelector
     {
-        Dispatcher.StateChanged -= _onStoreChanged;
+        public void Apply(UiState s);
+        public void Reset();
+    }
+
+    private sealed class Selector<T> : ISelector
+    {
+        private readonly Action<T> _apply;
+        private readonly IEqualityComparer<T> _cmp;
+        private readonly Func<UiState, T> _read;
+        private bool _has;
+        private T _last;
+
+        public Selector(Func<UiState, T> read, Action<T> apply, IEqualityComparer<T>? cmp)
+        {
+            _read = read;
+            _apply = apply;
+            _cmp = cmp ?? EqualityComparer<T>.Default;
+            _last = default!;
+        }
+
+        public void Apply(UiState s)
+        {
+            var v = _read(s);
+            if (_has && _cmp.Equals(_last, v)) return;
+            _last = v;
+            _has = true;
+            _apply(v);
+        }
+
+        public void Reset() => _has = false;
     }
 }

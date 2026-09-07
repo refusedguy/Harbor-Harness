@@ -1,11 +1,10 @@
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// HARBOR_MASCOT_MODE resolver (mascot-brand T2): HARBOR_MASCOT=off stays the
-/// hard kill-switch; panel/footer/off parse case-insensitively; anything else
-/// falls back to the footer default.
+///     HARBOR_MASCOT_MODE resolver (mascot-brand T2): HARBOR_MASCOT=off stays the
+///     hard kill-switch; panel/footer/off parse case-insensitively; anything else
+///     falls back to the footer default.
 /// </summary>
 public class MascotModeEnvTests
 {

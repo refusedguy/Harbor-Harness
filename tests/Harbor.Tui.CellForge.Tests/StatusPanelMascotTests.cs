@@ -1,13 +1,13 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Ambient mascot footer wiring (sprint UI-V2 P6.1): the status panel frames
-/// the mascot at the trailing edge on wide rows only — narrow rows keep the
-/// full width for status segments. Deterministic ticks, no wall clock
-/// (the sleeping mood needs 60s of idle uptime and is not asserted here).
+///     Ambient mascot footer wiring (sprint UI-V2 P6.1): the status panel frames
+///     the mascot at the trailing edge on wide rows only — narrow rows keep the
+///     full width for status segments. Deterministic ticks, no wall clock
+///     (the sleeping mood needs 60s of idle uptime and is not asserted here).
 /// </summary>
 public class StatusPanelMascotTests
 {
@@ -49,7 +49,7 @@ public class StatusPanelMascotTests
         foreach (var mode in Enum.GetValues<StatusBarMode>())
         {
             string art = PaintStatusRow(72, mode);
-            foreach (var frame in AmbientMascot.WorkingFrames
+            foreach (string frame in AmbientMascot.WorkingFrames
                          .Concat(AmbientMascot.AwaitingFrames)
                          .Concat(AmbientMascot.IdleFrames)
                          .Concat(AmbientMascot.SleepingFrames))
@@ -135,7 +135,7 @@ public class StatusPanelMascotTests
     /// <summary>Paints all panels <paramref name="frames" /> times, returning the concatenated art.</summary>
     private static string PaintFrames(ChatScreen screen, ScreenBuffer buffer, int frames)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         for (int i = 0; i < frames; i++)
         {
             foreach (var panel in screen.Tree.Panels)

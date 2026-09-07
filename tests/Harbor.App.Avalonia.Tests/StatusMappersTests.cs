@@ -2,6 +2,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.ViewModels;
 namespace Harbor.App.Avalonia.Tests;
+
 /// <summary>
 ///     Unit tests for the platform-agnostic <see cref="StatusMappers" />
 ///     helpers. These ensure the resource-key / display-string lookups

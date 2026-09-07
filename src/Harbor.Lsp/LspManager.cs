@@ -1,11 +1,10 @@
 using Harbor.Abstractions.Lsp;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Lsp;
 
 /// <summary>
 ///     Routes files to builtin language servers and implements
-///     <see cref="ILspService"/> over <see cref="LspServerSession"/> instances.
+///     <see cref="ILspService" /> over <see cref="LspServerSession" /> instances.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -22,12 +21,12 @@ namespace Harbor.Lsp;
 public sealed class LspManager : ILspService
 {
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
+    private readonly IReadOnlyList<LspServerDefinition> _definitions;
 
     private readonly ILogger<LspManager> _logger;
-    private readonly IReadOnlyList<LspServerDefinition> _definitions;
     private readonly Dictionary<string, LspServerSession> _sessions = [];
-    private readonly HashSet<string> _unavailable = [];
     private readonly Lock _sync = new();
+    private readonly HashSet<string> _unavailable = [];
     private int _disposed;
 
     /// <summary>Create a manager over the builtin server catalog (overridable for tests).</summary>
@@ -41,17 +40,14 @@ public sealed class LspManager : ILspService
     public event EventHandler<LspDiagnosticsChangedEventArgs>? DiagnosticsChanged;
 
     /// <inheritdoc />
-    public bool SupportsFile(string filePath)
-    {
-        return _definitions.Any(d => d.Handles(filePath));
-    }
+    public bool SupportsFile(string filePath) => _definitions.Any(d => d.Handles(filePath));
 
     /// <inheritdoc />
     public async ValueTask OpenFileAsync(string filePath, string text, CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = await GetOrCreateSessionAsync(filePath, ct).ConfigureAwait(false);
+        var session = await GetOrCreateSessionAsync(filePath, ct).ConfigureAwait(false);
         if (session is null) return;
 
         string fullPath = Path.GetFullPath(filePath);
@@ -64,7 +60,7 @@ public sealed class LspManager : ILspService
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = GetSessionFor(filePath);
+        var session = GetSessionFor(filePath);
         if (session is null) return;
         await session.ChangeAsync(Path.GetFullPath(filePath), newText, ct).ConfigureAwait(false);
     }
@@ -74,7 +70,7 @@ public sealed class LspManager : ILspService
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = GetSessionFor(filePath);
+        var session = GetSessionFor(filePath);
         if (session is null) return;
         await session.CloseAsync(Path.GetFullPath(filePath)).ConfigureAwait(false);
     }
@@ -84,8 +80,8 @@ public sealed class LspManager : ILspService
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = GetSessionFor(filePath);
-        IReadOnlyList<LspDiagnostic> diagnostics = session?.GetDiagnostics(Path.GetFullPath(filePath)) ?? [];
+        var session = GetSessionFor(filePath);
+        var diagnostics = session?.GetDiagnostics(Path.GetFullPath(filePath)) ?? [];
         return ValueTask.FromResult(diagnostics);
     }
 
@@ -94,7 +90,7 @@ public sealed class LspManager : ILspService
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = GetSessionFor(filePath);
+        var session = GetSessionFor(filePath);
         if (session is null) return null;
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(RequestTimeout);
@@ -106,34 +102,53 @@ public sealed class LspManager : ILspService
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = GetSessionFor(filePath);
+        var session = GetSessionFor(filePath);
         if (session is null) return [];
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(RequestTimeout);
         return await session.FindReferencesAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
     }
 
+    // ── Dispose ────────────────────────────────────────────────────────────
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        List<LspServerSession> sessions;
+        lock (_sync)
+        {
+            sessions = [.._sessions.Values];
+            _sessions.Clear();
+        }
+
+        foreach (var session in sessions)
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
     // ── Session management ─────────────────────────────────────────────────
 
     private LspServerSession? GetSessionFor(string filePath)
     {
-        LspServerDefinition? definition = _definitions.FirstOrDefault(d => d.Handles(filePath));
+        var definition = _definitions.FirstOrDefault(d => d.Handles(filePath));
         if (definition is null) return null;
 
         lock (_sync)
         {
-            return _sessions.TryGetValue(definition.Id, out LspServerSession? session) ? session : null;
+            return _sessions.TryGetValue(definition.Id, out var session) ? session : null;
         }
     }
 
     private async ValueTask<LspServerSession?> GetOrCreateSessionAsync(string filePath, CancellationToken ct)
     {
-        LspServerDefinition? definition = _definitions.FirstOrDefault(d => d.Handles(filePath));
+        var definition = _definitions.FirstOrDefault(d => d.Handles(filePath));
         if (definition is null) return null;
 
         lock (_sync)
         {
-            if (_sessions.TryGetValue(definition.Id, out LspServerSession? existing)) return existing;
+            if (_sessions.TryGetValue(definition.Id, out var existing)) return existing;
             if (_unavailable.Contains(definition.Id)) return null; // logged once, degrade silently
         }
 
@@ -162,7 +177,7 @@ public sealed class LspManager : ILspService
         lock (_sync)
         {
             // Two opens racing the same language: keep the winner, dispose the loser.
-            if (_sessions.TryGetValue(definition.Id, out LspServerSession? winner))
+            if (_sessions.TryGetValue(definition.Id, out var winner))
             {
                 _ = session.DisposeAsync().AsTask();
                 return winner;
@@ -176,7 +191,7 @@ public sealed class LspManager : ILspService
     /// <summary>Nearest ancestor directory containing <c>.git</c>, else the file's directory.</summary>
     public static string FindWorkspaceRoot(string filePath)
     {
-        DirectoryInfo? dir = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? "/");
+        var dir = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? "/");
         while (dir is not null)
         {
             if (Directory.Exists(Path.Combine(dir.FullName, ".git"))) return dir.FullName;
@@ -193,25 +208,6 @@ public sealed class LspManager : ILspService
         "go" => "go",
         "rust" => "rust",
         "csharp" => "csharp",
-        _ => definition.Language.ToLowerInvariant(),
+        _ => definition.Language.ToLowerInvariant()
     };
-
-    // ── Dispose ────────────────────────────────────────────────────────────
-
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-
-        List<LspServerSession> sessions;
-        lock (_sync)
-        {
-            sessions = [.. _sessions.Values];
-            _sessions.Clear();
-        }
-
-        foreach (LspServerSession session in sessions)
-        {
-            await session.DisposeAsync().ConfigureAwait(false);
-        }
-    }
 }

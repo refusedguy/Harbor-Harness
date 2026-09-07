@@ -1,6 +1,7 @@
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Registration;
+
 /// <summary>
 ///     <see cref="IPluginRegistrar" /> decorator that isolates failures per plugin.
 ///     <see cref="Register" /> never throws — every exception from the inner registrar

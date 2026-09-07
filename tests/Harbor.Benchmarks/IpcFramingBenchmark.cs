@@ -1,9 +1,9 @@
 #nullable enable
+using BenchmarkDotNet.Attributes;
+using Harbor.Ipc.Protocol;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.IO.Pipelines;
-using BenchmarkDotNet.Attributes;
-using Harbor.Ipc.Protocol;
 namespace Harbor.Benchmarks;
 
 /// <summary>
@@ -12,24 +12,24 @@ namespace Harbor.Benchmarks;
 ///     persistent <see cref="PipeStream" /> (per-iteration connection setup
 ///     excluded — the codec is measured, not the dial):
 ///     - <see cref="Roundtrip_Full" />: WriteResponseAsync + ReadResponseAsync
-///       with MessagePack serialization, steady-state (pre-built response).
+///     with MessagePack serialization, steady-state (pre-built response).
 ///     - <see cref="Roundtrip_FrameOnly" />: raw frame write + read without
-///       MessagePack — the framing layer alone; steady-state target is 0 B.
+///     MessagePack — the framing layer alone; steady-state target is 0 B.
 ///     - <see cref="ReadFrame_FromPipe" />: raw frame-header parsing from a
-///       <see cref="PipeReader" />.
+///     <see cref="PipeReader" />.
 /// </summary>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class IpcFramingBenchmark
 {
-    private Pipe _pipe = null!;
-    private PipeStream _stream = null!;
-    private PipeReader _reader = null!;
-    private byte[] _preformedFrame = null!;
-    private OkResponse _response = null!;
 
     [Params(64, 4096, 65536)]
     public int PayloadSize;
+    private Pipe _pipe = null!;
+    private byte[] _preformedFrame = null!;
+    private PipeReader _reader = null!;
+    private OkResponse _response = null!;
+    private PipeStream _stream = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -41,7 +41,7 @@ public class IpcFramingBenchmark
         _stream = new PipeStream(_pipe);
         _reader = PipeReader.Create(_stream, new StreamPipeReaderOptions(leaveOpen: true));
 
-        var payload = new byte[PayloadSize];
+        byte[] payload = new byte[PayloadSize];
         Random.Shared.NextBytes(payload);
         _response = new OkResponse { RequestId = Guid.NewGuid(), Payload = payload };
 
@@ -71,7 +71,7 @@ public class IpcFramingBenchmark
     public async ValueTask<int> Roundtrip_FrameOnly()
     {
         await WireCodec.WriteFrameAsync(_stream, _preformedFrame.AsMemory(4)).ConfigureAwait(false);
-        ReadOnlySequence<byte>? frame = await WireCodec.ReadFrameAsync(_reader).ConfigureAwait(false);
+        var frame = await WireCodec.ReadFrameAsync(_reader).ConfigureAwait(false);
         int length = (int)frame!.Value.Length;
         _reader.AdvanceTo(frame.Value.End);
         return length;
@@ -162,10 +162,8 @@ internal sealed class PipeStream : Stream
     }
 
     public override async ValueTask WriteAsync(
-        ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
-    {
+        ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
         await _pipe.Writer.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
-    }
 
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
     public override void SetLength(long value) => throw new NotSupportedException();

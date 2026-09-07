@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 namespace Harbor.Build.Meta;
+
 /// <summary>
 ///     Output format for the build tool. <see cref="Pretty" /> prints the
 ///     classic human-readable log (<c>==> Target: message</c>) to stdout.
@@ -13,6 +14,7 @@ public enum OutputFormat
     Pretty,
     Json
 }
+
 /// <summary>
 ///     Single point of emission for every message the build tool prints.
 ///     Replaces the former scattered <c>Console.WriteLine</c> calls in
@@ -47,9 +49,9 @@ public enum OutputFormat
 public sealed class BuildOutput
 {
     private const int SchemaVersion = 1;
-    private readonly TextWriter _stdout;
-    private readonly TextWriter? _file;
     private readonly List<string> _failedTargets = new();
+    private readonly TextWriter? _file;
+    private readonly TextWriter _stdout;
     private BuildOutput(OutputFormat format, bool dryRun, TextWriter stdout, TextWriter? file)
     {
         Format = format;
@@ -58,6 +60,14 @@ public sealed class BuildOutput
         _file = file;
         IsJson = format == OutputFormat.Json;
     }
+    /// <summary>Configured output format.</summary>
+    public OutputFormat Format { get; }
+    /// <summary>True when the format is Json.</summary>
+    public bool IsJson { get; }
+    /// <summary>True when targets must plan instead of executing.</summary>
+    public bool IsDryRun { get; }
+    /// <summary>Targets that threw during this run (for the run_end event).</summary>
+    public IReadOnlyList<string> FailedTargets => _failedTargets;
     /// <summary>Creates an output bound to the given format and streams.</summary>
     /// <param name="format">Requested output format.</param>
     /// <param name="dryRun">True when the run must not execute side effects.</param>
@@ -75,23 +85,15 @@ public sealed class BuildOutput
         TextWriter? file = null;
         if (!string.IsNullOrWhiteSpace(outFile))
         {
-            var directory = Path.GetDirectoryName(Path.GetFullPath(outFile));
+            string? directory = Path.GetDirectoryName(Path.GetFullPath(outFile));
             if (directory is not null)
             {
                 Directory.CreateDirectory(directory);
             }
-            file = new StreamWriter(outFile, append: false, Encoding.UTF8);
+            file = new StreamWriter(outFile, false, Encoding.UTF8);
         }
         return new BuildOutput(format, dryRun, stdout, file);
     }
-    /// <summary>Configured output format.</summary>
-    public OutputFormat Format { get; }
-    /// <summary>True when the format is Json.</summary>
-    public bool IsJson { get; }
-    /// <summary>True when targets must plan instead of executing.</summary>
-    public bool IsDryRun { get; }
-    /// <summary>Targets that threw during this run (for the run_end event).</summary>
-    public IReadOnlyList<string> FailedTargets => _failedTargets;
     /// <summary>Records a failed target for the final run_end summary.</summary>
     public void MarkFailed(string target) => _failedTargets.Add(target);
     /// <summary>
@@ -148,7 +150,7 @@ public sealed class BuildOutput
             {
                 w.WriteString("target", target);
                 w.WriteStartArray("argv");
-                foreach (var arg in argv)
+                foreach (string arg in argv)
                 {
                     w.WriteStringValue(arg);
                 }
@@ -186,8 +188,8 @@ public sealed class BuildOutput
         }
         else
         {
-            var size = bytes.HasValue ? $" ({HumanSize(bytes.Value)})" : string.Empty;
-            var marker = planned ? " [planned]" : string.Empty;
+            string size = bytes.HasValue ? $" ({HumanSize(bytes.Value)})" : string.Empty;
+            string marker = planned ? " [planned]" : string.Empty;
             Line(_stdout, $"==> {target}: artifact {path}{size}{marker}");
         }
     }
@@ -225,7 +227,7 @@ public sealed class BuildOutput
             {
                 w.WriteString("status", status);
                 w.WriteStartArray("failed");
-                foreach (var name in failed)
+                foreach (string name in failed)
                 {
                     w.WriteStringValue(name);
                 }
@@ -235,7 +237,7 @@ public sealed class BuildOutput
         }
         else
         {
-            var failedNote = failed.Count > 0 ? $" — failed: {string.Join(", ", failed)}" : string.Empty;
+            string failedNote = failed.Count > 0 ? $" — failed: {string.Join(", ", failed)}" : string.Empty;
             Line(_stdout, $"=> build {status}{failedNote}");
         }
         Flush();

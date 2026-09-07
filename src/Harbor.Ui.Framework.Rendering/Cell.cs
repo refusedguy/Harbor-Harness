@@ -1,18 +1,17 @@
 using System.Runtime.InteropServices;
 using System.Text;
-
 namespace Harbor.Ui.Framework.Rendering;
 
 /// <summary>
-/// One terminal cell — readonly struct of 16 bytes (celldiff §1.1):
-/// codepoint + packed fg/bg + attribute flags + display width.
-/// Equality is five integer compares (~1–2 ns), which is what makes the
-/// fused full-scan diff affordable.
+///     One terminal cell — readonly struct of 16 bytes (celldiff §1.1):
+///     codepoint + packed fg/bg + attribute flags + display width.
+///     Equality is five integer compares (~1–2 ns), which is what makes the
+///     fused full-scan diff affordable.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 public readonly struct Cell : IEquatable<Cell>
 {
-    public const byte WSkip = 0;   // tail half of a wide rune — invisible cell
+    public const byte WSkip = 0; // tail half of a wide rune — invisible cell
     public const byte Narrow = 1;
     public const byte Wide = 2;
 
@@ -40,7 +39,7 @@ public readonly struct Cell : IEquatable<Cell>
     /// <summary>
     ///     Rebuilds a cell from its raw packed fields — the cell-diff protocol
     ///     codec round-trip path (renderer-unification Phase 6.2). Width is
-    ///     preserved verbatim, unlike <see cref="Cell.From"/> which derives it.
+    ///     preserved verbatim, unlike <see cref="Cell.From" /> which derives it.
     /// </summary>
     public static Cell FromRaw(int rune, uint fg, uint bg, ushort flags, byte width) =>
         new(rune, fg, bg, flags, width);
@@ -65,7 +64,7 @@ public readonly struct Cell : IEquatable<Cell>
     public static Cell BlankAt(byte width) => width switch
     {
         WSkip => WideTail,
-        _ => new Cell(' ', 0, 0, 0, width),
+        _ => new Cell(' ', 0, 0, 0, width)
     };
 
     public bool Equals(Cell other) =>

@@ -1,6 +1,4 @@
 using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
@@ -13,16 +11,18 @@ using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Harbor.Ipc;
 using Harbor.Ipc.Protocol;
-using Harbor.Tui.AnsiPlain;
 using Harbor.Terminal.Abstractions;
+using Harbor.Tui.AnsiPlain;
 using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 using System.Runtime.InteropServices;
+using System.Text;
 #if HARBOR_WITH_PLUGINS
 #endif
 namespace Harbor.App.Cli;
+
 /// <summary>
 ///     Entry point — thin dispatcher. All logic delegated to HostBuilder, ReplRunner, SlashCommandDispatcher.
 /// </summary>
@@ -113,42 +113,42 @@ public static class Program
                 return await RunInteractiveAsync(args, scriptPath);
             }
 
-        string command = args[0].ToLowerInvariant();
-        if (command == "--demo")
-            command = "demo"; // `harbor --demo` is the documented alias of `harbor demo`
-        _logger.LogInformation("Command: {Command}", command);
+            string command = args[0].ToLowerInvariant();
+            if (command == "--demo")
+                command = "demo"; // `harbor --demo` is the documented alias of `harbor demo`
+            _logger.LogInformation("Command: {Command}", command);
 
-        var cliCommands = new ICommand[]
-        {
-            new LogsCommand(Console.Out, Console.Error),
-            new DaemonCommand(Console.Out, Console.Error),
-            new StatusCommand(Console.Out, Console.Error),
-            new PluginsCommand(Console.Out, Console.Error),
-            new SkillsCommand(Console.Out, Console.Error),
-            new DemoCommand(Console.Out, Console.Error),
-        };
-        if (await SlashCommandDispatcherStatic.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
-            return exitCode;
+            var cliCommands = new ICommand[]
+            {
+                new LogsCommand(Console.Out, Console.Error),
+                new DaemonCommand(Console.Out, Console.Error),
+                new StatusCommand(Console.Out, Console.Error),
+                new PluginsCommand(Console.Out, Console.Error),
+                new SkillsCommand(Console.Out, Console.Error),
+                new DemoCommand(Console.Out, Console.Error)
+            };
+            if (await SlashCommandDispatcherStatic.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
+                return exitCode;
 
-        return command switch
-        {
-            "ask" => await RunAskAsync(args.Skip(1).ToArray(), scriptPath),
-            "ide" => await RunIdeAsync(args.Skip(1).ToArray()),
-            "--headless" or "headless" => await RunHeadlessAsync(args.Skip(1).ToArray()),
-            "run" => await RunRunAsync(args.Skip(1).ToArray()),
-            "providers" => await RunListProvidersAsync(),
-            "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
-            "sessions" => await RunSessionsAsync(args.Skip(1).ToArray()),
-            "mcp" => await McpLoginRunner.RunAsync(Console.Out, Console.Error, args.Skip(1).ToArray()),
-            "tui" => PrintTuiOptions(),
-            "storage" => PrintStorageOptions(),
-            "setup" => await RunSetupAsync(),
-            "auth" => await RunAuthAsync(args.Skip(1).ToArray()),
-            "config" => await RunConfigAsync(args.Skip(1).ToArray()),
-            "help" or "--help" or "-h" => PrintHelp(),
-            "version" or "--version" or "-v" => PrintVersion(),
-            _ => await RunInteractiveAsync(Array.Empty<string>(), scriptPath)
-        };
+            return command switch
+            {
+                "ask" => await RunAskAsync(args.Skip(1).ToArray(), scriptPath),
+                "ide" => await RunIdeAsync(args.Skip(1).ToArray()),
+                "--headless" or "headless" => await RunHeadlessAsync(args.Skip(1).ToArray()),
+                "run" => await RunRunAsync(args.Skip(1).ToArray()),
+                "providers" => await RunListProvidersAsync(),
+                "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
+                "sessions" => await RunSessionsAsync(args.Skip(1).ToArray()),
+                "mcp" => await McpLoginRunner.RunAsync(Console.Out, Console.Error, args.Skip(1).ToArray()),
+                "tui" => PrintTuiOptions(),
+                "storage" => PrintStorageOptions(),
+                "setup" => await RunSetupAsync(),
+                "auth" => await RunAuthAsync(args.Skip(1).ToArray()),
+                "config" => await RunConfigAsync(args.Skip(1).ToArray()),
+                "help" or "--help" or "-h" => PrintHelp(),
+                "version" or "--version" or "-v" => PrintVersion(),
+                _ => await RunInteractiveAsync(Array.Empty<string>(), scriptPath)
+            };
         }
         catch (Exception ex)
         {
@@ -246,7 +246,7 @@ public static class Program
         // without it the process still exits on SIGTERM, just ungracefully.
         try
         {
-            using PosixSignalRegistration sigterm = PosixSignalRegistration.Create(
+            using var sigterm = PosixSignalRegistration.Create(
                 PosixSignal.SIGTERM, _ => shutdownCts.Cancel());
             await WaitForShutdownAsync(shutdownCts.Token).ConfigureAwait(false);
         }
@@ -421,7 +421,7 @@ public static class Program
         // rather than silently ignored.
         _ = services;
         _logger.LogWarning("--script flag ignored: scripting lives in contrib/scripting and is not part of the main CLI build");
-        return CSharpFunctionalExtensions.Result.Failure(
+        return Result.Failure(
             "Scripting is not available in this build. Build contrib/Contrib.slnx for the scripting-enabled projects.");
     }
 
@@ -686,7 +686,7 @@ public static class Program
         string path = args.Length > 1 ? args[1] : $"harbor-session-{sessionId}.jsonl";
         using var host = HostBuilder.Build();
         var porter = host.Services.GetRequiredService<ISessionPorter>();
-        await using var output = new StreamWriter(path, append: false, System.Text.Encoding.UTF8);
+        await using var output = new StreamWriter(path, false, Encoding.UTF8);
 
         var exported = await porter.ExportAsync(host.Services.GetRequiredService<ISessionStore>(), sessionId, output)
             .ConfigureAwait(false);
@@ -831,7 +831,7 @@ public static class Program
         string messageId = args[1];
         using var host = HostBuilder.Build();
         var store = host.Services.GetRequiredService<ISessionStore>();
-        var runner = new Harbor.App.Cli.Commands.SessionForkRunner(store);
+        var runner = new SessionForkRunner(store);
 
         var forked = await runner.ForkAsync(sessionId, messageId).ConfigureAwait(false);
         if (forked.IsFailure)

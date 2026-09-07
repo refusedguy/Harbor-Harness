@@ -1,8 +1,5 @@
-using System.Text;
-using Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>What the composer did with the key.</summary>
@@ -18,27 +15,26 @@ public enum ComposerAction : byte
     Submitted = 2,
 
     /// <summary>Ctrl+C on empty buffer — abort signal (caller quits/cancels).</summary>
-    Aborted = 3,
+    Aborted = 3
 }
 
 /// <summary>
-/// Keyboard routing for the inline composer: kitty-modifier aware Enter split
-/// (plain Enter submits; Shift+Enter / Alt+Enter insert a newline — the whole
-/// reason CE-0 pushed disambiguate flags), navigation/editing keys into
-/// <see cref="PromptBuffer"/>, prompt-history recall (<see cref="History"/>:
-/// Up from the first line walks back, Down from the last line forward),
-/// kill/yank chords (Ctrl+K/U/W + Ctrl+Y), Ctrl+C semantics, everything else
-/// ignored.
-///
-/// CF-B-005 history-through-store contract: Up/Down recall is a store
-/// transition — the keys map to <see cref="InputMsg.HistoryUp"/> /
-/// <see cref="InputMsg.HistoryDown"/> (see <c>InputModel.cs</c>) and are
-/// applied to the <see cref="PromptHistory"/> walk, so the in-flight draft is
-/// saved on the first Up and restored exactly once by the final Down
-/// (readline semantics owned by <see cref="PromptHistory"/>). Text and cursor
-/// stay store-owned: the sync mirrors
-/// <c>CellForgeTuiRenderer.SyncInputFromState</c> read-only (text change pins
-/// the caret to the end of the text); the renderer itself is untouched.
+///     Keyboard routing for the inline composer: kitty-modifier aware Enter split
+///     (plain Enter submits; Shift+Enter / Alt+Enter insert a newline — the whole
+///     reason CE-0 pushed disambiguate flags), navigation/editing keys into
+///     <see cref="PromptBuffer" />, prompt-history recall (<see cref="History" />:
+///     Up from the first line walks back, Down from the last line forward),
+///     kill/yank chords (Ctrl+K/U/W + Ctrl+Y), Ctrl+C semantics, everything else
+///     ignored.
+///     CF-B-005 history-through-store contract: Up/Down recall is a store
+///     transition — the keys map to <see cref="InputMsg.HistoryUp" /> /
+///     <see cref="InputMsg.HistoryDown" /> (see <c>InputModel.cs</c>) and are
+///     applied to the <see cref="PromptHistory" /> walk, so the in-flight draft is
+///     saved on the first Up and restored exactly once by the final Down
+///     (readline semantics owned by <see cref="PromptHistory" />). Text and cursor
+///     stay store-owned: the sync mirrors
+///     <c>CellForgeTuiRenderer.SyncInputFromState</c> read-only (text change pins
+///     the caret to the end of the text); the renderer itself is untouched.
 /// </summary>
 public sealed class ComposerController
 {
@@ -51,9 +47,9 @@ public sealed class ComposerController
     public bool IsRecalling => History.IsWalking;
 
     /// <summary>
-    /// Records a store-submitted line into the MRU rail (CF-B-005 choke point
-    /// for the submit path: trims, drops empties, collapses consecutive dupes,
-    /// evicts the oldest past <see cref="PromptHistory.DefaultCapacity"/>).
+    ///     Records a store-submitted line into the MRU rail (CF-B-005 choke point
+    ///     for the submit path: trims, drops empties, collapses consecutive dupes,
+    ///     evicts the oldest past <see cref="PromptHistory.DefaultCapacity" />).
     /// </summary>
     public void PushSubmitted(string entry) => History.Push(entry);
 
@@ -207,7 +203,7 @@ public sealed class ComposerController
                 // InputMsg.HistoryUp (UiStore → InputMsg.Update). The in-flight
                 // draft is saved on this first Up; PromptHistory owns the walk.
                 // First logical line + available history ⇒ recall instead of caret movement.
-                if (Buffer.LineIndexOf(Buffer.Cursor) == 0 && TryRecallViaStore(new InputMsg.HistoryUp(), Buffer.SnapshotText(), out var previous))
+                if (Buffer.LineIndexOf(Buffer.Cursor) == 0 && TryRecallViaStore(new InputMsg.HistoryUp(), Buffer.SnapshotText(), out string previous))
                 {
                     Recall(previous);
                     return ComposerAction.Edited;
@@ -220,7 +216,7 @@ public sealed class ComposerController
                 // CF-B-005: Down arrives as InputMsg.HistoryDown; the final step
                 // restores the saved draft exactly once (readline), then the
                 // walk ends and Down is plain caret movement again.
-                if (Buffer.LineIndexOf(Buffer.Cursor) == Buffer.LineCount - 1 && TryRecallViaStore(new InputMsg.HistoryDown(), Buffer.SnapshotText(), out var next))
+                if (Buffer.LineIndexOf(Buffer.Cursor) == Buffer.LineCount - 1 && TryRecallViaStore(new InputMsg.HistoryDown(), Buffer.SnapshotText(), out string next))
                 {
                     Recall(next);
                     return ComposerAction.Edited;
@@ -262,12 +258,12 @@ public sealed class ComposerController
     }
 
     /// <summary>
-    /// Store-message entry point for history recall (CF-B-005): maps
-    /// <see cref="InputMsg.HistoryUp"/> / <see cref="InputMsg.HistoryDown"/>
-    /// onto the <see cref="PromptHistory"/> walk. HistoryUp captures
-    /// <paramref name="draft"/> on the first step; the final HistoryDown
-    /// restores it exactly once. Returns false at the walk boundaries (caller
-    /// falls back to caret movement) and for any other message.
+    ///     Store-message entry point for history recall (CF-B-005): maps
+    ///     <see cref="InputMsg.HistoryUp" /> / <see cref="InputMsg.HistoryDown" />
+    ///     onto the <see cref="PromptHistory" /> walk. HistoryUp captures
+    ///     <paramref name="draft" /> on the first step; the final HistoryDown
+    ///     restores it exactly once. Returns false at the walk boundaries (caller
+    ///     falls back to caret movement) and for any other message.
     /// </summary>
     private bool TryRecallViaStore(InputMsg message, string draft, out string entry)
     {

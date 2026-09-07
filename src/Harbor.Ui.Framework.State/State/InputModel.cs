@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 namespace Harbor.Ui.Framework.State;
+
 /// <summary>
 ///     Pure input/editing model for the interactive prompt. Mirrors the behaviour
 ///     of the previous per-renderer <c>InputState</c> but is immutable and

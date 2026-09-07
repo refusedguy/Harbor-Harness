@@ -1,14 +1,11 @@
 using Harbor.Ui.Framework.Projection;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.DesignSystem.Tests;
 
 /// <summary>
-/// WCAG 2.x accessibility contract of the HDS v1 catalog — every surface and
-/// role pairing Harbor actually renders. Ratios computed from
-/// <see cref="Accessibility.ContrastRatio"/> against the real tokens, so a
-/// palette edit that silently breaks readability fails CI.
+///     WCAG 2.x accessibility contract of the HDS v1 catalog — every surface and
+///     role pairing Harbor actually renders. Ratios computed from
+///     <see cref="Accessibility.ContrastRatio" /> against the real tokens, so a
+///     palette edit that silently breaks readability fails CI.
 /// </summary>
 [NotInParallel("terminal-color-palette")]
 public class AccessibilityTests
@@ -18,7 +15,7 @@ public class AccessibilityTests
         TerminalColorPalette.Background,
         TerminalColorPalette.Panel,
         TerminalColorPalette.Surface,
-        TerminalColorPalette.Surface2,
+        TerminalColorPalette.Surface2
     ];
 
     private static readonly (RgbColor Color, string Name)[] Accents =
@@ -28,7 +25,7 @@ public class AccessibilityTests
         (TerminalColorPalette.Warning, "warning"),
         (TerminalColorPalette.Error, "error"),
         (TerminalColorPalette.Tool, "tool"),
-        (TerminalColorPalette.System, "system"),
+        (TerminalColorPalette.System, "system")
     ];
 
     [Test]
@@ -45,7 +42,7 @@ public class AccessibilityTests
     [Test]
     public async Task RoleAccents_ClearLargeTextOrUI_Threshold_OnEveryDarkSurface()
     {
-        foreach (var (color, name) in Accents)
+        foreach ((var color, string name) in Accents)
         {
             foreach (var surface in DarkSurfaces)
             {
@@ -67,10 +64,10 @@ public class AccessibilityTests
     }
 
     /// <summary>
-    /// Muted (#5C6773) is the HDS hint/glyph token — decorative tier. It
-    /// clears the UI-component ratio only on the base surfaces; any secondary
-    /// TEXT usage must sit on Panel/Bg at large-text size or move to a lifted
-    /// tone. Guarded here so nobody reshuffles surfaces under it unnoticed.
+    ///     Muted (#5C6773) is the HDS hint/glyph token — decorative tier. It
+    ///     clears the UI-component ratio only on the base surfaces; any secondary
+    ///     TEXT usage must sit on Panel/Bg at large-text size or move to a lifted
+    ///     tone. Guarded here so nobody reshuffles surfaces under it unnoticed.
     /// </summary>
     [Test]
     public async Task Muted_DocumentationContract_BaseSurfacesOnly()

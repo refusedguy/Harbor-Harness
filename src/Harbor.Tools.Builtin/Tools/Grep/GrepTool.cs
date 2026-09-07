@@ -1,10 +1,11 @@
+using Microsoft.Extensions.Logging;
 using System.Buffers;
 using System.Text;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Fast recursive content search. Local disk: sync bulk I/O + dir prune + binary skip.
 ///     Parallel across files; stops at maxResults.
@@ -66,16 +67,6 @@ public sealed class GrepTool : ITool
                                                                       }
                                                                       """);
 
-    /// <summary>
-    ///     Single regex compilation point (ROP-A Z1 п.5): validation and
-    ///     execution share one compiled instance instead of compiling twice
-    ///     with duplicated catch blocks.
-    /// </summary>
-    private static Result<Regex> CompileRegex(string pattern, RegexOptions options) =>
-        Result.Try(
-            () => new Regex(pattern, options, TimeSpan.FromSeconds(2)),
-            ex => $"Invalid regex: {ex.Message}");
-
     public Result ValidateArguments(JsonElement args)
     {
         if (!args.TryGetProperty("pattern", out var p) || p.ValueKind != JsonValueKind.String
@@ -95,13 +86,23 @@ public sealed class GrepTool : ITool
         return Task.Run(() => ExecuteCore(args, cancellationToken), cancellationToken);
     }
 
+    /// <summary>
+    ///     Single regex compilation point (ROP-A Z1 п.5): validation and
+    ///     execution share one compiled instance instead of compiling twice
+    ///     with duplicated catch blocks.
+    /// </summary>
+    private static Result<Regex> CompileRegex(string pattern, RegexOptions options) =>
+        Result.Try(
+            () => new Regex(pattern, options, TimeSpan.FromSeconds(2)),
+            ex => $"Invalid regex: {ex.Message}");
+
     private ToolResult ExecuteCore(JsonElement args, CancellationToken ct)
     {
         string pattern = args.GetProperty("pattern").GetString()!;
         string path = JsonArgs.GetString(args, "path") ?? Environment.CurrentDirectory;
         string? include = JsonArgs.GetString(args, "include");
         bool ignoreCase = JsonArgs.GetBool(args, "ignoreCase");
-        int maxResults = JsonArgs.GetInt(args, "maxResults") is { } max
+        int maxResults = JsonArgs.GetInt(args, "maxResults") is {} max
             ? Math.Clamp(max, 1, 10_000)
             : 100;
 
@@ -111,7 +112,7 @@ public sealed class GrepTool : ITool
         var compiled = CompileRegex(pattern, options);
         if (compiled.IsFailure)
             return ToolResult.Error(compiled.Error);
-        Regex regex = compiled.Value;
+        var regex = compiled.Value;
 
         Regex? includeRx = null;
         if (!string.IsNullOrWhiteSpace(include))
@@ -246,7 +247,7 @@ public sealed class GrepTool : ITool
             using var reader = new StreamReader(stream, Encoding.UTF8, true, 64 * 1024);
 
             int lineNum = 0;
-            while (reader.ReadLine() is { } line)
+            while (reader.ReadLine() is {} line)
             {
                 ct.ThrowIfCancellationRequested();
                 lineNum++;

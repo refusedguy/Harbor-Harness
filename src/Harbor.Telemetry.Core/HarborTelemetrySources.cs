@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-
 namespace Harbor.Telemetry;
 
 /// <summary>

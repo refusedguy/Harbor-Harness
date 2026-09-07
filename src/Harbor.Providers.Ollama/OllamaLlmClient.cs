@@ -1,8 +1,3 @@
-using System.Net.Http.Headers;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -10,7 +5,13 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
+using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading.Channels;
 namespace Harbor.Providers.Ollama;
+
 /// <summary>
 ///     Native Ollama provider — local LLM inference.
 ///     Implements Strategy pattern (GOF) via ILlmClient.

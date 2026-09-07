@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Bridge to Model Context Protocol (MCP) servers. The agent calls a named server's
 ///     method via the <see cref="IMcpRegistry" />; the registry looks up the server,

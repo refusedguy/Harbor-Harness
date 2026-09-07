@@ -8,20 +8,20 @@ Platform service abstractions and implementations for the Harbor UI Framework �
 
 ## What's in it
 
-| Subfolder / File | Purpose |
-|------------------|---------|
-| `EventBusAppStoreDispatcher.cs` | `EventBusAppStoreDispatcher` — bridges `IEventBus` into `AppStore.Dispatch`. |
-| `IRenderEngine.cs` | `IRenderEngine` — renderer lifecycle contract. |
-| `Overlays/OverlayController.cs` | `OverlayController` — manages overlay open/close/stack state. |
-| `Services/IDialogService.cs` | `IDialogService` — `ConfirmAsync`, `PromptAsync`, `AlertAsync`. |
-| `Services/IDispatcherAdapter.cs` | `IDispatcherAdapter` — platform dispatcher (`Post`, `Invoke`, `Bind`/`Unbind` store). |
-| `Services/IFilePicker.cs` | `IFilePicker` — `PickFilesAsync`, `PickSaveFileAsync`, `PickFolderAsync`. |
-| `Services/IOverlayStack.cs` | `IOverlayStack` — `Push`, `PopTop`, `Current`, `Stack`. |
-| `Services/IThemeService.cs` | `IThemeService` — theme apply/toggle/dark/light/HDS variants. |
-| `Services/IToastService.cs` | `IToastService` — `Show(message, kind)` with `ToastAdded` event. |
-| `Services/GitService.cs` | `GitService` — reads git status (`GetGitStatus`) for session metadata. |
-| `Services/GitSessionInfo.cs` | `GitSessionInfo` record (`Branch`, `IsDirty`, `DirtyCount`, `LastCommit`). |
-| `Services/SessionStatusTracker.cs` | `SessionStatusTracker` — tracks per-session status and message count, raises events. |
+| Subfolder / File                   | Purpose                                                                               |
+|------------------------------------|---------------------------------------------------------------------------------------|
+| `EventBusAppStoreDispatcher.cs`    | `EventBusAppStoreDispatcher` — bridges `IEventBus` into `AppStore.Dispatch`.          |
+| `IRenderEngine.cs`                 | `IRenderEngine` — renderer lifecycle contract.                                        |
+| `Overlays/OverlayController.cs`    | `OverlayController` — manages overlay open/close/stack state.                         |
+| `Services/IDialogService.cs`       | `IDialogService` — `ConfirmAsync`, `PromptAsync`, `AlertAsync`.                       |
+| `Services/IDispatcherAdapter.cs`   | `IDispatcherAdapter` — platform dispatcher (`Post`, `Invoke`, `Bind`/`Unbind` store). |
+| `Services/IFilePicker.cs`          | `IFilePicker` — `PickFilesAsync`, `PickSaveFileAsync`, `PickFolderAsync`.             |
+| `Services/IOverlayStack.cs`        | `IOverlayStack` — `Push`, `PopTop`, `Current`, `Stack`.                               |
+| `Services/IThemeService.cs`        | `IThemeService` — theme apply/toggle/dark/light/HDS variants.                         |
+| `Services/IToastService.cs`        | `IToastService` — `Show(message, kind)` with `ToastAdded` event.                      |
+| `Services/GitService.cs`           | `GitService` — reads git status (`GetGitStatus`) for session metadata.                |
+| `Services/GitSessionInfo.cs`       | `GitSessionInfo` record (`Branch`, `IsDirty`, `DirtyCount`, `LastCommit`).            |
+| `Services/SessionStatusTracker.cs` | `SessionStatusTracker` — tracks per-session status and message count, raises events.  |
 
 ## Public API summary
 
@@ -33,17 +33,17 @@ Platform service abstractions and implementations for the Harbor UI Framework �
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `Microsoft.Extensions.Logging.Abstractions` | Logging |
-| `Microsoft.Extensions.Logging` | Logging (concrete) |
+| Package                                     | Purpose            |
+|---------------------------------------------|--------------------|
+| `Microsoft.Extensions.Logging.Abstractions` | Logging            |
+| `Microsoft.Extensions.Logging`              | Logging (concrete) |
 
-| Project | Purpose |
-|---------|---------|
-| `Harbor.Abstractions` | Domain types |
-| `Harbor.Ui.Framework.State` | State records |
-| `Harbor.Ui.Framework.Reducers` | Reducers |
-| `Harbor.Ui.Framework.Abstractions` | Contracts |
+| Project                            | Purpose       |
+|------------------------------------|---------------|
+| `Harbor.Abstractions`              | Domain types  |
+| `Harbor.Ui.Framework.State`        | State records |
+| `Harbor.Ui.Framework.Reducers`     | Reducers      |
+| `Harbor.Ui.Framework.Abstractions` | Contracts     |
 
 ## Tests
 

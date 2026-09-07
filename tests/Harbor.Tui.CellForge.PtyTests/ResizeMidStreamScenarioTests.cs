@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -19,7 +17,7 @@ public sealed class ResizeMidStreamScenarioTests : CellForgePtyScenarioBase
         // ~900 chars at the mock's 4-chars/50ms cadence ≈ 10 s of streaming —
         // enough headroom to resize in the middle of the run.
         Server.SetResponse("test-model", "RESIZE-" + new string('m', 780) + "-DONE");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 

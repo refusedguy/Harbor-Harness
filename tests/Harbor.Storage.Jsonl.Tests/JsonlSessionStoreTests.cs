@@ -1,7 +1,8 @@
-using System.Reflection;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Reflection;
 namespace Harbor.Storage.Jsonl.Tests;
+
 public class JsonlSessionStoreTests
 {
     private static JsonlSessionStore CreateStore()
@@ -376,8 +377,8 @@ public class JsonlSessionStoreCancellationTests
             DateTimeOffset created = new(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
             await File.WriteAllTextAsync(sessionFile,
                 $$"""
-                {"type":"session","version":1,"id":"{{sessionId}}","projectId":"p","directory":"/tmp/x","title":"Legacy","agent":"code","model":"m","providerId":"anthropic","createdAt":"{{created:O}}"}
-                """);
+                  {"type":"session","version":1,"id":"{{sessionId}}","projectId":"p","directory":"/tmp/x","title":"Legacy","agent":"code","model":"m","providerId":"anthropic","createdAt":"{{created:O}}"}
+                  """);
 
             var first = await store.GetAsync(sessionId);
             var second = await store.GetAsync(sessionId);

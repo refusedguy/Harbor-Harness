@@ -3,13 +3,15 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Tui;
 using Harbor.App.Cli.Commands;
 using Harbor.Application.Configuration;
-
 namespace Harbor.App.Cli.Tests;
+
 /// <summary>
 ///     PROD-UI-0 З.3 — <c>/model provider/model</c> must rebind the ACTIVE
 ///     session (IAgent.Initialize with a fresh session + WithModel definition)
@@ -18,30 +20,30 @@ namespace Harbor.App.Cli.Tests;
 public class ModelCommandRebindTests
 {
     private static readonly Session BaseSession = new(
-        Id: "sess-1",
-        ProjectId: "proj",
-        Directory: "workdir",
-        Title: "t",
-        Agent: "code",
-        Model: "model-a",
-        ProviderId: "prov-a",
-        CreatedAt: DateTimeOffset.UtcNow,
-        UpdatedAt: DateTimeOffset.UtcNow,
-        Metadata: new SessionMetadata(0m, 0, 0, 0, 0, 0, 0, null));
+        "sess-1",
+        "proj",
+        "workdir",
+        "t",
+        "code",
+        "model-a",
+        "prov-a",
+        DateTimeOffset.UtcNow,
+        DateTimeOffset.UtcNow,
+        new SessionMetadata(0m, 0, 0, 0, 0, 0, 0, null));
 
     private static AgentDefinition InitialDef() => new(
-        Name: AgentName.Create("code"),
-        DisplayName: "Code",
-        Description: "default coding agent",
-        Model: "model-a",
-        ProviderId: "prov-a",
-        Permission: Harbor.Abstractions.Permissions.PermissionRuleset.Default);
+        AgentName.Create("code"),
+        "Code",
+        "default coding agent",
+        "model-a",
+        "prov-a",
+        PermissionRuleset.Default);
 
     private static (ModelCommand cmd, FakeAgent agent, InMemoryConfigStore config) Create(
         IAgent? agent, Session? session)
     {
         var config = new InMemoryConfigStore();
-        var cmd = new ModelCommand(config, new FakeProviders(), _ => { }, agent, session);
+        var cmd = new ModelCommand(config, new FakeProviders(), _ => {}, agent, session);
         return (cmd, (FakeAgent)agent!, config);
     }
 
@@ -51,7 +53,7 @@ public class ModelCommandRebindTests
         var agent = new FakeAgent(InitialDef());
         var (cmd, _, config) = Create(agent, BaseSession);
 
-        var result = await cmd.ExecuteAsync(["prov-b/model-b"], MakeCtx(), default);
+        var result = await cmd.ExecuteAsync(["prov-b/model-b"], MakeCtx());
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(config.Current.Model).IsEqualTo("prov-b/model-b");
@@ -71,9 +73,9 @@ public class ModelCommandRebindTests
         var agent = new FakeAgent(InitialDef());
         var config = new InMemoryConfigStore();
         config.Current.Provider = "anthropic";
-        var cmd = new ModelCommand(config, new FakeProviders(), _ => { }, agent, BaseSession);
+        var cmd = new ModelCommand(config, new FakeProviders(), _ => {}, agent, BaseSession);
 
-        var result = await cmd.ExecuteAsync(["claude-opus-4"], MakeCtx(), default);
+        var result = await cmd.ExecuteAsync(["claude-opus-4"], MakeCtx());
 
         await Assert.That(result.IsSuccess).IsTrue();
         var (session, def) = agent.InitializeCalls[0];
@@ -88,8 +90,8 @@ public class ModelCommandRebindTests
         var agent = new FakeAgent(InitialDef());
         var (cmd, _, _) = Create(agent, BaseSession);
 
-        await cmd.ExecuteAsync(["prov-b/model-b"], MakeCtx(), default);
-        await cmd.ExecuteAsync(["prov-c/model-c"], MakeCtx(), default);
+        await cmd.ExecuteAsync(["prov-b/model-b"], MakeCtx());
+        await cmd.ExecuteAsync(["prov-c/model-c"], MakeCtx());
 
         await Assert.That(agent.InitializeCalls.Count).IsEqualTo(2);
         // The command holds the REPL-start snapshot but only rewrites the two
@@ -103,9 +105,9 @@ public class ModelCommandRebindTests
     [Test]
     public async Task SetModel_WithoutSessionContext_ConfigOnlyStillSucceeds()
     {
-        var cmd = new ModelCommand(new InMemoryConfigStore(), new FakeProviders(), _ => { });
+        var cmd = new ModelCommand(new InMemoryConfigStore(), new FakeProviders(), _ => {});
 
-        var result = await cmd.ExecuteAsync(["openai/gpt-4o"], MakeCtx(), default);
+        var result = await cmd.ExecuteAsync(["openai/gpt-4o"], MakeCtx());
 
         await Assert.That(result.IsSuccess).IsTrue();
     }
@@ -116,7 +118,7 @@ public class ModelCommandRebindTests
         var agent = new FakeAgent(InitialDef());
         var (cmd, _, _) = Create(agent, BaseSession);
 
-        var result = await cmd.ExecuteAsync(["list"], MakeCtx(), default);
+        var result = await cmd.ExecuteAsync(["list"], MakeCtx());
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(agent.InitializeCalls.Count).IsEqualTo(0);
@@ -124,13 +126,13 @@ public class ModelCommandRebindTests
 
     private static SimpleCtx MakeCtx() => new();
 
-    private sealed class SimpleCtx : Harbor.Abstractions.Tui.ICommandContext
+    private sealed class SimpleCtx : ICommandContext
     {
-        public Harbor.Abstractions.Sessions.ISessionContext Session { get; } = null!;
+        public ISessionContext Session { get; } = null!;
         public IAgent Agent { get; } = null!;
         public IProviderRegistry Providers { get; } = new FakeProviders();
         public IToolRegistry Tools { get; } = null!;
-        public Action<string> Output { get; } = _ => { };
+        public Action<string> Output { get; } = _ => {};
         public Func<string, Task<string>> Prompt { get; } = _ => Task.FromResult(string.Empty);
     }
 
@@ -167,7 +169,7 @@ public class ModelCommandRebindTests
             Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>([]));
         public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default) =>
             Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>([]));
-        public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
+        public void Register(ProviderId providerId, Func<ILlmClient> factory) {}
         public Result Unregister(ProviderId providerId) => Result.Failure("n/a");
     }
 
@@ -197,15 +199,15 @@ public class ModelCommandRebindTests
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) =>
             new DummySubscription();
 
-        public void Steer(AgentMessage message) { }
+        public void Steer(AgentMessage message) {}
 
-        public void ResetAbortSource() { }
+        public void ResetAbortSource() {}
 
         public void Dispose() => AbortSource.Dispose();
 
         private sealed class DummySubscription : IDisposable
         {
-            public void Dispose() { }
+            public void Dispose() {}
         }
     }
 }

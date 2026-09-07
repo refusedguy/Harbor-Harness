@@ -1,6 +1,7 @@
-using Harbor.App.Avalonia.Views;
 using Harbor.App.Avalonia.Views.Components;
+using Harbor.App.Avalonia.Views.Shell;
 namespace Harbor.App.Avalonia.Tests;
+
 /// <summary>
 ///     Unit tests for the reusable React-style components extracted in
 ///     Task R28: <see cref="StatusBadge" />, <see cref="ChatBubble" />,
@@ -123,7 +124,7 @@ public class ComponentTests
     [Test]
     public async Task ActivityRailView_Instantiate_DoesNotThrow()
     {
-        var rail = new Views.Shell.ActivityRailView();
+        var rail = new ActivityRailView();
         await Assert.That(rail).IsNotNull();
         await Assert.That(rail.MinWidth).IsEqualTo(56.0);
     }
@@ -133,7 +134,7 @@ public class ComponentTests
     [Test]
     public async Task SessionsFlyoutView_Instantiate_DoesNotThrow()
     {
-        var flyout = new Views.Shell.SessionsFlyoutView();
+        var flyout = new SessionsFlyoutView();
         await Assert.That(flyout).IsNotNull();
         await Assert.That(flyout.MinWidth).IsEqualTo(280.0);
     }

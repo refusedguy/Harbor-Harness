@@ -1,5 +1,6 @@
 using System.Text;
 namespace Harbor.Terminal.Abstractions.Renderers;
+
 /// <summary>
 ///     Render context — abstraction over the actual output device (console, file, buffer).
 ///     Views render to this context, not directly to Console. This enables:
@@ -185,26 +186,26 @@ public sealed class CaptureRenderContext : ITuiRenderContext
     public void WriteStyled(string text, TuiStyle style) => _sb.Append(text);
 
     /// <inheritdoc />
-    public void SetCursorPosition(int row, int col) { }
+    public void SetCursorPosition(int row, int col) {}
 
     /// <inheritdoc />
-    public void ClearLine() { }
+    public void ClearLine() {}
 
     /// <inheritdoc />
     public void Clear() => _sb.Clear();
 
     /// <inheritdoc />
-    public void HideCursor() { }
+    public void HideCursor() {}
 
     /// <inheritdoc />
-    public void ShowCursor() { }
+    public void ShowCursor() {}
 
     /// <inheritdoc />
-    public void EnterAlternateScreen() { }
+    public void EnterAlternateScreen() {}
 
     /// <inheritdoc />
-    public void ExitAlternateScreen() { }
+    public void ExitAlternateScreen() {}
 
     /// <inheritdoc />
-    public void Flush() { }
+    public void Flush() {}
 }

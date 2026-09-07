@@ -1,6 +1,4 @@
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
-
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
@@ -44,7 +42,7 @@ public class ToolCategoryApprovalTests
     {
         var ruleset = new PermissionRuleset(new PermissionRule[]
         {
-            new("bash", "*", PermissionAction.Ask),   // category-level ask…
+            new("bash", "*", PermissionAction.Ask), // category-level ask…
             new("bash", "git status", PermissionAction.Allow) // …tool-level exception
         });
 

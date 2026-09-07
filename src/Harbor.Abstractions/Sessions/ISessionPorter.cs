@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Models;
-
 namespace Harbor.Abstractions.Sessions;
 
 /// <summary>

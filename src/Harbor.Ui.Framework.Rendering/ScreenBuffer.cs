@@ -1,28 +1,26 @@
 using System.Buffers;
 using System.Text;
-
 namespace Harbor.Ui.Framework.Rendering;
 
 /// <summary>
-/// Double-duty screen grid (celldiff §1.2): BACK holds what panels painted
-/// this frame, FRONT mirrors the terminal after a flush. The backing arrays
-/// grow geometrically and are never shrunk — resizing within capacity is
-/// allocation-free; only growth allocates.
-///
-/// Wide-char invariants (§1.3): a wide rune occupies its lead cell plus a
-/// <see cref="Cell.WideTail"/> cell; overwriting either half of an existing
-/// pair blanks the whole pair first so the diff repaints both halves and no
-/// glyph ghost survives.
+///     Double-duty screen grid (celldiff §1.2): BACK holds what panels painted
+///     this frame, FRONT mirrors the terminal after a flush. The backing arrays
+///     grow geometrically and are never shrunk — resizing within capacity is
+///     allocation-free; only growth allocates.
+///     Wide-char invariants (§1.3): a wide rune occupies its lead cell plus a
+///     <see cref="Cell.WideTail" /> cell; overwriting either half of an existing
+///     pair blanks the whole pair first so the diff repaints both halves and no
+///     glyph ghost survives.
 /// </summary>
 public sealed class ScreenBuffer
 {
     private const ulong FnvOffset = 0xCBF2_9CE4_8422_2325UL;
     private const ulong FnvPrime = 0x0000_0100_0000_01B3UL;
+    private int _capCols;
+    private int _capRows;
 
     private Cell[] _cells;
     private bool[] _rowHashValid;
-    private int _capCols;
-    private int _capRows;
 
     public ScreenBuffer(int cols, int rows)
     {
@@ -36,24 +34,24 @@ public sealed class ScreenBuffer
     public int Cols { get; private set; }
     public int Rows { get; private set; }
 
-    /// <summary>Row hash cache — valid only where <see cref="IsRowHashValid"/> says so.</summary>
+    /// <summary>Row hash cache — valid only where <see cref="IsRowHashValid" /> says so.</summary>
     public ulong[] RowHash { get; private set; } = [];
-
-    internal bool IsRowHashValid(int y) => _rowHashValid[y];
 
     /// <summary>Backing array identity, for capacity-reuse assertions in tests.</summary>
     internal Cell[] CellsForTests => _cells;
 
-    public ref Cell At(int x, int y) => ref _cells[(y * Cols) + x];
+    internal bool IsRowHashValid(int y) => _rowHashValid[y];
 
-    public Cell Get(int x, int y) => _cells[(y * Cols) + x];
+    public ref Cell At(int x, int y) => ref _cells[y * Cols + x];
+
+    public Cell Get(int x, int y) => _cells[y * Cols + x];
 
     // ── Geometry ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Changes visible geometry. Shrinking reuses the same array (only dims
-    /// change); growing reallocates geometrically (≥ ×1.25). All rows are
-    /// invalidated and blanked — content is repainted from state.
+    ///     Changes visible geometry. Shrinking reuses the same array (only dims
+    ///     change); growing reallocates geometrically (≥ ×1.25). All rows are
+    ///     invalidated and blanked — content is repainted from state.
     /// </summary>
     public void Resize(int cols, int rows)
     {
@@ -91,8 +89,8 @@ public sealed class ScreenBuffer
 
         if (_rowHashValid.Length < rows)
         {
-            var hash = new ulong[Math.Max(rows, _capRows)];
-            var valid = new bool[Math.Max(rows, _capRows)];
+            ulong[] hash = new ulong[Math.Max(rows, _capRows)];
+            bool[] valid = new bool[Math.Max(rows, _capRows)];
             Array.Copy(RowHash, hash, Math.Min(RowHash.Length, hash.Length));
             Array.Copy(_rowHashValid, valid, Math.Min(_rowHashValid.Length, valid.Length));
             RowHash = hash;
@@ -123,10 +121,10 @@ public sealed class ScreenBuffer
     public void FillAll(in Cell cell) => Fill(new Rect(0, 0, Cols, Rows), in cell);
 
     /// <summary>
-    /// Fills the clipped rectangle. Wide fill cells keep the §1.3 pair
-    /// structure: each lead gets a tail, a pair that would cross the rect's
-    /// right edge is skipped (ratatui policy), and clobbered neighbors have
-    /// their halves cleared so no ghost glyph survives.
+    ///     Fills the clipped rectangle. Wide fill cells keep the §1.3 pair
+    ///     structure: each lead gets a tail, a pair that would cross the rect's
+    ///     right edge is skipped (ratatui policy), and clobbered neighbors have
+    ///     their halves cleared so no ghost glyph survives.
     /// </summary>
     public void Fill(Rect rect, in Cell cell)
     {
@@ -135,7 +133,7 @@ public sealed class ScreenBuffer
         for (int y = clipped.Y; y < clipped.Bottom; y++)
         {
             int rowBase = y * Cols;
-            for (int x = clipped.X; x < clipped.Right; )
+            for (int x = clipped.X; x < clipped.Right;)
             {
                 ClearWidePairAt(x, y);
                 if (wide)
@@ -167,10 +165,10 @@ public sealed class ScreenBuffer
     }
 
     /// <summary>
-    /// Places one rune with wide-char handling. Zero-width runes are ignored
-    /// (documented simplification: per-rune widths, VS16/ZWJ are no-ops).
-    /// Returns false when a wide rune does not fit at the row edge — nothing
-    /// is painted then (ratatui skip policy).
+    ///     Places one rune with wide-char handling. Zero-width runes are ignored
+    ///     (documented simplification: per-rune widths, VS16/ZWJ are no-ops).
+    ///     Returns false when a wide rune does not fit at the row edge — nothing
+    ///     is painted then (ratatui skip policy).
     /// </summary>
     public bool SetRune(int x, int y, Rune rune, in CellStyle style)
     {
@@ -193,7 +191,7 @@ public sealed class ScreenBuffer
         ClearWidePairAt(x, y);
 
         var cell = Cell.From(rune, style);
-        int baseIndex = (y * Cols) + x;
+        int baseIndex = y * Cols + x;
         if (width == 2)
         {
             // If the next cell leads its own wide pair, orphaning its tail at
@@ -243,9 +241,11 @@ public sealed class ScreenBuffer
         }
     }
 
-    /// <summary>Recolors one cell without touching its rune. Wide clusters are
-    /// restyled as a whole — lead plus tail — so animation blends never leave
-    /// half-colored glyphs; a write landing on a tail is routed to its lead.</summary>
+    /// <summary>
+    ///     Recolors one cell without touching its rune. Wide clusters are
+    ///     restyled as a whole — lead plus tail — so animation blends never leave
+    ///     half-colored glyphs; a write landing on a tail is routed to its lead.
+    /// </summary>
     public bool SetStyleAt(int x, int y, in CellStyle style)
     {
         if ((uint)x >= (uint)Cols || (uint)y >= (uint)Rows)
@@ -253,7 +253,7 @@ public sealed class ScreenBuffer
             return false;
         }
 
-        ref Cell cell = ref At(x, y);
+        ref var cell = ref At(x, y);
         if (cell.Width == Cell.WSkip)
         {
             return x > 0 && SetStyleAt(x - 1, y, in style);
@@ -283,8 +283,10 @@ public sealed class ScreenBuffer
         return RowHash[y];
     }
 
-    /// <summary>Copies an authoritative row hash from another buffer (the
-    /// diff uses this to keep FRONT's cache in lockstep with BACK).</summary>
+    /// <summary>
+    ///     Copies an authoritative row hash from another buffer (the
+    ///     diff uses this to keep FRONT's cache in lockstep with BACK).
+    /// </summary>
     internal void AdoptRowHash(ScreenBuffer source, int y)
     {
         RowHash[y] = source.RowHash[y];
@@ -297,14 +299,14 @@ public sealed class ScreenBuffer
         ulong hash = FnvOffset;
         for (int x = 0; x < Cols; x++)
         {
-            ref readonly Cell c = ref _cells[baseIndex + x];
+            ref readonly var c = ref _cells[baseIndex + x];
             hash ^= (uint)c.Rune;
             hash *= FnvPrime;
             hash ^= c.Fg;
             hash *= FnvPrime;
             hash ^= c.Bg;
             hash *= FnvPrime;
-            hash ^= ((ulong)c.Flags << 8) | c.Width;
+            hash ^= (ulong)c.Flags << 8 | c.Width;
             hash *= FnvPrime;
         }
 
@@ -313,12 +315,12 @@ public sealed class ScreenBuffer
     }
 
     /// <summary>
-    /// If (x,y) sits on any half of a wide pair, resets BOTH halves to blanks.
-    /// This is what guarantees the diff repaints the surviving half (§1.3).
+    ///     If (x,y) sits on any half of a wide pair, resets BOTH halves to blanks.
+    ///     This is what guarantees the diff repaints the surviving half (§1.3).
     /// </summary>
     private void ClearWidePairAt(int x, int y)
     {
-        int index = (y * Cols) + x;
+        int index = y * Cols + x;
         if (_cells[index].Width == Cell.WSkip && x > 0 && _cells[index - 1].Width == Cell.Wide)
         {
             _cells[index - 1] = Cell.Blank;

@@ -1,7 +1,5 @@
 using Harbor.Abstractions.Events;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Ui.Framework.Services;
 
 /// <summary>
@@ -10,9 +8,9 @@ namespace Harbor.Ui.Framework.Services;
 /// </summary>
 public sealed class EventBusAppStoreDispatcher : IAsyncDisposable
 {
-    private readonly IEventBus _eventBus;
     private readonly AppStore _appStore;
     private readonly IDispatcherAdapter _dispatcher;
+    private readonly IEventBus _eventBus;
     private IDisposable? _subscription;
 
     public EventBusAppStoreDispatcher(IEventBus eventBus, AppStore appStore, IDispatcherAdapter dispatcher)
@@ -22,22 +20,19 @@ public sealed class EventBusAppStoreDispatcher : IAsyncDisposable
         _dispatcher = dispatcher;
     }
 
-    /// <summary>Subscribe to agent events and start feeding them into the app store.</summary>
-    public void Start()
-    {
-        _subscription = _eventBus.Subscribe<AgentEvent>(OnAgentEvent);
-    }
-
-    private ValueTask OnAgentEvent(AgentEvent @event, CancellationToken ct)
-    {
-        _dispatcher.Post(() => _appStore.Dispatch(@event));
-        return ValueTask.CompletedTask;
-    }
-
     /// <summary>Unsubscribe from the event bus and release resources.</summary>
     public ValueTask DisposeAsync()
     {
         _subscription?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>Subscribe to agent events and start feeding them into the app store.</summary>
+    public void Start() => _subscription = _eventBus.Subscribe<AgentEvent>(OnAgentEvent);
+
+    private ValueTask OnAgentEvent(AgentEvent @event, CancellationToken ct)
+    {
+        _dispatcher.Post(() => _appStore.Dispatch(@event));
         return ValueTask.CompletedTask;
     }
 }

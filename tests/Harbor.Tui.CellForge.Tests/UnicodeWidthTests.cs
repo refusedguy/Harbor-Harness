@@ -1,6 +1,4 @@
 using System.Text;
-using Harbor.Tui.CellForge.Rendering;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class UnicodeWidthTests

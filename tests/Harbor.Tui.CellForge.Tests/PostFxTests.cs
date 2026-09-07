@@ -1,18 +1,15 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
-using Harbor.Ui.Framework.Rendering;
-using Harbor.Ui.Framework.Rendering.Widgets;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Shader-like post-render effects (renderer-moat T3): a composable pipeline
-/// runs after the diff selects cells and before SGR encoding; warning/error
-/// accents (pending approval gates) bloom toward a hot tone. The empty
-/// pipeline is byte-identical to the classic scan — zero regression on
-/// non-effect frames.
+///     Shader-like post-render effects (renderer-moat T3): a composable pipeline
+///     runs after the diff selects cells and before SGR encoding; warning/error
+///     accents (pending approval gates) bloom toward a hot tone. The empty
+///     pipeline is byte-identical to the classic scan — zero regression on
+///     non-effect frames.
 /// </summary>
 public class PostFxTests
 {
@@ -21,17 +18,17 @@ public class PostFxTests
 
     private static PackedColor HotTone(PackedColor accent)
     {
-        var (r, g, b) = Channels(accent);
+        (byte r, byte g, byte b) = Channels(accent);
         const double burn = 0.65; // GlowEffect.HotBurn
         return PackedColor.Rgb(
-            (byte)(r + ((255 - r) * burn)),
-            (byte)(g + ((255 - g) * burn)),
-            (byte)(b + ((255 - b) * burn)));
+            (byte)(r + (255 - r) * burn),
+            (byte)(g + (255 - g) * burn),
+            (byte)(b + (255 - b) * burn));
     }
 
     private static string HotSgr(PackedColor accent)
     {
-        var (r, g, b) = Channels(PanelFx.Lerp(accent, HotTone(accent), GlowEffect.PeakStrength));
+        (byte r, byte g, byte b) = Channels(PanelFx.Lerp(accent, HotTone(accent), GlowEffect.PeakStrength));
         return $"\x1B[38;2;{r};{g};{b}m";
     }
 
@@ -72,7 +69,7 @@ public class PostFxTests
     {
         var accent = ChatPalette.Warning;
         var effect = new GlowEffect();
-        effect.Update(new GlowRegion(new Rect(0, 0, 20, 3), accent, intensity: 1.0));
+        effect.Update(new GlowRegion(new Rect(0, 0, 20, 3), accent, 1.0));
 
         var accentCell = Cell.From(new Rune('!'), new CellStyle(accent, attrs: StyleAttr.Bold));
         var textCell = Cell.From(new Rune('a'), new CellStyle(ChatPalette.Text));
@@ -84,7 +81,7 @@ public class PostFxTests
         await Assert.That(glowed.Style.Attrs).IsEqualTo(StyleAttr.Bold); // attrs untouched
 
         await Assert.That(effect.Transform(6, 1, in textCell)).IsEqualTo(textCell); // plain text — no wash
-        await Assert.That(effect.Transform(7, 1, in dimCell)).IsEqualTo(dimCell);   // hints — no wash
+        await Assert.That(effect.Transform(7, 1, in dimCell)).IsEqualTo(dimCell); // hints — no wash
         await Assert.That(effect.Transform(5, 9, in accentCell)).IsEqualTo(accentCell); // outside region
     }
 
@@ -92,7 +89,7 @@ public class PostFxTests
     public async Task Glow_ZeroIntensity_IsIdentity()
     {
         var effect = new GlowEffect();
-        effect.Update(new GlowRegion(new Rect(0, 0, 10, 2), ChatPalette.Error, intensity: 0.0));
+        effect.Update(new GlowRegion(new Rect(0, 0, 10, 2), ChatPalette.Error, 0.0));
 
         var cell = Cell.From(new Rune('!'), new CellStyle(ChatPalette.Error, attrs: StyleAttr.Bold));
         await Assert.That(effect.Transform(1, 0, in cell)).IsEqualTo(cell);
@@ -102,7 +99,7 @@ public class PostFxTests
     public async Task Glow_PaletteIndexAccent_DoesNotGlow()
     {
         var effect = new GlowEffect();
-        effect.Update(new GlowRegion(new Rect(0, 0, 10, 2), PackedColor.Indexed(3), intensity: 1.0));
+        effect.Update(new GlowRegion(new Rect(0, 0, 10, 2), PackedColor.Indexed(3), 1.0));
 
         var cell = Cell.From(new Rune('!'), new CellStyle(PackedColor.Indexed(3)));
         await Assert.That(effect.Transform(1, 0, in cell)).IsEqualTo(cell);
@@ -152,7 +149,7 @@ public class PostFxTests
         var engine = SeededEngine(30, 4, out var back, out var writer, out var backend);
         var accent = ChatPalette.Warning;
         var glow = new GlowEffect();
-        glow.Update(new GlowRegion(new Rect(0, 1, 30, 1), accent, intensity: 1.0));
+        glow.Update(new GlowRegion(new Rect(0, 1, 30, 1), accent, 1.0));
         var pipeline = new PostFxPipeline();
         pipeline.Set(0, glow);
         engine.Effects = pipeline;
@@ -173,7 +170,7 @@ public class PostFxTests
         // Disarm: the plain cell now differs from the mirrored glow and is
         // repainted once — no glow sticks to the terminal.
         backend.ResetForTests();
-        glow.Update(new GlowRegion(new Rect(0, 1, 30, 1), accent, intensity: 0.0));
+        glow.Update(new GlowRegion(new Rect(0, 1, 30, 1), accent, 0.0));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -197,7 +194,7 @@ public class PostFxTests
 
         back.SetText(0, 0, "PULSE", new CellStyle(accent, attrs: StyleAttr.Bold));
 
-        glow.Update(new GlowRegion(new Rect(0, 0, 20, 1), accent, intensity: 1.0));
+        glow.Update(new GlowRegion(new Rect(0, 0, 20, 1), accent, 1.0));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -206,7 +203,7 @@ public class PostFxTests
 
         backend.ResetForTests();
         writer.BeginFrame();
-        glow.Update(new GlowRegion(new Rect(0, 0, 20, 1), accent, intensity: 0.4));
+        glow.Update(new GlowRegion(new Rect(0, 0, 20, 1), accent, 0.4));
         engine.Flush(back, writer); // raw BACK unchanged — glow drives the repaint
         await writer.EndFrameAsync();
 
@@ -231,17 +228,17 @@ public class PostFxTests
         var regions = new GlowRegion[VirtualizedChatTimeline.MaxFxDamage];
 
         // Pulse peak (¼ cycle): full-intensity region with the painted accent.
-        timeline.CurrentTick = 100 + (PanelFx.PulseFrames / 4);
+        timeline.CurrentTick = 100 + PanelFx.PulseFrames / 4;
         timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
         int count = timeline.ConsumeGlowRegions(regions);
         await Assert.That(count).IsEqualTo(1);
         await Assert.That(regions[0].Intensity).IsGreaterThan(0.0);
         await Assert.That(regions[0].Bounds.Height).IsGreaterThan(0);
-        await Assert.That(regions[0].Accent).IsEqualTo(PanelFx.WarnTone(100, 100 + (PanelFx.PulseFrames / 4)).Fg);
+        await Assert.That(regions[0].Accent).IsEqualTo(PanelFx.WarnTone(100, 100 + PanelFx.PulseFrames / 4).Fg);
 
         // Pulse trough (¾ cycle — sine negative → clamped 0): the region is
         // STILL published at zero so the glow can be cleared on the terminal.
-        timeline.CurrentTick = 100 + PanelFx.PulseFrames + ((PanelFx.PulseFrames * 3) / 4);
+        timeline.CurrentTick = 100 + PanelFx.PulseFrames + PanelFx.PulseFrames * 3 / 4;
         timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
         count = timeline.ConsumeGlowRegions(regions);
         await Assert.That(count).IsEqualTo(1);
@@ -264,7 +261,7 @@ public class PostFxTests
         _ = timeline.PrepareFrame(60, 10);
         gate.BeginWarnPulse(50);
 
-        timeline.CurrentTick = 50 + (PanelFx.PulseFrames / 4);
+        timeline.CurrentTick = 50 + PanelFx.PulseFrames / 4;
         timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
 
         var regions = new GlowRegion[1];
@@ -303,7 +300,7 @@ public class PostFxTests
     public async Task ScreenSession_ArmsEffectsThroughFlush_EmptyStaysByteIdentical()
     {
         var backend = new RecordingBackend();
-        var session = new ScreenSession(new AnsiWriter(backend, syncUpdates: true), 20, 3);
+        var session = new ScreenSession(new AnsiWriter(backend, true), 20, 3);
 
         session.BeginFrame();
         session.FlushFrame();
@@ -321,13 +318,13 @@ public class PostFxTests
     public async Task ScreenSession_ArmedGlow_FlowsThroughFlushFrame()
     {
         var backend = new RecordingBackend();
-        var session = new ScreenSession(new AnsiWriter(backend, syncUpdates: true), 20, 3);
+        var session = new ScreenSession(new AnsiWriter(backend, true), 20, 3);
         session.BeginFrame();
         session.FlushFrame();
 
         var accent = ChatPalette.Warning;
         var glow = new GlowEffect();
-        glow.Update(new GlowRegion(new Rect(0, 1, 20, 1), accent, intensity: 1.0));
+        glow.Update(new GlowRegion(new Rect(0, 1, 20, 1), accent, 1.0));
         session.Effects.Set(0, glow);
 
         session.Back.SetText(2, 1, "HOT", new CellStyle(accent, attrs: StyleAttr.Bold));

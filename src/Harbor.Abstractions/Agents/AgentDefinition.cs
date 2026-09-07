@@ -2,6 +2,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 namespace Harbor.Abstractions.Agents;
+
 /// <summary>
 ///     Agent definition. An "agent" combines a model, a permission ruleset, and a max-steps limit.
 ///     Implements Prototype pattern (GOF) — agents are cloned and customized.
@@ -37,7 +38,7 @@ namespace Harbor.Abstractions.Agents;
 /// <param name="ToolTimeoutSeconds">
 ///     A9 (sprint 5): per-tool-call execution timeout in seconds. When set, a
 ///     hanging tool is cancelled at this deadline and returns an error result
-///     instead of blocking the loop forever. <see langword="null"/> (default)
+///     instead of blocking the loop forever. <see langword="null" /> (default)
 ///     preserves the legacy unbounded behaviour.
 /// </param>
 public sealed record AgentDefinition(

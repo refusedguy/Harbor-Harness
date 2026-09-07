@@ -1,7 +1,4 @@
 using Harbor.E2E.Framework;
-using Harbor.E2E.Framework.Pty;
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -22,7 +19,7 @@ public sealed class CrashRecoveryScenarioTests : CellForgePtyScenarioBase
         PtySession.RequireLinux();
 
         Server.SetResponse("test-model", new string('х', 800));
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -47,7 +44,7 @@ public sealed class CrashRecoveryScenarioTests : CellForgePtyScenarioBase
         await Assert.That((lflag & ECHO) == 0).IsTrue();
 
         // Recovery: a brand-new session on a fresh PTY works end-to-end.
-        await using var probe = PtySession.Start(new PtyStartSpec("cat", [], Cols: 80, Rows: 24));
+        await using var probe = PtySession.Start(new PtyStartSpec("cat", [], 80, 24));
         probe.WriteLine("recovered-after-crash");
         bool echoed = await probe.WaitForTextAsync(
             "recovered-after-crash", TimeSpan.FromSeconds(5)).ConfigureAwait(false);

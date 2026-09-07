@@ -1,8 +1,9 @@
-using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Panels;
+using System.Collections.Immutable;
 namespace Harbor.Ui.Framework.State;
+
 /// <summary>
 ///     The single message type for the interactive UI (TEA/MVU "Msg"). Every input
 ///     — agent events, key presses, and view-measured geometry — flows through this

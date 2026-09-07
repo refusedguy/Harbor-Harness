@@ -1,12 +1,13 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 namespace Harbor.Tui.Notifications;
+
 /// <summary>
 ///     Non-interactive renderer that fires desktop OS notifications on key
 ///     agent events. No terminal output — designed for long-running agents in the
@@ -247,7 +248,7 @@ internal sealed class WindowsToastBackend : INotificationBackend
 internal sealed class NullNotificationBackend : INotificationBackend
 {
     public string Name => "null (no notifications)";
-    public void Notify(string title, string body, bool isError) { }
+    public void Notify(string title, string body, bool isError) {}
 }
 
 /// <summary>Render context shim — the notification renderer doesn't paint.</summary>
@@ -261,27 +262,27 @@ internal sealed class NotificationRenderContext : ITuiRenderContext
     public bool SupportsColor => false;
 
     /// <inheritdoc />
-    public void Write(string text) { }
+    public void Write(string text) {}
     /// <inheritdoc />
-    public void WriteLine(string? text = null) { }
+    public void WriteLine(string? text = null) {}
     /// <inheritdoc />
-    public void WriteColored(string text, TuiColor foreground, TuiColor? background = null) { }
+    public void WriteColored(string text, TuiColor foreground, TuiColor? background = null) {}
     /// <inheritdoc />
-    public void WriteStyled(string text, TuiStyle style) { }
+    public void WriteStyled(string text, TuiStyle style) {}
     /// <inheritdoc />
-    public void SetCursorPosition(int row, int col) { }
+    public void SetCursorPosition(int row, int col) {}
     /// <inheritdoc />
-    public void ClearLine() { }
+    public void ClearLine() {}
     /// <inheritdoc />
-    public void Clear() { }
+    public void Clear() {}
     /// <inheritdoc />
-    public void HideCursor() { }
+    public void HideCursor() {}
     /// <inheritdoc />
-    public void ShowCursor() { }
+    public void ShowCursor() {}
     /// <inheritdoc />
-    public void EnterAlternateScreen() { }
+    public void EnterAlternateScreen() {}
     /// <inheritdoc />
-    public void ExitAlternateScreen() { }
+    public void ExitAlternateScreen() {}
     /// <inheritdoc />
-    public void Flush() { }
+    public void Flush() {}
 }

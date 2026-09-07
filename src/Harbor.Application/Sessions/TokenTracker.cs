@@ -1,16 +1,8 @@
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
-
 namespace Harbor.Application.Sessions;
 
 public sealed class TokenTracker : ITokenTracker
 {
     private readonly HeuristicTokenEstimator _estimator;
-    private int _totalInputTokens;
-    private int _totalOutputTokens;
-    private int _totalReasoningTokens;
-    private int _totalCacheReadTokens;
-    private int _totalCacheWriteTokens;
 
     // Running-estimate cache (B3): _runningEstimate covers exactly the leading
     // _trackedCount messages of the history. Appends reported through
@@ -19,16 +11,21 @@ public sealed class TokenTracker : ITokenTracker
     // truncation) desynchronizes the count and forces exactly one full rescan
     // on the next ShouldCompact call before O(1) checks resume.
     private int _runningEstimate;
+    private int _totalCacheReadTokens;
+    private int _totalCacheWriteTokens;
+    private int _totalInputTokens;
+    private int _totalOutputTokens;
+    private int _totalReasoningTokens;
     private int _trackedCount;
 
-    public int ReserveTokens { get; set; } = 16384;
-
-    public TokenTracker() : this(new HeuristicTokenEstimator()) { }
+    public TokenTracker() : this(new HeuristicTokenEstimator()) {}
 
     public TokenTracker(HeuristicTokenEstimator estimator)
     {
         _estimator = estimator;
     }
+
+    public int ReserveTokens { get; set; } = 16384;
 
     public void RecordTurnUsage(Usage usage)
     {
@@ -75,8 +72,5 @@ public sealed class TokenTracker : ITokenTracker
         return estimated > model.ContextWindow - ReserveTokens;
     }
 
-    public TokenStats GetStats()
-    {
-        return new TokenStats(_totalInputTokens, _totalOutputTokens, _totalReasoningTokens, _totalCacheReadTokens, _totalCacheWriteTokens);
-    }
+    public TokenStats GetStats() => new(_totalInputTokens, _totalOutputTokens, _totalReasoningTokens, _totalCacheReadTokens, _totalCacheWriteTokens);
 }

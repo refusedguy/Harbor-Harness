@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 namespace Harbor.Plugins.Hosting;
 
 /// <summary>The kind of filesystem change detected for a plugin source file.</summary>
@@ -12,14 +12,16 @@ public enum PluginSourceChangeKind
     Modified,
 
     /// <summary>The file was removed.</summary>
-    Removed,
+    Removed
 }
 
 /// <summary>
 ///     One detected change to a CS-source plugin file.
 /// </summary>
-/// <remarks>Named with the <c>EventArgs</c> suffix per convention — this is raised
-///     through <see cref="DebouncedPluginWatcher.ChangesReady" />.</remarks>
+/// <remarks>
+///     Named with the <c>EventArgs</c> suffix per convention — this is raised
+///     through <see cref="DebouncedPluginWatcher.ChangesReady" />.
+/// </remarks>
 public sealed class PluginSourceChangeEventArgs : EventArgs
 {
     /// <summary>Construct one change report.</summary>
@@ -54,21 +56,12 @@ public sealed class PluginSourceChangeEventArgs : EventArgs
 public sealed class DebouncedPluginWatcher : IDisposable
 {
     private const int WatcherBufferSizeBytes = 64 * 1024;
+    private readonly TimeSpan _debounce;
+    private readonly ILogger<DebouncedPluginWatcher>? _logger;
 
     private readonly ConcurrentDictionary<string, PendingChange> _pending = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, FileSystemWatcher> _watched = new(StringComparer.OrdinalIgnoreCase);
-    private readonly TimeSpan _debounce;
-    private readonly ILogger<DebouncedPluginWatcher>? _logger;
     private int _disposed;
-
-    /// <summary>Raised on a thread-pool thread once per debounced per-file burst.</summary>
-    public event EventHandler<PluginSourceChangeEventArgs>? ChangesReady;
-
-    /// <summary>
-    ///     Tracks one path mid-burst. Rank always holds the MOST RECENT raw event's
-    ///     kind; Generation is bumped per raw event and arms the matching timer.
-    /// </summary>
-    private readonly record struct PendingChange(byte Rank, long Generation);
 
     /// <summary>
     ///     Construct and start watching immediately.
@@ -85,7 +78,7 @@ public sealed class DebouncedPluginWatcher : IDisposable
         _logger = logger;
 
         foreach (string dir in (directories ?? throw new ArgumentNullException(nameof(directories)))
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
+                 .Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (!Directory.Exists(dir))
             {
@@ -97,7 +90,7 @@ public sealed class DebouncedPluginWatcher : IDisposable
             {
                 IncludeSubdirectories = false,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
-                InternalBufferSize = WatcherBufferSizeBytes,
+                InternalBufferSize = WatcherBufferSizeBytes
             };
             fsw.Created += (_, e) => OnRawEvent(e.FullPath, PluginSourceChangeKind.Added);
             fsw.Changed += (_, e) => OnRawEvent(e.FullPath, PluginSourceChangeKind.Modified);
@@ -124,7 +117,7 @@ public sealed class DebouncedPluginWatcher : IDisposable
     }
 
     /// <summary>Directories that are actually being watched.</summary>
-    public IReadOnlyCollection<string> WatchedDirectories => [.. _watched.Keys];
+    public IReadOnlyCollection<string> WatchedDirectories => [.._watched.Keys];
 
     /// <inheritdoc />
     public void Dispose()
@@ -141,6 +134,9 @@ public sealed class DebouncedPluginWatcher : IDisposable
         _watched.Clear();
     }
 
+    /// <summary>Raised on a thread-pool thread once per debounced per-file burst.</summary>
+    public event EventHandler<PluginSourceChangeEventArgs>? ChangesReady;
+
     private void OnRawEvent(string fullPath, PluginSourceChangeKind kind)
     {
         if (_disposed != 0 || !".cs".Equals(Path.GetExtension(fullPath), StringComparison.OrdinalIgnoreCase))
@@ -150,7 +146,7 @@ public sealed class DebouncedPluginWatcher : IDisposable
         long armedGeneration = -1;
         while (true)
         {
-            PendingChange current = _pending.GetOrAdd(fullPath, new PendingChange(incomingRank, 0));
+            var current = _pending.GetOrAdd(fullPath, new PendingChange(incomingRank, 0));
             PendingChange next = new(incomingRank, current.Generation + 1); // last event wins, chronologically
             if (_pending.TryUpdate(fullPath, next, current))
             {
@@ -163,7 +159,7 @@ public sealed class DebouncedPluginWatcher : IDisposable
         Timer timer = null!;
         string path = fullPath;
         long generation = armedGeneration;
-        DebouncedPluginWatcher owner = this;
+        var owner = this;
         timer = new Timer(
             _ =>
             {
@@ -220,13 +216,19 @@ public sealed class DebouncedPluginWatcher : IDisposable
     {
         PluginSourceChangeKind.Removed => 0,
         PluginSourceChangeKind.Added => 1,
-        _ => 2,
+        _ => 2
     };
 
     private static PluginSourceChangeKind UnmapRank(byte rank) => rank switch
     {
         0 => PluginSourceChangeKind.Removed,
         1 => PluginSourceChangeKind.Added,
-        _ => PluginSourceChangeKind.Modified,
+        _ => PluginSourceChangeKind.Modified
     };
+
+    /// <summary>
+    ///     Tracks one path mid-burst. Rank always holds the MOST RECENT raw event's
+    ///     kind; Generation is bumped per raw event and arms the matching timer.
+    /// </summary>
+    private readonly record struct PendingChange(byte Rank, long Generation);
 }

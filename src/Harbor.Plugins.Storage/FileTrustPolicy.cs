@@ -1,7 +1,7 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 namespace Harbor.Plugins.Storage;
 
 /// <summary>
@@ -26,34 +26,22 @@ namespace Harbor.Plugins.Storage;
 /// </remarks>
 public sealed class FileTrustPolicy : IPluginTrustPolicy
 {
-    private sealed record TrustEntry
-    {
-        [JsonPropertyName("path")]
-        public string Path { get; set; } = string.Empty;
-
-        [JsonPropertyName("hash")]
-        public string Hash { get; set; } = string.Empty;
-
-        /// <summary>
-        ///     v2: capabilities the user approved for this exact (path, hash) pair.
-        ///     Stored as canonical lowercase names; null for legacy v1 entries.
-        /// </summary>
-        [JsonPropertyName("capabilities")]
-        public List<string>? Capabilities { get; set; }
-    }
 
     private static readonly JsonSerializerOptions StoreOptions = new()
     {
         WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    private static readonly IReadOnlySet<PluginCapability> EmptyGranted =
+        new HashSet<PluginCapability>();
+    private readonly Func<PluginScript, IReadOnlySet<PluginCapability>, Task<IReadOnlySet<PluginCapability>>>? _capabilityPrompt;
 
     private readonly ILogger<FileTrustPolicy> _logger;
     private readonly Func<PluginScript, Task<bool>>? _prompt;
-    private readonly Func<PluginScript, IReadOnlySet<PluginCapability>, Task<IReadOnlySet<PluginCapability>>>? _capabilityPrompt;
-    private readonly IReadOnlyList<string> _trustedDirs;
     private readonly string _storePath;
     private readonly object _sync = new();
+    private readonly IReadOnlyList<string> _trustedDirs;
     private List<TrustEntry>? _entries;
 
     /// <summary>
@@ -258,7 +246,7 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(_storePath)!);
-                var json = JsonSerializer.Serialize(updated, StoreOptions);
+                string json = JsonSerializer.Serialize(updated, StoreOptions);
                 File.WriteAllText(_storePath, json);
 
                 // Only promote to the live cache after a successful save — an unwritable
@@ -277,6 +265,19 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
         }
     }
 
-    private static readonly IReadOnlySet<PluginCapability> EmptyGranted =
-        new HashSet<PluginCapability>();
+    private sealed record TrustEntry
+    {
+        [JsonPropertyName("path")]
+        public string Path { get; set; } = string.Empty;
+
+        [JsonPropertyName("hash")]
+        public string Hash { get; set; } = string.Empty;
+
+        /// <summary>
+        ///     v2: capabilities the user approved for this exact (path, hash) pair.
+        ///     Stored as canonical lowercase names; null for legacy v1 entries.
+        /// </summary>
+        [JsonPropertyName("capabilities")]
+        public List<string>? Capabilities { get; set; }
+    }
 }

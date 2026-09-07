@@ -1,12 +1,10 @@
-using System.Text;
-
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Subsequence fuzzy scorer for the command palette (fzf-style, simplified).
-/// Match = query characters appear in candidate in order. Score rewards
-/// word-boundary and consecutive hits, penalizes sparse matches and length.
-/// Pure static functions, zero allocations on the hot path.
+///     Subsequence fuzzy scorer for the command palette (fzf-style, simplified).
+///     Match = query characters appear in candidate in order. Score rewards
+///     word-boundary and consecutive hits, penalizes sparse matches and length.
+///     Pure static functions, zero allocations on the hot path.
 /// </summary>
 public static class FuzzyMatcher
 {
@@ -14,8 +12,8 @@ public static class FuzzyMatcher
     public const int MinScore = int.MinValue;
 
     /// <summary>
-    /// Scores <paramref name="candidate" /> against <paramref name="query" />.
-    /// null = not a subsequence match; higher = better.
+    ///     Scores <paramref name="candidate" /> against <paramref name="query" />.
+    ///     null = not a subsequence match; higher = better.
     /// </summary>
     public static int? Score(string query, string candidate)
     {
@@ -46,9 +44,9 @@ public static class FuzzyMatcher
 
             // Word-boundary bonus: string start, separator, or camelCase hump.
             bool boundary = prevMatch < 0 && firstSegment
-                || ci == 0
-                || IsSeparator(candidate[ci - 1])
-                || (char.IsUpper(cc) && !char.IsUpper(candidate[ci - 1]));
+                            || ci == 0
+                            || IsSeparator(candidate[ci - 1])
+                            || char.IsUpper(cc) && !char.IsUpper(candidate[ci - 1]);
             if (boundary)
             {
                 score += 16;
@@ -82,9 +80,9 @@ public static class FuzzyMatcher
     }
 
     /// <summary>
-    /// Ranks <paramref name="candidates" /> by <paramref name="query" />:
-    /// matching items first (best score first), non-matching dropped.
-    /// Stable for equal scores — suggested order survives.
+    ///     Ranks <paramref name="candidates" /> by <paramref name="query" />:
+    ///     matching items first (best score first), non-matching dropped.
+    ///     Stable for equal scores — suggested order survives.
     /// </summary>
     public static List<T> Filter<T>(string query, IReadOnlyList<T> candidates, Func<T, string> textOf)
     {

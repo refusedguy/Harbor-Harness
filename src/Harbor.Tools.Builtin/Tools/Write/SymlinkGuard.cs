@@ -1,4 +1,5 @@
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Refuses file writes whose target or any ancestor directory below the workspace root
 ///     is a symbolic link (symlink-attack guard for write-style tools).

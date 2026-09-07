@@ -1,13 +1,13 @@
 using BenchmarkDotNet.Attributes;
-using System.Collections.Immutable;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
+using System.Collections.Immutable;
 namespace Harbor.Benchmarks;
 
 /// <summary>
 ///     Benchmarks <see cref=\"DefaultUiProjector.Project\" /> — the
-///     projection of <see cref=\"UiState\" /> into <see cref=\"UiScreenModel\" />.
+///     projection of <see cref=\"UiState" /> into <see cref=\"UiScreenModel\" />.
 ///     Measures the cost of building <see cref=\"UiRenderedLine\" /> arrays,
 ///     resolving <see cref=\"StyledSpan\" /> lists, and computing the state
 ///     revision string.
@@ -16,11 +16,11 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class DefaultUiProjectorBenchmark
 {
-    private UiState _state = null!;
-    private DefaultUiProjector _projector = null!;
 
     [Params(1, 50, 500, 5000)]
     public int LineCount;
+    private DefaultUiProjector _projector = null!;
+    private UiState _state = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -31,10 +31,9 @@ public class DefaultUiProjectorBenchmark
         {
             lines[i] = new ChatLine(
                 i % 4 == 0 ? ChatRole.User : i % 4 == 1 ? ChatRole.Assistant : i % 4 == 2 ? ChatRole.Tool : ChatRole.ToolResult,
-                $"Message {i}: " + new string('x', 40 + (i % 80)),
+                $"Message {i}: " + new string('x', 40 + i % 80),
                 i % 4 == 2 ? $"tc_{i}" : null,
-                $"msg-{i}",
-                default);
+                $"msg-{i}");
         }
 
         _state = new UiState
@@ -66,10 +65,7 @@ public class DefaultUiProjectorBenchmark
     }
 
     [Benchmark(Description = "Project UiState -> UiScreenModel (cached hit, same ref)")]
-    public UiScreenModel Project_UiState_CachedHit()
-    {
-        return _projector.Project(_state);
-    }
+    public UiScreenModel Project_UiState_CachedHit() => _projector.Project(_state);
 
     [Benchmark(Description = "ExtractRenderedLines from projected screen")]
     public ImmutableArray<UiRenderedLine> ExtractRenderedLines()

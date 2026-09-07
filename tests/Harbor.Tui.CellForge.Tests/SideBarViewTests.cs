@@ -1,6 +1,5 @@
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 public class SideBarViewTests
@@ -27,18 +26,18 @@ public class SideBarViewTests
     [Test]
     public async Task Paint_FullState_RendersAllSections()
     {
-        var (buffer, rect) = MakeBuffer(cols: 80, rows: 30);
+        var (buffer, rect) = MakeBuffer(80, 30);
         var state = new SideBarState(
-            SessionTitle: "Fix the parser",
-            SessionId: "0123456789abcdef",
-            Model: "kilocode/tencent/hy3:free",
-            TokensIn: 12_345,
-            TokensOut: 678,
-            CostUsd: 0.0123,
-            ModifiedFiles: ["src/A.cs", "src/B.cs"],
-            LspErrors: 2,
-            LspWarnings: 5,
-            McpServers: [new McpServerStatus("git", McpServerState.Connected), new McpServerStatus("fs", McpServerState.Error)]);
+            "Fix the parser",
+            "0123456789abcdef",
+            "kilocode/tencent/hy3:free",
+            12_345,
+            678,
+            0.0123,
+            ["src/A.cs", "src/B.cs"],
+            2,
+            5,
+            [new McpServerStatus("git", McpServerState.Connected), new McpServerStatus("fs", McpServerState.Error)]);
 
         SideBarView.Paint(buffer, rect, state);
         string dump = Dump(buffer, rect);
@@ -59,10 +58,10 @@ public class SideBarViewTests
     [Test]
     public async Task Paint_ExtraSlots_RenderTitlesAndLines()
     {
-        var (buffer, rect) = MakeBuffer(cols: 80, rows: 30);
+        var (buffer, rect) = MakeBuffer(80, 30);
         var slots = new[]
         {
-            new SideBarSlot("PLUGINS", _ => new[] { new SideBarLine("web-search", "enabled") }),
+            new SideBarSlot("PLUGINS", _ => new[] { new SideBarLine("web-search", "enabled") })
         };
 
         SideBarView.Paint(buffer, rect, SideBarState.Empty, slots);
@@ -110,7 +109,7 @@ public class SideBarViewTests
 
     private static string Dump(ScreenBuffer buffer, Rect rect)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         for (int y = rect.Y; y < Math.Min(rect.Bottom, buffer.Rows); y++)
         {
             for (int x = rect.X; x < Math.Min(rect.Right, buffer.Cols); x++)

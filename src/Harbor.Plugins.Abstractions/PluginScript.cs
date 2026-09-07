@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 namespace Harbor.Plugins.Abstractions;
+
 /// <summary>
 ///     Immutable wrapper around a single CS-source plugin file: its on-disk path, raw source
 ///     text, and a deterministic SHA-256 content hash used for caching compiled assemblies.
@@ -22,11 +24,14 @@ public sealed class PluginScript
     /// </summary>
     public const string CapabilityDirective = "harbor:capabilities";
 
-    private static readonly System.Text.RegularExpressions.Regex CapabilitiesPattern = new(
+    private static readonly Regex CapabilitiesPattern = new(
         // Colon after the directive keyword is accepted but not required — the
         // documented form is '// harbor:capabilities read_files,http_requests'.
         @"^\s*//\s*harbor:capabilities:?\s*(?<caps>[^\r\n]+)",
-        System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.Compiled);
+        RegexOptions.Multiline | RegexOptions.Compiled);
+
+    private static readonly IReadOnlySet<PluginCapability> FrozenEmpty =
+        new HashSet<PluginCapability>();
 
     /// <summary>
     ///     Construct a new <see cref="PluginScript" /> from a file path.
@@ -42,19 +47,9 @@ public sealed class PluginScript
     }
 
     private PluginScript(string path, string source, IReadOnlySet<PluginCapability> narrowed)
-        : this(path, source) => DeclaredCapabilities = narrowed;
-
-    /// <summary>
-    ///     Copy of this script whose capability set is narrowed to the user-approved
-    ///     grants (intersected with the declared manifest — the trust gate narrows,
-    ///     never widens). Path, source and hash are shared; downstream enforcement
-    ///     points (sandbox ALC, tool sandbox) read <see cref="DeclaredCapabilities" />
-    ///     and therefore enforce the approved subset.
-    /// </summary>
-    public PluginScript WithGrantedCapabilities(IReadOnlySet<PluginCapability> granted)
+        : this(path, source)
     {
-        ArgumentNullException.ThrowIfNull(granted);
-        return new PluginScript(Path, Source, granted.Where(DeclaredCapabilities.Contains).ToHashSet());
+        DeclaredCapabilities = narrowed;
     }
 
     /// <summary>
@@ -70,6 +65,31 @@ public sealed class PluginScript
     ///     regardless of user choice — fail-closed.
     /// </summary>
     public bool HasInvalidManifest { get; private set; }
+
+    /// <summary>The absolute on-disk path of the plugin source file.</summary>
+    public string Path { get; }
+
+    /// <summary>The raw source text of the plugin.</summary>
+    public string Source { get; }
+
+    /// <summary>
+    ///     Lowercase hex SHA-256 of <see cref="Source" />. Used as the cache key for the
+    ///     compiled assembly — files with the same hash skip recompilation on subsequent loads.
+    /// </summary>
+    public string Hash { get; }
+
+    /// <summary>
+    ///     Copy of this script whose capability set is narrowed to the user-approved
+    ///     grants (intersected with the declared manifest — the trust gate narrows,
+    ///     never widens). Path, source and hash are shared; downstream enforcement
+    ///     points (sandbox ALC, tool sandbox) read <see cref="DeclaredCapabilities" />
+    ///     and therefore enforce the approved subset.
+    /// </summary>
+    public PluginScript WithGrantedCapabilities(IReadOnlySet<PluginCapability> granted)
+    {
+        ArgumentNullException.ThrowIfNull(granted);
+        return new PluginScript(Path, Source, granted.Where(DeclaredCapabilities.Contains).ToHashSet());
+    }
 
     /// <summary>
     ///     Extract the declared capabilities from the plugin source. Sets
@@ -89,18 +109,6 @@ public sealed class PluginScript
         HasInvalidManifest = true;
         return FrozenEmpty;
     }
-
-    /// <summary>The absolute on-disk path of the plugin source file.</summary>
-    public string Path { get; }
-
-    /// <summary>The raw source text of the plugin.</summary>
-    public string Source { get; }
-
-    /// <summary>
-    ///     Lowercase hex SHA-256 of <see cref="Source" />. Used as the cache key for the
-    ///     compiled assembly — files with the same hash skip recompilation on subsequent loads.
-    /// </summary>
-    public string Hash { get; }
 
     /// <summary>
     ///     Load a <see cref="PluginScript" /> from disk, reading the file as UTF-8.
@@ -136,7 +144,4 @@ public sealed class PluginScript
         byte[] hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
-
-    private static readonly IReadOnlySet<PluginCapability> FrozenEmpty =
-        new HashSet<PluginCapability>();
 }

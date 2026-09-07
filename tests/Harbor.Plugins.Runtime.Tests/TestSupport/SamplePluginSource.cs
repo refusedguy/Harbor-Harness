@@ -1,4 +1,5 @@
 namespace Harbor.Plugins.Runtime.Tests.TestSupport;
+
 /// <summary>
 ///     Canonical hello-world CS-source plugin source generator. Suffix isolates types
 ///     per test run so the shared AppDomain doesn't see duplicate type names.

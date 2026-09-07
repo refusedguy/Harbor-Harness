@@ -1,5 +1,4 @@
 using System.Text;
-
 namespace Harbor.Tools.Mcp;
 
 /// <summary>

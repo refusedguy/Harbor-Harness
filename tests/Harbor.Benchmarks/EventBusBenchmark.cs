@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Events;
 namespace Harbor.Benchmarks;
+
 /// <summary>
 ///     Benchmarks <see cref="InMemoryEventBus.PublishAsync" /> with varying
 ///     subscriber counts. The hot path is a lock-free snapshot read followed by

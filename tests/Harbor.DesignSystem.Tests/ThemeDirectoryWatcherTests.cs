@@ -1,13 +1,12 @@
 using Harbor.Ui.Framework.Projection;
-
 namespace Harbor.DesignSystem.Tests;
 
 /// <summary>
-/// Marketplace live-reload: polling picks up new/changed theme files and
-/// applies them to TerminalColorPalette; invalid files report errors and keep
-/// the last applied theme. Watchers run with autoStart=false for full
-/// determinism. Keyed with the other palette-mutating classes — the palette
-/// is global static state.
+///     Marketplace live-reload: polling picks up new/changed theme files and
+///     applies them to TerminalColorPalette; invalid files report errors and keep
+///     the last applied theme. Watchers run with autoStart=false for full
+///     determinism. Keyed with the other palette-mutating classes — the palette
+///     is global static state.
 /// </summary>
 [NotInParallel("terminal-color-palette")]
 public class ThemeDirectoryWatcherTests
@@ -44,7 +43,7 @@ public class ThemeDirectoryWatcherTests
         finally
         {
             TerminalColorPalette.Apply(HarborTheme.HarborDark);
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 
@@ -71,7 +70,7 @@ public class ThemeDirectoryWatcherTests
         finally
         {
             TerminalColorPalette.Apply(HarborTheme.HarborDark);
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 
@@ -95,7 +94,7 @@ public class ThemeDirectoryWatcherTests
         finally
         {
             TerminalColorPalette.Apply(HarborTheme.HarborDark);
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 

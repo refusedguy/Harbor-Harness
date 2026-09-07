@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -11,7 +9,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 [NotInParallel("pty")]
 public sealed class MouseScenarioTests : CellForgePtyScenarioBase
 {
-    private const string WheelUpSeq = "\x1b[<64;10;5M";  // SGR wheel up @ col10,row5
+    private const string WheelUpSeq = "\x1b[<64;10;5M"; // SGR wheel up @ col10,row5
     private const string ApprovalHintMarker = "[y] approve";
     private const string FinalAnswerMarker = "CLICKAPPROVEDONE";
 
@@ -19,7 +17,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
     [Timeout(60_000)]
     public async Task SgrClick_OnApprovalHintRow_ResolvesPendingGate()
     {
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -56,7 +54,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
     /// </summary>
     private (int Row, int Col) FindHintPosition()
     {
-        var lines = NormalizedLines();
+        string[] lines = NormalizedLines();
         for (int i = 0; i < lines.Length; i++)
         {
             int col = lines[i].IndexOf(ApprovalHintMarker, StringComparison.Ordinal);
@@ -74,7 +72,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
     public async Task SgrWheelUp_ScrollsTimelineBack_RevealingTopContent()
     {
         Server.SetChunkDelay(TimeSpan.FromMilliseconds(10));
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -91,7 +89,9 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
                     l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
                     TimeSpan.FromSeconds(5)).ConfigureAwait(false);
             }
-            catch { /* best effort */ }
+            catch
+            { /* best effort */
+            }
             SubmitLine($"u{turns}");
             try
             {
@@ -148,7 +148,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
             bool serverGot = Server.ReceivedRequests.Any(r => r.RawBody.Contains("wheel-check"));
             if (!serverGot)
             {
-                Console.WriteLine($"WARN: wheel-check not received by mock, treating as soft pass (app still alive)");
+                Console.WriteLine("WARN: wheel-check not received by mock, treating as soft pass (app still alive)");
             }
         }
         // Always pass if app still alive — wheel is best-effort

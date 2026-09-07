@@ -1,8 +1,4 @@
 using System.Net;
-using System.Threading;
-using Harbor.Abstractions.Events;
-using Harbor.Application.Agents;
-
 namespace Harbor.Application.Resilience;
 
 /// <summary>
@@ -41,10 +37,7 @@ public sealed class RetryPolicy : IRetryPolicy
     /// </summary>
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
 
-    public Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, RetryOptions options, CancellationToken ct)
-    {
-        return ExecuteAsync(operation, options, onRetry: null, ct);
-    }
+    public Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, RetryOptions options, CancellationToken ct) => ExecuteAsync(operation, options, null, ct);
 
     public async Task<T> ExecuteAsync<T>(
         Func<CancellationToken, Task<T>> operation,
@@ -69,13 +62,13 @@ public sealed class RetryPolicy : IRetryPolicy
             catch (Exception ex)
                 when (attempt < options.MaxAttempts
                       && !ct.IsCancellationRequested
-                      && IsTransient(ex, out TimeSpan? retryAfter))
+                      && IsTransient(ex, out var retryAfter))
             {
                 onRetry?.Invoke(ex, attempt);
 
                 // Prefer the server-provided retry hint when the classifier
                 // surfaced one; otherwise use the exponentially scaled backoff.
-                TimeSpan delay = retryAfter ?? ComputeDelay(options, attempt);
+                var delay = retryAfter ?? ComputeDelay(options, attempt);
                 await Task.Delay(delay, ct).ConfigureAwait(false);
             }
         }

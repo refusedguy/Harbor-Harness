@@ -1,16 +1,16 @@
-namespace Harbor.Tui.RendererTests.Support;
-
-using System.Text;
 using SharpConsoleUI;
 using SharpConsoleUI.Core;
 using SharpConsoleUI.Drivers;
 using SharpConsoleUI.Helpers;
 using SharpConsoleUI.Layout;
-using Size = SharpConsoleUI.Helpers.Size;
+using System.Text;
+namespace Harbor.Tui.RendererTests.Support;
+
+using Size = Size;
 
 /// <summary>
 ///     IConsoleDriver decorator that records the composed cell grid while
-///     forwarding everything to a wrapped <see cref="HeadlessConsoleDriver"/>
+///     forwarding everything to a wrapped <see cref="HeadlessConsoleDriver" />
 ///     (renderer-unification sprint Phase 5 capture seam).
 /// </summary>
 /// <remarks>
@@ -23,8 +23,8 @@ using Size = SharpConsoleUI.Helpers.Size;
 /// </remarks>
 public sealed class RecordingConsoleDriver : IConsoleDriver
 {
-    private readonly HeadlessConsoleDriver _inner;
     private readonly string?[,] _grid;
+    private readonly HeadlessConsoleDriver _inner;
 
     public RecordingConsoleDriver(int width, int height)
     {
@@ -33,34 +33,6 @@ public sealed class RecordingConsoleDriver : IConsoleDriver
     }
 
     public Size ScreenSize => _inner.ScreenSize;
-
-    /// <summary>
-    ///     The composed visible screen: one string per row, trailing blanks
-    ///     trimmed, trailing empty rows dropped.
-    /// </summary>
-    public string Snapshot()
-    {
-        int width = _inner.ScreenSize.Width;
-        int height = _inner.ScreenSize.Height;
-        var rows = new List<string>(height);
-        for (int y = 0; y < height; y++)
-        {
-            var sb = new StringBuilder(width);
-            for (int x = 0; x < width; x++)
-            {
-                sb.Append(_grid[x, y] ?? " ");
-            }
-
-            rows.Add(sb.ToString().TrimEnd());
-        }
-
-        while (rows.Count > 0 && rows[^1].Length == 0)
-        {
-            rows.RemoveAt(rows.Count - 1);
-        }
-
-        return string.Join("\n", rows);
-    }
 
     public void Clear()
     {
@@ -129,6 +101,34 @@ public sealed class RecordingConsoleDriver : IConsoleDriver
     public event EventHandler<string>? Paste;
     public event IConsoleDriver.MouseEventHandler? MouseEvent;
     public event EventHandler<Size>? ScreenResized;
+
+    /// <summary>
+    ///     The composed visible screen: one string per row, trailing blanks
+    ///     trimmed, trailing empty rows dropped.
+    /// </summary>
+    public string Snapshot()
+    {
+        int width = _inner.ScreenSize.Width;
+        int height = _inner.ScreenSize.Height;
+        var rows = new List<string>(height);
+        for (int y = 0; y < height; y++)
+        {
+            var sb = new StringBuilder(width);
+            for (int x = 0; x < width; x++)
+            {
+                sb.Append(_grid[x, y] ?? " ");
+            }
+
+            rows.Add(sb.ToString().TrimEnd());
+        }
+
+        while (rows.Count > 0 && rows[^1].Length == 0)
+        {
+            rows.RemoveAt(rows.Count - 1);
+        }
+
+        return string.Join("\n", rows);
+    }
 
     private bool InBounds(int x, int y) =>
         x >= 0 && y >= 0 && x < _grid.GetLength(0) && y < _grid.GetLength(1);

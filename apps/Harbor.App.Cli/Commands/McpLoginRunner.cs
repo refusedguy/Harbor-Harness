@@ -1,6 +1,5 @@
 using Harbor.Hosting;
 using Harbor.Tools.Mcp;
-
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
@@ -24,7 +23,7 @@ public static class McpLoginRunner
             "list" => await ListAsync(output).ConfigureAwait(false),
             "login" => await LoginAsync(output, error, args.Skip(1).ToArray(), ct).ConfigureAwait(false),
             "logout" => Logout(output, error, args.Skip(1).ToArray()),
-            _ => Usage(error),
+            _ => Usage(error)
         };
     }
 
@@ -38,7 +37,7 @@ public static class McpLoginRunner
         }
 
         var cache = new McpOAuthTokenCache();
-        foreach (var (name, url, oauth) in remotes)
+        foreach ((string name, string url, var oauth) in remotes)
         {
             string auth = oauth is null ? "no-auth" : "oauth";
             string state = "no-token";

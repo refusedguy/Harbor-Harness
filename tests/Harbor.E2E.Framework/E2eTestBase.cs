@@ -1,4 +1,5 @@
 namespace Harbor.E2E.Framework;
+
 /// <summary>
 ///     Base class for all Harbor E2E test fixtures. Owns a per-class
 ///     <see cref="MockLlmServer" /> + a temporary <c>HOME</c> directory so each
@@ -167,7 +168,7 @@ public abstract class E2eTestBase
     /// </summary>
     protected static async Task AssertPngArtifactsExistAndDifferAsync(params string[] paths)
     {
-        var hashes = new byte[paths.Length][];
+        byte[][] hashes = new byte[paths.Length][];
         for (int i = 0; i < paths.Length; i++)
         {
             await Assert.That(File.Exists(paths[i])).IsTrue();

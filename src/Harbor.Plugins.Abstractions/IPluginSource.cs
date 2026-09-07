@@ -1,4 +1,5 @@
 namespace Harbor.Plugins.Abstractions;
+
 /// <summary>
 ///     Async-stream source of <see cref="PluginScript" /> wrappers. Each implementation
 ///     represents a different storage backend for CS-source plugins (filesystem,

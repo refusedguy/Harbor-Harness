@@ -1,12 +1,11 @@
 using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Theme live-reload: the watcher applies a rewritten theme file on the next
-/// poll, keeps the previous theme on parse failures, and stays quiet when the
-/// file is untouched. Uses the public Poll() — no wall-clock flakiness.
+///     Theme live-reload: the watcher applies a rewritten theme file on the next
+///     poll, keeps the previous theme on parse failures, and stays quiet when the
+///     file is untouched. Uses the public Poll() — no wall-clock flakiness.
 /// </summary>
 [NotInParallel] // mutates global theme state
 public class ThemeFileWatcherTests
@@ -49,7 +48,7 @@ public class ThemeFileWatcherTests
     {
         await File.WriteAllTextAsync(_path, """{ "name": "cb", "accent": "#333333" }""");
         var applied = new List<string>();
-        using var watcher = new ThemeFileWatcher(_path, onApplied: t => applied.Add(t.Name));
+        using var watcher = new ThemeFileWatcher(_path, t => applied.Add(t.Name));
 
         await File.WriteAllTextAsync(_path, """{ "name": "cb2", "accent": "#444444" }""");
         watcher.Poll();

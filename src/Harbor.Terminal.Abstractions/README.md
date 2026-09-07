@@ -8,14 +8,14 @@ Terminal UI contracts — renderer, view, view-model, plugin, and navigation abs
 
 ## What's in it
 
-| Subfolder | Contents |
-|-----------|----------|
-| `Views/` | `ITuiView`, `TuiViewBase<TVm>`, `TuiViewPlacement`; built-in views (`StatusBarView`, `ChatHistoryView`, `InputView`, `DiffPreviewView`) |
-| `ViewModels/` | `ITuiViewModel`, builtin view models (`StatusBarViewModel`, `ChatHistoryViewModel`, `InputViewModel`, `DiffPreviewViewModel`) |
-| `Renderers/` | `ITuiRenderer`, `BaseTuiRenderer`, `ITuiRenderContext` (`TuiColor`, `TuiStyle`), GFM table renderer |
-| `Plugins/` | `ITuiPlugin` — terminal-side plugin contract |
-| `Navigation/` | `ViewRegistry`, `ViewModelRegistry` |
-| `Rendering/` | `StyledSpan`, `RgbColor`, table-cell formatting helpers |
+| Subfolder     | Contents                                                                                                                                |
+|---------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| `Views/`      | `ITuiView`, `TuiViewBase<TVm>`, `TuiViewPlacement`; built-in views (`StatusBarView`, `ChatHistoryView`, `InputView`, `DiffPreviewView`) |
+| `ViewModels/` | `ITuiViewModel`, builtin view models (`StatusBarViewModel`, `ChatHistoryViewModel`, `InputViewModel`, `DiffPreviewViewModel`)           |
+| `Renderers/`  | `ITuiRenderer`, `BaseTuiRenderer`, `ITuiRenderContext` (`TuiColor`, `TuiStyle`), GFM table renderer                                     |
+| `Plugins/`    | `ITuiPlugin` — terminal-side plugin contract                                                                                            |
+| `Navigation/` | `ViewRegistry`, `ViewModelRegistry`                                                                                                     |
+| `Rendering/`  | `StyledSpan`, `RgbColor`, table-cell formatting helpers                                                                                 |
 
 ## Public API summary
 
@@ -26,12 +26,12 @@ Terminal UI contracts — renderer, view, view-model, plugin, and navigation abs
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
+| Package                 | Purpose                                    |
+|-------------------------|--------------------------------------------|
 | `CommunityToolkit.Mvvm` | `ObservableObject` for builtin view models |
 
-| Project | Purpose |
-|---------|---------|
+| Project               | Purpose                                |
+|-----------------------|----------------------------------------|
 | `Harbor.Abstractions` | `AgentEvent`, `KeyPress`, domain types |
 
 ## Tests

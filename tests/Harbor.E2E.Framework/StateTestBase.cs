@@ -1,6 +1,4 @@
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.E2E.Framework;
 
 /// <summary>
@@ -38,10 +36,8 @@ public abstract class StateTestBase : E2eTestBase
         IE2eDriver driver,
         UiState state,
         string? expectedText = null,
-        TimeSpan? timeout = null)
-    {
-        return await StateTestRunner.AssertStateRenderedAsync(driver, state, expectedText, timeout).ConfigureAwait(false);
-    }
+        TimeSpan? timeout = null) =>
+        await StateTestRunner.AssertStateRenderedAsync(driver, state, expectedText, timeout).ConfigureAwait(false);
 
     /// <summary>
     ///     Drive <paramref name="driver" /> through a sequence of
@@ -50,10 +46,8 @@ public abstract class StateTestBase : E2eTestBase
     /// </summary>
     protected async Task<bool> RunStateSequenceAsync(
         IE2eDriver driver,
-        params (UiState state, string? expectedText)[] steps)
-    {
-        return await StateTestRunner.RunStateSequenceAsync(driver, steps).ConfigureAwait(false);
-    }
+        params (UiState state, string? expectedText)[] steps) =>
+        await StateTestRunner.RunStateSequenceAsync(driver, steps).ConfigureAwait(false);
 
     /// <summary>
     ///     Extract the expected visible text from a <see cref="UiState" />

@@ -1,6 +1,5 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 public class AnsiWriterTests
@@ -19,7 +18,7 @@ public class AnsiWriterTests
         w.WriteText("hi");
         await w.EndFrameAsync();
 
-        var text = backend.Text;
+        string text = backend.Text;
         await Assert.That(text.StartsWith("\x1B[?2026h")).IsTrue();
         await Assert.That(text.EndsWith("\x1B[?2026l")).IsTrue();
         await Assert.That(text.Contains("hi")).IsTrue();

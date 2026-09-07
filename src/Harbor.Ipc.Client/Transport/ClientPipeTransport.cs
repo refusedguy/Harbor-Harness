@@ -1,4 +1,5 @@
 namespace Harbor.Ipc.Transport;
+
 /// <summary>
 ///     Client-side transport. Opens an outbound connection to a server
 ///     <see cref="ServerPipeTransport" /> (named pipe on Windows, Unix

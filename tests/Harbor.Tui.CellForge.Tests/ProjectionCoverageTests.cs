@@ -1,40 +1,22 @@
-using System.Reflection;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions.ViewModels;
-using Harbor.Tui.CellForge;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Reflection;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Covers the private <c>CellForgeTuiRenderer.ProjectStateIntoWidgets</c>
-/// projection: every test drives a real <see cref="UiStore"/> fold through
-/// <c>renderer.RenderAsync</c> with real <see cref="AgentEvent"/>s and asserts
-/// on freshly injected VMs. Fresh VMs in the ctor are required — the base
-/// <c>RenderAsync</c> fan-out would otherwise apply token deltas twice
-/// (absolute projection + incremental VM update). <c>InitializeAsync</c> is
-/// required: the projection rides the store's <c>Changed</c> subscription.
+///     Covers the private <c>CellForgeTuiRenderer.ProjectStateIntoWidgets</c>
+///     projection: every test drives a real <see cref="UiStore" /> fold through
+///     <c>renderer.RenderAsync</c> with real <see cref="AgentEvent" />s and asserts
+///     on freshly injected VMs. Fresh VMs in the ctor are required — the base
+///     <c>RenderAsync</c> fan-out would otherwise apply token deltas twice
+///     (absolute projection + incremental VM update). <c>InitializeAsync</c> is
+///     required: the projection rides the store's <c>Changed</c> subscription.
 /// </summary>
 public class ProjectionCoverageTests
 {
-    private sealed class Harness : IDisposable
-    {
-        public RecordingBackend Backend { get; } = new();
-        public StatusBarViewModel Status { get; } = new();
-        public ChatHistoryViewModel Chat { get; } = new();
-        public CellForgeTuiRenderer Renderer { get; }
-
-        public Harness()
-        {
-            Renderer = new CellForgeTuiRenderer(
-                NullLogger<CellForgeTuiRenderer>.Instance, Backend, Status, Chat);
-        }
-
-        public void Dispose() => Renderer.Dispose();
-    }
 
     private static async Task<Harness> CreateAsync()
     {
@@ -161,7 +143,7 @@ public class ProjectionCoverageTests
             new MessageStartEvent(partial),
             new MessageUpdateEvent(new TextDeltaEvent("t1", "mirror-me"), partial),
             new MessageUpdateEvent(new ThinkingDeltaEvent("h1", "deep-thought"), partial),
-            new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(2000, 1000)), partial),
+            new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(2000, 1000)), partial)
         ];
         foreach (var evt in stream)
         {
@@ -215,7 +197,23 @@ public class ProjectionCoverageTests
         using var harness = await CreateAsync();
         await harness.Renderer.RenderAsync(new CompactionStartedEvent("s1"));
         await harness.Renderer.RenderAsync(new CompactionCompletedEvent(
-            "s1", "summary", PrunedMessageCount: 5, TokensSaved: 100, TimeSpan.FromSeconds(1)));
+            "s1", "summary", 5, 100, TimeSpan.FromSeconds(1)));
         await Assert.That(harness.Status.Status).IsEqualTo("running");
+    }
+
+    private sealed class Harness : IDisposable
+    {
+
+        public Harness()
+        {
+            Renderer = new CellForgeTuiRenderer(
+                NullLogger<CellForgeTuiRenderer>.Instance, Backend, Status, Chat);
+        }
+        public RecordingBackend Backend { get; } = new();
+        public StatusBarViewModel Status { get; } = new();
+        public ChatHistoryViewModel Chat { get; } = new();
+        public CellForgeTuiRenderer Renderer { get; }
+
+        public void Dispose() => Renderer.Dispose();
     }
 }

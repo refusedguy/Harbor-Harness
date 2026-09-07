@@ -1,12 +1,16 @@
+using Nuke.Common;
+using System.Collections;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using Nuke.Common;
 namespace Harbor.Build.Meta;
+
 /// <summary>One documented parameter of a target (global NUKE [Parameter]).</summary>
 public sealed record TargetParam(string Name, string Type, string? Default, string Description);
+
 /// <summary>One documented output location of a target.</summary>
 public sealed record TargetOutput(string Kind, string? Path);
+
 /// <summary>
 ///     Hand-written documentation entry for one NUKE target. The set of
 ///     entries is reconciled 1:1 against reflection over the <c>Target</c>
@@ -24,6 +28,7 @@ public sealed record TargetDoc(
     string[] Examples,
     string[] AgentHints,
     bool IsDefault = false);
+
 /// <summary>
 ///     Source of truth for <c>./build.sh list|help</c>: the catalog of all
 ///     targets, meta commands and global flags, kept honest by reflection.
@@ -49,7 +54,7 @@ public static class TargetCatalog
             [new TargetParam("--configuration", "enum[Debug|Release]", "release", "build configuration")],
             [new TargetOutput("dir", "src/**/bin/Release")],
             ["./build.sh Compile", "./build.sh Compile --configuration Debug"],
-            ["default target; tests need it first because they run --no-build"], IsDefault: true),
+            ["default target; tests need it first because they run --no-build"], true),
         new("Test", "dotnet test the whole solution --no-build after Compile.",
             ["Compile"], [],
             [new TargetParam("--configuration", "enum[Debug|Release]", "release", "must match the Compile configuration")],
@@ -166,8 +171,8 @@ public static class TargetCatalog
     public static HashSet<string> ParseInvokedTargetNames(IEnumerable<string> args)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var previous = string.Empty;
-        foreach (var arg in args)
+        string previous = string.Empty;
+        foreach (string arg in args)
         {
             if (arg.StartsWith('-'))
             {
@@ -212,7 +217,7 @@ public static class TargetCatalog
             }
             writer.WriteEndArray();
             writer.WriteStartArray("metaCommands");
-            foreach (var (name, usage) in MetaCommands)
+            foreach ((string name, string usage) in MetaCommands)
             {
                 writer.WriteStartObject();
                 writer.WriteString("name", name);
@@ -221,14 +226,14 @@ public static class TargetCatalog
             }
             writer.WriteEndArray();
             writer.WriteStartArray("globalFlags");
-            foreach (var (name, values, description) in GlobalFlags)
+            foreach ((string name, string values, string description) in GlobalFlags)
             {
                 writer.WriteStartObject();
                 writer.WriteString("name", name);
                 if (values.Length > 0)
                 {
                     writer.WriteStartArray("values");
-                    foreach (var value in values.Split('|'))
+                    foreach (string value in values.Split('|'))
                     {
                         writer.WriteStringValue(value);
                     }
@@ -248,21 +253,21 @@ public static class TargetCatalog
         output.Human("Targets (run via ./build.sh <Name>):");
         foreach (var entry in Entries)
         {
-            var deps = entry.DependsOn.Length > 0 ? $" [dependsOn: {string.Join(", ", entry.DependsOn)}]" : string.Empty;
-            var def = entry.IsDefault ? " (default)" : string.Empty;
+            string deps = entry.DependsOn.Length > 0 ? $" [dependsOn: {string.Join(", ", entry.DependsOn)}]" : string.Empty;
+            string def = entry.IsDefault ? " (default)" : string.Empty;
             output.Human($"  {entry.Name}{def} — {entry.Summary}{deps}");
-            foreach (var hint in entry.AgentHints)
+            foreach (string hint in entry.AgentHints)
             {
                 output.Human($"      hint: {hint}");
             }
         }
         output.Human("Meta commands:");
-        foreach (var (name, usage) in MetaCommands)
+        foreach ((string name, string usage) in MetaCommands)
         {
             output.Human($"  {usage}");
         }
         output.Human("Global flags:");
-        foreach (var (name, _, description) in GlobalFlags)
+        foreach ((string name, string _, string description) in GlobalFlags)
         {
             output.Human($"  {name}  {description}");
         }
@@ -273,7 +278,7 @@ public static class TargetCatalog
         writer.WriteString("name", entry.Name);
         writer.WriteString("summary", entry.Summary);
         writer.WriteStartArray("dependsOn");
-        foreach (var dep in entry.DependsOn)
+        foreach (string dep in entry.DependsOn)
         {
             writer.WriteStringValue(dep);
         }
@@ -305,13 +310,13 @@ public static class TargetCatalog
         }
         writer.WriteEndArray();
         writer.WriteStartArray("examples");
-        foreach (var example in entry.Examples)
+        foreach (string example in entry.Examples)
         {
             writer.WriteStringValue(example);
         }
         writer.WriteEndArray();
         writer.WriteStartArray("agentHints");
-        foreach (var hint in entry.AgentHints)
+        foreach (string hint in entry.AgentHints)
         {
             writer.WriteStringValue(hint);
         }
@@ -368,13 +373,13 @@ public static class TargetCatalog
         var property = typeof(NukeBuild).GetProperty(
             "ExecutableTargets",
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        var executables = property?.GetValue(build) as System.Collections.IEnumerable
-            ?? throw new InvalidOperationException(
-                "NUKE did not expose NukeBuild.ExecutableTargets — the catalog reconciliation " +
-                "cannot run. This usually means the NUKE major version changed its internals; " +
-                "update Meta/TargetCatalog.cs accordingly.");
+        var executables = property?.GetValue(build) as IEnumerable
+                          ?? throw new InvalidOperationException(
+                              "NUKE did not expose NukeBuild.ExecutableTargets — the catalog reconciliation " +
+                              "cannot run. This usually means the NUKE major version changed its internals; " +
+                              "update Meta/TargetCatalog.cs accordingly.");
         var result = new List<ReflectedTarget>();
-        foreach (var item in executables)
+        foreach (object item in executables)
         {
             var type = item.GetType();
             result.Add(new ReflectedTarget(
@@ -388,24 +393,25 @@ public static class TargetCatalog
     private static string ReadName(Type type, object instance, string propertyName)
     {
         var prop = type.GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException($"NUKE type {type.Name} lost its '{propertyName}' member.");
+                   ?? throw new InvalidOperationException($"NUKE type {type.Name} lost its '{propertyName}' member.");
         return prop.GetValue(instance)?.ToString() ?? string.Empty;
     }
     private static IReadOnlyList<string> ReadNames(Type type, object instance, string propertyName)
     {
         var prop = type.GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException($"NUKE type {type.Name} lost its '{propertyName}' member.");
-        if (prop.GetValue(instance) is not System.Collections.IEnumerable items)
+                   ?? throw new InvalidOperationException($"NUKE type {type.Name} lost its '{propertyName}' member.");
+        if (prop.GetValue(instance) is not IEnumerable items)
         {
             return [];
         }
         var names = new List<string>();
-        foreach (var item in items)
+        foreach (object item in items)
         {
             names.Add(ReadName(item.GetType(), item, "Name"));
         }
         return names;
     }
+
     internal sealed record ReflectedTarget(
         string Name,
         IReadOnlyList<string> ExecutionDependencies,

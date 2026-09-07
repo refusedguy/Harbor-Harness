@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 namespace Harbor.Abstractions.Extensions;
+
 /// <summary>
 ///     Extension methods for working with collections in a performance-oriented way.
 ///     Uses Frozen collections for read-only scenarios to minimize lookup overhead.

@@ -1,4 +1,5 @@
 namespace Harbor.Abstractions.Events;
+
 /// <summary>
 ///     Pub/Sub event bus. Implements Observer pattern (GOF).
 ///     Allows multiple subscribers to receive agent events.

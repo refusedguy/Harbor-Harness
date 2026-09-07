@@ -1,28 +1,29 @@
 using Harbor.Tui.CellForge.Rendering;
-using Harbor.Ui.Framework.Rendering.Markdown;
-
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Finalized assistant message block: renders its immutable markdown source
-/// through the same styled-line pipeline as the streaming tail (one-shot
-/// render, width-keyed cache). Measure/Paint stay allocation-free in steady
-/// state.
+///     Finalized assistant message block: renders its immutable markdown source
+///     through the same styled-line pipeline as the streaming tail (one-shot
+///     render, width-keyed cache). Measure/Paint stay allocation-free in steady
+///     state.
 /// </summary>
 public sealed class AssistantMarkdownBlock : IChatBlock
 {
     private readonly string _source;
-    private List<MdLine> _lines = [];
     private Dictionary<int, List<CodeSpan>>? _code;
+    private List<MdLine> _lines = [];
     private int _width = -1;
 
-    public AssistantMarkdownBlock(string source) => _source = source ?? string.Empty;
+    public AssistantMarkdownBlock(string source)
+    {
+        _source = source ?? string.Empty;
+    }
 
     public string Kind => "assistant";
 
     public bool IsStreamContinuation => false;
 
-    public int BudgetBytes => 64 + (_source.Length * 2);
+    public int BudgetBytes => 64 + _source.Length * 2;
 
     public BlockMeasure Measure(int width)
     {
@@ -84,7 +85,7 @@ public sealed class AssistantMarkdownBlock : IChatBlock
         MdStyle.Code => new CellStyle(PackedColor.Indexed(3)),
         MdStyle.Fence => ChatPalette.Dim,
         MdStyle.Bullet => new CellStyle(PackedColor.Indexed(4)),
-        _ => CellStyle.Plain,
+        _ => CellStyle.Plain
     };
 
     private void EnsureRendered(int width)

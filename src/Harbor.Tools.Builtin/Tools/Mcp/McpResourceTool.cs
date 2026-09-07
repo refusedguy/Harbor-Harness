@@ -4,6 +4,7 @@ using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Reads an MCP resource (<c>resources/read</c>) from a registered server
 ///     and returns its text contents. URIs come from <c>resources/list</c>
@@ -59,7 +60,7 @@ public sealed class McpResourceTool : ITool
     [
         "Use `read_mcp_resource` for server-side data (docs, schemas, file views) exposed as MCP resources",
         "Discover URIs with mcp {\"method\":\"resources/list\"} before reading",
-        "Binary (base64 blob) resources are rejected — ask for a text view instead",
+        "Binary (base64 blob) resources are rejected — ask for a text view instead"
     ];
 
     /// <inheritdoc />

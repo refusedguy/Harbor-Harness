@@ -9,6 +9,7 @@ using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Harbor.Application.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Storage.Jsonl;
 using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +29,7 @@ using HostBuilder = Harbor.App.Cli.Hosting.HostBuilder;
 #pragma warning disable DI006
 
 namespace Harbor.App.Cli.Tests;
+
 /// <summary>
 ///     DI registration tests for <see cref="HostBuilder.Build" />.
 ///     Each [Test] resolves one (or a related group) of the services declared
@@ -67,7 +69,7 @@ public class HostBuilderDiTests
         // NOTE: HARBOR_HOME is required on top of HOME/USERPROFILE — on Windows
         // GetFolderPath(UserProfile) resolves from the user token and ignores a
         // swapped USERPROFILE process variable (see HarborPaths).
-        var tempHome = Path.Combine(Path.GetTempPath(), $"harbor-cli-di-tests-{Guid.NewGuid():N}");
+        string tempHome = Path.Combine(Path.GetTempPath(), $"harbor-cli-di-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempHome);
         Environment.SetEnvironmentVariable("HOME", tempHome);
         Environment.SetEnvironmentVariable("USERPROFILE", tempHome);
@@ -150,7 +152,7 @@ public class HostBuilderDiTests
 
     [Test]
     public async Task Build_Registers_ISessionStore() =>
-        await Assert.That(Services.GetService<ISessionStore>()).IsTypeOf<Harbor.Storage.Jsonl.JsonlSessionStore>();
+        await Assert.That(Services.GetService<ISessionStore>()).IsTypeOf<JsonlSessionStore>();
 
     [Test]
     public async Task Build_Registers_ITuiRenderer() => await Assert.That(Services.GetService<ITuiRenderer>()).IsNotNull();

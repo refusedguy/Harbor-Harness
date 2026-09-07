@@ -1,6 +1,6 @@
-using System.Runtime.CompilerServices;
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 namespace Harbor.Plugins.Storage;
 
 /// <summary>
@@ -16,10 +16,10 @@ namespace Harbor.Plugins.Storage;
 /// </remarks>
 public sealed class TrustingPluginSource : IPluginSource
 {
+    private readonly IPluginAuditLog? _audit;
     private readonly IPluginSource _inner;
     private readonly ILogger<TrustingPluginSource> _logger;
     private readonly IPluginTrustPolicy _policy;
-    private readonly IPluginAuditLog? _audit;
 
     /// <summary>
     ///     Construct a trust-gated view over <paramref name="inner" />.
@@ -56,7 +56,7 @@ public sealed class TrustingPluginSource : IPluginSource
             var decision = script.HasInvalidManifest
                 ? PluginTrustDecision.Untrusted
                 : await _policy.DecideAsync(script, ct).ConfigureAwait(false);
-            var trusted = decision == PluginTrustDecision.Trusted;
+            bool trusted = decision == PluginTrustDecision.Trusted;
 
             if (_audit is not null)
             {

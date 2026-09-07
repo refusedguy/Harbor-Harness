@@ -1,5 +1,6 @@
 using MemoryPack;
 namespace Harbor.Abstractions.Models;
+
 /// <summary>
 ///     Base type for all messages in a session.
 /// </summary>

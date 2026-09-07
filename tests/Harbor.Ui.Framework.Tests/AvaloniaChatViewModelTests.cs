@@ -1,12 +1,8 @@
-using System.Collections.Immutable;
-using Harbor.Ui.Framework.Services;
-using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
+using System.Collections.Immutable;
 namespace Harbor.Ui.Framework.Tests;
 
 /// <summary>
@@ -39,10 +35,7 @@ public sealed class TestableHookTrackingViewModel : StoreSubscriberViewModel
         OnAfterSelectorsAppliedStates.Add(state);
     }
 
-    public void SimulateStateChange(UiState state)
-    {
-        ((TestDispatcherAdapter)Dispatcher).Raise(state);
-    }
+    public void SimulateStateChange(UiState state) => ((TestDispatcherAdapter)Dispatcher).Raise(state);
 }
 
 /// <summary>
@@ -52,27 +45,18 @@ public sealed class TestableHookTrackingViewModel : StoreSubscriberViewModel
 /// </summary>
 public sealed class TrackingOrderViewModel : StoreSubscriberViewModel
 {
-    public List<string> CallOrder { get; } = new();
 
     public TrackingOrderViewModel()
         : base(new TestDispatcherAdapter(), NullLogger.Instance)
     {
     }
+    public List<string> CallOrder { get; } = new();
 
-    protected override void OnStoreChanged(UiState state)
-    {
-        CallOrder.Add("OnStoreChanged");
-    }
+    protected override void OnStoreChanged(UiState state) => CallOrder.Add("OnStoreChanged");
 
-    protected override void OnAfterSelectorsApplied(UiState state)
-    {
-        CallOrder.Add("OnAfterSelectorsApplied");
-    }
+    protected override void OnAfterSelectorsApplied(UiState state) => CallOrder.Add("OnAfterSelectorsApplied");
 
-    public void SimulateStateChange(UiState state)
-    {
-        ((TestDispatcherAdapter)Dispatcher).Raise(state);
-    }
+    public void SimulateStateChange(UiState state) => ((TestDispatcherAdapter)Dispatcher).Raise(state);
 }
 
 /// <summary>
@@ -81,33 +65,21 @@ public sealed class TrackingOrderViewModel : StoreSubscriberViewModel
 /// </summary>
 public sealed class SelectorTrackingViewModel : StoreSubscriberViewModel
 {
-    public bool SelectorApplied { get; private set; }
-    public bool AfterHookCalled { get; private set; }
 
     public SelectorTrackingViewModel()
         : base(new TestDispatcherAdapter(), NullLogger.Instance)
     {
     }
+    public bool SelectorApplied { get; private set; }
+    public bool AfterHookCalled { get; private set; }
 
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 
-    protected override void OnAfterSelectorsApplied(UiState state)
-    {
-        AfterHookCalled = true;
-    }
+    protected override void OnAfterSelectorsApplied(UiState state) => AfterHookCalled = true;
 
-    public void RegisterStatusSelector()
-    {
-        Select(state => state.Status, v => SelectorApplied = true);
-    }
+    public void RegisterStatusSelector() => Select(state => state.Status, v => SelectorApplied = true);
 
-    public void SimulateStateChange(UiState state)
-    {
-        ((TestDispatcherAdapter)Dispatcher).Raise(state);
-    }
+    public void SimulateStateChange(UiState state) => ((TestDispatcherAdapter)Dispatcher).Raise(state);
 }
 
 /// <summary>

@@ -1,7 +1,6 @@
 using Harbor.E2E.Framework;
-using System.IO;
-using System;
 namespace Harbor.E2E.Cli;
+
 /// <summary>
 ///     End-to-end tests for the Harbor CLI one-shot commands. Each test spawns
 ///     a real <c>Harbor.App.Cli</c> subprocess via <see cref="CliDriver" />,
@@ -26,7 +25,7 @@ public class CliE2ETests : E2eTestBase
     public async Task VersionCommand_PrintsVersion()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(["--version"], this.GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["--version"], GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 
@@ -43,7 +42,7 @@ public class CliE2ETests : E2eTestBase
     public async Task HelpCommand_ListsCommands()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(["help"], this.GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["help"], GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 
@@ -62,7 +61,7 @@ public class CliE2ETests : E2eTestBase
     public async Task TuiCommand_ListsAllRenderers()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(["tui"], this.GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["tui"], GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 
@@ -81,7 +80,7 @@ public class CliE2ETests : E2eTestBase
     public async Task StorageCommand_ListsBackends()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(["storage"], this.GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["storage"], GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 
@@ -100,7 +99,7 @@ public class CliE2ETests : E2eTestBase
     public async Task ProvidersCommand_ListsAllRegisteredProviders()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(["providers"], this.GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["providers"], GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 
@@ -127,10 +126,10 @@ public class CliE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task AskCommand_WithMockServer_ReturnsResponse()
     {
-        this.Server.SetResponse("test-model", "Hello from mock LLM!");
+        Server.SetResponse("test-model", "Hello from mock LLM!");
 
         await using var driver = new CliDriver(CliProjectPath);
-        var env = this.GetEnv();
+        var env = GetEnv();
         // Plain renderer: writes streamed text directly to Console.Out for
         // non-interactive ask mode (interactive renderers need a PTY).
         env["HARBOR_TUI"] = "plain";
@@ -141,7 +140,7 @@ public class CliE2ETests : E2eTestBase
         await Assert.That(exit).IsEqualTo(0);
         await Assert.That(output).Contains("Hello from mock LLM!");
         // Verify the mock server actually received a chat-completion request.
-        await Assert.That(this.Server.ReceivedRequests.Count).IsGreaterThan(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsGreaterThan(0);
     }
 
     /// <summary>
@@ -153,7 +152,7 @@ public class CliE2ETests : E2eTestBase
     public async Task VersionCommand_CapturesScreenshot()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(["--version"], this.GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["--version"], GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
 
         await Assert.That(exit).IsEqualTo(0);
@@ -163,7 +162,7 @@ public class CliE2ETests : E2eTestBase
         // machines and made the test CI-hostile; the capture itself is what
         // this test demonstrates.
         string screenshotPath = Path.Combine(
-            this.TempHome, "docs", "screenshots", "cli", "01-version.txt");
+            TempHome, "docs", "screenshots", "cli", "01-version.txt");
         Directory.CreateDirectory(Path.GetDirectoryName(screenshotPath)!);
         await driver.CaptureScreenAsync(screenshotPath).ConfigureAwait(false);
 
@@ -185,16 +184,16 @@ public class CliE2ETests : E2eTestBase
     public async Task AskCommand_ReplayMode_ReproducesRecordedAnswer()
     {
         const string answer = "Recorded offline answer #42";
-        this.Server.SetResponse("test-model", answer);
+        Server.SetResponse("test-model", answer);
         string recordingPath = Path.Combine(Path.GetTempPath(), $"harbor-e2e-rec-{Guid.NewGuid():N}.jsonl");
 
         try
         {
             // ── Run 1: live scripted serve + record ──
-            this.Server.StartRecording(recordingPath);
+            Server.StartRecording(recordingPath);
             await using (var driver = new CliDriver(CliProjectPath))
             {
-                var env = this.GetEnv();
+                var env = GetEnv();
                 env["HARBOR_TUI"] = "plain";
                 await driver.StartAsync(["ask", "Give me the answer"], env).ConfigureAwait(false);
                 int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(false);
@@ -203,21 +202,21 @@ public class CliE2ETests : E2eTestBase
                 await Assert.That(output).Contains(answer);
             }
 
-            await this.Server.StopAsync().ConfigureAwait(false);
+            await Server.StopAsync().ConfigureAwait(false);
 
             // ── Fresh replay server + repoint the installed provider config ──
             await using var replayer = new MockLlmServer();
             await replayer.StartAsync().ConfigureAwait(false);
             replayer.ReplayFrom(recordingPath);
-            string mockConfigPath = Path.Combine(this.TempHome, ".harbor", "providers", "mock.json");
+            string mockConfigPath = Path.Combine(TempHome, ".harbor", "providers", "mock.json");
             string rewritten = (await File.ReadAllTextAsync(mockConfigPath).ConfigureAwait(false))
-                .Replace(this.Server.BaseUri.ToString(), replayer.BaseUri.ToString(), StringComparison.Ordinal);
+                .Replace(Server.BaseUri.ToString(), replayer.BaseUri.ToString(), StringComparison.Ordinal);
             await File.WriteAllTextAsync(mockConfigPath, rewritten).ConfigureAwait(false);
 
             // ── Run 2: same pipeline, zero scripted state — only the recording ──
             await using (var driver = new CliDriver(CliProjectPath))
             {
-                var env = this.GetEnv();
+                var env = GetEnv();
                 env["HARBOR_TUI"] = "plain";
                 await driver.StartAsync(["ask", "Give me the answer"], env).ConfigureAwait(false);
                 int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(false);

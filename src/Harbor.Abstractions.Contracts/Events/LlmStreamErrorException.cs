@@ -20,11 +20,6 @@ namespace Harbor.Abstractions.Events;
 /// </remarks>
 public sealed class LlmStreamErrorException : Exception
 {
-    /// <summary>Transport classification of the failure (Unknown for legacy call sites).</summary>
-    public ProviderErrorKind Kind { get; }
-
-    /// <summary>HTTP status code when the failure came from a non-success response.</summary>
-    public int? StatusCode { get; }
 
     /// <summary>Creates the error from the terminal stream event.</summary>
     /// <param name="err">The error event reported by the provider stream.</param>
@@ -52,4 +47,9 @@ public sealed class LlmStreamErrorException : Exception
     public LlmStreamErrorException()
     {
     }
+    /// <summary>Transport classification of the failure (Unknown for legacy call sites).</summary>
+    public ProviderErrorKind Kind { get; }
+
+    /// <summary>HTTP status code when the failure came from a non-success response.</summary>
+    public int? StatusCode { get; }
 }

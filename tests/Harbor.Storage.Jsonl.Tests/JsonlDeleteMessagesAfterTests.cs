@@ -1,7 +1,5 @@
 using Harbor.Abstractions.Models;
-using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Storage.Jsonl.Tests;
 
 /// <summary>

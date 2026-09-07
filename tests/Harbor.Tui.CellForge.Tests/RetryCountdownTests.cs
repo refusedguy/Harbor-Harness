@@ -1,5 +1,4 @@
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class RetryCountdownTests
@@ -21,7 +20,7 @@ public class RetryCountdownTests
     [Test]
     public async Task Segments_WideBar_ProportionalFill()
     {
-        var (line, bar) = RetryCountdown.Segments(1, 4, secondsRemaining: 8, totalSeconds: 10, barWidth: 10);
+        (string line, string bar) = RetryCountdown.Segments(1, 4, 8, 10, 10);
         await Assert.That(line).IsEqualTo("retry 1/4 in 8s");
         await Assert.That(bar).IsEqualTo("████████░░");
     }
@@ -29,7 +28,7 @@ public class RetryCountdownTests
     [Test]
     public async Task Segments_NarrowBar_Suppressed()
     {
-        var (line, bar) = RetryCountdown.Segments(1, 4, 8, 10, barWidth: 2);
+        (string line, string bar) = RetryCountdown.Segments(1, 4, 8, 10, 2);
         await Assert.That(bar).IsEqualTo(string.Empty);
         await Assert.That(line).IsEqualTo("retry 1/4 in 8s");
     }
@@ -37,15 +36,12 @@ public class RetryCountdownTests
     [Test]
     public async Task Segments_NeverExceedsWidth()
     {
-        var (_, bar) = RetryCountdown.Segments(1, 9, 999, 3, barWidth: 5);
+        (_, string bar) = RetryCountdown.Segments(1, 9, 999, 3, 5);
         await Assert.That(bar).IsEqualTo("█████");
     }
 
     [Test]
-    public async Task Bar_EmptyFill_AllTrack()
-    {
-        await Assert.That(RetryCountdown.Bar(0, 4)).IsEqualTo("░░░░");
-    }
+    public async Task Bar_EmptyFill_AllTrack() => await Assert.That(RetryCountdown.Bar(0, 4)).IsEqualTo("░░░░");
 
     [Test]
     public async Task Bar_ZeroWidth_Empty()
@@ -60,13 +56,10 @@ public class RetryCountdownTests
         await Assert.That(RetryCountdown.BackoffSeconds(1)).IsEqualTo(1);
         await Assert.That(RetryCountdown.BackoffSeconds(2)).IsEqualTo(2);
         await Assert.That(RetryCountdown.BackoffSeconds(3)).IsEqualTo(4);
-        await Assert.That(RetryCountdown.BackoffSeconds(4, baseSeconds: 1, maxSeconds: 5)).IsEqualTo(5);
+        await Assert.That(RetryCountdown.BackoffSeconds(4, 1, 5)).IsEqualTo(5);
         await Assert.That(RetryCountdown.BackoffSeconds(20)).IsEqualTo(60);
     }
 
     [Test]
-    public async Task BackoffSeconds_AttemptBelowOne_Throws()
-    {
-        await Assert.That(() => RetryCountdown.BackoffSeconds(0)).Throws<ArgumentOutOfRangeException>();
-    }
+    public async Task BackoffSeconds_AttemptBelowOne_Throws() => await Assert.That(() => RetryCountdown.BackoffSeconds(0)).Throws<ArgumentOutOfRangeException>();
 }

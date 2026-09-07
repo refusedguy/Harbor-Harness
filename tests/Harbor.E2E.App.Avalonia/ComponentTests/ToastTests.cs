@@ -1,8 +1,3 @@
-using Harbor.App.Avalonia.Services;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core.Enums;
-
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
 /// <summary>
@@ -13,13 +8,13 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         Tests cover: info toast (blue), success toast (green), warning toast
 ///         (peach), error toast (red), multiple stacked toasts, auto-dismiss
 ///         after 4s, and a long-message toast. Each test pushes a toast via
-///         <see cref="MainViewModel.AddToast"/> and captures a screenshot.
+///         <see cref="MainViewModel.AddToast" /> and captures a screenshot.
 ///     </para>
 /// </remarks>
 [NotInParallel]
 public sealed class ToastTests : ComponentTestBase
 {
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupAsync() => await GetDriverAsync("Toast").ConfigureAwait(false);
 
     /// <summary>
@@ -35,11 +30,11 @@ public sealed class ToastTests : ComponentTestBase
         UI(() => Vm.AddToast(new ToastNotification("Info: connection established.", ToastKind.Info)));
         await Task.Delay(300).ConfigureAwait(false);
 
-        var hasMsg = await Driver.WaitForTextAsync("Info: connection established.", TimeSpan.FromSeconds(2))
+        bool hasMsg = await Driver.WaitForTextAsync("Info: connection established.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasMsg).IsTrue();
 
-        var path = await CaptureAsync("toast-info").ConfigureAwait(false);
+        string path = await CaptureAsync("toast-info").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -55,11 +50,11 @@ public sealed class ToastTests : ComponentTestBase
         UI(() => Vm.AddToast(new ToastNotification("Success: file saved.", ToastKind.Success)));
         await Task.Delay(300).ConfigureAwait(false);
 
-        var hasMsg = await Driver.WaitForTextAsync("Success: file saved.", TimeSpan.FromSeconds(2))
+        bool hasMsg = await Driver.WaitForTextAsync("Success: file saved.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasMsg).IsTrue();
 
-        var path = await CaptureAsync("toast-success").ConfigureAwait(false);
+        string path = await CaptureAsync("toast-success").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -75,11 +70,11 @@ public sealed class ToastTests : ComponentTestBase
         UI(() => Vm.AddToast(new ToastNotification("Warning: rate limit approaching.", ToastKind.Warning)));
         await Task.Delay(300).ConfigureAwait(false);
 
-        var hasMsg = await Driver.WaitForTextAsync("Warning: rate limit approaching.", TimeSpan.FromSeconds(2))
+        bool hasMsg = await Driver.WaitForTextAsync("Warning: rate limit approaching.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasMsg).IsTrue();
 
-        var path = await CaptureAsync("toast-warning").ConfigureAwait(false);
+        string path = await CaptureAsync("toast-warning").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -95,11 +90,11 @@ public sealed class ToastTests : ComponentTestBase
         UI(() => Vm.AddToast(new ToastNotification("Error: provider returned 503.", ToastKind.Error)));
         await Task.Delay(300).ConfigureAwait(false);
 
-        var hasMsg = await Driver.WaitForTextAsync("Error: provider returned 503.", TimeSpan.FromSeconds(2))
+        bool hasMsg = await Driver.WaitForTextAsync("Error: provider returned 503.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasMsg).IsTrue();
 
-        var path = await CaptureAsync("toast-error").ConfigureAwait(false);
+        string path = await CaptureAsync("toast-error").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -121,15 +116,15 @@ public sealed class ToastTests : ComponentTestBase
         });
         await Task.Delay(300).ConfigureAwait(false);
 
-        var hasFirst = await Driver.WaitForTextAsync("First toast body", TimeSpan.FromSeconds(2))
+        bool hasFirst = await Driver.WaitForTextAsync("First toast body", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        var hasSecond = await Driver.WaitForTextAsync("Second toast body", TimeSpan.FromSeconds(2))
+        bool hasSecond = await Driver.WaitForTextAsync("Second toast body", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        var hasThird = await Driver.WaitForTextAsync("Third toast body", TimeSpan.FromSeconds(2))
+        bool hasThird = await Driver.WaitForTextAsync("Third toast body", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasFirst && hasSecond && hasThird).IsTrue();
 
-        var path = await CaptureAsync("toast-multiple-stacked").ConfigureAwait(false);
+        string path = await CaptureAsync("toast-multiple-stacked").ConfigureAwait(false);
 
         // Wait for auto-dismiss so the next test starts clean.
         await Task.Delay(5_000).ConfigureAwait(false);
@@ -148,17 +143,17 @@ public sealed class ToastTests : ComponentTestBase
         UI(() => Vm.AddToast(new ToastNotification("Auto-dismiss test", ToastKind.Info)));
         await Task.Delay(300).ConfigureAwait(false);
 
-        var hasToastBefore = await Driver.WaitForTextAsync("Auto-dismiss test", TimeSpan.FromSeconds(2))
+        bool hasToastBefore = await Driver.WaitForTextAsync("Auto-dismiss test", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasToastBefore).IsTrue();
 
         // Wait for auto-dismiss (4s) + buffer.
         await Task.Delay(5_000).ConfigureAwait(false);
 
-        var stillThere = Driver.GetAllVisibleText().Contains("Auto-dismiss test", StringComparison.Ordinal);
+        bool stillThere = Driver.GetAllVisibleText().Contains("Auto-dismiss test", StringComparison.Ordinal);
         await Assert.That(stillThere).IsFalse();
 
-        var path = await CaptureAsync("toast-auto-dismissed").ConfigureAwait(false);
+        string path = await CaptureAsync("toast-auto-dismissed").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -178,11 +173,11 @@ public sealed class ToastTests : ComponentTestBase
             ToastKind.Info)));
         await Task.Delay(300).ConfigureAwait(false);
 
-        var hasMsg = await Driver.WaitForTextAsync("deliberately long toast", TimeSpan.FromSeconds(2))
+        bool hasMsg = await Driver.WaitForTextAsync("deliberately long toast", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasMsg).IsTrue();
 
-        var path = await CaptureAsync("toast-long-message").ConfigureAwait(false);
+        string path = await CaptureAsync("toast-long-message").ConfigureAwait(false);
 
         // Wait for auto-dismiss.
         await Task.Delay(5_000).ConfigureAwait(false);

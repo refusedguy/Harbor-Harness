@@ -30,22 +30,6 @@ namespace Harbor.Architecture.Tests;
 
 public class FullLayerMatrixTests
 {
-    /// <summary>Layers a src assembly can belong to.</summary>
-    private enum Layer
-    {
-        /// <summary>Pure contracts / BCL-only helpers. Bottom of the pyramid.</summary>
-        Domain,
-        /// <summary>UI framework family + concrete renderers (Tui.*, Desktop.*, Ui.Framework.*).</summary>
-        Presentation,
-        /// <summary>Use-case orchestration: Application, Registries, plugin contract/runtime surface.</summary>
-        Application,
-        /// <summary>Implementations: providers, storage, tools, IPC endpoints, telemetry, plugin machinery.</summary>
-        Infrastructure,
-        /// <summary>DI wiring over everything (Harbor.Hosting). Unrestricted.</summary>
-        CompositionRoot,
-    }
-
-    private sealed record Row(Layer Layer, string[] Allowed);
 
     // The single source of truth for "which src assemblies exist AND are under
     // enforcement". LayerDependencyTests.AllExpectedHarborAssembliesAreLoaded
@@ -107,7 +91,7 @@ public class FullLayerMatrixTests
         "Harbor.Plugins.Registration",
         "Harbor.Plugins.Hosting",
         // CompositionRoot
-        "Harbor.Hosting",
+        "Harbor.Hosting"
     ];
 
     // (from → to) edges that violate the naive layer rules but are accepted,
@@ -122,7 +106,7 @@ public class FullLayerMatrixTests
         [
             // NOTE: the csproj also declares Harbor.Core (facade), but no Core
             // type survives in IL — only the Application edge is real.
-            "Harbor.Application",
+            "Harbor.Application"
         ],
         // ITuiPlugin / TUI vocabulary lives in Terminal.Abstractions by design;
         // plugin-surface assemblies legitimately reach Presentation for it.
@@ -130,87 +114,89 @@ public class FullLayerMatrixTests
         [
             "Harbor.Terminal.Abstractions",
             // Plugin manifests describe TUI state projections.
-            "Harbor.Ui.Framework.State",
+            "Harbor.Ui.Framework.State"
         ],
         ["Harbor.Plugins.Compilation"] =
         [
             // Compile-time reference passing includes ITuiPlugin vocabulary.
-            "Harbor.Terminal.Abstractions",
+            "Harbor.Terminal.Abstractions"
         ],
         ["Harbor.Plugins.Registration"] =
         [
             "Harbor.Terminal.Abstractions",
             // Registered TUI plugins carry view-model/state payloads.
-            "Harbor.Ui.Framework.State",
-        ],
+            "Harbor.Ui.Framework.State"
+        ]
     };
 
     private static readonly Dictionary<string, Row> Matrix = new()
     {
         // ---- Domain -------------------------------------------------------
-        ["Harbor.Abstractions.Contracts"] = new(Layer.Domain, []),
-        ["Harbor.Diagnostics.Abstractions"] = new(Layer.Domain, []),
-        ["Harbor.Extensions"] = new(Layer.Domain, []),
-        ["Harbor.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions.Contracts"]),
-        ["Harbor.Ipc.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions"]),
-        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions"]),
+        ["Harbor.Abstractions.Contracts"] = new Row(Layer.Domain, []),
+        ["Harbor.Diagnostics.Abstractions"] = new Row(Layer.Domain, []),
+        ["Harbor.Extensions"] = new Row(Layer.Domain, []),
+        ["Harbor.Abstractions"] = new Row(Layer.Domain, ["Harbor.Abstractions.Contracts"]),
+        ["Harbor.Ipc.Abstractions"] = new Row(Layer.Domain, ["Harbor.Abstractions"]),
+        ["Harbor.Ui.Framework.Abstractions"] = new Row(Layer.Domain, ["Harbor.Abstractions"]),
 
         // ---- Presentation -------------------------------------------------
-        ["Harbor.Terminal.Abstractions"] = new(Layer.Presentation, ["Harbor.Abstractions", "Harbor.Ui.Framework"]),
-        ["Harbor.Tui.Abstractions"] = new(Layer.Presentation,
+        ["Harbor.Terminal.Abstractions"] = new Row(Layer.Presentation, ["Harbor.Abstractions", "Harbor.Ui.Framework"]),
+        ["Harbor.Tui.Abstractions"] = new Row(Layer.Presentation,
             ["Harbor.Ui.Framework", "Harbor.Terminal.Abstractions"]),
-        ["Harbor.Ui.Framework"] = new(Layer.Presentation,
+        ["Harbor.Ui.Framework"] = new Row(Layer.Presentation,
         [
             "Harbor.Ui.Framework.Abstractions", "Harbor.Ui.Framework.State",
             "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.ViewModels",
-            "Harbor.Ui.Framework.Projection", "Harbor.Ui.Framework.Sessions",
+            "Harbor.Ui.Framework.Projection", "Harbor.Ui.Framework.Sessions"
         ]),
-        ["Harbor.Ui.Framework.State"] = new(Layer.Presentation,
+        ["Harbor.Ui.Framework.State"] = new Row(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.Abstractions"]),
-        ["Harbor.Ui.Framework.Reducers"] = new(Layer.Presentation,
+        ["Harbor.Ui.Framework.Reducers"] = new Row(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State"]),
-        ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
+        ["Harbor.Ui.Framework.Services"] = new Row(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Reducers", "Harbor.Ui.Framework.Abstractions"]),
-        ["Harbor.Ui.Framework.ViewModels"] = new(Layer.Presentation,
+        ["Harbor.Ui.Framework.ViewModels"] = new Row(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions"]),
-        ["Harbor.Ui.Framework.Projection"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
-             // RgbColor is defined in the standalone DesignSystem package but
-             // keeps its historical Projection namespace for compatibility.
-             "Harbor.DesignSystem"]),
+        ["Harbor.Ui.Framework.Projection"] = new Row(Layer.Presentation,
+        [
+            "Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
+            // RgbColor is defined in the standalone DesignSystem package but
+            // keeps its historical Projection namespace for compatibility.
+            "Harbor.DesignSystem"
+        ]),
         // Renderer-agnostic shared layer: cell/screen primitives, input
         // vocabulary and chat widgets consumed by every renderer backend.
         // Leaf Presentation library over the projection primitives; the HDS
         // token catalog (DesignSystem) and motion tokens (Desktop.Animations)
         // back ChatPalette/PanelFx (ChatPalette + the cell-style primitives
         // physically live in the DesignSystem package assembly now).
-        ["Harbor.Ui.Framework.Rendering"] = new(Layer.Presentation,
+        ["Harbor.Ui.Framework.Rendering"] = new Row(Layer.Presentation,
             ["Harbor.Ui.Framework.Projection", "Harbor.DesignSystem", "Harbor.Desktop.Animations"]),
         // HDS v1 token catalog — standalone leaf: ZERO Harbor references. The
         // design-system package ships RgbColor (under the historical Projection
         // namespace) plus the cell-style primitives and ChatPalette, so
         // Projection/Rendering/CellForge/apps all resolve them from here.
-        ["Harbor.DesignSystem"] = new(Layer.Presentation, []),
-        ["Harbor.Ui.Framework.Sessions"] = new(Layer.Presentation,
+        ["Harbor.DesignSystem"] = new Row(Layer.Presentation, []),
+        ["Harbor.Ui.Framework.Sessions"] = new Row(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.ViewModels", "Harbor.Ui.Framework.Abstractions"]),
-        ["Harbor.Desktop.Abstractions"] = new(Layer.Presentation,
+        ["Harbor.Desktop.Abstractions"] = new Row(Layer.Presentation,
         [
             "Harbor.Abstractions", "Harbor.Terminal.Abstractions",
             "Harbor.Ui.Framework", "Harbor.Ui.Framework.ViewModels",
             "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services",
-            "Harbor.Ui.Framework.Sessions",
+            "Harbor.Ui.Framework.Sessions"
         ]),
-        ["Harbor.Desktop.Shared"] = new(Layer.Presentation,
+        ["Harbor.Desktop.Shared"] = new Row(Layer.Presentation,
             ["Harbor.Desktop.Abstractions", "Harbor.Ui.Framework"]),
         // RgbColor is defined in Harbor.DesignSystem (standalone package); the
         // token types come through that same reference.
-        ["Harbor.Desktop.Animations"] = new(Layer.Presentation,
+        ["Harbor.Desktop.Animations"] = new Row(Layer.Presentation,
             ["Harbor.DesignSystem"]),
-        ["Harbor.Tui.Notifications"] = new(Layer.Presentation,
+        ["Harbor.Tui.Notifications"] = new Row(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
         // renderer-unification Phase 4: Ansi + Plain merged into one assembly;
         // styling flows through IEscapeCodeStrategy (Ansi / Null impls).
-        ["Harbor.Tui.AnsiPlain"] = new(Layer.Presentation,
+        ["Harbor.Tui.AnsiPlain"] = new Row(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
         // CellForge owns its own input+render stack; reuses Presentation-state
         // streaming buffers (StreamingSync/ChunkedBuffer) and the shared
@@ -224,76 +210,76 @@ public class FullLayerMatrixTests
         // orchestration) + Ui.Framework.Abstractions (Domain contracts) are the
         // panel-integration surface for epic B-K; Presentation->Presentation and
         // Presentation->Domain edges satisfy MatrixTable_RespectsLayerRules.
-        ["Harbor.Tui.CellForge"] = new(Layer.Presentation,
-            [
-                "Harbor.Abstractions", "Harbor.Terminal.Abstractions",
-                "Harbor.Ui.Framework.State",
-                "Harbor.Ui.Framework.Projection",
-                "Harbor.Ui.Framework.Rendering",
-                "Harbor.Ui.Framework.Services",
-                "Harbor.Ui.Framework.ViewModels",
-                "Harbor.Ui.Framework.Sessions",
-                "Harbor.Ui.Framework.Abstractions",
-                "Harbor.DesignSystem", "Harbor.Desktop.Animations",
-            ]),
+        ["Harbor.Tui.CellForge"] = new Row(Layer.Presentation,
+        [
+            "Harbor.Abstractions", "Harbor.Terminal.Abstractions",
+            "Harbor.Ui.Framework.State",
+            "Harbor.Ui.Framework.Projection",
+            "Harbor.Ui.Framework.Rendering",
+            "Harbor.Ui.Framework.Services",
+            "Harbor.Ui.Framework.ViewModels",
+            "Harbor.Ui.Framework.Sessions",
+            "Harbor.Ui.Framework.Abstractions",
+            "Harbor.DesignSystem", "Harbor.Desktop.Animations"
+        ]),
 
         // ---- Application ----------------------------------------------------
-        ["Harbor.Application"] = new(Layer.Application,
+        ["Harbor.Application"] = new Row(Layer.Application,
             ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions"]),
-        ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]),
+        ["Harbor.Registries"] = new Row(Layer.Application, ["Harbor.Abstractions"]),
         // Empty backward-compat facade forwarding to Application+Registries.
-        ["Harbor.Core"] = new(Layer.Application, ["Harbor.Application", "Harbor.Registries"]),
-        ["Harbor.Plugins.Abstractions"] = new(Layer.Application, ["Harbor.Abstractions"]),
+        ["Harbor.Core"] = new Row(Layer.Application, ["Harbor.Application", "Harbor.Registries"]),
+        ["Harbor.Plugins.Abstractions"] = new Row(Layer.Application, ["Harbor.Abstractions"]),
         // Runtime is the composition surface over the plugin machinery stack
         // (Host/Storage/Compilation/Instantiation/Registration are its family);
         // classified Infrastructure-plugins rather than Application because of
         // those intra-family edges.
-        ["Harbor.Plugins.Runtime"] = new(Layer.Infrastructure,
+        ["Harbor.Plugins.Runtime"] = new Row(Layer.Infrastructure,
         [
             "Harbor.Plugins.Hosting", "Harbor.Plugins.Storage",
             "Harbor.Plugins.Compilation", "Harbor.Plugins.Instantiation",
             "Harbor.Plugins.Registration", "Harbor.Plugins.Abstractions",
-            "Harbor.Abstractions",
+            "Harbor.Abstractions"
         ]),
 
         // ---- Infrastructure ---------------------------------------------------
-        ["Harbor.Providers.OpenAiCompatible"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
-        ["Harbor.Providers.Anthropic"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
-        ["Harbor.Providers.OpenAI"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
-        ["Harbor.Providers.Ollama"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
-        ["Harbor.Storage.Jsonl"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
-        ["Harbor.Storage.Memory"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
-        ["Harbor.Storage.Sqlite"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
-        ["Harbor.Tools.Builtin"] = new(Layer.Infrastructure,
+        ["Harbor.Providers.OpenAiCompatible"] = new Row(Layer.Infrastructure, ["Harbor.Abstractions"]),
+        ["Harbor.Providers.Anthropic"] = new Row(Layer.Infrastructure, ["Harbor.Abstractions"]),
+        ["Harbor.Providers.OpenAI"] = new Row(Layer.Infrastructure, ["Harbor.Abstractions"]),
+        ["Harbor.Providers.Ollama"] = new Row(Layer.Infrastructure, ["Harbor.Abstractions"]),
+        ["Harbor.Storage.Jsonl"] = new Row(Layer.Infrastructure, ["Harbor.Abstractions"]),
+        ["Harbor.Storage.Memory"] = new Row(Layer.Infrastructure, ["Harbor.Abstractions"]),
+        ["Harbor.Storage.Sqlite"] = new Row(Layer.Infrastructure, ["Harbor.Abstractions"]),
+        ["Harbor.Tools.Builtin"] = new Row(Layer.Infrastructure,
             ["Harbor.Abstractions", "Harbor.Extensions"]),
-        ["Harbor.Lsp"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
-        ["Harbor.Terminal.Pty"] = new(Layer.Infrastructure, []),
-        ["Harbor.Logging"] = new(Layer.Infrastructure, []),
-        ["Harbor.Transport.Remote"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
-        ["Harbor.Telemetry.Core"] = new(Layer.Infrastructure,
+        ["Harbor.Lsp"] = new Row(Layer.Infrastructure, ["Harbor.Abstractions"]),
+        ["Harbor.Terminal.Pty"] = new Row(Layer.Infrastructure, []),
+        ["Harbor.Logging"] = new Row(Layer.Infrastructure, []),
+        ["Harbor.Transport.Remote"] = new Row(Layer.Infrastructure, ["Harbor.Abstractions"]),
+        ["Harbor.Telemetry.Core"] = new Row(Layer.Infrastructure,
             ["Harbor.Diagnostics.Abstractions", "Harbor.Abstractions"]),
-        ["Harbor.Telemetry.Otlp"] = new(Layer.Infrastructure, ["Harbor.Telemetry.Core"]),
-        ["Harbor.Ipc.Client"] = new(Layer.Infrastructure,
+        ["Harbor.Telemetry.Otlp"] = new Row(Layer.Infrastructure, ["Harbor.Telemetry.Core"]),
+        ["Harbor.Ipc.Client"] = new Row(Layer.Infrastructure,
             ["Harbor.Ipc.Abstractions", "Harbor.Abstractions"]),
-        ["Harbor.Ipc.InProcess"] = new(Layer.Infrastructure,
+        ["Harbor.Ipc.InProcess"] = new Row(Layer.Infrastructure,
             ["Harbor.Ipc.Abstractions", "Harbor.Abstractions"]),
-        ["Harbor.Ipc.Server"] = new(Layer.Infrastructure,
+        ["Harbor.Ipc.Server"] = new Row(Layer.Infrastructure,
             ["Harbor.Ipc.Abstractions", "Harbor.Abstractions", "Harbor.Application"]),
-        ["Harbor.Plugins.Storage"] = new(Layer.Infrastructure, ["Harbor.Plugins.Abstractions"]),
-        ["Harbor.Plugins.Compilation"] = new(Layer.Infrastructure,
+        ["Harbor.Plugins.Storage"] = new Row(Layer.Infrastructure, ["Harbor.Plugins.Abstractions"]),
+        ["Harbor.Plugins.Compilation"] = new Row(Layer.Infrastructure,
             ["Harbor.Plugins.Abstractions", "Harbor.Abstractions"]),
-        ["Harbor.Plugins.Instantiation"] = new(Layer.Infrastructure,
+        ["Harbor.Plugins.Instantiation"] = new Row(Layer.Infrastructure,
             ["Harbor.Plugins.Abstractions", "Harbor.Abstractions"]),
-        ["Harbor.Plugins.Registration"] = new(Layer.Infrastructure,
+        ["Harbor.Plugins.Registration"] = new Row(Layer.Infrastructure,
             ["Harbor.Plugins.Abstractions", "Harbor.Plugins.Instantiation", "Harbor.Abstractions"]),
-        ["Harbor.Plugins.Hosting"] = new(Layer.Infrastructure,
+        ["Harbor.Plugins.Hosting"] = new Row(Layer.Infrastructure,
         [
             "Harbor.Plugins.Abstractions", "Harbor.Plugins.Storage",
             "Harbor.Plugins.Compilation", "Harbor.Plugins.Instantiation",
-            "Harbor.Plugins.Registration",
+            "Harbor.Plugins.Registration"
         ]),
         // ---- CompositionRoot -----------------------------------------------
-        ["Harbor.Hosting"] = new(Layer.CompositionRoot,
+        ["Harbor.Hosting"] = new Row(Layer.CompositionRoot,
         [
             // Wires DI over the whole graph incl. contrib renderers — free tier.
             "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
@@ -320,15 +306,15 @@ public class FullLayerMatrixTests
             // renderer-unification Phase 3: nickprotop/ConsoleEx wrapper,
             // wired behind HarborWithNickConsoleEx (mutually exclusive with
             // HarborWithSpectreTui — see Harbor.Hosting.csproj).
-            "Harbor.Tui.NickConsoleEx",
-        ]),
+            "Harbor.Tui.NickConsoleEx"
+        ])
     };
 
     /// <summary>
     ///     Allowed set plus implicit edges:
     ///     - referencing <c>Harbor.Abstractions</c> implies
-    ///       <c>Harbor.Abstractions.Contracts</c> (the facade re-exports contract
-    ///       types, so consumer IL legitimately emits the Contracts AssemblyRef);
+    ///     <c>Harbor.Abstractions.Contracts</c> (the facade re-exports contract
+    ///     types, so consumer IL legitimately emits the Contracts AssemblyRef);
     ///     - plus this row's documented exceptions.
     /// </summary>
     private static HashSet<string> ExpandAllowed(string name, Row row)
@@ -338,7 +324,7 @@ public class FullLayerMatrixTests
         {
             allowed.Add("Harbor.Abstractions.Contracts");
         }
-        if (DocumentedExceptions.TryGetValue(name, out var exc))
+        if (DocumentedExceptions.TryGetValue(name, out string[]? exc))
         {
             allowed.UnionWith(exc);
         }
@@ -402,13 +388,13 @@ public class FullLayerMatrixTests
             var n when n.StartsWith("Harbor.Plugins.", StringComparison.Ordinal) => "plugins",
             var n when n.StartsWith("Harbor.Ipc.", StringComparison.Ordinal) => "ipc",
             var n when n.StartsWith("Harbor.Telemetry.", StringComparison.Ordinal) => "telemetry",
-            _ => null,
+            _ => null
         };
 
         var layers = Matrix.ToDictionary(kv => kv.Key, kv => kv.Value.Layer);
         var failures = new List<string>();
 
-        foreach (var (from, row) in Matrix)
+        foreach ((string from, var row) in Matrix)
         {
             foreach (string to in row.Allowed)
             {
@@ -426,9 +412,9 @@ public class FullLayerMatrixTests
                     Layer.Presentation => toLayer is Layer.Domain or Layer.Presentation,
                     Layer.Application => toLayer is Layer.Domain or Layer.Application,
                     Layer.Infrastructure => toLayer is Layer.Domain or Layer.Application
-                        || (toLayer == Layer.Infrastructure && Family(to) == Family(from)),
+                                            || toLayer == Layer.Infrastructure && Family(to) == Family(from),
                     Layer.CompositionRoot => true,
-                    _ => false,
+                    _ => false
                 };
 
                 if (!ok)
@@ -454,7 +440,7 @@ public class FullLayerMatrixTests
         var loaded = ArchitectureTestHelpers.LoadHarborAssemblies();
         var failures = new List<string>();
 
-        foreach (var (from, excs) in DocumentedExceptions)
+        foreach ((string from, string[] excs) in DocumentedExceptions)
         {
             if (!loaded.TryGetValue(from, out var asm))
             {
@@ -493,4 +479,21 @@ public class FullLayerMatrixTests
         await Assert.That(missingRows).IsEmpty();
         await Assert.That(orphanRows).IsEmpty();
     }
+
+    /// <summary>Layers a src assembly can belong to.</summary>
+    private enum Layer
+    {
+        /// <summary>Pure contracts / BCL-only helpers. Bottom of the pyramid.</summary>
+        Domain,
+        /// <summary>UI framework family + concrete renderers (Tui.*, Desktop.*, Ui.Framework.*).</summary>
+        Presentation,
+        /// <summary>Use-case orchestration: Application, Registries, plugin contract/runtime surface.</summary>
+        Application,
+        /// <summary>Implementations: providers, storage, tools, IPC endpoints, telemetry, plugin machinery.</summary>
+        Infrastructure,
+        /// <summary>DI wiring over everything (Harbor.Hosting). Unrestricted.</summary>
+        CompositionRoot
+    }
+
+    private sealed record Row(Layer Layer, string[] Allowed);
 }

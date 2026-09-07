@@ -1,4 +1,5 @@
 namespace Harbor.Build.Meta;
+
 /// <summary>
 ///     Self-check for <see cref="ImpactMapper" /> — plain assertions over a
 ///     throwaway sandbox tree (no TUnit dependency: the build project does
@@ -12,7 +13,7 @@ public static class ImpactMapperSelfTest
     /// <summary>Runs every scenario; throws listing the first broken expectation.</summary>
     public static void RunAll(BuildOutput output)
     {
-        var sandbox = CreateSandbox();
+        string sandbox = CreateSandbox();
         try
         {
             var plainInput = new ImpactInput(sandbox,
@@ -81,7 +82,7 @@ public static class ImpactMapperSelfTest
     }
     private static string CreateSandbox()
     {
-        var root = Directory.CreateTempSubdirectory("harbor-impact-selftest-").FullName;
+        string root = Directory.CreateTempSubdirectory("harbor-impact-selftest-").FullName;
         WriteFile(root, "src/B/B.csproj", PlainCsproj([]));
         WriteFile(root, "src/B/Thing.cs", "// marker");
         WriteFile(root, "src/A/A.csproj", PlainCsproj(["..\\B\\B.csproj"]));
@@ -100,7 +101,7 @@ public static class ImpactMapperSelfTest
     }
     private static string PlainCsproj(string[] references)
     {
-        var header =
+        string header =
             "<Project Sdk=\"Microsoft.NET.Sdk\">\n" +
             "  <PropertyGroup>\n" +
             "    <TargetFramework>net10.0</TargetFramework>\n" +
@@ -109,15 +110,15 @@ public static class ImpactMapperSelfTest
         {
             return header + "</Project>\n";
         }
-        var items = references.Aggregate(
+        string items = references.Aggregate(
             "  <ItemGroup>\n",
             (current, reference) => current + $"    <ProjectReference Include=\"{reference}\" />\n");
         return header + items + "  </ItemGroup>\n</Project>\n";
     }
     private static void WriteFile(string root, string relative, string content)
     {
-        var path = System.IO.Path.Combine(root, relative.Replace('/', System.IO.Path.DirectorySeparatorChar));
-        var directory = System.IO.Path.GetDirectoryName(path);
+        string path = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+        string? directory = Path.GetDirectoryName(path);
         if (directory is not null)
         {
             Directory.CreateDirectory(directory);
@@ -128,7 +129,7 @@ public static class ImpactMapperSelfTest
     {
         try
         {
-            Directory.Delete(directory, recursive: true);
+            Directory.Delete(directory, true);
         }
         catch (IOException)
         {

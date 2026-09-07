@@ -1,11 +1,4 @@
-using Harbor.Application.Configuration;
-using Harbor.Registries.Events;
-using Harbor.Desktop.Abstractions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-
 using CSharpFunctionalExtensions;
-
 namespace Harbor.Hosting;
 
 // DI014/DI016: config is loaded synchronously at composition time by explicit
@@ -24,7 +17,7 @@ internal static class ConfigurationModule
         HarborComposeOptions options)
     {
         var loggerFactory = options.BootstrapLoggerFactory?.Invoke()
-            ?? LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.Warning));
+                            ?? LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.Warning));
         var ctx = new HarborCompositionContext(options, loggerFactory);
 
         // ---- stores -------------------------------------------------------
@@ -68,8 +61,8 @@ internal static class ConfigurationModule
         // ---- event bus: constructed explicitly, registered as instance -----
         var middlewares = options.EventBusMiddlewares?.Invoke(loggerFactory) ?? Array.Empty<IEventBusMiddleware>();
         var eventBusLogger = loggerFactory.CreateLogger<InMemoryEventBus>();
-        ctx.EventBus = options.EventBusScrollback is { } scrollback
-            ? new InMemoryEventBus(eventBusLogger, maxScrollback: scrollback, middlewares.ToArray())
+        ctx.EventBus = options.EventBusScrollback is {} scrollback
+            ? new InMemoryEventBus(eventBusLogger, scrollback, middlewares.ToArray())
             : new InMemoryEventBus(eventBusLogger);
 
         return ctx;
@@ -82,7 +75,7 @@ internal static class ConfigurationModule
     /// </summary>
     private static T LoadOrDefault<T>(Func<Result<T>> load, T fallback, string name, HarborCompositionContext ctx)
     {
-        Result<T> result = load();
+        var result = load();
         if (result.IsFailure) // §4.6-ok: единственная проверка формы load→default.
             ctx.Logger.LogWarning("Failed to load {Name}, using defaults: {Error}", name, result.Error);
         return result.IsSuccess ? result.Value : fallback;

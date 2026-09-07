@@ -1,93 +1,60 @@
-using System.Text;
 using BenchmarkDotNet.Attributes;
 using Harbor.Tui.CellForge.Rendering;
-using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering;
-using Harbor.Ui.Framework.Rendering.Widgets;
-
+using System.Text;
 namespace Harbor.Benchmarks;
 
 /// <summary>
-/// Cell-diff core costs (celldiff §7) against the frame budget of 16 ms:
-/// idle frame via row-hash skip (~0.05 ms @ 200×50), typical token frame
-/// with ~300 changed cells (0.5–1 ms), full repaint at 200×50 and 400×120
-/// (~6 ms worst case), and the cold layout solve for a 20-panel tree
-/// (&lt; 0.01 ms). All flushes go through the real DiffEngine + AnsiWriter
-/// into a discarding backend — no tty I/O, encode cost included.
+///     Cell-diff core costs (celldiff §7) against the frame budget of 16 ms:
+///     idle frame via row-hash skip (~0.05 ms @ 200×50), typical token frame
+///     with ~300 changed cells (0.5–1 ms), full repaint at 200×50 and 400×120
+///     (~6 ms worst case), and the cold layout solve for a 20-panel tree
+///     (&lt; 0.01 ms). All flushes go through the real DiffEngine + AnsiWriter
+///     into a discarding backend — no tty I/O, encode cost included.
 /// </summary>
 /// <remarks>
-/// The <see cref="StreamingDelta_Unpaced1000Fps" /> and
-/// <see cref="StreamingDelta_Paced60Fps" /> scenarios measure the streaming
-/// acceptance (perf sprint §3.10): ANSI bytes per 1000 text deltas — each op
-/// types 1000 deltas (~5 chars, content varies per delta so every frame
-/// carries real change) into a chat tail and returns the total ANSI byte
-/// count emitted <b>during the stream</b> (the one-time initial paint is
-/// excluded via <c>CountingBackend.Reset</c>). The value is the ANSI bytes/sec
-/// budget at 1000 deltas/sec; target &lt; 10 000 B for the paced path
-/// (vs ~1920 cells × full redraw before the diff engine). BDN does not
-/// surface benchmark return values in its summary table, so the validated
-/// per-run minimum/maximum is echoed into the log by
-/// <see cref="ReportStreamBytes" /> (min = paced, max = unpaced).
+///     The <see cref="StreamingDelta_Unpaced1000Fps" /> and
+///     <see cref="StreamingDelta_Paced60Fps" /> scenarios measure the streaming
+///     acceptance (perf sprint §3.10): ANSI bytes per 1000 text deltas — each op
+///     types 1000 deltas (~5 chars, content varies per delta so every frame
+///     carries real change) into a chat tail and returns the total ANSI byte
+///     count emitted <b>during the stream</b> (the one-time initial paint is
+///     excluded via <c>CountingBackend.Reset</c>). The value is the ANSI bytes/sec
+///     budget at 1000 deltas/sec; target &lt; 10 000 B for the paced path
+///     (vs ~1920 cells × full redraw before the diff engine). BDN does not
+///     surface benchmark return values in its summary table, so the validated
+///     per-run minimum/maximum is echoed into the log by
+///     <see cref="ReportStreamBytes" /> (min = paced, max = unpaced).
 /// </remarks>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 10)]
 public class DiffEngineBenchmark
 {
-    private sealed class NullBackend : ITerminalBackend
-    {
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
-            ValueTask.CompletedTask;
-    }
-
-    private sealed class CountingBackend : ITerminalBackend
-    {
-        public long TotalBytes;
-
-        public void Reset() => TotalBytes = 0;
-
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
-        {
-            TotalBytes += bytes.Length;
-            return ValueTask.CompletedTask;
-        }
-    }
-
-    private sealed class StubPanel : Panel
-    {
-        public StubPanel(string id, int minW, int minH, int priority = 0)
-            : base(id, new Size(minW, minH), priority)
-        {
-        }
-
-        public override void Paint(ScreenBuffer buffer)
-        {
-        }
-    }
-
-    private AnsiWriter _writer = null!;
-    private DiffEngine _engineIdle = null!;
+    private ScreenBuffer _backFull200 = null!;
+    private ScreenBuffer _backFull400 = null!;
     private ScreenBuffer _backIdle = null!;
-
-    private DiffEngine _engineToken = null!;
     private ScreenBuffer _backToken = null!;
     private string[] _bandA = null!;
     private string[] _bandB = null!;
     private int _bandIndex;
 
     private DiffEngine _engineFull200 = null!;
-    private ScreenBuffer _backFull200 = null!;
     private DiffEngine _engineFull400 = null!;
-    private ScreenBuffer _backFull400 = null!;
+    private DiffEngine _engineIdle = null!;
 
-    private long _minStreamBytes = long.MaxValue;
+    private DiffEngine _engineToken = null!;
     private long _maxStreamBytes;
 
+    private long _minStreamBytes = long.MaxValue;
+
     private LayoutTree _tree = null!;
+
+    private AnsiWriter _writer = null!;
 
     [GlobalSetup]
     public void Setup()
     {
-        _writer = new AnsiWriter(new NullBackend(), syncUpdates: true);
+        _writer = new AnsiWriter(new NullBackend(), true);
 
         (_engineIdle, _backIdle) = MakeSyncedScreen(200, 50);
 
@@ -109,7 +76,7 @@ public class DiffEngineBenchmark
 
     private static (DiffEngine Engine, ScreenBuffer Back) MakeSyncedScreen(int cols, int rows)
     {
-        var writer = new AnsiWriter(new NullBackend(), syncUpdates: true);
+        var writer = new AnsiWriter(new NullBackend(), true);
         var engine = new DiffEngine(cols, rows);
         var back = new ScreenBuffer(cols, rows);
         for (int y = 0; y < rows; y++)
@@ -138,7 +105,7 @@ public class DiffEngineBenchmark
         MakeCountedScreen(int cols, int rows)
     {
         var backend = new CountingBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var writer = new AnsiWriter(backend, true);
         var engine = new DiffEngine(cols, rows);
         var back = new ScreenBuffer(cols, rows);
         for (int y = 0; y < rows; y++)
@@ -178,13 +145,15 @@ public class DiffEngineBenchmark
         col += delta.Length;
     }
 
-    /// <summary>Worst case: every delta flushes its own frame (no pacing).
-    /// Returns ANSI bytes emitted for the 1000-delta stream (validated).</summary>
+    /// <summary>
+    ///     Worst case: every delta flushes its own frame (no pacing).
+    ///     Returns ANSI bytes emitted for the 1000-delta stream (validated).
+    /// </summary>
     [Benchmark(Description = "Streaming 1000 deltas, 1 frame each (ANSI bytes/sec)")]
     public async Task<long> StreamingDelta_Unpaced1000Fps()
     {
         var (engine, back, writer, backend) = MakeCountedScreen(200, 50);
-        var delta = new char[] { 'x', 'y', 'z', '0', '9' };
+        char[] delta = new[] { 'x', 'y', 'z', '0', '9' };
         int col = 8;
         int row = 21; // 28 tail rows hold 1000 deltas of ~5 chars
         for (int i = 0; i < 1000; i++)
@@ -200,13 +169,15 @@ public class DiffEngineBenchmark
         return backend.TotalBytes;
     }
 
-    /// <summary>Paced case: ~1000 deltas/sec batched into ~60 frames/sec —
-    /// the renderer's commit-pacing path and the &lt; 10 KB/s acceptance.</summary>
+    /// <summary>
+    ///     Paced case: ~1000 deltas/sec batched into ~60 frames/sec —
+    ///     the renderer's commit-pacing path and the &lt; 10 KB/s acceptance.
+    /// </summary>
     [Benchmark(Description = "Streaming 1000 deltas paced to 60 fps (ANSI bytes/sec)")]
     public async Task<long> StreamingDelta_Paced60Fps()
     {
         var (engine, back, writer, backend) = MakeCountedScreen(200, 50);
-        var delta = new char[] { 'x', 'y', 'z', '0', '9' };
+        char[] delta = new[] { 'x', 'y', 'z', '0', '9' };
         int col = 8;
         int row = 21;
         int step = 0;
@@ -239,8 +210,10 @@ public class DiffEngineBenchmark
         }
     }
 
-    /// <summary>Echos the validated ANSI-bytes-per-1000-deltas acceptance
-    /// number into the run log (BDN does not print benchmark return values).</summary>
+    /// <summary>
+    ///     Echos the validated ANSI-bytes-per-1000-deltas acceptance
+    ///     number into the run log (BDN does not print benchmark return values).
+    /// </summary>
     [GlobalCleanup]
     public void ReportStreamBytes() => Console.WriteLine(
         $"// STREAM-BYTES (acceptance < 10000 B per 1000 deltas): min={_minStreamBytes} max={_maxStreamBytes}");
@@ -304,5 +277,36 @@ public class DiffEngineBenchmark
         }
 
         return tree;
+    }
+
+    private sealed class NullBackend : ITerminalBackend
+    {
+        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
+    }
+
+    private sealed class CountingBackend : ITerminalBackend
+    {
+        public long TotalBytes;
+
+        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
+        {
+            TotalBytes += bytes.Length;
+            return ValueTask.CompletedTask;
+        }
+
+        public void Reset() => TotalBytes = 0;
+    }
+
+    private sealed class StubPanel : Panel
+    {
+        public StubPanel(string id, int minW, int minH, int priority = 0)
+            : base(id, new Size(minW, minH), priority)
+        {
+        }
+
+        public override void Paint(ScreenBuffer buffer)
+        {
+        }
     }
 }

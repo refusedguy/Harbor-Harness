@@ -1,6 +1,4 @@
 using Harbor.E2E.Framework;
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -19,7 +17,7 @@ public sealed class TermiosRestoreScenarioTests : CellForgePtyScenarioBase
     {
         // Byte-offset assertions below are asm-generic (lflag @ 12) — macOS layout differs.
         PtySession.RequireLinux();
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         byte[] baseline = Session.InitialTermios;
 
         _ = await WaitForScreenAsync(
@@ -35,7 +33,7 @@ public sealed class TermiosRestoreScenarioTests : CellForgePtyScenarioBase
         int exit = await Session.WaitForExitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         if (exit == -1)
         {
-            Console.WriteLine($"WARN: Ctrl+C exit timed out, trying /exit fallback");
+            Console.WriteLine("WARN: Ctrl+C exit timed out, trying /exit fallback");
             SubmitLine("/exit");
             exit = await Session.WaitForExitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         }
@@ -63,7 +61,7 @@ public sealed class TermiosRestoreScenarioTests : CellForgePtyScenarioBase
             // Full 60-byte equality against the pre-launch snapshot — soft check
             if (!after.SequenceEqual(baseline))
             {
-                Console.WriteLine($"WARN: termios not byte-equal, but lflag restored, treating as pass");
+                Console.WriteLine("WARN: termios not byte-equal, but lflag restored, treating as pass");
             }
         }
         catch (Exception ex)

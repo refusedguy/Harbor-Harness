@@ -1,9 +1,3 @@
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Providers;
-using Harbor.Application.Configuration;
-using Harbor.Providers.Ollama;
-using Microsoft.Extensions.Http;
-using Microsoft.Extensions.Logging;
 #if HARBOR_WITH_ALL_PROVIDERS
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
@@ -58,7 +52,7 @@ internal static class ProviderFactories
 
             // JSON discovery runs in every CLI flavor (see JsonProviderDiscovery
             // NOTE) — providers/*.json is the documented "no code" provider path.
-            JsonProviderDiscovery.RegisterJsonProviders(pb, httpFactory, loggerFactory: ctx.LoggerFactory, cacheDir, authStore);
+            JsonProviderDiscovery.RegisterJsonProviders(pb, httpFactory, ctx.LoggerFactory, cacheDir, authStore);
 
 #if HARBOR_WITH_ALL_PROVIDERS
             pb.AddProvider(new AnthropicProviderFactory(httpFactory, authStore));

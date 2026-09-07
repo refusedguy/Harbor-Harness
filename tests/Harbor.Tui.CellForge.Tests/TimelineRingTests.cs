@@ -1,5 +1,4 @@
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class TimelineRingTests

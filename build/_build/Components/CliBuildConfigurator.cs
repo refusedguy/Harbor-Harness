@@ -1,4 +1,5 @@
 namespace Harbor.Build.Components;
+
 /// <summary>
 ///     Translates <see cref="FeatureFlags" /> into MSBuild <c>/p:</c> properties
 ///     and <c>&lt;DefineConstants&gt;</c> values that <c>Harbor.App.Cli.csproj</c>

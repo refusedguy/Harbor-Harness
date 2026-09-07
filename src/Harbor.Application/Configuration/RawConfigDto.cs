@@ -1,5 +1,5 @@
-using System.Text.Json.Serialization;
 namespace Harbor.Application.Configuration;
+
 /// <summary>
 ///     Raw DTO for the persisted config.json shape. Allows the normalizer to
 ///     read both the canonical fields and the legacy <c>CommonConfig</c> aliases

@@ -54,21 +54,21 @@ Local Ollama needs no key (`HARBOR_PROVIDER=ollama`, `OLLAMA_HOST=http://localho
 harbor [ask <prompt>|setup|auth|config|providers|models|sessions|daemon|status|logs|help|version] [--loglevel <lvl>]
 ```
 
-| Command          | Description                                                                  |
-|------------------|------------------------------------------------------------------------------|
-| *(none)*         | Interactive REPL with the selected TUI renderer (default).                   |
-| `ask <prompt>`   | One-shot: run the prompt through the agent loop and exit.                    |
-| `headless`       | Full agent host + IPC server, no UI — blocks until SIGINT/SIGTERM (pairing QR printed). |
-| `setup`          | Onboarding wizard (pick provider/model interactively).                       |
-| `auth`           | Set/list stored API keys in `~/.harbor/config.json`.                         |
-| `config`         | Inspect/update Harbor config.                                                |
-| `providers`      | List registered providers with client-health status.                         |
-| `models [prov]`  | List live models for a provider (or all).                                    |
-| `sessions`       | List saved sessions.                                                         |
-| `daemon`         | Start/stop the background headless daemon.                                   |
-| `status`         | Show daemon/host status.                                                     |
-| `logs`           | Manage per-run log files (`--list`, `--last`, `--follow`, `--clean`).        |
-| `tui` / `storage`| Print available TUI renderers / storage backends.                            |
+| Command           | Description                                                                             |
+|-------------------|-----------------------------------------------------------------------------------------|
+| *(none)*          | Interactive REPL with the selected TUI renderer (default).                              |
+| `ask <prompt>`    | One-shot: run the prompt through the agent loop and exit.                               |
+| `headless`        | Full agent host + IPC server, no UI — blocks until SIGINT/SIGTERM (pairing QR printed). |
+| `setup`           | Onboarding wizard (pick provider/model interactively).                                  |
+| `auth`            | Set/list stored API keys in `~/.harbor/config.json`.                                    |
+| `config`          | Inspect/update Harbor config.                                                           |
+| `providers`       | List registered providers with client-health status.                                    |
+| `models [prov]`   | List live models for a provider (or all).                                               |
+| `sessions`        | List saved sessions.                                                                    |
+| `daemon`          | Start/stop the background headless daemon.                                              |
+| `status`          | Show daemon/host status.                                                                |
+| `logs`            | Manage per-run log files (`--list`, `--last`, `--follow`, `--clean`).                   |
+| `tui` / `storage` | Print available TUI renderers / storage backends.                                       |
 
 Log verbosity: `--loglevel <lvl>` (or `-ll` / `HARBOR_LOGLEVEL`). Console defaults to Information; the file log under `~/.harbor/logs/` always captures Debug.
 
@@ -99,17 +99,12 @@ HARBOR_TUI=razor       harbor     # .razor components, hot reload
 ```
 
 `spectre*`, `terminal-gui`, `termina`, `razor` are compiled from `contrib/tui/*` when
-`HarborWithSpectreTui=true` (the default; excluded in minimal builds).
-One-shot commands (`ask`, `providers`, …) are always non-interactive regardless of `HARBOR_TUI`.
+`HarborWithSpectreTui=true` (the default; excluded in minimal builds). One-shot commands (`ask`, `providers`, …) are always non-interactive regardless of `HARBOR_TUI`.
 
 #### Interactive renderer notes
 
-Interactive renderers own the alt-screen buffer; console logging is routed into the in-TUI
-diagnostics panel (F12) instead of stdout. `consoleex` is the newest interactive renderer:
-event-driven frame loop, virtualized timeline, streaming markdown with frozen tail,
-Ctrl+C aborts the current agent turn and repeats to exit — see its README
-([../../src/Harbor.Tui.ConsoleEx/README.md](../../src/Harbor.Tui.ConsoleEx/README.md)).
-Enable it persistently with `"tui": "consoleex"` in `~/.harbor/config.json` or
+Interactive renderers own the alt-screen buffer; console logging is routed into the in-TUI diagnostics panel (F12) instead of stdout. `consoleex` is the newest interactive renderer:
+event-driven frame loop, virtualized timeline, streaming markdown with frozen tail, Ctrl+C aborts the current agent turn and repeats to exit — see its README ([../../src/Harbor.Tui.ConsoleEx/README.md](../../src/Harbor.Tui.ConsoleEx/README.md)). Enable it persistently with `"tui": "consoleex"` in `~/.harbor/config.json` or
 `{ "defaultTuiRenderer": "consoleex" }` in `~/.harbor/cli.json`.
 
 See [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) for the full comparison matrix.
@@ -118,31 +113,27 @@ See [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) for the full 
 
 Dispatched by `SlashCommandDispatcher` (`apps/Harbor.App.Cli/Repl/SlashCommandDispatcher.cs:82-113`):
 
-| Command            | Description                                                       |
-|--------------------|-------------------------------------------------------------------|
-| `/help`            | List all commands.                                                |
-| `/model <name>`    | Switch model — rebinds the active session without restarting the REPL. |
-| `/agent <name>` (alias `/mode`) | Switch the active agent/mode.                        |
-| `/providers`       | List registered providers.                                        |
-| `/sessions`        | List saved sessions.                                              |
-| `/auth`            | Manage stored API keys.                                           |
-| `/config`          | Inspect/update config.                                            |
-| `/setup`           | Re-run the onboarding wizard.                                     |
-| `/tui`             | Print available renderers.                                        |
-| `/storage`         | Print storage backends.                                           |
-| `/exit` (`/quit`)  | Exit.                                                             |
+| Command                         | Description                                                            |
+|---------------------------------|------------------------------------------------------------------------|
+| `/help`                         | List all commands.                                                     |
+| `/model <name>`                 | Switch model — rebinds the active session without restarting the REPL. |
+| `/agent <name>` (alias `/mode`) | Switch the active agent/mode.                                          |
+| `/providers`                    | List registered providers.                                             |
+| `/sessions`                     | List saved sessions.                                                   |
+| `/auth`                         | Manage stored API keys.                                                |
+| `/config`                       | Inspect/update config.                                                 |
+| `/setup`                        | Re-run the onboarding wizard.                                          |
+| `/tui`                          | Print available renderers.                                             |
+| `/storage`                      | Print storage backends.                                                |
+| `/exit` (`/quit`)               | Exit.                                                                  |
 
-Messages are persisted to the session store as the conversation runs
-(`DefaultAgent.AppendMessageAsync`), so nothing is lost on exit; compaction runs
-automatically when the context grows (see `CompactionService`).
+Messages are persisted to the session store as the conversation runs (`DefaultAgent.AppendMessageAsync`), so nothing is lost on exit; compaction runs automatically when the context grows (see `CompactionService`).
 
 ## Troubleshooting
 
 ### Missing API key error names every tried source
 
-You didn't set a key for that provider. Run `harbor auth` (or `harbor setup`),
-set the preset env var listed in the provider's JSON config (e.g. `KILO_API_KEY`), or
-write it into `ApiKeys` in `~/.harbor/config.json`.
+You didn't set a key for that provider. Run `harbor auth` (or `harbor setup`), set the preset env var listed in the provider's JSON config (e.g. `KILO_API_KEY`), or write it into `ApiKeys` in `~/.harbor/config.json`.
 
 ### `Error: 401 Unauthorized`
 
@@ -158,8 +149,7 @@ curl https://api.anthropic.com/v1/messages \
 
 ### TUI looks broken on Windows cmd.exe
 
-Use Windows Terminal. Legacy conhost doesn't render ANSI escapes correctly.
-ConsoleEx additionally requires VT input/raw-mode bring-up on Windows (falls back to legacy automatically).
+Use Windows Terminal. Legacy conhost doesn't render ANSI escapes correctly. ConsoleEx additionally requires VT input/raw-mode bring-up on Windows (falls back to legacy automatically).
 
 ### Plugin load failed with Roslyn error
 
@@ -167,8 +157,7 @@ Check the compile error in the log (`HARBOR_LOGLEVEL=Debug`, or `harbor logs --f
 
 ### Session history piling up
 
-Sessions accumulate in storage. Use `/sessions` to see them; start fresh or adjust
-compaction settings — long context is folded into anchored summaries automatically.
+Sessions accumulate in storage. Use `/sessions` to see them; start fresh or adjust compaction settings — long context is folded into anchored summaries automatically.
 
 ## Project structure
 
@@ -192,8 +181,7 @@ apps/Harbor.App.Cli/
 
 ## Dependencies
 
-Composition root — references every Harbor library, grouped per build flavor
-(`Harbor.App.Cli.csproj:145-224`):
+Composition root — references every Harbor library, grouped per build flavor (`Harbor.App.Cli.csproj:145-224`):
 
 - Always: `Harbor.Abstractions`, `Harbor.Core`, `Harbor.Hosting` (+ transitively Domain/Application layers), `Harbor.Desktop.Abstractions`, `Harbor.Tools.Builtin`
 - Always: storage `Jsonl` + `Memory`; providers `Ollama`; renderers `Tui.Plain`, `Tui.Ansi`, `Tui.ConsoleEx`

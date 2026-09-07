@@ -4,11 +4,9 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
-using Harbor.Application.Tests.Fakes;
 using Harbor.Application.Agents;
+using Harbor.Application.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
 namespace Harbor.Application.Tests;
 
 /// <summary>
@@ -19,6 +17,40 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class StorePersistFailureTests
 {
+
+    [Test]
+    public async Task PromptAsync_StoreAppendFails_RunFailsWithoutStarting()
+    {
+        var session = Session.Create("/tmp/harbor-persist-failure", "code", "test", "test-model");
+        var loop = new FakeAgentLoop();
+        var agent = new DefaultAgent(
+            new FailingAppendStore(session),
+            loop,
+            new FakeEventBus(),
+            NullLogger<DefaultAgent>.Instance);
+        try
+        {
+            agent.Initialize(session, new AgentDefinition(
+                AgentName.Create("code"),
+                "Code",
+                "persist-failure harness",
+                "test-model",
+                "test",
+                new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) })));
+
+            var result = await agent.PromptAsync("will not be persisted");
+
+            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result.Error).Contains("Failed to persist");
+            // The agent loop must never see a run whose history is missing its prompt.
+            await Assert.That(loop.Runs).IsEqualTo(0);
+        }
+        finally
+        {
+            agent.Dispose();
+        }
+    }
+
     private sealed class FailingAppendStore(Session session) : ISessionStore
     {
         public Task<Result<Session>> CreateAsync(
@@ -54,38 +86,5 @@ public class StorePersistFailureTests
 
         public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
             => Task.FromResult(Result.Success());
-    }
-
-    [Test]
-    public async Task PromptAsync_StoreAppendFails_RunFailsWithoutStarting()
-    {
-        var session = Session.Create("/tmp/harbor-persist-failure", "code", "test", "test-model");
-        var loop = new FakeAgentLoop();
-        var agent = new DefaultAgent(
-            new FailingAppendStore(session),
-            loop,
-            new FakeEventBus(),
-            NullLogger<DefaultAgent>.Instance);
-        try
-        {
-            agent.Initialize(session, new AgentDefinition(
-                AgentName.Create("code"),
-                "Code",
-                "persist-failure harness",
-                "test-model",
-                "test",
-                new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) })));
-
-            var result = await agent.PromptAsync("will not be persisted");
-
-            await Assert.That(result.IsFailure).IsTrue();
-            await Assert.That(result.Error).Contains("Failed to persist");
-            // The agent loop must never see a run whose history is missing its prompt.
-            await Assert.That(loop.Runs).IsEqualTo(0);
-        }
-        finally
-        {
-            agent.Dispose();
-        }
     }
 }

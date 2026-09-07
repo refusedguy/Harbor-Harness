@@ -1,9 +1,7 @@
+using Microsoft.Extensions.Logging;
 using System.Net;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Tools.Mcp;
 
 /// <summary>
@@ -26,8 +24,8 @@ public sealed class McpSseTransport : IMcpRemoteTransport
 
     private readonly Uri _endpoint;
     private readonly IReadOnlyDictionary<string, string>? _headers;
-    private readonly Func<CancellationToken, Task<string?>>? _oauthTokenProvider;
     private readonly ILogger? _logger;
+    private readonly Func<CancellationToken, Task<string?>>? _oauthTokenProvider;
     private readonly TimeSpan _requestTimeout;
     private HttpClient? _client;
     private bool _disposed;
@@ -58,7 +56,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        HttpClient client = GetClient();
+        var client = GetClient();
         string body = request.GetRawText();
         int attempt = 1;
 
@@ -115,7 +113,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         using HttpRequestMessage sseRequest = new(HttpMethod.Get, _endpoint);
         sseRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
         ApplyHeaders(sseRequest, oauthToken);
-        using HttpResponseMessage sseResponse = await client
+        using var sseResponse = await client
             .SendAsync(sseRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
         EnsureSuccess(sseResponse, "SSE channel");
@@ -125,9 +123,9 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         using StreamReader streamReader = new(
             await sseResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false),
             Encoding.UTF8,
-            detectEncodingFromByteOrderMarks: false,
-            bufferSize: 1024,
-            leaveOpen: true);
+            false,
+            1024,
+            true);
 
         while (postEndpoint is null)
         {
@@ -137,7 +135,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
                 throw new IOException("MCP SSE stream closed before announcing an endpoint.");
             }
 
-            if (reader.Feed(line) is { } ev && ev.Event == "endpoint")
+            if (reader.Feed(line) is {} ev && ev.Event == "endpoint")
             {
                 postEndpoint = new Uri(_endpoint, ev.Data.Trim());
             }
@@ -146,10 +144,10 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         // 2. POST the JSON-RPC request to the announced endpoint.
         using HttpRequestMessage postRequest = new(HttpMethod.Post, postEndpoint)
         {
-            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
         ApplyHeaders(postRequest, oauthToken);
-        using HttpResponseMessage postResponse = await client
+        using var postResponse = await client
             .SendAsync(postRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
         EnsureSuccess(postResponse, "message endpoint");
@@ -164,7 +162,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             }
 
             if (reader.Feed(line) is { Event: "message" } ev
-                && McpSse.TryParseResponse(ev.Data, expectedId) is { } doc)
+                && McpSse.TryParseResponse(ev.Data, expectedId) is {} doc)
             {
                 return doc;
             }
@@ -176,7 +174,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         bool hasAuthorization = false;
         if (_headers is { Count: > 0 })
         {
-            foreach (KeyValuePair<string, string> header in _headers)
+            foreach (var header in _headers)
             {
                 if (request.Headers.TryAddWithoutValidation(header.Key, header.Value))
                 {
@@ -205,11 +203,11 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         => ex is HttpRequestException or IOException or TimeoutException;
 
     private async Task BackoffAsync(int attempt, CancellationToken cancellationToken)
-        => await Task.Delay(FirstRetryDelay * (1 << (attempt - 1)), cancellationToken).ConfigureAwait(false);
+        => await Task.Delay(FirstRetryDelay * (1 << attempt - 1), cancellationToken).ConfigureAwait(false);
 
     private HttpClient GetClient()
     {
-        if (_client is { } existing)
+        if (_client is {} existing)
         {
             return existing;
         }
@@ -217,7 +215,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         var handler = new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) };
         var client = new HttpClient(handler)
         {
-            Timeout = Timeout.InfiniteTimeSpan, // the GET stream outlives any single request; per-attempt CTS bounds it
+            Timeout = Timeout.InfiniteTimeSpan // the GET stream outlives any single request; per-attempt CTS bounds it
         };
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));

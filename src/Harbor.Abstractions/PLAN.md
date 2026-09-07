@@ -13,8 +13,7 @@ The Domain/facade layer is the foundation of Harbor. Every public API is XML-doc
 - [x] Identifier value objects: `SessionId`, `MessageId`, `ToolCallId`, `ProviderId`, `ModelRef`, `ToolName`, `AgentName` (`Harbor.Abstractions.Contracts/Models/Identifiers/Identifiers.cs`)
 - [x] `Permission` system (`Allow | Ask | Deny` per tool per glob)
 - [x] Session contracts: `ICompactionService` / `CompactionResult` / `ISystemPromptBuilder` / `ITokenTracker` (`Sessions/`)
-- [x] F1 decoupling: models extracted to `Harbor.Abstractions.Contracts` with zero Harbor project refs; facade references Contracts only
-      (`Abstractions_ReferencesOnlyContracts` in `tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs:218`)
+- [x] F1 decoupling: models extracted to `Harbor.Abstractions.Contracts` with zero Harbor project refs; facade references Contracts only (`Abstractions_ReferencesOnlyContracts` in `tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs:218`)
 - [x] ZLinq drop-in generator (replaces `System.Linq`)
 - [x] MemoryPack serialization for events
 - [x] 100% safe code (`AllowUnsafeBlocks=false`)

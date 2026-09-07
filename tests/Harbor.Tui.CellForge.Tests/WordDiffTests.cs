@@ -1,5 +1,3 @@
-using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class WordDiffTests
@@ -79,7 +77,7 @@ public class WordDiffTests
         var sides = WordDiff.Segment("b a", "a b");
 
         int gapRuns = sides.Removed.Count(s => s.Kind != WordSegKind.Equal)
-                    + sides.Inserted.Count(s => s.Kind != WordSegKind.Equal);
+                      + sides.Inserted.Count(s => s.Kind != WordSegKind.Equal);
         await Assert.That(gapRuns).IsLessThanOrEqualTo(2);
         await Assert.That(WordCount(sides.Removed.Where(s => s.Kind == WordSegKind.Equal).ToList()))
             .IsGreaterThanOrEqualTo(1);

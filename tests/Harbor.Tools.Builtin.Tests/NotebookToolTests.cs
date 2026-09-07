@@ -1,9 +1,10 @@
-using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
+
 /// <summary>
 ///     Tests for <see cref="NotebookTool" /> — set/get/add/clear/list flow against a
 ///     temp directory so the default <c>~/.harbor/notes</c> root is never touched.

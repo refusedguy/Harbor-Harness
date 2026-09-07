@@ -1,18 +1,17 @@
-using System.Text.Json;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
-using Harbor.Application.Tests.Fakes;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
+using Harbor.Application.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
+using System.Text;
+using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 namespace Harbor.Application.Tests;
 
 /// <summary>
@@ -36,20 +35,16 @@ public class ToolDispatcherFailClosedTests
         IAgentRegistry permissionRegistry)
     {
         var tool = new CountingTool();
-        var client = new ScriptedLlmClient(
-        [
-            new LlmEvent[]
-            {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
-            },
-            new LlmEvent[]
-            {
-                new TextDeltaEvent("t", "after tool"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
-            }
-        ]);
+        var client = new ScriptedLlmClient(new LlmEvent[]
+        {
+            new ToolCallStartEvent("call-1", "counter"),
+            new ToolCallDeltaEvent("call-1", """{"n":1}"""),
+            new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+        }, new LlmEvent[]
+        {
+            new TextDeltaEvent("t", "after tool"),
+            new StepFinishEvent(1, "stop", new Usage(1, 1))
+        });
         // NOTE: the loop registry contains the agent; the PERMISSION registry is
         // passed separately so tests can simulate an unregistered/diverged agent.
         var agents = new FakeAgentRegistry(agent);
@@ -68,15 +63,15 @@ public class ToolDispatcherFailClosedTests
         return (loop, client, tool);
     }
 
-    private static Fakes.TestSessionContext NewSession() => new(
+    private static TestSessionContext NewSession() => new(
         Session.Create("/tmp/harbor-fail-closed-tests", "code", "test", "test-model"));
 
     [Test]
     public async Task RunAsync_PermissionSubsystemFailure_ToolNeverExecutes()
     {
-        AgentDefinition agent = CodeAgent();
+        var agent = CodeAgent();
         // Empty registry → CheckAsync returns Failure for every call.
-        (AgentLoop loop, ScriptedLlmClient client, CountingTool tool) =
+        var (loop, client, tool) =
             CreateLoop(agent, new FakeAgentRegistry());
 
         var session = NewSession();
@@ -92,8 +87,8 @@ public class ToolDispatcherFailClosedTests
     public async Task RunAsync_PermissionAllow_ToolStillExecutes()
     {
         // Control: a healthy permission subsystem with an Allow rule keeps working.
-        AgentDefinition agent = CodeAgent();
-        (AgentLoop loop, _, CountingTool tool) =
+        var agent = CodeAgent();
+        var (loop, _, tool) =
             CreateLoop(agent, new FakeAgentRegistry(agent));
 
         var session = NewSession();
@@ -105,12 +100,12 @@ public class ToolDispatcherFailClosedTests
 
     private static string RenderText(LlmRequest request)
     {
-        var sb = new System.Text.StringBuilder();
-        foreach (LlmMessage message in request.Messages)
+        var sb = new StringBuilder();
+        foreach (var message in request.Messages)
         {
             if (message is LlmUserMessage user)
             {
-                foreach (LlmContentBlock block in user.Content)
+                foreach (var block in user.Content)
                 {
                     if (block is LlmTextBlock text)
                     {

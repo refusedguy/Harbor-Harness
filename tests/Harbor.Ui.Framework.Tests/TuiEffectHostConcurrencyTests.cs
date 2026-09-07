@@ -1,11 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
-using Harbor.Ui.Framework.Panels;
-using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
+using Harbor.Ui.Framework.State;
 namespace Harbor.Ui.Framework.Tests;
 
 /// <summary>
@@ -17,19 +13,6 @@ namespace Harbor.Ui.Framework.Tests;
 /// </summary>
 public class TuiEffectHostConcurrencyTests
 {
-    /// <summary>Runner whose PromptAsync returns a pre-set (possibly pending) task.</summary>
-    private sealed class GatedRunner(Task<Result> outcome) : IAgentRunner
-    {
-        public CancellationTokenSource AbortSource { get; } = new();
-
-        public Task<Result> PromptAsync(string text, CancellationToken ct = default) => outcome;
-
-        public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
-
-        public void ResetAbortSource()
-        {
-        }
-    }
 
     private static TaskCompletionSource<UiState> SettledWhenIdle(UiStore store)
     {
@@ -67,13 +50,13 @@ public class TuiEffectHostConcurrencyTests
 
         // Session B finishes CLEANLY while session A is still in flight.
         succeeding.TrySetResult(Result.Success());
-        UiState stateB = await settledB.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var stateB = await settledB.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Assert.That(stateB.Status).IsEqualTo("idle");
         await Assert.That(HasErrorLine(storeB.State, "session A failed")).IsFalse();
 
         // Session A then fails — the error must land ONLY in A's store.
         failing.TrySetResult(Result.Failure("session A failed"));
-        UiState stateA = await settledA.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var stateA = await settledA.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Assert.That(stateA.Status).IsEqualTo("error");
         await Assert.That(HasErrorLine(storeA.State, "session A failed")).IsTrue();
 
@@ -106,5 +89,19 @@ public class TuiEffectHostConcurrencyTests
 
         // CAS retry must not lose a single fold — no locks, no lost updates.
         await Assert.That(store.State.Lines.Length).IsEqualTo(threads * perThread);
+    }
+
+    /// <summary>Runner whose PromptAsync returns a pre-set (possibly pending) task.</summary>
+    private sealed class GatedRunner(Task<Result> outcome) : IAgentRunner
+    {
+        public CancellationTokenSource AbortSource { get; } = new();
+
+        public Task<Result> PromptAsync(string text, CancellationToken ct = default) => outcome;
+
+        public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+        public void ResetAbortSource()
+        {
+        }
     }
 }

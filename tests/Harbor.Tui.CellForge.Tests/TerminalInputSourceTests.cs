@@ -1,14 +1,12 @@
-using System.Threading.Channels;
-using System.Text;
 using Harbor.Tui.CellForge.Input;
-using Harbor.Tui.CellForge.Parsing;
-
+using System.Text;
+using System.Threading.Channels;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Pipeline tests (design §5.1): stream bytes → TerminalInputSource reader
-/// thread → parser → channel of typed events, including the ESC-flush and
-/// paste-watchdog timer policies running on the reader thread.
+///     Pipeline tests (design §5.1): stream bytes → TerminalInputSource reader
+///     thread → parser → channel of typed events, including the ESC-flush and
+///     paste-watchdog timer policies running on the reader thread.
 /// </summary>
 public class TerminalInputSourceTests
 {
@@ -44,13 +42,13 @@ public class TerminalInputSourceTests
             new TerminalInputSourceOptions
             {
                 EscFlushTimeout = TimeSpan.FromMilliseconds(30),
-                PasteAbortTimeout = TimeSpan.Zero,
+                PasteAbortTimeout = TimeSpan.Zero
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         _ = source.RunAsync(cts.Token);
 
-        stream.Push([(byte)0x1B]);
+        stream.Push([0x1B]);
 
         var evt = await ReadOne(source.Events, cts.Token);
         await Assert.That(evt.Kind).IsEqualTo(InputEventKind.Key);
@@ -71,7 +69,7 @@ public class TerminalInputSourceTests
             new TerminalInputSourceOptions
             {
                 EscFlushTimeout = TimeSpan.Zero,
-                PasteAbortTimeout = TimeSpan.FromMilliseconds(40),
+                PasteAbortTimeout = TimeSpan.FromMilliseconds(40)
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -91,14 +89,14 @@ public class TerminalInputSourceTests
         // Deterministic probe: first two calls report the old viewport,
         // every later call reports the resized one (baseline capture is
         // asynchronous, so value sequences — not timing — define the test).
-        var probes = 0;
+        int probes = 0;
         using var stream = new PulsedStream();
         using var source = new TerminalInputSource(
             stream,
             new TerminalInputSourceOptions
             {
                 ResizePollInterval = TimeSpan.FromMilliseconds(20),
-                SizeProvider = () => ++probes <= 2 ? (80, 24) : (100, 30),
+                SizeProvider = () => ++probes <= 2 ? (80, 24) : (100, 30)
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -128,7 +126,7 @@ public class TerminalInputSourceTests
         await run.WaitAsync(TimeSpan.FromSeconds(3));
         // Reader.Completion completes only after the channel drains: "idle"
         // queued four Char events and only the first one was consumed.
-        var drained = 0;
+        int drained = 0;
         while (source.Events.TryRead(out _))
         {
             drained++;
@@ -157,20 +155,28 @@ public class TerminalInputSourceTests
         }
     }
 
-    private static async Task<InputEvent> ReadOne(System.Threading.Channels.ChannelReader<InputEvent> reader, CancellationToken ct)
+    private static async Task<InputEvent> ReadOne(ChannelReader<InputEvent> reader, CancellationToken ct)
     {
         await Assert.That(await reader.WaitToReadAsync(ct)).IsTrue();
         await Assert.That(reader.TryRead(out var evt)).IsTrue();
         return evt;
     }
 
-    /// <summary>In-memory stream whose reads block until chunks are pushed —
-    /// emulates a live terminal without a real tty.</summary>
+    /// <summary>
+    ///     In-memory stream whose reads block until chunks are pushed —
+    ///     emulates a live terminal without a real tty.
+    /// </summary>
     private sealed class PulsedStream : Stream
     {
-        private readonly Queue<byte[]> _chunks = new();
         private readonly SemaphoreSlim _available = new(0);
+        private readonly Queue<byte[]> _chunks = new();
         private readonly object _gate = new();
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
 
         public void Push(byte[] chunk)
         {
@@ -191,16 +197,10 @@ public class TerminalInputSourceTests
                 chunk = _chunks.Dequeue();
             }
 
-            var count = Math.Min(chunk.Length, buffer.Length);
+            int count = Math.Min(chunk.Length, buffer.Length);
             chunk.AsSpan(0, count).CopyTo(buffer.Span);
             return count;
         }
-
-        public override bool CanRead => true;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => throw new NotSupportedException();
-        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
         public override void Flush()
         {
         }

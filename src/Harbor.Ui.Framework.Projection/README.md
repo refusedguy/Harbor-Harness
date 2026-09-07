@@ -8,10 +8,10 @@ Renderer-agnostic projection of `UiState` into `UiScreenModel`. The bridge betwe
 
 ## What's in it
 
-| Subfolder | Contents |
-|-----------|----------|
+| Subfolder     | Contents                                                                                                                                                                                                     |
+|---------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Projection/` | `IUiProjector`, `DefaultUiProjector`, `IUiViewport`, `UiScreenModel` record hierarchy (`UiHeaderModel`, `UiTranscriptModel`, `UiInputModel`, `UiStatusBarModel`), `UiRenderedLine`, `StyledSpan`, `RgbColor` |
-| `Rendering/` | `ChatStreamingPresenter` — derives `SessionStatus` and streaming flags from `UiState`. |
+| `Rendering/`  | `ChatStreamingPresenter` — derives `SessionStatus` and streaming flags from `UiState`.                                                                                                                       |
 
 ## Public API summary
 
@@ -23,15 +23,15 @@ Renderer-agnostic projection of `UiState` into `UiScreenModel`. The bridge betwe
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
+| Package                                     | Purpose |
+|---------------------------------------------|---------|
 | `Microsoft.Extensions.Logging.Abstractions` | Logging |
 
-| Project | Purpose |
-|---------|---------|
-| `Harbor.Abstractions` | Domain types |
-| `Harbor.Ui.Framework.State` | `UiState`, `UiStore`, state records |
-| `Harbor.Ui.Framework.Abstractions` | Contracts |
+| Project                            | Purpose                             |
+|------------------------------------|-------------------------------------|
+| `Harbor.Abstractions`              | Domain types                        |
+| `Harbor.Ui.Framework.State`        | `UiState`, `UiStore`, state records |
+| `Harbor.Ui.Framework.Abstractions` | Contracts                           |
 
 ## Tests
 

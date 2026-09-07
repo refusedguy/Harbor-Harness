@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-
 namespace Harbor.App.Cli.Demo;
 
 /// <summary>One scripted LLM reply: streamed text or a single tool call.</summary>
@@ -28,11 +27,11 @@ public sealed class DemoLlmServer : IAsyncDisposable
 {
     /// <summary>Model id the demo provider config references (<c>demo/harbor-1</c>).</summary>
     public const string ModelId = "harbor-1";
+    private readonly TimeSpan _chunkDelay;
+    private readonly CancellationTokenSource _cts = new();
 
     private readonly Queue<DemoReply> _script = new();
     private readonly object _scriptLock = new();
-    private readonly TimeSpan _chunkDelay;
-    private readonly CancellationTokenSource _cts = new();
     private HttpListener? _listener;
     private Task? _loopTask;
 
@@ -45,12 +44,28 @@ public sealed class DemoLlmServer : IAsyncDisposable
     /// <summary>Base URI for the demo provider config (<c>http://localhost:&lt;port&gt;</c>, no trailing slash).</summary>
     public Uri BaseUri { get; private set; } = new("http://localhost:0");
 
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        try { _listener?.Stop(); }
+        catch
+        { /* already stopped */
+        }
+        try { _listener?.Close(); }
+        catch
+        { /* already closed */
+        }
+        _cts.Dispose();
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
+
     /// <summary>Append replies to the FIFO script. Each <c>chat/completions</c> request consumes the next entry.</summary>
     public void Enqueue(params ReadOnlySpan<DemoReply> replies)
     {
         lock (_scriptLock)
         {
-            foreach (DemoReply reply in replies)
+            foreach (var reply in replies)
             {
                 _script.Enqueue(reply);
             }
@@ -83,25 +98,15 @@ public sealed class DemoLlmServer : IAsyncDisposable
             {
                 lastError = ex;
                 try { _listener.Stop(); }
-                catch { /* port taken — retry on a fresh listener */ }
+                catch
+                { /* port taken — retry on a fresh listener */
+                }
 
                 _listener = new HttpListener();
             }
         }
 
         throw new InvalidOperationException("Could not bind DemoLlmServer to any port.", lastError);
-    }
-
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        _cts.Cancel();
-        try { _listener?.Stop(); }
-        catch { /* already stopped */ }
-        try { _listener?.Close(); }
-        catch { /* already closed */ }
-        _cts.Dispose();
-        await Task.CompletedTask.ConfigureAwait(false);
     }
 
     private async Task ListenLoopAsync(CancellationToken ct)
@@ -132,14 +137,14 @@ public sealed class DemoLlmServer : IAsyncDisposable
 
     private async Task HandleAsync(HttpListenerContext ctx, CancellationToken ct)
     {
-        HttpListenerResponse resp = ctx.Response;
+        var resp = ctx.Response;
         try
         {
             string path = (ctx.Request.Url?.AbsolutePath ?? "/").TrimEnd('/');
             if (ctx.Request.HttpMethod == "GET" && path is "/models" or "/v1/models")
             {
                 await WriteAsync(resp, "application/json",
-                    $$"""{"object":"list","data":[{"id":"{{ModelId}}","object":"model","created":0,"owned_by":"harbor-demo"}]}""", ct)
+                        $$"""{"object":"list","data":[{"id":"{{ModelId}}","object":"model","created":0,"owned_by":"harbor-demo"}]}""", ct)
                     .ConfigureAwait(false);
                 return;
             }
@@ -160,12 +165,16 @@ public sealed class DemoLlmServer : IAsyncDisposable
                 resp.StatusCode = 500;
                 await WriteAsync(resp, "text/plain", "demo mock error: " + ex.Message, ct).ConfigureAwait(false);
             }
-            catch { /* connection gone — nothing to report to */ }
+            catch
+            { /* connection gone — nothing to report to */
+            }
         }
         finally
         {
             try { resp.Close(); }
-            catch { /* client vanished */ }
+            catch
+            { /* client vanished */
+            }
         }
     }
 
@@ -179,7 +188,7 @@ public sealed class DemoLlmServer : IAsyncDisposable
 
         resp.ContentType = "text/event-stream";
         resp.ContentEncoding = Encoding.UTF8;
-        Stream outStream = resp.OutputStream;
+        var outStream = resp.OutputStream;
 
         if (reply is null)
         {

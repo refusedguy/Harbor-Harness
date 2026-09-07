@@ -6,6 +6,9 @@ public readonly record struct Rect(int X, int Y, int Width, int Height)
     public int Right => X + Width;
     public int Bottom => Y + Height;
 
+    /// <summary>Cell count — the damage-area metric for hint-vs-fullscan choice.</summary>
+    public long Area => (long)Width * Height;
+
     public bool Contains(int x, int y) =>
         x >= X && x < Right && y >= Y && y < Bottom;
 
@@ -17,7 +20,4 @@ public readonly record struct Rect(int X, int Y, int Width, int Height)
         int bottom = Math.Min(Bottom, other.Bottom);
         return right > left && bottom > top ? new Rect(left, top, right - left, bottom - top) : default;
     }
-
-    /// <summary>Cell count — the damage-area metric for hint-vs-fullscan choice.</summary>
-    public long Area => (long)Width * Height;
 }

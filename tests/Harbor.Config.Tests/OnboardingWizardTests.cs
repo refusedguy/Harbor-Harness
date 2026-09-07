@@ -1,7 +1,13 @@
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Providers;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Config.Tests;
+
 /// <summary>
 ///     Tests for OnboardingWizard.RunAsync — exercises the full interactive flow
 ///     using stub Func&lt;string, Task&lt;string&gt;&gt; reader and Action&lt;string&gt; writer.
@@ -85,30 +91,10 @@ public class OnboardingWizardTests
         }
     }
 
-    // ---- PROD-UI-0 З.2: "test connection" step in the wizard ----
-
-    /// <summary>Fake probe with a canned outcome, records the probed provider ids.</summary>
-    private sealed class FakeHealthCheck(
-        Harbor.Abstractions.Providers.ProviderHealth? outcome,
-        string? error = null) : Harbor.Abstractions.Providers.IProviderHealthCheck
-    {
-        public List<string> Probed { get; } = [];
-
-        public Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Providers.ProviderHealth>> CheckAsync(
-            Harbor.Abstractions.Models.Identifiers.ProviderId providerId,
-            CancellationToken cancellationToken = default)
-        {
-            Probed.Add(providerId.Value);
-            return Task.FromResult(outcome is not null && error is null
-                ? CSharpFunctionalExtensions.Result.Success(outcome.Value)
-                : CSharpFunctionalExtensions.Result.Failure<Harbor.Abstractions.Providers.ProviderHealth>(error ?? "?"));
-        }
-    }
-
     [Test]
     public async Task RunAsync_HealthCheckSuccess_ReportsConnectionOk_AndContinues()
     {
-        var health = new FakeHealthCheck(new Harbor.Abstractions.Providers.ProviderHealth(42, 7));
+        var health = new FakeHealthCheck(new ProviderHealth(42, 7));
         string path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
         var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
         var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
@@ -141,7 +127,7 @@ public class OnboardingWizardTests
     [Test]
     public async Task RunAsync_HealthCheckFails_WarnsButDoesNotAbort()
     {
-        var health = new FakeHealthCheck(null, error: "API key is invalid or missing (401/403 from provider)");
+        var health = new FakeHealthCheck(null, "API key is invalid or missing (401/403 from provider)");
         string path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
         var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
         var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
@@ -169,67 +155,6 @@ public class OnboardingWizardTests
         {
             Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", null);
             Cleanup(path);
-        }
-    }
-
-    // ---- PROD-UI-0 З.4: live model list in the wizard's model step ----
-
-    /// <summary>Fake registry serving a canned model list for every provider.</summary>
-    private sealed class FakeLiveRegistry(string[] modelIds) : Harbor.Abstractions.Providers.IProviderRegistry
-    {
-        private bool _clientsDisabled;
-
-        public void DisableClients() => _clientsDisabled = true;
-
-        public IReadOnlyList<Harbor.Abstractions.Models.Identifiers.ProviderId> GetRegisteredProviderIds() => [];
-
-        public CSharpFunctionalExtensions.Result<Harbor.Abstractions.Providers.ILlmClient> GetClient(
-            Harbor.Abstractions.Models.Identifiers.ProviderId providerId) =>
-            _clientsDisabled
-                ? CSharpFunctionalExtensions.Result.Failure<Harbor.Abstractions.Providers.ILlmClient>(
-                    $"Provider '{providerId.Value}' is not registered.")
-                : new FakeCatalogClient(providerId, modelIds);
-
-        public Task<CSharpFunctionalExtensions.Result<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(CSharpFunctionalExtensions.Result.Failure<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>("n/a"));
-
-        public Task<CSharpFunctionalExtensions.Result<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>> GetModelsCachedAsync(
-            Harbor.Abstractions.Models.Identifiers.ProviderId providerId, CancellationToken cancellationToken = default) =>
-            GetAllModelsAsync(cancellationToken);
-
-        public void Register(Harbor.Abstractions.Models.Identifiers.ProviderId providerId, Func<Harbor.Abstractions.Providers.ILlmClient> factory) { }
-
-        public CSharpFunctionalExtensions.Result Unregister(Harbor.Abstractions.Models.Identifiers.ProviderId providerId) =>
-            CSharpFunctionalExtensions.Result.Failure("n/a");
-
-        private sealed class FakeCatalogClient : Harbor.Abstractions.Providers.ILlmClient
-        {
-            private readonly string[] _modelIds;
-
-            public FakeCatalogClient(Harbor.Abstractions.Models.Identifiers.ProviderId providerId, string[] modelIds)
-            {
-                ProviderId = providerId;
-                _modelIds = modelIds;
-            }
-
-            public Harbor.Abstractions.Models.Identifiers.ProviderId ProviderId { get; }
-
-            public IAsyncEnumerable<Harbor.Abstractions.Events.LlmEvent> StreamAsync(
-                Harbor.Abstractions.Providers.LlmRequest request, CancellationToken cancellationToken = default)
-            {
-                async IAsyncEnumerable<Harbor.Abstractions.Events.LlmEvent> Empty()
-                {
-                    await Task.CompletedTask;
-                    yield break;
-                }
-                return Empty();
-            }
-
-            public Task<CSharpFunctionalExtensions.Result<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
-                Task.FromResult(CSharpFunctionalExtensions.Result.Success<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>(
-                    _modelIds.Select(id => new Harbor.Abstractions.Models.ModelInfo(
-                        id, ProviderId.Value, id, 8192, 4096, false, false, false,
-                        Harbor.Abstractions.Models.Pricing.Unknown, "openai")).ToList()));
         }
     }
 
@@ -583,6 +508,88 @@ public class OnboardingWizardTests
         {
             Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
             Cleanup(path);
+        }
+    }
+
+    // ---- PROD-UI-0 З.2: "test connection" step in the wizard ----
+
+    /// <summary>Fake probe with a canned outcome, records the probed provider ids.</summary>
+    private sealed class FakeHealthCheck(
+        ProviderHealth? outcome,
+        string? error = null) : IProviderHealthCheck
+    {
+        public List<string> Probed { get; } = [];
+
+        public Task<Result<ProviderHealth>> CheckAsync(
+            ProviderId providerId,
+            CancellationToken cancellationToken = default)
+        {
+            Probed.Add(providerId.Value);
+            return Task.FromResult(outcome is not null && error is null
+                ? Result.Success(outcome.Value)
+                : Result.Failure<ProviderHealth>(error ?? "?"));
+        }
+    }
+
+    // ---- PROD-UI-0 З.4: live model list in the wizard's model step ----
+
+    /// <summary>Fake registry serving a canned model list for every provider.</summary>
+    private sealed class FakeLiveRegistry(string[] modelIds) : IProviderRegistry
+    {
+        private bool _clientsDisabled;
+
+        public IReadOnlyList<ProviderId> GetRegisteredProviderIds() => [];
+
+        public Result<ILlmClient> GetClient(
+            ProviderId providerId) =>
+            _clientsDisabled
+                ? Result.Failure<ILlmClient>(
+                    $"Provider '{providerId.Value}' is not registered.")
+                : new FakeCatalogClient(providerId, modelIds);
+
+        public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(Result.Failure<IReadOnlyList<ModelInfo>>("n/a"));
+
+        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(
+            ProviderId providerId, CancellationToken cancellationToken = default) =>
+            GetAllModelsAsync(cancellationToken);
+
+        public void Register(ProviderId providerId, Func<ILlmClient> factory) {}
+
+        public Result Unregister(ProviderId providerId) =>
+            Result.Failure("n/a");
+
+        public void DisableClients() => _clientsDisabled = true;
+
+        private sealed class FakeCatalogClient : ILlmClient
+        {
+            private readonly string[] _modelIds;
+
+            public FakeCatalogClient(ProviderId providerId, string[] modelIds)
+            {
+                ProviderId = providerId;
+                _modelIds = modelIds;
+            }
+
+            public ProviderId ProviderId { get; }
+
+            public IAsyncEnumerable<LlmEvent> StreamAsync(
+                LlmRequest request, CancellationToken cancellationToken = default)
+            {
+                async IAsyncEnumerable<LlmEvent> Empty()
+                {
+                    await Task.CompletedTask;
+                    yield break;
+                }
+
+                return Empty();
+            }
+
+            public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
+                Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(
+                    _modelIds.Select(id => new ModelInfo(
+                        id, ProviderId.Value, id, 8192, 4096, false, false, false,
+                        Pricing.Unknown, "openai")).ToList()));
         }
     }
 }

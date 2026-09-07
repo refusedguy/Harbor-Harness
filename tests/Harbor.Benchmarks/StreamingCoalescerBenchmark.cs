@@ -3,7 +3,7 @@ using Harbor.Application.Agents;
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks <see cref=\"StreamingCoalescer\" /> — the buffer that
+///     Benchmarks <see cref=\"StreamingCoalescer" /> — the buffer that
 ///     accumulates text deltas, thinking deltas, and tool-call argument
 ///     fragments during a streaming LLM turn. Measures the cost of
 ///     appending deltas, flushing buffers, and materializing tool calls
@@ -13,13 +13,13 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class StreamingCoalescerBenchmark
 {
+
+    [Params(10, 100, 1000)]
+    public int DeltaCount;
     private StreamingCoalescer _coalescer = null!;
     private string[] _textDeltas = null!;
     private string[] _thinkingDeltas = null!;
     private (string id, string name, string argsDelta)[] _toolCallDeltas = null!;
-
-    [Params(10, 100, 1000)]
-    public int DeltaCount;
 
     [GlobalSetup]
     public void Setup()
@@ -37,10 +37,7 @@ public class StreamingCoalescerBenchmark
     }
 
     [GlobalCleanup]
-    public void Cleanup()
-    {
-        _coalescer?.Dispose();
-    }
+    public void Cleanup() => _coalescer?.Dispose();
 
     [Benchmark(Description = "AppendTextDelta N times")]
     public void AppendTextDeltas()
@@ -64,7 +61,7 @@ public class StreamingCoalescerBenchmark
         _coalescer = new StreamingCoalescer();
         for (int i = 0; i < DeltaCount; i++)
         {
-            var (id, name, argsDelta) = _toolCallDeltas[i];
+            (string id, string name, string argsDelta) = _toolCallDeltas[i];
             _coalescer.StartToolCall(id, name);
             _coalescer.AppendToolCallDelta(id, argsDelta);
         }

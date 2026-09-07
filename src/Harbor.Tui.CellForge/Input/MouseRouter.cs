@@ -1,26 +1,23 @@
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Tui.CellForge.Input;
 
 /// <summary>Pointer-event sink for a hit-tested region (celldiff §5.2).</summary>
 public interface IPointerTarget
 {
-    string Id { get; }
+    public string Id { get; }
 
-    void OnPress(int col, int row);
+    public void OnPress(int col, int row);
 
-    void OnRelease(int col, int row);
+    public void OnRelease(int col, int row);
 
     /// <summary>Positive delta = wheel up.</summary>
-    void OnWheel(int col, int row, int delta);
+    public void OnWheel(int col, int row, int delta);
 }
 
 /// <summary>
-/// SGR mouse routing scaffold: hit-tests press/release/wheel against resolved
-/// layout rects and dispatches to the owning target. Out-of-screen coordinates
-/// (drag release outside the window, §3.3) are clamped before the hit test.
+///     SGR mouse routing scaffold: hit-tests press/release/wheel against resolved
+///     layout rects and dispatches to the owning target. Out-of-screen coordinates
+///     (drag release outside the window, §3.3) are clamped before the hit test.
 /// </summary>
 public sealed class MouseRouter
 {
@@ -94,12 +91,12 @@ public sealed class MouseRouter
     // working). Positive delta = wheel up per the IPointerTarget contract.
 
     /// <summary>
-    /// Maps a wheel tick to the store scroll message: positive
-    /// <paramref name="delta"/> (wheel up) → <c>ScrollUpLine</c>, negative →
-    /// <c>ScrollDownLine</c>, zero → a <c>ChatAction.None</c> no-op the reducer
-    /// drops. Same mapping as <c>VirtualizedChatTimeline.WheelMsg</c>, kept local
-    /// so Input never depends on Widgets. The host dispatches the result
-    /// (once per tick, or in a loop for acceleration).
+    ///     Maps a wheel tick to the store scroll message: positive
+    ///     <paramref name="delta" /> (wheel up) → <c>ScrollUpLine</c>, negative →
+    ///     <c>ScrollDownLine</c>, zero → a <c>ChatAction.None</c> no-op the reducer
+    ///     drops. Same mapping as <c>VirtualizedChatTimeline.WheelMsg</c>, kept local
+    ///     so Input never depends on Widgets. The host dispatches the result
+    ///     (once per tick, or in a loop for acceleration).
     /// </summary>
     public static UiMsg WheelToMessage(int delta)
     {
@@ -123,11 +120,11 @@ public sealed class MouseRouter
 }
 
 /// <summary>
-/// Wheel-only pointer target that forwards ticks to a store-dispatch callback
-/// (CF-C-002): bind it to the timeline rect and wheel events flow into the store
-/// as <c>KeyInput</c> line-scrolls via <see cref="MouseRouter.WheelToMessage"/>.
-/// Press/release are intentional no-ops (selection lives elsewhere). AOT-clean:
-/// no reflection, no allocations beyond the message itself.
+///     Wheel-only pointer target that forwards ticks to a store-dispatch callback
+///     (CF-C-002): bind it to the timeline rect and wheel events flow into the store
+///     as <c>KeyInput</c> line-scrolls via <see cref="MouseRouter.WheelToMessage" />.
+///     Press/release are intentional no-ops (selection lives elsewhere). AOT-clean:
+///     no reflection, no allocations beyond the message itself.
 /// </summary>
 public sealed class TimelineWheelTarget : IPointerTarget
 {

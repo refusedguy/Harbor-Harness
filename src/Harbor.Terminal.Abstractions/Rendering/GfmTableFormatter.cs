@@ -1,5 +1,6 @@
 using System.Text;
 namespace Harbor.Terminal.Abstractions.Rendering;
+
 /// <summary>
 ///     Renders a <see cref="GfmTable" /> to a plain Unicode-grid of display
 ///     strings (one <see cref="string" /> per row). Framework-free: contains no

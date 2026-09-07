@@ -1,4 +1,3 @@
-using System.Collections.Frozen;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
@@ -11,10 +10,12 @@ using Harbor.App.Cli.Commands;
 using Harbor.App.Cli.Hosting;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
+using Harbor.Hosting;
+using Harbor.Hosting.Rendering;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
+using System.Collections.Frozen;
 namespace Harbor.App.Cli.Repl;
 
 /// <summary>
@@ -28,28 +29,8 @@ namespace Harbor.App.Cli.Repl;
 /// </remarks>
 internal sealed class SlashCommandDispatcher
 {
-    private readonly ILogger<SlashCommandDispatcher> _logger;
     private readonly FrozenDictionary<string, SlashCommandRegistration> _byName;
-
-    /// <summary>All registered slash commands (canonical + aliases → single registration).</summary>
-    private sealed record SlashCommandRegistration(
-        string CanonicalName,
-        IReadOnlyList<string> Aliases,
-        IReadOnlyList<string>? ArgSuggestions,
-        Func<CommandContext, IReadOnlyList<string>, Task<Result>> Execute);
-
-    /// <summary>Lightweight context bag passed to command execute delegates.</summary>
-    public sealed record CommandContext(
-        IServiceProvider Services,
-        Action<string> Writer,
-        Func<string, Task<string>>? Reader,
-        Session Session,
-        IAgent Agent,
-        IAgentRegistry AgentRegistry,
-        IProviderRegistry Providers,
-        IConfigStore ConfigStore,
-        AuthStore AuthStore,
-        IToolRegistry ToolRegistry);
+    private readonly ILogger<SlashCommandDispatcher> _logger;
 
     public SlashCommandDispatcher(ILogger<SlashCommandDispatcher> logger)
     {
@@ -64,8 +45,8 @@ internal sealed class SlashCommandDispatcher
         IProviderRegistry providers, Session session)
     {
         return await HandleCoreAsync(input, sp,
-            writer: msg => _ = renderer.WriteLineAsync(msg),
-            reader: async prompt =>
+            msg => _ = renderer.WriteLineAsync(msg),
+            async prompt =>
             {
                 var r = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
                 return r.IsSuccess ? r.Value : string.Empty;
@@ -94,7 +75,7 @@ internal sealed class SlashCommandDispatcher
         if (cmd is "exit" or "quit")
         {
             _logger.LogInformation("Quit requested via /{Command}", cmd);
-            return Task.FromResult(SlashCommandOutcome.Quit(0));
+            return Task.FromResult(SlashCommandOutcome.Quit());
         }
 
         if (!_byName.TryGetValue(cmd, out var reg))
@@ -175,7 +156,7 @@ internal sealed class SlashCommandDispatcher
         {
             var reg = new SlashCommandRegistration(canonical, aliases, argSuggestions, execute);
             dict[canonical.ToLowerInvariant()] = reg;
-            foreach (var a in aliases)
+            foreach (string a in aliases)
             {
                 dict[a.ToLowerInvariant()] = reg;
             }
@@ -263,7 +244,7 @@ internal sealed class SlashCommandDispatcher
             if (built.Value.Count == 0)
                 ctx.Writer("No sessions.");
             else
-                foreach (var line in built.Value)
+                foreach (string line in built.Value)
                     ctx.Writer(line);
             return Result.Success();
         });
@@ -290,7 +271,7 @@ internal sealed class SlashCommandDispatcher
 
         Register("plugins", [], null, (ctx, _) =>
         {
-            if (ctx.Services.GetService<Harbor.Hosting.PluginReloadService>() is { } reload)
+            if (ctx.Services.GetService<PluginReloadService>() is {} reload)
             {
                 return RunPluginReloadAsync(reload, ctx.Writer);
             }
@@ -313,7 +294,7 @@ internal sealed class SlashCommandDispatcher
 
         Register("renderer", [], null, (ctx, _) =>
         {
-            if (ctx.Services.GetService<Harbor.Hosting.Rendering.IRendererPipeline>() is not { } pipeline)
+            if (ctx.Services.GetService<IRendererPipeline>() is not {} pipeline)
             {
                 ctx.Writer("Renderer pipeline: not available in this build.");
                 return Task.FromResult(Result.Success());
@@ -331,17 +312,37 @@ internal sealed class SlashCommandDispatcher
         new SimpleCommandContext(ctx.Session, ctx.Agent, ctx.Providers, ctx.ToolRegistry, ctx.Writer, ctx.Reader!);
 
     private static async Task<Result> RunPluginReloadAsync(
-        Harbor.Hosting.PluginReloadService reload, Action<string> writer)
+        PluginReloadService reload, Action<string> writer)
     {
         var summary = await reload.ReloadAsync().ConfigureAwait(false);
         writer(summary.Loaded == 0
             ? "Plugins: no new plugin(s) loaded."
             : $"Plugins: {summary.Loaded} loaded.");
-        foreach (var note in summary.Notes)
+        foreach (string note in summary.Notes)
             writer($"  - {note}");
         writer("Hint: edited/removed plugins need a restart to fully rebind.");
         return Result.Success();
     }
+
+    /// <summary>All registered slash commands (canonical + aliases → single registration).</summary>
+    private sealed record SlashCommandRegistration(
+        string CanonicalName,
+        IReadOnlyList<string> Aliases,
+        IReadOnlyList<string>? ArgSuggestions,
+        Func<CommandContext, IReadOnlyList<string>, Task<Result>> Execute);
+
+    /// <summary>Lightweight context bag passed to command execute delegates.</summary>
+    public sealed record CommandContext(
+        IServiceProvider Services,
+        Action<string> Writer,
+        Func<string, Task<string>>? Reader,
+        Session Session,
+        IAgent Agent,
+        IAgentRegistry AgentRegistry,
+        IProviderRegistry Providers,
+        IConfigStore ConfigStore,
+        AuthStore AuthStore,
+        IToolRegistry ToolRegistry);
 
     /// <summary>Minimal ISlashCommand adapter for palette consumption.</summary>
     private sealed record DelegateSlashCommand(

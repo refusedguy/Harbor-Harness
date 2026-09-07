@@ -1,5 +1,5 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
+using System.Text;
 using FrameworkStatusMappers = Harbor.Ui.Framework.Converters.StatusMappers;
 using VmToolCallStatus = Harbor.Ui.Framework.ViewModels.ToolCallStatus;
 using VmToolCall = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
@@ -11,16 +11,16 @@ public enum ToolCallStatus : byte
 {
     Running = 0,
     Ok = 1,
-    Error = 2,
+    Error = 2
 }
 
 /// <summary>
-/// Identity of the call: stable id + display name + truncated args.
-/// CF-E-011: optional diff-preview surface filled from
-/// <see cref="Rendering.DiffPreview"/> — <c>FilePath</c> extracted from the
-/// args payload, <c>DiffPreview</c> the 6-line inline preview, <c>DiffFull</c>
-/// the full (≤80-line) diff backing the expand path. All optional so existing
-/// call sites stay source-compatible.
+///     Identity of the call: stable id + display name + truncated args.
+///     CF-E-011: optional diff-preview surface filled from
+///     <see cref="Rendering.DiffPreview" /> — <c>FilePath</c> extracted from the
+///     args payload, <c>DiffPreview</c> the 6-line inline preview, <c>DiffFull</c>
+///     the full (≤80-line) diff backing the expand path. All optional so existing
+///     call sites stay source-compatible.
 /// </summary>
 public readonly record struct ToolCallInfo(
     string Id,
@@ -31,9 +31,9 @@ public readonly record struct ToolCallInfo(
     string? DiffFull = null);
 
 /// <summary>
-/// Final outcome of a tool execution. <see cref="DiffText"/> carries a unified
-/// diff when the producing tool supplied one — the feed upgrades to a
-/// <c>DiffBlock</c>-style body in that case; otherwise output lines show.
+///     Final outcome of a tool execution. <see cref="DiffText" /> carries a unified
+///     diff when the producing tool supplied one — the feed upgrades to a
+///     <c>DiffBlock</c>-style body in that case; otherwise output lines show.
 /// </summary>
 public sealed class ToolResultBody
 {
@@ -51,22 +51,22 @@ public sealed class ToolResultBody
     public string? DiffText { get; }
 
     /// <summary>
-    /// Back-compat shim over <see cref="FrameworkStatusMappers.DurationToText"/>.
-    /// Kept (not deleted, CF-E-012) because
-    /// <c>ChatBlockTests.FormatDuration_HumanBuckets</c> pins the legacy
-    /// <c>"&lt;1ms"</c> bucket for sub-millisecond durations, while
-    /// <c>DurationToText</c> returns <see cref="string.Empty"/> there
-    /// (instantaneous calls hide the duration column). Internal paint paths
-    /// call <c>DurationToText</c> directly.
+    ///     Back-compat shim over <see cref="FrameworkStatusMappers.DurationToText" />.
+    ///     Kept (not deleted, CF-E-012) because
+    ///     <c>ChatBlockTests.FormatDuration_HumanBuckets</c> pins the legacy
+    ///     <c>"&lt;1ms"</c> bucket for sub-millisecond durations, while
+    ///     <c>DurationToText</c> returns <see cref="string.Empty" /> there
+    ///     (instantaneous calls hide the duration column). Internal paint paths
+    ///     call <c>DurationToText</c> directly.
     /// </summary>
     public static string FormatDuration(TimeSpan d) =>
         FrameworkStatusMappers.DurationToText(d) is { Length: > 0 } text ? text : "<1ms";
 }
 
 /// <summary>
-/// Mutable tool-call card (widgets §3.1): created Running on ToolCallStart,
-/// completed Ok/Error with duration on ToolExecutionEnd. The timeline marks
-/// its slot dirty after each mutation — paint itself is pure over fields.
+///     Mutable tool-call card (widgets §3.1): created Running on ToolCallStart,
+///     completed Ok/Error with duration on ToolExecutionEnd. The timeline marks
+///     its slot dirty after each mutation — paint itself is pure over fields.
 /// </summary>
 public sealed class ToolCallBlock : IChatBlock
 {
@@ -75,104 +75,91 @@ public sealed class ToolCallBlock : IChatBlock
     private const char ErrorGlyph = '✖';
     private const int DefaultBodyLines = 4;
 
-    private ToolCallStatus _status;
-    private ToolResultBody? _body;
-
     public ToolCallBlock(in ToolCallInfo info)
     {
         Info = info;
-        _status = ToolCallStatus.Running;
+        Status = ToolCallStatus.Running;
         MaxBodyLines = DefaultBodyLines;
     }
 
     public ToolCallInfo Info { get; }
 
-    public ToolCallStatus Status => _status;
+    public ToolCallStatus Status { get; private set; }
 
-    public ToolResultBody? Body => _body;
+    public ToolResultBody? Body { get; private set; }
 
     /// <summary>
-    /// Framework-level <see cref="VmToolCall"/> snapshot for this block.
-    /// Bridges the pure-paint widget into the shared
-    /// <c>Harbor.Ui.Framework.ViewModels</c> vocabulary so renderers can
-    /// bind against the same status / duration / diff surface used by
-    /// Avalonia / WPF / Blazor.
+    ///     Framework-level <see cref="VmToolCall" /> snapshot for this block.
+    ///     Bridges the pure-paint widget into the shared
+    ///     <c>Harbor.Ui.Framework.ViewModels</c> vocabulary so renderers can
+    ///     bind against the same status / duration / diff surface used by
+    ///     Avalonia / WPF / Blazor.
     /// </summary>
     public VmToolCall ViewModel => new()
     {
         Id = Info.Id,
         ToolName = Info.ToolName,
         ArgsPreview = Info.ArgsSummary,
-        Status = _status switch
+        Status = Status switch
         {
             ToolCallStatus.Ok => VmToolCallStatus.Success,
             ToolCallStatus.Error => VmToolCallStatus.Error,
-            _ => VmToolCallStatus.Running,
+            _ => VmToolCallStatus.Running
         },
-        ResultPreview = _body is null ? string.Empty : _body.Output,
-        Duration = _body?.Duration ?? TimeSpan.Zero,
+        ResultPreview = Body is null ? string.Empty : Body.Output,
+        Duration = Body?.Duration ?? TimeSpan.Zero,
         IsDiffTool = Info.DiffFull is not null,
         DiffFilePath = Info.FilePath,
         DiffPreview = Info.DiffPreview,
-        DiffFull = Info.DiffFull,
+        DiffFull = Info.DiffFull
     };
 
     /// <summary>
-    /// Status in the shared <c>Harbor.Ui.Framework.ViewModels</c> vocabulary —
-    /// the single bridge that lets the framework-free <c>StatusMappers</c>
-    /// converters operate on this block. Local <c>Ok</c> maps to
-    /// <c>Success</c> (naming only; same meaning).
+    ///     Status in the shared <c>Harbor.Ui.Framework.ViewModels</c> vocabulary —
+    ///     the single bridge that lets the framework-free <c>StatusMappers</c>
+    ///     converters operate on this block. Local <c>Ok</c> maps to
+    ///     <c>Success</c> (naming only; same meaning).
     /// </summary>
-    private VmToolCallStatus ViewModelStatus => _status switch
+    private VmToolCallStatus ViewModelStatus => Status switch
     {
         ToolCallStatus.Ok => VmToolCallStatus.Success,
         ToolCallStatus.Error => VmToolCallStatus.Error,
-        _ => VmToolCallStatus.Running,
+        _ => VmToolCallStatus.Running
     };
 
     /// <summary>
-    /// Short status pill label via <c>StatusMappers.ToolCallStatusToPill</c>
-    /// (<c>"running"</c> / <c>"ok"</c> / <c>"err"</c>).
+    ///     Short status pill label via <c>StatusMappers.ToolCallStatusToPill</c>
+    ///     (<c>"running"</c> / <c>"ok"</c> / <c>"err"</c>).
     /// </summary>
     public string StatusPill => FrameworkStatusMappers.ToolCallStatusToPill(ViewModelStatus);
 
     /// <summary>
-    /// Resource key for the status brush via
-    /// <c>StatusMappers.ToolCallStatusToBrushKey</c> (e.g. <c>"MochaGreen"</c>).
-    /// Consumed by projector-level style mapping (CF-D-005); cell paint keeps
-    /// using <c>ChatPalette</c> styles (the single cell source of truth).
+    ///     Resource key for the status brush via
+    ///     <c>StatusMappers.ToolCallStatusToBrushKey</c> (e.g. <c>"MochaGreen"</c>).
+    ///     Consumed by projector-level style mapping (CF-D-005); cell paint keeps
+    ///     using <c>ChatPalette</c> styles (the single cell source of truth).
     /// </summary>
     public string StatusBrushKey => FrameworkStatusMappers.ToolCallStatusToBrushKey(ViewModelStatus);
 
     /// <summary>Collapsed-body line budget (continuation marker when exceeded).</summary>
     public int MaxBodyLines { get; set; }
 
+    public bool HasDiffText => Body?.DiffText is not null;
+
     public string Kind => "tool-call";
 
     public bool IsStreamContinuation => false;
 
-    public int BudgetBytes => 96 + (Info.ToolName.Length * 2) + (Info.ArgsSummary.Length * 2)
-        + (_body is null ? 0 : 64 + (_body.Output.Length * 2));
-
-    /// <summary>Completes the card; idempotent — first result wins.</summary>
-    public void Complete(ToolResultBody body)
-    {
-        if (_body is not null)
-        {
-            return;
-        }
-
-        _body = body;
-        _status = body.IsError ? ToolCallStatus.Error : ToolCallStatus.Ok;
-    }
+    public int BudgetBytes => 96 + Info.ToolName.Length * 2 + Info.ArgsSummary.Length * 2
+                              + (Body is null ? 0 : 64 + Body.Output.Length * 2);
 
     public BlockMeasure Measure(int width)
     {
         int lines = 1;
-        if (_body is not null)
+        if (Body is not null)
         {
             // Mirror Paint: a present DiffText replaces the output body.
-            if (_body.DiffText is not null)
+            if (Body.DiffText is not null)
             {
                 lines += DiffLineCount();
             }
@@ -188,9 +175,9 @@ public sealed class ToolCallBlock : IChatBlock
     public int CheapEstimate(int width)
     {
         int lines = 1;
-        if (_body is not null)
+        if (Body is not null)
         {
-            if (_body.DiffText is not null)
+            if (Body.DiffText is not null)
             {
                 lines += DiffLineCount();
             }
@@ -209,20 +196,45 @@ public sealed class ToolCallBlock : IChatBlock
         int y = ctx.Rect.Y;
         PaintHeader(buffer, ctx.Rect.X, y, ctx.Rect.Width);
 
-        if (_body is null)
+        if (Body is null)
         {
             return;
         }
 
         y++;
         int rows = ctx.Rect.Bottom - y;
-        if (_body.DiffText is not null)
+        if (Body.DiffText is not null)
         {
-            DiffRenderer.RenderPlain(_body.DiffText, buffer, ctx.Rect.X, y, rows);
+            DiffRenderer.RenderPlain(Body.DiffText, buffer, ctx.Rect.X, y, rows);
             return;
         }
 
         PaintOutputBody(buffer, ctx.Rect.X, y, rows);
+    }
+
+    public string RawText()
+    {
+        var sb = new StringBuilder();
+        sb.Append(RunningGlyph).Append(' ').Append(Info.ToolName);
+        if (Body is not null)
+        {
+            sb.Append(" → ").Append(Body.IsError ? "error" : "ok")
+                .Append(' ').Append(ToolResultBody.FormatDuration(Body.Duration));
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>Completes the card; idempotent — first result wins.</summary>
+    public void Complete(ToolResultBody body)
+    {
+        if (Body is not null)
+        {
+            return;
+        }
+
+        Body = body;
+        Status = body.IsError ? ToolCallStatus.Error : ToolCallStatus.Ok;
     }
 
     private void PaintHeader(ScreenBuffer buffer, int x, int y, int width)
@@ -232,17 +244,17 @@ public sealed class ToolCallBlock : IChatBlock
             return;
         }
 
-        char glyph = _status switch
+        char glyph = Status switch
         {
             ToolCallStatus.Ok => OkGlyph,
             ToolCallStatus.Error => ErrorGlyph,
-            _ => RunningGlyph,
+            _ => RunningGlyph
         };
-        var glyphStyle = _status switch
+        var glyphStyle = Status switch
         {
             ToolCallStatus.Ok => ChatPalette.ToolOk,
             ToolCallStatus.Error => ChatPalette.ToolError,
-            _ => ChatPalette.ToolRunning,
+            _ => ChatPalette.ToolRunning
         };
 
         buffer.SetText(x, y, [glyph], glyphStyle);
@@ -257,15 +269,15 @@ public sealed class ToolCallBlock : IChatBlock
         buffer.SetText(cursor, y, Info.ToolName, ChatPalette.ToolName);
         cursor += Info.ToolName.Length;
 
-        if (_body is not null)
+        if (Body is not null)
         {
             // CF-E-012: duration straight from StatusMappers.DurationToText.
             // It returns string.Empty for sub-millisecond (instantaneous) calls,
             // so the column hides instead of rendering " ()".
-            var durationText = FrameworkStatusMappers.DurationToText(_body.Duration);
+            string durationText = FrameworkStatusMappers.DurationToText(Body.Duration);
             if (durationText.Length > 0)
             {
-                var tail = $" ({durationText})";
+                string tail = $" ({durationText})";
                 buffer.SetText(cursor, y, tail, ChatPalette.Dim);
                 cursor += tail.Length;
             }
@@ -275,7 +287,7 @@ public sealed class ToolCallBlock : IChatBlock
             // screenshot baselines). StatusPill still reports "running" pre-flight.
             // No ChatPalette.ToolPill: ChatPalette lives in Harbor.DesignSystem
             // (out of scope) — the pill reuses the status glyph style instead.
-            var pill = $" [{StatusPill}]";
+            string pill = $" [{StatusPill}]";
             buffer.SetText(cursor, y, pill, glyphStyle);
             cursor += pill.Length;
         }
@@ -283,7 +295,7 @@ public sealed class ToolCallBlock : IChatBlock
         if (!string.IsNullOrEmpty(Info.ArgsSummary))
         {
             const string sep = "  ";
-            int avail = (x + width) - cursor - sep.Length;
+            int avail = x + width - cursor - sep.Length;
             if (avail > 0)
             {
                 var args = Info.ArgsSummary.AsSpan(0, Math.Min(avail, Info.ArgsSummary.Length));
@@ -294,13 +306,13 @@ public sealed class ToolCallBlock : IChatBlock
 
     private void PaintOutputBody(ScreenBuffer buffer, int x, int y, int rows)
     {
-        var output = _body!.Output.AsSpan().TrimEnd('\n');
+        var output = Body!.Output.AsSpan().TrimEnd('\n');
         if (output.IsEmpty || rows <= 0)
         {
             return;
         }
 
-        var style = _body.IsError ? ChatPalette.ToolError : ChatPalette.ToolBody;
+        var style = Body.IsError ? ChatPalette.ToolError : ChatPalette.ToolBody;
         int shown = 0;
         int cursorY = y;
         var rest = output;
@@ -346,7 +358,7 @@ public sealed class ToolCallBlock : IChatBlock
 
     private int BodyLineCount()
     {
-        var output = _body!.Output.AsSpan().TrimEnd('\n');
+        var output = Body!.Output.AsSpan().TrimEnd('\n');
         if (output.IsEmpty)
         {
             return 0;
@@ -356,34 +368,19 @@ public sealed class ToolCallBlock : IChatBlock
         return Math.Min(logical, MaxBodyLines) + (logical > MaxBodyLines ? 1 : 0);
     }
 
-    private int DiffLineCount() => DiffRenderer.CountLines(_body!.DiffText!);
-
-    public string RawText()
-    {
-        var sb = new StringBuilder();
-        sb.Append(RunningGlyph).Append(' ').Append(Info.ToolName);
-        if (_body is not null)
-        {
-            sb.Append(" → ").Append(_body.IsError ? "error" : "ok")
-              .Append(' ').Append(ToolResultBody.FormatDuration(_body.Duration));
-        }
-
-        return sb.ToString();
-    }
-
-    public bool HasDiffText => _body?.DiffText is not null;
+    private int DiffLineCount() => DiffRenderer.CountLines(Body!.DiffText!);
 }
 
 /// <summary>
-/// Minimal unified-diff blitter used by tool-card bodies before the dedicated
-/// <c>DiffBlock</c> lands (W2.3): sign + colored line, no gutter numbers, no
-/// syntax overlay. Pure functions over the diff text.
-/// CF-E-011: inline preview budget mirrors <c>HdsDiffCompact.MaxLines</c>
-/// (Avalonia) — at most <see cref="DiffPreview.MaxPreviewLines"/> content rows,
-/// then a single <c>"… diff truncated"</c> overflow row, so an unbounded
-/// foreign <c>DiffText</c> can no longer blow the card's line budget
-/// (<see cref="DiffPreview.DiffTruncatedSentinel"/> is the single source of
-/// truth for the marker text).
+///     Minimal unified-diff blitter used by tool-card bodies before the dedicated
+///     <c>DiffBlock</c> lands (W2.3): sign + colored line, no gutter numbers, no
+///     syntax overlay. Pure functions over the diff text.
+///     CF-E-011: inline preview budget mirrors <c>HdsDiffCompact.MaxLines</c>
+///     (Avalonia) — at most <see cref="DiffPreview.MaxPreviewLines" /> content rows,
+///     then a single <c>"… diff truncated"</c> overflow row, so an unbounded
+///     foreign <c>DiffText</c> can no longer blow the card's line budget
+///     (<see cref="DiffPreview.DiffTruncatedSentinel" /> is the single source of
+///     truth for the marker text).
 /// </summary>
 internal static class DiffRenderer
 {
@@ -422,7 +419,7 @@ internal static class DiffRenderer
                 '+' => ChatPalette.ToolOk,
                 '-' => ChatPalette.ToolError,
                 '@' => new CellStyle(PackedColor.Indexed(6)),
-                _ => ChatPalette.ToolBody,
+                _ => ChatPalette.ToolBody
             };
 
             int avail = Math.Max(0, buffer.Cols - x);

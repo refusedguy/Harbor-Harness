@@ -1,9 +1,9 @@
 namespace Harbor.Tui.CellForge.Capabilities;
 
 /// <summary>
-/// Escape-sequence writers for terminal mode control (design §2.2/§3.1/§4).
-/// Static formatters ONLY — nothing here touches Console directly (lesson
-/// from AnsiTui's Ansi class); callers write the returned strings themselves.
+///     Escape-sequence writers for terminal mode control (design §2.2/§3.1/§4).
+///     Static formatters ONLY — nothing here touches Console directly (lesson
+///     from AnsiTui's Ansi class); callers write the returned strings themselves.
 /// </summary>
 public static class TerminalQueries
 {
@@ -11,9 +11,6 @@ public static class TerminalQueries
 
     /// <summary>Query currently-pushed kitty flags: CSI ? u (answer: CSI ? flags u).</summary>
     public const string KittyQuery = "\u001B[?u";
-
-    /// <summary>Stacked push of kitty protocol flags: CSI &gt; flags u.</summary>
-    public static string KittyPush(uint flags) => $"\u001B[>{flags}u";
 
     /// <summary>Pop one level of kitty flags: CSI &lt; u.</summary>
     public const string KittyPop = "\u001B[<u";
@@ -23,16 +20,20 @@ public static class TerminalQueries
 
     // ── DECRQM ────────────────────────────────────────────────────────────
 
-    /// <summary>DECRQM request for bracketed-paste mode support: CSI ? Pd $ p
-    /// (answer: CSI ? Ps ; Pv $ y). Used as the fallback probe when the kitty
-    /// query stays silent (§2.4).</summary>
+    /// <summary>
+    ///     DECRQM request for bracketed-paste mode support: CSI ? Pd $ p
+    ///     (answer: CSI ? Ps ; Pv $ y). Used as the fallback probe when the kitty
+    ///     query stays silent (§2.4).
+    /// </summary>
     public const string DecRqmBracketedPaste = "\u001B[?2004$p";
 
     /// <summary>DECRQM response mode number for bracketed paste.</summary>
     public const int BracketedPasteMode = 2004;
 
-    /// <summary>DECRQM request for synchronized-output mode support:
-    /// CSI ? 2026 $ p (answer: CSI ? 2026 ; Pv $ y) — celldiff §3.4.</summary>
+    /// <summary>
+    ///     DECRQM request for synchronized-output mode support:
+    ///     CSI ? 2026 $ p (answer: CSI ? 2026 ; Pv $ y) — celldiff §3.4.
+    /// </summary>
     public const string DecRqmSyncUpdates = "\u001B[?2026$p";
 
     /// <summary>DECRQM response mode number for synchronized output.</summary>
@@ -56,15 +57,22 @@ public static class TerminalQueries
 
     // ── OSC 11 background-color report (auto-theme) ───────────────────────
 
-    /// <summary>Query the terminal's background color: OSC 11 ; ? BEL.
-    /// Feed the raw response to Harbor.DesignSystem's
-    /// TerminalBackgroundProbe.Detect for theme auto-picking.</summary>
+    /// <summary>
+    ///     Query the terminal's background color: OSC 11 ; ? BEL.
+    ///     Feed the raw response to Harbor.DesignSystem's
+    ///     TerminalBackgroundProbe.Detect for theme auto-picking.
+    /// </summary>
     public const string Osc11BackgroundQuery = "\u001B]11;?\u0007";
 
     // ── OSC 99 desktop-notification capability probe (kitty) ─────────────
 
-    /// <summary>kitty desktop-notification support query: OSC 99 ; i=harbor :
-    /// p=? BEL (answer: OSC 99 ; i=… : p=&lt;payload types&gt; …). Terminals
-    /// without the protocol ignore the query silently — no timeout harm.</summary>
+    /// <summary>
+    ///     kitty desktop-notification support query: OSC 99 ; i=harbor :
+    ///     p=? BEL (answer: OSC 99 ; i=… : p=&lt;payload types&gt; …). Terminals
+    ///     without the protocol ignore the query silently — no timeout harm.
+    /// </summary>
     public const string Osc99NotifyProbe = "\u001B]99;i=harbor:p=?\u0007";
+
+    /// <summary>Stacked push of kitty protocol flags: CSI &gt; flags u.</summary>
+    public static string KittyPush(uint flags) => $"\u001B[>{flags}u";
 }

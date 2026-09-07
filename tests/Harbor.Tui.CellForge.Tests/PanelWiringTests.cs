@@ -1,38 +1,23 @@
-using System.Collections.Immutable;
+using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Collections.Immutable;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CF-E-002 wiring (TOP-1 #27): the renderer owns a <see cref="CellForgePanelRegistry"/>
-/// with the 7 cell-native builtins in Spectre Alt+1..9 slot order,
-/// <c>InitializeAsync</c> seeds them into <see cref="UiState"/>,
-/// <see cref="ChatScreenPanelDock"/> draws visible panels through
-/// <see cref="CellForgePanelAdapter"/> into <see cref="LayoutTree"/> dock regions
-/// (or the bottom-stack fallback), and focused-panel keys route to <c>OnKey</c>.
+///     CF-E-002 wiring (TOP-1 #27): the renderer owns a <see cref="CellForgePanelRegistry" />
+///     with the 7 cell-native builtins in Spectre Alt+1..9 slot order,
+///     <c>InitializeAsync</c> seeds them into <see cref="UiState" />,
+///     <see cref="ChatScreenPanelDock" /> draws visible panels through
+///     <see cref="CellForgePanelAdapter" /> into <see cref="LayoutTree" /> dock regions
+///     (or the bottom-stack fallback), and focused-panel keys route to <c>OnKey</c>.
 /// </summary>
 public class PanelWiringTests
 {
-    private sealed class FakeServices : IServiceProvider
-    {
-        private readonly Dictionary<Type, object> _map = new();
-
-        public FakeServices Add<T>(T instance)
-            where T : class
-        {
-            _map[typeof(T)] = instance;
-            return this;
-        }
-
-        public object? GetService(Type serviceType) =>
-            _map.TryGetValue(serviceType, out var value) ? value : null;
-    }
 
     private static readonly string[] ExpectedOrder =
     [
@@ -43,7 +28,7 @@ public class PanelWiringTests
         "token-breakdown",
         "diagnostics",
         "logs",
-        "session-sidebar",
+        "session-sidebar"
     ];
 
     private static CellForgeTuiRenderer Create(RecordingBackend backend) =>
@@ -138,7 +123,7 @@ public class PanelWiringTests
 
         ChatScreenPanelDock.AttachPanels(
             screen, renderer.Panels.Registry, renderer.Store.State,
-            services: null, viewportWidth: 100, viewportHeight: 40);
+            null, 100, 40);
 
         await Assert.That(ChatScreenPanelDock.HasDocks(screen)).IsTrue();
         var dock = FindDock(screen, CellForgeDockPanel.BottomId);
@@ -157,7 +142,7 @@ public class PanelWiringTests
         owner.Register(new CellForgeTodoListPanel());
         var store = new UiStore(new UiState
         {
-            Lines = ImmutableArray.Create(new ChatLine(ChatRole.ToolResult, "[ ] Write code")),
+            Lines = ImmutableArray.Create(new ChatLine(ChatRole.ToolResult, "[ ] Write code"))
         });
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new UiMsg.TogglePanel("todo-list"));
@@ -165,7 +150,7 @@ public class PanelWiringTests
         var screen = BuildScreen();
         ChatScreenPanelDock.AttachPanels(
             screen, owner.Registry, store.State,
-            services: null, viewportWidth: 100, viewportHeight: 40);
+            null, 100, 40);
 
         var dock = FindDock(screen, CellForgeDockPanel.RightId);
         await Assert.That(dock.Providers.Count).IsEqualTo(1);
@@ -187,7 +172,7 @@ public class PanelWiringTests
         var screen = BuildScreen();
         ChatScreenPanelDock.AttachPanels(
             screen, owner.Registry, store.State,
-            services: null, viewportWidth: 100, viewportHeight: 40);
+            null, 100, 40);
 
         var buffer = new ScreenBuffer(100, 40);
         PaintAll(screen, buffer);
@@ -196,7 +181,7 @@ public class PanelWiringTests
         // A fresh snapshot (same visible set, new numbers) refreshes the leaf
         // payload in place — no re-attach, no tree surgery — and repaints.
         var next = store.State with { Cost = new CostSnapshot(2500, 100, 0.01m) };
-        ChatScreenPanelDock.UpdatePanels(screen, owner.Registry, next, services: null);
+        ChatScreenPanelDock.UpdatePanels(screen, owner.Registry, next, null);
 
         var after = new ScreenBuffer(100, 40);
         PaintAll(screen, after);
@@ -214,7 +199,7 @@ public class PanelWiringTests
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new UiMsg.TogglePanel("help"));
         _ = store.Dispatch(new UiMsg.FocusPanel("help"));
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new FakeServices().Add(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
             owner.Registry, store.State, UiKey.ForChar('?'), services);
@@ -232,7 +217,7 @@ public class PanelWiringTests
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new UiMsg.TogglePanel("logs"));
         _ = store.Dispatch(new UiMsg.FocusPanel("logs"));
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new FakeServices().Add(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
             owner.Registry, store.State, new UiKey(UiKeyCode.F12), services);
@@ -249,7 +234,7 @@ public class PanelWiringTests
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new UiMsg.TogglePanel("help")); // Visible, never focused
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new FakeServices().Add(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
             owner.Registry, store.State, UiKey.ForChar('?'), services);
@@ -266,7 +251,7 @@ public class PanelWiringTests
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new UiMsg.FocusPanel("help"));
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new FakeServices().Add(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
             new PanelRegistry(), store.State, UiKey.ForChar('?'), services);
@@ -282,7 +267,7 @@ public class PanelWiringTests
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new UiMsg.FocusPanel("todo-list"));
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new FakeServices().Add(store);
 
         // Todo-list is non-interactive: OnKey returns false, routing must surface it.
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
@@ -306,11 +291,26 @@ public class PanelWiringTests
 
         var buffer = new ScreenBuffer(100, 40);
         int painted = ChatScreenPanelDock.PaintBottomStack(
-            buffer, screen.Timeline.Rect, owner.Registry, store.State, services: null);
+            buffer, screen.Timeline.Rect, owner.Registry, store.State, null);
 
         await Assert.That(painted > 0).IsTrue();
         string art = GridDump.Art(buffer);
         await Assert.That(art).Contains("Token Breakdown");
         await Assert.That(art).Contains("1.5K");
+    }
+
+    private sealed class FakeServices : IServiceProvider
+    {
+        private readonly Dictionary<Type, object> _map = new();
+
+        public object? GetService(Type serviceType) =>
+            _map.TryGetValue(serviceType, out object? value) ? value : null;
+
+        public FakeServices Add<T>(T instance)
+            where T : class
+        {
+            _map[typeof(T)] = instance;
+            return this;
+        }
     }
 }

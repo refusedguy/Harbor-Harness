@@ -1,12 +1,13 @@
-using System.Net;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
+
 /// <summary>
 ///     Tests for <see cref="WebFetchTool" /> — mock HttpMessageHandler returns a fixed
 ///     HTML payload, and we verify the markdown conversion + metadata extraction. No real
@@ -135,7 +136,7 @@ public class WebFetchToolTests
             // resolves DNS for every target regardless of the injected
             // client — fail-closed on hosts that don't resolve (CI runners).
             // "*" disables the address check for the whole mock harness.
-            allowedHosts: ["*"]);
+            ["*"]);
 
     private static ToolContext CreateContext() => new(
         "test-session",

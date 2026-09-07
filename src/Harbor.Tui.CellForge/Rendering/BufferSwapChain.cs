@@ -1,10 +1,10 @@
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
-/// Immutable BACK/FRONT buffer pair handed between threads as one unit
-/// (renderer-moat hot-swap runtime): publishing is a single reference write,
-/// so a consumer either sees the whole pair or none of it — a torn half-pair
-/// is unrepresentable.
+///     Immutable BACK/FRONT buffer pair handed between threads as one unit
+///     (renderer-moat hot-swap runtime): publishing is a single reference write,
+///     so a consumer either sees the whole pair or none of it — a torn half-pair
+///     is unrepresentable.
 /// </summary>
 public sealed class BufferPair
 {
@@ -22,18 +22,17 @@ public sealed class BufferPair
 }
 
 /// <summary>
-/// Lock-free ScreenBuffer handoff for the hot-swap runtime (renderer-moat T2):
-/// producers publish a freshly painted or re-geometry'd <see cref="BufferPair" />
-/// from any thread; the render loop adopts it at the next frame boundary —
-/// the loop never stops, blocks or locks. Synchronization is volatile reads +
-/// Interlocked CAS exclusively (no Monitor anywhere), so under load there is
-/// no lock contention by construction.
-///
-/// Publication is last-writer-wins: a newer offer displaces a pending one
-/// (swap events are rare resize/attach/theme moments, not steady-state
-/// traffic — the displaced pair is dropped to the pool by its producer).
-/// The slot pool recycles retired buffers with bounded memory and zero
-/// per-rent allocations within retained capacity.
+///     Lock-free ScreenBuffer handoff for the hot-swap runtime (renderer-moat T2):
+///     producers publish a freshly painted or re-geometry'd <see cref="BufferPair" />
+///     from any thread; the render loop adopts it at the next frame boundary —
+///     the loop never stops, blocks or locks. Synchronization is volatile reads +
+///     Interlocked CAS exclusively (no Monitor anywhere), so under load there is
+///     no lock contention by construction.
+///     Publication is last-writer-wins: a newer offer displaces a pending one
+///     (swap events are rare resize/attach/theme moments, not steady-state
+///     traffic — the displaced pair is dropped to the pool by its producer).
+///     The slot pool recycles retired buffers with bounded memory and zero
+///     per-rent allocations within retained capacity.
 /// </summary>
 public sealed class BufferSwapChain
 {
@@ -53,8 +52,10 @@ public sealed class BufferSwapChain
         Volatile.Write(ref _pending, offer);
     }
 
-    /// <summary>Takes the pending offer atomically (null when none is pending
-    /// or a concurrent consumer won the race — callers simply re-check next frame).</summary>
+    /// <summary>
+    ///     Takes the pending offer atomically (null when none is pending
+    ///     or a concurrent consumer won the race — callers simply re-check next frame).
+    /// </summary>
     public BufferPair? TryTake()
     {
         var offer = Volatile.Read(ref _pending);
@@ -67,9 +68,9 @@ public sealed class BufferSwapChain
     }
 
     /// <summary>
-    /// Claims a pooled buffer (resized to <paramref name="cols"/>×<paramref name="rows"/>,
-    /// blanked) or allocates a fresh one when the pool is empty. Resizing within
-    /// retained capacity is allocation-free.
+    ///     Claims a pooled buffer (resized to <paramref name="cols" />×<paramref name="rows" />,
+    ///     blanked) or allocates a fresh one when the pool is empty. Resizing within
+    ///     retained capacity is allocation-free.
     /// </summary>
     public ScreenBuffer Rent(int cols, int rows)
     {

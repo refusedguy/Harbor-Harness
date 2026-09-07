@@ -1,9 +1,6 @@
-using Harbor.Ipc.Client;
-using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ipc.Tests;
 
 /// <summary>

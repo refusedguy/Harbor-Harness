@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 namespace Harbor.Plugins.Runtime;
+
 /// <summary>
 ///     Result of compiling a single CS-source plugin. Success carries the live
 ///     <see cref="CompiledPlugin" />; failure carries the Roslyn diagnostics as a

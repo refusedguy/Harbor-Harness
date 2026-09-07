@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-
 namespace Harbor.Providers.OpenAiCompatible;
 
 /// <summary>

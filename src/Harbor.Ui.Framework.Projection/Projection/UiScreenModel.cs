@@ -1,7 +1,5 @@
-using System.Collections.Immutable;
-using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
-
+using Harbor.Ui.Framework.State;
 namespace Harbor.Ui.Framework.Projection;
 
 public sealed record UiHeaderModel(

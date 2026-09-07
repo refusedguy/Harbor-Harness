@@ -1,7 +1,7 @@
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
+using System.Collections.Immutable;
 namespace Harbor.E2E.Framework;
 
 /// <summary>
@@ -118,7 +118,7 @@ public class StateTestRunnerTests
     [Test]
     public async Task ExtractExpectedText_PanelFocusedState_IncludesPanelId()
     {
-        var state = StateTestRunner.PanelFocusedState("logs");
+        var state = StateTestRunner.PanelFocusedState();
 
         string text = StateTestRunner.ExtractExpectedText(state);
 
@@ -128,7 +128,7 @@ public class StateTestRunnerTests
     [Test]
     public async Task ExtractExpectedText_ScrolledState_IncludesScrollOffset()
     {
-        var state = StateTestRunner.ScrolledState(scrollOffset: 5, totalLines: 30, viewportLines: 20);
+        var state = StateTestRunner.ScrolledState();
 
         string text = StateTestRunner.ExtractExpectedText(state);
 
@@ -138,7 +138,7 @@ public class StateTestRunnerTests
     [Test]
     public async Task ExtractExpectedText_HistoryNavigatedState_IncludesHistoryText()
     {
-        var state = StateTestRunner.HistoryNavigatedState("first prompt", historyIndex: 0);
+        var state = StateTestRunner.HistoryNavigatedState("first prompt");
 
         string text = StateTestRunner.ExtractExpectedText(state);
 
@@ -182,7 +182,7 @@ public class StateTestRunnerTests
     {
         var state = new UiState
         {
-            Lines = System.Collections.Immutable.ImmutableArray.Create(
+            Lines = ImmutableArray.Create(
                 new ChatLine(ChatRole.User, "User message"),
                 new ChatLine(ChatRole.Assistant, "Assistant reply"),
                 new ChatLine(ChatRole.Tool, "read: {}"),
@@ -234,7 +234,7 @@ public class StateTestRunnerTests
     {
         var state = new UiState
         {
-            Lines = System.Collections.Immutable.ImmutableArray.Create(
+            Lines = ImmutableArray.Create(
                 new ChatLine(ChatRole.User, ""),
                 new ChatLine(ChatRole.Assistant, "Real text")
             ),
@@ -253,7 +253,7 @@ public class StateTestRunnerTests
         var state = new UiState
         {
             Active = new ActiveMessage("stream", "think"),
-            Lines = System.Collections.Immutable.ImmutableArray.Create(
+            Lines = ImmutableArray.Create(
                 new ChatLine(ChatRole.User, "user line")
             ),
             Status = "running",
@@ -313,7 +313,7 @@ public class StateTestRunnerTests
     [Test]
     public async Task StateFactory_PanelFocusedState_SetsCorrectProperties()
     {
-        var state = StateTestRunner.PanelFocusedState("logs");
+        var state = StateTestRunner.PanelFocusedState();
 
         await Assert.That(state.Focus).IsEqualTo(FocusMode.Panel);
         await Assert.That(state.FocusedPanelId).IsEqualTo("logs");
@@ -325,7 +325,7 @@ public class StateTestRunnerTests
     [Test]
     public async Task StateFactory_ScrolledState_SetsCorrectProperties()
     {
-        var state = StateTestRunner.ScrolledState(scrollOffset: 5, totalLines: 30, viewportLines: 20);
+        var state = StateTestRunner.ScrolledState();
 
         await Assert.That(state.ScrollOffset).IsEqualTo(5);
         await Assert.That(state.TotalLines).IsEqualTo(30);
@@ -335,7 +335,7 @@ public class StateTestRunnerTests
     [Test]
     public async Task StateFactory_HistoryNavigatedState_SetsCorrectProperties()
     {
-        var state = StateTestRunner.HistoryNavigatedState("current", historyIndex: 1);
+        var state = StateTestRunner.HistoryNavigatedState("current", 1);
 
         await Assert.That(state.Input.Text).IsEqualTo("current");
         await Assert.That(state.Input.HistoryIndex).IsEqualTo(1);

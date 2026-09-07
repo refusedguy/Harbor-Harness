@@ -1,10 +1,11 @@
-using System.Text;
 using Harbor.Abstractions.Lsp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Surgical string replace. oldString must be unique unless replaceAll.
 ///     Multi-edit applies in order on the updated buffer.
@@ -236,7 +237,7 @@ public sealed class EditTool : ITool
     {
         try
         {
-            if (context.Services?.GetService<ILspService>() is not { } lsp)
+            if (context.Services?.GetService<ILspService>() is not {} lsp)
                 return string.Empty;
             if (!lsp.SupportsFile(path))
                 return string.Empty;

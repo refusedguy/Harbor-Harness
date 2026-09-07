@@ -1,17 +1,34 @@
 using System.Globalization;
-using System.Threading;
-using Harbor.Ui.Framework.Rendering;
-
 namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>
-/// Typed status payload (widgets §3.7, grok StatusLineContext): «нет данных ⇒
-/// None, не ноль» — unknown token counts mean the context segment is absent,
-/// never zero-filled. <see cref="BuildSegments"/> packs a reusable workspace
-/// span; no string interpolation per frame.
+///     Typed status payload (widgets §3.7, grok StatusLineContext): «нет данных ⇒
+///     None, не ноль» — unknown token counts mean the context segment is absent,
+///     never zero-filled. <see cref="BuildSegments" /> packs a reusable workspace
+///     span; no string interpolation per frame.
 /// </summary>
 public sealed class StatusViewModel
 {
+
+    public const double CtxWarnThreshold = 0.50;
+    public const double CtxDangerThreshold = 0.85;
+    public const int CtxCells = 6;
+    private const char Filled = '▰';
+    private const char Empty = '▱';
+
+    /// <summary>Precomputed bars — BuildSegments stays allocation-free.</summary>
+    private static readonly string[] BarCache =
+    [
+        new(Empty, CtxCells),
+        new string(Filled, 1) + new string(Empty, CtxCells - 1),
+        new string(Filled, 2) + new string(Empty, CtxCells - 2),
+        new string(Filled, 3) + new string(Empty, CtxCells - 3),
+        new string(Filled, 4) + new string(Empty, CtxCells - 4),
+        new string(Filled, 5) + new string(Empty, CtxCells - 5),
+        new(Filled, CtxCells)
+    ];
+
+    private int _mascotSignal;
     /// <summary>Model id — fixed-priority segment, survives truncation.</summary>
     public string Model { get; set; } = string.Empty;
 
@@ -21,35 +38,41 @@ public sealed class StatusViewModel
     /// <summary>Token totals text ("12.3k↑ 4.5k↓") — second from the right.</summary>
     public string? Tokens { get; set; }
 
-    /// <summary>Retry countdown line ("retry 2/3 in 4s") — a fixed-priority
-    /// Warning segment while the host feeds it; null when no retry is pending.
-    /// Set once per change (precomputed via <see cref="RetryCountdown.Line" />),
-    /// never interpolated per frame.</summary>
+    /// <summary>
+    ///     Retry countdown line ("retry 2/3 in 4s") — a fixed-priority
+    ///     Warning segment while the host feeds it; null when no retry is pending.
+    ///     Set once per change (precomputed via <see cref="RetryCountdown.Line" />),
+    ///     never interpolated per frame.
+    /// </summary>
     public string? Retry { get; set; }
 
     public StatusBarMode Mode { get; set; }
 
-    /// <summary>Fine-grained agent phase (mascot-brand T1): disambiguates
-    /// Running into thinking / tool-call and flags end-of-run outcomes for the
-    /// mascot. <see cref="AgentPhase.Auto" /> derives from <see cref="Mode" /> alone.</summary>
+    /// <summary>
+    ///     Fine-grained agent phase (mascot-brand T1): disambiguates
+    ///     Running into thinking / tool-call and flags end-of-run outcomes for the
+    ///     mascot. <see cref="AgentPhase.Auto" /> derives from <see cref="Mode" /> alone.
+    /// </summary>
     public AgentPhase Phase { get; set; }
-
-    private int _mascotSignal;
-
-    /// <summary>Arms a one-shot mascot reaction (mascot-brand T3). Thread-safe:
-    /// events arrive on bus threads while the render thread consumes. Latest
-    /// signal wins; the panel that renders the mascot owns the consume.</summary>
-    public void SignalMascot(MascotReaction reaction) =>
-        Interlocked.Exchange(ref _mascotSignal, (int)reaction);
-
-    /// <summary>Render-thread consume — exactly one caller receives each
-    /// armed reaction; everyone else sees <see cref="MascotReaction.None" />.</summary>
-    public MascotReaction ConsumeMascotSignal() =>
-        (MascotReaction)Interlocked.Exchange(ref _mascotSignal, 0);
 
     public int? ContextTokensUsed { get; private set; }
 
     public int ContextWindow { get; private set; }
+
+    /// <summary>
+    ///     Arms a one-shot mascot reaction (mascot-brand T3). Thread-safe:
+    ///     events arrive on bus threads while the render thread consumes. Latest
+    ///     signal wins; the panel that renders the mascot owns the consume.
+    /// </summary>
+    public void SignalMascot(MascotReaction reaction) =>
+        Interlocked.Exchange(ref _mascotSignal, (int)reaction);
+
+    /// <summary>
+    ///     Render-thread consume — exactly one caller receives each
+    ///     armed reaction; everyone else sees <see cref="MascotReaction.None" />.
+    /// </summary>
+    public MascotReaction ConsumeMascotSignal() =>
+        (MascotReaction)Interlocked.Exchange(ref _mascotSignal, 0);
 
     /// <summary>grok None-semantics: false when the provider reported nothing.</summary>
     public bool TryGetContextTokens(out int used)
@@ -73,77 +96,58 @@ public sealed class StatusViewModel
         Cost = costUsd is null ? null : "$" + costUsd.Value.ToString("0.####", CultureInfo.InvariantCulture);
     }
 
-    /// <summary>Token-only pull feed (host polling <c>ITokenTracker.GetStats()</c>):
-    /// refreshes the token segment and PRESERVES any cost a richer source
-    /// already reported — pull feeds must never erase event-pushed cost.</summary>
-    public void SetUsage(long inputTokens, long outputTokens)
-    {
-        Tokens = FormatCount(inputTokens) + "↑ " + FormatCount(outputTokens) + "↓";
-    }
+    /// <summary>
+    ///     Token-only pull feed (host polling <c>ITokenTracker.GetStats()</c>):
+    ///     refreshes the token segment and PRESERVES any cost a richer source
+    ///     already reported — pull feeds must never erase event-pushed cost.
+    /// </summary>
+    public void SetUsage(long inputTokens, long outputTokens) => Tokens = FormatCount(inputTokens) + "↑ " + FormatCount(outputTokens) + "↓";
 
-    /// <summary>Fills <paramref name="workspace"/> left-to-right; returns segment count.</summary>
+    /// <summary>Fills <paramref name="workspace" /> left-to-right; returns segment count.</summary>
     public int BuildSegments(Span<StatusSeg> workspace)
     {
         int n = 0;
         if (!string.IsNullOrEmpty(Model))
         {
-            workspace[n++] = new StatusSeg(Model, StatusAccent.Accent, FixedPriority: true);
+            workspace[n++] = new StatusSeg(Model, StatusAccent.Accent, true);
         }
 
         switch (Mode)
         {
             case StatusBarMode.AwaitingApproval:
-                workspace[n++] = new StatusSeg("⏸ awaiting approval", StatusAccent.Warning, FixedPriority: true);
+                workspace[n++] = new StatusSeg("⏸ awaiting approval", StatusAccent.Warning, true);
                 break;
             case StatusBarMode.Compacting:
-                workspace[n++] = new StatusSeg("compacting…", StatusAccent.Dim, FixedPriority: true);
+                workspace[n++] = new StatusSeg("compacting…", StatusAccent.Dim, true);
                 break;
         }
 
         if (!string.IsNullOrEmpty(Retry))
         {
-            workspace[n++] = new StatusSeg(Retry!, StatusAccent.Warning, FixedPriority: true);
+            workspace[n++] = new StatusSeg(Retry!, StatusAccent.Warning, true);
         }
 
-        if (TryGetContextTokens(out var used))
+        if (TryGetContextTokens(out int used))
         {
             double ratio = Math.Clamp((double)used / ContextWindow, 0, 1);
             var accent = ratio >= CtxDangerThreshold ? StatusAccent.Error
                 : ratio >= CtxWarnThreshold ? StatusAccent.Warning
                 : StatusAccent.Success;
-            workspace[n++] = new StatusSeg(ContextBar(ratio), accent, FixedPriority: false);
+            workspace[n++] = new StatusSeg(ContextBar(ratio), accent, false);
         }
 
         if (!string.IsNullOrEmpty(Tokens))
         {
-            workspace[n++] = new StatusSeg(Tokens!, StatusAccent.Dim, FixedPriority: false);
+            workspace[n++] = new StatusSeg(Tokens!, StatusAccent.Dim, false);
         }
 
         if (!string.IsNullOrEmpty(Cost))
         {
-            workspace[n++] = new StatusSeg(Cost!, StatusAccent.Dim, FixedPriority: false);
+            workspace[n++] = new StatusSeg(Cost!, StatusAccent.Dim, false);
         }
 
         return n;
     }
-
-    public const double CtxWarnThreshold = 0.50;
-    public const double CtxDangerThreshold = 0.85;
-    public const int CtxCells = 6;
-    private const char Filled = '▰';
-    private const char Empty = '▱';
-
-    /// <summary>Precomputed bars — BuildSegments stays allocation-free.</summary>
-    private static readonly string[] BarCache =
-    [
-        new string(Empty, CtxCells),
-        new string(Filled, 1) + new string(Empty, CtxCells - 1),
-        new string(Filled, 2) + new string(Empty, CtxCells - 2),
-        new string(Filled, 3) + new string(Empty, CtxCells - 3),
-        new string(Filled, 4) + new string(Empty, CtxCells - 4),
-        new string(Filled, 5) + new string(Empty, CtxCells - 5),
-        new string(Filled, CtxCells),
-    ];
 
     internal static string ContextBar(double ratio)
     {
@@ -155,7 +159,7 @@ public sealed class StatusViewModel
     {
         >= 1_000_000 => (v / 1_000_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "M",
         >= 1_000 => (v / 1_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "k",
-        _ => v.ToString(CultureInfo.InvariantCulture),
+        _ => v.ToString(CultureInfo.InvariantCulture)
     };
 }
 
@@ -169,7 +173,7 @@ public static class StatusBarWidget
         StatusAccent.Success => new CellStyle(PackedColor.Indexed(2)),
         StatusAccent.Warning => new CellStyle(PackedColor.Indexed(3)),
         StatusAccent.Error => new CellStyle(PackedColor.Indexed(1)),
-        _ => CellStyle.Plain,
+        _ => CellStyle.Plain
     };
 
     public static void Paint(ScreenBuffer buffer, Rect rect, ReadOnlySpan<StatusSeg> segs)

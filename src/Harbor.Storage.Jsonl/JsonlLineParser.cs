@@ -1,5 +1,4 @@
-using System.Text.Json;
-
+using System.Text;
 namespace Harbor.Storage.Jsonl;
 
 /// <summary>
@@ -17,15 +16,15 @@ namespace Harbor.Storage.Jsonl;
 ///         raw span is captured from the line buffer via token indexes and
 ///         parsed by a second reader over the same memory. Allocations are
 ///         limited to the strings that end up inside the returned message
-///         object graph (plus a <see cref="JsonElement"/> for tool-call args,
+///         object graph (plus a <see cref="JsonElement" /> for tool-call args,
 ///         which is part of the model).
 ///     </para>
 ///     <para>
 ///         <b>Fidelity:</b> semantics mirror the previous
 ///         <c>ParseMessageLine</c> — same required-field checks, same error
-///         messages, same <see cref="StopReason"/> normalization (the span
+///         messages, same <see cref="StopReason" /> normalization (the span
 ///         fast path covers every value this store writes; anything else
-///         falls back to <see cref="StopReasonJsonConverter.Parse"/>).
+///         falls back to <see cref="StopReasonJsonConverter.Parse" />).
 ///     </para>
 /// </remarks>
 internal static class JsonlLineParser
@@ -34,15 +33,6 @@ internal static class JsonlLineParser
     {
         CommentHandling = JsonCommentHandling.Skip
     };
-
-    /// <summary>Parsed role of a message line.</summary>
-    private enum MessageRole : byte
-    {
-        Unknown,
-        User,
-        Assistant,
-        ToolResult
-    }
 
     /// <summary>
     ///     Parse one JSONL line (raw UTF-8) into an <see cref="AgentMessage" />.
@@ -61,7 +51,7 @@ internal static class JsonlLineParser
             string? id = null;
             DateTimeOffset createdAt = default;
             string? parentId = null;
-            MessageRole role = MessageRole.Unknown;
+            var role = MessageRole.Unknown;
             bool hasRole = false;
             bool isMessage = false;
             ReadOnlySpan<byte> roleSpan = default;
@@ -76,7 +66,7 @@ internal static class JsonlLineParser
                 if (reader.TokenType != JsonTokenType.PropertyName)
                     continue;
 
-                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                var prop = reader.ValueSpan;
                 reader.Read();
 
                 switch (MatchLineProperty(prop))
@@ -122,7 +112,7 @@ internal static class JsonlLineParser
 
             if (role == MessageRole.Unknown)
                 return Result.Failure<AgentMessage>(
-                    $"message {id}: unknown role '{System.Text.Encoding.UTF8.GetString(roleSpan)}'");
+                    $"message {id}: unknown role '{Encoding.UTF8.GetString(roleSpan)}'");
 
             if (!hasPayload)
                 return Result.Failure<AgentMessage>($"message {id}: missing 'payload'");
@@ -163,7 +153,7 @@ internal static class JsonlLineParser
                 if (reader.TokenType != JsonTokenType.PropertyName)
                     continue;
 
-                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                var prop = reader.ValueSpan;
                 reader.Read();
 
                 if (MatchUserProperty(prop) == UserProperty.Content)
@@ -209,7 +199,7 @@ internal static class JsonlLineParser
                 if (reader.TokenType != JsonTokenType.PropertyName)
                     continue;
 
-                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                var prop = reader.ValueSpan;
                 reader.Read();
 
                 switch (MatchAssistantProperty(prop))
@@ -222,7 +212,7 @@ internal static class JsonlLineParser
                         break;
                     case AssistantProperty.Usage:
                         usage = JsonSerializer.Deserialize(ref reader, JsonlCodecContext.Default.Usage)
-                            ?? new Usage(0, 0);
+                                ?? new Usage(0, 0);
                         break;
                     case AssistantProperty.Model:
                         model = reader.GetString();
@@ -275,7 +265,7 @@ internal static class JsonlLineParser
                 if (reader.TokenType != JsonTokenType.PropertyName)
                     continue;
 
-                ReadOnlySpan<byte> prop = reader.ValueSpan;
+                var prop = reader.ValueSpan;
                 reader.Read();
 
                 if (MatchToolResultProperty(prop) != ToolResultProperty.Results
@@ -301,7 +291,7 @@ internal static class JsonlLineParser
                         if (reader.TokenType != JsonTokenType.PropertyName)
                             continue;
 
-                        ReadOnlySpan<byte> rProp = reader.ValueSpan;
+                        var rProp = reader.ValueSpan;
                         reader.Read();
 
                         switch (MatchResultEntryProperty(rProp))
@@ -353,7 +343,7 @@ internal static class JsonlLineParser
             if (reader.TokenType != JsonTokenType.StartObject)
                 continue;
 
-            PartType partType = PartType.Unknown;
+            var partType = PartType.Unknown;
             string? text = null;
             string? partId = null;
             string? toolName = null;
@@ -368,7 +358,7 @@ internal static class JsonlLineParser
                 if (reader.TokenType != JsonTokenType.PropertyName)
                     continue;
 
-                ReadOnlySpan<byte> pProp = reader.ValueSpan;
+                var pProp = reader.ValueSpan;
                 reader.Read();
 
                 switch (MatchPartProperty(pProp))
@@ -420,16 +410,6 @@ internal static class JsonlLineParser
 
         return parts;
     }
-
-    // ── Property matchers (zero-alloc, UTF-8 span compare) ─────────────────
-
-    private enum LineProperty : byte { Other, Type, Id, CreatedAt, ParentId, Role, Payload }
-    private enum UserProperty : byte { Other, Content, Agent, Model }
-    private enum AssistantProperty : byte { Other, Parts, StopReason, Usage, Model, IsSummary, SummaryFirstKeptId }
-    private enum ToolResultProperty : byte { Other, Results }
-    private enum ResultEntryProperty : byte { Other, ToolCallId, ToolName, Output, IsError }
-    private enum PartProperty : byte { Other, Type, Text, Id, ToolName, Args, Path, MimeType, SizeBytes }
-    private enum PartType : byte { Unknown, Text, Thinking, ToolCall, File }
 
     private static LineProperty MatchLineProperty(ReadOnlySpan<byte> p) => p switch
     {
@@ -508,7 +488,7 @@ internal static class JsonlLineParser
 
     /// <summary>
     ///     Span fast path covering every casing/variant
-    ///     <see cref="StopReasonJsonConverter.Parse"/> handles; unknown values
+    ///     <see cref="StopReasonJsonConverter.Parse" /> handles; unknown values
     ///     fall back to the converter via a one-off string (error path only).
     /// </summary>
     private static StopReason ParseStopReason(ReadOnlySpan<byte> p)
@@ -518,16 +498,41 @@ internal static class JsonlLineParser
         if (p.SequenceEqual("length"u8) || p.SequenceEqual("max_tokens"u8) || p.SequenceEqual("max_tokens_length"u8))
             return StopReason.Length;
         if (p.SequenceEqual("tool_use"u8) || p.SequenceEqual("tool_calls"u8)
-            || p.SequenceEqual("function_call"u8) || p.SequenceEqual("tooluse"u8))
+                                          || p.SequenceEqual("function_call"u8) || p.SequenceEqual("tooluse"u8))
             return StopReason.ToolUse;
         if (p.SequenceEqual("content_filter"u8) || p.SequenceEqual("content_filtering"u8)
-            || p.SequenceEqual("contentfilter"u8))
+                                                || p.SequenceEqual("contentfilter"u8))
             return StopReason.ContentFilter;
         if (p.SequenceEqual("error"u8) || p.SequenceEqual("failed"u8))
             return StopReason.Error;
         if (p.SequenceEqual("aborted"u8) || p.SequenceEqual("abort"u8) || p.SequenceEqual("cancelled"u8))
             return StopReason.Aborted;
 
-        return StopReasonJsonConverter.Parse(System.Text.Encoding.UTF8.GetString(p));
+        return StopReasonJsonConverter.Parse(Encoding.UTF8.GetString(p));
     }
+
+    /// <summary>Parsed role of a message line.</summary>
+    private enum MessageRole : byte
+    {
+        Unknown,
+        User,
+        Assistant,
+        ToolResult
+    }
+
+    // ── Property matchers (zero-alloc, UTF-8 span compare) ─────────────────
+
+    private enum LineProperty : byte { Other, Type, Id, CreatedAt, ParentId, Role, Payload }
+
+    private enum UserProperty : byte { Other, Content, Agent, Model }
+
+    private enum AssistantProperty : byte { Other, Parts, StopReason, Usage, Model, IsSummary, SummaryFirstKeptId }
+
+    private enum ToolResultProperty : byte { Other, Results }
+
+    private enum ResultEntryProperty : byte { Other, ToolCallId, ToolName, Output, IsError }
+
+    private enum PartProperty : byte { Other, Type, Text, Id, ToolName, Args, Path, MimeType, SizeBytes }
+
+    private enum PartType : byte { Unknown, Text, Thinking, ToolCall, File }
 }

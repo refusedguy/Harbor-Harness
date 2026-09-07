@@ -7,6 +7,7 @@ using Harbor.Plugins.Storage;
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Runtime;
+
 /// <summary>
 ///     <b>Obsolete facade.</b> Thin wrapper around <see cref="PluginHost" /> that
 ///     preserves the original <c>CsPluginLoader</c> API for one release while callers

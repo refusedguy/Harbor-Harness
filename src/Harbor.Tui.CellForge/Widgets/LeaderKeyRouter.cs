@@ -1,12 +1,10 @@
-using Harbor.Tui.CellForge.Input;
-
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Leader-key chord router (ctrl+x pattern): the leader press arms the router,
-/// the next key inside the timeout window resolves the chord and fires its
-/// bound action; unknown chords disarm silently. Keys while unarmed pass
-/// through untouched — the host keeps full routing control.
+///     Leader-key chord router (ctrl+x pattern): the leader press arms the router,
+///     the next key inside the timeout window resolves the chord and fires its
+///     bound action; unknown chords disarm silently. Keys while unarmed pass
+///     through untouched — the host keeps full routing control.
 /// </summary>
 public sealed class LeaderKeyRouter
 {
@@ -27,9 +25,9 @@ public sealed class LeaderKeyRouter
     }
 
     /// <summary>
-    /// Feeds a key event. Returns true when the event was consumed (the leader
-    /// press itself, a resolved chord, or a failed chord attempt). The bound
-    /// action fires synchronously on resolution.
+    ///     Feeds a key event. Returns true when the event was consumed (the leader
+    ///     press itself, a resolved chord, or a failed chord attempt). The bound
+    ///     action fires synchronously on resolution.
     /// </summary>
     public bool HandleKey(in KeyEvent key, long nowMs)
     {

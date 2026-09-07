@@ -1,6 +1,5 @@
-using System.Threading.Channels;
-using Harbor.Abstractions.Sessions;
 using Microsoft.Extensions.Logging;
+using System.Threading.Channels;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Application.Agents;
@@ -81,10 +80,10 @@ public sealed class SubAgentRunner(
         SubAgentRunRequest request,
         CancellationToken ct)
     {
-        var directory = string.IsNullOrWhiteSpace(request.WorkingDirectory)
+        string directory = string.IsNullOrWhiteSpace(request.WorkingDirectory)
             ? Environment.CurrentDirectory
             : request.WorkingDirectory!;
-        var title = BuildTitle(agent, request.Prompt);
+        string title = BuildTitle(agent, request.Prompt);
 
         var created = await store.CreateAsync(directory, agent.Name.Value, agent.ProviderId, agent.Model, ct)
             .ConfigureAwait(false);
@@ -110,7 +109,7 @@ public sealed class SubAgentRunner(
 
         // Fresh unbounded steering channel mirrors DefaultAgent's shape. Nothing will
         // ever steer a sub-run — no external handle to it is published anywhere.
-        var steering = Channel.CreateUnbounded<Harbor.Abstractions.Models.AgentMessage>(new UnboundedChannelOptions
+        var steering = Channel.CreateUnbounded<AgentMessage>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false
@@ -144,7 +143,7 @@ public sealed class SubAgentRunner(
             return Result.Failure<SubAgentRunResult>(
                 $"Sub-agent '{agent.Name.Value}' finished but produced no readable history (session {session.Id}).");
 
-        var finalOutput = ExtractFinalOutput(history.Value);
+        string finalOutput = ExtractFinalOutput(history.Value);
         if (string.IsNullOrWhiteSpace(finalOutput))
             return Result.Failure<SubAgentRunResult>(
                 $"Sub-agent '{agent.Name.Value}' finished without producing a final assistant message (session {session.Id}).");
@@ -161,7 +160,7 @@ public sealed class SubAgentRunner(
     ///     assistant message that carries any prose. Thinking blocks and tool-call
     ///     payloads are ignored — parents receive the answer, not the chatter.
     /// </summary>
-    private static string ExtractFinalOutput(IReadOnlyList<Harbor.Abstractions.Models.AgentMessage> messages)
+    private static string ExtractFinalOutput(IReadOnlyList<AgentMessage> messages)
     {
         for (int i = messages.Count - 1; i >= 0; i--)
         {
@@ -221,10 +220,6 @@ public sealed class DeferredSubAgentRunner : ISubAgentRunner
 {
     private volatile ISubAgentRunner? _inner;
 
-    /// <summary>Wire in the real runner once the container can build it. One-shot, idempotent-after-attach semantics are NOT required (host composes once).</summary>
-    public void Attach(ISubAgentRunner inner)
-        => _inner = inner ?? throw new ArgumentNullException(nameof(inner));
-
     /// <inheritdoc />
     public bool CanSpawn => _inner?.CanSpawn ?? false;
 
@@ -240,4 +235,11 @@ public sealed class DeferredSubAgentRunner : ISubAgentRunner
             : Task.FromResult(Result.Failure<SubAgentRunResult>(
                 "Sub-agent runtime is not initialized yet (host composition incomplete)."));
     }
+
+    /// <summary>
+    ///     Wire in the real runner once the container can build it. One-shot, idempotent-after-attach semantics are NOT
+    ///     required (host composes once).
+    /// </summary>
+    public void Attach(ISubAgentRunner inner)
+        => _inner = inner ?? throw new ArgumentNullException(nameof(inner));
 }

@@ -1,13 +1,12 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
-
 namespace Harbor.Ipc.Ide;
 
 /// <summary>
 ///     A single bridge request handler. Returns the JSON payload for the
 ///     <c>result</c> member (pre-serialized through <see cref="IdeJsonContext" />)
-///     or <see langword="null"/> for an empty result. Typed failures throw
+///     or <see langword="null" /> for an empty result. Typed failures throw
 ///     <see cref="IdeRpcException" />; any other exception becomes
 ///     code <see cref="IdeRpcException.HandlerError" />.
 /// </summary>
@@ -54,14 +53,14 @@ public sealed record IdeJsonRpcServerOptions
 /// </remarks>
 public sealed class IdeJsonRpcServer : IAsyncDisposable
 {
+    private readonly CancellationTokenSource _cts = new();
     private readonly IdeRequestHandler _handler;
+    private readonly List<Task> _inFlight = [];
+    private readonly Lock _inFlightLock = new();
     private readonly ILogger _logger;
     private readonly IdeJsonRpcServerOptions _options;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly TextWriter _writer;
-    private readonly CancellationTokenSource _cts = new();
-    private readonly List<Task> _inFlight = [];
-    private readonly Lock _inFlightLock = new();
     private int _disposed;
 
     /// <summary>
@@ -86,8 +85,40 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
     /// <summary>The editor-facing input stream (stdin of the bridge process).</summary>
     public TextReader Input { get; }
 
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        await _cts.CancelAsync().ConfigureAwait(false);
+
+        // Short grace window: in-flight handlers observe the cancel and
+        // DisposeAsync never hangs on a stuck handler.
+        Task[] tasks;
+        lock (_inFlightLock)
+        {
+            tasks = [.._inFlight];
+            _inFlight.Clear();
+        }
+
+        if (tasks.Length > 0)
+        {
+            try
+            {
+                await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "IDE bridge in-flight requests did not drain within the grace window");
+            }
+        }
+
+        _cts.Dispose();
+        _writeLock.Dispose();
+    }
+
     /// <summary>Raised when the editor closes stdin (EOF) — the bridge host uses it to shut down.</summary>
-    public event EventHandler StdioClosed = delegate { };
+    public event EventHandler StdioClosed = delegate {};
 
     /// <summary>
     ///     Serve requests until the editor closes stdin or the server is
@@ -146,7 +177,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             if (payload is { ValueKind: not (JsonValueKind.Undefined or JsonValueKind.Null) } p)
             {
                 json.WritePropertyName("params");
-                json.WriteRawValue(p.GetRawText(), skipInputValidation: false);
+                json.WriteRawValue(p.GetRawText(), false);
             }
             json.WriteEndObject();
         }
@@ -162,38 +193,6 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
         {
             _writeLock.Release();
         }
-    }
-
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-
-        await _cts.CancelAsync().ConfigureAwait(false);
-
-        // Short grace window: in-flight handlers observe the cancel and
-        // DisposeAsync never hangs on a stuck handler.
-        Task[] tasks;
-        lock (_inFlightLock)
-        {
-            tasks = [.. _inFlight];
-            _inFlight.Clear();
-        }
-
-        if (tasks.Length > 0)
-        {
-            try
-            {
-                await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "IDE bridge in-flight requests did not drain within the grace window");
-            }
-        }
-
-        _cts.Dispose();
-        _writeLock.Dispose();
     }
 
     // ── Request routing ────────────────────────────────────────────────────
@@ -216,7 +215,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
 
         using (doc)
         {
-            JsonElement root = doc.RootElement;
+            var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
                 await WriteErrorAsync(default, IdeRpcException.InvalidRequest, "Request must be a JSON object.")
@@ -225,13 +224,13 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             }
 
             // Notifications (no id) from the editor are accepted and ignored.
-            if (!root.TryGetProperty("id", out JsonElement id))
+            if (!root.TryGetProperty("id", out var id))
             {
                 _logger.LogDebug("IDE bridge ignored editor notification: {Line}", line);
                 return;
             }
 
-            if (!root.TryGetProperty("method", out JsonElement methodEl) || methodEl.ValueKind != JsonValueKind.String)
+            if (!root.TryGetProperty("method", out var methodEl) || methodEl.ValueKind != JsonValueKind.String)
             {
                 await WriteErrorAsync(id, IdeRpcException.InvalidRequest, "Missing string 'method'.")
                     .ConfigureAwait(false);
@@ -239,7 +238,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             }
 
             string method = methodEl.GetString()!;
-            JsonElement? parameters = root.TryGetProperty("params", out JsonElement p) ? p : null;
+            JsonElement? parameters = root.TryGetProperty("params", out var p) ? p : null;
 
             // Dispatch is fire-and-forget: the JsonDocument is disposed when this
             // method returns, so the dispatched work must own its data. Clone both
@@ -258,12 +257,12 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
         {
             try
             {
-                Task<JsonElement?> handlerTask = _handler(method, parameters, requestCts.Token);
+                var handlerTask = _handler(method, parameters, requestCts.Token);
 
                 // Race the handler against the per-request budget — a handler
                 // that ignores its token (e.g. blocked on the host) still gets
                 // its timeout response instead of leaving the editor hanging.
-                Task completed = await Task.WhenAny(
+                var completed = await Task.WhenAny(
                     handlerTask,
                     Task.Delay(_options.RequestTimeout, CancellationToken.None)).ConfigureAwait(false);
                 if (completed != handlerTask)
@@ -274,12 +273,12 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
                     // must stay cancelable; the CancelAfter timer already fired.
                     _ = ObserveAbandonedAsync(handlerTask);
                     await WriteErrorAsync(
-                        id, -32002, $"Request '{method}' timed out after {_options.RequestTimeout.TotalSeconds:F0}s.")
+                            id, -32002, $"Request '{method}' timed out after {_options.RequestTimeout.TotalSeconds:F0}s.")
                         .ConfigureAwait(false);
                     return;
                 }
 
-                JsonElement? result = await handlerTask.ConfigureAwait(false);
+                var result = await handlerTask.ConfigureAwait(false);
                 await WriteResultAsync(id, result, requestCts.Token).ConfigureAwait(false);
             }
             catch (IdeRpcException ex)
@@ -335,7 +334,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             json.WritePropertyName("result");
             if (result is { ValueKind: not JsonValueKind.Undefined } r)
             {
-                json.WriteRawValue(r.GetRawText(), skipInputValidation: false);
+                json.WriteRawValue(r.GetRawText());
             }
             else
             {
@@ -385,7 +384,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
         }
         else
         {
-            json.WriteRawValue(id.GetRawText(), skipInputValidation: false);
+            json.WriteRawValue(id.GetRawText());
         }
     }
 

@@ -1,7 +1,7 @@
-using System.Collections.Concurrent;
-using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 namespace Harbor.Registries.Tools;
+
 /// <summary>
 ///     In-memory <see cref="IMcpRegistry" />. Tracks registrations but always returns
 ///     <see cref="Result{T}.Failure" /> for <see cref="InvokeAsync" /> — a real MCP client

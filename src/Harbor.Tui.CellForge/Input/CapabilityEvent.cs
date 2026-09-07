@@ -16,17 +16,27 @@ public enum CapabilityEventKind : byte
     /// <summary>Cursor position report: <c>CSI row ; col R</c>.</summary>
     CursorPositionReport = 3,
 
-    /// <summary>OSC 11 background-color answer: <c>OSC 11 ; rgb:RR/GG/BB ST|BEL</c>
-    /// — the auto-theme probe response (widgets §3.x).</summary>
+    /// <summary>
+    ///     OSC 11 background-color answer: <c>OSC 11 ; rgb:RR/GG/BB ST|BEL</c>
+    ///     — the auto-theme probe response (widgets §3.x).
+    /// </summary>
     Osc11BackgroundReport = 4,
 
-    /// <summary>kitty desktop-notification capability answer: <c>OSC 99 ; i=… :
-    /// p=&lt;payload types&gt; … ST|BEL</c> — notifications supported (osc-sprint §777).</summary>
-    Osc99NotifyReport = 5,
+    /// <summary>
+    ///     kitty desktop-notification capability answer:
+    ///     <c>
+    ///         OSC 99 ; i=… :
+    ///         p=&lt;payload types&gt; … ST|BEL
+    ///     </c>
+    ///     — notifications supported (osc-sprint §777).
+    /// </summary>
+    Osc99NotifyReport = 5
 }
 
-/// <summary>A capability-probe response intercepted by the parser. Probe
-/// traffic is routed here, never surfaced as user input.</summary>
+/// <summary>
+///     A capability-probe response intercepted by the parser. Probe
+///     traffic is routed here, never surfaced as user input.
+/// </summary>
 public readonly struct CapabilityEvent(
     CapabilityEventKind kind,
     uint flags,
@@ -45,7 +55,10 @@ public readonly struct CapabilityEvent(
     public int Row { get; } = row;
     public int Column { get; } = column;
 
-    /// <summary>Background report color channels (0..255) — valid for <see cref="CapabilityEventKind.Osc11BackgroundReport" />.</summary>
+    /// <summary>
+    ///     Background report color channels (0..255) — valid for <see cref="CapabilityEventKind.Osc11BackgroundReport" />
+    ///     .
+    /// </summary>
     public int Red { get; } = red;
     public int Green { get; } = green;
     public int Blue { get; } = blue;

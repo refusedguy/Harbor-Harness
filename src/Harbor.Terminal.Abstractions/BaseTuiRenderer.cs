@@ -5,6 +5,7 @@ using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Terminal.Abstractions;
+
 /// <summary>
 ///     Base TUI renderer implementing the common view-dispatch logic.
 /// </summary>
@@ -140,7 +141,7 @@ public abstract class BaseTuiRenderer : ITuiRenderer
     public abstract Task<Result> WriteLineAsync(string? text = null, CancellationToken ct = default);
     public abstract Task<Result> ClearAsync(CancellationToken ct = default);
 
-    public virtual void Dispose() { }
+    public virtual void Dispose() {}
 
     /// <summary>
     ///     Registers the builtin views. Plugins that registered a view with the same id before

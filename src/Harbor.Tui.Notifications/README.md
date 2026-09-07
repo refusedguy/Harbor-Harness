@@ -1,17 +1,12 @@
 # Harbor.Tui.Notifications
 
-Non-interactive renderer that fires desktop OS notifications on key agent
-events: errors, completion, compaction, and tool failures. Designed for
-long-running agents in the background where the user has switched to another
-window and wants to be notified when the agent needs attention.
+Non-interactive renderer that fires desktop OS notifications on key agent events: errors, completion, compaction, and tool failures. Designed for long-running agents in the background where the user has switched to another window and wants to be notified when the agent needs attention.
 
 ## When to use
 
-- You started Harbor with `harbor ask "refactor this entire folder"` and
-  switched to a different task.
+- You started Harbor with `harbor ask "refactor this entire folder"` and switched to a different task.
 - You run Harbor inside CI and want a notification when a long job finishes.
-- You want a "watch loop" renderer: agent runs, you go do other work, you get
-  pinged when it's done or stuck.
+- You want a "watch loop" renderer: agent runs, you go do other work, you get pinged when it's done or stuck.
 - You don't want any terminal output — just notifications.
 
 ## Platform support
@@ -29,8 +24,7 @@ window and wants to be notified when the agent needs attention.
 - `Harbor.Terminal.Abstractions` (`BaseTuiRenderer`, `ITuiRenderContext`)
 - `Microsoft.Extensions.Logging.Abstractions`
 
-No external NuGet packages — uses only `System.Diagnostics.Process` to shell
-out to the OS notification tool.
+No external NuGet packages — uses only `System.Diagnostics.Process` to shell out to the OS notification tool.
 
 ## Files
 
@@ -78,10 +72,7 @@ public override async Task RenderAsync(AgentEvent @event, CancellationToken ct)
 }
 ```
 
-Platform detection uses `RuntimeInformation.IsOSPlatform`. On Linux it shells
-out to `notify-send`; on macOS to `osascript -e 'display notification...'`;
-on Windows to `msg.exe` (modal dialog). For proper Windows Action Center
-toasts, install `snoretoast.exe` and replace `WindowsToastBackend`.
+Platform detection uses `RuntimeInformation.IsOSPlatform`. On Linux it shells out to `notify-send`; on macOS to `osascript -e 'display notification...'`; on Windows to `msg.exe` (modal dialog). For proper Windows Action Center toasts, install `snoretoast.exe` and replace `WindowsToastBackend`.
 
 ## Build
 
@@ -107,17 +98,12 @@ to `~/.harbor/config.json`.
 
 ## Memory footprint
 
-Lowest of the lot: ~2 MB RSS idle. The renderer itself is stateless beyond
-the `BaseTuiRenderer` base; each notification spawns a short-lived
+Lowest of the lot: ~2 MB RSS idle. The renderer itself is stateless beyond the `BaseTuiRenderer` base; each notification spawns a short-lived
 `ProcessStartInfo` shell-out (a few KB and one process for ~100 ms).
 
 ## Limitations / TODO
 
-- Cannot display interactive prompts — `ReadLineAsync` returns empty. Use only
-  with `harbor ask` (one-shot) or with `--no-input` style invocations.
-- No notification deduplication — a fast-failing agent loop could spam. Add a
-  debounce window (e.g. max one notification per 5 seconds per category).
-- Windows backend uses `msg.exe` (modal dialog). Swap in `snoretoast.exe` or
-  the WinRT `ToastNotificationManager` for proper Action Center integration.
-- No click-through — notifications are fire-and-forget. For "click to view",
-  the backend would need to launch a URL or open the session log file.
+- Cannot display interactive prompts — `ReadLineAsync` returns empty. Use only with `harbor ask` (one-shot) or with `--no-input` style invocations.
+- No notification deduplication — a fast-failing agent loop could spam. Add a debounce window (e.g. max one notification per 5 seconds per category).
+- Windows backend uses `msg.exe` (modal dialog). Swap in `snoretoast.exe` or the WinRT `ToastNotificationManager` for proper Action Center integration.
+- No click-through — notifications are fire-and-forget. For "click to view", the backend would need to launch a URL or open the session log file.

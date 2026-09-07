@@ -1,11 +1,10 @@
-using System.Collections.Immutable;
+using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
-
+using System.Collections.Immutable;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
@@ -16,41 +15,13 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class CellForgeBuiltinPanelsTests
 {
-    private sealed class FakeServices : IServiceProvider
-    {
-        private readonly Dictionary<Type, object> _map = new();
-
-        public FakeServices Add<T>(T instance)
-            where T : class
-        {
-            _map[typeof(T)] = instance;
-            return this;
-        }
-
-        public object? GetService(Type serviceType) =>
-            _map.TryGetValue(serviceType, out var value) ? value : null;
-    }
-
-    private sealed class StubPanel : IPanelProvider
-    {
-        public string Id => "stub-a";
-
-        public string Title => "Stub A";
-
-        public TuiPanelPlacement DefaultPlacement => TuiPanelPlacement.Right;
-
-        public int DefaultSize => 10;
-
-        public object? Build(PanelContext ctx) => "stub";
-
-        public bool OnKey(UiKey key, PanelContext ctx) => false;
-    }
 
     private static PanelContext Ctx(UiState state, int width = 80, int height = 24, IServiceProvider? services = null) =>
         new(state, width, height, services);
 
     private static UiState StateWithLines(params ChatLine[] lines) =>
-        new UiState { Lines = ImmutableArray.Create(lines) };
+        new()
+            { Lines = ImmutableArray.Create(lines) };
 
     private static IReadOnlyList<string> Rows(object? widget) => widget switch
     {
@@ -58,7 +29,7 @@ public class CellForgeBuiltinPanelsTests
         string s => s.Split('\n'),
         IReadOnlyList<string> rows => rows,
         IEnumerable<string> lines => lines.ToArray(),
-        _ => new[] { widget.ToString() ?? string.Empty },
+        _ => new[] { widget.ToString() ?? string.Empty }
     };
 
     private static string Joined(object? widget) => string.Join("\n", Rows(widget));
@@ -81,7 +52,7 @@ public class CellForgeBuiltinPanelsTests
         new CellForgeFileTreePanel(),
         new CellForgeTokenBreakdownPanel(),
         new CellForgeDiagnosticsPanel(),
-        new CellForgeLogsPanel(),
+        new CellForgeLogsPanel()
     ];
 
     [Test]
@@ -145,7 +116,7 @@ public class CellForgeBuiltinPanelsTests
     {
         foreach (var panel in AllPanels())
         {
-            var rows = Rows(panel.Build(Ctx(new UiState(), width: 10, height: 3, services: null)));
+            var rows = Rows(panel.Build(Ctx(new UiState(), 10, 3)));
             await Assert.That(rows.Count <= 3).IsTrue();
             foreach (string line in rows)
             {
@@ -158,8 +129,8 @@ public class CellForgeBuiltinPanelsTests
     public async Task Clipping_ZeroGeometry_ReturnsEmpty()
     {
         var panel = new CellForgeHelpPanel();
-        await Assert.That(Rows(panel.Build(Ctx(new UiState(), width: 0, height: 24))).Count).IsEqualTo(0);
-        await Assert.That(Rows(panel.Build(Ctx(new UiState(), width: 80, height: 0))).Count).IsEqualTo(0);
+        await Assert.That(Rows(panel.Build(Ctx(new UiState(), 0))).Count).IsEqualTo(0);
+        await Assert.That(Rows(panel.Build(Ctx(new UiState(), 80, 0))).Count).IsEqualTo(0);
     }
 
     [Test]
@@ -267,7 +238,7 @@ public class CellForgeBuiltinPanelsTests
     public async Task Help_OnKey_QuestionMark_DispatchesToggle()
     {
         var store = SeededStore("help", 48);
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new FakeServices().Add(store);
         bool consumed = new CellForgeHelpPanel().OnKey(UiKey.ForChar('?'), Ctx(store.State, services: services));
         await Assert.That(consumed).IsTrue();
         await Assert.That(store.State.PanelStates["help"]).IsEqualTo(TuiPanelState.Visible);
@@ -318,7 +289,7 @@ public class CellForgeBuiltinPanelsTests
     public async Task Logs_OnKey_F12_DispatchesToggle()
     {
         var store = SeededStore("logs", 10);
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new FakeServices().Add(store);
         bool consumed = new CellForgeLogsPanel().OnKey(new UiKey(UiKeyCode.F12), Ctx(store.State, services: services));
         await Assert.That(consumed).IsTrue();
         await Assert.That(store.State.PanelStates["logs"]).IsEqualTo(TuiPanelState.Visible);
@@ -339,7 +310,7 @@ public class CellForgeBuiltinPanelsTests
             new CellForgeTodoListPanel(),
             new CellForgeDiffPreviewPanel(),
             new CellForgeDiagnosticsPanel(),
-            new CellForgeTokenBreakdownPanel(),
+            new CellForgeTokenBreakdownPanel()
         ];
         foreach (var panel in pure)
         {
@@ -383,5 +354,35 @@ public class CellForgeBuiltinPanelsTests
         _ = panel.OnKey(UiKey.ForChar('k'), ctx);
         string text = Joined(panel.Build(ctx));
         await Assert.That(text).Contains("File Tree");
+    }
+
+    private sealed class FakeServices : IServiceProvider
+    {
+        private readonly Dictionary<Type, object> _map = new();
+
+        public object? GetService(Type serviceType) =>
+            _map.TryGetValue(serviceType, out object? value) ? value : null;
+
+        public FakeServices Add<T>(T instance)
+            where T : class
+        {
+            _map[typeof(T)] = instance;
+            return this;
+        }
+    }
+
+    private sealed class StubPanel : IPanelProvider
+    {
+        public string Id => "stub-a";
+
+        public string Title => "Stub A";
+
+        public TuiPanelPlacement DefaultPlacement => TuiPanelPlacement.Right;
+
+        public int DefaultSize => 10;
+
+        public object? Build(PanelContext ctx) => "stub";
+
+        public bool OnKey(UiKey key, PanelContext ctx) => false;
     }
 }

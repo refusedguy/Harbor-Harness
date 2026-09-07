@@ -1,8 +1,7 @@
-using System.Text.Json.Serialization;
-using Microsoft.Extensions.Logging;
 using Harbor.Abstractions.Results;
-
+using Microsoft.Extensions.Logging;
 namespace Harbor.Application.Configuration;
+
 /// <summary>
 ///     Configuration store — reads/writes ~/.harbor/config.json.
 ///     Implements Repository pattern for config.
@@ -76,11 +75,46 @@ public sealed class JsonConfigStore : IConfigStore
     {
         lock (_lock)
         {
-            Result<HarborConfig> loaded = LoadCore();
+            var loaded = LoadCore();
             if (loaded.IsFailure) // §4.6-ok: единая точка лога провала загрузки (rop-final-mile B2).
                 _logger?.LogError("Failed to load config: {Error}", loaded.Error);
             return Task.FromResult(loaded);
         }
+    }
+
+    /// <inheritdoc />
+    public Task<Result> SaveAsync(HarborConfig config, CancellationToken ct = default)
+    {
+        lock (_lock)
+        {
+            // rop-final-mile B3 / §4.6: one guard around the sync IO core.
+            // Canonical selector (§4.5): OCE propagates instead of masking
+            // cancellation as a save failure — same contract as LoadAsync.
+            return Task.FromResult(Result.Try(() => SaveCore(config), ResultErrors.Message)
+                .TapError(error => _logger?.LogError("Failed to save config: {Error}", error)));
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<Result> UpdateAsync(Func<HarborConfig, HarborConfig> updater, CancellationToken ct = default)
+    {
+        var loadResult = await LoadAsync(ct).ConfigureAwait(false);
+        if (loadResult.IsFailure) return loadResult; // §4.6-ok: одиночный passthrough.
+
+
+        var updated = updater(loadResult.Value);
+        return await SaveAsync(updated, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default)
+    {
+        var loadResult = await LoadAsync(ct).ConfigureAwait(false);
+        if (loadResult.IsFailure) return Result.Failure<string>(loadResult.Error); // §4.6-ok: одиночный passthrough (смена типа ошибки).
+
+        if (loadResult.Value.ApiKeys.TryGetValue(providerId, out string? key) && !string.IsNullOrEmpty(key))
+            return Result.Success(key);
+        return Result.Failure<string>($"No API key for '{providerId}' in config.json");
     }
 
     // rop-final-mile B2 / §4.6: only File/Deserialize throw; everything
@@ -117,19 +151,6 @@ public sealed class JsonConfigStore : IConfigStore
             .Bind(config => config.Validate());
     }
 
-    /// <inheritdoc />
-    public Task<Result> SaveAsync(HarborConfig config, CancellationToken ct = default)
-    {
-        lock (_lock)
-        {
-            // rop-final-mile B3 / §4.6: one guard around the sync IO core.
-            // Canonical selector (§4.5): OCE propagates instead of masking
-            // cancellation as a save failure — same contract as LoadAsync.
-            return Task.FromResult(Result.Try(() => SaveCore(config), ResultErrors.Message)
-                .TapError(error => _logger?.LogError("Failed to save config: {Error}", error)));
-        }
-    }
-
     private void SaveCore(HarborConfig config)
     {
         string? dir = Path.GetDirectoryName(_configPath);
@@ -141,28 +162,6 @@ public sealed class JsonConfigStore : IConfigStore
         string json = JsonSerializer.Serialize(config.ToRaw()!, ConfigJsonContext.Default.RawConfigDto);
         File.WriteAllText(_configPath, json);
         _logger?.LogDebug("Config saved to {Path}", _configPath);
-    }
-
-    /// <inheritdoc />
-    public async Task<Result> UpdateAsync(Func<HarborConfig, HarborConfig> updater, CancellationToken ct = default)
-    {
-        var loadResult = await LoadAsync(ct).ConfigureAwait(false);
-        if (loadResult.IsFailure) return loadResult; // §4.6-ok: одиночный passthrough.
-
-
-        var updated = updater(loadResult.Value);
-        return await SaveAsync(updated, ct).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default)
-    {
-        var loadResult = await LoadAsync(ct).ConfigureAwait(false);
-        if (loadResult.IsFailure) return Result.Failure<string>(loadResult.Error); // §4.6-ok: одиночный passthrough (смена типа ошибки).
-
-        if (loadResult.Value.ApiKeys.TryGetValue(providerId, out string? key) && !string.IsNullOrEmpty(key))
-            return Result.Success(key);
-        return Result.Failure<string>($"No API key for '{providerId}' in config.json");
     }
 
     /// <summary>Returns the default config file path (<c>~/.harbor/config.json</c>).</summary>

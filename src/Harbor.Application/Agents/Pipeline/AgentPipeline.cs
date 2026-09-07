@@ -1,5 +1,5 @@
-using CSharpFunctionalExtensions;
 namespace Harbor.Application.Agents.Pipeline;
+
 /// <summary>
 ///     Continuation of the behavior chain: invoke the rest of the pipeline
 ///     (ultimately the agent loop core) with the given request.
@@ -21,7 +21,7 @@ public interface IPipelineBehavior
     /// <param name="next">The rest of the pipeline (core loop last).</param>
     /// <param name="ct">Caller cancellation token.</param>
     /// <returns>The run outcome, or failure when short-circuited.</returns>
-    Task<Result> HandleAsync(PromptRequest request, PipelineNext next, CancellationToken ct);
+    public Task<Result> HandleAsync(PromptRequest request, PipelineNext next, CancellationToken ct);
 }
 
 /// <summary>
@@ -35,7 +35,7 @@ public sealed class AgentPipeline
 
     public AgentPipeline(IEnumerable<IPipelineBehavior> behaviors)
     {
-        _behaviors = [.. behaviors];
+        _behaviors = [..behaviors];
     }
 
     /// <summary>
@@ -43,13 +43,13 @@ public sealed class AgentPipeline
     /// </summary>
     public async Task<Result> HandleAsync(PromptRequest request, PipelineNext terminal, CancellationToken ct)
     {
-        PipelineNext chain = terminal;
+        var chain = terminal;
         // Compose right-to-left so behavior[0] runs outermost. Locals capture the
         // current chain — the loop variable itself must not leak into closures.
         for (int i = _behaviors.Length - 1; i >= 0; i--)
         {
-            IPipelineBehavior behavior = _behaviors[i];
-            PipelineNext next = chain;
+            var behavior = _behaviors[i];
+            var next = chain;
             chain = (req, token) => behavior.HandleAsync(req, next, token);
         }
 

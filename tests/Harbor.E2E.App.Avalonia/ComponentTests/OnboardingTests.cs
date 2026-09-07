@@ -1,14 +1,9 @@
 using Avalonia.Controls;
-using Avalonia.Headless;
 using Avalonia.Threading;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
 using Microsoft.Extensions.DependencyInjection;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core.Enums;
-
-using HarborApp = global::Harbor.App.Avalonia.App;
+using HarborApp = Harbor.App.Avalonia.App;
 
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
@@ -19,20 +14,20 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///     <para>
 ///         Tests cover: step 1 (welcome), step 2 (providers), step 3 (API key),
 ///         step 4 (default model), step 5 (theme), Back button navigation,
-///         Skip button. Each test opens a fresh <see cref="OnboardingWindow"/>
-///         bound to a fresh <see cref="OnboardingViewModel"/> from the DI
+///         Skip button. Each test opens a fresh <see cref="OnboardingWindow" />
+///         bound to a fresh <see cref="OnboardingViewModel" /> from the DI
 ///         container, sets the requested step, and captures a screenshot.
 ///     </para>
 ///     <para>
-///         The onboarding window is a separate Avalonia <see cref="Window"/>
+///         The onboarding window is a separate Avalonia <see cref="Window" />
 ///         (not a child of <c>MainWindow</c>), so we capture it via
-///         <see cref="ComponentTestBase.CaptureOnboardingWindowAsync"/>.
+///         <see cref="ComponentTestBase.CaptureOnboardingWindowAsync" />.
 ///     </para>
 /// </remarks>
 [NotInParallel]
 public sealed class OnboardingTests : ComponentTestBase
 {
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupAsync() => await GetDriverAsync("Onboarding").ConfigureAwait(false);
 
     /// <summary>Open a fresh onboarding window bound to a fresh VM at the given step.</summary>
@@ -43,7 +38,7 @@ public sealed class OnboardingTests : ComponentTestBase
         if (step >= 1) UI(() => vm.CurrentStep = step);
         if (step >= 4) UI(() => vm.DefaultModel = vm.SelectedProvider?.DefaultModel ?? "qwen2.5-coder:7b");
 
-        var window = Dispatcher.UIThread.InvokeAsync<OnboardingWindow>(() =>
+        var window = Dispatcher.UIThread.InvokeAsync(() =>
         {
             var w = new OnboardingWindow();
             w.Bind(vm);
@@ -77,13 +72,13 @@ public sealed class OnboardingTests : ComponentTestBase
         var (window, vm) = await OpenOnboardingAsync(step: 1).ConfigureAwait(false);
         try
         {
-            var sawBrand = await Driver.WaitForTextInWindowAsync(window, "Harbor", TimeSpan.FromSeconds(2))
+            bool sawBrand = await Driver.WaitForTextInWindowAsync(window, "Harbor", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
             await Assert.That(sawBrand).IsTrue();
-            var step = UI(() => vm.CurrentStep);
+            int step = UI(() => vm.CurrentStep);
             await Assert.That(step).IsEqualTo(1);
 
-            var path = await CaptureOnboardingWindowAsync(window, "onboarding-step1-welcome")
+            string path = await CaptureOnboardingWindowAsync(window, "onboarding-step1-welcome")
                 .ConfigureAwait(false);
         }
         finally
@@ -104,13 +99,13 @@ public sealed class OnboardingTests : ComponentTestBase
         var (window, vm) = await OpenOnboardingAsync(step: 2).ConfigureAwait(false);
         try
         {
-            var hasAnthropic = await Driver.WaitForTextInWindowAsync(window, "Anthropic", TimeSpan.FromSeconds(2))
+            bool hasAnthropic = await Driver.WaitForTextInWindowAsync(window, "Anthropic", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
-            var hasOllama = await Driver.WaitForTextInWindowAsync(window, "Ollama", TimeSpan.FromSeconds(2))
+            bool hasOllama = await Driver.WaitForTextInWindowAsync(window, "Ollama", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
             await Assert.That(hasAnthropic || hasOllama).IsTrue();
 
-            var path = await CaptureOnboardingWindowAsync(window, "onboarding-step2-providers")
+            string path = await CaptureOnboardingWindowAsync(window, "onboarding-step2-providers")
                 .ConfigureAwait(false);
         }
         finally
@@ -140,11 +135,11 @@ public sealed class OnboardingTests : ComponentTestBase
             });
             await Task.Delay(150).ConfigureAwait(false);
 
-            var hasApiKey = await Driver.WaitForTextInWindowAsync(window, "API key", TimeSpan.FromSeconds(2))
+            bool hasApiKey = await Driver.WaitForTextInWindowAsync(window, "API key", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
             await Assert.That(hasApiKey).IsTrue();
 
-            var path = await CaptureOnboardingWindowAsync(window, "onboarding-step3-apikey")
+            string path = await CaptureOnboardingWindowAsync(window, "onboarding-step3-apikey")
                 .ConfigureAwait(false);
         }
         finally
@@ -166,11 +161,11 @@ public sealed class OnboardingTests : ComponentTestBase
         var (window, vm) = await OpenOnboardingAsync(step: 4).ConfigureAwait(false);
         try
         {
-            var hasModel = await Driver.WaitForTextInWindowAsync(window, "default model", TimeSpan.FromSeconds(2))
+            bool hasModel = await Driver.WaitForTextInWindowAsync(window, "default model", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
             await Assert.That(hasModel).IsTrue();
 
-            var path = await CaptureOnboardingWindowAsync(window, "onboarding-step4-model")
+            string path = await CaptureOnboardingWindowAsync(window, "onboarding-step4-model")
                 .ConfigureAwait(false);
         }
         finally
@@ -193,11 +188,11 @@ public sealed class OnboardingTests : ComponentTestBase
         try
         {
             UI(() => vm.DefaultModel = "qwen2.5-coder:7b");
-            var hasTheme = await Driver.WaitForTextInWindowAsync(window, "Choose your theme", TimeSpan.FromSeconds(2))
+            bool hasTheme = await Driver.WaitForTextInWindowAsync(window, "Choose your theme", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
             await Assert.That(hasTheme).IsTrue();
 
-            var path = await CaptureOnboardingWindowAsync(window, "onboarding-step5-theme")
+            string path = await CaptureOnboardingWindowAsync(window, "onboarding-step5-theme")
                 .ConfigureAwait(false);
         }
         finally
@@ -218,16 +213,16 @@ public sealed class OnboardingTests : ComponentTestBase
         var (window, vm) = await OpenOnboardingAsync(step: 3).ConfigureAwait(false);
         try
         {
-            var stepBefore = UI(() => vm.CurrentStep);
+            int stepBefore = UI(() => vm.CurrentStep);
             await Assert.That(stepBefore).IsEqualTo(3);
 
             UI(() => vm.BackCommand.Execute(null));
             await Task.Delay(150).ConfigureAwait(false);
 
-            var stepAfter = UI(() => vm.CurrentStep);
+            int stepAfter = UI(() => vm.CurrentStep);
             await Assert.That(stepAfter).IsEqualTo(2);
 
-            var path = await CaptureOnboardingWindowAsync(window, "onboarding-back-to-step2")
+            string path = await CaptureOnboardingWindowAsync(window, "onboarding-back-to-step2")
                 .ConfigureAwait(false);
         }
         finally
@@ -251,15 +246,16 @@ public sealed class OnboardingTests : ComponentTestBase
             UI(() => vm.SkipCommand.Execute(null));
             await Task.Delay(150).ConfigureAwait(false);
 
-            var isCompleted = UI(() => vm.IsCompleted);
+            bool isCompleted = UI(() => vm.IsCompleted);
             await Assert.That(isCompleted).IsTrue();
 
-            var path = await CaptureOnboardingWindowAsync(window, "onboarding-skip")
+            string path = await CaptureOnboardingWindowAsync(window, "onboarding-skip")
                 .ConfigureAwait(false);
         }
         finally
         {
-            try { CloseWindow(window); } catch { }
+            try { CloseWindow(window); }
+            catch {}
         }
     }
 }

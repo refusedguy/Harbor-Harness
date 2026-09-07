@@ -1,6 +1,7 @@
 using Nuke.Common.IO;
 using Nuke.Common.Tools.DotNet;
 namespace Harbor.Build.Extensions;
+
 /// <summary>
 ///     Fluent extension methods for <see cref="DotNetPublishSettings" />.
 ///     Centralizes the per-flag <c>SetProperty</c> chains so target code

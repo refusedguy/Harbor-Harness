@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -18,7 +16,7 @@ public sealed class KittyEdgeScenarioTests : CellForgePtyScenarioBase
     public async Task ModifierEnter_AltInsertsNewline_CtrlIgnored()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -57,7 +55,7 @@ public sealed class KittyEdgeScenarioTests : CellForgePtyScenarioBase
     public async Task UnknownCsiU_AndGarbage_IgnoredComposerUnaffected()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -73,7 +71,7 @@ public sealed class KittyEdgeScenarioTests : CellForgePtyScenarioBase
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("ok", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-        var body = Server.ReceivedRequests[^1].RawBody;
+        string body = Server.ReceivedRequests[^1].RawBody;
         await Assert.That(body).Contains("alive");
     }
 }

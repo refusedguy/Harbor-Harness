@@ -1,69 +1,21 @@
 using Harbor.DesignSystem;
-using Harbor.Ui.Framework.Rendering;
-using Harbor.Ui.Framework.Projection;
-
 namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>
-/// Shared cell styles for chat widgets — the terminal-side instance of the
-/// HDS v1 design tokens (docs/design-system-report-20260827.html, §Design
-/// Tokens). All raw colors are derived from
-/// <see cref="TerminalColorPalette" /> in Harbor.DesignSystem — this file is
-/// the PackedColor projection of the token catalog, not a second source of
-/// truth. HDS §7.1 names ChatPalette as the single source of truth for block
-/// colors inside the CellForge renderer: widget code must reference these
-/// styles and never hardcode hex values.
-///
-/// Theme switching: the projection is a cached per-theme catalog, rebuilt
-/// whenever <see cref="TerminalColorPalette.ThemeChanged" /> fires — reads are
-/// a volatile field + member access on hot paths.
+///     Shared cell styles for chat widgets — the terminal-side instance of the
+///     HDS v1 design tokens (docs/design-system-report-20260827.html, §Design
+///     Tokens). All raw colors are derived from
+///     <see cref="TerminalColorPalette" /> in Harbor.DesignSystem — this file is
+///     the PackedColor projection of the token catalog, not a second source of
+///     truth. HDS §7.1 names ChatPalette as the single source of truth for block
+///     colors inside the CellForge renderer: widget code must reference these
+///     styles and never hardcode hex values.
+///     Theme switching: the projection is a cached per-theme catalog, rebuilt
+///     whenever <see cref="TerminalColorPalette.ThemeChanged" /> fires — reads are
+///     a volatile field + member access on hot paths.
 /// </summary>
 public static class ChatPalette
 {
-    /// <summary>Per-theme projection: raw color tokens + derived cell styles.</summary>
-    private sealed class Catalog
-    {
-        public Catalog(HarborTheme theme)
-        {
-            _accent = Project(theme.Accent);
-            _success = Project(theme.Success);
-            _warning = Project(theme.Warning);
-            _error = Project(theme.Error);
-            _tool = Project(theme.Tool);
-            _systemToken = Project(theme.System);
-            _text = Project(theme.Text);
-            _muted = Project(theme.Muted);
-            _bg = Project(theme.Background);
-            _panel = Project(theme.Panel);
-            _surface = Project(theme.Surface);
-            _surface2 = Project(theme.Surface2);
-            _border = Project(theme.Border);
-
-            UserPrefixStyle = new CellStyle(_accent, attrs: StyleAttr.Bold);
-            UserTextStyle = new CellStyle(attrs: StyleAttr.Bold);
-            SystemStyle = new CellStyle(_muted, attrs: StyleAttr.Dim | StyleAttr.Italic);
-            ToolNameStyle = new CellStyle(_tool, attrs: StyleAttr.Bold);
-            ToolArgsStyle = new CellStyle(_text);
-            ToolRunningStyle = new CellStyle(_warning);
-            ToolOkStyle = new CellStyle(_success);
-            ToolErrorStyle = new CellStyle(_error);
-            ToolBodyStyle = new CellStyle(_text);
-            ToolPillRunningStyle = new CellStyle(_warning);
-            ToolPillOkStyle = new CellStyle(_success);
-            ToolPillErrorStyle = new CellStyle(_error);
-            DimStyle = new CellStyle(attrs: StyleAttr.Dim);
-        }
-
-        private static PackedColor Project(RgbColor c) => PackedColor.Rgb(c.R, c.G, c.B);
-
-        public readonly PackedColor _accent, _success, _warning, _error, _tool, _systemToken, _text, _muted;
-        public readonly PackedColor _bg, _panel, _surface, _surface2, _border;
-
-        // Semantic cell styles (HDS v1 §1.3/§4.2 role map)
-        public readonly CellStyle UserPrefixStyle, UserTextStyle, SystemStyle, ToolNameStyle, ToolArgsStyle;
-        public readonly CellStyle ToolRunningStyle, ToolOkStyle, ToolErrorStyle, ToolBodyStyle;
-        public readonly CellStyle ToolPillRunningStyle, ToolPillOkStyle, ToolPillErrorStyle, DimStyle;
-    }
 
     private static readonly Catalog _initialCatalog = BuildInitial();
 
@@ -78,27 +30,10 @@ public static class ChatPalette
     [ThreadStatic]
     private static Catalog? _framePinned;
 
-    private static Catalog BuildInitial()
-    {
-        TerminalColorPalette.ThemeChanged += (_, _) => _catalog = new Catalog(TerminalColorPalette.Current);
-        return new Catalog(TerminalColorPalette.Current);
-    }
-
     /// <summary>
-    /// Frame-boundary snapshot (renderer-moat hot-swap): pins the current
-    /// catalog for the CALLING render thread until <see cref="UnpinFrame"/>.
-    /// A concurrent <see cref="TerminalColorPalette.Apply"/> publishes a new
-    /// catalog but cannot tear the pinned frame; the new catalog is picked up
-    /// by the next pin. Lock-free — a volatile field read plus a ThreadStatic
-    /// assignment; callers on other threads are unaffected.
+    ///     Active projection for the calling thread: the pinned frame
+    ///     snapshot when one is armed, the live catalog otherwise.
     /// </summary>
-    public static void PinFrame() => _framePinned = _catalog;
-
-    /// <summary>Ends the pinned-frame scope for the calling thread.</summary>
-    public static void UnpinFrame() => _framePinned = null;
-
-    /// <summary>Active projection for the calling thread: the pinned frame
-    /// snapshot when one is armed, the live catalog otherwise.</summary>
     private static Catalog C => _framePinned ?? _catalog;
 
     // ── HDS v1 raw color tokens (truecolor 24-bit) ─────────────────────────
@@ -160,28 +95,100 @@ public static class ChatPalette
     /// <summary>Tool output body — primary text tone.</summary>
     public static CellStyle ToolBody => C.ToolBodyStyle;
 
-    /// <summary>Tool status pill — running (<c>"running"</c>) — warning
-    /// yellow. Cell-side projection of
-    /// <c>StatusMappers.ToolCallStatusToBrushKey(Running)</c>
-    /// (<c>MochaYellow</c>); same color as <see cref="ToolRunning"/>
-    /// (glyph style), separate member so the pill can diverge.</summary>
+    /// <summary>
+    ///     Tool status pill — running (<c>"running"</c>) — warning
+    ///     yellow. Cell-side projection of
+    ///     <c>StatusMappers.ToolCallStatusToBrushKey(Running)</c>
+    ///     (<c>MochaYellow</c>); same color as <see cref="ToolRunning" />
+    ///     (glyph style), separate member so the pill can diverge.
+    /// </summary>
     public static CellStyle ToolPillRunning => C.ToolPillRunningStyle;
 
-    /// <summary>Tool status pill — success (<c>"ok"</c>) — success green.
-    /// Cell-side projection of
-    /// <c>StatusMappers.ToolCallStatusToBrushKey(Success)</c>
-    /// (<c>MochaGreen</c>); same color as <see cref="ToolOk"/>
-    /// (glyph style), separate member so the pill can diverge.</summary>
+    /// <summary>
+    ///     Tool status pill — success (<c>"ok"</c>) — success green.
+    ///     Cell-side projection of
+    ///     <c>StatusMappers.ToolCallStatusToBrushKey(Success)</c>
+    ///     (<c>MochaGreen</c>); same color as <see cref="ToolOk" />
+    ///     (glyph style), separate member so the pill can diverge.
+    /// </summary>
     public static CellStyle ToolPillOk => C.ToolPillOkStyle;
 
-    /// <summary>Tool status pill — error (<c>"err"</c>) — error red.
-    /// Cell-side projection of
-    /// <c>StatusMappers.ToolCallStatusToBrushKey(Error)</c>
-    /// (<c>MochaRed</c>); same color as <see cref="ToolError"/>
-    /// (glyph style), separate member so the pill can diverge.</summary>
+    /// <summary>
+    ///     Tool status pill — error (<c>"err"</c>) — error red.
+    ///     Cell-side projection of
+    ///     <c>StatusMappers.ToolCallStatusToBrushKey(Error)</c>
+    ///     (<c>MochaRed</c>); same color as <see cref="ToolError" />
+    ///     (glyph style), separate member so the pill can diverge.
+    /// </summary>
     public static CellStyle ToolPillError => C.ToolPillErrorStyle;
 
-    /// <summary>Gutters, hints, secondary metadata — SGR dim (terminal-level
-    /// muted rendering; keeps goldens stable across truecolor capability).</summary>
+    /// <summary>
+    ///     Gutters, hints, secondary metadata — SGR dim (terminal-level
+    ///     muted rendering; keeps goldens stable across truecolor capability).
+    /// </summary>
     public static CellStyle Dim => C.DimStyle;
+
+    private static Catalog BuildInitial()
+    {
+        TerminalColorPalette.ThemeChanged += (_, _) => _catalog = new Catalog(TerminalColorPalette.Current);
+        return new Catalog(TerminalColorPalette.Current);
+    }
+
+    /// <summary>
+    ///     Frame-boundary snapshot (renderer-moat hot-swap): pins the current
+    ///     catalog for the CALLING render thread until <see cref="UnpinFrame" />.
+    ///     A concurrent <see cref="TerminalColorPalette.Apply" /> publishes a new
+    ///     catalog but cannot tear the pinned frame; the new catalog is picked up
+    ///     by the next pin. Lock-free — a volatile field read plus a ThreadStatic
+    ///     assignment; callers on other threads are unaffected.
+    /// </summary>
+    public static void PinFrame() => _framePinned = _catalog;
+
+    /// <summary>Ends the pinned-frame scope for the calling thread.</summary>
+    public static void UnpinFrame() => _framePinned = null;
+
+    /// <summary>Per-theme projection: raw color tokens + derived cell styles.</summary>
+    private sealed class Catalog
+    {
+        public readonly CellStyle ToolPillRunningStyle, ToolPillOkStyle, ToolPillErrorStyle, DimStyle;
+        public readonly CellStyle ToolRunningStyle, ToolOkStyle, ToolErrorStyle, ToolBodyStyle;
+
+        // Semantic cell styles (HDS v1 §1.3/§4.2 role map)
+        public readonly CellStyle UserPrefixStyle, UserTextStyle, SystemStyle, ToolNameStyle, ToolArgsStyle;
+
+        public readonly PackedColor _accent, _success, _warning, _error, _tool, _systemToken, _text, _muted;
+        public readonly PackedColor _bg, _panel, _surface, _surface2, _border;
+        public Catalog(HarborTheme theme)
+        {
+            _accent = Project(theme.Accent);
+            _success = Project(theme.Success);
+            _warning = Project(theme.Warning);
+            _error = Project(theme.Error);
+            _tool = Project(theme.Tool);
+            _systemToken = Project(theme.System);
+            _text = Project(theme.Text);
+            _muted = Project(theme.Muted);
+            _bg = Project(theme.Background);
+            _panel = Project(theme.Panel);
+            _surface = Project(theme.Surface);
+            _surface2 = Project(theme.Surface2);
+            _border = Project(theme.Border);
+
+            UserPrefixStyle = new CellStyle(_accent, attrs: StyleAttr.Bold);
+            UserTextStyle = new CellStyle(attrs: StyleAttr.Bold);
+            SystemStyle = new CellStyle(_muted, attrs: StyleAttr.Dim | StyleAttr.Italic);
+            ToolNameStyle = new CellStyle(_tool, attrs: StyleAttr.Bold);
+            ToolArgsStyle = new CellStyle(_text);
+            ToolRunningStyle = new CellStyle(_warning);
+            ToolOkStyle = new CellStyle(_success);
+            ToolErrorStyle = new CellStyle(_error);
+            ToolBodyStyle = new CellStyle(_text);
+            ToolPillRunningStyle = new CellStyle(_warning);
+            ToolPillOkStyle = new CellStyle(_success);
+            ToolPillErrorStyle = new CellStyle(_error);
+            DimStyle = new CellStyle(attrs: StyleAttr.Dim);
+        }
+
+        private static PackedColor Project(RgbColor c) => PackedColor.Rgb(c.R, c.G, c.B);
+    }
 }

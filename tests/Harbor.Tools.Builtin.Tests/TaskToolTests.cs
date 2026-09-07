@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
@@ -6,7 +5,9 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
+
 /// <summary>
 ///     Tests for <see cref="TaskTool" /> — argument validation, unknown-agent errors,
 ///     non-sub-agent rejection, and the happy path message formatting.
@@ -157,10 +158,10 @@ public class TaskToolTests
         var agents = new AgentRegistry();
         agents.Register(SubAgent("explore"));
         var runner = new FakeRunner(Result.Success(new SubAgentRunResult(
-            SessionId: "sub-1",
-            AgentName: "explore",
-            FinalOutput: "found 3 TODO comments in src/",
-            NewMessages: 2)));
+            "sub-1",
+            "explore",
+            "found 3 TODO comments in src/",
+            2)));
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
 
         var args = Args(("agent", "explore"), ("prompt", "find all TODOs"));
@@ -196,7 +197,7 @@ public class TaskToolTests
     {
         var agents = new AgentRegistry();
         agents.Register(SubAgent("explore"));
-        var runner = new FakeRunner(Result.Success(new SubAgentRunResult("sub-1", "explore", "never", 0)), canSpawn: false);
+        var runner = new FakeRunner(Result.Success(new SubAgentRunResult("sub-1", "explore", "never", 0)), false);
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
 
         var args = Args(("agent", "explore"), ("prompt", "hi"));

@@ -1,9 +1,4 @@
 using System.Text;
-using Harbor.Tui.CellForge.Rendering;
-using Harbor.Tui.CellForge.Widgets;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>PanelFx — pure motion-primitive contracts (HDS v1 timings).</summary>
@@ -21,8 +16,8 @@ public class PanelFxTests
     [Test]
     public async Task Progress_BeforeStart_IsSettled()
     {
-        await Assert.That(PanelFx.Progress(startTick: 10, nowTick: 10, PanelFx.FadeFrames)).IsEqualTo(1.0);
-        await Assert.That(PanelFx.Progress(startTick: 20, nowTick: 5, PanelFx.FadeFrames)).IsEqualTo(1.0);
+        await Assert.That(PanelFx.Progress(10, 10, PanelFx.FadeFrames)).IsEqualTo(1.0);
+        await Assert.That(PanelFx.Progress(20, 5, PanelFx.FadeFrames)).IsEqualTo(1.0);
     }
 
     [Test]
@@ -32,8 +27,8 @@ public class PanelFxTests
         double half = PanelFx.Progress(0, PanelFx.FadeFrames / 2, PanelFx.FadeFrames);
         double full = PanelFx.Progress(0, PanelFx.FadeFrames * 3, PanelFx.FadeFrames);
 
-        await Assert.That(first > 0).IsTrue();            // ease-out overshoots linear
-        await Assert.That(first > (1.0 / PanelFx.FadeFrames)).IsTrue();
+        await Assert.That(first > 0).IsTrue(); // ease-out overshoots linear
+        await Assert.That(first > 1.0 / PanelFx.FadeFrames).IsTrue();
         await Assert.That(half > 0.5 && half < 1.0).IsTrue();
         await Assert.That(full).IsEqualTo(1.0);
     }
@@ -41,11 +36,11 @@ public class PanelFxTests
     [Test]
     public async Task WarnPulse_SymmetricAroundZeroBirthGuarded()
     {
-        await Assert.That(PanelFx.WarnPulse(birthTick: -1, nowTick: 999)).IsEqualTo(0.0);
-        await Assert.That(PanelFx.WarnPulse(10, nowTick: 10)).IsEqualTo(0.0);
+        await Assert.That(PanelFx.WarnPulse(-1, 999)).IsEqualTo(0.0);
+        await Assert.That(PanelFx.WarnPulse(10, 10)).IsEqualTo(0.0);
 
-        double mid = PanelFx.WarnPulse(0, nowTick: PanelFx.PulseFrames / 4);   // peak
-        double trough = PanelFx.WarnPulse(0, nowTick: PanelFx.PulseFrames * 3 / 4); // negative sine → clamp
+        double mid = PanelFx.WarnPulse(0, PanelFx.PulseFrames / 4); // peak
+        double trough = PanelFx.WarnPulse(0, PanelFx.PulseFrames * 3 / 4); // negative sine → clamp
 
         await Assert.That(mid > 0.99).IsTrue();
         await Assert.That(trough).IsEqualTo(0.0);

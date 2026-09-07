@@ -1,6 +1,7 @@
-using System.Text.Json.Serialization;
 using MemoryPack;
+using System.Text.Json.Serialization;
 namespace Harbor.Abstractions.Models;
+
 /// <summary>
 ///     Status of a session — tracks agent activity state.
 /// </summary>

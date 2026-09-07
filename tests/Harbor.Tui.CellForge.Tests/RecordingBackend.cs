@@ -1,9 +1,8 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
-/// <summary>In-memory <see cref="ITerminalBackend"/> capturing every frame write.</summary>
+/// <summary>In-memory <see cref="ITerminalBackend" /> capturing every frame write.</summary>
 internal sealed class RecordingBackend : ITerminalBackend
 {
     private readonly List<byte[]> _writes = [];
@@ -16,12 +15,12 @@ internal sealed class RecordingBackend : ITerminalBackend
         get
         {
             var combined = new List<byte>();
-            foreach (var w in _writes)
+            foreach (byte[] w in _writes)
             {
                 combined.AddRange(w);
             }
 
-            return Encoding.UTF8.GetString([.. combined]);
+            return Encoding.UTF8.GetString([..combined]);
         }
     }
 
@@ -30,7 +29,7 @@ internal sealed class RecordingBackend : ITerminalBackend
         get
         {
             long total = 0;
-            foreach (var w in _writes)
+            foreach (byte[] w in _writes)
             {
                 total += w.Length;
             }
@@ -39,10 +38,10 @@ internal sealed class RecordingBackend : ITerminalBackend
         }
     }
 
-    public void ResetForTests() => _writes.Clear();
-
-    /// <summary>Control characters rendered visible (\e, \r, \n) so TUnit
-    /// comparisons never see raw CR/LF.</summary>
+    /// <summary>
+    ///     Control characters rendered visible (\e, \r, \n) so TUnit
+    ///     comparisons never see raw CR/LF.
+    /// </summary>
     public string Escaped => Text
         .Replace("\u001B", "\\e")
         .Replace("\r", "\\r")
@@ -54,10 +53,11 @@ internal sealed class RecordingBackend : ITerminalBackend
         return ValueTask.CompletedTask;
     }
 
-    /// <summary>Sync twin used by <see cref="AnsiWriter.EndFrame"/> (sync render
-    /// contexts and perf probes) — same capture semantics.</summary>
-    public void Write(ReadOnlySpan<byte> bytes)
-    {
-        _writes.Add(bytes.ToArray());
-    }
+    /// <summary>
+    ///     Sync twin used by <see cref="AnsiWriter.EndFrame" /> (sync render
+    ///     contexts and perf probes) — same capture semantics.
+    /// </summary>
+    public void Write(ReadOnlySpan<byte> bytes) => _writes.Add(bytes.ToArray());
+
+    public void ResetForTests() => _writes.Clear();
 }

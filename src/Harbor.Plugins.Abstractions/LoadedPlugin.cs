@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Plugins;
 namespace Harbor.Plugins.Abstractions;
+
 /// <summary>
 ///     A live <see cref="IPlugin" /> instance plus the metadata the registration layer
 ///     needs to wire it into the host. Produced by <see cref="IPluginInstantiator" />.
@@ -11,13 +12,13 @@ namespace Harbor.Plugins.Abstractions;
 /// <param name="SourcePath">Source identity (path / resource name / synthetic id).</param>
 /// <param name="SourceHash">SHA-256 hex hash of the source text.</param>
 /// <param name="LoadedFromCache">
-    ///     <see langword="true" /> if the compiled assembly was loaded from disk cache.
-    /// </param>
-    /// <param name="DeclaredCapabilities">
-    ///     Capabilities declared in the plugin's manifest (fail-closed empty set when
-    ///     absent). Used by the execution sandbox and audit trail.
-    /// </param>
-    public sealed record LoadedPlugin(
+///     <see langword="true" /> if the compiled assembly was loaded from disk cache.
+/// </param>
+/// <param name="DeclaredCapabilities">
+///     Capabilities declared in the plugin's manifest (fail-closed empty set when
+///     absent). Used by the execution sandbox and audit trail.
+/// </param>
+public sealed record LoadedPlugin(
     IPlugin Instance,
     string Name,
     Version Version,
@@ -27,6 +28,9 @@ namespace Harbor.Plugins.Abstractions;
     bool LoadedFromCache,
     IReadOnlySet<PluginCapability> DeclaredCapabilities)
 {
+
+    private static readonly IReadOnlySet<PluginCapability> FrozenCapabilities =
+        new HashSet<PluginCapability>();
     /// <summary>
     ///     Convenience ctor for callers that don't track capability manifests
     ///     (legacy tests, custom instantiators) — grants an empty set (fail-closed).
@@ -48,7 +52,4 @@ namespace Harbor.Plugins.Abstractions;
     ///     slash-command. Format: <c>name@version (file)</c>.
     /// </summary>
     public string DisplayName => $"{Name}@{Version} ({Path.GetFileName(SourcePath)})";
-
-    private static readonly IReadOnlySet<PluginCapability> FrozenCapabilities =
-        new HashSet<PluginCapability>();
 }

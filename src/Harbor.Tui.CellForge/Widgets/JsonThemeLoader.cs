@@ -2,27 +2,26 @@ using CSharpFunctionalExtensions;
 using Harbor.DesignSystem;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Services;
-
 namespace Harbor.Tui.CellForge.Widgets;
 
 public sealed class JsonThemeLoader : IThemeService
 {
-    public static HarborTheme Default { get; } = new HarborTheme(
+    public static HarborTheme Default { get; } = new(
         "harbor-terminal",
-        Accent: new RgbColor(0x39, 0xBA, 0xE6),
-        Success: new RgbColor(0x7F, 0xD9, 0x62),
-        Warning: new RgbColor(0xFF, 0xB4, 0x54),
-        Error: new RgbColor(0xFF, 0x6B, 0x6B),
-        Tool: new RgbColor(0xD2, 0xA6, 0xFF),
-        System: new RgbColor(0xF2, 0x96, 0x68),
-        User: new RgbColor(0x39, 0xBA, 0xE6),
-        Background: new RgbColor(0x0A, 0x0E, 0x14),
-        Panel: new RgbColor(0x0D, 0x11, 0x17),
-        Surface: new RgbColor(0x13, 0x18, 0x20),
-        Surface2: new RgbColor(0x1A, 0x1F, 0x2B),
-        Border: new RgbColor(0x1F, 0x24, 0x30),
-        Muted: new RgbColor(0x5C, 0x67, 0x73),
-        Text: new RgbColor(0xB3, 0xB9, 0xC5));
+        new RgbColor(0x39, 0xBA, 0xE6),
+        new RgbColor(0x7F, 0xD9, 0x62),
+        new RgbColor(0xFF, 0xB4, 0x54),
+        new RgbColor(0xFF, 0x6B, 0x6B),
+        new RgbColor(0xD2, 0xA6, 0xFF),
+        new RgbColor(0xF2, 0x96, 0x68),
+        new RgbColor(0x39, 0xBA, 0xE6),
+        new RgbColor(0x0A, 0x0E, 0x14),
+        new RgbColor(0x0D, 0x11, 0x17),
+        new RgbColor(0x13, 0x18, 0x20),
+        new RgbColor(0x1A, 0x1F, 0x2B),
+        new RgbColor(0x1F, 0x24, 0x30),
+        new RgbColor(0x5C, 0x67, 0x73),
+        new RgbColor(0xB3, 0xB9, 0xC5));
 
     public static RgbColor ChatUser => Default.Accent;
     public static RgbColor ChatAssistant => Default.Text;
@@ -76,6 +75,23 @@ public sealed class JsonThemeLoader : IThemeService
         return result.IsSuccess ? Result.Success() : Result.Failure(result.Error);
     }
 
+    public IDisposable Watch(string path)
+    {
+        var watcher = new ThemeFileWatcher(path, ApplyResult, OnError);
+        return watcher;
+
+        void ApplyResult(HarborTheme theme)
+        {
+            TerminalColorPalette.Apply(theme);
+            ThemeJsonApplied?.Invoke(this, string.Empty);
+        }
+
+        void OnError(string error)
+        {
+            // Theme file watcher errors are non-fatal; live-reload resumes on next write.
+        }
+    }
+
     public static Result<HarborTheme> LoadFile(string path)
     {
         try
@@ -111,21 +127,4 @@ public sealed class JsonThemeLoader : IThemeService
     }
 
     internal static bool TryParseHex(string hex, out RgbColor color) => ThemeJson.TryParseHex(hex, out color);
-
-    public IDisposable Watch(string path)
-    {
-        var watcher = new ThemeFileWatcher(path, ApplyResult, OnError);
-        return watcher;
-
-        void ApplyResult(HarborTheme theme)
-        {
-            TerminalColorPalette.Apply(theme);
-            ThemeJsonApplied?.Invoke(this, string.Empty);
-        }
-
-        void OnError(string error)
-        {
-            // Theme file watcher errors are non-fatal; live-reload resumes on next write.
-        }
-    }
 }

@@ -1,6 +1,7 @@
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
@@ -10,19 +11,16 @@ using Harbor.E2E.Framework;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Storage.Memory;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.LoadTests;
 
 /// <summary>
 ///     In-process multi-session load harness: composes the REAL agent stack
-    ///     (shared <see cref="AgentLoop" /> singleton + shared
+///     (shared <see cref="AgentLoop" /> singleton + shared
 ///     <see cref="InMemoryEventBus" /> + real <see cref="OpenAiCompatibleLlmClient" />
 ///     over HTTP/SSE + <see cref="MemorySessionStore" />) and drives
 ///     <c>sessionCount × agentsPerSession</c> agent runs against one
-    ///     <see cref="MockLlmServer" /> in echo mode.
+///     <see cref="MockLlmServer" /> in echo mode.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -42,18 +40,16 @@ namespace Harbor.LoadTests;
 public sealed class MultiSessionLoadHarness : IAsyncDisposable
 {
     private const string Model = "test-model";
+    private readonly List<AgentDefinition> _agentDefs = [];
+    private readonly int _agentsPerSession;
+    private readonly InMemoryEventBus _bus;
+    private readonly List<LoadSessionContext> _contexts = [];
+    private readonly AgentLoop _loop;
 
     private readonly MockLlmServer _server;
-    private readonly InMemoryEventBus _bus;
     private readonly MemorySessionStore _store;
-    private readonly AgentLoop _loop;
-    private readonly TokenBucketRateLimiter _limiter;
-    private readonly LoadSignals _signals;
-    private readonly int _agentsPerSession;
-    private readonly List<AgentDefinition> _agentDefs = [];
     private readonly List<IDisposable> _subscriptions = [];
     private readonly List<UiStore> _uiStores = [];
-    private readonly List<LoadSessionContext> _contexts = [];
 
     private MultiSessionLoadHarness(
         MockLlmServer server,
@@ -68,19 +64,30 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         _bus = bus;
         _store = store;
         _loop = loop;
-        _limiter = limiter;
-        _signals = signals;
+        Limiter = limiter;
+        Signals = signals;
         _agentsPerSession = agentsPerSession;
     }
 
-    public LoadSignals Signals => _signals;
+    public LoadSignals Signals { get; }
 
-    public TokenBucketRateLimiter Limiter => _limiter;
+    public TokenBucketRateLimiter Limiter { get; }
 
     public IReadOnlyList<LoadSessionContext> Contexts => _contexts;
 
     /// <summary>Per-session UiStores bound to the shared bus (concurrent reducer dispatch under load).</summary>
     public IReadOnlyList<UiStore> Stores => _uiStores;
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var sub in _subscriptions)
+        {
+            sub.Dispose();
+        }
+
+        Limiter.Dispose();
+        await _server.StopAsync().ConfigureAwait(false);
+    }
 
     /// <summary>
     ///     Spin up the whole stack: mock server (echo mode, dilated chunk
@@ -117,7 +124,7 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         var agentDefs = new List<AgentDefinition>(agentsPerSession);
         for (int a = 0; a < agentsPerSession; a++)
         {
-            AgentDefinition def = LoadTestFakes.Agent("agent-" + a);
+            var def = LoadTestFakes.Agent("agent-" + a);
             agentDefs.Add(def);
             agents.Register(def);
         }
@@ -161,7 +168,7 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         var tasks = new Task<SessionRunResult>[_contexts.Count];
         for (int s = 0; s < _contexts.Count; s++)
         {
-            LoadSessionContext ctx = _contexts[s];
+            var ctx = _contexts[s];
             tasks[s] = Task.Run(() => RunSessionAsync(ctx, ct), ct);
         }
 
@@ -173,7 +180,7 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
     {
         for (int s = 0; s < sessionCount; s++)
         {
-            Result<Harbor.Abstractions.Models.Session> created =
+            var created =
                 await _store.CreateAsync("/tmp/harbor-load-" + s, "agent-0", "mock", Model, ct)
                     .ConfigureAwait(false);
             if (created.IsFailure)
@@ -186,7 +193,7 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
     }
 
     /// <summary>Read the persisted transcript for a session (independent of the contexts).</summary>
-    public Task<Result<IReadOnlyList<Harbor.Abstractions.Models.AgentMessage>>> ReadStoredAsync(string sessionId, CancellationToken ct = default) =>
+    public Task<Result<IReadOnlyList<AgentMessage>>> ReadStoredAsync(string sessionId, CancellationToken ct = default) =>
         _store.GetMessagesAsync(sessionId, ct);
 
     private async Task<SessionRunResult> RunSessionAsync(LoadSessionContext ctx, CancellationToken ct)
@@ -196,9 +203,9 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
 
         for (int a = 0; a < _agentsPerSession; a++)
         {
-            AgentDefinition agent = AgentFor(a);
+            var agent = AgentFor(a);
             string prompt = $"session-{ctx.Session.Id[..8]}-run-{a}-prompt";
-            var message = new Harbor.Abstractions.Models.UserMessage(
+            var message = new UserMessage(
                 Guid.NewGuid().ToString("N"),
                 ctx.Session.Id,
                 DateTimeOffset.UtcNow,
@@ -211,7 +218,7 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
             // persists only assistant messages itself.
             await ctx.AppendMessageAsync(message, ct).ConfigureAwait(false);
 
-            CSharpFunctionalExtensions.Result result;
+            Result result;
             try
             {
                 result = await _loop.RunAsync(ctx, agent, ct).ConfigureAwait(false);
@@ -236,17 +243,6 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
     }
 
     private AgentDefinition AgentFor(int index) => _agentDefs[index];
-
-    public async ValueTask DisposeAsync()
-    {
-        foreach (IDisposable sub in _subscriptions)
-        {
-            sub.Dispose();
-        }
-
-        _limiter.Dispose();
-        await _server.StopAsync().ConfigureAwait(false);
-    }
 }
 
 /// <summary>Per-session outcome of <see cref="MultiSessionLoadHarness.RunAllAsync" />.</summary>

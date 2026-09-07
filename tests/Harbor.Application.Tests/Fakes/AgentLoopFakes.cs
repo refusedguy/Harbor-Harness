@@ -1,6 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -10,7 +7,9 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Threading.Channels;
 namespace Harbor.Application.Tests.Fakes;
 
 public sealed class ScriptedLlmClient : ILlmClient
@@ -35,9 +34,9 @@ public sealed class ScriptedLlmClient : ILlmClient
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         Requests.Add(request);
-        LlmEvent[] script = _scripts[Math.Min(_callIndex, _scripts.Length - 1)];
+        var script = _scripts[Math.Min(_callIndex, _scripts.Length - 1)];
         _callIndex++;
-        foreach (LlmEvent evt in script)
+        foreach (var evt in script)
         {
             yield return evt;
             await Task.Yield();
@@ -74,10 +73,10 @@ public sealed class FakeAgentRegistry(params AgentDefinition[] agents) : IAgentR
     private readonly Dictionary<string, AgentDefinition> _agents =
         agents.ToDictionary(a => a.Name.Value, StringComparer.Ordinal);
 
-    public IReadOnlyList<AgentDefinition> GetAllAgents() => [.. _agents.Values];
+    public IReadOnlyList<AgentDefinition> GetAllAgents() => [.._agents.Values];
 
     public Result<AgentDefinition> GetAgent(AgentName name) =>
-        _agents.TryGetValue(name.Value, out AgentDefinition? definition)
+        _agents.TryGetValue(name.Value, out var definition)
             ? Result.Success(definition)
             : Result.Failure<AgentDefinition>($"Agent '{name.Value}' is not registered.");
 
@@ -144,7 +143,7 @@ public sealed class FakeToolRegistry(params ITool[] tools) : IToolRegistry
         => Snapshot();
 
     public Result<ITool> GetTool(ToolName name) =>
-        _tools.TryGetValue(name.Value, out ITool? tool)
+        _tools.TryGetValue(name.Value, out var tool)
             ? Result.Success(tool)
             : Result.Failure<ITool>($"Unknown tool '{name.Value}'.");
 
@@ -245,7 +244,7 @@ public sealed class FakeCompactionService : ICompactionService
 
 public sealed class TestSessionContext(Session session, IReadOnlyList<AgentMessage>? seedMessages = null) : ISessionContext
 {
-    private readonly List<AgentMessage> _messages = [.. seedMessages ?? []];
+    private readonly List<AgentMessage> _messages = [..seedMessages ?? []];
 
     public Session Session { get; } = session;
 
@@ -263,7 +262,7 @@ public sealed class TestSessionContext(Session session, IReadOnlyList<AgentMessa
 
     public void EnqueueSteering(params AgentMessage[] messages)
     {
-        foreach (AgentMessage message in messages)
+        foreach (var message in messages)
         {
             SteeringQueue.Writer.TryWrite(message);
         }

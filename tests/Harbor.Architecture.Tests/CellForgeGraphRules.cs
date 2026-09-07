@@ -27,7 +27,7 @@ public sealed class CellForgeGraphRules
 
         // The controller itself must live inside the CellForge assembly.
         var controller = consoleEx!.GetType(
-            "Harbor.Tui.CellForge.Input.UnixTermiosModeController", throwOnError: false);
+            "Harbor.Tui.CellForge.Input.UnixTermiosModeController", false);
         await Assert.That(controller).IsNotNull()
             .Because("UnixTermiosModeController must remain a CellForge-internal detail.");
 
@@ -39,12 +39,12 @@ public sealed class CellForgeGraphRules
         HashSet<string> allowed =
         [
             "Harbor.Tui.CellForge", // self
-            "Harbor.App.Cli",       // composition root: CellForgeReplRunner wiring
-            "Harbor.Hosting"        // TuiModule: CellForgeTuiRenderer registration
+            "Harbor.App.Cli", // composition root: CellForgeReplRunner wiring
+            "Harbor.Hosting" // TuiModule: CellForgeTuiRenderer registration
         ];
 
         var violations = new List<string>();
-        foreach (var (name, asm) in loaded)
+        foreach ((string name, var asm) in loaded)
         {
             if (allowed.Contains(name))
             {

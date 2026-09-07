@@ -1,7 +1,6 @@
+using Harbor.Tui.CellForge.Input;
 using System.Runtime.InteropServices;
 using System.Text;
-using Harbor.Tui.CellForge.Input;
-
 #pragma warning disable S108, S2486 // Best-effort interop probes in tests — intentionally ignored.
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -9,10 +8,10 @@ namespace Harbor.Tui.CellForge.Tests;
 public class WindowsVtModeControllerTests
 {
     [DllImport("kernel32", SetLastError = true)]
-    private static extern uint GetConsoleCP();
+    private extern static uint GetConsoleCP();
 
     [DllImport("kernel32", SetLastError = true)]
-    private static extern uint GetConsoleOutputCP();
+    private extern static uint GetConsoleOutputCP();
 
     [Test]
     public async Task InitialState_IsRaw_False()
@@ -78,7 +77,8 @@ public class WindowsVtModeControllerTests
         }
         finally
         {
-            try { controller.Restore(); } catch { }
+            try { controller.Restore(); }
+            catch {}
         }
     }
 
@@ -108,23 +108,25 @@ public class WindowsVtModeControllerTests
         {
             controller.Enter();
             await Assert.That(controller.IsRaw).IsTrue();
-            try { controller.Restore(); } catch { }
+            try { controller.Restore(); }
+            catch {}
             await Assert.That(controller.IsRaw).IsFalse();
         }
         catch (InvalidOperationException ex)
         {
             await Assert.That(controller.IsRaw).IsFalse();
-            var msg = ex.Message;
-            var containsExpected = msg.Contains("not a console", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("GetConsoleMode", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("GetStdHandle", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("stdin", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("handle", StringComparison.OrdinalIgnoreCase);
+            string msg = ex.Message;
+            bool containsExpected = msg.Contains("not a console", StringComparison.OrdinalIgnoreCase)
+                                    || msg.Contains("GetConsoleMode", StringComparison.OrdinalIgnoreCase)
+                                    || msg.Contains("GetStdHandle", StringComparison.OrdinalIgnoreCase)
+                                    || msg.Contains("stdin", StringComparison.OrdinalIgnoreCase)
+                                    || msg.Contains("handle", StringComparison.OrdinalIgnoreCase);
             await Assert.That(containsExpected).IsTrue();
         }
         finally
         {
-            try { controller.Restore(); } catch { }
+            try { controller.Restore(); }
+            catch {}
         }
     }
 
@@ -141,10 +143,14 @@ public class WindowsVtModeControllerTests
         uint originalInputCp = 0;
         uint originalOutputCp = 0;
 
-        try { originalInputEncoding = Console.InputEncoding; } catch { }
-        try { originalOutputEncoding = Console.OutputEncoding; } catch { }
-        try { originalInputCp = GetConsoleCP(); } catch { }
-        try { originalOutputCp = GetConsoleOutputCP(); } catch { }
+        try { originalInputEncoding = Console.InputEncoding; }
+        catch {}
+        try { originalOutputEncoding = Console.OutputEncoding; }
+        catch {}
+        try { originalInputCp = GetConsoleCP(); }
+        catch {}
+        try { originalOutputCp = GetConsoleOutputCP(); }
+        catch {}
 
         var controller = new WindowsVtModeController();
         bool entered = false;
@@ -172,7 +178,7 @@ public class WindowsVtModeControllerTests
                 var inputEnc = Console.InputEncoding;
                 await Assert.That(inputEnc.CodePage).IsEqualTo(Encoding.UTF8.CodePage);
             }
-            catch { }
+            catch {}
 
             try
             {
@@ -183,7 +189,7 @@ public class WindowsVtModeControllerTests
                     await Assert.That(cp).IsEqualTo(65001u);
                 }
             }
-            catch { }
+            catch {}
 
             try
             {
@@ -193,11 +199,12 @@ public class WindowsVtModeControllerTests
                     await Assert.That(outCp).IsEqualTo(65001u);
                 }
             }
-            catch { }
+            catch {}
         }
         finally
         {
-            try { controller.Restore(); } catch { }
+            try { controller.Restore(); }
+            catch {}
         }
 
         await Assert.That(controller.IsRaw).IsFalse();
@@ -210,7 +217,7 @@ public class WindowsVtModeControllerTests
                 var after = Console.InputEncoding;
                 await Assert.That(after.CodePage).IsEqualTo(originalInputEncoding.CodePage);
             }
-            catch { }
+            catch {}
         }
 
         if (originalOutputEncoding is not null)
@@ -220,33 +227,33 @@ public class WindowsVtModeControllerTests
                 var after = Console.OutputEncoding;
                 await Assert.That(after.CodePage).IsEqualTo(originalOutputEncoding.CodePage);
             }
-            catch { }
+            catch {}
         }
 
         if (originalInputCp != 0)
         {
             try
             {
-                var afterCp = GetConsoleCP();
+                uint afterCp = GetConsoleCP();
                 if (afterCp != 0)
                 {
                     await Assert.That(afterCp).IsEqualTo(originalInputCp);
                 }
             }
-            catch { }
+            catch {}
         }
 
         if (originalOutputCp != 0)
         {
             try
             {
-                var afterOutCp = GetConsoleOutputCP();
+                uint afterOutCp = GetConsoleOutputCP();
                 if (afterOutCp != 0)
                 {
                     await Assert.That(afterOutCp).IsEqualTo(originalOutputCp);
                 }
             }
-            catch { }
+            catch {}
         }
     }
 
@@ -284,7 +291,8 @@ public class WindowsVtModeControllerTests
         }
         finally
         {
-            try { controller.Restore(); } catch { }
+            try { controller.Restore(); }
+            catch {}
         }
 
         await Assert.That(controller.IsRaw).IsFalse();
@@ -327,17 +335,18 @@ public class WindowsVtModeControllerTests
         catch (InvalidOperationException ex)
         {
             await Assert.That(controller.IsRaw).IsFalse();
-            var msg = ex.Message;
-            var containsExpected = msg.Contains("not a console", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("GetConsoleMode", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("GetStdHandle", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("stdin", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("handle", StringComparison.OrdinalIgnoreCase);
+            string msg = ex.Message;
+            bool containsExpected = msg.Contains("not a console", StringComparison.OrdinalIgnoreCase)
+                                    || msg.Contains("GetConsoleMode", StringComparison.OrdinalIgnoreCase)
+                                    || msg.Contains("GetStdHandle", StringComparison.OrdinalIgnoreCase)
+                                    || msg.Contains("stdin", StringComparison.OrdinalIgnoreCase)
+                                    || msg.Contains("handle", StringComparison.OrdinalIgnoreCase);
             await Assert.That(containsExpected).IsTrue();
         }
         finally
         {
-            try { controller.Restore(); } catch { }
+            try { controller.Restore(); }
+            catch {}
         }
     }
 }

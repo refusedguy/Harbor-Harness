@@ -1,11 +1,12 @@
 #nullable enable
-using System.Text;
-using System.Text.Json;
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text;
+using System.Text.Json;
 namespace Harbor.Benchmarks;
+
 /// <summary>
 ///     Benchmarks <see cref="JsonlSessionStore" /> hot paths:
 ///     - <see cref="JsonlSessionStore.AppendMessageAsync" />: append-only write,
@@ -141,15 +142,15 @@ public class JsonlParseBenchmark
 
     private const string AssistantLine =
         """{"type":"message","id":"msg-000124","parentId":null,"role":"assistant","createdAt":"2026-08-29T02:30:42.0784502+00:00","payload":{"parts":[{"type":"text","text":"Here is a function that reverses a string:\n\n```csharp\nstring Reverse(string s) => new string(s.Reverse().ToArray());\n```"}],"stopReason":"stop","usage":{"inputTokens":120,"outputTokens":35},"model":"claude-opus-4","isSummary":false}}""";
-
-    private string _root = null!;
-    private string _fileSessionId = null!;
-    private byte[] _userLineBytes = null!;
-    private byte[] _assistantLineBytes = null!;
     private readonly string _sessionId = "bench-session";
 
     [Params(100, 10_000)]
     public int MessageCount;
+    private byte[] _assistantLineBytes = null!;
+    private string _fileSessionId = null!;
+
+    private string _root = null!;
+    private byte[] _userLineBytes = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -167,8 +168,8 @@ public class JsonlParseBenchmark
 
         var sb = new StringBuilder(64 * 1024 * MessageCount / 1000);
         sb.AppendLine($$"""
-            {"type":"session","version":1,"id":"{{sessionId}}","projectId":"bench","directory":"/tmp","title":"bench","agent":"code","model":"stub-1","providerId":"stub","createdAt":"2026-08-29T00:00:00.0000000+00:00","updatedAt":"2026-08-29T00:00:00.0000000+00:00"}
-            """);
+                        {"type":"session","version":1,"id":"{{sessionId}}","projectId":"bench","directory":"/tmp","title":"bench","agent":"code","model":"stub-1","providerId":"stub","createdAt":"2026-08-29T00:00:00.0000000+00:00","updatedAt":"2026-08-29T00:00:00.0000000+00:00"}
+                        """);
 
         for (int i = 0; i < MessageCount / 2; i++)
         {
@@ -177,11 +178,11 @@ public class JsonlParseBenchmark
             string ts1 = $"2026-08-29T{2 + i / 3600:D2}:{i / 60 % 60:D2}:{i % 60:D2}.{i % 1000:D3}+00:00";
             string ts2 = $"2026-08-29T{3 + i / 3600:D2}:{i / 60 % 60:D2}:{i % 60:D2}.{i % 1000:D3}+00:00";
             sb.AppendLine($$$"""
-                {"type":"message","id":"msg-u-{{{i:D6}}}","parentId":null,"role":"user","createdAt":"{{{ts1}}}","payload":{"content":"Write a C# function that reverses a string. Include unit tests.","agent":"code","model":"stub-1"}}
-                """);
+                             {"type":"message","id":"msg-u-{{{i:D6}}}","parentId":null,"role":"user","createdAt":"{{{ts1}}}","payload":{"content":"Write a C# function that reverses a string. Include unit tests.","agent":"code","model":"stub-1"}}
+                             """);
             sb.AppendLine($$$"""
-                {"type":"message","id":"msg-a-{{{i:D6}}}","parentId":null,"role":"assistant","createdAt":"{{{ts2}}}","payload":{"parts":[{"type":"text","text":"Here is a function that reverses a string: Reverse(s). Runs in O(n)."}],"stopReason":"stop","usage":{"inputTokens":120,"outputTokens":35},"model":"stub-1","isSummary":false}}
-                """);
+                             {"type":"message","id":"msg-a-{{{i:D6}}}","parentId":null,"role":"assistant","createdAt":"{{{ts2}}}","payload":{"parts":[{"type":"text","text":"Here is a function that reverses a string: Reverse(s). Runs in O(n)."}],"stopReason":"stop","usage":{"inputTokens":120,"outputTokens":35},"model":"stub-1","isSummary":false}}
+                             """);
         }
 
         File.WriteAllText(Path.Combine(_root, sessionId + ".jsonl"), sb.ToString());
@@ -191,22 +192,18 @@ public class JsonlParseBenchmark
     public void Cleanup()
     {
         try { Directory.Delete(_root, true); }
-        catch { /* best-effort cleanup */ }
+        catch
+        { /* best-effort cleanup */
+        }
     }
 
     // ── NEW path (raw UTF-8 span parser) ──────────────────────────────────
 
     [Benchmark(Description = "NEW: parse one user line (raw UTF-8 span)", Baseline = true)]
-    public Result<AgentMessage> ParseLine_User()
-    {
-        return JsonlLineParser.Parse(_userLineBytes, _sessionId);
-    }
+    public Result<AgentMessage> ParseLine_User() => JsonlLineParser.Parse(_userLineBytes, _sessionId);
 
     [Benchmark(Description = "NEW: parse one assistant line (raw UTF-8 span)")]
-    public Result<AgentMessage> ParseLine_Assistant()
-    {
-        return JsonlLineParser.Parse(_assistantLineBytes, _sessionId);
-    }
+    public Result<AgentMessage> ParseLine_Assistant() => JsonlLineParser.Parse(_assistantLineBytes, _sessionId);
 
     // ── OLD path (string + GetBytes + JsonElement payload round-trip) ─────
 
@@ -237,7 +234,9 @@ public class JsonlParseBenchmark
                 {
                     case "id": id = reader.GetString()!; break;
                     case "createdAt": createdAt = reader.GetDateTimeOffset(); break;
-                    case "parentId": if (reader.TokenType == JsonTokenType.String) parentId = reader.GetString()!; break;
+                    case "parentId":
+                        if (reader.TokenType == JsonTokenType.String) parentId = reader.GetString()!;
+                        break;
                     case "payload": payload = JsonSerializer.Deserialize(ref reader, JsonlCodecContext.Default.JsonElement); break;
                 }
             }
@@ -307,7 +306,9 @@ public class JsonlParseBenchmark
                 {
                     case "id": id = reader.GetString()!; break;
                     case "createdAt": createdAt = reader.GetDateTimeOffset(); break;
-                    case "parentId": if (reader.TokenType == JsonTokenType.String) parentId = reader.GetString()!; break;
+                    case "parentId":
+                        if (reader.TokenType == JsonTokenType.String) parentId = reader.GetString()!;
+                        break;
                     case "payload": payload = JsonSerializer.Deserialize(ref reader, JsonlCodecContext.Default.JsonElement); break;
                 }
             }

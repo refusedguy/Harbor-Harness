@@ -1,5 +1,4 @@
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class SpinnerStripTests
@@ -46,7 +45,7 @@ public class SpinnerStripTests
     [Test]
     public async Task Rhythms_DifferAtSameTick_SoUserSeesStateChange()
     {
-        string working = new(SpinnerStrip.Frame(5, SpinnerRhythm.Working));
+        string working = new(SpinnerStrip.Frame(5));
         string awaiting = new(SpinnerStrip.Frame(5, SpinnerRhythm.Awaiting));
         await Assert.That(working).IsNotEqualTo(awaiting);
     }
@@ -54,7 +53,7 @@ public class SpinnerStripTests
     [Test]
     public async Task Glyphs_AreSingleCellWidth()
     {
-        foreach (var f in SpinnerStrip.WorkingFrames.Concat(SpinnerStrip.AwaitingFrames))
+        foreach (string f in SpinnerStrip.WorkingFrames.Concat(SpinnerStrip.AwaitingFrames))
         {
             await Assert.That(UnicodeWidth.Width(f)).IsEqualTo(1);
         }

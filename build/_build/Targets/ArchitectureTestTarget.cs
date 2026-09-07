@@ -2,6 +2,7 @@ using Harbor.Build.Components;
 using Harbor.Build.Meta;
 using Nuke.Common.Tools.DotNet;
 namespace Harbor.Build.Targets;
+
 /// <summary>
 ///     Architecture-test target — runs only the
 ///     <c>Harbor.Architecture.Tests</c> project. Used to validate layer
@@ -17,7 +18,7 @@ public static class ArchitectureTestTarget
     public static void Execute(ArtifactPathResolver resolver, BuildSettings settings, BuildOutput output)
     {
         var csproj = resolver.TestsDirectory / "Harbor.Architecture.Tests" / "Harbor.Architecture.Tests.csproj";
-        var configuration = settings.ConfigurationString;
+        string configuration = settings.ConfigurationString;
         output.Cmd("ArchitectureTests", ["dotnet", "test", csproj.ToString(), "-c", configuration, "--no-restore", "--no-build"]);
         if (output.IsDryRun)
         {

@@ -1,12 +1,13 @@
+using System.Globalization;
 namespace Harbor.DesignSystem;
 
 /// <summary>
-/// OSC 11 auto-theme detection (Claude Code pattern): parse the terminal's
-/// background-color report (<c>OSC 11 ; rgb:RR/GG/BB ST|BEL</c>) and pick the
-/// built-in theme whose surfaces match the real terminal background — light
-/// report → <see cref="HarborTheme.HarborLight" />, dark →
-/// <see cref="HarborTheme.HarborDark" />. Pure static logic: no Console I/O,
-/// hosts send the query and feed the raw response here.
+///     OSC 11 auto-theme detection (Claude Code pattern): parse the terminal's
+///     background-color report (<c>OSC 11 ; rgb:RR/GG/BB ST|BEL</c>) and pick the
+///     built-in theme whose surfaces match the real terminal background — light
+///     report → <see cref="HarborTheme.HarborLight" />, dark →
+///     <see cref="HarborTheme.HarborDark" />. Pure static logic: no Console I/O,
+///     hosts send the query and feed the raw response here.
 /// </summary>
 public static class TerminalBackgroundProbe
 {
@@ -17,11 +18,11 @@ public static class TerminalBackgroundProbe
     public const double LightLuminanceThreshold = 0.5;
 
     /// <summary>
-    /// Parses an OSC 11 background report. Accepts BEL- and ST-terminated
-    /// responses, <c>rgb:</c> color specs in 8-bit (RR/GG/BB) and 16-bit
-    /// (RRRR/GGGG/BBBB) component forms; the 16-bit form keeps the high byte.
-    /// XParseColor scaled-RGB forms are out of scope — no known terminal
-    /// answers OSC 11 with them.
+    ///     Parses an OSC 11 background report. Accepts BEL- and ST-terminated
+    ///     responses, <c>rgb:</c> color specs in 8-bit (RR/GG/BB) and 16-bit
+    ///     (RRRR/GGGG/BBBB) component forms; the 16-bit form keeps the high byte.
+    ///     XParseColor scaled-RGB forms are out of scope — no known terminal
+    ///     answers OSC 11 with them.
     /// </summary>
     public static bool TryParseOsc11(string? response, out RgbColor background)
     {
@@ -79,13 +80,13 @@ public static class TerminalBackgroundProbe
         double r = LinearChannel(color.R);
         double g = LinearChannel(color.G);
         double b = LinearChannel(color.B);
-        return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     }
 
     /// <summary>
-    /// Picks the built-in theme matching a terminal background: light report →
-    /// <see cref="HarborTheme.HarborLight" />, otherwise
-    /// <see cref="HarborTheme.HarborDark" />.
+    ///     Picks the built-in theme matching a terminal background: light report →
+    ///     <see cref="HarborTheme.HarborLight" />, otherwise
+    ///     <see cref="HarborTheme.HarborDark" />.
     /// </summary>
     public static HarborTheme PickTheme(RgbColor background) =>
         RelativeLuminance(background) >= LightLuminanceThreshold
@@ -94,7 +95,7 @@ public static class TerminalBackgroundProbe
 
     /// <summary>Detects a theme from a raw OSC 11 response; unparsable/absent → <see cref="HarborTheme.HarborDark" />.</summary>
     public static HarborTheme Detect(string? osc11Response) =>
-        TryParseOsc11(osc11Response, out RgbColor background) ? PickTheme(background) : HarborTheme.HarborDark;
+        TryParseOsc11(osc11Response, out var background) ? PickTheme(background) : HarborTheme.HarborDark;
 
     private static bool TryParseComponent(string hex, out byte value)
     {
@@ -112,14 +113,14 @@ public static class TerminalBackgroundProbe
                 return false;
             }
 
-            return byte.TryParse(hex[2..], System.Globalization.NumberStyles.HexNumber, null, out _);
+            return byte.TryParse(hex[2..], NumberStyles.HexNumber, null, out _);
         }
 
         return false;
     }
 
     private static bool TryFromHex(string hex, out byte value) =>
-        byte.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out value);
+        byte.TryParse(hex, NumberStyles.HexNumber, null, out value);
 
     private static double LinearChannel(byte channel)
     {

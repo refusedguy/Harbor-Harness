@@ -1,13 +1,14 @@
-using System.Collections.Concurrent;
-using System.Text;
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
+using System.Text;
+using System.Text.Json;
 namespace Harbor.Plugin.TodoWrite;
+
 /// <summary>
 ///     TodoWrite plugin — adds a `todo` tool for task management.
 ///     Demonstrates stateful plugin with in-memory todo list.

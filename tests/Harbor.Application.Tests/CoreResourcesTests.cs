@@ -1,7 +1,5 @@
-using System.Reflection;
 using Harbor.Application.Permissions;
-using TUnit.Assertions;
-
+using System.Reflection;
 namespace Harbor.Application.Tests;
 
 public class CoreResourcesTests
@@ -16,47 +14,41 @@ public class CoreResourcesTests
     [Test]
     public async Task GetLog_ReturnsString_ForKnownKey()
     {
-        var result = GetLog("AgentLoopStarting");
+        string result = GetLog("AgentLoopStarting");
         await Assert.That(result).IsNotNull();
         await Assert.That(result.Length).IsGreaterThan(0);
     }
 
     [Test]
-    public async Task GetLog_ReturnsKey_ForUnknownKey()
-    {
-        await Assert.That(GetLog("NonExistentKey123")).IsEqualTo("NonExistentKey123");
-    }
+    public async Task GetLog_ReturnsKey_ForUnknownKey() => await Assert.That(GetLog("NonExistentKey123")).IsEqualTo("NonExistentKey123");
 
     [Test]
     public async Task GetError_ReturnsString_ForKnownKey()
     {
-        var result = GetError("SessionNotFound");
+        string result = GetError("SessionNotFound");
         await Assert.That(result).IsNotNull();
         await Assert.That(result).Contains("Session");
     }
 
     [Test]
-    public async Task GetError_ReturnsKey_ForUnknownKey()
-    {
-        await Assert.That(GetError("NonExistentError456")).IsEqualTo("NonExistentError456");
-    }
+    public async Task GetError_ReturnsKey_ForUnknownKey() => await Assert.That(GetError("NonExistentError456")).IsEqualTo("NonExistentError456");
 
     [Test]
     public async Task KnownKeys_AllReturnNonEmpty()
     {
-        var logKeys = new[] { "AgentLoopStarting", "OpenSessionFailed", "DeleteSessionFailed", "RenameSessionFailed", "AgentFailed" };
-        var errorKeys = new[] { "SessionNotFound", "OperationCancelled", "ToolNotRegistered", "PermissionDenied", "InvalidHarborMode" };
+        string[] logKeys = new[] { "AgentLoopStarting", "OpenSessionFailed", "DeleteSessionFailed", "RenameSessionFailed", "AgentFailed" };
+        string[] errorKeys = new[] { "SessionNotFound", "OperationCancelled", "ToolNotRegistered", "PermissionDenied", "InvalidHarborMode" };
 
-        foreach (var key in logKeys)
+        foreach (string key in logKeys)
         {
-            var value = GetLog(key);
+            string value = GetLog(key);
             await Assert.That(value).IsNotNull();
             await Assert.That(value.Length).IsGreaterThan(0);
         }
 
-        foreach (var key in errorKeys)
+        foreach (string key in errorKeys)
         {
-            var value = GetError(key);
+            string value = GetError(key);
             await Assert.That(value).IsNotNull();
             await Assert.That(value.Length).IsGreaterThan(0);
         }

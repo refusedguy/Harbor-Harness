@@ -8,8 +8,7 @@
 - [x] Disk cache decorator (source hash key) (`CachingCompiler(inner, cacheDir, logger)`)
 - [x] Assembly reference snapshot (`PluginAssemblyReferences`)
 - [x] Compilation diagnostics surfaced as Result failure
-- [x] Compile errors surfaced with file:line diagnostics
-      (`RoslynPluginCompiler.cs:87-92` — `[severity] path(line,col): id — message`)
+- [x] Compile errors surfaced with file:line diagnostics (`RoslynPluginCompiler.cs:87-92` — `[severity] path(line,col): id — message`)
 
 ## TODO
 

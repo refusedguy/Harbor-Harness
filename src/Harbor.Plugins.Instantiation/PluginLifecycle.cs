@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Plugins;
 using Harbor.Plugins.Abstractions;
 namespace Harbor.Plugins.Instantiation;
+
 /// <summary>
 ///     Lifecycle helpers for live <see cref="IPlugin" /> instances. The registration
 ///     layer delegates here for <see cref="IPlugin.Initialize" /> + shutdown orchestration

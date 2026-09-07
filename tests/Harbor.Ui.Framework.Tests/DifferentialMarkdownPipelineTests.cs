@@ -1,13 +1,8 @@
-namespace Harbor.Ui.Framework.Tests;
-
-using System.Text;
-using System.Collections.Immutable;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Markdown;
-using Harbor.Ui.Framework.Rendering.PerformanceContracts;
 using Harbor.Ui.Framework.Rendering.Protocol;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
+using System.Text;
+namespace Harbor.Ui.Framework.Tests;
 
 /// <summary>
 ///     Differential markdown pipeline + frozen-tail cache tests
@@ -20,15 +15,15 @@ public class DifferentialMarkdownPipelineTests
     public async Task Cache_FreezeAndRestore_RoundTripsCells()
     {
         var cache = new FrozenTailMarkdownCache();
-        var cells = new Cell[] { Cell.Blank, Cell.From(new Rune('X'), CellStyle.Plain) };
+        var cells = new[] { Cell.Blank, Cell.From(new Rune('X'), CellStyle.Plain) };
         BlockFrozenEventArgs? frozen = null;
         cache.BlockFrozen += (_, e) => frozen = e;
 
         cache.Freeze(7, cells);
-        bool hit = cache.TryGet(7, out Cell[]? restored);
+        bool hit = cache.TryGet(7, out var restored);
 
         await Assert.That(hit).IsTrue();
-        await Assert.That(restored![1].Rune).IsEqualTo((int)'X');
+        await Assert.That(restored![1].Rune).IsEqualTo('X');
         await Assert.That(frozen).IsNotNull();
         await Assert.That(frozen!.BlockId).IsEqualTo(7);
     }
@@ -57,12 +52,12 @@ public class DifferentialMarkdownPipelineTests
         var pipeline = new DifferentialMarkdownPipeline(40, 10);
         var lines = new[] { BuildLine("completed block") };
 
-        CellDiffBatch first = pipeline.RenderBlock(1, lines, isComplete: true, y: 0);
+        var first = pipeline.RenderBlock(1, lines, true, 0);
         await Assert.That(first.Changes.Length).IsGreaterThan(0); // full row painted
 
         // Mutate the incoming lines — a frozen block must NOT restyle them.
         lines[0] = BuildLine("mutated tail!!");
-        CellDiffBatch second = pipeline.RenderBlock(1, lines, isComplete: true, y: 0);
+        var second = pipeline.RenderBlock(1, lines, true, 0);
 
         await Assert.That(second.Changes.Length).IsEqualTo(0); // cache hit → byte-identical rows
     }
@@ -71,10 +66,10 @@ public class DifferentialMarkdownPipelineTests
     public async Task Pipeline_TailBlock_DiffsOnlyChangedCells()
     {
         var pipeline = new DifferentialMarkdownPipeline(40, 10);
-        _ = pipeline.RenderBlock(1, [BuildLine("tail")], isComplete: false, y: 0);
+        _ = pipeline.RenderBlock(1, [BuildLine("tail")], false, 0);
 
         // Stream one more token into the tail: only the delta is reported.
-        CellDiffBatch batch = pipeline.RenderBlock(1, [BuildLine("tail+token")], isComplete: false, y: 0);
+        var batch = pipeline.RenderBlock(1, [BuildLine("tail+token")], false, 0);
 
         await Assert.That(batch.Changes.Length).IsGreaterThan(0);
         await Assert.That(batch.Changes.Length).IsLessThan(40);
@@ -87,7 +82,7 @@ public class DifferentialMarkdownPipelineTests
         var batches = new List<CellDiffBatch>();
         pipeline.Diffs.Subscribe(new CollectingSink(batches));
 
-        _ = pipeline.RenderBlock(1, [BuildLine("tail")], isComplete: false, y: 0);
+        _ = pipeline.RenderBlock(1, [BuildLine("tail")], false, 0);
 
         await Assert.That(batches.Count).IsEqualTo(1);
     }
@@ -97,7 +92,7 @@ public class DifferentialMarkdownPipelineTests
         var lines = new[] { BuildLine("frozen") };
         for (int i = 0; i < frozenBlocks; i++)
         {
-            _ = pipeline.RenderBlock(i, lines, isComplete: true, y: 0);
+            _ = pipeline.RenderBlock(i, lines, true, 0);
         }
     }
 

@@ -1,7 +1,8 @@
-using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Harbor.Abstractions.Models;
+using System.ComponentModel;
 namespace Harbor.Ui.Framework.ViewModels;
+
 /// <summary>
 ///     One row in the session sidebar list. Shows title, model, relative time,
 ///     status (idle/working/done/error), and git info (branch + dirty).
@@ -9,8 +10,8 @@ namespace Harbor.Ui.Framework.ViewModels;
 public sealed partial class SessionItemViewModel : ObservableObject
 {
     [ObservableProperty] private string? _gitBranch;
-    [ObservableProperty] private bool _gitIsDirty;
     [ObservableProperty] private int _gitDirtyCount;
+    [ObservableProperty] private bool _gitIsDirty;
     [ObservableProperty] private string? _gitLastCommit;
 
     /// <summary>
@@ -139,7 +140,7 @@ public sealed partial class SessionItemViewModel : ObservableObject
     /// <param name="value">The new SessionStatus value.</param>
     partial void OnStatusChanged(SessionStatus value)
     {
-        this.OnPropertyChanged(nameof(StatusColor));
-        this.OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(StatusColor));
+        OnPropertyChanged(nameof(StatusText));
     }
 }

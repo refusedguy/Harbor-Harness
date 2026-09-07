@@ -8,6 +8,7 @@ using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Plugins.Runtime.Tests.Hosting;
+
 /// <summary>
 ///     Tests for the Hosting layer: <see cref="PluginHost" /> and
 ///     <see cref="PluginHostBuilder" />.

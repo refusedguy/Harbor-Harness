@@ -1,4 +1,5 @@
 namespace Harbor.E2E.Framework;
+
 /// <summary>
 ///     <see cref="IE2eDriver" /> implementation for one-shot CLI commands.
 ///     Wraps <see cref="System.Diagnostics.Process" /> with redirected stdin /
@@ -33,12 +34,12 @@ public sealed class CliDriver : IE2eDriver
 {
     private readonly string _projectPath;
     private Process? _process;
-    private Task? _stderrDrain;
-    private Task? _stdoutDrain;
     private StringBuilder _stderr = new();
+    private Task? _stderrDrain;
     private StreamReader? _stderrReader;
     private StreamWriter? _stdinWriter;
     private StringBuilder _stdout = new();
+    private Task? _stdoutDrain;
     private StreamReader? _stdoutReader;
 
     /// <summary>
@@ -175,7 +176,7 @@ public sealed class CliDriver : IE2eDriver
     public async Task<bool> WaitForTextAsync(string pattern, TimeSpan? timeout = null, CancellationToken ct = default)
     {
         var deadline = TimeSpan.FromSeconds(10);
-        if (timeout is { } t) deadline = t;
+        if (timeout is {} t) deadline = t;
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < deadline)
         {
@@ -194,7 +195,7 @@ public sealed class CliDriver : IE2eDriver
         if (_process is null)
             throw new InvalidOperationException("CliDriver not started.");
         var deadline = TimeSpan.FromSeconds(30);
-        if (timeout is { } t) deadline = t;
+        if (timeout is {} t) deadline = t;
 
         // Close stdin so the REPL (if any) sees EOF and exits.
         try { _stdinWriter?.Close(); }
@@ -228,17 +229,6 @@ public sealed class CliDriver : IE2eDriver
         return _process.ExitCode;
     }
 
-    /// <summary>
-    ///     Capture the current screen output to a text file.
-    ///     Useful for CLI screenshot artifacts.
-    /// </summary>
-    /// <param name="path">Output file path</param>
-    public async Task CaptureScreenAsync(string path, CancellationToken ct = default)
-    {
-        string screen = await ReadScreenAsync(ct).ConfigureAwait(false);
-        await File.WriteAllTextAsync(path, screen, ct).ConfigureAwait(false);
-    }
-
     /// <inheritdoc />
     public Task StopAsync(CancellationToken ct = default)
     {
@@ -264,6 +254,17 @@ public sealed class CliDriver : IE2eDriver
         _stderrReader?.Dispose();
         _process?.Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Capture the current screen output to a text file.
+    ///     Useful for CLI screenshot artifacts.
+    /// </summary>
+    /// <param name="path">Output file path</param>
+    public async Task CaptureScreenAsync(string path, CancellationToken ct = default)
+    {
+        string screen = await ReadScreenAsync(ct).ConfigureAwait(false);
+        await File.WriteAllTextAsync(path, screen, ct).ConfigureAwait(false);
     }
 
     /// <summary>

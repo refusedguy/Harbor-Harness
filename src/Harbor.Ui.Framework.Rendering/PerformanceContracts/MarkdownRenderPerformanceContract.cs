@@ -1,7 +1,6 @@
-namespace Harbor.Ui.Framework.Rendering.PerformanceContracts;
-
-using System.Diagnostics;
 using Harbor.Ui.Framework.Rendering.Markdown;
+using System.Diagnostics;
+namespace Harbor.Ui.Framework.Rendering.PerformanceContracts;
 
 /// <summary>
 ///     Formal performance contract of the differential markdown pipeline
@@ -11,20 +10,32 @@ using Harbor.Ui.Framework.Rendering.Markdown;
 /// <remarks>
 ///     <para>
 ///         <b>The three enforceable ceilings</b> (enforced by
-///         <see cref="MarkdownRenderPerformanceGate.Validate"/> and by the
+///         <see cref="MarkdownRenderPerformanceGate.Validate" /> and by the
 ///         renderer perf suite in CI):
 ///     </para>
 ///     <list type="number">
-///         <item><description><see cref="FrozenRestoreBudget"/> — restoring a
-///             completed block from <c>FrozenTailMarkdownCache</c> must stay
-///             under 1 ms per block (O(1) cell copy, no re-parse, no
-///             re-style).</description></item>
-///         <item><description><see cref="TailRenderBudget"/> — re-rendering a
-///             100-block document where 99 blocks are frozen must stay under
-///             2 ms: only the tail block is re-styled and re-diffed.</description></item>
-///         <item><description><see cref="CacheCapacityCeiling"/> — the frozen
-///             cache holds at most 500 blocks (LRU eviction), so memory is
-///             bounded regardless of document length.</description></item>
+///         <item>
+///             <description>
+///                 <see cref="FrozenRestoreBudget" /> — restoring a
+///                 completed block from <c>FrozenTailMarkdownCache</c> must stay
+///                 under 1 ms per block (O(1) cell copy, no re-parse, no
+///                 re-style).
+///             </description>
+///         </item>
+///         <item>
+///             <description>
+///                 <see cref="TailRenderBudget" /> — re-rendering a
+///                 100-block document where 99 blocks are frozen must stay under
+///                 2 ms: only the tail block is re-styled and re-diffed.
+///             </description>
+///         </item>
+///         <item>
+///             <description>
+///                 <see cref="CacheCapacityCeiling" /> — the frozen
+///                 cache holds at most 500 blocks (LRU eviction), so memory is
+///                 bounded regardless of document length.
+///             </description>
+///         </item>
 ///     </list>
 ///     <para>
 ///         A new renderer backend that consumes the differential markdown
@@ -76,18 +87,18 @@ public static class MarkdownRenderPerformanceGate
         int cols = 80,
         int rows = 24)
     {
-        MarkdownRenderPerformanceContract c = contract ?? MarkdownRenderPerformanceContract.Default;
+        var c = contract ?? MarkdownRenderPerformanceContract.Default;
         var results = new List<MarkdownPerformanceMeasurement>(3);
 
         // ── Scenario 1: frozen restore ≤ budget per block ──────────────────
         var pipeline = new DifferentialMarkdownPipeline(cols, rows);
-        Cell[] warm = Freeze(pipeline, blockId: 0, rows: 1);
+        var warm = Freeze(pipeline, 0, 1);
         pipeline.Cache.Freeze(0, warm);
-        Warmup(() => _ = pipeline.RestoreFrozenBlock(0, y: 0, height: 1));
+        Warmup(() => _ = pipeline.RestoreFrozenBlock(0, 0, 1));
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < 100; i++)
         {
-            _ = pipeline.RestoreFrozenBlock(0, y: 0, height: 1);
+            _ = pipeline.RestoreFrozenBlock(0, 0, 1);
         }
 
         sw.Stop();
@@ -98,13 +109,13 @@ public static class MarkdownRenderPerformanceGate
 
         // ── Scenario 2: 100-block document, tail-only re-render ≤ budget ───
         pipeline = new DifferentialMarkdownPipeline(cols, rows);
-        FreezeDocument(pipeline, frozenBlocks: 99, cols);
-        MdLine tail = BuildTailLine("tail text ");
-        Warmup(() => _ = pipeline.RenderBlock(99, [tail, BuildTailLine("warm")], isComplete: false, y: 0));
+        FreezeDocument(pipeline, 99, cols);
+        var tail = BuildTailLine("tail text ");
+        Warmup(() => _ = pipeline.RenderBlock(99, [tail, BuildTailLine("warm")], false, 0));
         sw = Stopwatch.StartNew();
         for (int token = 0; token < 100; token++)
         {
-            _ = pipeline.RenderBlock(99, [tail, BuildTailLine($"token {token}")], isComplete: false, y: 0);
+            _ = pipeline.RenderBlock(99, [tail, BuildTailLine($"token {token}")], false, 0);
         }
 
         sw.Stop();
@@ -115,14 +126,14 @@ public static class MarkdownRenderPerformanceGate
 
         // ── Scenario 3: 10k-token long-document stream ≤ total budget ──────
         pipeline = new DifferentialMarkdownPipeline(cols, rows);
-        FreezeDocument(pipeline, frozenBlocks: c.CacheCapacityCeiling, cols);
+        FreezeDocument(pipeline, c.CacheCapacityCeiling, cols);
         Warmup(() => _ = pipeline.RenderBlock(
-            int.MaxValue, [BuildTailLine("warm")], isComplete: false, y: 0));
+            int.MaxValue, [BuildTailLine("warm")], false, 0));
         sw = Stopwatch.StartNew();
         for (int token = 0; token < c.LongDocumentTokenCount; token++)
         {
             _ = pipeline.RenderBlock(
-                int.MaxValue, [BuildTailLine($"token {token}")], isComplete: false, y: 0);
+                int.MaxValue, [BuildTailLine($"token {token}")], false, 0);
         }
 
         sw.Stop();
@@ -152,8 +163,8 @@ public static class MarkdownRenderPerformanceGate
             lines.Add(BuildTailLine("frozen"));
         }
 
-        _ = pipeline.RenderBlock(blockId, lines, isComplete: true, y: 0);
-        _ = pipeline.Cache.TryGet(blockId, out Cell[]? snapshot);
+        _ = pipeline.RenderBlock(blockId, lines, true, 0);
+        _ = pipeline.Cache.TryGet(blockId, out var snapshot);
         return snapshot!;
     }
 
@@ -162,7 +173,7 @@ public static class MarkdownRenderPerformanceGate
         var oneRow = new List<MdLine> { BuildTailLine("frozen block") };
         for (int i = 0; i < frozenBlocks; i++)
         {
-            _ = pipeline.RenderBlock(i, oneRow, isComplete: true, y: 0);
+            _ = pipeline.RenderBlock(i, oneRow, true, 0);
         }
     }
 

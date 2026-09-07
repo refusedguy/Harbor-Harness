@@ -1,40 +1,32 @@
-using System.Threading.Channels;
 using Harbor.Tui.CellForge.Parsing;
-
+using System.Threading.Channels;
 namespace Harbor.Tui.CellForge.Input;
 
 /// <summary>
-/// Raw stdin pipeline (design §5.1): a dedicated long-running reader thread
-/// pulls byte chunks from the stream, feeds them through the shared
-/// <see cref="EscapeSequenceParser"/> and publishes typed events into an
-/// unbounded single-reader channel.
-///
-/// Timer policies run ON the reader thread only (no cross-thread parser
-/// mutation): ESC-flush at chunk boundaries (§2.4) and the paste watchdog
-/// (§4.2) are applied as due-deadline checks between reads.
+///     Raw stdin pipeline (design §5.1): a dedicated long-running reader thread
+///     pulls byte chunks from the stream, feeds them through the shared
+///     <see cref="EscapeSequenceParser" /> and publishes typed events into an
+///     unbounded single-reader channel.
+///     Timer policies run ON the reader thread only (no cross-thread parser
+///     mutation): ESC-flush at chunk boundaries (§2.4) and the paste watchdog
+///     (§4.2) are applied as due-deadline checks between reads.
 /// </summary>
 public sealed class TerminalInputSource : IDisposable
 {
-    private readonly Stream _stdin;
-    private readonly TerminalInputSourceOptions _options;
     private readonly Channel<InputEvent> _channel;
     private readonly object _gate = new();
-
-    /// <summary>The parser feeding this source. Exposed so capability probing
-    /// (phase 1) can intercept CapabilityEvents before UI dispatch.</summary>
-    public EscapeSequenceParser Parser { get; } = new();
-
-    public ChannelReader<InputEvent> Events => _channel.Reader;
+    private readonly TerminalInputSourceOptions _options;
+    private readonly Stream _stdin;
 
     private CancellationTokenSource? _cts;
-    private Task? _runTask;
 
     private long _escDeadlineTicks = long.MaxValue;
-    private long _pasteDeadlineTicks = long.MaxValue;
-    private long _nextResizePollTicks = long.MaxValue;
+    private int _lastHeight = -1;
 
     private int _lastWidth = -1;
-    private int _lastHeight = -1;
+    private long _nextResizePollTicks = long.MaxValue;
+    private long _pasteDeadlineTicks = long.MaxValue;
+    private Task? _runTask;
 
     public TerminalInputSource(
         Stream stdin,
@@ -45,12 +37,48 @@ public sealed class TerminalInputSource : IDisposable
         _channel = Channel.CreateUnbounded<InputEvent>(new UnboundedChannelOptions
         {
             SingleReader = true,
-            SingleWriter = true,
+            SingleWriter = true
         });
     }
 
-    /// <summary>Starts the reader loop on a dedicated thread. Returns a task
-    /// completing on EOF, cancellation or stream failure.</summary>
+    /// <summary>
+    ///     The parser feeding this source. Exposed so capability probing
+    ///     (phase 1) can intercept CapabilityEvents before UI dispatch.
+    /// </summary>
+    public EscapeSequenceParser Parser { get; } = new();
+
+    public ChannelReader<InputEvent> Events => _channel.Reader;
+
+    public void Dispose()
+    {
+        if (_cts is not null)
+        {
+            try
+            {
+                _cts.Cancel();
+                // The run task is expected to end via OCE/EOF/IOException; a
+                // faulted task (stream implementation bug) must not break the
+                // caller's finally block.
+                _ = _runTask?.Wait(TimeSpan.FromSeconds(2));
+            }
+            catch (ObjectDisposedException)
+            {
+                // Already torn down by a concurrent Dispose.
+            }
+            catch (AggregateException)
+            {
+                // Faulted reader task — teardown still proceeds to CTS disposal.
+            }
+
+            _cts.Dispose();
+            _cts = null;
+        }
+    }
+
+    /// <summary>
+    ///     Starts the reader loop on a dedicated thread. Returns a task
+    ///     completing on EOF, cancellation or stream failure.
+    /// </summary>
     public Task RunAsync(CancellationToken cancellationToken)
     {
         if (_runTask is not null)
@@ -70,7 +98,7 @@ public sealed class TerminalInputSource : IDisposable
 
     private async Task RunLoop(CancellationToken token)
     {
-        var buffer = new byte[_options.ReadBufferSize];
+        byte[] buffer = new byte[_options.ReadBufferSize];
         try
         {
             InitializeResizeBaseline();
@@ -83,7 +111,7 @@ public sealed class TerminalInputSource : IDisposable
             {
                 readTask ??= _stdin.ReadAsync(buffer.AsMemory(), token).AsTask();
                 var wake = NextWakeIn();
-                if (wake is { } delay)
+                if (wake is {} delay)
                 {
                     var completed = await Task.WhenAny(readTask, Task.Delay(delay, token)).ConfigureAwait(false);
                     if (completed != readTask)
@@ -93,7 +121,7 @@ public sealed class TerminalInputSource : IDisposable
                     }
                 }
 
-                var bytesRead = await readTask.ConfigureAwait(false);
+                int bytesRead = await readTask.ConfigureAwait(false);
                 readTask = null;
                 if (bytesRead <= 0)
                 {
@@ -130,8 +158,10 @@ public sealed class TerminalInputSource : IDisposable
 
     // ── Timer policy (reader-thread-only access) ──────────────────────────
 
-    /// <summary>Pure read of current deadlines — NEVER re-arms them, otherwise
-    /// each wake would push its own deadline out and timers would never fire.</summary>
+    /// <summary>
+    ///     Pure read of current deadlines — NEVER re-arms them, otherwise
+    ///     each wake would push its own deadline out and timers would never fire.
+    /// </summary>
     private TimeSpan? NextWakeIn()
     {
         long? earliest = null;
@@ -143,7 +173,7 @@ public sealed class TerminalInputSource : IDisposable
                 return;
             }
 
-            earliest = earliest is { } current ? Math.Min(current, deadlineTicks) : deadlineTicks;
+            earliest = earliest is {} current ? Math.Min(current, deadlineTicks) : deadlineTicks;
         }
 
         lock (_gate)
@@ -160,17 +190,17 @@ public sealed class TerminalInputSource : IDisposable
 
     private void ArmTimers(long now)
     {
-        var escEnabled = _options.EscFlushTimeout > TimeSpan.Zero;
+        bool escEnabled = _options.EscFlushTimeout > TimeSpan.Zero;
         _escDeadlineTicks = escEnabled && Parser.State == ParserState.Escape
             ? now + (long)_options.EscFlushTimeout.TotalMilliseconds
             : long.MaxValue;
 
-        var pasteEnabled = _options.PasteAbortTimeout > TimeSpan.Zero;
+        bool pasteEnabled = _options.PasteAbortTimeout > TimeSpan.Zero;
         _pasteDeadlineTicks = pasteEnabled && Parser.IsAwaitingPasteClose
             ? now + (long)_options.PasteAbortTimeout.TotalMilliseconds
             : long.MaxValue;
 
-        if (_options.SizeProvider is not null && _options.ResizePollInterval is { } interval)
+        if (_options.SizeProvider is not null && _options.ResizePollInterval is {} interval)
         {
             _nextResizePollTicks = now + (long)interval.TotalMilliseconds;
         }
@@ -182,10 +212,10 @@ public sealed class TerminalInputSource : IDisposable
 
     private void ApplyDueTimers()
     {
-        var now = Environment.TickCount64;
+        long now = Environment.TickCount64;
         lock (_gate)
         {
-            var dirty = false;
+            bool dirty = false;
             if (_escDeadlineTicks != long.MaxValue && now >= _escDeadlineTicks)
             {
                 Parser.FlushPendingEscape();
@@ -237,7 +267,7 @@ public sealed class TerminalInputSource : IDisposable
             return;
         }
 
-        var now = Environment.TickCount64;
+        long now = Environment.TickCount64;
         if (!force && (_nextResizePollTicks == long.MaxValue || now < _nextResizePollTicks))
         {
             return;
@@ -247,7 +277,7 @@ public sealed class TerminalInputSource : IDisposable
         {
             try
             {
-                var (width, height) = provider();
+                (int width, int height) = provider();
                 if ((width != _lastWidth || height != _lastHeight) && width > 0 && height > 0)
                 {
                     _lastWidth = width;
@@ -269,32 +299,6 @@ public sealed class TerminalInputSource : IDisposable
         while (Parser.TryTakeEvent(out var evt))
         {
             _channel.Writer.TryWrite(evt);
-        }
-    }
-
-    public void Dispose()
-    {
-        if (_cts is not null)
-        {
-            try
-            {
-                _cts.Cancel();
-                // The run task is expected to end via OCE/EOF/IOException; a
-                // faulted task (stream implementation bug) must not break the
-                // caller's finally block.
-                _ = _runTask?.Wait(TimeSpan.FromSeconds(2));
-            }
-            catch (ObjectDisposedException)
-            {
-                // Already torn down by a concurrent Dispose.
-            }
-            catch (AggregateException)
-            {
-                // Faulted reader task — teardown still proceeds to CTS disposal.
-            }
-
-            _cts.Dispose();
-            _cts = null;
         }
     }
 }

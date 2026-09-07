@@ -1,10 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
-using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using Harbor.Ui.Framework.ViewModels;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -77,8 +71,5 @@ public abstract partial class ProviderModelPickerViewModelBase : StoreSubscriber
     ///     declared selectors to project state slices into view-model properties.
     /// </summary>
     /// <param name="state">The current UI state snapshot.</param>
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 }

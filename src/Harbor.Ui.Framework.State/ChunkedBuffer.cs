@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-
 namespace Harbor.Ui.Framework.State;
 
 /// <summary>
@@ -63,12 +62,12 @@ public sealed class ChunkedBuffer
             return string.Empty;
 
         int count = 0;
-        for (ImmutableStack<string> node = ChunksReversed; !node.IsEmpty; node = node.Pop())
+        for (var node = ChunksReversed; !node.IsEmpty; node = node.Pop())
             count++;
 
-        var parts = new string[count];
+        string[] parts = new string[count];
         int index = count;
-        for (ImmutableStack<string> node = ChunksReversed; !node.IsEmpty; node = node.Pop())
+        for (var node = ChunksReversed; !node.IsEmpty; node = node.Pop())
             parts[--index] = node.Peek();
 
         return string.Concat(parts);

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
@@ -6,7 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Sessions;
-
+using System.Text.Json;
 namespace Harbor.Benchmarks;
 
 [MemoryDiagnoser]
@@ -14,11 +13,11 @@ namespace Harbor.Benchmarks;
 public class WorkspaceContextSourceBenchmark
 {
     private string _emptyDir = null!;
-    private string _withFilesDir = null!;
     private string _emptySkillsDir = null!;
-    private string _with5SkillsDir = null!;
     private string _hitDir = null!;
     private string _missDir = null!;
+    private string _with5SkillsDir = null!;
+    private string _withFilesDir = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -47,13 +46,13 @@ public class WorkspaceContextSourceBenchmark
         for (int i = 0; i < 5; i++)
         {
             string content = $$"""
-                ---
-                description: Skill {{i}} does something useful for benchmarking the workspace loader.
-                ---
-                # Skill {{i}}
+                               ---
+                               description: Skill {{i}} does something useful for benchmarking the workspace loader.
+                               ---
+                               # Skill {{i}}
 
-                Body of skill {{i}} with some extra prose to make the file realistic.
-                """;
+                               Body of skill {{i}} with some extra prose to make the file realistic.
+                               """;
             File.WriteAllText(Path.Combine(with5SkillsSub, $"skill-{i}.md"), content);
         }
 
@@ -67,12 +66,12 @@ public class WorkspaceContextSourceBenchmark
             for (int i = 0; i < 5; i++)
             {
                 string content = $$"""
-                    ---
-                    description: Skill {{i}} for hit/miss benchmark.
-                    ---
-                    # Skill {{i}}
-                    Extra content {{i}}.
-                    """;
+                                   ---
+                                   description: Skill {{i}} for hit/miss benchmark.
+                                   ---
+                                   # Skill {{i}}
+                                   Extra content {{i}}.
+                                   """;
                 File.WriteAllText(Path.Combine(skillsSub, $"skill-{i}.md"), content);
             }
         }
@@ -95,7 +94,7 @@ public class WorkspaceContextSourceBenchmark
         {
             string? root = _emptyDir != null ? Path.GetDirectoryName(_emptyDir) : null;
             if (root != null && Directory.Exists(root))
-                Directory.Delete(root, recursive: true);
+                Directory.Delete(root, true);
         }
         catch
         {
@@ -113,11 +112,11 @@ public class WorkspaceContextSourceBenchmark
 
     [Benchmark(Description = "LoadSkills_Empty")]
     public IReadOnlyList<SkillDescriptor> LoadSkills_Empty() =>
-        WorkspaceContextSource.LoadSkills(_emptySkillsDir, globalSkillsDir: null);
+        WorkspaceContextSource.LoadSkills(_emptySkillsDir, null);
 
     [Benchmark(Description = "LoadSkills_With5Skills")]
     public IReadOnlyList<SkillDescriptor> LoadSkills_With5Skills() =>
-        WorkspaceContextSource.LoadSkills(_with5SkillsDir, globalSkillsDir: null);
+        WorkspaceContextSource.LoadSkills(_with5SkillsDir, null);
 
     [Benchmark(Description = "GetOrLoadCached_Hit")]
     public (IReadOnlyList<ContextFile> Files, IReadOnlyList<SkillDescriptor> Skills) GetOrLoadCached_Hit() =>
@@ -184,12 +183,12 @@ public class CachingPromptBenchmark
         var files = new[]
         {
             new ContextFile("AGENTS.md", new string('A', 1024)),
-            new ContextFile("CLAUDE.md", new string('C', 512)),
+            new ContextFile("CLAUDE.md", new string('C', 512))
         };
         var skills = new[]
         {
             new SkillDescriptor("skill-0", "Skill 0 description", "/tmp/.harbor/skills/skill-0.md"),
-            new SkillDescriptor("skill-1", "Skill 1 description", "/tmp/.harbor/skills/skill-1.md"),
+            new SkillDescriptor("skill-1", "Skill 1 description", "/tmp/.harbor/skills/skill-1.md")
         };
 
         return new SystemPromptContext(agent, model, tools, files, skills, null, workingDirectory);

@@ -1,6 +1,3 @@
-using System.Collections.Concurrent;
-using System.Security.Cryptography;
-using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -9,11 +6,13 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tools;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Channels;
 namespace Harbor.LoadTests;
 
 /// <summary>
@@ -41,7 +40,7 @@ public static class LoadTestFakes
         ApiType = "openai-compatible",
         AuthType = "bearer",
         AuthEnvVar = "MOCK_API_KEY",
-        Models = [TestModel],
+        Models = [TestModel]
     };
 
     /// <summary>
@@ -51,7 +50,7 @@ public static class LoadTestFakes
     /// </summary>
     public static string ExpectedEcho(string userPrompt)
     {
-        string hash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(userPrompt)));
+        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(userPrompt)));
         return "echo-" + hash[..12].ToLowerInvariant();
     }
 
@@ -95,7 +94,7 @@ public sealed class SingleProviderRegistry(ILlmClient client) : IProviderRegistr
     public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default) =>
         client.GetModelsAsync(cancellationToken);
 
-    public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
+    public void Register(ProviderId providerId, Func<ILlmClient> factory) {}
 
     public Result Unregister(ProviderId providerId) => Result.Failure("SingleProviderRegistry does not support unregister.");
 }
@@ -119,16 +118,16 @@ public sealed class NoCompaction : ICompactionService
 
 /// <summary>
 ///     Store-backed per-run session context: appends persist to the shared
-    ///     <see cref="ISessionStore" /> so corruption assertions read the
+///     <see cref="ISessionStore" /> so corruption assertions read the
 ///     persisted transcript INDEPENDENTLY of the in-memory message list.
-    ///     One context serves ONE run at a time (the ISessionContext contract:
+///     One context serves ONE run at a time (the ISessionContext contract:
 ///     the message list is not safe for concurrent runs — load runs within a
 ///     session are strictly sequential).
 /// </summary>
 public sealed class LoadSessionContext : ISessionContext
 {
-    private readonly ISessionStore _store;
     private readonly List<AgentMessage> _messages = [];
+    private readonly ISessionStore _store;
 
     public LoadSessionContext(ISessionStore store, Session session)
     {
@@ -149,7 +148,7 @@ public sealed class LoadSessionContext : ISessionContext
             _messages.Add(message);
         }
 
-        Result result = await _store.AppendMessageAsync(Session.Id, message, ct).ConfigureAwait(false);
+        var result = await _store.AppendMessageAsync(Session.Id, message, ct).ConfigureAwait(false);
         if (result.IsFailure)
         {
             throw new InvalidOperationException(
@@ -161,7 +160,7 @@ public sealed class LoadSessionContext : ISessionContext
 
     public void EnqueueSteering(params AgentMessage[] messages)
     {
-        foreach (AgentMessage message in messages)
+        foreach (var message in messages)
         {
             SteeringQueue.Writer.TryWrite(message);
         }
@@ -170,9 +169,9 @@ public sealed class LoadSessionContext : ISessionContext
 
 /// <summary>
 ///     Deterministic token-bucket admission control for LLM calls. The
-    ///     bucket starts full with <paramref name="capacity" /> tokens; each
+///     bucket starts full with <paramref name="capacity" /> tokens; each
 ///     in-flight LLM stream holds one token and refunds it on completion.
-    ///     Refill is driven by ACTUAL COMPLETIONS, not wall-clock timers — so
+///     Refill is driven by ACTUAL COMPLETIONS, not wall-clock timers — so
 ///     the shape of the load (who streams when) is a pure function of the
 ///     system's own progress, with zero real-time sleeps in the harness.
 /// </summary>
@@ -181,6 +180,7 @@ public sealed class TokenBucketRateLimiter : IDisposable
     private readonly SemaphoreSlim _tokens;
     private int _inFlight;
     private int _peakInFlight;
+    private int _totalAdmissions;
 
     public TokenBucketRateLimiter(int capacity)
     {
@@ -200,7 +200,8 @@ public sealed class TokenBucketRateLimiter : IDisposable
 
     /// <summary>Total admissions granted so far.</summary>
     public int TotalAdmissions => Volatile.Read(ref _totalAdmissions);
-    private int _totalAdmissions;
+
+    public void Dispose() => _tokens.Dispose();
 
     /// <summary>Blocks asynchronously until a token is available.</summary>
     public async ValueTask AcquireAsync(CancellationToken ct = default)
@@ -223,13 +224,11 @@ public sealed class TokenBucketRateLimiter : IDisposable
         Interlocked.Decrement(ref _inFlight);
         _tokens.Release();
     }
-
-    public void Dispose() => _tokens.Dispose();
 }
 
 /// <summary>
 ///     <see cref="ILlmClient" /> decorator that gates every streaming call
-    ///     through a <see cref="TokenBucketRateLimiter" /> and records the
+///     through a <see cref="TokenBucketRateLimiter" /> and records the
 ///     concurrency the bucket actually admitted (proof the shaping worked).
 /// </summary>
 public sealed class RateLimitedLlmClient : ILlmClient
@@ -248,12 +247,12 @@ public sealed class RateLimitedLlmClient : ILlmClient
 
     public async IAsyncEnumerable<LlmEvent> StreamAsync(
         LlmRequest request,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await _limiter.AcquireAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await foreach (LlmEvent evt in _inner.StreamAsync(request, cancellationToken).ConfigureAwait(false))
+            await foreach (var evt in _inner.StreamAsync(request, cancellationToken).ConfigureAwait(false))
             {
                 yield return evt;
             }
@@ -270,22 +269,22 @@ public sealed class RateLimitedLlmClient : ILlmClient
 
 /// <summary>
 ///     Thread-safe collector of bus-level signals: how many AgentStart /
-    ///     AgentEnd events were published, dispatch exceptions inside UiStore
+///     AgentEnd events were published, dispatch exceptions inside UiStore
 ///     subscribers, and per-session UiStore final states.
 /// </summary>
 public sealed class LoadSignals
 {
     private readonly ConcurrentDictionary<string, byte> _dispatchErrors = new();
-    private int _agentStarts;
     private int _agentEnds;
+    private int _agentStarts;
 
     public int AgentStarts => Volatile.Read(ref _agentStarts);
     public int AgentEnds => Volatile.Read(ref _agentEnds);
-    public IReadOnlyCollection<string> DispatchErrors => [.. _dispatchErrors.Keys];
+    public IReadOnlyCollection<string> DispatchErrors => [.._dispatchErrors.Keys];
 
     public IDisposable SubscribeBus(IEventBus bus)
     {
-        return bus.Subscribe((AgentEvent evt, CancellationToken _) =>
+        return bus.Subscribe((evt, _) =>
         {
             switch (evt)
             {
@@ -303,7 +302,7 @@ public sealed class LoadSignals
 
     public IDisposable SubscribeUiStore(IEventBus bus, UiStore store)
     {
-        return bus.Subscribe((AgentEvent evt, CancellationToken _) =>
+        return bus.Subscribe((evt, _) =>
         {
             try
             {

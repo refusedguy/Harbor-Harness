@@ -1,11 +1,5 @@
-using System.Linq;
 using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using Harbor.Ui.Framework.ViewModels;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -52,7 +46,7 @@ public abstract partial class FocusSessionViewModelBase : StoreSubscriberViewMod
         Select(state => state.Lines.Length, v => MessageCount = v);
         Select(state =>
         {
-            var title = "Focus Session";
+            string title = "Focus Session";
             if (state.ActiveSessionId is SessionId id)
             {
                 var sessions = state.Sessions;
@@ -74,8 +68,5 @@ public abstract partial class FocusSessionViewModelBase : StoreSubscriberViewMod
     ///     declared selectors to project state slices into view-model properties.
     /// </summary>
     /// <param name="state">The current UI state snapshot.</param>
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 }

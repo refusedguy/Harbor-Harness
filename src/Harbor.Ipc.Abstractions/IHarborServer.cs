@@ -1,4 +1,5 @@
 namespace Harbor.Ipc;
+
 /// <summary>
 ///     Host-side Harbor server interface. Implemented by
 ///     <c>HarborIpcServer</c> (MessagePack RPC over pipe) and — for in-process

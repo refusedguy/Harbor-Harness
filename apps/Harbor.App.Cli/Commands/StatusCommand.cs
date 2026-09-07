@@ -1,10 +1,7 @@
 using Harbor.Ipc;
-using Harbor.Ipc.Client;
 using Harbor.Ipc.Protocol;
 using Harbor.Ipc.Transport;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
@@ -17,9 +14,9 @@ namespace Harbor.App.Cli.Commands;
 public sealed class StatusCommand : ICommand
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(2);
+    private readonly TextWriter _error;
 
     private readonly TextWriter _output;
-    private readonly TextWriter _error;
 
     public StatusCommand(TextWriter output, TextWriter error)
     {

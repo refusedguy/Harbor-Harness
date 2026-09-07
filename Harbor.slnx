@@ -28,7 +28,8 @@
     </Folder>
 
     <Folder Name="/src/Core/">
-        <Project Path="src/Harbor.Core/Harbor.Core.csproj"/>        <Project Path="src/Harbor.Registries/Harbor.Registries.csproj"/>
+        <Project Path="src/Harbor.Core/Harbor.Core.csproj"/>
+        <Project Path="src/Harbor.Registries/Harbor.Registries.csproj"/>
         <Project Path="src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj"/>
         <Project Path="src/Harbor.Ui.Framework.Abstractions/Harbor.Ui.Framework.Abstractions.csproj"/>
         <Project Path="src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj"/>

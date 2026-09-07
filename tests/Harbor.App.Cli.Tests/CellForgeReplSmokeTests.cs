@@ -1,29 +1,25 @@
-using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
-using Harbor.Application.Configuration;
-using Harbor.Registries.Events;
 using Harbor.App.Cli.Repl;
+using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
-using Harbor.Ui.Framework.Rendering;
-using Harbor.Ui.Framework.Rendering.Input;
-using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Tui.CellForge.Widgets;
-using Microsoft.Extensions.Logging;
+using Harbor.Ui.Framework.Rendering;
+using Harbor.Ui.Framework.Rendering.Widgets;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Text;
 namespace Harbor.App.Cli.Tests;
 
 /// <summary>
-/// CE-4 E2E-smoke: полный цикл CellForge REPL без реального терминала —
-/// scripted stdin (промпт + Enter), mock-агент на настоящем InMemoryEventBus,
-/// кадровой цикл раннера, golden grid-dump финального кадра с ответом.
+///     CE-4 E2E-smoke: полный цикл CellForge REPL без реального терминала —
+///     scripted stdin (промпт + Enter), mock-агент на настоящем InMemoryEventBus,
+///     кадровой цикл раннера, golden grid-dump финального кадра с ответом.
 /// </summary>
 public class CellForgeReplSmokeTests
 {
@@ -34,8 +30,8 @@ public class CellForgeReplSmokeTests
     public async Task FullTurn_ScriptedInput_MockAgent_GoldenFrame()
     {
         var backend = new FrameCaptureBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
-        var session = new ScreenSession(writer, Cols, Rows, sizeSource: () => (Cols, Rows));
+        var writer = new AnsiWriter(backend, true);
+        var session = new ScreenSession(writer, Cols, Rows, () => (Cols, Rows));
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "mock/mock-model" };
         var screen = ChatScreen.Build(composer, status);
@@ -54,18 +50,18 @@ public class CellForgeReplSmokeTests
         using var agent = new ScriptedAgent(bus, sessionModel.Id);
         agent.Initialize(sessionModel, agentDef);
 
-        using var bridge = new ChatScreenBridge(bus, screen.Timeline, status, autoSubscribe: false);
+        using var bridge = new ChatScreenBridge(bus, screen.Timeline, status, false);
 
         var stdin = new MemoryStream(Encoding.UTF8.GetBytes("скажи привет\r"));
         using var input = new TerminalInputSource(stdin, new TerminalInputSourceOptions
         {
-            SizeProvider = () => (Cols, Rows),
+            SizeProvider = () => (Cols, Rows)
         });
 
         var services = new MapServiceProvider
         {
             [typeof(IEventBus)] = bus,
-            [typeof(IConfigStore)] = new StubConfigStore(),
+            [typeof(IConfigStore)] = new StubConfigStore()
         };
         var runner = new CellForgeReplRunner(
             services, agent, sessionModel, session, screen, bridge, input,
@@ -78,9 +74,9 @@ public class CellForgeReplSmokeTests
         await Assert.That(exitCode).IsEqualTo(0);
 
         string art = Art(session.Back);
-        await Assert.That(art).Contains("скажи привет");          // локальное эхо промпта
-        await Assert.That(art).Contains("Готово: mock-ответ");     // committed ответ агента
-        await Assert.That(art).Contains("mock/mock-model");       // статус-бар
+        await Assert.That(art).Contains("скажи привет"); // локальное эхо промпта
+        await Assert.That(art).Contains("Готово: mock-ответ"); // committed ответ агента
+        await Assert.That(art).Contains("mock/mock-model"); // статус-бар
 
         string expected = Golden.Verify("ce4-consoleex-repl", art);
         await Assert.That(art).IsEqualTo(expected);
@@ -142,10 +138,7 @@ public class CellForgeReplSmokeTests
         public CancellationTokenSource AbortSource { get; } = new();
         public AgentState State { get; private set; }
 
-        public void Initialize(Session session, AgentDefinition agent)
-        {
-            State = AgentState.Idle(session.Id, agent);
-        }
+        public void Initialize(Session session, AgentDefinition agent) => State = AgentState.Idle(session.Id, agent);
 
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) =>
             _bus.Subscribe(listener);
@@ -171,9 +164,9 @@ public class CellForgeReplSmokeTests
                 await _bus.PublishAsync(new MessageEndEvent(final)).ConfigureAwait(false);
 
                 await _bus.PublishAsync(new SessionStatsEvent(_sessionId, new SessionMetadata(
-                    Cost: 0.0001m, TokensInput: 12, TokensOutput: 5,
-                    TokensReasoning: 0, TokensCacheRead: 0, TokensCacheWrite: 0,
-                    MessageCount: 2, TimeCompacting: null))).ConfigureAwait(false);
+                    0.0001m, 12, 5,
+                    0, 0, 0,
+                    2, null))).ConfigureAwait(false);
 
                 await _bus.PublishAsync(new AgentEndEvent([])).ConfigureAwait(false);
                 return Result.Success();
@@ -225,7 +218,7 @@ public class CellForgeReplSmokeTests
 
         public object? this[Type serviceType]
         {
-            get => Map.TryGetValue(serviceType, out var value) ? value : null;
+            get => Map.TryGetValue(serviceType, out object? value) ? value : null;
             set => Map[serviceType] = value!;
         }
 

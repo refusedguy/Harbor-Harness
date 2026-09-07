@@ -1,10 +1,7 @@
 using Harbor.Abstractions.Events;
-using Harbor.Tui.CellForge.Input;
-using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
-
+using Harbor.Ui.Framework.State;
 namespace Harbor.Tui.CellForge.Tests;
 
 public class CommitTickPacerTests
@@ -16,7 +13,7 @@ public class CommitTickPacerTests
     public async Task LightQueue_StaysSmooth_Single()
     {
         var pacer = new CommitTickPacer();
-        var plan = pacer.Decide(Snap(1, 5), nowMs: 100);
+        var plan = pacer.Decide(Snap(1, 5), 100);
         await Assert.That(plan).IsEqualTo(DrainPlanKind.Single);
         await Assert.That(pacer.IsCatchUp).IsFalse();
     }
@@ -25,11 +22,11 @@ public class CommitTickPacerTests
     public async Task DeepQueue_EntersCatchUp()
     {
         var pacer = new CommitTickPacer();
-        var plan = pacer.Decide(Snap(8, 0), nowMs: 100);
+        var plan = pacer.Decide(Snap(8, 0), 100);
         await Assert.That(plan).IsEqualTo(DrainPlanKind.Single); // decision tick itself is Single
         await Assert.That(pacer.IsCatchUp).IsTrue();
 
-        var next = pacer.Decide(Snap(20, 10), nowMs: 110);
+        var next = pacer.Decide(Snap(20, 10), 110);
         await Assert.That(next).IsEqualTo(DrainPlanKind.BatchAll);
     }
 
@@ -37,7 +34,7 @@ public class CommitTickPacerTests
     public async Task OldLine_TriggersEnter_EvenAtLowDepth()
     {
         var pacer = new CommitTickPacer();
-        _ = pacer.Decide(Snap(2, 121), nowMs: 200);
+        _ = pacer.Decide(Snap(2, 121), 200);
         await Assert.That(pacer.IsCatchUp).IsTrue();
     }
 
@@ -45,14 +42,14 @@ public class CommitTickPacerTests
     public async Task ExitHold_PreventsInstantExit()
     {
         var pacer = new CommitTickPacer();
-        _ = pacer.Decide(Snap(8, 0), nowMs: 100); // enter
+        _ = pacer.Decide(Snap(8, 0), 100); // enter
 
         // calm immediately but held < 250 ms → stays in CatchUp
-        var early = pacer.Decide(Snap(1, 0), nowMs: 300);
+        var early = pacer.Decide(Snap(1, 0), 300);
         await Assert.That(pacer.IsCatchUp).IsTrue();
         await Assert.That(early).IsEqualTo(DrainPlanKind.BatchAll);
 
-        var afterHold = pacer.Decide(Snap(1, 0), nowMs: 351);
+        var afterHold = pacer.Decide(Snap(1, 0), 351);
         await Assert.That(afterHold).IsEqualTo(DrainPlanKind.BatchAll); // exit decision drains all once more
         await Assert.That(pacer.IsCatchUp).IsFalse();
     }
@@ -61,15 +58,15 @@ public class CommitTickPacerTests
     public async Task ReenterHold_BlocksFlapping()
     {
         var pacer = new CommitTickPacer();
-        _ = pacer.Decide(Snap(8, 0), nowMs: 0);   // enter at t=0
-        _ = pacer.Decide(Snap(1, 0), nowMs: 260); // exit at t=260 (calm + hold passed)
+        _ = pacer.Decide(Snap(8, 0), 0); // enter at t=0
+        _ = pacer.Decide(Snap(1, 0), 260); // exit at t=260 (calm + hold passed)
 
         // pressure returns quickly (< 250 ms after exit) → must NOT re-enter
-        _ = pacer.Decide(Snap(9, 0), nowMs: 400);
+        _ = pacer.Decide(Snap(9, 0), 400);
         await Assert.That(pacer.IsCatchUp).IsFalse();
 
         // after the re-entry hold it may enter again
-        _ = pacer.Decide(Snap(9, 0), nowMs: 511);
+        _ = pacer.Decide(Snap(9, 0), 511);
         await Assert.That(pacer.IsCatchUp).IsTrue();
     }
 
@@ -77,7 +74,7 @@ public class CommitTickPacerTests
     public async Task SevereAge_ForcesBatch_WithoutModeSwitch()
     {
         var pacer = new CommitTickPacer();
-        var plan = pacer.Decide(Snap(2, 301), nowMs: 50);
+        var plan = pacer.Decide(Snap(2, 301), 50);
         await Assert.That(plan).IsEqualTo(DrainPlanKind.BatchAll);
         await Assert.That(pacer.IsCatchUp).IsFalse(); // severe drain ≠ catch-up mode
     }
@@ -101,7 +98,7 @@ public class StreamBlockTests
     public async Task LongStream_DefersMaterialization_UntilLagLimit()
     {
         var block = new StreamBlock();
-        var chunk = new string('x', 400);
+        string chunk = new('x', 400);
         for (int i = 0; i < 10; i++)
         {
             block.AppendDelta(chunk);
@@ -135,7 +132,7 @@ public class StreamBlockTests
             block.AppendDelta($"line{i}\n");
         }
 
-        _ = block.Tick(nowMs: 0);           // enters CatchUp on depth ≥ 8 (Single this tick)
+        _ = block.Tick(nowMs: 0); // enters CatchUp on depth ≥ 8 (Single this tick)
         var drained = block.Tick(nowMs: 1); // BatchAll drains the rest
         await Assert.That(drained.Count).IsEqualTo(11);
         await Assert.That(block.LinesConsumed).IsEqualTo(12);

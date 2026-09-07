@@ -1,7 +1,5 @@
 using Harbor.Tui.CellForge.Input;
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class SelectionEngineTests
@@ -39,7 +37,7 @@ public class SelectionEngineTests
     {
         var engine = new SelectionEngine();
         engine.OnPress(1, 1, MouseButton.Left);
-        var text = engine.OnRelease(1, 1, 40, 10, (x, y) => Cell.Blank);
+        string? text = engine.OnRelease(1, 1, 40, 10, (x, y) => Cell.Blank);
         await Assert.That(text).IsNull();
         await Assert.That(engine.IsActive).IsFalse();
     }
@@ -51,7 +49,7 @@ public class SelectionEngineTests
         var engine = new SelectionEngine();
         engine.OnPress(0, 0, MouseButton.Left);
         engine.OnDrag(5, 0);
-        var text = engine.OnRelease(5, 0, buffer.Cols, buffer.Rows, buffer.Get);
+        string? text = engine.OnRelease(5, 0, buffer.Cols, buffer.Rows, buffer.Get);
         await Assert.That(text).IsEqualTo("hello");
     }
 
@@ -62,7 +60,7 @@ public class SelectionEngineTests
         var engine = new SelectionEngine();
         engine.OnPress(0, 0, MouseButton.Left);
         engine.OnDrag(9, 1);
-        var text = engine.OnRelease(9, 1, buffer.Cols, buffer.Rows, buffer.Get);
+        string? text = engine.OnRelease(9, 1, buffer.Cols, buffer.Rows, buffer.Get);
         await Assert.That(text).IsEqualTo("alpha beta\ngamma");
     }
 
@@ -73,7 +71,7 @@ public class SelectionEngineTests
         var engine = new SelectionEngine();
         engine.OnPress(5, 1, MouseButton.Left); // release end
         engine.OnDrag(3, 1);
-        var text = engine.OnRelease(3, 1, buffer.Cols, buffer.Rows, buffer.Get);
+        string? text = engine.OnRelease(3, 1, buffer.Cols, buffer.Rows, buffer.Get);
         await Assert.That(text).IsEqualTo("jkl"); // cols 3..5 of row 1, reversed drag
     }
 
@@ -83,7 +81,7 @@ public class SelectionEngineTests
         var buffer = Buffer(["abcdef"]);
         var engine = new SelectionEngine();
         engine.OnPress(3, 0, MouseButton.Left);
-        var text = engine.OnRelease(999, 999, buffer.Cols, buffer.Rows, buffer.Get);
+        string? text = engine.OnRelease(999, 999, buffer.Cols, buffer.Rows, buffer.Get);
         await Assert.That(text).IsEqualTo("def");
     }
 
@@ -95,7 +93,7 @@ public class SelectionEngineTests
         buffer.SetText(0, 0, "あb", CellStyle.Plain);
         var engine = new SelectionEngine();
         engine.OnPress(0, 0, MouseButton.Left);
-        var text = engine.OnRelease(3, 0, buffer.Cols, buffer.Rows, buffer.Get);
+        string? text = engine.OnRelease(3, 0, buffer.Cols, buffer.Rows, buffer.Get);
         await Assert.That(text).IsEqualTo("あb");
     }
 
@@ -105,7 +103,7 @@ public class SelectionEngineTests
         var buffer = Buffer(["     "]);
         var engine = new SelectionEngine();
         engine.OnPress(0, 0, MouseButton.Left);
-        var text = engine.OnRelease(4, 0, buffer.Cols, buffer.Rows, buffer.Get);
+        string? text = engine.OnRelease(4, 0, buffer.Cols, buffer.Rows, buffer.Get);
         await Assert.That(text).IsNull();
     }
 
@@ -141,7 +139,7 @@ public class SelectionEngineTests
         var engine = new SelectionEngine();
         engine.OnPress(1, 1, MouseButton.Left);
         engine.OnPress(5, 5, MouseButton.Left);
-        var text = engine.OnRelease(5, 5, 40, 10, (x, y) => Cell.Blank);
+        string? text = engine.OnRelease(5, 5, 40, 10, (x, y) => Cell.Blank);
         await Assert.That(text).IsNull(); // second press reset the anchor
     }
 }

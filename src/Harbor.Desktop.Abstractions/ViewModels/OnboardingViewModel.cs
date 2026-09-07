@@ -1,14 +1,11 @@
-using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Providers;
+using Harbor.Application.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Desktop.Abstractions.Messages;
-using Harbor.Application.Configuration;
-using Harbor.Ui.Framework.Services;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
+
 /// <summary>
 ///     First-launch onboarding wizard view-model. Walks the user through
 ///     provider selection → API key entry → default model → theme → done,
@@ -22,18 +19,11 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     /// <summary>Number of steps in the wizard (1-based index, used by the view).</summary>
     public const int TotalSteps = 5;
 
-    /// <summary>
-    ///     Model used when nothing is selected/typed — always a keyless local
-    ///     provider default from <see cref="ProviderPresets" /> so the wizard
-    ///     can complete offline.
-    /// </summary>
-    public static string OfflineFallbackModel => ProviderPresets.Find("ollama")?.DefaultModel ?? "llama3.2";
-
     private readonly ICommonConfigStore _configStore;
+    private readonly IProviderHealthCheck? _healthCheck;
     private readonly ILogger<OnboardingViewModel> _logger;
     private readonly IMessenger _messenger;
-    private readonly Harbor.Abstractions.Providers.IProviderHealthCheck? _healthCheck;
-    private readonly Harbor.Abstractions.Providers.IProviderRegistry? _providers;
+    private readonly IProviderRegistry? _providers;
     private readonly IThemeService _theme;
     private readonly IToastService _toasts;
     private readonly CancellationTokenSource _wizardCts = new();
@@ -42,6 +32,14 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanAdvance))]
     private string _apiKey = string.Empty;
+
+    /// <summary>
+    ///     Result of the last "test connection" probe for the selected
+    ///     provider (empty until run; never blocks advancing — the check is
+    ///     informational, a transient outage must not trap the user).
+    /// </summary>
+    [ObservableProperty]
+    private string _connectionStatus = string.Empty;
 
     /// <summary>The current step (1..TotalSteps).</summary>
     [ObservableProperty]
@@ -61,41 +59,6 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isCompleted;
 
-    /// <summary>Selected provider for the "default model" dropdown on step 4.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanAdvance))]
-    private OnboardingProviderOption? _selectedProvider;
-
-    /// <summary>Status text shown while testing/saving (e.g. "Saving…").</summary>
-    [ObservableProperty]
-    private string _statusText = string.Empty;
-
-    /// <summary>
-    ///     Result of the last "test connection" probe for the selected
-    ///     provider (empty until run; never blocks advancing — the check is
-    ///     informational, a transient outage must not trap the user).
-    /// </summary>
-    [ObservableProperty]
-    private string _connectionStatus = string.Empty;
-
-    /// <summary>True while the connection probe is in flight.</summary>
-    [ObservableProperty]
-    private bool _isTestingConnection;
-
-    /// <summary>
-    ///     Whether the "Test connection" affordance is available — depends on
-    ///     the host supplying an <see cref="Harbor.Abstractions.Providers.IProviderHealthCheck" />.
-    ///     Fixed for the VM's lifetime, so a plain one-way binding is enough.
-    /// </summary>
-    public bool HasConnectionTest => _healthCheck is not null;
-
-    /// <summary>
-    ///     Live model ids for <see cref="SelectedProvider" /> fetched from the
-    ///     provider's catalog (PROD-UI-0 З.4). Empty until a successful fetch;
-    ///     while empty the free-text model box stays visible (explicit degrade).
-    /// </summary>
-    public ObservableCollection<string> AvailableModels { get; } = new();
-
     /// <summary>True once the live list has been fetched for the current provider.</summary>
     [ObservableProperty]
     private bool _isLiveModelList;
@@ -104,9 +67,22 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isLoadingModels;
 
+    /// <summary>True while the connection probe is in flight.</summary>
+    [ObservableProperty]
+    private bool _isTestingConnection;
+
     /// <summary>User-facing note about why the live list is unavailable (empty when live).</summary>
     [ObservableProperty]
     private string _modelListNote = string.Empty;
+
+    /// <summary>Selected provider for the "default model" dropdown on step 4.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAdvance))]
+    private OnboardingProviderOption? _selectedProvider;
+
+    /// <summary>Status text shown while testing/saving (e.g. "Saving…").</summary>
+    [ObservableProperty]
+    private string _statusText = string.Empty;
 
     /// <summary>Theme choice on step 5: "dark" / "light" / "system".</summary>
     [ObservableProperty]
@@ -132,8 +108,8 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         IToastService toasts,
         ILogger<OnboardingViewModel> logger,
         IMessenger messenger,
-        Harbor.Abstractions.Providers.IProviderHealthCheck? healthCheck = null,
-        Harbor.Abstractions.Providers.IProviderRegistry? providers = null)
+        IProviderHealthCheck? healthCheck = null,
+        IProviderRegistry? providers = null)
     {
         _configStore = configStore;
         _theme = theme;
@@ -163,24 +139,26 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         RefreshSelectedProvider();
     }
 
-    /// <summary>Glyph shown next to a provider row; presentation-only mapping.</summary>
-    private static string IconFor(string id) => id switch
-    {
-        "anthropic" => "🤖",
-        "openai" => "🌐",
-        "openrouter" => "🛰️",
-        "deepseek" => "🐋",
-        "groq" => "⚡",
-        "mistral" => "🌬️",
-        "xai" => "✖️",
-        "together" => "🤝",
-        "fireworks" => "🎆",
-        "cerebras" => "🧠",
-        "kilocode" => "⌨️",
-        "ollama" => "🦙",
-        "vllm" => "🚀",
-        _ => "🔧"
-    };
+    /// <summary>
+    ///     Model used when nothing is selected/typed — always a keyless local
+    ///     provider default from <see cref="ProviderPresets" /> so the wizard
+    ///     can complete offline.
+    /// </summary>
+    public static string OfflineFallbackModel => ProviderPresets.Find("ollama")?.DefaultModel ?? "llama3.2";
+
+    /// <summary>
+    ///     Whether the "Test connection" affordance is available — depends on
+    ///     the host supplying an <see cref="Harbor.Abstractions.Providers.IProviderHealthCheck" />.
+    ///     Fixed for the VM's lifetime, so a plain one-way binding is enough.
+    /// </summary>
+    public bool HasConnectionTest => _healthCheck is not null;
+
+    /// <summary>
+    ///     Live model ids for <see cref="SelectedProvider" /> fetched from the
+    ///     provider's catalog (PROD-UI-0 З.4). Empty until a successful fetch;
+    ///     while empty the free-text model box stays visible (explicit degrade).
+    /// </summary>
+    public ObservableCollection<string> AvailableModels { get; } = new();
 
     /// <summary>Provider catalogue shown on step 2.</summary>
     public ObservableCollection<OnboardingProviderOption> Providers { get; }
@@ -218,10 +196,26 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     ///     <see cref="OnboardingWindow" /> when it closes — prevents the CTS
     ///     from leaking across re-runs of the wizard.
     /// </summary>
-    public void Dispose()
+    public void Dispose() => _wizardCts.Dispose();
+
+    /// <summary>Glyph shown next to a provider row; presentation-only mapping.</summary>
+    private static string IconFor(string id) => id switch
     {
-        _wizardCts.Dispose();
-    }
+        "anthropic" => "🤖",
+        "openai" => "🌐",
+        "openrouter" => "🛰️",
+        "deepseek" => "🐋",
+        "groq" => "⚡",
+        "mistral" => "🌬️",
+        "xai" => "✖️",
+        "together" => "🤝",
+        "fireworks" => "🎆",
+        "cerebras" => "🧠",
+        "kilocode" => "⌨️",
+        "ollama" => "🦙",
+        "vllm" => "🚀",
+        _ => "🔧"
+    };
 
     /// <summary>Recompute <see cref="SelectedProvider" /> + CanAdvance after step-2 checkbox toggles.</summary>
     /// <summary>Advance to the next step (or complete on step 5).</summary>
@@ -336,7 +330,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         string? providerId = SelectedProvider?.Id;
         if (providerId is null) return;
 
-        var pid = Harbor.Abstractions.Models.Identifiers.ProviderId.TryCreate(providerId);
+        var pid = ProviderId.TryCreate(providerId);
         if (pid.IsFailure)
         {
             ConnectionStatus = "Invalid provider id.";
@@ -369,10 +363,10 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
 
     /// <summary>
     ///     PROD-UI-0 З.4: fetch the selected provider's live model list.
-    ///     On success <see cref="AvailableModels"/> is populated and step 4
+    ///     On success <see cref="AvailableModels" /> is populated and step 4
     ///     switches to a picker; on failure the free-text box stays with an
     ///     explicit note — degradation is visible, never silent. All faults
-    ///     are observed internally (safe fire-and-forget from <see cref="Next"/>).
+    ///     are observed internally (safe fire-and-forget from <see cref="Next" />).
     /// </summary>
     [RelayCommand]
     private async Task LoadModelsAsync(CancellationToken ct = default)
@@ -381,7 +375,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         string? providerId = SelectedProvider?.Id;
         if (providerId is null) return;
 
-        var pid = Harbor.Abstractions.Models.Identifiers.ProviderId.TryCreate(providerId);
+        var pid = ProviderId.TryCreate(providerId);
         if (pid.IsFailure)
             return;
 
@@ -397,7 +391,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
             }
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _wizardCts.Token);
-            cts.CancelAfter(Harbor.Abstractions.Providers.IProviderHealthCheck.DefaultTimeout);
+            cts.CancelAfter(IProviderHealthCheck.DefaultTimeout);
 
             var result = await clientResult.Value.GetModelsAsync(cts.Token).ConfigureAwait(true);
             if (result.IsFailure)

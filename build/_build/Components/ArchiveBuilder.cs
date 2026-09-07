@@ -1,8 +1,9 @@
+using Nuke.Common.IO;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Compression;
-using Nuke.Common.IO;
 namespace Harbor.Build.Components;
+
 /// <summary>
 ///     Creates <c>.tar.gz</c> or <c>.zip</c> archives from a publish output
 ///     directory. Uses the system <c>tar</c> binary (must be on <c>PATH</c>)

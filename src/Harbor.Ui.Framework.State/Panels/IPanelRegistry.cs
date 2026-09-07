@@ -1,8 +1,8 @@
 using CSharpFunctionalExtensions;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Panels;
+
 /// <summary>
 ///     Read-only view over the panel registry plus <see cref="UiState" />. Use this
 ///     from renderers / layout shells to answer "which panels are visible right now?"
@@ -164,17 +164,17 @@ public sealed class PanelRegistry : IPanelRegistry
         }
     }
 
-/// <summary>
-///     Build a read-only <see cref="PanelRegistryView" /> snapshot over this
-///     registry and the supplied <see cref="UiState" />. Renderers call this once
-///     per frame to answer visibility / size queries without touching the
-///     registry's internal lock.
-/// </summary>
-public PanelRegistryView View(UiState state)
-{
-    var snapshot = All;
-    return new PanelRegistryView(snapshot, state);
-}
+    /// <summary>
+    ///     Build a read-only <see cref="PanelRegistryView" /> snapshot over this
+    ///     registry and the supplied <see cref="UiState" />. Renderers call this once
+    ///     per frame to answer visibility / size queries without touching the
+    ///     registry's internal lock.
+    /// </summary>
+    public PanelRegistryView View(UiState state)
+    {
+        var snapshot = All;
+        return new PanelRegistryView(snapshot, state);
+    }
 }
 
 /// <summary>

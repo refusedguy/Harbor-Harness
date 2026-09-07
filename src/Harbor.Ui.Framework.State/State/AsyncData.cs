@@ -1,5 +1,4 @@
 using CSharpFunctionalExtensions;
-
 namespace Harbor.Ui.Framework.State;
 
 /// <summary>
@@ -14,18 +13,18 @@ public readonly record struct AsyncData<T>(
 {
     public static readonly AsyncData<T> Idle = new(AsyncStatus.Idle);
 
+    public bool IsBusy => Status is AsyncStatus.Loading or AsyncStatus.Refreshing;
+    public bool HasValue => Status is AsyncStatus.Success or AsyncStatus.Refreshing && Value is not null;
+
     public AsyncData<T> ToLoading() => Status is AsyncStatus.Success
-        ? new(AsyncStatus.Refreshing, Value)
-        : new(AsyncStatus.Loading);
+        ? new AsyncData<T>(AsyncStatus.Refreshing, Value)
+        : new AsyncData<T>(AsyncStatus.Loading);
 
     public static AsyncData<T> Success(T value) => new(AsyncStatus.Success, value);
     public static AsyncData<T> None() => new(AsyncStatus.None);
     public static AsyncData<T> Failed(string e) => new(AsyncStatus.Error, default, e);
 
     public static AsyncData<T> From(Result<T> r) => r.IsSuccess ? Success(r.Value) : Failed(r.Error);
-
-    public bool IsBusy => Status is AsyncStatus.Loading or AsyncStatus.Refreshing;
-    public bool HasValue => Status is AsyncStatus.Success or AsyncStatus.Refreshing && Value is not null;
 }
 
 /// <summary>Lifecycle of an async data operation.</summary>

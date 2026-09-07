@@ -8,23 +8,23 @@ namespace Harbor.Ui.Framework.Navigation;
 public interface IWorkspaceCommands
 {
     /// <summary>Create a new session.</summary>
-    void NewSession();
+    public void NewSession();
 
     /// <summary>Branch the active session.</summary>
-    void BranchSession();
+    public void BranchSession();
 
     /// <summary>Refresh the session list.</summary>
-    void RefreshSessions();
+    public void RefreshSessions();
 
     /// <summary>Open a file in the editor.</summary>
-    System.Threading.Tasks.Task OpenFileAsync();
+    public Task OpenFileAsync();
 
     /// <summary>Save the current file.</summary>
-    System.Threading.Tasks.Task SaveFileAsync();
+    public Task SaveFileAsync();
 
     /// <summary>Stop the currently running agent.</summary>
-    void StopAgent();
+    public void StopAgent();
 
     /// <summary>Clear the chat transcript.</summary>
-    void ClearChat();
+    public void ClearChat();
 }

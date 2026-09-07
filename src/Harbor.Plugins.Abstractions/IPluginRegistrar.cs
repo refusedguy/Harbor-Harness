@@ -1,4 +1,5 @@
 namespace Harbor.Plugins.Abstractions;
+
 /// <summary>
 ///     Wires a live <see cref="LoadedPlugin" /> into the host's registries. This is the
 ///     only layer that calls <see cref="Harbor.Abstractions.Plugins.IPlugin.Initialize" />

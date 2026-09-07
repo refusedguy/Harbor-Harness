@@ -9,6 +9,7 @@ using Harbor.Terminal.Abstractions.Plugins;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Registration;
+
 /// <summary>
 ///     Default <see cref="IPluginRegistrar" />. Builds a <see cref="PluginContext" />,
 ///     calls <see cref="IPlugin.Initialize" />, then dispatches each <c>Register*</c>
@@ -26,10 +27,10 @@ namespace Harbor.Plugins.Registration;
 /// </remarks>
 public sealed class PluginRegistrar : IPluginRegistrar
 {
-    private readonly ILogger<PluginRegistrar> _logger;
-    private readonly string _pluginRoot;
-    private readonly ILoggerFactory _loggerFactory;
     private readonly IPluginAuditLog? _audit;
+    private readonly ILogger<PluginRegistrar> _logger;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly string _pluginRoot;
 
     /// <summary>
     ///     Construct a new registrar.
@@ -121,12 +122,12 @@ public sealed class PluginRegistrar : IPluginRegistrar
 
     private sealed class ToolRegistryBuilderAdapter : IToolRegistryBuilder
     {
-        private readonly IPluginLoadHost _host;
-        private readonly string _pluginName;
-        private readonly IReadOnlySet<PluginCapability> _pluginCapabilities;
         private readonly IPluginAuditLog? _audit;
+        private readonly IPluginLoadHost _host;
         private readonly ILogger _logger;
         private readonly ILoggerFactory _loggerFactory;
+        private readonly IReadOnlySet<PluginCapability> _pluginCapabilities;
+        private readonly string _pluginName;
 
         internal ToolRegistryBuilderAdapter(
             IPluginLoadHost host,

@@ -1,11 +1,11 @@
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Tools;
 using Harbor.Ipc.InProcess;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TUnit.Core;
-
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -15,7 +15,7 @@ namespace Harbor.Ipc.Tests;
 ///     without serialization.
 /// </summary>
 [NotInParallel]
-    public class InProcessClientTests
+public class InProcessClientTests
 {
     /// <summary>
     ///     CreateSession should round-trip through the session store and
@@ -28,10 +28,10 @@ namespace Harbor.Ipc.Tests;
         await using var client = new InProcessHarborClient(
             sp.GetRequiredService<IAgent>(),
             sp.GetRequiredService<IAgentRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Sessions.ISessionStore>(),
-            sp.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Events.IEventBus>(),
+            sp.GetRequiredService<ISessionStore>(),
+            sp.GetRequiredService<IProviderRegistry>(),
+            sp.GetRequiredService<IToolRegistry>(),
+            sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ILogger<InProcessHarborClient>>());
 
         var result = await client.CreateSessionAsync(
@@ -55,10 +55,10 @@ namespace Harbor.Ipc.Tests;
         await using var client = new InProcessHarborClient(
             sp.GetRequiredService<IAgent>(),
             sp.GetRequiredService<IAgentRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Sessions.ISessionStore>(),
-            sp.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Events.IEventBus>(),
+            sp.GetRequiredService<ISessionStore>(),
+            sp.GetRequiredService<IProviderRegistry>(),
+            sp.GetRequiredService<IToolRegistry>(),
+            sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ILogger<InProcessHarborClient>>());
 
         var create = await client.CreateSessionAsync("/tmp/test", "code", "ollama", "qwen2.5-coder:7b");
@@ -78,10 +78,10 @@ namespace Harbor.Ipc.Tests;
         await using var client = new InProcessHarborClient(
             sp.GetRequiredService<IAgent>(),
             sp.GetRequiredService<IAgentRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Sessions.ISessionStore>(),
-            sp.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Events.IEventBus>(),
+            sp.GetRequiredService<ISessionStore>(),
+            sp.GetRequiredService<IProviderRegistry>(),
+            sp.GetRequiredService<IToolRegistry>(),
+            sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ILogger<InProcessHarborClient>>());
 
         var create = await client.CreateSessionAsync("/tmp/test", "code", "ollama", "qwen2.5-coder:7b");
@@ -101,10 +101,10 @@ namespace Harbor.Ipc.Tests;
         await using var client = new InProcessHarborClient(
             sp.GetRequiredService<IAgent>(),
             sp.GetRequiredService<IAgentRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Sessions.ISessionStore>(),
-            sp.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Events.IEventBus>(),
+            sp.GetRequiredService<ISessionStore>(),
+            sp.GetRequiredService<IProviderRegistry>(),
+            sp.GetRequiredService<IToolRegistry>(),
+            sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ILogger<InProcessHarborClient>>());
 
         var result = await client.ListProvidersAsync();
@@ -123,10 +123,10 @@ namespace Harbor.Ipc.Tests;
         await using var client = new InProcessHarborClient(
             sp.GetRequiredService<IAgent>(),
             sp.GetRequiredService<IAgentRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Sessions.ISessionStore>(),
-            sp.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Events.IEventBus>(),
+            sp.GetRequiredService<ISessionStore>(),
+            sp.GetRequiredService<IProviderRegistry>(),
+            sp.GetRequiredService<IToolRegistry>(),
+            sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ILogger<InProcessHarborClient>>());
 
         var result = await client.ListToolsAsync();
@@ -144,10 +144,10 @@ namespace Harbor.Ipc.Tests;
         await using var client = new InProcessHarborClient(
             sp.GetRequiredService<IAgent>(),
             sp.GetRequiredService<IAgentRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Sessions.ISessionStore>(),
-            sp.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(),
-            sp.GetRequiredService<Harbor.Abstractions.Events.IEventBus>(),
+            sp.GetRequiredService<ISessionStore>(),
+            sp.GetRequiredService<IProviderRegistry>(),
+            sp.GetRequiredService<IToolRegistry>(),
+            sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ILogger<InProcessHarborClient>>());
 
         await Assert.That(client.IsConnected).IsTrue();

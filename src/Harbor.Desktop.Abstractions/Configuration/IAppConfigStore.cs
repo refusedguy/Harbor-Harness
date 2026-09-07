@@ -8,6 +8,7 @@
 
 using CSharpFunctionalExtensions;
 namespace Harbor.Desktop.Abstractions.Configuration;
+
 /// <summary>
 ///     Repository contract for per-app configuration. Each app registers a
 ///     single <see cref="IAppConfigStore{T}" /> in its DI container where

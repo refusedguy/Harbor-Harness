@@ -1,12 +1,11 @@
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Diagnostics;
-
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 namespace Harbor.Telemetry;
 
 /// <summary>
@@ -21,7 +20,7 @@ public sealed class InstrumentedProviderRegistry(IProviderRegistry inner, IMetri
 
     public Result<ILlmClient> GetClient(ProviderId providerId)
     {
-        Result<ILlmClient> resolved = inner.GetClient(providerId);
+        var resolved = inner.GetClient(providerId);
         return resolved.IsSuccess
             ? Result.Success<ILlmClient>(new InstrumentedLlmClient(providerId, resolved.Value, metrics, tracer))
             : Result.Failure<ILlmClient>(resolved.Error);
@@ -62,14 +61,14 @@ public sealed class InstrumentedLlmClient(
         LlmRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        using Harbor.Diagnostics.ITelemetrySpan? span = tracer.StartSpan(
+        using var span = tracer.StartSpan(
             "llm.stream",
             new KeyValuePair<string, object?>(TelemetryTagNames.Model, request.Model),
             new KeyValuePair<string, object?>(TelemetryTagNames.Provider, providerId.Value));
 
         // Manual enumeration lets the wrapper catch/observe failures WITHOUT a
         // try/catch around `yield return` (which C# forbids in iterators).
-        IAsyncEnumerator<LlmEvent> source = inner.StreamAsync(request, cancellationToken).GetAsyncEnumerator(cancellationToken);
+        var source = inner.StreamAsync(request, cancellationToken).GetAsyncEnumerator(cancellationToken);
         await using (source.ConfigureAwait(false))
         {
             long start = Stopwatch.GetTimestamp();

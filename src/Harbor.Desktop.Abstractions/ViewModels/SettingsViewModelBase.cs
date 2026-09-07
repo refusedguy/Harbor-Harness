@@ -1,13 +1,6 @@
-using System.Collections.Immutable;
-using CommunityToolkit.Mvvm.ComponentModel;
 using Harbor.Abstractions.Providers;
 using Harbor.Desktop.Abstractions.Models;
-using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using Harbor.Ui.Framework.ViewModels;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -17,8 +10,12 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// </summary>
 public abstract partial class SettingsViewModelBase : StoreSubscriberViewModel
 {
-    private readonly IThemeService _themeService;
     private readonly IProviderRegistry _providers;
+    private readonly IThemeService _themeService;
+
+    /// <summary>Registered provider IDs. Projected from <see cref="IProviderRegistry" />.</summary>
+    [ObservableProperty]
+    private ImmutableArray<string> _availableProviders = ImmutableArray<string>.Empty;
 
     /// <summary>Code font size in px. Default 13.</summary>
     [ObservableProperty]
@@ -27,6 +24,14 @@ public abstract partial class SettingsViewModelBase : StoreSubscriberViewModel
     /// <summary>Default provider id (e.g. "openai", "anthropic").</summary>
     [ObservableProperty]
     private string _defaultProviderId = string.Empty;
+
+    /// <summary>Whether the active session is authenticated.</summary>
+    [ObservableProperty]
+    private bool _isAuthenticated;
+
+    /// <summary>Whether dark theme is currently active. Projected from <see cref="IThemeService" />.</summary>
+    [ObservableProperty]
+    private bool _isDarkTheme;
 
     /// <summary>True if there are unsaved changes.</summary>
     [ObservableProperty]
@@ -43,18 +48,6 @@ public abstract partial class SettingsViewModelBase : StoreSubscriberViewModel
     /// <summary>UI font size in px. Default 13.</summary>
     [ObservableProperty]
     private int _uiFontSize = 13;
-
-    /// <summary>Whether dark theme is currently active. Projected from <see cref="IThemeService" />.</summary>
-    [ObservableProperty]
-    private bool _isDarkTheme;
-
-    /// <summary>Registered provider IDs. Projected from <see cref="IProviderRegistry" />.</summary>
-    [ObservableProperty]
-    private ImmutableArray<string> _availableProviders = ImmutableArray<string>.Empty;
-
-    /// <summary>Whether the active session is authenticated.</summary>
-    [ObservableProperty]
-    private bool _isAuthenticated;
 
     /// <summary>Construct a <see cref="SettingsViewModelBase" />.</summary>
     /// <param name="dispatcher">UI-thread marshaller / store binder.</param>
@@ -78,10 +71,7 @@ public abstract partial class SettingsViewModelBase : StoreSubscriberViewModel
     }
 
     /// <summary>Apply all declared selectors against the current store snapshot.</summary>
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 
     /// <summary>Mark the VM dirty when a property changes.</summary>
     /// <param name="e">Event args.</param>

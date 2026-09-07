@@ -1,7 +1,8 @@
-using System.Collections.Frozen;
 using Microsoft.Extensions.Logging;
 using NonBlocking;
+using System.Collections.Frozen;
 namespace Harbor.Abstractions.Tools;
+
 /// <summary>
 ///     Thread-safe tool registry with frozen lookup table for fast resolution.
 ///     Implements Registry pattern (GOF).
@@ -203,8 +204,8 @@ public sealed class ToolRegistry : IToolRegistry
 /// </summary>
 public sealed class ToolRegistryBuilder : IToolRegistryBuilder
 {
-    private readonly IToolRegistry _registry;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IToolRegistry _registry;
 
     /// <summary>
     ///     Construct a builder backed by the supplied registry.

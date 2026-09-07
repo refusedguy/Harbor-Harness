@@ -1,11 +1,7 @@
-using Harbor.Abstractions.Tui;
 using Harbor.Hosting.Rendering;
-using Harbor.Ui.Framework.Panels;
+using Harbor.Tui.CellForge;
+using Harbor.Tui.NickConsoleEx;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Hosting;
 
 internal static class TuiModule
@@ -78,15 +74,15 @@ internal static class TuiModule
                 // path through the AnsiWriter SGR automaton. The interactive
                 // raw-mode entry remains ReplRunner (ScreenSession), which
                 // bypasses ITuiRenderer entirely.
-                return new Harbor.Tui.CellForge.CellForgeTuiRenderer(
-                    sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>());
+                return new CellForgeTuiRenderer(
+                    sp.GetRequiredService<ILogger<CellForgeTuiRenderer>>());
             }
 #if HARBOR_WITH_NICK_CONSOLE_EX
             // Phase 3: ADDITIVE backend — nickprotop/ConsoleEx window system.
             if (tui == "nickconsoleex")
             {
-                return new Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer(
-                    sp.GetRequiredService<ILogger<Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer>>());
+                return new NickConsoleExTuiRenderer(
+                    sp.GetRequiredService<ILogger<NickConsoleExTuiRenderer>>());
             }
 #endif
 
@@ -108,9 +104,9 @@ internal static class TuiModule
             return tui.ToLowerInvariant() switch
             {
                 "plain" => new PlainTuiRenderer(),
-                "consoleex" or "cellforge" => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
-                    sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>()),
-                _ => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>())
+                "consoleex" or "cellforge" => new CellForgeTuiRenderer(
+                    sp.GetRequiredService<ILogger<CellForgeTuiRenderer>>()),
+                _ => new AnsiTuiRenderer(sp.GetRequiredService<ILogger<AnsiTuiRenderer>>())
             };
 #endif
         });
@@ -128,14 +124,14 @@ internal static class TuiModule
                 sp.GetService<UiStore>(),
                 sp.GetRequiredService<ILogger<RendererPipeline>>());
 
-            pipeline.Register("cellforge", () => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
-                sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>()));
-            pipeline.Register("ansi", () => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(
-                sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>()));
-            pipeline.Register("plain", () => new Harbor.Tui.AnsiPlain.PlainTuiRenderer());
+            pipeline.Register("cellforge", () => new CellForgeTuiRenderer(
+                sp.GetRequiredService<ILogger<CellForgeTuiRenderer>>()));
+            pipeline.Register("ansi", () => new AnsiTuiRenderer(
+                sp.GetRequiredService<ILogger<AnsiTuiRenderer>>()));
+            pipeline.Register("plain", () => new PlainTuiRenderer());
 #if HARBOR_WITH_NICK_CONSOLE_EX
-            pipeline.Register("nickconsoleex", () => new Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer(
-                sp.GetRequiredService<ILogger<Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer>>()));
+            pipeline.Register("nickconsoleex", () => new NickConsoleExTuiRenderer(
+                sp.GetRequiredService<ILogger<NickConsoleExTuiRenderer>>()));
 #endif
             return pipeline;
         });

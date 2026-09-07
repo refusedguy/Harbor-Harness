@@ -1,4 +1,5 @@
 namespace Harbor.Desktop.Abstractions.ViewModels;
+
 /// <summary>
 ///     One command-palette result row. Pure record — no UI-framework
 ///     dependency — extracted from <c>CommandPaletteViewModel.cs</c> so the

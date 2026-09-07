@@ -1,9 +1,5 @@
 using Harbor.Desktop.Shared.Locators;
 using Microsoft.Extensions.DependencyInjection;
-using TUnit;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.App.Avalonia.Tests;
 
 /// <summary>A singleton dummy — every resolve must return the same instance.</summary>
@@ -102,7 +98,7 @@ public sealed class LocatorConventionTests
         services.AddViewModelLocator();
         services.AddViewModelLocator(); // second call must be a no-op
 
-        var count = services.Count(d =>
+        int count = services.Count(d =>
             d.ServiceType == typeof(IViewModelLocator)
             || d.ServiceType == typeof(ViewModelLocator)
             || d.ServiceType == typeof(IShowPlaceholderFactory)

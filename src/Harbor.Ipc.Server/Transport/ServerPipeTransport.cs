@@ -1,5 +1,6 @@
-namespace Harbor.Ipc.Transport;
 using System.Runtime.Versioning;
+namespace Harbor.Ipc.Transport;
+
 /// <summary>
 ///     Server-side transport that accepts inbound connections over a Named
 ///     Pipe (Windows) or Unix Domain Socket (Linux/Mac). Each accepted
@@ -13,21 +14,26 @@ using System.Runtime.Versioning;
 ///         <c>/tmp/harbor-ipc.sock</c>). The same <c>pipeName</c> argument
 ///         works on both OSes — the transport picks the right mechanism.
 ///     </para>
-    /// <para>
-    ///         <b>Permissions:</b> on Unix the socket file is chmod'ed 0600
-    ///         (owner-only) immediately after bind. On Windows the pipe is
-    ///         created with <c>PipeOptions.None</c> (current-user-only ACL via the
-    ///         default NamedPipeServerStream constructor).
-    ///     </para>
-    ///     <para>
-    ///         <b>Stale endpoint policy:</b> a leftover socket file is deleted
-    ///         only after a probe <c>connect()</c> proves no live listener is
-    ///         serving it. A live peer makes <see cref="BindAsync" /> fail with
-    ///         an explicit error instead of silently stealing the endpoint.
-    ///     </para>
+///     <para>
+///         <b>Permissions:</b> on Unix the socket file is chmod'ed 0600
+///         (owner-only) immediately after bind. On Windows the pipe is
+///         created with <c>PipeOptions.None</c> (current-user-only ACL via the
+///         default NamedPipeServerStream constructor).
+///     </para>
+///     <para>
+///         <b>Stale endpoint policy:</b> a leftover socket file is deleted
+///         only after a probe <c>connect()</c> proves no live listener is
+///         serving it. A live peer makes <see cref="BindAsync" /> fail with
+///         an explicit error instead of silently stealing the endpoint.
+///     </para>
 /// </remarks>
 public sealed class ServerPipeTransport : IIpcServerTransport
 {
+
+    // Accept-failure backoff: repeated AcceptAsync errors (EMFILE/ENFILE fd
+    // exhaustion, transient socket-state faults) must not spin the loop hot.
+    // 100 ms doubling capped at 5 s; reset on every successful accept.
+    private const int MaxAcceptBackoffMs = 5000;
     private readonly Channel<Stream> _acceptChannel;
     private readonly CancellationTokenSource _cts = new();
     private readonly ILogger<ServerPipeTransport> _logger;
@@ -70,22 +76,6 @@ public sealed class ServerPipeTransport : IIpcServerTransport
         await UnbindAsync().ConfigureAwait(false);
         _cts.Dispose();
         Volatile.Write(ref _disposed, true);
-    }
-
-    // Accept-failure backoff: repeated AcceptAsync errors (EMFILE/ENFILE fd
-    // exhaustion, transient socket-state faults) must not spin the loop hot.
-    // 100 ms doubling capped at 5 s; reset on every successful accept.
-    private const int MaxAcceptBackoffMs = 5000;
-
-    /// <summary>
-    ///     Backoff delay for the Nth consecutive accept failure (1-based).
-    ///     Pure function — exposed for tests.
-    /// </summary>
-    public static TimeSpan ComputeAcceptBackoff(int consecutiveFailures)
-    {
-        if (consecutiveFailures <= 1) return TimeSpan.FromMilliseconds(100);
-        int shift = Math.Min(consecutiveFailures - 1, 6);
-        return TimeSpan.FromMilliseconds(Math.Min(100 << shift, MaxAcceptBackoffMs));
     }
 
     /// <summary>
@@ -154,6 +144,17 @@ public sealed class ServerPipeTransport : IIpcServerTransport
         }
     }
 
+    /// <summary>
+    ///     Backoff delay for the Nth consecutive accept failure (1-based).
+    ///     Pure function — exposed for tests.
+    /// </summary>
+    public static TimeSpan ComputeAcceptBackoff(int consecutiveFailures)
+    {
+        if (consecutiveFailures <= 1) return TimeSpan.FromMilliseconds(100);
+        int shift = Math.Min(consecutiveFailures - 1, 6);
+        return TimeSpan.FromMilliseconds(Math.Min(100 << shift, MaxAcceptBackoffMs));
+    }
+
     // ── Windows: NamedPipeServerStream accept loop ─────────────────────────
 
     private async Task AcceptLoopWindowsAsync(CancellationToken ct)
@@ -182,7 +183,7 @@ public sealed class ServerPipeTransport : IIpcServerTransport
             catch (Exception ex)
             {
                 consecutiveFailures++;
-                TimeSpan delay = ComputeAcceptBackoff(consecutiveFailures);
+                var delay = ComputeAcceptBackoff(consecutiveFailures);
                 _logger.LogWarning(
                     ex, "WaitForConnectionAsync failed ({Count} consecutive); backing off {Delay}ms",
                     consecutiveFailures, delay.TotalMilliseconds);
@@ -251,7 +252,7 @@ public sealed class ServerPipeTransport : IIpcServerTransport
             catch (Exception ex)
             {
                 consecutiveFailures++;
-                TimeSpan delay = ComputeAcceptBackoff(consecutiveFailures);
+                var delay = ComputeAcceptBackoff(consecutiveFailures);
                 _logger.LogWarning(
                     ex, "AcceptAsync failed ({Count} consecutive); backing off {Delay}ms",
                     consecutiveFailures, delay.TotalMilliseconds);

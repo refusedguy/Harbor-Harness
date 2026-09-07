@@ -1,12 +1,11 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Entrance-motion wiring (HDS v1): timeline slide+fade, approval warn-glow
-/// pulse, and the status-bar mode crossfade. All assertions run against
-/// deterministic ticks — no wall clock anywhere.
+///     Entrance-motion wiring (HDS v1): timeline slide+fade, approval warn-glow
+///     pulse, and the status-bar mode crossfade. All assertions run against
+///     deterministic ticks — no wall clock anywhere.
 /// </summary>
 public class PanelFxWiringTests
 {
@@ -26,7 +25,7 @@ public class PanelFxWiringTests
         tl.EnableEntranceFx();
         tl.Append(new UserBlock("hello"));
 
-        var buffer = PaintTimeline(tl, 40, 4, tick: 0);
+        var buffer = PaintTimeline(tl, 40, 4, 0);
 
         await Assert.That(GridDump.Art(buffer)).Contains("hello");
         // Prefix accent is exact — no alpha blending on cold screens.
@@ -39,12 +38,12 @@ public class PanelFxWiringTests
         var tl = new VirtualizedChatTimeline();
         tl.EnableEntranceFx();
 
-        _ = PaintTimeline(tl, 40, 6, tick: 0);   // first frame → hasPaintedFrame
+        _ = PaintTimeline(tl, 40, 6, 0); // first frame → hasPaintedFrame
         tl.Append(new UserBlock("late arrival"));
         tl.ScrollToEnd(6);
 
-        ScreenBuffer animating = PaintTimeline(tl, 40, 6, tick: 1);
-        ScreenBuffer settled = PaintTimeline(tl, 40, 6, tick: 99);
+        var animating = PaintTimeline(tl, 40, 6, 1);
+        var settled = PaintTimeline(tl, 40, 6, 99);
 
         string animArt = GridDump.Art(animating);
         string settledArt = GridDump.Art(settled);
@@ -55,10 +54,10 @@ public class PanelFxWiringTests
 
         // Settled grid must equal a no-FX timeline rendered from the same content.
         var plainTl = new VirtualizedChatTimeline();
-        _ = PaintTimeline(plainTl, 40, 6, tick: 0);
+        _ = PaintTimeline(plainTl, 40, 6, 0);
         plainTl.Append(new UserBlock("late arrival"));
         plainTl.ScrollToEnd(6);
-        ScreenBuffer baseline = PaintTimeline(plainTl, 40, 6, tick: 99);
+        var baseline = PaintTimeline(plainTl, 40, 6, 99);
 
         await Assert.That(GridDump.Art(baseline)).IsEqualTo(settledArt);
     }
@@ -78,8 +77,8 @@ public class PanelFxWiringTests
         var plainWarning = new CellStyle(ChatPalette.Warning, attrs: StyleAttr.Bold);
         gate.BeginWarnPulse(birthTick: 100);
 
-        await Assert.That(HeaderAt(100 + (PanelFx.PulseFrames / 4)) == plainWarning).IsTrue(); // sine peak ≈ full glow
-        await Assert.That(HeaderAt(100 + (PanelFx.PulseFrames / 2) - 1).Fg != ChatPalette.Warning).IsTrue(); // trough dims
+        await Assert.That(HeaderAt(100 + PanelFx.PulseFrames / 4) == plainWarning).IsTrue(); // sine peak ≈ full glow
+        await Assert.That(HeaderAt(100 + PanelFx.PulseFrames / 2 - 1).Fg != ChatPalette.Warning).IsTrue(); // trough dims
 
         _ = gate.TryDecide(ApprovalChoice.Approve);
         await Assert.That(HeaderAt(100 + PanelFx.PulseFrames) == ChatPalette.Dim).IsTrue(); // stamped → dim, glow off
@@ -96,8 +95,8 @@ public class PanelFxWiringTests
         screen.Tree.Solve(60, 20);
 
         Frame(screen, buffer);
-        status.Mode = StatusBarMode.AwaitingApproval;   // flip mid-stream
-        Frame(screen, buffer);                          // crossfade frame 1
+        status.Mode = StatusBarMode.AwaitingApproval; // flip mid-stream
+        Frame(screen, buffer); // crossfade frame 1
         string duringCrossfade = GridDump.Art(buffer);
 
         for (int i = 0; i < PanelFx.FadeFrames + 2; i++)

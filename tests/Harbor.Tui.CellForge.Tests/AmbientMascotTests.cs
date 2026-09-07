@@ -1,32 +1,31 @@
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class AmbientMascotTests
 {
+
+    private static long IdlePeriod => AmbientMascot.IdleFrames.Length;
     [Test]
     public async Task Frame_CyclesDeterministically()
     {
-        string f0 = AmbientMascot.Frame(0, MascotMood.Idle);
-        string f1 = AmbientMascot.Frame(1, MascotMood.Idle);
-        string fAgain = AmbientMascot.Frame(IdlePeriod, MascotMood.Idle);
+        string f0 = AmbientMascot.Frame(0);
+        string f1 = AmbientMascot.Frame(1);
+        string fAgain = AmbientMascot.Frame(IdlePeriod);
 
         await Assert.That(f0).IsEqualTo(fAgain);
         await Assert.That(f1).IsNotEqualTo(f0);
     }
-
-    private static long IdlePeriod => AmbientMascot.IdleFrames.Length;
 
     [Test]
     public async Task Frame_AllMoods_ConstantWidth()
     {
         foreach (var mood in Enum.GetValues<MascotMood>())
         {
-            var frames = AmbientMascot.FramesOf(mood);
+            string[] frames = AmbientMascot.FramesOf(mood);
 
             int width = AmbientMascot.Width(frames[0]);
             await Assert.That(width).IsGreaterThan(0);
-            foreach (var frame in frames)
+            foreach (string frame in frames)
             {
                 await Assert.That(AmbientMascot.Width(frame)).IsEqualTo(width);
             }
@@ -38,7 +37,7 @@ public class AmbientMascotTests
     {
         foreach (var mood in Enum.GetValues<MascotMood>())
         {
-            var frames = AmbientMascot.FramesOf(mood);
+            string[] frames = AmbientMascot.FramesOf(mood);
             for (long tick = -10; tick < 40; tick++)
             {
                 int idx = AmbientMascot.FrameIndex(tick, mood);

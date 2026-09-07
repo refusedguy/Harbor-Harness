@@ -1,29 +1,28 @@
 using Harbor.Tui.CellForge.Rendering;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Spring-driven split-ratio animation on the layout tree (HDS v1
-/// panel-resize motion): rects track the spring each frame, the geometry
-/// cache is bypassed mid-flight, and the settled layout matches a direct
-/// ratio solve.
+///     Spring-driven split-ratio animation on the layout tree (HDS v1
+///     panel-resize motion): rects track the spring each frame, the geometry
+///     cache is bypassed mid-flight, and the settled layout matches a direct
+///     ratio solve.
 /// </summary>
 public class LayoutTreeSpringTests
 {
     private static (LayoutTree Tree, Panel A, Panel B) BuildSplit(float ratio)
     {
         var tree = new LayoutTree();
-        var a = new BorderPanel("a", minWidth: 2, minHeight: 2);
-        var b = new BorderPanel("b", minWidth: 2, minHeight: 2);
+        var a = new BorderPanel("a", 2, 2);
+        var b = new BorderPanel("b", 2, 2);
         tree.AddRoot(a);
-        tree.Split("a", SplitDir.Vertical, ratio, b, gap: 1);
+        tree.Split("a", SplitDir.Vertical, ratio, b, 1);
         return (tree, a, b);
     }
 
     [Test]
     public async Task AnimateRatio_RectsTrackSpring_AndSettleOnTarget()
     {
-        (var tree, var a, var b) = BuildSplit(0.5f);
+        var (tree, a, b) = BuildSplit(0.5f);
 
         tree.AnimateRatio("a", 0.8f);
         int lastHeight = a.Rect.Height;
@@ -44,7 +43,7 @@ public class LayoutTreeSpringTests
     [Test]
     public async Task Solve_BypassesCache_WhileSpringIsInFlight()
     {
-        (var tree, var a, var b) = BuildSplit(0.5f);
+        var (tree, a, b) = BuildSplit(0.5f);
         tree.Solve(40, 20);
         int settledHeight = a.Rect.Height;
 
@@ -58,7 +57,7 @@ public class LayoutTreeSpringTests
     [Test]
     public async Task AnimateRatio_UnknownPanel_Throws()
     {
-        (var tree, _, _) = BuildSplit(0.5f);
+        var (tree, _, _) = BuildSplit(0.5f);
 
         await Assert.ThrowsAsync<KeyNotFoundException>(async () =>
         {
@@ -70,14 +69,14 @@ public class LayoutTreeSpringTests
     [Test]
     public async Task AnimateRatio_SettledLayout_MatchesDirectRatioSolve()
     {
-        (var springTree, var springA, _) = BuildSplit(0.5f);
+        var (springTree, springA, _) = BuildSplit(0.5f);
         springTree.AnimateRatio("a", 0.8f);
         for (int frame = 0; frame < 200; frame++)
         {
             springTree.Solve(40, 20);
         }
 
-        (var directTree, var directA, _) = BuildSplit(0.8f);
+        var (directTree, directA, _) = BuildSplit(0.8f);
         directTree.Solve(40, 20);
 
         await Assert.That(springA.Rect).IsEqualTo(directA.Rect);
@@ -86,7 +85,7 @@ public class LayoutTreeSpringTests
     [Test]
     public async Task Remove_CancelsPendingSpring()
     {
-        (var tree, var a, var b) = BuildSplit(0.5f);
+        var (tree, a, b) = BuildSplit(0.5f);
         tree.AnimateRatio("a", 0.8f);
         tree.Remove("b"); // b promoted into the root leaf slot
 
@@ -100,15 +99,17 @@ public class LayoutTreeSpringTests
 
     // ── Min-width springs (sidebar-style show/hide, P1.6) ─────────────────
 
-    /// <summary>Sidebar scenario: B pinned at its 42-style min on a wide row;
-    /// A owns the rest. Gap 1, so usable = width − 1.</summary>
+    /// <summary>
+    ///     Sidebar scenario: B pinned at its 42-style min on a wide row;
+    ///     A owns the rest. Gap 1, so usable = width − 1.
+    /// </summary>
     private static (LayoutTree Tree, Panel A, Panel B) BuildSidebar(int viewportWidth)
     {
         var tree = new LayoutTree();
-        var timeline = new BorderPanel("timeline", minWidth: 2, minHeight: 1, priority: 10);
-        var sidebar = new BorderPanel("sidebar", minWidth: 6, minHeight: 1, priority: 5);
+        var timeline = new BorderPanel("timeline", 2, 1, 10);
+        var sidebar = new BorderPanel("sidebar", 6, 1, 5);
         tree.AddRoot(timeline);
-        tree.Split("timeline", SplitDir.Horizontal, (viewportWidth - 1 - 6) / (float)(viewportWidth - 1), sidebar, gap: 1);
+        tree.Split("timeline", SplitDir.Horizontal, (viewportWidth - 1 - 6) / (float)(viewportWidth - 1), sidebar, 1);
         tree.Solve(viewportWidth, 10);
         return (tree, timeline, sidebar);
     }
@@ -116,7 +117,7 @@ public class LayoutTreeSpringTests
     [Test]
     public async Task AnimateMinWidth_Hide_GlidesToZero_NotBinaryJump()
     {
-        (var tree, var timeline, var sidebar) = BuildSidebar(40);
+        var (tree, timeline, sidebar) = BuildSidebar(40);
         int shownWidth = sidebar.Rect.Width;
         await Assert.That(shownWidth).IsEqualTo(6);
 
@@ -140,7 +141,7 @@ public class LayoutTreeSpringTests
     [Test]
     public async Task AnimateMinWidth_Show_GrowsBackToBaseMinimum()
     {
-        (var tree, _, var sidebar) = BuildSidebar(40);
+        var (tree, _, sidebar) = BuildSidebar(40);
         tree.AnimateRatio("timeline", 1.0f);
         tree.AnimateMinWidth("sidebar", 0);
         for (int frame = 0; frame < 200; frame++)
@@ -166,7 +167,7 @@ public class LayoutTreeSpringTests
     [Test]
     public async Task AnimateMinWidth_SettledZero_SmallViewportStillSolvesNoCollapse()
     {
-        (var tree, var timeline, var sidebar) = BuildSidebar(40);
+        var (tree, timeline, sidebar) = BuildSidebar(40);
         tree.AnimateRatio("timeline", 1.0f);
         tree.AnimateMinWidth("sidebar", 0);
         for (int frame = 0; frame < 200; frame++)
@@ -184,7 +185,7 @@ public class LayoutTreeSpringTests
     [Test]
     public async Task AnimateMinWidth_UnknownPanel_Throws()
     {
-        (var tree, _, _) = BuildSidebar(40);
+        var (tree, _, _) = BuildSidebar(40);
 
         await Assert.ThrowsAsync<KeyNotFoundException>(async () =>
         {
@@ -196,7 +197,7 @@ public class LayoutTreeSpringTests
     [Test]
     public async Task IsAnimating_TracksSpringFlight()
     {
-        (var tree, _, _) = BuildSidebar(40);
+        var (tree, _, _) = BuildSidebar(40);
         await Assert.That(tree.IsAnimating).IsFalse();
 
         tree.AnimateMinWidth("sidebar", 0);

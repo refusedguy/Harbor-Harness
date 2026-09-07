@@ -1,9 +1,8 @@
+using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.State;
 using System.Collections.Frozen;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Ui.Framework.Projection;
 
 /// <summary>
@@ -16,9 +15,7 @@ namespace Harbor.Ui.Framework.Projection;
 public static class PanelExtractors
 {
     /// <summary>Tool names tracked by <see cref="ExtractRecentChanges" />.</summary>
-    private static readonly FrozenSet<string> TrackedTools = FrozenSet.ToFrozenSet(
-        new[] { "edit", "write", "read", "patch" },
-        StringComparer.OrdinalIgnoreCase);
+    private static readonly FrozenSet<string> TrackedTools = new[] { "edit", "write", "read", "patch" }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private static readonly Regex TodoRegex = new(
         @"^\s*\[(?<marker>[ ~xX\?])\]\s*(?<content>.+?)\s*$",
@@ -68,7 +65,7 @@ public static class PanelExtractors
         var bodies = new List<string>();
         for (int i = lines.Count - 1; i >= 0; i--)
         {
-            ChatLine line = lines[i];
+            var line = lines[i];
             if (line.Role == ChatRole.Tool)
             {
                 break;
@@ -87,7 +84,7 @@ public static class PanelExtractors
         {
             foreach (string row in bodies[b].Split('\n'))
             {
-                Match m = TodoRegex.Match(row);
+                var m = TodoRegex.Match(row);
                 if (!m.Success)
                 {
                     continue;
@@ -134,7 +131,7 @@ public static class PanelExtractors
         var result = new List<PanelFileChange>();
         for (int i = lines.Count - 1; i >= 0 && result.Count < maxCount; i--)
         {
-            ChatLine line = lines[i];
+            var line = lines[i];
             if (line.Role != ChatRole.ToolResult)
             {
                 continue;
@@ -192,7 +189,7 @@ public static class PanelExtractors
         var result = new List<PanelDiagnostic>();
         for (int i = 0; i < lines.Count; i++)
         {
-            ChatLine line = lines[i];
+            var line = lines[i];
             if (line.Role != ChatRole.ToolResult && line.Role != ChatRole.Error)
             {
                 continue;
@@ -213,7 +210,7 @@ public static class PanelExtractors
                     continue;
                 }
 
-                if (TryClassify(row, out PanelDiagnostic? diagnostic) && diagnostic is not null)
+                if (TryClassify(row, out var diagnostic) && diagnostic is not null)
                 {
                     result.Add(diagnostic);
                 }
@@ -266,7 +263,7 @@ public static class PanelExtractors
             return "<unknown>";
         }
 
-        Match m = ToolNameRegex.Match(toolText);
+        var m = ToolNameRegex.Match(toolText);
         return m.Success ? m.Groups["tool"].Value.Trim() : "<unknown>";
     }
 
@@ -277,13 +274,13 @@ public static class PanelExtractors
         {
             try
             {
-                using JsonDocument doc = JsonDocument.Parse(toolText[brace..]);
+                using var doc = JsonDocument.Parse(toolText[brace..]);
                 if (doc.RootElement.ValueKind == JsonValueKind.Object)
                 {
                     string[] keys = ["path", "filePath", "file", "filename"];
                     foreach (string key in keys)
                     {
-                        if (doc.RootElement.TryGetProperty(key, out JsonElement value) &&
+                        if (doc.RootElement.TryGetProperty(key, out var value) &&
                             value.ValueKind == JsonValueKind.String)
                         {
                             string? s = value.GetString();
@@ -301,13 +298,13 @@ public static class PanelExtractors
             }
         }
 
-        Match m = PathJsonRegex.Match(toolText);
+        var m = PathJsonRegex.Match(toolText);
         return m.Success ? m.Groups["p"].Value.Trim() : "<unknown>";
     }
 
     private static bool TryClassify(string row, out PanelDiagnostic? diagnostic)
     {
-        PanelDiagnosticSeverity severity = WarningRegex.IsMatch(row)
+        var severity = WarningRegex.IsMatch(row)
             ? PanelDiagnosticSeverity.Warning
             : PanelDiagnosticSeverity.Error;
 
@@ -388,11 +385,14 @@ public sealed record PanelFileChange(string ToolName, string FilePath, string Di
 public enum PanelDiagnosticSeverity
 {
     Error,
-    Warning,
+    Warning
 }
 
 /// <summary>One diagnostic: a single physical transcript line classified by detector.</summary>
 /// <param name="Severity">Error, or Warning when the line mentions <c>warning</c>.</param>
-/// <param name="Source">Detector id: <c>csharp</c>, <c>rust</c>, <c>python</c>, <c>node</c>, <c>exception</c>, <c>warning</c>, <c>error</c>.</param>
+/// <param name="Source">
+///     Detector id: <c>csharp</c>, <c>rust</c>, <c>python</c>, <c>node</c>, <c>exception</c>,
+///     <c>warning</c>, <c>error</c>.
+/// </param>
 /// <param name="Message">Trimmed source line.</param>
 public sealed record PanelDiagnostic(PanelDiagnosticSeverity Severity, string Source, string Message);

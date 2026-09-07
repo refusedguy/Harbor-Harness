@@ -1,15 +1,10 @@
 using System.Text;
-using Harbor.Tui.CellForge.Rendering;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class CellTests
 {
     [Test]
-    public async Task Size_Is16Bytes()
-    {
-        await Assert.That(Cell.SizeBytes).IsEqualTo(16);
-    }
+    public async Task Size_Is16Bytes() => await Assert.That(Cell.SizeBytes).IsEqualTo(16);
 
     [Test]
     public async Task Blank_IsPlainSpace()
@@ -86,8 +81,8 @@ public class ScreenBufferGeometryTests
 
 public class ScreenBufferWideCharTests
 {
-    private static readonly Rune Cjk = new(0x4E2D);      // 中
-    private static readonly Rune Emoji = new(0x1F600);   // 😀
+    private static readonly Rune Cjk = new(0x4E2D); // 中
+    private static readonly Rune Emoji = new(0x1F600); // 😀
     private static readonly CellStyle Red = new(PackedColor.Indexed(1));
 
     [Test]
@@ -129,8 +124,8 @@ public class ScreenBufferWideCharTests
     public async Task PlacingWideOverNextWide_ClearsOrphanTail()
     {
         var buf = new ScreenBuffer(10, 1);
-        _ = buf.SetRune(0, 0, Cjk, CellStyle.Plain);   // pair (0,1)
-        _ = buf.SetRune(2, 0, Cjk, CellStyle.Plain);   // pair (2,3)
+        _ = buf.SetRune(0, 0, Cjk, CellStyle.Plain); // pair (0,1)
+        _ = buf.SetRune(2, 0, Cjk, CellStyle.Plain); // pair (2,3)
         _ = buf.SetRune(2, 0, new Rune('Z'), CellStyle.Plain); // overwrite lead of pair 2
 
         await Assert.That(buf.Get(2, 0).Rune).IsEqualTo('Z');

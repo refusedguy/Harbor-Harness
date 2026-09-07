@@ -1,7 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Sessions;
 namespace Harbor.App.Cli.Commands;
+
 /// <summary>
 ///     <c>harbor run task agent=&lt;name&gt; &lt;prompt&gt;</c> — execute a sub-agent
 ///     directly through <see cref="ISubAgentRunner" /> without a parent LLM turn.
@@ -57,7 +57,7 @@ public static class TaskRunRunner
             return 1;
         }
 
-        AgentDefinition? definition = agents.GetAllAgents()
+        var definition = agents.GetAllAgents()
             .FirstOrDefault(a => a.Name.Value.Equals(agentName, StringComparison.OrdinalIgnoreCase));
         if (definition is null)
         {
@@ -76,14 +76,14 @@ public static class TaskRunRunner
 
         var result = await runner.RunAsync(
             definition,
-            new SubAgentRunRequest(prompt, ParentSessionId: null),
+            new SubAgentRunRequest(prompt),
             CancellationToken.None).ConfigureAwait(false);
 
         return await result.Match(
             async run =>
             {
                 await stdout.WriteLineAsync(
-                    $"[sub-agent '{run.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s)]")
+                        $"[sub-agent '{run.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s)]")
                     .ConfigureAwait(false);
                 await stdout.WriteLineAsync(run.FinalOutput).ConfigureAwait(false);
                 return 0;

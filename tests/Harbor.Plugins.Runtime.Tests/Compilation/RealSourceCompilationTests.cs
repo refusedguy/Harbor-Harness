@@ -1,9 +1,7 @@
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
-using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Plugins.Runtime.Tests.Compilation;
 
 /// <summary>
@@ -40,7 +38,7 @@ public sealed class RealSourceCompilationTests
             fixture.CacheDir,
             NullLogger<CachingCompiler>.Instance);
 
-        CompilationResult first = await compiler.CompileAsync(scriptLoad.Value).ConfigureAwait(false);
+        var first = await compiler.CompileAsync(scriptLoad.Value).ConfigureAwait(false);
         if (first.IsFailure)
         {
             // Surface real diagnostics instead of a bare assert on CI drift.
@@ -52,10 +50,10 @@ public sealed class RealSourceCompilationTests
 
         // The compiled assembly really contains the shipped plugin type.
         var pluginType = first.Value.Assembly.GetType(
-            "Harbor.Sample.HelloWorld.HelloWorldPlugin", throwOnError: false);
+            "Harbor.Sample.HelloWorld.HelloWorldPlugin", false);
         await Assert.That(pluginType).IsNotNull();
 
-        CompilationResult second = await compiler.CompileAsync(scriptLoad.Value).ConfigureAwait(false);
+        var second = await compiler.CompileAsync(scriptLoad.Value).ConfigureAwait(false);
         await Assert.That(second.IsSuccess).IsTrue();
         await Assert.That(second.FromCache).IsTrue();
 
@@ -89,12 +87,12 @@ public sealed class RealSourceCompilationTests
 
         var compiler = new RoslynPluginCompiler(
             new PluginAssemblyReferences(NullLogger<PluginAssemblyReferences>.Instance));
-        CompilationResult result = await compiler.CompileAsync(script).ConfigureAwait(false);
+        var result = await compiler.CompileAsync(script).ConfigureAwait(false);
 
         await Assert.That(result.IsFailure).IsTrue();
 
         // The unresolved-type error is diagnosed as CS0246 on the class line.
-        Diagnostic? cs0246 = result.Diagnostics.FirstOrDefault(d => d.Id == "CS0246");
+        var cs0246 = result.Diagnostics.FirstOrDefault(d => d.Id == "CS0246");
         await Assert.That(cs0246).IsNotNull();
 
         // The diagnostic carries the 1-based line of the class declaration.
@@ -116,33 +114,33 @@ public sealed class RealSourceCompilationTests
     public async Task CircularBaseClassDependency_FailsGracefullyWithDiagnostic()
     {
         const string circularSource = """
-            using Harbor.Abstractions.Plugins;
+                                      using Harbor.Abstractions.Plugins;
 
-            namespace Harbor.Sample.Circular;
+                                      namespace Harbor.Sample.Circular;
 
-            // Not sealed: a sealed base would pre-empt the cycle with CS0509 —
-            // we want the genuine circular-dependency diagnostic (CS0146).
-            public class CircularPluginA : CircularPluginB
-            {
-                public string Name => "circular-a";
-                public Version Version => new(1, 0, 0);
-                public string Description => "circular";
-                public void Initialize(PluginContext context) { }
-            }
+                                      // Not sealed: a sealed base would pre-empt the cycle with CS0509 —
+                                      // we want the genuine circular-dependency diagnostic (CS0146).
+                                      public class CircularPluginA : CircularPluginB
+                                      {
+                                          public string Name => "circular-a";
+                                          public Version Version => new(1, 0, 0);
+                                          public string Description => "circular";
+                                          public void Initialize(PluginContext context) { }
+                                      }
 
-            public class CircularPluginB : CircularPluginA
-            {
-                public string Name => "circular-b";
-                public Version Version => new(1, 0, 0);
-                public string Description => "circular";
-                public void Initialize(PluginContext context) { }
-            }
-            """;
+                                      public class CircularPluginB : CircularPluginA
+                                      {
+                                          public string Name => "circular-b";
+                                          public Version Version => new(1, 0, 0);
+                                          public string Description => "circular";
+                                          public void Initialize(PluginContext context) { }
+                                      }
+                                      """;
         var script = new PluginScript("circular.cs", circularSource);
 
         var compiler = new RoslynPluginCompiler(
             new PluginAssemblyReferences(NullLogger<PluginAssemblyReferences>.Instance));
-        CompilationResult result = await compiler.CompileAsync(script).ConfigureAwait(false);
+        var result = await compiler.CompileAsync(script).ConfigureAwait(false);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Diagnostics.Count).IsGreaterThan(0);
@@ -151,7 +149,7 @@ public sealed class RealSourceCompilationTests
         // The error string embeds every CS0146 diagnostic's file(line,column)
         // position — the graceful, actionable failure users see. Message text
         // itself is locale-dependent, so only positions and ids are asserted.
-        foreach (Diagnostic diag in result.Diagnostics.Where(d => d.Id == "CS0146"))
+        foreach (var diag in result.Diagnostics.Where(d => d.Id == "CS0146"))
         {
             int line = diag.Location.GetLineSpan().StartLinePosition.Line + 1;
             await Assert.That(result.Error).Contains($"({line},");

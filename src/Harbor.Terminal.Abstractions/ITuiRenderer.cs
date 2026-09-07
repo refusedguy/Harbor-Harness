@@ -3,6 +3,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Terminal.Abstractions.Renderers;
 namespace Harbor.Terminal.Abstractions;
+
 /// <summary>
 ///     Strategy interface for TUI rendering (Strategy pattern, GOF).
 ///     The renderer manages the screen layout and dispatches events to views.

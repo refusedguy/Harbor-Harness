@@ -1,13 +1,12 @@
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>Counting block: reports how many times Measure was invoked.</summary>
 internal sealed class CountingBlock : IChatBlock
 {
     private readonly int _lines;
-    public int MeasureCalls;
     public int LastWidth = -1;
+    public int MeasureCalls;
 
     public CountingBlock(string kind, int lines, bool exact = true)
     {
@@ -15,11 +14,11 @@ internal sealed class CountingBlock : IChatBlock
         _lines = lines;
         Exact = exact;
     }
+    public bool Exact { get; }
 
     public string Kind { get; }
-    public bool Exact { get; }
     public bool IsStreamContinuation => false;
-    public int BudgetBytes => 32 + (_lines * 8);
+    public int BudgetBytes => 32 + _lines * 8;
 
     public BlockMeasure Measure(int width)
     {
@@ -30,7 +29,7 @@ internal sealed class CountingBlock : IChatBlock
 
     public int CheapEstimate(int width) => Exact ? _lines : Math.Max(1, _lines / 2);
 
-    public void Paint(in BlockPaintContext ctx) { }
+    public void Paint(in BlockPaintContext ctx) {}
 
     public string RawText() => Kind;
 }
@@ -47,13 +46,13 @@ public class TimelineLayoutCacheTests
         }
 
         // Viewport shows rows 0..10 → blocks 0..3 (3 lines each).
-        var outcome = cache.PrepareLayout(width: 40, viewportH: 10, scrollY: 0);
+        var outcome = cache.PrepareLayout(40, 10, 0);
 
         await Assert.That(outcome).IsEqualTo(LayoutOutcome.FullRebuild);
         await Assert.That(cache.TotalHeight).IsEqualTo(150);
         await Assert.That(cache.MeasureCallsLastFrame).IsLessThanOrEqualTo(5); // settled visible only
         var counting = (CountingBlock)cache.BlockAt(30);
-        await Assert.That(counting.MeasureCalls).IsEqualTo(0);                  // far below never touched
+        await Assert.That(counting.MeasureCalls).IsEqualTo(0); // far below never touched
     }
 
     [Test]
@@ -68,7 +67,7 @@ public class TimelineLayoutCacheTests
         _ = cache.PrepareLayout(40, 100, 0);
 
         cache.Append(new CountingBlock("tail", 4));
-        var outcome = cache.PrepareLayout(40, 100, scrollY: 34);
+        var outcome = cache.PrepareLayout(40, 100, 34);
 
         await Assert.That(outcome).IsEqualTo(LayoutOutcome.Patched);
         await Assert.That(cache.TotalHeight).IsEqualTo(44);
@@ -88,10 +87,10 @@ public class TimelineLayoutCacheTests
             cache.Append(new CountingBlock($"b{i}", 5));
         }
 
-        _ = cache.PrepareLayout(60, 10, scrollY: 40);
+        _ = cache.PrepareLayout(60, 10, 40);
         cache.PinAnchor(scrollTopY: 40);
 
-        var outcome = cache.PrepareLayout(30, 10, scrollY: 40);
+        var outcome = cache.PrepareLayout(30, 10, 40);
         await Assert.That(outcome).IsEqualTo(LayoutOutcome.FullRebuild);
 
         long restored = cache.RestoreAnchor();
@@ -164,7 +163,7 @@ public class TimelineLayoutCacheTests
     public async Task Replace_SwapsStreamTailForCommittedBlock()
     {
         var cache = new TimelineLayoutCache();
-        cache.Append(new CountingBlock("stream", 7, exact: false));
+        cache.Append(new CountingBlock("stream", 7, false));
         _ = cache.PrepareLayout(40, 20, 0);
 
         var committed = new CountingBlock("assistant", 9);

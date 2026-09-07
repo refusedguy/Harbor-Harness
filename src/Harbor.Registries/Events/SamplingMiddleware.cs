@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Registries.Events;
 
 /// <summary>
@@ -17,7 +16,6 @@ namespace Harbor.Registries.Events;
 /// </remarks>
 public sealed class SamplingMiddleware : IEventBusMiddleware
 {
-    public string Name => "sampling";
 
     private readonly ILogger _logger;
     private readonly double _rate;
@@ -29,6 +27,7 @@ public sealed class SamplingMiddleware : IEventBusMiddleware
         _rate = rate;
         _rnd = new Random();
     }
+    public string Name => "sampling";
 
     public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default)
     {

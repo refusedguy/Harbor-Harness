@@ -4,12 +4,16 @@ namespace Harbor.Application.Resilience;
 /// <summary>
 ///     ROP-B П.21 — the retry-vs-compensation boundary, as code:
 ///     <list type="bullet">
-///         <item>"repeat the SAME operation with backoff" →
+///         <item>
+///             "repeat the SAME operation with backoff" →
 ///             <see cref="IRetryPolicy.ExecuteAsync{T}(Func{CancellationToken,Task{T}},RetryOptions,CancellationToken)" />
-///             (exception-based: transient classification, Retry-After, jitter);</item>
-///         <item>"if it failed — do something DIFFERENT" → CSE <c>Compensate</c> on the
+///             (exception-based: transient classification, Retry-After, jitter);
+///         </item>
+///         <item>
+///             "if it failed — do something DIFFERENT" → CSE <c>Compensate</c> on the
 ///             <see cref="Result{T}" /> this adapter hands back (see AuthStore.GetApiKeyAsync,
-///             CompactionService secondary fallback).</item>
+///             CompactionService secondary fallback).
+///         </item>
 ///     </list>
 ///     Exceptions must not leak into railway code and Result must not emulate
 ///     backoff loops — this adapter is the only seam between the two worlds.
@@ -37,5 +41,5 @@ public static class RetryPolicyExtensions
         Func<CancellationToken, Task<T>> operation,
         RetryOptions options,
         CancellationToken ct) =>
-        policy.ExecuteSafeAsync(operation, options, onRetry: null, ct);
+        policy.ExecuteSafeAsync(operation, options, null, ct);
 }

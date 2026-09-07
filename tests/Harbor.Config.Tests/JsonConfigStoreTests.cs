@@ -2,6 +2,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Config.Tests;
+
 /// <summary>
 ///     Tests for JsonConfigStore — file-based HarborConfig persistence.
 /// </summary>
@@ -246,7 +247,7 @@ public class JsonConfigStoreTests
                 Tui = "consoleex",
                 Onboarded = true
             };
-            config.Ui = config.Ui with { CellForge = new CellForgeUiConfig(Enabled: false, SyncUpdates: false) };
+            config.Ui = config.Ui with { CellForge = new CellForgeUiConfig(false, false) };
 
             var saveResult = await store.SaveAsync(config);
             await Assert.That(saveResult.IsSuccess).IsTrue();
@@ -370,7 +371,7 @@ public class JsonConfigStoreTests
             var config = new HarborConfig
             {
                 Provider = "kilocode",
-                Model = "kilocode/tencent/hy3:free",
+                Model = "kilocode/tencent/hy3:free"
             };
             config.Permissions["code"] = new List<PermissionRule>
             {

@@ -1,9 +1,10 @@
-using System.Text;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
+using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Persistent per-session markdown notes. The agent can stash small bits of context
 ///     (file paths, decisions, intermediate findings) and pull them back later. Notes
@@ -80,23 +81,6 @@ public sealed class NotebookTool : ITool
                                                                       }
                                                                       """);
 
-    private enum NoteAction { Get, Set, Add, Clear, List }
-
-    /// <summary>
-    ///     ROP-A Z1 п.9: the action string parses into an enum exactly once —
-    ///     validation, dispatch and the requirement matrix below all derive
-    ///     from it, so an unknown action cannot reach the switch.
-    /// </summary>
-    private static NoteAction? ParseAction(string raw) => raw.ToLowerInvariant() switch
-    {
-        "get" => NoteAction.Get,
-        "set" => NoteAction.Set,
-        "add" => NoteAction.Add,
-        "clear" => NoteAction.Clear,
-        "list" => NoteAction.List,
-        _ => null
-    };
-
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
     {
@@ -149,13 +133,13 @@ public sealed class NotebookTool : ITool
 
         // ROP-A Z1 п.10: Load and Save are guarded symmetrically now — a write
         // failure surfaces as a tool error instead of escaping the contract.
-        Result<Dictionary<string, NoteEntry>> loaded = await Result.Try(
+        var loaded = await Result.Try(
                 () => LoadAsync(path, cancellationToken),
                 ToolErrors.Handler("notebook", cancellationToken, failurePrefix: "Failed to load notes: "))
             .ConfigureAwait(false);
         if (loaded.IsFailure)
             return ToolResult.Error(loaded.Error);
-        Dictionary<string, NoteEntry> notes = loaded.Value;
+        var notes = loaded.Value;
 
         switch (action)
         {
@@ -174,9 +158,9 @@ public sealed class NotebookTool : ITool
                 notes[key!] = new NoteEntry(content!, DateTimeOffset.UtcNow);
                 _logger.LogDebug("Notebook set {Key} ({Chars} chars) for {Session}", key, content!.Length, sessionId);
                 return await SaveNotesAsync(path, notes, cancellationToken,
-                    () => ToolResult.Success(
-                        $"Set note '{key}' ({content.Length} chars).",
-                        new { key, chars = content.Length, totalNotes = notes.Count }))
+                        () => ToolResult.Success(
+                            $"Set note '{key}' ({content.Length} chars).",
+                            new { key, chars = content.Length, totalNotes = notes.Count }))
                     .ConfigureAwait(false);
             }
             case NoteAction.Add:
@@ -195,9 +179,9 @@ public sealed class NotebookTool : ITool
                     notes[key!] = new NoteEntry(content!, DateTimeOffset.UtcNow);
                 }
                 return await SaveNotesAsync(path, notes, cancellationToken,
-                    () => ToolResult.Success(
-                        $"Appended to note '{key}' (now {notes[key!].Content.Length} chars).",
-                        new { key, chars = notes[key!].Content.Length, totalNotes = notes.Count }))
+                        () => ToolResult.Success(
+                            $"Appended to note '{key}' (now {notes[key!].Content.Length} chars).",
+                            new { key, chars = notes[key!].Content.Length, totalNotes = notes.Count }))
                     .ConfigureAwait(false);
             }
             case NoteAction.Clear:
@@ -207,13 +191,13 @@ public sealed class NotebookTool : ITool
                     int removed = notes.Count;
                     notes.Clear();
                     return await SaveNotesAsync(path, notes, cancellationToken,
-                        () => ToolResult.Success($"Cleared {removed} note(s).", new { removed }))
+                            () => ToolResult.Success($"Cleared {removed} note(s).", new { removed }))
                         .ConfigureAwait(false);
                 }
                 if (!notes.Remove(key))
                     return ToolResult.Error($"No note with key '{key}'.");
                 return await SaveNotesAsync(path, notes, cancellationToken,
-                    () => ToolResult.Success($"Cleared note '{key}'.", new { key, remaining = notes.Count }))
+                        () => ToolResult.Success($"Cleared note '{key}'.", new { key, remaining = notes.Count }))
                     .ConfigureAwait(false);
             }
             case NoteAction.List:
@@ -242,13 +226,28 @@ public sealed class NotebookTool : ITool
     }
 
     /// <summary>
+    ///     ROP-A Z1 п.9: the action string parses into an enum exactly once —
+    ///     validation, dispatch and the requirement matrix below all derive
+    ///     from it, so an unknown action cannot reach the switch.
+    /// </summary>
+    private static NoteAction? ParseAction(string raw) => raw.ToLowerInvariant() switch
+    {
+        "get" => NoteAction.Get,
+        "set" => NoteAction.Set,
+        "add" => NoteAction.Add,
+        "clear" => NoteAction.Clear,
+        "list" => NoteAction.List,
+        _ => null
+    };
+
+    /// <summary>
     ///     ROP-A Z1 п.10: Save under the same guard contract as Load; the
     ///     caller's success payload is built only after a verified save.
     /// </summary>
     private async Task<ToolResult> SaveNotesAsync(
         string path, Dictionary<string, NoteEntry> notes, CancellationToken ct, Func<ToolResult> success)
     {
-        Result saved = await Result.Try(() => SaveAsync(path, notes, ct),
+        var saved = await Result.Try(() => SaveAsync(path, notes, ct),
                 ToolErrors.Handler("notebook", ct, failurePrefix: "Failed to save notes: "))
             .ConfigureAwait(false);
 
@@ -330,6 +329,8 @@ public sealed class NotebookTool : ITool
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return Path.Combine(home, ".harbor", "notes");
     }
+
+    private enum NoteAction { Get, Set, Add, Clear, List }
 
     private sealed record NoteEntry(string Content, DateTimeOffset UpdatedAt);
 }

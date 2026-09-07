@@ -4,6 +4,7 @@ using Harbor.Build.Meta;
 using Nuke.Common.IO;
 using Nuke.Common.Tools.DotNet;
 namespace Harbor.Build.Targets;
+
 /// <summary>
 ///     Publish target — runs <c>dotnet publish</c> on the named app with the
 ///     given <see cref="PublishVariant" /> + <see cref="FeatureFlags" />.
@@ -40,7 +41,7 @@ public static class PublishTarget
         output.Cmd("Publish", DotNetArgv.RenderPublish(settings));
         if (output.IsDryRun)
         {
-            output.Artifact("Publish", outputDir.ToString(), bytes: null, planned: true);
+            output.Artifact("Publish", outputDir.ToString(), null, true);
             return outputDir;
         }
         DotNetTasks.DotNetPublish(settings);

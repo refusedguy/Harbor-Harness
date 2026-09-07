@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -9,7 +7,10 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 namespace Harbor.Core.Tests;
+
 /// <summary>
 ///     Tests for <see cref="CompactionService" />: the <see cref="CompactionService.ShouldCompact" />
 ///     threshold check and the cut-point selection logic exercised via

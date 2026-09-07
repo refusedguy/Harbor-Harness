@@ -1,5 +1,4 @@
 using MessagePack;
-
 namespace Harbor.Ipc.Protocol;
 
 /// <summary>
@@ -13,5 +12,5 @@ public sealed record SubscriptionAck(
     [property: Key(1)] bool ResyncRequired)
 {
     /// <summary>Parameterless ctor for MessagePack deserialization.</summary>
-    public SubscriptionAck() : this(0, false) { }
+    public SubscriptionAck() : this(0, false) {}
 }

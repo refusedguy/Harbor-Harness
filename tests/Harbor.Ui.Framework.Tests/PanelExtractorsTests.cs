@@ -1,10 +1,7 @@
-using System.Collections.Immutable;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
+using System.Collections.Immutable;
 namespace Harbor.Ui.Framework.Tests;
 
 /// <summary>
@@ -22,7 +19,7 @@ public class PanelExtractorsTests
         var lines = new List<ChatLine>
         {
             Tool("→ todo  {\"action\":\"list\"}", "tc1"),
-            ToolResult("✓ Todos (4):\n  [ ] pending task\n  [~] active task\n  [x] done task\n  [X] done upper", "tc1"),
+            ToolResult("✓ Todos (4):\n  [ ] pending task\n  [~] active task\n  [x] done task\n  [X] done upper", "tc1")
         };
 
         var todos = PanelExtractors.ExtractTodos(lines);
@@ -44,7 +41,7 @@ public class PanelExtractorsTests
             Tool("→ todo  {\"action\":\"list\"}", "tc1"),
             ToolResult("✓   [ ] stale task", "tc1"),
             Tool("→ todo  {\"action\":\"list\"}", "tc2"),
-            ToolResult("✓   [x] fresh task", "tc2"),
+            ToolResult("✓   [x] fresh task", "tc2")
         };
 
         var todos = PanelExtractors.ExtractTodos(lines);
@@ -60,7 +57,7 @@ public class PanelExtractorsTests
         {
             ToolResult("✓   [ ] orphan stale", "tc0"),
             Tool("→ todo  {\"action\":\"list\"}", "tc1"),
-            ToolResult("✓   [ ] fresh", "tc1"),
+            ToolResult("✓   [ ] fresh", "tc1")
         };
 
         var todos = PanelExtractors.ExtractTodos(lines);
@@ -81,10 +78,10 @@ public class PanelExtractorsTests
             Tool("→ read  {\"path\":\"c.cs\"}", "t3"),
             ToolResult("✓ content", "t3"),
             Tool("→ patch  {\"path\":\"d.cs\"}", "t4"),
-            ToolResult("✓ patched", "t4"),
+            ToolResult("✓ patched", "t4")
         };
 
-        var changes = PanelExtractors.ExtractRecentChanges(lines, 8);
+        var changes = PanelExtractors.ExtractRecentChanges(lines);
 
         await Assert.That(changes.Count).IsEqualTo(4);
         string sorted = string.Join("|", changes.Select(c => c.ToolName).OrderBy(n => n));
@@ -99,10 +96,10 @@ public class PanelExtractorsTests
             Tool("→ edit  {\"path\":\"first.cs\"}", "t1"),
             ToolResult("✓ first", "t1"),
             Tool("→ write  {\"path\":\"second.cs\"}", "t2"),
-            ToolResult("✓ second", "t2"),
+            ToolResult("✓ second", "t2")
         };
 
-        var changes = PanelExtractors.ExtractRecentChanges(lines, 8);
+        var changes = PanelExtractors.ExtractRecentChanges(lines);
 
         await Assert.That(changes.Count).IsEqualTo(2);
         await Assert.That(changes[0].FilePath).IsEqualTo("second.cs");
@@ -115,10 +112,10 @@ public class PanelExtractorsTests
         var lines = new List<ChatLine>
         {
             Tool("→ edit  {\"path\":\"src/Foo.cs\"}", "t1"),
-            ToolResult("✓ @@ -1 +1 @@\n-a\n+b", "t1"),
+            ToolResult("✓ @@ -1 +1 @@\n-a\n+b", "t1")
         };
 
-        var changes = PanelExtractors.ExtractRecentChanges(lines, 8);
+        var changes = PanelExtractors.ExtractRecentChanges(lines);
 
         await Assert.That(changes.Count).IsEqualTo(1);
         await Assert.That(changes[0].ToolName).IsEqualTo("edit");
@@ -131,10 +128,10 @@ public class PanelExtractorsTests
         var lines = new List<ChatLine>
         {
             Tool("→ edit  {}", "t1"),
-            ToolResult("✓ ok", "t1"),
+            ToolResult("✓ ok", "t1")
         };
 
-        var changes = PanelExtractors.ExtractRecentChanges(lines, 8);
+        var changes = PanelExtractors.ExtractRecentChanges(lines);
 
         await Assert.That(changes.Count).IsEqualTo(1);
         await Assert.That(changes[0].FilePath).IsEqualTo("<unknown>");
@@ -148,10 +145,10 @@ public class PanelExtractorsTests
             Tool("→ edit  {\"path\":\"a.cs\"}", "t1"),
             ToolResult("✓ ok", "t1"),
             Tool("→ edit  {\"path\":\"b.cs\"}", "t2"),
-            ToolResult("✗ failed", "t2"),
+            ToolResult("✗ failed", "t2")
         };
 
-        var changes = PanelExtractors.ExtractRecentChanges(lines, 8);
+        var changes = PanelExtractors.ExtractRecentChanges(lines);
 
         await Assert.That(changes.Count).IsEqualTo(2);
         await Assert.That(changes[0].IsError).IsTrue();
@@ -163,7 +160,7 @@ public class PanelExtractorsTests
     {
         var lines = new List<ChatLine>
         {
-            ToolResult("✓ error CS0246: The type or namespace name 'Foo' could not be found", "b1"),
+            ToolResult("✓ error CS0246: The type or namespace name 'Foo' could not be found", "b1")
         };
 
         var diags = PanelExtractors.CollectDiagnostics(lines);
@@ -180,7 +177,7 @@ public class PanelExtractorsTests
         var lines = new List<ChatLine>
         {
             ToolResult("✗ error[E0308]: mismatched types", "b1"),
-            ToolResult("✓ File \"app.py\", line 10, in <module>", "b2"),
+            ToolResult("✓ File \"app.py\", line 10, in <module>", "b2")
         };
 
         var diags = PanelExtractors.CollectDiagnostics(lines);
@@ -198,7 +195,7 @@ public class PanelExtractorsTests
         var lines = new List<ChatLine>
         {
             ToolResult("✓ TypeError: Cannot read properties of undefined", "b1"),
-            ToolResult("✓ System.NullReferenceException: Object reference not set", "b2"),
+            ToolResult("✓ System.NullReferenceException: Object reference not set", "b2")
         };
 
         var diags = PanelExtractors.CollectDiagnostics(lines);
@@ -213,7 +210,7 @@ public class PanelExtractorsTests
     {
         var lines = new List<ChatLine>
         {
-            ToolResult("✓ warning: unused variable 'x'", "b1"),
+            ToolResult("✓ warning: unused variable 'x'", "b1")
         };
 
         var diags = PanelExtractors.CollectDiagnostics(lines);
@@ -227,7 +224,7 @@ public class PanelExtractorsTests
     {
         var errors = new List<ChatLine>
         {
-            new(ChatRole.Error, "agent exploded"),
+            new(ChatRole.Error, "agent exploded")
         };
 
         var diags = PanelExtractors.CollectDiagnostics(errors);
@@ -238,7 +235,7 @@ public class PanelExtractorsTests
         var clean = new List<ChatLine>
         {
             new(ChatRole.Assistant, "all good"),
-            ToolResult("✓ ok", "t1"),
+            ToolResult("✓ ok", "t1")
         };
 
         await Assert.That(PanelExtractors.CollectDiagnostics(clean).Count).IsEqualTo(0);
@@ -253,7 +250,7 @@ public class PanelExtractorsTests
             Tool("→ todo  {\"action\":\"list\"}", "tc1"),
             ToolResult("✓   [ ] item", "tc1"),
             Tool("→ edit  {\"path\":\"a.cs\"}", "t2"),
-            ToolResult("✓ done", "t2"),
+            ToolResult("✓ done", "t2")
         };
         var state = new UiState { Lines = list.ToImmutableArray() };
 
@@ -261,8 +258,8 @@ public class PanelExtractorsTests
         var todosState = PanelExtractors.ExtractTodos(state);
         await Assert.That(todosState.Count).IsEqualTo(todosList.Count);
 
-        var changesList = PanelExtractors.ExtractRecentChanges(list, 8);
-        var changesState = PanelExtractors.ExtractRecentChanges(state, 8);
+        var changesList = PanelExtractors.ExtractRecentChanges(list);
+        var changesState = PanelExtractors.ExtractRecentChanges(state);
         await Assert.That(changesState.Count).IsEqualTo(changesList.Count);
 
         var diagsList = PanelExtractors.CollectDiagnostics(list);

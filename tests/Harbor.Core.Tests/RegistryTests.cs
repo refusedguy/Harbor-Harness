@@ -1,11 +1,12 @@
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
+using System.Text.Json;
 namespace Harbor.Core.Tests;
+
 public class RegistryTests
 {
     [Test]

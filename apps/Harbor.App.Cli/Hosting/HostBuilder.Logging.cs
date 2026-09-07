@@ -1,10 +1,8 @@
+using Harbor.App.Cli.Logging;
+using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Harbor.App.Cli.Logging;
-using Harbor.Terminal.Abstractions;
-using Harbor.Ui.Framework.Diagnostics;
-
 namespace Harbor.App.Cli.Hosting;
 
 internal static partial class HostBuilder

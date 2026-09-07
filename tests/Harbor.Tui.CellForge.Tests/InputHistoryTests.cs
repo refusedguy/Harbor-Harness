@@ -1,33 +1,30 @@
-using System.Text;
-using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CF-B-005: input history through the store. Up/Down arrive as
-/// <see cref="InputMsg.HistoryUp"/> / <see cref="InputMsg.HistoryDown"/>
-/// (see <c>InputModel.cs</c>) and are applied to the
-/// <see cref="PromptHistory"/> walk: the in-flight draft is saved on the
-/// first Up and restored exactly once by the final Down (readline
-/// semantics); the caret follows the store sync rule
-/// (<c>SyncInputFromState</c>: end of text). Covers draft save/restore,
-/// walk boundaries, and the MRU cap.
+///     CF-B-005: input history through the store. Up/Down arrive as
+///     <see cref="InputMsg.HistoryUp" /> / <see cref="InputMsg.HistoryDown" />
+///     (see <c>InputModel.cs</c>) and are applied to the
+///     <see cref="PromptHistory" /> walk: the in-flight draft is saved on the
+///     first Up and restored exactly once by the final Down (readline
+///     semantics); the caret follows the store sync rule
+///     (<c>SyncInputFromState</c>: end of text). Covers draft save/restore,
+///     walk boundaries, and the MRU cap.
 /// </summary>
 public class InputHistoryTests
 {
-    private static KeyEvent CharKey(char c, KeyModifiers mods = KeyModifiers.None) =>
-        KeyEvent.Char(new Rune(c), mods);
 
     private static readonly KeyEvent Up = KeyEvent.Simple(KeyCode.Up);
     private static readonly KeyEvent Down = KeyEvent.Simple(KeyCode.Down);
+    private static KeyEvent CharKey(char c, KeyModifiers mods = KeyModifiers.None) =>
+        KeyEvent.Char(new Rune(c), mods);
 
     /// <summary>Type text without submitting (stays the in-flight draft).</summary>
     private static void TypeDraft(ComposerController composer, string text)
     {
-        foreach (var c in text)
+        foreach (char c in text)
         {
             _ = composer.HandleKey(CharKey(c));
         }
@@ -41,11 +38,11 @@ public class InputHistoryTests
         _ = composer.Buffer.TakeText();
     }
 
-    /// <summary>Build a store-side <see cref="InputModel"/> holding the same submitted lines.</summary>
+    /// <summary>Build a store-side <see cref="InputModel" /> holding the same submitted lines.</summary>
     private static InputModel StoreWith(params string[] entries)
     {
         var store = InputModel.Empty;
-        foreach (var entry in entries)
+        foreach (string entry in entries)
         {
             store = store.SetText(entry).Consume().Next;
         }
@@ -180,11 +177,11 @@ public class InputHistoryTests
         await Assert.That(history.Count).IsEqualTo(50);
 
         // Newest recalled first, oldest surviving entry is item-05.
-        await Assert.That(history.TryRecallPrevious("draft", out var newest)).IsTrue();
+        await Assert.That(history.TryRecallPrevious("draft", out string newest)).IsTrue();
         await Assert.That(newest).IsEqualTo("item-54");
 
         string oldest = string.Empty;
-        while (history.TryRecallPrevious(string.Empty, out var entry))
+        while (history.TryRecallPrevious(string.Empty, out string entry))
         {
             oldest = entry;
         }
@@ -194,7 +191,7 @@ public class InputHistoryTests
         // Walk back forward: newest again, then the captured draft exactly once.
         string last = string.Empty;
         int steps = 0;
-        while (history.TryRecallNext(out var entry))
+        while (history.TryRecallNext(out string entry))
         {
             last = entry;
             steps++;

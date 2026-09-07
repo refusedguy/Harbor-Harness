@@ -1,6 +1,6 @@
 using Harbor.App.Cli.Logging;
-using System.Threading.Tasks;
 namespace Harbor.App.Cli.Commands;
+
 /// <summary>
 ///     <c>harbor logs</c> — inspect per-run log files written by
 ///     <see cref="FileLoggerProvider" /> to <c>~/.harbor/logs/</c>.
@@ -44,13 +44,13 @@ public sealed class LogsCommand : ICommand
     private readonly TextWriter _error;
     private readonly TextWriter _output;
 
-    public string Name => "logs";
-
     public LogsCommand(TextWriter output, TextWriter error)
     {
         _output = output;
         _error = error;
     }
+
+    public string Name => "logs";
 
     /// <summary>
     ///     Execute the parsed subcommand.
@@ -70,9 +70,9 @@ public sealed class LogsCommand : ICommand
                 PrintUsage();
                 return 0;
             case "--last" or "-n":
-                return await PrintLastAsync(follow: false, ct).ConfigureAwait(false);
+                return await PrintLastAsync(false, ct).ConfigureAwait(false);
             case "--follow" or "-f":
-                return await PrintLastAsync(follow: true, ct).ConfigureAwait(false);
+                return await PrintLastAsync(true, ct).ConfigureAwait(false);
             case "--clean" or "-c":
                 return await CleanAsync(ct).ConfigureAwait(false);
             default:

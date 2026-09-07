@@ -1,5 +1,4 @@
 using System.Resources;
-
 namespace Harbor.Application.Resources;
 
 internal static class CoreResources

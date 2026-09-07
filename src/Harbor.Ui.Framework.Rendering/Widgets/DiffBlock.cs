@@ -1,6 +1,4 @@
 using System.Globalization;
-using Harbor.Ui.Framework.Rendering;
-
 namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>Kind of one unified-diff line.</summary>
@@ -10,17 +8,17 @@ public enum DiffLineKind : byte
     Add,
     Delete,
     HunkHeader,
-    FileHeader,
+    FileHeader
 }
 
 /// <summary>Parsed diff row: kind, resolved line numbers (0 when n/a) and raw text.</summary>
 public readonly record struct DiffLine(DiffLineKind Kind, int OldNo, int NewNo, string Text);
 
 /// <summary>
-/// Strict unified-diff reader (CE-3 scope): file headers, hunk headers,
-/// ±/context rows. Anything that does not look like a unified diff yields an
-/// empty list — callers skip instead of guessing (widgets §3.10, no
-/// «Contains("Wrote ")» heuristics).
+///     Strict unified-diff reader (CE-3 scope): file headers, hunk headers,
+///     ±/context rows. Anything that does not look like a unified diff yields an
+///     empty list — callers skip instead of guessing (widgets §3.10, no
+///     «Contains("Wrote ")» heuristics).
 /// </summary>
 public static class UnifiedDiffParser
 {
@@ -29,8 +27,8 @@ public static class UnifiedDiffParser
     {
         var t = text.TrimStart();
         return t.StartsWith("diff --git", StringComparison.Ordinal)
-            || t.StartsWith("--- ", StringComparison.Ordinal)
-            || t.StartsWith("@@ -", StringComparison.Ordinal);
+               || t.StartsWith("--- ", StringComparison.Ordinal)
+               || t.StartsWith("@@ -", StringComparison.Ordinal);
     }
 
     public static IReadOnlyList<DiffLine> Parse(string diffText)
@@ -57,7 +55,7 @@ public static class UnifiedDiffParser
 
             if (line.StartsWith("@@ -", StringComparison.Ordinal))
             {
-                var (o, n, ok) = ParseHunk(line);
+                (int o, int n, bool ok) = ParseHunk(line);
                 if (!ok)
                 {
                     continue;
@@ -70,7 +68,7 @@ public static class UnifiedDiffParser
             }
 
             if (line.StartsWith("--- ", StringComparison.Ordinal) || line.StartsWith("+++ ", StringComparison.Ordinal)
-                || line.StartsWith("diff --git", StringComparison.Ordinal) || line.StartsWith("index ", StringComparison.Ordinal))
+                                                                  || line.StartsWith("diff --git", StringComparison.Ordinal) || line.StartsWith("index ", StringComparison.Ordinal))
             {
                 lines.Add(new DiffLine(DiffLineKind.FileHeader, 0, 0, line.ToString()));
                 continue;
@@ -127,36 +125,32 @@ public static class UnifiedDiffParser
     private static int ParseLeadingInt(ReadOnlySpan<char> span)
     {
         span = SpanSliceUntil(span.TrimStart(), ',');
-        return int.TryParse(span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : 0;
+        return int.TryParse(span, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) ? v : 0;
     }
 }
 
 /// <summary>
-/// Diff chat block (widgets §3.10): right-aligned gutter numbers + sign +
-/// per-kind color, hard-truncated at rect width. Consecutive delete→add row
-/// pairs additionally get word-level emphasis: context tokens render dim,
-/// changed tokens take the full add/delete accent (git --word-diff view).
+///     Diff chat block (widgets §3.10): right-aligned gutter numbers + sign +
+///     per-kind color, hard-truncated at rect width. Consecutive delete→add row
+///     pairs additionally get word-level emphasis: context tokens render dim,
+///     changed tokens take the full add/delete accent (git --word-diff view).
 /// </summary>
 public sealed class DiffBlock : IChatBlock
 {
+
+    public const int GutterWidth = 11; // "1234 5678  "
     private readonly string _diffText;
-    private IReadOnlyList<DiffLine> _lines = [];
-    private bool _parsed;
 
     /// <summary>Pair start row index → intraline segments; built once at parse.</summary>
     private readonly Dictionary<int, WordDiffSides> _pairSegs = [];
+    private IReadOnlyList<DiffLine> _lines = [];
+    private bool _parsed;
 
     public DiffBlock(string diffText, string? path = null)
     {
         _diffText = diffText ?? string.Empty;
         Path = path;
     }
-
-    public string Kind => "diff";
-
-    public bool IsStreamContinuation => false;
-
-    public int BudgetBytes => 96 + (_diffText.Length * 2);
 
     public string? Path { get; }
 
@@ -168,6 +162,12 @@ public sealed class DiffBlock : IChatBlock
             return _lines;
         }
     }
+
+    public string Kind => "diff";
+
+    public bool IsStreamContinuation => false;
+
+    public int BudgetBytes => 96 + _diffText.Length * 2;
 
     public BlockMeasure Measure(int width)
     {
@@ -208,7 +208,7 @@ public sealed class DiffBlock : IChatBlock
             {
                 DiffLineKind.Add => '+',
                 DiffLineKind.Delete => '-',
-                _ => ' ',
+                _ => ' '
             };
 
             buffer.SetText(x, y, [sign], BodyStyle(dl.Kind));
@@ -220,7 +220,7 @@ public sealed class DiffBlock : IChatBlock
             if (_pairSegs.TryGetValue(i, out var sides))
             {
                 bool addSide = dl.Kind == DiffLineKind.Add;
-                IReadOnlyList<WordSeg> segs = addSide ? sides.Inserted : sides.Removed;
+                var segs = addSide ? sides.Inserted : sides.Removed;
                 PaintSegmented(buffer, x + 1, y, avail - 1, addSide, segs);
                 continue;
             }
@@ -229,10 +229,11 @@ public sealed class DiffBlock : IChatBlock
             buffer.SetText(x + 1, y, body, BodyStyle(dl.Kind));
         }
     }
+    public string RawText() => _diffText;
 
     /// <summary>
-    /// Word-level paint of one side of a paired change: context dim, the
-    /// changed tokens in the row's full accent color.
+    ///     Word-level paint of one side of a paired change: context dim, the
+    ///     changed tokens in the row's full accent color.
     /// </summary>
     private static void PaintSegmented(ScreenBuffer buffer, int x, int y, int width, bool addSide, IReadOnlyList<WordSeg> segs)
     {
@@ -266,19 +267,16 @@ public sealed class DiffBlock : IChatBlock
         DiffLineKind.Delete => ChatPalette.ToolError,
         DiffLineKind.HunkHeader => new CellStyle(PackedColor.Indexed(6)),
         DiffLineKind.FileHeader => new CellStyle(attrs: StyleAttr.Bold),
-        _ => CellStyle.Plain,
+        _ => CellStyle.Plain
     };
-
-    public const int GutterWidth = 11; // "1234 5678  "
 
     internal static string Gutter(DiffLine dl) => dl.Kind switch
     {
         DiffLineKind.Add => $"{' ',4} {dl.NewNumberString()}  ",
         DiffLineKind.Delete => $"{dl.OldNumberString()} {' ',4}  ",
         DiffLineKind.Context => $"{dl.OldNumberString()} {dl.NewNumberString()}  ",
-        _ => new string(' ', GutterWidth),
+        _ => new string(' ', GutterWidth)
     };
-    public string RawText() => _diffText;
 
     private void EnsureParsed()
     {
@@ -291,8 +289,8 @@ public sealed class DiffBlock : IChatBlock
     }
 
     /// <summary>
-    /// One intraline segment set per consecutive delete→add pair, computed at
-    /// parse time — Paint stays allocation-free across frames.
+    ///     One intraline segment set per consecutive delete→add pair, computed at
+    ///     parse time — Paint stays allocation-free across frames.
     /// </summary>
     private void BuildPairSegments()
     {

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 namespace Harbor.Application.Agents.Pipeline;
+
 /// <summary>
 ///     Run-level permission pre-flight (audit v2 §3.5 concern #1). The per-call
 ///     gating itself stays in <c>ToolDispatcher</c> (it needs the raw arguments);
@@ -11,7 +12,7 @@ namespace Harbor.Application.Agents.Pipeline;
 public sealed class PermissionCheckBehavior(ILogger logger) : IPipelineBehavior
 {
     /// <inheritdoc />
-    public Task<CSharpFunctionalExtensions.Result> HandleAsync(
+    public Task<Result> HandleAsync(
         PromptRequest request, PipelineNext next, CancellationToken ct)
     {
         if (request.Agent.Permission is null)
@@ -19,7 +20,7 @@ public sealed class PermissionCheckBehavior(ILogger logger) : IPipelineBehavior
             logger.LogError(
                 "Refusing to run agent {Agent}: definition carries no permission ruleset",
                 request.Agent.Name.Value);
-            return Task.FromResult(CSharpFunctionalExtensions.Result.Failure(
+            return Task.FromResult(Result.Failure(
                 $"Agent '{request.Agent.Name.Value}' has no permission ruleset; refusing to run."));
         }
 

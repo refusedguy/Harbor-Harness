@@ -6,20 +6,24 @@ public enum DesktopNotifyKind : byte
     /// <summary>Terminal gave no signal — notifications stay suppressed.</summary>
     None = 0,
 
-    /// <summary>kitty OSC 99 — confirmed by the capability probe answer
-    /// (<c>CapabilityEventKind.Osc99NotifyReport</c>).</summary>
+    /// <summary>
+    ///     kitty OSC 99 — confirmed by the capability probe answer
+    ///     (<c>CapabilityEventKind.Osc99NotifyReport</c>).
+    /// </summary>
     Osc99 = 1,
 
-    /// <summary>rxvt-unicode family OSC 777 — env-detected, no wire probe
-    /// exists for this family.</summary>
-    Osc777 = 2,
+    /// <summary>
+    ///     rxvt-unicode family OSC 777 — env-detected, no wire probe
+    ///     exists for this family.
+    /// </summary>
+    Osc777 = 2
 }
 
 /// <summary>
-/// Desktop-notification family detection (osc-sprint §777). kitty is confirmed
-/// on the wire via the OSC 99 probe; the urxvt family (OSC 777) has no probe
-/// mechanism, so it is env-detected with the same discipline as
-/// <see cref="InlineImageProbe" />: explicit override first, then heuristics.
+///     Desktop-notification family detection (osc-sprint §777). kitty is confirmed
+///     on the wire via the OSC 99 probe; the urxvt family (OSC 777) has no probe
+///     mechanism, so it is env-detected with the same discipline as
+///     <see cref="InlineImageProbe" />: explicit override first, then heuristics.
 /// </summary>
 public static class NotifyProbe
 {

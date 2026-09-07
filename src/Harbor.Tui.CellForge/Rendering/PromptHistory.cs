@@ -1,22 +1,21 @@
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
-/// Bounded prompt-history rail behind the composer (readline semantics):
-/// Up walks backwards from the newest entry saving the in-flight draft,
-/// Down walks forwards and finally restores that draft exactly once.
-/// The controller decides WHEN to recall (first-line/last-line gates); this
-/// class owns only the walk state, so both single-line and multi-line
-/// composers share identical semantics.
-///
-/// CF-B-005: this rail is also the walk owner for the store path — Up/Down
-/// arrive as <c>InputMsg.HistoryUp/Down</c> (see ComposerController) and are
-/// mapped onto this walk, so the in-flight draft survives the round-trip.
+///     Bounded prompt-history rail behind the composer (readline semantics):
+///     Up walks backwards from the newest entry saving the in-flight draft,
+///     Down walks forwards and finally restores that draft exactly once.
+///     The controller decides WHEN to recall (first-line/last-line gates); this
+///     class owns only the walk state, so both single-line and multi-line
+///     composers share identical semantics.
+///     CF-B-005: this rail is also the walk owner for the store path — Up/Down
+///     arrive as <c>InputMsg.HistoryUp/Down</c> (see ComposerController) and are
+///     mapped onto this walk, so the in-flight draft survives the round-trip.
 /// </summary>
 public sealed class PromptHistory
 {
     /// <summary>
-    /// MRU cap: mirrors <c>RecentItemsService</c> (<c>maxItems: 50</c>).
-    /// In-memory only — no file persist (see TODO below).
+    ///     MRU cap: mirrors <c>RecentItemsService</c> (<c>maxItems: 50</c>).
+    ///     In-memory only — no file persist (see TODO below).
     /// </summary>
     public const int DefaultCapacity = 50;
 
@@ -25,7 +24,7 @@ public sealed class PromptHistory
     private readonly int _capacity;
     private readonly List<string> _entries = [];
 
-    /// <summary>Walk index into <see cref="_entries"/>; -1 means «live draft».</summary>
+    /// <summary>Walk index into <see cref="_entries" />; -1 means «live draft».</summary>
     private int _index = -1;
 
     /// <summary>Draft captured on the first Up stroke, restored by the final Down.</summary>
@@ -43,16 +42,16 @@ public sealed class PromptHistory
     public bool IsWalking => _index != -1;
 
     /// <summary>
-    /// Record a submitted prompt: whitespace trimmed, empties dropped,
-    /// repeated strokes (resubmits / edit-then-resend) collapse to one slot.
-    /// Any active recall walk resets to the live-draft state.
+    ///     Record a submitted prompt: whitespace trimmed, empties dropped,
+    ///     repeated strokes (resubmits / edit-then-resend) collapse to one slot.
+    ///     Any active recall walk resets to the live-draft state.
     /// </summary>
     public void Push(string entry)
     {
         Reset();
 
-        var text = entry.Trim();
-        if (text.Length == 0 || (_entries.Count > 0 && _entries[^1] == text))
+        string text = entry.Trim();
+        if (text.Length == 0 || _entries.Count > 0 && _entries[^1] == text)
         {
             return;
         }
@@ -72,9 +71,9 @@ public sealed class PromptHistory
     public void PushSubmitted(string entry) => Push(entry);
 
     /// <summary>
-    /// Step one entry back from the current position. On the first call the
-    /// supplied draft is captured for <see cref="TryRecallNext" /> restoration.
-    /// False at the oldest boundary — caller falls back to caret movement.
+    ///     Step one entry back from the current position. On the first call the
+    ///     supplied draft is captured for <see cref="TryRecallNext" /> restoration.
+    ///     False at the oldest boundary — caller falls back to caret movement.
     /// </summary>
     public bool TryRecallPrevious(string currentDraft, out string entry)
     {
@@ -102,9 +101,9 @@ public sealed class PromptHistory
     }
 
     /// <summary>
-    /// Step one entry forward. When past the newest entry, restores the saved
-    /// draft exactly once and ends the walk. False when not walking — the
-    /// caller falls back to caret movement.
+    ///     Step one entry forward. When past the newest entry, restores the saved
+    ///     draft exactly once and ends the walk. False when not walking — the
+    ///     caller falls back to caret movement.
     /// </summary>
     public bool TryRecallNext(out string entry)
     {

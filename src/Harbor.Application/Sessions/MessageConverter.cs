@@ -1,4 +1,5 @@
 namespace Harbor.Application.Sessions;
+
 /// <summary>
 ///     Converts domain <see cref="AgentMessage" /> instances to LLM-specific <see cref="LlmMessage" /> format.
 ///     Implements Adapter pattern (GOF).

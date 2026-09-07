@@ -1,5 +1,6 @@
 using Harbor.Desktop.Abstractions.Models;
 namespace Harbor.Desktop.Shared.Commands;
+
 /// <summary>
 ///     Catalog of built-in command-palette items shared by every desktop app.
 ///     Each platform app maps these to its own actions (which use platform-specific
@@ -24,51 +25,51 @@ public static class BuiltInCommands
             "Open Session",
             "Open an existing chat session",
             "FolderIcon",
-            static () => { }),
+            static () => {}),
         new(
             "New Session",
             "Start a fresh chat session",
             "PlusIcon",
-            static () => { }),
+            static () => {}),
         new(
             "Branch Session",
             "Branch the current session at the selected message",
             "BranchIcon",
-            static () => { }),
+            static () => {}),
         new(
             "Toggle Theme",
             "Switch between dark and light",
             "ThemeIcon",
-            static () => { }),
+            static () => {}),
         new(
             "Open Code Editor",
             "Open the built-in code editor",
             "CodeIcon",
-            static () => { }),
+            static () => {}),
         new(
             "Open Diff View",
             "Open the diff viewer",
             "DiffIcon",
-            static () => { }),
+            static () => {}),
         new(
             "Open Token Usage",
             "Show per-session token usage and cost",
             "ChartIcon",
-            static () => { }),
+            static () => {}),
         new(
             "Open Settings",
             "Configure providers, theme, fonts",
             "SettingsIcon",
-            static () => { }),
+            static () => {}),
         new(
             "Open Provider Browser",
             "Browse and configure LLM providers",
             "ProviderIcon",
-            static () => { }),
+            static () => {}),
         new(
             "Quit",
             "Exit Harbor",
             "QuitIcon",
-            static () => { })
+            static () => {})
     ];
 }

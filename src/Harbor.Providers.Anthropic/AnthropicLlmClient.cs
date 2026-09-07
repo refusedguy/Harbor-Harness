@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -7,7 +5,10 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 namespace Harbor.Providers.Anthropic;
+
 /// <summary>
 ///     Native Anthropic Messages API client.
 ///     Implements Strategy pattern (GOF) via ILlmClient.

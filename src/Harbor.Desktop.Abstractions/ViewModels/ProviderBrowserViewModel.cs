@@ -1,13 +1,6 @@
-using System.Collections.ObjectModel;
-using System.Collections.Immutable;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Providers;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -20,8 +13,8 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
     public static readonly TimeSpan ModelFetchTimeout = TimeSpan.FromSeconds(5);
 
     private readonly ILogger<ProviderBrowserViewModel> _logger;
-    private readonly IProviderRegistry _providers;
     private readonly AsyncFeed<IReadOnlyList<ModelRowViewModel>> _modelsFeed;
+    private readonly IProviderRegistry _providers;
     private string _currentProviderId = string.Empty;
 
     [ObservableProperty]

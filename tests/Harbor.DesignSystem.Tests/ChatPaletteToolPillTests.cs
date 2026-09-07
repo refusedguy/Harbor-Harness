@@ -1,8 +1,5 @@
-using Harbor.DesignSystem;
-using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
-
 namespace Harbor.DesignSystem.Tests;
 
 /// <summary>Tool status pill styles — serialized (shared key) to avoid cross-test theme races.</summary>

@@ -1,9 +1,5 @@
 using Avalonia.Threading;
 using Harbor.App.Avalonia.ViewModels;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core.Enums;
-
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
 /// <summary>
@@ -17,13 +13,13 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///     </para>
 ///     <para>
 ///         The Settings modal is opened by setting
-///         <see cref="MainViewModel.IsSettingsOpen"/> = true on the UI thread.
+///         <see cref="MainViewModel.IsSettingsOpen" /> = true on the UI thread.
 ///     </para>
 /// </remarks>
 [NotInParallel]
 public sealed class SettingsTests : ComponentTestBase
 {
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupAsync() => await GetDriverAsync("Settings").ConfigureAwait(false);
 
     /// <summary>
@@ -41,20 +37,20 @@ public sealed class SettingsTests : ComponentTestBase
         UI(() => Vm.IsSettingsOpen = true);
         await Task.Delay(400).ConfigureAwait(false);
 
-        var hasTheme = await Driver.WaitForTextAsync("Theme", TimeSpan.FromSeconds(2))
+        bool hasTheme = await Driver.WaitForTextAsync("Theme", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        var hasProvider = await Driver.WaitForTextAsync("Default provider", TimeSpan.FromSeconds(2))
+        bool hasProvider = await Driver.WaitForTextAsync("Default provider", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        var hasFont = await Driver.WaitForTextAsync("Font family", TimeSpan.FromSeconds(2))
+        bool hasFont = await Driver.WaitForTextAsync("Font family", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        var hasStorage = await Driver.WaitForTextAsync("Storage backend", TimeSpan.FromSeconds(2))
+        bool hasStorage = await Driver.WaitForTextAsync("Storage backend", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        var hasLog = await Driver.WaitForTextAsync("Log level", TimeSpan.FromSeconds(2))
+        bool hasLog = await Driver.WaitForTextAsync("Log level", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
 
         await Assert.That(hasTheme && hasProvider && hasFont && hasStorage && hasLog).IsTrue();
 
-        var path = await CaptureAsync("settings-open").ConfigureAwait(false);
+        string path = await CaptureAsync("settings-open").ConfigureAwait(false);
 
         UI(() => Vm.IsSettingsOpen = false);
     }
@@ -76,10 +72,10 @@ public sealed class SettingsTests : ComponentTestBase
         });
         await Task.Delay(400).ConfigureAwait(false);
 
-        var theme = UI(() => Vm.Settings.ThemeSettings.Theme);
+        string theme = UI(() => Vm.Settings.ThemeSettings.Theme);
         await Assert.That(theme).IsEqualTo("light");
 
-        var path = await CaptureAsync("settings-theme-light").ConfigureAwait(false);
+        string path = await CaptureAsync("settings-theme-light").ConfigureAwait(false);
 
         UI(() =>
         {
@@ -115,8 +111,8 @@ public sealed class SettingsTests : ComponentTestBase
 
         // A11: read through the STORE-REPORTED directory — the test's own
         // TempHome assumption may diverge from where the host actually writes.
-        var configDir = UI(() => settingsVm!.Settings.DebugConfigDirectory);
-        var configPath = Path.Combine(configDir, "config.json");
+        string configDir = UI(() => settingsVm!.Settings.DebugConfigDirectory);
+        string configPath = Path.Combine(configDir, "config.json");
 
         string configText = string.Empty;
         for (int i = 0; i < 20; i++)
@@ -131,7 +127,7 @@ public sealed class SettingsTests : ComponentTestBase
         await Assert.That(configText).Contains("light");
         await Assert.That(configText).Contains("test-model-save");
 
-        var path = await CaptureAsync("settings-saved").ConfigureAwait(false);
+        string path = await CaptureAsync("settings-saved").ConfigureAwait(false);
 
         UI(() => Vm.IsSettingsOpen = false);
     }
@@ -150,7 +146,7 @@ public sealed class SettingsTests : ComponentTestBase
 
         // Capture the ACTUAL persisted theme instead of assuming "dark" —
         // CommonConfig defaults to "system" when config.json has no key.
-        var themeBefore = UI(() => Vm.Settings.ThemeSettings.Theme);
+        string themeBefore = UI(() => Vm.Settings.ThemeSettings.Theme);
 
         UI(() =>
         {
@@ -162,10 +158,10 @@ public sealed class SettingsTests : ComponentTestBase
         UI(() => Vm.Settings.CancelCommand.Execute(null));
         await Task.Delay(200).ConfigureAwait(false);
 
-        var themeAfter = UI(() => Vm.Settings.ThemeSettings.Theme);
+        string themeAfter = UI(() => Vm.Settings.ThemeSettings.Theme);
         await Assert.That(themeAfter).IsEqualTo(themeBefore);
 
-        var path = await CaptureAsync("settings-cancelled").ConfigureAwait(false);
+        string path = await CaptureAsync("settings-cancelled").ConfigureAwait(false);
 
         UI(() => Vm.IsSettingsOpen = false);
     }
@@ -186,15 +182,15 @@ public sealed class SettingsTests : ComponentTestBase
 
         // ScrollViewer may hide the provider config section; verify it exists
         // by looking for the "Provider Configuration" label.
-        var hasProviderConfig = await Driver.WaitForTextAsync("Provider Configuration", TimeSpan.FromSeconds(2))
+        bool hasProviderConfig = await Driver.WaitForTextAsync("Provider Configuration", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasProviderConfig).IsTrue();
 
         // At least one provider row visible (Ollama is always registered).
-        var providerCount = UI(() => Vm.Settings.ProviderConfigs.Count);
+        int providerCount = UI(() => Vm.Settings.ProviderConfigs.Count);
         await Assert.That(providerCount).IsGreaterThan(0);
 
-        var path = await CaptureAsync("settings-provider-config").ConfigureAwait(false);
+        string path = await CaptureAsync("settings-provider-config").ConfigureAwait(false);
 
         UI(() => Vm.IsSettingsOpen = false);
     }

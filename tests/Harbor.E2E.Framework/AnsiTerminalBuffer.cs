@@ -1,6 +1,3 @@
-using System.Net;
-using System.Text;
-
 namespace Harbor.E2E.Framework;
 
 /// <summary>
@@ -45,31 +42,26 @@ internal sealed class AnsiTerminalBuffer
         "#666666", "#f14c4c", "#23d18b", "#f5f543",
         "#3b8eea", "#d670d6", "#29b8db", "#ffffff"
     ];
-
-    private readonly int _width;
-    private readonly int _height;
     private readonly TerminalCell[,] _grid;
 
-    private int _cursorRow;
-    private int _cursorCol;
-
-    private string _currentFg = DefaultFg;
     private string _currentBg = DefaultBg;
     private bool _currentBold;
+
+    private string _currentFg = DefaultFg;
     private bool _currentUnderline;
 
     public AnsiTerminalBuffer(int width = 120, int height = 50)
     {
-        _width = width;
-        _height = height;
-        _grid = new TerminalCell[_height, _width];
+        Width = width;
+        Height = height;
+        _grid = new TerminalCell[Height, Width];
         ClearEntireScreen();
     }
 
-    public int Width => _width;
-    public int Height => _height;
-    public int CursorRow => _cursorRow;
-    public int CursorCol => _cursorCol;
+    public int Width { get; }
+    public int Height { get; }
+    public int CursorRow { get; private set; }
+    public int CursorCol { get; private set; }
 
     public void Write(string input)
     {
@@ -136,7 +128,7 @@ internal sealed class AnsiTerminalBuffer
 
             if (c == '\r')
             {
-                _cursorCol = 0;
+                CursorCol = 0;
                 i++;
                 continue;
             }
@@ -150,15 +142,15 @@ internal sealed class AnsiTerminalBuffer
 
             if (c == '\b')
             {
-                _cursorCol = Math.Max(0, _cursorCol - 1);
+                CursorCol = Math.Max(0, CursorCol - 1);
                 i++;
                 continue;
             }
 
             if (c == '\t')
             {
-                int nextTab = (_cursorCol + 8) & ~7;
-                _cursorCol = Math.Min(_width - 1, nextTab);
+                int nextTab = CursorCol + 8 & ~7;
+                CursorCol = Math.Min(Width - 1, nextTab);
                 i++;
                 continue;
             }
@@ -177,51 +169,51 @@ internal sealed class AnsiTerminalBuffer
 
     private void PutChar(char c)
     {
-        if (_cursorRow >= _height)
+        if (CursorRow >= Height)
         {
             ScrollUp(1);
-            _cursorRow = _height - 1;
+            CursorRow = Height - 1;
         }
 
-        if (_cursorCol >= _width)
+        if (CursorCol >= Width)
         {
-            _cursorCol = 0;
-            _cursorRow++;
-            if (_cursorRow >= _height)
+            CursorCol = 0;
+            CursorRow++;
+            if (CursorRow >= Height)
             {
                 ScrollUp(1);
-                _cursorRow = _height - 1;
+                CursorRow = Height - 1;
             }
         }
 
-        _grid[_cursorRow, _cursorCol] = new TerminalCell(c, _currentFg, _currentBg, _currentBold, _currentUnderline);
-        _cursorCol++;
+        _grid[CursorRow, CursorCol] = new TerminalCell(c, _currentFg, _currentBg, _currentBold, _currentUnderline);
+        CursorCol++;
     }
 
     private void AdvanceLine()
     {
-        _cursorCol = 0;
-        _cursorRow++;
-        if (_cursorRow >= _height)
+        CursorCol = 0;
+        CursorRow++;
+        if (CursorRow >= Height)
         {
             ScrollUp(1);
-            _cursorRow = _height - 1;
+            CursorRow = Height - 1;
         }
     }
 
     private void ScrollUp(int lines)
     {
-        for (int r = 0; r < _height - lines; r++)
+        for (int r = 0; r < Height - lines; r++)
         {
-            for (int c = 0; c < _width; c++)
+            for (int c = 0; c < Width; c++)
             {
                 _grid[r, c] = _grid[r + lines, c];
             }
         }
 
-        for (int r = _height - lines; r < _height; r++)
+        for (int r = Height - lines; r < Height; r++)
         {
-            for (int c = 0; c < _width; c++)
+            for (int c = 0; c < Width; c++)
             {
                 _grid[r, c] = new TerminalCell(' ', DefaultFg, DefaultBg);
             }
@@ -230,9 +222,9 @@ internal sealed class AnsiTerminalBuffer
 
     private void ClearEntireScreen()
     {
-        for (int r = 0; r < _height; r++)
+        for (int r = 0; r < Height; r++)
         {
-            for (int c = 0; c < _width; c++)
+            for (int c = 0; c < Width; c++)
             {
                 _grid[r, c] = new TerminalCell(' ', DefaultFg, DefaultBg);
             }
@@ -266,24 +258,24 @@ internal sealed class AnsiTerminalBuffer
                     if (p0 == 1049 || p0 == 47 || p0 == 1047)
                     {
                         ClearEntireScreen();
-                        _cursorRow = 0;
-                        _cursorCol = 0;
+                        CursorRow = 0;
+                        CursorCol = 0;
                     }
                     return;
                 case 'l': // Reset private mode
                     if (p0 == 1049 || p0 == 47 || p0 == 1047)
                     {
                         ClearEntireScreen();
-                        _cursorRow = 0;
-                        _cursorCol = 0;
+                        CursorRow = 0;
+                        CursorCol = 0;
                     }
                     return;
                 case 'J': // Erase in Display (private mode) — treat same as non-private
                     if (p0 == 0 || p0 == 2)
                     {
                         ClearEntireScreen();
-                        _cursorRow = 0;
-                        _cursorCol = 0;
+                        CursorRow = 0;
+                        CursorCol = 0;
                     }
                     return;
             }
@@ -296,32 +288,32 @@ internal sealed class AnsiTerminalBuffer
             {
                 int r = (p0 > 0 ? p0 : 1) - 1;
                 int c = (p1 > 0 ? p1 : 1) - 1;
-                _cursorRow = Math.Clamp(r, 0, _height - 1);
-                _cursorCol = Math.Clamp(c, 0, _width - 1);
+                CursorRow = Math.Clamp(r, 0, Height - 1);
+                CursorCol = Math.Clamp(c, 0, Width - 1);
                 break;
             }
             case 'A': // Cursor Up
             {
                 int count = p0 > 0 ? p0 : 1;
-                _cursorRow = Math.Max(0, _cursorRow - count);
+                CursorRow = Math.Max(0, CursorRow - count);
                 break;
             }
             case 'B': // Cursor Down
             {
                 int count = p0 > 0 ? p0 : 1;
-                _cursorRow = Math.Min(_height - 1, _cursorRow + count);
+                CursorRow = Math.Min(Height - 1, CursorRow + count);
                 break;
             }
             case 'C': // Cursor Forward
             {
                 int count = p0 > 0 ? p0 : 1;
-                _cursorCol = Math.Min(_width - 1, _cursorCol + count);
+                CursorCol = Math.Min(Width - 1, CursorCol + count);
                 break;
             }
             case 'D': // Cursor Backward
             {
                 int count = p0 > 0 ? p0 : 1;
-                _cursorCol = Math.Max(0, _cursorCol - count);
+                CursorCol = Math.Max(0, CursorCol - count);
                 break;
             }
             case 'J': // Erase in Display
@@ -329,26 +321,26 @@ internal sealed class AnsiTerminalBuffer
                 if (p0 == 2 || p0 == 3)
                 {
                     ClearEntireScreen();
-                    _cursorRow = 0;
-                    _cursorCol = 0;
+                    CursorRow = 0;
+                    CursorCol = 0;
                 }
                 else if (p0 == 0)
                 {
                     // Clear from cursor to end of screen
-                    for (int c = _cursorCol; c < _width; c++)
-                        _grid[_cursorRow, c] = new TerminalCell(' ', _currentFg, _currentBg);
-                    for (int r = _cursorRow + 1; r < _height; r++)
-                        for (int c = 0; c < _width; c++)
-                            _grid[r, c] = new TerminalCell(' ', _currentFg, _currentBg);
+                    for (int c = CursorCol; c < Width; c++)
+                        _grid[CursorRow, c] = new TerminalCell(' ', _currentFg, _currentBg);
+                    for (int r = CursorRow + 1; r < Height; r++)
+                    for (int c = 0; c < Width; c++)
+                        _grid[r, c] = new TerminalCell(' ', _currentFg, _currentBg);
                 }
                 else if (p0 == 1)
                 {
                     // Clear from start of screen to cursor
-                    for (int r = 0; r < _cursorRow; r++)
-                        for (int c = 0; c < _width; c++)
-                            _grid[r, c] = new TerminalCell(' ', _currentFg, _currentBg);
-                    for (int c = 0; c <= _cursorCol; c++)
-                        _grid[_cursorRow, c] = new TerminalCell(' ', _currentFg, _currentBg);
+                    for (int r = 0; r < CursorRow; r++)
+                    for (int c = 0; c < Width; c++)
+                        _grid[r, c] = new TerminalCell(' ', _currentFg, _currentBg);
+                    for (int c = 0; c <= CursorCol; c++)
+                        _grid[CursorRow, c] = new TerminalCell(' ', _currentFg, _currentBg);
                 }
 
                 break;
@@ -357,18 +349,18 @@ internal sealed class AnsiTerminalBuffer
             {
                 if (p0 == 0)
                 {
-                    for (int c = _cursorCol; c < _width; c++)
-                        _grid[_cursorRow, c] = new TerminalCell(' ', _currentFg, _currentBg);
+                    for (int c = CursorCol; c < Width; c++)
+                        _grid[CursorRow, c] = new TerminalCell(' ', _currentFg, _currentBg);
                 }
                 else if (p0 == 1)
                 {
-                    for (int c = 0; c <= _cursorCol; c++)
-                        _grid[_cursorRow, c] = new TerminalCell(' ', _currentFg, _currentBg);
+                    for (int c = 0; c <= CursorCol; c++)
+                        _grid[CursorRow, c] = new TerminalCell(' ', _currentFg, _currentBg);
                 }
                 else if (p0 == 2)
                 {
-                    for (int c = 0; c < _width; c++)
-                        _grid[_cursorRow, c] = new TerminalCell(' ', _currentFg, _currentBg);
+                    for (int c = 0; c < Width; c++)
+                        _grid[CursorRow, c] = new TerminalCell(' ', _currentFg, _currentBg);
                 }
 
                 break;
@@ -498,9 +490,9 @@ internal sealed class AnsiTerminalBuffer
         if (index is >= 16 and <= 231)
         {
             int n = index - 16;
-            int r = (n / 36) * 51;
-            int g = ((n / 6) % 6) * 51;
-            int b = (n % 6) * 51;
+            int r = n / 36 * 51;
+            int g = n / 6 % 6 * 51;
+            int b = n % 6 * 51;
             return $"#{r:X2}{g:X2}{b:X2}";
         }
 
@@ -520,7 +512,7 @@ internal sealed class AnsiTerminalBuffer
     public string ToHtml()
     {
         // Find last non-empty row to trim trailing whitespace
-        int lastRow = _height - 1;
+        int lastRow = Height - 1;
         while (lastRow > 0 && IsRowEmpty(lastRow))
         {
             lastRow--;
@@ -556,7 +548,7 @@ internal sealed class AnsiTerminalBuffer
         {
             sb.Append("<div class=\"term-row\">");
             int c = 0;
-            while (c < _width)
+            while (c < Width)
             {
                 var cell = _grid[r, c];
                 string fg = cell.FgColor;
@@ -565,7 +557,7 @@ internal sealed class AnsiTerminalBuffer
                 bool underline = cell.Underline;
 
                 var runSb = new StringBuilder();
-                while (c < _width &&
+                while (c < Width &&
                        _grid[r, c].FgColor == fg &&
                        _grid[r, c].BgColor == bg &&
                        _grid[r, c].Bold == bold &&
@@ -577,8 +569,8 @@ internal sealed class AnsiTerminalBuffer
 
                 string chunk = WebUtility.HtmlEncode(runSb.ToString());
                 bool isDefaultStyle = (fg == DefaultFg || string.Equals(fg, "#e6e6e6", StringComparison.OrdinalIgnoreCase)) &&
-                                     (bg == DefaultBg || string.Equals(bg, "#0d0d0f", StringComparison.OrdinalIgnoreCase)) &&
-                                     !bold && !underline;
+                                      (bg == DefaultBg || string.Equals(bg, "#0d0d0f", StringComparison.OrdinalIgnoreCase)) &&
+                                      !bold && !underline;
 
                 if (isDefaultStyle)
                 {
@@ -610,7 +602,7 @@ internal sealed class AnsiTerminalBuffer
 
     private bool IsRowEmpty(int row)
     {
-        for (int c = 0; c < _width; c++)
+        for (int c = 0; c < Width; c++)
         {
             char ch = _grid[row, c].Character;
             if (ch != ' ' && ch != '\0')
@@ -626,11 +618,11 @@ internal sealed class AnsiTerminalBuffer
     /// </summary>
     public string GetVisibleText()
     {
-        var sb = new StringBuilder(_height * (_width + 1));
-        for (int r = 0; r < _height; r++)
+        var sb = new StringBuilder(Height * (Width + 1));
+        for (int r = 0; r < Height; r++)
         {
-            var rowSb = new StringBuilder(_width);
-            for (int c = 0; c < _width; c++)
+            var rowSb = new StringBuilder(Width);
+            for (int c = 0; c < Width; c++)
             {
                 char ch = _grid[r, c].Character;
                 rowSb.Append(ch == '\0' ? ' ' : ch);
@@ -653,10 +645,10 @@ internal sealed class AnsiTerminalBuffer
         if (string.IsNullOrEmpty(pattern))
             return false;
 
-        for (int r = 0; r < _height; r++)
+        for (int r = 0; r < Height; r++)
         {
-            var rowSb = new StringBuilder(_width);
-            for (int c = 0; c < _width; c++)
+            var rowSb = new StringBuilder(Width);
+            for (int c = 0; c < Width; c++)
             {
                 char ch = _grid[r, c].Character;
                 rowSb.Append(ch == '\0' ? ' ' : ch);

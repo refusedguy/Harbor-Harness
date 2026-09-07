@@ -2,8 +2,7 @@
 
 ## Status: Deprecated facade — removal in v0.6
 
-The R6 rename split the old TUI abstractions into `Harbor.Ui.Framework` (TEA state +
-panels, shared by terminal and desktop shells) and `Harbor.Terminal.Abstractions`
+The R6 rename split the old TUI abstractions into `Harbor.Ui.Framework` (TEA state + panels, shared by terminal and desktop shells) and `Harbor.Terminal.Abstractions`
 (renderer/view/VM/plugin contracts). This project is an empty `ProjectReference`
 shim kept only for build compatibility.
 

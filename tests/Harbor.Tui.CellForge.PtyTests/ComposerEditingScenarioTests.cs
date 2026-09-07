@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -20,7 +18,7 @@ public sealed class ComposerEditingScenarioTests : CellForgePtyScenarioBase
     public async Task HistoryRecall_UpWalksBack_DownRestoresDraft()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -54,7 +52,7 @@ public sealed class ComposerEditingScenarioTests : CellForgePtyScenarioBase
     public async Task KillToLineStartAndEnd_ThenYankRestores()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -94,7 +92,7 @@ public sealed class ComposerEditingScenarioTests : CellForgePtyScenarioBase
     public async Task EnterOnEmptyComposer_NoRequest_StateClean()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 

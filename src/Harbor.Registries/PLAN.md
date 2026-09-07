@@ -2,8 +2,7 @@
 
 ## Status: Stable
 
-Thread-safe registry implementations extracted from `Harbor.Core` in the S1
-split. Each registry implements an interface from `Harbor.Abstractions`.
+Thread-safe registry implementations extracted from `Harbor.Core` in the S1 split. Each registry implements an interface from `Harbor.Abstractions`.
 
 ## Done
 
@@ -13,9 +12,8 @@ split. Each registry implements an interface from `Harbor.Abstractions`.
 - [x] `ToolRegistryBuilder` - fluent registration helper
 - [x] `ProviderRegistry` migrated from Harbor.Core (`Providers/ProviderRegistry.cs`)
 - [x] `InMemoryEventBus` migrated from Harbor.Core (`Events/InMemoryEventBus.cs`)
-      with bounded scrollback + lock-free snapshot reads
-- [x] `CompositeToolRegistry` — fan-in over multiple tool sources without re-freeze
-      (`Tools/CompositeToolRegistry.cs:4`)
+  with bounded scrollback + lock-free snapshot reads
+- [x] `CompositeToolRegistry` — fan-in over multiple tool sources without re-freeze (`Tools/CompositeToolRegistry.cs:4`)
 - [x] Bus middleware: `SamplingMiddleware`, `TypeFilterMiddleware` (`Events/`)
 - [x] `InMemoryMcpRegistry` - in-memory MCP server registry
 - [x] Lock-free scaling for hot paths
@@ -28,10 +26,8 @@ split. Each registry implements an interface from `Harbor.Abstractions`.
 
 ## Known issues
 
-- `ToolRegistry` maintains a dual read path (frozen snapshot vs concurrent
-  fallback) that duplicates logic across `GetAllTools` / `ResolveTools` /
-  `GetTool`; the fix is a composite delegating to a single `IToolSource` —
-  flagged in code as `TODO(principles)[OCP, ROP]`
+- `ToolRegistry` maintains a dual read path (frozen snapshot vs concurrent fallback) that duplicates logic across `GetAllTools` / `ResolveTools` /
+  `GetTool`; the fix is a composite delegating to a single `IToolSource` — flagged in code as `TODO(principles)[OCP, ROP]`
   (`Tools/ToolRegistry.cs:25`, см. аудит §OOP-005).
 - `InMemoryMcpRegistry` cannot actually invoke MCP servers - production hosts must swap in a real client.
 - Registry mutations require a re-freeze; for plugin-loaded tools, this happens once at startup. Hot-reload not yet wired.

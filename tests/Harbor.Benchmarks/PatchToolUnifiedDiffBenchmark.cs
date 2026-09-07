@@ -4,10 +4,12 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text;
+using System.Text.Json;
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks <see cref=\"PatchTool\" /> unified-diff parsing and application.
+///     Benchmarks <see cref=\"PatchTool" /> unified-diff parsing and application.
 ///     Measures the cost of parsing a large patch (5000 hunts) and applying
 ///     it to a target buffer, focusing on zero-allocation span-based line
 ///     splitting and context matching.
@@ -16,13 +18,13 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 2, iterationCount: 3)]
 public class PatchToolUnifiedDiffBenchmark
 {
-    private PatchTool _tool = null!;
-    private string _originalFile = null!;
-    private string _patch = null!;
-    private string _tempFilePath = null!;
 
     [Params(100, 1000, 5000)]
     public int HunkCount;
+    private string _originalFile = null!;
+    private string _patch = null!;
+    private string _tempFilePath = null!;
+    private PatchTool _tool = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -30,31 +32,32 @@ public class PatchToolUnifiedDiffBenchmark
         _tool = new PatchTool(NullLogger<PatchTool>.Instance);
         _originalFile = BuildOriginalFile(HunkCount * 10);
         _patch = BuildUnifiedDiff(_originalFile, HunkCount);
-        _tempFilePath = System.IO.Path.GetTempFileName();
-        System.IO.File.WriteAllText(_tempFilePath, _originalFile);
+        _tempFilePath = Path.GetTempFileName();
+        File.WriteAllText(_tempFilePath, _originalFile);
     }
 
     [IterationCleanup]
     public void Cleanup()
     {
-        try { System.IO.File.Delete(_tempFilePath); } catch { }
+        try { File.Delete(_tempFilePath); }
+        catch {}
     }
 
     [Benchmark(Description = "Parse + Apply unified diff (N hunks)", Baseline = true)]
     public async Task<string> ApplyPatch()
     {
-        var args = System.Text.Json.JsonDocument.Parse(
-            System.Text.Json.JsonSerializer.Serialize(new { path = _tempFilePath, patch = _patch })).RootElement.Clone();
+        var args = JsonDocument.Parse(
+            JsonSerializer.Serialize(new { path = _tempFilePath, patch = _patch })).RootElement.Clone();
         var ctx = new ToolContext(
-            SessionId: "session-1",
-            MessageId: "msg-1",
-            CallId: null,
-            Agent: "code",
-            Abort: CancellationToken.None,
-            Messages: Array.Empty<AgentMessage>(),
-            ReportProgress: (_, __) => Task.CompletedTask,
-            Ask: (_, __) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-            Services: null!);
+            "session-1",
+            "msg-1",
+            null,
+            "code",
+            CancellationToken.None,
+            Array.Empty<AgentMessage>(),
+            (_, __) => Task.CompletedTask,
+            (_, __) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
+            null!);
         var result = await _tool.ExecuteAsync(args, ctx).ConfigureAwait(false);
         return result.Output;
     }
@@ -62,7 +65,7 @@ public class PatchToolUnifiedDiffBenchmark
     [Benchmark(Description = "Parse unified diff only")]
     public List<object> ParseDiffOnly()
     {
-        var lines = _patch.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        string[] lines = _patch.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
         var hunks = new List<object>();
         int i = 0;
         while (i < lines.Length && !lines[i].StartsWith("@@", StringComparison.Ordinal))
@@ -90,7 +93,7 @@ public class PatchToolUnifiedDiffBenchmark
 
     private static string BuildOriginalFile(int lineCount)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         for (int i = 0; i < lineCount; i++)
         {
             sb.AppendLine($"public class Class{i} {{");
@@ -102,8 +105,8 @@ public class PatchToolUnifiedDiffBenchmark
 
     private static string BuildUnifiedDiff(string original, int hunkCount)
     {
-        var lines = original.Split('\n');
-        var sb = new System.Text.StringBuilder();
+        string[] lines = original.Split('\n');
+        var sb = new StringBuilder();
         sb.AppendLine("--- a/file.cs");
         sb.AppendLine("+++ b/file.cs");
 

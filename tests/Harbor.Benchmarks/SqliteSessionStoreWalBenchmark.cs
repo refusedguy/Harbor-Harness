@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks <see cref=\"SqliteSessionStore\" /> hot paths under
+///     Benchmarks <see cref=\"SqliteSessionStore" /> hot paths under
 ///     WAL-mode concurrent write load. Measures append throughput,
 ///     read-back latency, and transaction commit cost with the recommended
 ///     PRAGMAs (<c>journal_mode=WAL</c>, <c>synchronous=NORMAL</c>).
@@ -14,20 +14,20 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 2, iterationCount: 3)]
 public class SqliteSessionStoreWalBenchmark
 {
-    private SqliteSessionStore _store = null!;
-    private string _dbPath = null!;
-    private Session _session = null!;
-    private string _sessionId = null!;
-    private UserMessage _userMessage = null!;
-    private AssistantMessage _assistantMessage = null!;
 
     [Params(10, 100, 1000)]
     public int MessageCount;
+    private AssistantMessage _assistantMessage = null!;
+    private string _dbPath = null!;
+    private Session _session = null!;
+    private string _sessionId = null!;
+    private SqliteSessionStore _store = null!;
+    private UserMessage _userMessage = null!;
 
     [IterationSetup]
     public void IterationSetup()
     {
-        _dbPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "harbor-bench-sqlite-" + Guid.NewGuid().ToString("N") + ".db");
+        _dbPath = Path.Combine(Path.GetTempPath(), "harbor-bench-sqlite-" + Guid.NewGuid().ToString("N") + ".db");
         _store = new SqliteSessionStore(_dbPath, NullLogger<SqliteSessionStore>.Instance);
 
         var createResult = _store.CreateAsync("/tmp", "code", "stub", "stub-1").GetAwaiter().GetResult();
@@ -58,10 +58,10 @@ public class SqliteSessionStoreWalBenchmark
     {
         try
         {
-            if (System.IO.File.Exists(_dbPath))
-                System.IO.File.Delete(_dbPath);
+            if (File.Exists(_dbPath))
+                File.Delete(_dbPath);
         }
-        catch { }
+        catch {}
     }
 
     [Benchmark(Description = "AppendMessageAsync (N messages, single session)")]

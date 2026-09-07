@@ -1,12 +1,11 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CF-E-013: cell-grid port of the Avalonia <c>CodeBlock</c> tokenizer —
-/// keyword sets for all 6 language groups, strings/comments/numbers,
-/// shebang quirk, empty input, and the fence-body overlay.
+///     CF-E-013: cell-grid port of the Avalonia <c>CodeBlock</c> tokenizer —
+///     keyword sets for all 6 language groups, strings/comments/numbers,
+///     shebang quirk, empty input, and the fence-body overlay.
 /// </summary>
 public class CodeTokenizerTests
 {
@@ -19,70 +18,37 @@ public class CodeTokenizerTests
     }
 
     [Test]
-    public async Task CSharp_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("class Foo {}", "csharp", "class");
-    }
+    public async Task CSharp_Keyword_Highlighted() => await AssertFirstKeyword("class Foo {}", "csharp", "class");
 
     [Test]
-    public async Task CSharp_Alias_Cs_Highlighted()
-    {
-        await AssertFirstKeyword("namespace Harbor {}", "cs", "namespace");
-    }
+    public async Task CSharp_Alias_Cs_Highlighted() => await AssertFirstKeyword("namespace Harbor {}", "cs", "namespace");
 
     [Test]
-    public async Task Js_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("function f() {}", "js", "function");
-    }
+    public async Task Js_Keyword_Highlighted() => await AssertFirstKeyword("function f() {}", "js", "function");
 
     [Test]
-    public async Task Ts_Alias_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("interface I {}", "typescript", "interface");
-    }
+    public async Task Ts_Alias_Keyword_Highlighted() => await AssertFirstKeyword("interface I {}", "typescript", "interface");
 
     [Test]
-    public async Task Python_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("def f():", "python", "def");
-    }
+    public async Task Python_Keyword_Highlighted() => await AssertFirstKeyword("def f():", "python", "def");
 
     [Test]
-    public async Task Python_Alias_Py_Highlighted()
-    {
-        await AssertFirstKeyword("None", "py", "None");
-    }
+    public async Task Python_Alias_Py_Highlighted() => await AssertFirstKeyword("None", "py", "None");
 
     [Test]
-    public async Task Go_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("func main() {}", "go", "func");
-    }
+    public async Task Go_Keyword_Highlighted() => await AssertFirstKeyword("func main() {}", "go", "func");
 
     [Test]
-    public async Task Rust_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("fn main() {}", "rust", "fn");
-    }
+    public async Task Rust_Keyword_Highlighted() => await AssertFirstKeyword("fn main() {}", "rust", "fn");
 
     [Test]
-    public async Task Rust_Alias_Rs_Highlighted()
-    {
-        await AssertFirstKeyword("let x = 1;", "rs", "let");
-    }
+    public async Task Rust_Alias_Rs_Highlighted() => await AssertFirstKeyword("let x = 1;", "rs", "let");
 
     [Test]
-    public async Task Sql_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("SELECT a FROM t", "sql", "SELECT");
-    }
+    public async Task Sql_Keyword_Highlighted() => await AssertFirstKeyword("SELECT a FROM t", "sql", "SELECT");
 
     [Test]
-    public async Task Sql_Lowercase_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("select a from t", "sql", "select");
-    }
+    public async Task Sql_Lowercase_Keyword_Highlighted() => await AssertFirstKeyword("select a from t", "sql", "select");
 
     [Test]
     public async Task NonKeyword_Identifier_StaysPlain()
@@ -258,7 +224,7 @@ public class CodeTokenizerTests
             new([new MdSpan("```csharp", MdStyle.Fence)]),
             new([new MdSpan("class Foo {}", MdStyle.Normal)]),
             new([new MdSpan("```", MdStyle.Fence)]),
-            new([new MdSpan("class after", MdStyle.Normal)]),
+            new([new MdSpan("class after", MdStyle.Normal)])
         };
 
         var map = CodeTokenizer.HighlightFenceBodies(lines);
@@ -276,7 +242,7 @@ public class CodeTokenizerTests
     {
         var lines = new List<MdLine>
         {
-            new([new MdSpan("just text", MdStyle.Normal)]),
+            new([new MdSpan("just text", MdStyle.Normal)])
         };
 
         await Assert.That(CodeTokenizer.HighlightFenceBodies(lines)).IsNull();
@@ -289,7 +255,7 @@ public class CodeTokenizerTests
         {
             new([new MdSpan("```brainfuck", MdStyle.Fence)]),
             new([new MdSpan("class Foo {}", MdStyle.Normal)]),
-            new([new MdSpan("```", MdStyle.Fence)]),
+            new([new MdSpan("```", MdStyle.Fence)])
         };
 
         await Assert.That(CodeTokenizer.HighlightFenceBodies(lines)).IsNull();
@@ -301,7 +267,7 @@ public class CodeTokenizerTests
         var lines = new List<MdLine>
         {
             new([new MdSpan("```go", MdStyle.Fence)]),
-            new([new MdSpan("func main() {}", MdStyle.Normal)]),
+            new([new MdSpan("func main() {}", MdStyle.Normal)])
         };
 
         var map = CodeTokenizer.HighlightFenceBodies(lines);
@@ -318,7 +284,7 @@ public class CodeTokenizerTests
         var measure = block.Measure(40);
         var buffer = new ScreenBuffer(40, measure.MinLines);
         buffer.Fill(new Rect(0, 0, 40, measure.MinLines), Cell.Blank);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, measure.MinLines), tick: 0));
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, measure.MinLines), 0));
 
         bool sawKeyword = false;
         for (int y = 0; y < buffer.Rows && !sawKeyword; y++)

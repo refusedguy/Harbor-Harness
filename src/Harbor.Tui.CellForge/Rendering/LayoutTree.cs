@@ -1,5 +1,4 @@
 using System.Text;
-
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>Splits a node's usable extent along its main axis.</summary>
@@ -9,13 +8,13 @@ public enum SplitDir : byte
     Horizontal = 0,
 
     /// <summary>Children share the height (stacked rows).</summary>
-    Vertical = 1,
+    Vertical = 1
 }
 
 /// <summary>
-/// Leaf panel of the layout tree (celldiff §5): owns a resolved
-/// <see cref="Rect"/>, minimum sizes, collapse priority and focus flag.
-/// Lower <see cref="Priority"/> collapses first; status bars use int.MaxValue.
+///     Leaf panel of the layout tree (celldiff §5): owns a resolved
+///     <see cref="Rect" />, minimum sizes, collapse priority and focus flag.
+///     Lower <see cref="Priority" /> collapses first; status bars use int.MaxValue.
 /// </summary>
 public abstract class Panel
 {
@@ -64,10 +63,10 @@ internal sealed class SplitNode
     public SplitNode? B { get; set; }
 
     /// <summary>
-    /// Minimum extent along a split axis. Along the node's own axis children
-    /// stack (sum + gap); along the cross axis they share the extent (max) —
-    /// this is what lets a horizontal mascot split nest inside the vertical
-    /// composer⇄status split without inflating the tree's row minimum.
+    ///     Minimum extent along a split axis. Along the node's own axis children
+    ///     stack (sum + gap); along the cross axis they share the extent (max) —
+    ///     this is what lets a horizontal mascot split nest inside the vertical
+    ///     composer⇄status split without inflating the tree's row minimum.
     /// </summary>
     public int MinAlong(SplitDir dir) => Leaf is not null
         ? Leaf.MinAlong(dir)
@@ -96,28 +95,60 @@ internal sealed class SplitNode
 }
 
 /// <summary>
-/// Binary split tree with water-filling solver honoring per-panel minimums
-/// and priority-based collapse (celldiff §5.1). Results are cached by
-/// (width, height, capsVer) — repeated frames at the same geometry solve in
-/// O(1); any tree mutation bumps capsVer.
+///     Binary split tree with water-filling solver honoring per-panel minimums
+///     and priority-based collapse (celldiff §5.1). Results are cached by
+///     (width, height, capsVer) — repeated frames at the same geometry solve in
+///     O(1); any tree mutation bumps capsVer.
 /// </summary>
 public sealed class LayoutTree
 {
+    private readonly List<Rect> _cachedRects = [];
+    private readonly Dictionary<string, SpringFx> _minWidthSprings = [];
+
+    private readonly List<Panel> _orderedBuffer = [];
     private readonly Dictionary<string, Panel> _panels = [];
     private readonly Dictionary<string, SpringFx> _ratioSprings = [];
-    private readonly Dictionary<string, SpringFx> _minWidthSprings = [];
-    private SplitNode? _root;
-    private uint _capsVer = 1;
+    private readonly List<Rect> _solvedOrder = [];
 
     private (int W, int H, uint Ver)? _cacheKey;
-    private readonly List<Rect> _cachedRects = [];
+    private uint _capsVer = 1;
+    private string? _focusedId;
+    private SplitNode? _root;
 
     public IReadOnlyCollection<Panel> Panels => _panels.Values;
 
     /// <summary>
-    /// Paints every registered panel in registration order through the
-    /// dictionary's struct enumerator — the steady-state frame path must not
-    /// box an enumerator (the <see cref="Panels" /> interface foreach does).
+    ///     True while any spring (ratio or min-width) is still in flight — hosts
+    ///     use it to keep frames flowing until the resize motion settles.
+    /// </summary>
+    public bool IsAnimating
+    {
+        get
+        {
+            foreach (var spring in _ratioSprings.Values)
+            {
+                if (!spring.Settled)
+                {
+                    return true;
+                }
+            }
+
+            foreach (var spring in _minWidthSprings.Values)
+            {
+                if (!spring.Settled)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Paints every registered panel in registration order through the
+    ///     dictionary's struct enumerator — the steady-state frame path must not
+    ///     box an enumerator (the <see cref="Panels" /> interface foreach does).
     /// </summary>
     public void PaintAll(ScreenBuffer buffer)
     {
@@ -134,8 +165,10 @@ public sealed class LayoutTree
         Register(panel);
     }
 
-    /// <summary>Splits the side containing <paramref name="panelId"/>: the old
-    /// panel keeps ratio·(usable−gap−newMin), the new one takes the rest.</summary>
+    /// <summary>
+    ///     Splits the side containing <paramref name="panelId" />: the old
+    ///     panel keeps ratio·(usable−gap−newMin), the new one takes the rest.
+    /// </summary>
     public void Split(string panelId, SplitDir dir, float ratio, Panel newPanel, byte gap = 1)
     {
         var target = FindAndWrap(_root, panelId) ?? throw new KeyNotFoundException($"panel '{panelId}' not found");
@@ -166,12 +199,12 @@ public sealed class LayoutTree
     }
 
     /// <summary>
-    /// Springs the split ratio of the split created by
-    /// <see cref="Split" /> for <paramref name="panelId" /> toward
-    /// <paramref name="target" /> using <see cref="SpringFx" /> physics
-    /// (HDS v1 panel-resize motion). Each <see cref="Solve" /> advances the
-    /// spring one frame while it is unsettled — the cache is bypassed for
-    /// that window so rects track the animation.
+    ///     Springs the split ratio of the split created by
+    ///     <see cref="Split" /> for <paramref name="panelId" /> toward
+    ///     <paramref name="target" /> using <see cref="SpringFx" /> physics
+    ///     (HDS v1 panel-resize motion). Each <see cref="Solve" /> advances the
+    ///     spring one frame while it is unsettled — the cache is bypassed for
+    ///     that window so rects track the animation.
     /// </summary>
     public void AnimateRatio(string panelId, float target)
     {
@@ -189,15 +222,15 @@ public sealed class LayoutTree
     }
 
     /// <summary>
-    /// Springs the horizontal minimum width of a leaf panel (HDS v1
-    /// panel-resize motion). Complements <see cref="AnimateRatio" /> for
-    /// show/hide transitions the ratio alone cannot express: while the
-    /// sidebar's fixed 42-column minimum pins it, hide must glide the
-    /// minimum to 0 (with the ratio to 1) so the solver narrows the panel
-    /// across frames instead of binary-collapsing it. Each <see cref="Solve" />
-    /// advances the spring one frame while unsettled — the effective leaf
-    /// minimum then comes from the spring position, not the immutable
-    /// <c>Min</c>. Width-only: vertical (row) minimums are never animated.
+    ///     Springs the horizontal minimum width of a leaf panel (HDS v1
+    ///     panel-resize motion). Complements <see cref="AnimateRatio" /> for
+    ///     show/hide transitions the ratio alone cannot express: while the
+    ///     sidebar's fixed 42-column minimum pins it, hide must glide the
+    ///     minimum to 0 (with the ratio to 1) so the solver narrows the panel
+    ///     across frames instead of binary-collapsing it. Each <see cref="Solve" />
+    ///     advances the spring one frame while unsettled — the effective leaf
+    ///     minimum then comes from the spring position, not the immutable
+    ///     <c>Min</c>. Width-only: vertical (row) minimums are never animated.
     /// </summary>
     public void AnimateMinWidth(string panelId, int target)
     {
@@ -215,34 +248,6 @@ public sealed class LayoutTree
 
         spring.Retarget(target);
         _capsVer++;
-    }
-
-    /// <summary>
-    /// True while any spring (ratio or min-width) is still in flight — hosts
-    /// use it to keep frames flowing until the resize motion settles.
-    /// </summary>
-    public bool IsAnimating
-    {
-        get
-        {
-            foreach (var spring in _ratioSprings.Values)
-            {
-                if (!spring.Settled)
-                {
-                    return true;
-                }
-            }
-
-            foreach (var spring in _minWidthSprings.Values)
-            {
-                if (!spring.Settled)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
     }
 
     /// <summary>Resolves every panel rect for the given viewport. Cached.</summary>
@@ -275,10 +280,6 @@ public sealed class LayoutTree
         ApplyCached();
         _focusedId = _panels.Values.FirstOrDefault(p => p.Focused)?.Id;
     }
-
-    private readonly List<Panel> _orderedBuffer = [];
-    private readonly List<Rect> _solvedOrder = [];
-    private string? _focusedId;
 
     private IEnumerable<Panel> Ordered()
     {
@@ -339,7 +340,7 @@ public sealed class LayoutTree
         }
 
         bool anyUnsettled = false;
-        foreach (var (panelId, spring) in _ratioSprings)
+        foreach ((string panelId, var spring) in _ratioSprings)
         {
             double position = spring.Step();
             var node = FindSplitWithAChild(_root, panelId);
@@ -375,15 +376,15 @@ public sealed class LayoutTree
     }
 
     /// <summary>
-    /// Leaf minimum along a split axis, honoring an active min-width spring:
-    /// the spring position replaces the panel's immutable base width while an
-    /// entry exists (settled at the base value it is a no-op). Split subtrees
-    /// keep their summed static minimum — springs target direct leaves only.
+    ///     Leaf minimum along a split axis, honoring an active min-width spring:
+    ///     the spring position replaces the panel's immutable base width while an
+    ///     entry exists (settled at the base value it is a no-op). Split subtrees
+    ///     keep their summed static minimum — springs target direct leaves only.
     /// </summary>
     private int EffectiveMinAlong(SplitNode node, SplitDir dir)
     {
         if (dir == SplitDir.Horizontal && node.Leaf is not null
-            && _minWidthSprings.TryGetValue(node.Leaf.Id, out var spring))
+                                       && _minWidthSprings.TryGetValue(node.Leaf.Id, out var spring))
         {
             return Math.Max(0, (int)Math.Round(spring.Position));
         }
@@ -404,8 +405,8 @@ public sealed class LayoutTree
         int gap = Math.Min(node.GapSize, total);
         int usable = total - gap;
 
-        SplitNode childA = node.A!;
-        SplitNode childB = node.B!;
+        var childA = node.A!;
+        var childB = node.B!;
         int minA = EffectiveMinAlong(childA, node.Dir);
         int minB = EffectiveMinAlong(childB, node.Dir);
 
@@ -480,14 +481,14 @@ public sealed class LayoutTree
 
         if (node.A?.Leaf?.Id == id)
         {
-            Promote(node, keepB: true);
+            Promote(node, true);
             _panels.Remove(id);
             return true;
         }
 
         if (node.B?.Leaf?.Id == id)
         {
-            Promote(node, keepB: false);
+            Promote(node, false);
             _panels.Remove(id);
             return true;
         }
@@ -518,8 +519,8 @@ public sealed class LayoutTree
 }
 
 /// <summary>
-/// Box-drawing frame panel — the minimal concrete painter used by golden
-/// grid-dump tests. Focus switches the border to bold accent style.
+///     Box-drawing frame panel — the minimal concrete painter used by golden
+///     grid-dump tests. Focus switches the border to bold accent style.
 /// </summary>
 public class BorderPanel : Panel
 {

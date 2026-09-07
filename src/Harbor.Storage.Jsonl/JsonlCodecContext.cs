@@ -8,8 +8,6 @@
 // they can be registered here.
 
 using System.Text.Json.Serialization;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Storage.Jsonl;
 
 /// <summary>
@@ -54,10 +52,10 @@ internal sealed partial class JsonlCodecContext : JsonSerializerContext
     ///     resolve their runtime types through the generated type info at
     ///     runtime — no reflection needed.
     /// </summary>
-    public static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+    public static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = false,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         TypeInfoResolver = Default
     };
 }
@@ -65,40 +63,40 @@ internal sealed partial class JsonlCodecContext : JsonSerializerContext
 // ── Payload DTOs (replace anonymous types so they can be AOT-registered) ────
 
 internal sealed record UserPayload(
-    [property: System.Text.Json.Serialization.JsonPropertyName("content")] string Content,
-    [property: System.Text.Json.Serialization.JsonPropertyName("agent")] string Agent,
-    [property: System.Text.Json.Serialization.JsonPropertyName("model")] string Model);
+    [property: JsonPropertyName("content")] string Content,
+    [property: JsonPropertyName("agent")] string Agent,
+    [property: JsonPropertyName("model")] string Model);
 
 internal sealed record AssistantPayload(
-    [property: System.Text.Json.Serialization.JsonPropertyName("parts")] object[] Parts,
-    [property: System.Text.Json.Serialization.JsonPropertyName("stopReason")] string StopReason,
-    [property: System.Text.Json.Serialization.JsonPropertyName("usage")] Usage Usage,
-    [property: System.Text.Json.Serialization.JsonPropertyName("model")] string Model,
-    [property: System.Text.Json.Serialization.JsonPropertyName("isSummary")] bool IsSummary,
-    [property: System.Text.Json.Serialization.JsonPropertyName("summaryFirstKeptId")] string? SummaryFirstKeptId);
+    [property: JsonPropertyName("parts")] object[] Parts,
+    [property: JsonPropertyName("stopReason")] string StopReason,
+    [property: JsonPropertyName("usage")] Usage Usage,
+    [property: JsonPropertyName("model")] string Model,
+    [property: JsonPropertyName("isSummary")] bool IsSummary,
+    [property: JsonPropertyName("summaryFirstKeptId")] string? SummaryFirstKeptId);
 
 internal sealed record ToolResultPayload(
-    [property: System.Text.Json.Serialization.JsonPropertyName("results")] ToolResultEntry[] Results);
+    [property: JsonPropertyName("results")] ToolResultEntry[] Results);
 
 internal sealed record TextPartPayload(
-    [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type,
-    [property: System.Text.Json.Serialization.JsonPropertyName("text")] string Text);
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("text")] string Text);
 
 internal sealed record ThinkingPartPayload(
-    [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type,
-    [property: System.Text.Json.Serialization.JsonPropertyName("text")] string Text);
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("text")] string Text);
 
 internal sealed record ToolCallPartPayload(
-    [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type,
-    [property: System.Text.Json.Serialization.JsonPropertyName("id")] string Id,
-    [property: System.Text.Json.Serialization.JsonPropertyName("toolName")] string ToolName,
-    [property: System.Text.Json.Serialization.JsonPropertyName("args")] System.Text.Json.JsonElement Args);
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("toolName")] string ToolName,
+    [property: JsonPropertyName("args")] JsonElement Args);
 
 internal sealed record FilePartPayload(
-    [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type,
-    [property: System.Text.Json.Serialization.JsonPropertyName("path")] string Path,
-    [property: System.Text.Json.Serialization.JsonPropertyName("mimeType")] string MimeType,
-    [property: System.Text.Json.Serialization.JsonPropertyName("sizeBytes")] long SizeBytes);
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("mimeType")] string MimeType,
+    [property: JsonPropertyName("sizeBytes")] long SizeBytes);
 
 internal sealed record UnknownPartPayload(
-    [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type);
+    [property: JsonPropertyName("type")] string Type);

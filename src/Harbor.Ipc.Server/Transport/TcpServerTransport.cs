@@ -1,6 +1,4 @@
 namespace Harbor.Ipc.Transport;
-using System.Net;
-using System.Net.Sockets;
 
 /// <summary>
 ///     Server-side TCP transport: accepts inbound connections on a
@@ -17,8 +15,8 @@ public sealed class TcpServerTransport : IIpcServerTransport
 {
     private readonly Channel<Stream> _acceptChannel;
     private readonly CancellationTokenSource _cts = new();
-    private readonly ILogger<TcpServerTransport> _logger;
     private readonly string _host;
+    private readonly ILogger<TcpServerTransport> _logger;
     private readonly int _port;
     private Task? _acceptLoopTask;
     private bool _bound;
@@ -42,11 +40,11 @@ public sealed class TcpServerTransport : IIpcServerTransport
         });
     }
 
-    /// <inheritdoc />
-    public string Endpoint { get; }
-
     /// <summary>The OS-assigned port actually bound (useful when constructed with port 0); null before bind.</summary>
     public int? BoundPort { get; private set; }
+
+    /// <inheritdoc />
+    public string Endpoint { get; }
 
     /// <inheritdoc />
     public bool IsBound => Volatile.Read(ref _bound);
@@ -69,7 +67,7 @@ public sealed class TcpServerTransport : IIpcServerTransport
             throw new InvalidOperationException("Transport is already bound");
         }
 
-        IPAddress address = await ResolveHostAsync(_host).ConfigureAwait(false);
+        var address = await ResolveHostAsync(_host).ConfigureAwait(false);
         var endpoint = new IPEndPoint(address, _port);
 
         _listener = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
@@ -113,7 +111,9 @@ public sealed class TcpServerTransport : IIpcServerTransport
         if (_acceptLoopTask is not null)
         {
             try { await _acceptLoopTask.ConfigureAwait(false); }
-            catch (OperationCanceledException) { /* expected on shutdown */ }
+            catch (OperationCanceledException)
+            { /* expected on shutdown */
+            }
             catch (Exception ex) { _logger.LogWarning(ex, "Accept loop ended with error"); }
         }
 
@@ -138,7 +138,7 @@ public sealed class TcpServerTransport : IIpcServerTransport
             catch (Exception ex)
             {
                 consecutiveFailures++;
-                TimeSpan delay = ServerPipeTransport.ComputeAcceptBackoff(consecutiveFailures);
+                var delay = ServerPipeTransport.ComputeAcceptBackoff(consecutiveFailures);
                 _logger.LogWarning(
                     ex, "AcceptAsync failed ({Count} consecutive); backing off {Delay}ms",
                     consecutiveFailures, delay.TotalMilliseconds);
@@ -147,22 +147,22 @@ public sealed class TcpServerTransport : IIpcServerTransport
                 continue;
             }
 
-            var stream = new NetworkStream(client, ownsSocket: true);
+            var stream = new NetworkStream(client, true);
             await _acceptChannel.Writer.WriteAsync(stream, ct).ConfigureAwait(false);
         }
     }
 
     private async Task<IPAddress> ResolveHostAsync(string host)
     {
-        if (IPAddress.TryParse(host, out IPAddress? parsed))
+        if (IPAddress.TryParse(host, out var parsed))
         {
             return parsed!;
         }
 
-        IPAddress[] addresses = await Dns.GetHostAddressesAsync(host).ConfigureAwait(false);
-        IPAddress? ipv4 = Array.Find(addresses, a => a.AddressFamily == AddressFamily.InterNetwork);
+        var addresses = await Dns.GetHostAddressesAsync(host).ConfigureAwait(false);
+        var ipv4 = Array.Find(addresses, a => a.AddressFamily == AddressFamily.InterNetwork);
         return ipv4 ?? addresses[0]
-               ?? throw new IOException($"Cannot resolve TCP IPC host '{host}'.");
+            ?? throw new IOException($"Cannot resolve TCP IPC host '{host}'.");
     }
 
     private async Task DisposeListenerAsync()

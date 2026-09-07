@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Permissions;
 namespace Harbor.Domain.Tests;
+
 public class BashArgMatcherTests
 {
     [Test]

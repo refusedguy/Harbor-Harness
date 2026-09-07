@@ -1,14 +1,13 @@
-using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Golden-byte vectors for the kitty keyboard protocol (design §2.3).
-/// Modifier contract per CellForge design doc: value = 1 + (shift=1, ctrl=2,
-/// alt=4, super/hyper/meta collapse to Meta). The critical composer cases —
-/// Enter vs Shift+Enter vs Ctrl+Enter — are pinned here.
+///     Golden-byte vectors for the kitty keyboard protocol (design §2.3).
+///     Modifier contract per CellForge design doc: value = 1 + (shift=1, ctrl=2,
+///     alt=4, super/hyper/meta collapse to Meta). The critical composer cases —
+///     Enter vs Shift+Enter vs Ctrl+Enter — are pinned here.
 /// </summary>
 public class GoldenKittyKeyTests
 {
@@ -28,8 +27,8 @@ public class GoldenKittyKeyTests
     }
 
     [Test]
-    [Arguments("\u001B[13;2u")]   // 1 + shift
-    [Arguments("\u001B[13;4u")]   // 1 + shift|ctrl
+    [Arguments("\u001B[13;2u")] // 1 + shift
+    [Arguments("\u001B[13;4u")] // 1 + shift|ctrl
     public async Task Enter_Vs_ShiftEnter_Vs_CtrlEnter_Are_Distinguishable(string input)
     {
         var plain = T.Feed(new EscapeSequenceParser(), "\u001B[13u");
@@ -48,16 +47,16 @@ public class GoldenKittyKeyTests
     [Test]
     [Arguments("\u001B[97u", KeyModifiers.None, 'a')]
     [Arguments("\u001B[97;2u", KeyModifiers.Shift, 'a')]
-    [Arguments("\u001B[97;3u", KeyModifiers.Ctrl, 'a')]      // 1 + ctrl
-    [Arguments("\u001B[97;5u", KeyModifiers.Alt, 'a')]       // 1 + alt
+    [Arguments("\u001B[97;3u", KeyModifiers.Ctrl, 'a')] // 1 + ctrl
+    [Arguments("\u001B[97;5u", KeyModifiers.Alt, 'a')] // 1 + alt
     [Arguments("\u001B[97;7u", KeyModifiers.Alt | KeyModifiers.Ctrl, 'a')]
-    [Arguments("\u001B[97;9u", KeyModifiers.Meta, 'a')]      // 1 + super → Meta
+    [Arguments("\u001B[97;9u", KeyModifiers.Meta, 'a')] // 1 + super → Meta
     public async Task Modified_Chars_Decode_Kitty_Modifier_Bits(string input, KeyModifiers mods, char letter)
     {
         var events = T.Feed(_parser, input);
 
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsChar(events[0], new Rune(letter), mods, kitty: true);
+        await A.IsChar(events[0], new Rune(letter), mods, true);
     }
 
     [Test]
@@ -88,7 +87,7 @@ public class GoldenKittyKeyTests
         var events = T.Feed(_parser, "\u001B[97:65;2u");
 
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsChar(events[0], new Rune('A'), KeyModifiers.Shift, kitty: true);
+        await A.IsChar(events[0], new Rune('A'), KeyModifiers.Shift, true);
     }
 
     [Test]
@@ -97,7 +96,7 @@ public class GoldenKittyKeyTests
         var events = T.Feed(_parser, "\u001B[97:65:98;2u");
 
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsChar(events[0], new Rune('A'), KeyModifiers.Shift, kitty: true);
+        await A.IsChar(events[0], new Rune('A'), KeyModifiers.Shift, true);
     }
 
     [Test]
@@ -120,10 +119,10 @@ public class GoldenKittyKeyTests
             ("\r", "\u001B[13u"),
             ("\t", "\u001B[9u"),
             ("\u007F", "\u001B[127u"),
-            ("\u001B[3~", "\u001B[3~"), // Delete keeps legacy form even under kitty
+            ("\u001B[3~", "\u001B[3~") // Delete keeps legacy form even under kitty
         ];
 
-        foreach (var (legacyForm, kittyForm) in pairs)
+        foreach ((string legacyForm, string kittyForm) in pairs)
         {
             var l = T.Feed(new EscapeSequenceParser(), legacyForm);
             var k = T.Feed(new EscapeSequenceParser(), kittyForm);

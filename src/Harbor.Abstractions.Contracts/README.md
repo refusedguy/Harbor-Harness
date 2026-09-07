@@ -10,12 +10,12 @@ The **pure contract/data layer** of Harbor — value objects, domain events, mes
 
 ## What's in it
 
-| Subfolder | Contents |
-|-----------|----------|
-| `Models/` | `Session`, `SessionMetadata`, `Usage`, `Pricing`, `AgentMessage` hierarchy (`UserMessage`, `AssistantMessage`, `ContentPart`, `TextPart`, `ToolResultMessage`), `MemoryPackFormatters` |
-| `Models/Identifiers/` | `SessionId`, `MessageId`, `AgentId`, `ProviderId`, `ToolName` — `ValueObject`-based identifiers with validation |
-| `Events/` | `AgentEvent` discriminated union (`AgentStartEvent`, `TurnStartEvent`, `MessageStartEvent`, `ToolExecutionStartEvent`, etc.), `LlmStreamErrorException`, `ProviderErrorKind`, `ProviderErrors` |
-| `Permissions/` | `PermissionRuleset`, `PermissionRule`, `PermissionAction`, `BashArgMatcher`, `ToolCategory` |
+| Subfolder             | Contents                                                                                                                                                                                       |
+|-----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Models/`             | `Session`, `SessionMetadata`, `Usage`, `Pricing`, `AgentMessage` hierarchy (`UserMessage`, `AssistantMessage`, `ContentPart`, `TextPart`, `ToolResultMessage`), `MemoryPackFormatters`         |
+| `Models/Identifiers/` | `SessionId`, `MessageId`, `AgentId`, `ProviderId`, `ToolName` — `ValueObject`-based identifiers with validation                                                                                |
+| `Events/`             | `AgentEvent` discriminated union (`AgentStartEvent`, `TurnStartEvent`, `MessageStartEvent`, `ToolExecutionStartEvent`, etc.), `LlmStreamErrorException`, `ProviderErrorKind`, `ProviderErrors` |
+| `Permissions/`        | `PermissionRuleset`, `PermissionRule`, `PermissionAction`, `BashArgMatcher`, `ToolCategory`                                                                                                    |
 
 ## Public API summary
 
@@ -28,10 +28,10 @@ The **pure contract/data layer** of Harbor — value objects, domain events, mes
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `CSharpFunctionalExtensions` | `ValueObject` base for identifiers |
-| `MemoryPack` | Binary serialization for `[MemoryPackable]` types |
+| Package                      | Purpose                                           |
+|------------------------------|---------------------------------------------------|
+| `CSharpFunctionalExtensions` | `ValueObject` base for identifiers                |
+| `MemoryPack`                 | Binary serialization for `[MemoryPackable]` types |
 
 ## Tests
 

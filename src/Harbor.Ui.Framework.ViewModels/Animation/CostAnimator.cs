@@ -1,18 +1,16 @@
-using System;
 using Harbor.Ui.Framework.Converters;
-
 namespace Harbor.Ui.Framework.Animation;
 
 /// <summary>
 ///     Animates the running cost label while an agent session is active.
-///     The platform VM owns the UI-thread timer and calls <see cref="Advance"/>
+///     The platform VM owns the UI-thread timer and calls <see cref="Advance" />
 ///     on each interval.
 /// </summary>
 public sealed class CostAnimator : IDisposable
 {
     private decimal _baseCost;
-    private DateTime? _startTime;
     private bool _disposed;
+    private DateTime? _startTime;
 
     public decimal BaseCost
     {
@@ -28,6 +26,13 @@ public sealed class CostAnimator : IDisposable
     public decimal DisplayCost { get; private set; }
     public bool IsRunning { get; private set; }
     public string AnimatedText => StatusMappers.CostToUsd(DisplayCost);
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        Tick = null;
+        _disposed = true;
+    }
 
     public event Action? Tick;
 
@@ -47,7 +52,7 @@ public sealed class CostAnimator : IDisposable
 
     public void Advance()
     {
-        if (_startTime is not { } start)
+        if (_startTime is not {} start)
         {
             Stop();
             return;
@@ -56,12 +61,5 @@ public sealed class CostAnimator : IDisposable
         var elapsed = DateTime.UtcNow - start;
         DisplayCost = _baseCost + (decimal)(elapsed.TotalSeconds * 0.0001);
         Tick?.Invoke();
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        Tick = null;
-        _disposed = true;
     }
 }

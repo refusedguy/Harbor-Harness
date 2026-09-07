@@ -17,11 +17,11 @@ public interface IViewModelLocator
 {
     /// <summary>Resolve <typeparamref name="T" /> from the underlying service provider.</summary>
     /// <typeparam name="T">The view-model (or service) contract. Class-only.</typeparam>
-    T Get<T>() where T : class;
+    public T Get<T>() where T : class;
 
     /// <summary>Resolve <typeparamref name="T" />, returning <c>null</c> when unregistered.</summary>
     /// <typeparam name="T">The view-model (or service) contract. Class-only.</typeparam>
-    T? TryGet<T>() where T : class;
+    public T? TryGet<T>() where T : class;
 
     /// <summary>
     ///     Resolve <typeparamref name="T" /> and verify the container holds it
@@ -30,5 +30,5 @@ public interface IViewModelLocator
     ///     fixed nodes instead of constructing duplicates.
     /// </summary>
     /// <typeparam name="T">The view-model contract. Class-only.</typeparam>
-    T GetFromSingleton<T>() where T : class;
+    public T GetFromSingleton<T>() where T : class;
 }

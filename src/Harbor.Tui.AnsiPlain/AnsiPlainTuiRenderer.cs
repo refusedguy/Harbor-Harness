@@ -1,19 +1,18 @@
-namespace Harbor.Tui.AnsiPlain;
-
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
 using Harbor.Tui.AnsiPlain.EscapeCodes;
 using Microsoft.Extensions.Logging;
+namespace Harbor.Tui.AnsiPlain;
 
 /// <summary>
 ///     Unified streaming TUI renderer — the shared event-driven pipeline
 ///     behind the <c>ansi</c> and <c>plain</c> backends (renderer-unification
 ///     sprint Phase 4). All styling and terminal control flow through an
-///     <see cref="IEscapeCodeStrategy"/>, so the render logic exists exactly
-///     once: <see cref="AnsiTuiRenderer"/> selects
-///     <see cref="AnsiEscapeStrategy"/> for real terminals, and
-///     <see cref="PlainTuiRenderer"/> selects <see cref="NullEscapeStrategy"/>
+///     <see cref="IEscapeCodeStrategy" />, so the render logic exists exactly
+///     once: <see cref="AnsiTuiRenderer" /> selects
+///     <see cref="AnsiEscapeStrategy" /> for real terminals, and
+///     <see cref="PlainTuiRenderer" /> selects <see cref="NullEscapeStrategy" />
 ///     for pipes, CI logs, accessibility and files.
 /// </summary>
 /// <remarks>
@@ -24,12 +23,12 @@ using Microsoft.Extensions.Logging;
 ///         streaming token feed while adding image-emission hooks.
 ///     </para>
 /// </remarks>
-public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
+public class AnsiPlainTuiRenderer : BaseTuiRenderer
 {
     private readonly bool _ownsWriter;
     private readonly TextWriter _writer;
 
-    private protected AnsiPlainTuiRenderer(
+    protected private AnsiPlainTuiRenderer(
         TextWriter writer,
         bool ownsWriter,
         IEscapeCodeStrategy strategy,
@@ -176,14 +175,14 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
 
 /// <summary>
 ///     Render context for the unified renderer — writes every styled/cursor
-///     operation through an <see cref="IEscapeCodeStrategy"/> into a
-///     <see cref="TextWriter"/>.
+///     operation through an <see cref="IEscapeCodeStrategy" /> into a
+///     <see cref="TextWriter" />.
 /// </summary>
 internal sealed class AnsiPlainRenderContext : ITuiRenderContext
 {
-    private readonly TextWriter _writer;
-    private readonly Func<int> _width;
     private readonly Func<int> _height;
+    private readonly Func<int> _width;
+    private readonly TextWriter _writer;
 
     public AnsiPlainRenderContext(TextWriter writer, IEscapeCodeStrategy strategy)
         : this(writer, strategy, static () => Console.WindowWidth, static () => Console.WindowHeight)

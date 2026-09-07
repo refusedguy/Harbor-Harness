@@ -1,7 +1,6 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
 using Harbor.E2E.Framework.Pty;
-
+using System.Collections;
+using System.Runtime.InteropServices;
 namespace Harbor.E2E.Framework;
 
 /// <summary>Launch spec for <see cref="PtySession.Start" />.</summary>
@@ -38,15 +37,15 @@ public sealed record PtyStartSpec(
 /// </remarks>
 public sealed class PtySession : IAsyncDisposable
 {
-    private readonly int _masterFd;
-    private readonly int _slaveFd;
-    private readonly int _pid;
     private readonly Task<int> _exitTask;
-    private readonly Thread _readerThread;
+    private readonly byte[] _initialTermios;
+    private readonly int _masterFd;
+    private readonly int _pid;
     private readonly List<byte> _raw = [];
     private readonly object _rawLock = new();
+    private readonly Thread _readerThread;
+    private readonly int _slaveFd;
     private readonly object _writeLock = new();
-    private readonly byte[] _initialTermios;
 
     private PtySession(int masterFd, int slaveFd, int pid, byte[] initialTermios)
     {
@@ -65,7 +64,7 @@ public sealed class PtySession : IAsyncDisposable
         _readerThread = new Thread(ReaderLoop)
         {
             IsBackground = true,
-            Name = "PtySession.Reader",
+            Name = "PtySession.Reader"
         };
         _readerThread.Start();
     }
@@ -80,7 +79,7 @@ public sealed class PtySession : IAsyncDisposable
         {
             lock (_rawLock)
             {
-                return [.. _raw];
+                return [.._raw];
             }
         }
     }
@@ -92,6 +91,32 @@ public sealed class PtySession : IAsyncDisposable
 
     /// <summary>Exit code once exited; throws before that. -1 when SIGKILLed on timeout.</summary>
     public int ExitCode => _exitTask.IsCompleted ? _exitTask.Result : throw new InvalidOperationException("Process has not exited.");
+
+    /// <summary>Length of <see cref="RawOutput" /> right now — phase marker for scoped assertions.</summary>
+    public int OutputLength
+    {
+        get
+        {
+            lock (_rawLock)
+            {
+                return _raw.Count;
+            }
+        }
+    }
+
+    /// <summary>Termios snapshot taken BEFORE the child was spawned (pre-raw baseline).</summary>
+    public byte[] InitialTermios => [.._initialTermios];
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        Kill();
+
+        // Closing the master makes the reader's next read fail (EIO/EOF).
+        _ = LibcNative.close(_masterFd);
+        await _exitTask.ConfigureAwait(false);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>TUnit skip off-Unix — Windows ConPTY is an explicit follow-up.</summary>
     public static void RequireUnix()
@@ -136,7 +161,7 @@ public sealed class PtySession : IAsyncDisposable
             ApplySize(master, spec.Cols, spec.Rows);
 
             var env = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
+            foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
             {
                 env[(string)entry.Key] = (string)entry.Value!;
             }
@@ -235,24 +260,12 @@ public sealed class PtySession : IAsyncDisposable
     public Task<bool> WaitForTextAsync(string needle, TimeSpan? timeout = null) =>
         WaitForOutputAsync(text => text.Contains(needle, StringComparison.Ordinal), timeout ?? TimeSpan.FromSeconds(10));
 
-    /// <summary>Length of <see cref="RawOutput" /> right now — phase marker for scoped assertions.</summary>
-    public int OutputLength
-    {
-        get
-        {
-            lock (_rawLock)
-            {
-                return _raw.Count;
-            }
-        }
-    }
-
     /// <summary>Cumulative output truncated to start at raw offset <paramref name="from" />.</summary>
     public byte[] RawOutputFrom(int from)
     {
         lock (_rawLock)
         {
-            return _raw.Count <= from ? [] : [.. _raw.Skip(from)];
+            return _raw.Count <= from ? [] : [.._raw.Skip(from)];
         }
     }
 
@@ -269,9 +282,6 @@ public sealed class PtySession : IAsyncDisposable
         return CaptureTermiosOn(_masterFd);
     }
 
-    /// <summary>Termios snapshot taken BEFORE the child was spawned (pre-raw baseline).</summary>
-    public byte[] InitialTermios => [.. _initialTermios];
-
     private static byte[] CaptureTermiosOn(int fd)
     {
         var t = new LibcNative.TermiosKernel { Cc = new byte[32] };
@@ -285,7 +295,7 @@ public sealed class PtySession : IAsyncDisposable
         try
         {
             Marshal.StructureToPtr(t, ptr, false);
-            var bytes = new byte[size];
+            byte[] bytes = new byte[size];
             Marshal.Copy(ptr, bytes, 0, size);
             return bytes;
         }
@@ -300,7 +310,7 @@ public sealed class PtySession : IAsyncDisposable
     /// <summary>Wait for exit; SIGKILL and return -1 past <paramref name="timeout" />.</summary>
     public async Task<int> WaitForExitAsync(TimeSpan timeout)
     {
-        Task completed = await Task.WhenAny(_exitTask, Task.Delay(timeout)).ConfigureAwait(false);
+        var completed = await Task.WhenAny(_exitTask, Task.Delay(timeout)).ConfigureAwait(false);
         if (completed != _exitTask)
         {
             Kill();
@@ -324,17 +334,6 @@ public sealed class PtySession : IAsyncDisposable
         }
     }
 
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        Kill();
-
-        // Closing the master makes the reader's next read fail (EIO/EOF).
-        _ = LibcNative.close(_masterFd);
-        await _exitTask.ConfigureAwait(false);
-        GC.SuppressFinalize(this);
-    }
-
     // ── Internals ──────────────────────────────────────────────────────────
 
     private static void ApplySize(int fd, int cols, int rows)
@@ -347,12 +346,12 @@ public sealed class PtySession : IAsyncDisposable
     }
 
     private static int DecodeStatus(int status) => (status & 0x7f) == 0
-        ? (status >> 8) & 0xff
+        ? status >> 8 & 0xff
         : 128 + (status & 0x7f); // signaled → 128+sig convention
 
     private void ReaderLoop()
     {
-        var buf = new byte[16384];
+        byte[] buf = new byte[16384];
         while (true)
         {
             int n = LibcNative.read(_masterFd, buf, buf.Length);

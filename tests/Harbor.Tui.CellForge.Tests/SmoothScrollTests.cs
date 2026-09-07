@@ -1,12 +1,11 @@
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Smooth scroll (HDS v1): user scroll deltas ease toward the target over the
-/// micro fade while follow-tail and explicit end snaps stay exact.
-/// Deterministic ticks — no wall clock.
+///     Smooth scroll (HDS v1): user scroll deltas ease toward the target over the
+///     micro fade while follow-tail and explicit end snaps stay exact.
+///     Deterministic ticks — no wall clock.
 /// </summary>
 public class SmoothScrollTests
 {
@@ -21,14 +20,14 @@ public class SmoothScrollTests
             tl.EnableSmoothScroll();
         }
 
-        _ = Paint(tl, tick: 0); // first frame → hasPaintedFrame
+        _ = Paint(tl, 0); // first frame → hasPaintedFrame
         for (int i = 0; i < 20; i++)
         {
             tl.Append(new UserBlock($"line-{i:00}"));
         }
 
         tl.ScrollToEnd(Height);
-        _ = Paint(tl, tick: 10); // settled at the tail
+        _ = Paint(tl, 10); // settled at the tail
         return tl;
     }
 
@@ -45,7 +44,7 @@ public class SmoothScrollTests
     {
         for (int y = 0; y < buffer.Rows; y++)
         {
-            var sb = new System.Text.StringBuilder();
+            var sb = new StringBuilder();
             for (int x = 0; x < buffer.Cols; x++)
             {
                 _ = sb.Append((char)buffer.Get(x, y).Rune);
@@ -65,7 +64,7 @@ public class SmoothScrollTests
     {
         var tl = Populated(smooth: false);
         tl.ScrollUp(10);
-        _ = Paint(tl, tick: 11);
+        _ = Paint(tl, 11);
 
         await Assert.That(tl.EffectiveScrollY).IsEqualTo(tl.ScrollY); // visual == target right away
     }
@@ -78,21 +77,21 @@ public class SmoothScrollTests
         tl.ScrollUp(10); // target = tail - 10
 
         long start = tl.EffectiveScrollY;
-        _ = Paint(tl, tick: 11);
+        _ = Paint(tl, 11);
         long early = tl.EffectiveScrollY;
 
-        for (long tick = 12; tick < 11 + (PanelFx.FadeFrames / 2); tick++)
+        for (long tick = 12; tick < 11 + PanelFx.FadeFrames / 2; tick++)
         {
             _ = Paint(tl, tick);
         }
 
         long late = tl.EffectiveScrollY;
-        _ = Paint(tl, tick: 10 + PanelFx.FadeFrames + 1);
+        _ = Paint(tl, 10 + PanelFx.FadeFrames + 1);
         long settled = tl.EffectiveScrollY;
 
-        await Assert.That(start).IsEqualTo(tail);        // eased view starts at the pinned position
-        await Assert.That(early).IsLessThan(start);      // gliding up (offset decreases)
-        await Assert.That(late).IsLessThan(early);       // monotonic ease-out
+        await Assert.That(start).IsEqualTo(tail); // eased view starts at the pinned position
+        await Assert.That(early).IsLessThan(start); // gliding up (offset decreases)
+        await Assert.That(late).IsLessThan(early); // monotonic ease-out
         await Assert.That(late).IsGreaterThan(tail - 10); // not settled mid-flight
         await Assert.That(settled).IsEqualTo(tail - 10); // lands exactly on target
     }
@@ -103,8 +102,8 @@ public class SmoothScrollTests
         var tl = Populated(smooth: true);
         tl.ScrollUp(10);
 
-        var mid = Paint(tl, tick: 11 + (PanelFx.FadeFrames / 2));
-        var settled = Paint(tl, tick: 11 + PanelFx.FadeFrames + 1);
+        var mid = Paint(tl, 11 + PanelFx.FadeFrames / 2);
+        var settled = Paint(tl, 11 + PanelFx.FadeFrames + 1);
 
         await Assert.That(GridDump.Art(mid)).IsNotEqualTo(GridDump.Art(settled)); // visible glide
     }
@@ -115,7 +114,7 @@ public class SmoothScrollTests
         var tl = Populated(smooth: true);
         tl.ScrollUp(10);
 
-        _ = Paint(tl, tick: 11);
+        _ = Paint(tl, 11);
         long prev = tl.EffectiveScrollY;
         for (long tick = 12; tick <= 15; tick++)
         {
@@ -126,7 +125,7 @@ public class SmoothScrollTests
         }
 
         tl.ScrollUp(10); // retarget mid-flight
-        _ = Paint(tl, tick: 16);
+        _ = Paint(tl, 16);
         long after = tl.EffectiveScrollY;
 
         await Assert.That(prev - after).IsLessThanOrEqualTo(3); // chained, no discontinuity
@@ -143,11 +142,11 @@ public class SmoothScrollTests
         }
 
         tl.ScrollDown(4); // unpinned — animates toward tail-6
-        _ = Paint(tl, tick: 12 + PanelFx.FadeFrames);
+        _ = Paint(tl, 12 + PanelFx.FadeFrames);
         await Assert.That(tl.EffectiveScrollY).IsNotEqualTo(tl.TotalHeight - Height);
 
         tl.ScrollToEnd(Height); // follow-tail re-engaged — exact snap
-        var buffer = Paint(tl, tick: 13 + PanelFx.FadeFrames);
+        var buffer = Paint(tl, 13 + PanelFx.FadeFrames);
 
         await Assert.That(tl.EffectiveScrollY).IsEqualTo(tl.TotalHeight - Height);
         await Assert.That(RowOf(buffer, "line-19")).IsGreaterThanOrEqualTo(0);

@@ -1,9 +1,5 @@
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Sessions;
-using TUnit.Assertions;
-
 namespace Harbor.Application.Tests;
 
 /// <summary>
@@ -79,7 +75,7 @@ public class WorkspaceContextSourceTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(projectSkills, "review.md"),
             "---\nname: review\ndescription: Reviews pull requests with the house style\n---\n# Review\n");
 
-        var skills = WorkspaceContextSource.LoadSkills(_dir, globalSkillsDir: null);
+        var skills = WorkspaceContextSource.LoadSkills(_dir, null);
 
         await Assert.That(skills.Count).IsEqualTo(1);
         await Assert.That(skills[0].Description).IsEqualTo("Reviews pull requests with the house style");
@@ -181,7 +177,7 @@ public class WorkspaceContextSourceTests : IDisposable
         var servers = new[]
         {
             new McpServerInstructions("filesystem", "Read files only."),
-            new McpServerInstructions("git", "Never force-push.\nUse dry runs."),
+            new McpServerInstructions("git", "Never force-push.\nUse dry runs.")
         };
 
         string? block = WorkspaceContextSource.FormatMcpInstructions(servers);

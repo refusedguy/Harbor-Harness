@@ -1,12 +1,8 @@
-using System.Diagnostics;
-using System.Text;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.E2E.Framework;
-using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using TUnit.Assertions;
-
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 namespace Harbor.LoadTests;
 
 /// <summary>
@@ -14,7 +10,6 @@ namespace Harbor.LoadTests;
 ///     10 sessions × 3 agents driven through the REAL agent stack (shared
 ///     AgentLoop + shared InMemoryEventBus + real OpenAI-compatible HTTP
 ///     client over SSE) against one <see cref="MockLlmServer" /> in echo mode.
-///
 ///     Determinism contract: the only pacing is the refund-on-completion
 ///     <c>TokenBucketRateLimiter</c> and <see cref="MockLlmServer.SetChunkDelay" />
 ///     time dilation — the harness never sleeps on real time, so the suite
@@ -32,16 +27,16 @@ public sealed class MultiSessionLoadTests
     [Test]
     public async Task TenSessions_ThreeAgents_EchoRunsComplete_NoCorruptionNoDeadlock()
     {
-        await using MultiSessionLoadHarness harness = await MultiSessionLoadHarness.StartAsync(
+        await using var harness = await MultiSessionLoadHarness.StartAsync(
             Sessions, AgentsPerSession, BucketCapacity, TimeSpan.FromMilliseconds(2));
         await harness.CreateSessionsAsync(Sessions);
 
         var stopwatch = Stopwatch.StartNew();
-        SessionRunResult[] results = await harness.RunAllAsync();
+        var results = await harness.RunAllAsync();
         stopwatch.Stop();
 
         // Every run of every session succeeded.
-        foreach (SessionRunResult result in results)
+        foreach (var result in results)
         {
             await Assert.That(result.SucceededRuns).IsEqualTo(AgentsPerSession);
             await Assert.That(result.Errors).IsEmpty();
@@ -72,13 +67,13 @@ public sealed class MultiSessionLoadTests
         const int sessions = 2;
         const int agents = 2;
 
-        await using MultiSessionLoadHarness harness = await MultiSessionLoadHarness.StartAsync(
-            sessions, agents, bucketCapacity: 1, TimeSpan.FromMilliseconds(1));
+        await using var harness = await MultiSessionLoadHarness.StartAsync(
+            sessions, agents, 1, TimeSpan.FromMilliseconds(1));
         await harness.CreateSessionsAsync(sessions);
 
-        SessionRunResult[] results = await harness.RunAllAsync();
+        var results = await harness.RunAllAsync();
 
-        foreach (SessionRunResult result in results)
+        foreach (var result in results)
         {
             await Assert.That(result.SucceededRuns).IsEqualTo(agents);
             await Assert.That(result.Errors).IsEmpty();
@@ -100,19 +95,19 @@ public sealed class MultiSessionLoadTests
     /// </summary>
     private static async Task AssertSessionsNotCorruptedAsync(MultiSessionLoadHarness harness, int runsPerSession)
     {
-        foreach (LoadSessionContext ctx in harness.Contexts)
+        foreach (var ctx in harness.Contexts)
         {
-            Result<IReadOnlyList<AgentMessage>> stored =
+            var stored =
                 await harness.ReadStoredAsync(ctx.Session.Id);
             await Assert.That(stored.IsSuccess).IsTrue();
 
-            IReadOnlyList<AgentMessage> messages = stored.Value;
+            var messages = stored.Value;
             await Assert.That(messages.Count).IsEqualTo(runsPerSession * 2);
 
             for (int i = 0; i < runsPerSession; i++)
             {
-                AgentMessage user = messages[i * 2];
-                AgentMessage assistant = messages[(i * 2) + 1];
+                var user = messages[i * 2];
+                var assistant = messages[i * 2 + 1];
 
                 await Assert.That(user.Role).IsEqualTo("user");
                 await Assert.That(assistant.Role).IsEqualTo("assistant");
@@ -132,7 +127,6 @@ public sealed class MultiSessionLoadTests
     ///     run EVERY store must be fully drained: idle, not streaming, and
     ///     holding a bounded transcript. A lost or raced dispatch would leave
     ///     a store stuck in "running" or make the reducer throw.
-    ///
     ///     Line counts and cross-store equality are deliberately not asserted:
     ///     the 10 concurrent session pipelines publish interleaved, so stores
     ///     legitimately observe different event ORDERS, and the Active-message
@@ -143,9 +137,9 @@ public sealed class MultiSessionLoadTests
     {
         await Assert.That(harness.Stores.Count).IsEqualTo(Sessions);
 
-        foreach (UiStore store in harness.Stores)
+        foreach (var store in harness.Stores)
         {
-            UiState state = store.State;
+            var state = store.State;
             await Assert.That(state.IsStreaming).IsFalse();
             await Assert.That(state.IsAgentRunning).IsFalse();
             await Assert.That(state.Status).IsEqualTo("idle");
@@ -182,7 +176,7 @@ public sealed class MultiSessionLoadTests
     private static string AssistantText(AgentMessage message)
     {
         var sb = new StringBuilder();
-        foreach (ContentPart part in ((AssistantMessage)message).Parts)
+        foreach (var part in ((AssistantMessage)message).Parts)
         {
             if (part is TextPart text)
             {
@@ -193,5 +187,5 @@ public sealed class MultiSessionLoadTests
         return sb.ToString();
     }
 
-    private static string FormatMb(long bytes) => (bytes / (1024.0 * 1024.0)).ToString("F1", System.Globalization.CultureInfo.InvariantCulture) + " MB";
+    private static string FormatMb(long bytes) => (bytes / (1024.0 * 1024.0)).ToString("F1", CultureInfo.InvariantCulture) + " MB";
 }

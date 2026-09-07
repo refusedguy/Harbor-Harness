@@ -1,7 +1,8 @@
-using System.Globalization;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.ViewModels;
+using System.Globalization;
 namespace Harbor.Ui.Framework.Converters;
+
 /// <summary>
 ///     Platform-agnostic helpers that map view-model state to resource
 ///     keys / display strings. UI frameworks (Avalonia / WPF / MAUI /

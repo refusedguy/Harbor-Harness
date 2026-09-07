@@ -1,8 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
-using Microsoft.Extensions.DependencyInjection;
-
 namespace Harbor.Desktop.Shared.Locators;
 
 /// <summary>
@@ -44,8 +43,8 @@ public sealed class ViewModelLocator : IViewModelLocator
     /// <inheritdoc />
     public T GetFromSingleton<T>() where T : class
     {
-        T first = Get<T>();
-        T second = Get<T>();
+        var first = Get<T>();
+        var second = Get<T>();
         if (!ReferenceEquals(first, second))
         {
             throw new InvalidOperationException(
@@ -66,9 +65,9 @@ public sealed class ViewModelLocator : IViewModelLocator
     private static MethodInfo FindServiceMethod(bool isRequired)
     {
         string name = isRequired ? "GetRequiredService" : "GetService";
-        foreach (MethodInfo method in typeof(ServiceProviderServiceExtensions).GetMethods())
+        foreach (var method in typeof(ServiceProviderServiceExtensions).GetMethods())
         {
-            ParameterInfo[] parameters = method.GetParameters();
+            var parameters = method.GetParameters();
             if (method.Name == name
                 && method.IsGenericMethodDefinition
                 && parameters.Length == 1
@@ -83,10 +82,10 @@ public sealed class ViewModelLocator : IViewModelLocator
 
     private static Func<IServiceProvider, object?> BuildCall(MethodInfo openGeneric, Type type)
     {
-        ParameterExpression sp = Expression.Parameter(typeof(IServiceProvider), "sp");
-        MethodInfo closed = openGeneric.MakeGenericMethod(type);
-        MethodCallExpression call = Expression.Call(null, closed, sp);
-        UnaryExpression cast = Expression.Convert(call, typeof(object));
+        var sp = Expression.Parameter(typeof(IServiceProvider), "sp");
+        var closed = openGeneric.MakeGenericMethod(type);
+        var call = Expression.Call(null, closed, sp);
+        var cast = Expression.Convert(call, typeof(object));
         return Expression.Lambda<Func<IServiceProvider, object?>>(cast, sp).Compile();
     }
 }

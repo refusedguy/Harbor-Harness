@@ -1,5 +1,5 @@
+using System.Text;
 using System.Text.Json;
-
 namespace Harbor.Ipc.Ide;
 
 /// <summary>Tunables for <see cref="IdeSessionBridge" />.</summary>
@@ -18,7 +18,7 @@ public sealed record IdeSessionBridgeOptions
 
 /// <summary>
 ///     Binds the NDJSON JSON-RPC framing server to a live Harbor host through the
-///     hexagonal <see cref="IHarborClient"/> seam, implementing the four editor
+///     hexagonal <see cref="IHarborClient" /> seam, implementing the four editor
 ///     methods: <c>list_sessions</c>, <c>inject_prompt</c>, <c>read_stream</c>,
 ///     <c>stop_stream</c> and <c>abort</c>.
 /// </summary>
@@ -29,14 +29,14 @@ public sealed record IdeSessionBridgeOptions
 ///         <c>{"accepted":true}</c> immediately — the run never blocks the read
 ///         loop, and the read loop never blocks the agent. Progress reaches the
 ///         editor as <c>stream</c> notifications pushed by a single event pump
-///         consuming <see cref="IHarborClient.SubscribeToEventsAsync"/>; pump
+///         consuming <see cref="IHarborClient.SubscribeToEventsAsync" />; pump
 ///         writes share the framing server's write lock, so frames never
 ///         interleave.
 ///     </para>
 ///     <para>
 ///         <b>Session binding:</b> the bridge serves exactly one session
-///         (<see cref="SessionId"/>, bound by the host glue via
-///         <c>StartAgentAsync</c> before <see cref="RunAsync"/>).
+///         (<see cref="SessionId" />, bound by the host glue via
+///         <c>StartAgentAsync</c> before <see cref="RunAsync" />).
 ///         <c>inject_prompt</c> with a foreign <c>session_id</c> is rejected with
 ///         -32602 instead of silently rerouting the host's agent.
 ///     </para>
@@ -44,21 +44,21 @@ public sealed record IdeSessionBridgeOptions
 public sealed class IdeSessionBridge : IAsyncDisposable
 {
     private readonly IHarborClient _client;
-    private readonly IdeJsonRpcServer _server;
-    private readonly IdeSessionBridgeOptions _options;
-    private readonly ILogger _logger;
     private readonly CancellationTokenSource _lifetimeCts = new();
-    private readonly Lock _sync = new();
+    private readonly ILogger _logger;
+    private readonly IdeSessionBridgeOptions _options;
     private readonly List<(Task Run, CancellationTokenSource Cts)> _runs = [];
-    private int _streamSubscribed;
-    private Task? _eventPump;
+    private readonly IdeJsonRpcServer _server;
+    private readonly Lock _sync = new();
     private int _disposed;
+    private Task? _eventPump;
+    private int _streamSubscribed;
 
     /// <summary>
     ///     Create a bridge over the editor-facing stdio pair. The host glue is
     ///     responsible for connecting the client and calling
-    ///     <c>StartAgentAsync</c> for <paramref name="sessionId"/> before
-    ///     <see cref="RunAsync"/>.
+    ///     <c>StartAgentAsync</c> for <paramref name="sessionId" /> before
+    ///     <see cref="RunAsync" />.
     /// </summary>
     public IdeSessionBridge(
         IHarborClient client,
@@ -81,11 +81,42 @@ public sealed class IdeSessionBridge : IAsyncDisposable
     }
 
     /// <summary>Session the bridge is bound to (null until the glue binds one).</summary>
-    public string? SessionId { get; private set; }
+    public string? SessionId { get; }
+
+    // ── Dispose ────────────────────────────────────────────────────────────
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        await _lifetimeCts.CancelAsync().ConfigureAwait(false);
+
+        Task[] pending;
+        lock (_sync)
+        {
+            pending = [.._runs.Select(r => r.Run), _eventPump ?? Task.CompletedTask];
+            _runs.Clear();
+        }
+
+        if (pending.Length > 0)
+        {
+            try
+            {
+                await Task.WhenAll(pending).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "IDE bridge: in-flight work did not drain within the grace window");
+            }
+        }
+
+        _lifetimeCts.Dispose();
+        await _server.DisposeAsync().ConfigureAwait(false);
+    }
 
     /// <summary>
     ///     Serve requests until the editor closes stdin. Returns the framing
-    ///     server's completion; in-flight runs are cancelled by <see cref="DisposeAsync"/>.
+    ///     server's completion; in-flight runs are cancelled by <see cref="DisposeAsync" />.
     /// </summary>
     public Task RunAsync(CancellationToken ct) => _server.RunAsync(ct);
 
@@ -106,12 +137,12 @@ public sealed class IdeSessionBridge : IAsyncDisposable
 
     private async Task<JsonElement?> ListSessionsAsync(CancellationToken requestCt)
     {
-        Result<IReadOnlyList<Session>> result = await _client.ListSessionsAsync(requestCt).ConfigureAwait(false);
+        var result = await _client.ListSessionsAsync(requestCt).ConfigureAwait(false);
         if (result.IsFailure)
             throw new IdeRpcException(IdeRpcException.HandlerError, result.Error);
 
         var sessions = new List<IdeSessionInfo>(result.Value.Count);
-        foreach (Session s in result.Value)
+        foreach (var s in result.Value)
         {
             sessions.Add(new IdeSessionInfo(s.Id, s.Title, s.Agent, s.ProviderId, s.Model, s.Directory, s.UpdatedAt));
         }
@@ -121,7 +152,7 @@ public sealed class IdeSessionBridge : IAsyncDisposable
 
     private JsonElement? InjectPrompt(JsonElement? parameters)
     {
-        IdeInjectPromptParams p = ParseInjectParams(parameters);
+        var p = ParseInjectParams(parameters);
         if (string.IsNullOrWhiteSpace(p.Prompt))
             throw new IdeRpcException(IdeRpcException.InvalidParams, "'prompt' (non-empty string) is required.");
         if (!string.IsNullOrEmpty(p.SessionId) && !string.Equals(p.SessionId, SessionId, StringComparison.Ordinal))
@@ -132,7 +163,7 @@ public sealed class IdeSessionBridge : IAsyncDisposable
         SchedulePromptRun(p.Prompt);
 
         return JsonSerializer.SerializeToElement(
-            new IdeInjectPromptResult(Accepted: true, SessionId: SessionId),
+            new IdeInjectPromptResult(true, SessionId),
             IdeJsonContext.Default.IdeInjectPromptResult);
     }
 
@@ -153,7 +184,7 @@ public sealed class IdeSessionBridge : IAsyncDisposable
 
     private async Task<JsonElement?> AbortAsync(CancellationToken requestCt)
     {
-        Result result = await _client.AbortAgentAsync(requestCt).ConfigureAwait(false);
+        var result = await _client.AbortAgentAsync(requestCt).ConfigureAwait(false);
         return JsonSerializer.SerializeToElement(new IdeAbortResult(Requested: result.IsSuccess), IdeJsonContext.Default.IdeAbortResult);
     }
 
@@ -164,7 +195,7 @@ public sealed class IdeSessionBridge : IAsyncDisposable
         var runCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
         runCts.CancelAfter(_options.RunTimeout);
 
-        Task run = Task.Run(() => RunPromptAsync(prompt, runCts), CancellationToken.None);
+        var run = Task.Run(() => RunPromptAsync(prompt, runCts), CancellationToken.None);
         lock (_sync)
         {
             _runs.RemoveAll(static r => r.Run.IsCompleted);
@@ -230,10 +261,10 @@ public sealed class IdeSessionBridge : IAsyncDisposable
     {
         try
         {
-            await foreach (HarborEvent evt in _client.SubscribeToEventsAsync(ct).ConfigureAwait(false))
+            await foreach (var evt in _client.SubscribeToEventsAsync(ct).ConfigureAwait(false))
             {
                 if (Volatile.Read(ref _streamSubscribed) == 0) continue;
-                if (MapEvent(evt) is not { } notification) continue;
+                if (MapEvent(evt) is not {} notification) continue;
                 await PushNotificationAsync(IdeNotifications.Stream, notification, ct).ConfigureAwait(false);
             }
         }
@@ -249,22 +280,22 @@ public sealed class IdeSessionBridge : IAsyncDisposable
 
     private IdeStreamNotification? MapEvent(HarborEvent evt) => evt switch
     {
-        HarborEvent.AgentStarted s => new(SessionId: s.SessionId, Kind: IdeStreamKinds.AgentStart),
-        HarborEvent.MessageUpdate u => new(u.Partial.SessionId, IdeStreamKinds.MessageDelta, Delta: u.Delta),
-        HarborEvent.MessageEnd e => new(e.Final.SessionId, IdeStreamKinds.MessageEnd, Text: ConcatText(e.Final)),
-        HarborEvent.ToolStart t => new(SessionId, IdeStreamKinds.ToolStart, ToolCallId: t.ToolCallId, ToolName: t.ToolName),
-        HarborEvent.ToolEnd t => new(SessionId, IdeStreamKinds.ToolEnd, ToolCallId: t.ToolCallId, Ok: !t.Result.IsError),
-        HarborEvent.TurnStart t => new(SessionId, IdeStreamKinds.TurnStart, Turn: t.Turn),
-        HarborEvent.TurnEnd t => new(SessionId, IdeStreamKinds.TurnEnd, Turn: t.Turn),
-        HarborEvent.AgentEnded s => new(s.SessionId, IdeStreamKinds.AgentEnd),
-        HarborEvent.AgentError e => new(SessionId, IdeStreamKinds.AgentError, Error: e.Message),
+        HarborEvent.AgentStarted s => new IdeStreamNotification(s.SessionId, IdeStreamKinds.AgentStart),
+        HarborEvent.MessageUpdate u => new IdeStreamNotification(u.Partial.SessionId, IdeStreamKinds.MessageDelta, u.Delta),
+        HarborEvent.MessageEnd e => new IdeStreamNotification(e.Final.SessionId, IdeStreamKinds.MessageEnd, Text: ConcatText(e.Final)),
+        HarborEvent.ToolStart t => new IdeStreamNotification(SessionId, IdeStreamKinds.ToolStart, ToolCallId: t.ToolCallId, ToolName: t.ToolName),
+        HarborEvent.ToolEnd t => new IdeStreamNotification(SessionId, IdeStreamKinds.ToolEnd, ToolCallId: t.ToolCallId, Ok: !t.Result.IsError),
+        HarborEvent.TurnStart t => new IdeStreamNotification(SessionId, IdeStreamKinds.TurnStart, Turn: t.Turn),
+        HarborEvent.TurnEnd t => new IdeStreamNotification(SessionId, IdeStreamKinds.TurnEnd, Turn: t.Turn),
+        HarborEvent.AgentEnded s => new IdeStreamNotification(s.SessionId, IdeStreamKinds.AgentEnd),
+        HarborEvent.AgentError e => new IdeStreamNotification(SessionId, IdeStreamKinds.AgentError, Error: e.Message),
         _ => null // compaction events stay TUI-internal; not part of the editor stream
     };
 
     private static string ConcatText(AssistantMessage message)
     {
-        var sb = new System.Text.StringBuilder();
-        foreach (ContentPart part in message.Parts)
+        var sb = new StringBuilder();
+        foreach (var part in message.Parts)
         {
             if (part is TextPart text) _ = sb.Append(text.Text);
         }
@@ -276,7 +307,7 @@ public sealed class IdeSessionBridge : IAsyncDisposable
     {
         try
         {
-            JsonElement element = payload switch
+            var element = payload switch
             {
                 IdeStreamNotification n => JsonSerializer.SerializeToElement(n, IdeJsonContext.Default.IdeStreamNotification),
                 IdePromptErrorNotification n => JsonSerializer.SerializeToElement(n, IdeJsonContext.Default.IdePromptErrorNotification),
@@ -306,36 +337,5 @@ public sealed class IdeSessionBridge : IAsyncDisposable
         {
             throw new IdeRpcException(IdeRpcException.InvalidParams, $"Malformed params: {ex.Message}");
         }
-    }
-
-    // ── Dispose ────────────────────────────────────────────────────────────
-
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-
-        await _lifetimeCts.CancelAsync().ConfigureAwait(false);
-
-        Task[] pending;
-        lock (_sync)
-        {
-            pending = [.. _runs.Select(r => r.Run), _eventPump ?? Task.CompletedTask];
-            _runs.Clear();
-        }
-
-        if (pending.Length > 0)
-        {
-            try
-            {
-                await Task.WhenAll(pending).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "IDE bridge: in-flight work did not drain within the grace window");
-            }
-        }
-
-        _lifetimeCts.Dispose();
-        await _server.DisposeAsync().ConfigureAwait(false);
     }
 }

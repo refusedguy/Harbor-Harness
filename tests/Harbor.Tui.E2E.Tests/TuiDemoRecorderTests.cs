@@ -1,7 +1,4 @@
 using Harbor.E2E.Framework;
-using TUnit.Core;
-using TUnit.Core.Enums;
-
 namespace Harbor.Tui.E2E.Tests;
 
 /// <summary>
@@ -34,12 +31,12 @@ public class TuiDemoRecorderTests
             ("hero", "ansi", "assets/demo/hero-compressed.gif"),
             ("markdown", "ansi", "assets/demo/markdown-compressed.gif"),
             ("approval", "ansi", "assets/demo/approval-compressed.gif"),
-            ("hero", "plain", "assets/demo/plain-compressed.gif"),
+            ("hero", "plain", "assets/demo/plain-compressed.gif")
         };
 
-        foreach (var (scene, tui, output) in recordings)
+        foreach ((string scene, string tui, string output) in recordings)
         {
-            TuiDemoRecording recording = await TuiDemoRecorder.RecordAsync(new TuiDemoRecordingOptions
+            var recording = await TuiDemoRecorder.RecordAsync(new TuiDemoRecordingOptions
             {
                 Scene = scene,
                 TuiName = tui,

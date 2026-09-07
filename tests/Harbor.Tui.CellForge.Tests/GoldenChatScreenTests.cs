@@ -1,12 +1,11 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Full chat-screen golden (CE-3 W2.4): timeline feed above, live composer
-/// below, status footer at the bottom — one LayoutTree, one frame pipeline.
+///     Full chat-screen golden (CE-3 W2.4): timeline feed above, live composer
+///     below, status footer at the bottom — one LayoutTree, one frame pipeline.
 /// </summary>
 public class GoldenChatScreenTests
 {
@@ -14,7 +13,7 @@ public class GoldenChatScreenTests
     public async Task ChatScreen_ThreeZones_Golden()
     {
         var backend = new RecordingBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var writer = new AnsiWriter(backend, true);
         var session = new ScreenSession(writer, 64, 14);
 
         var composer = new ComposerController();
@@ -22,7 +21,7 @@ public class GoldenChatScreenTests
         var status = new StatusViewModel
         {
             Model = "kilocode/hy3",
-            Mode = StatusBarMode.Running,
+            Mode = StatusBarMode.Running
         };
         status.SetContext(4300, 10_000);
         status.SetUsage(12_400, 5_200, 0.0021m);
@@ -52,9 +51,9 @@ public class GoldenChatScreenTests
 
         // Zone sanity: prompt text on a lower row, model id on the bottom row.
         string art = GridDump.Art(session.Back);
-        var rows = art.Split('\n');
-        await Assert.That(rows.Any(r => r.Contains("fix the bug"))).IsTrue();          // composer zone
+        string[] rows = art.Split('\n');
+        await Assert.That(rows.Any(r => r.Contains("fix the bug"))).IsTrue(); // composer zone
         await Assert.That(rows.Any(r => r.StartsWith('⠙') || r.StartsWith('⠸'))).IsTrue(); // spinner glyph
-        await Assert.That(rows[^2].Contains("kilocode/hy3")).IsTrue();                 // status row
+        await Assert.That(rows[^2].Contains("kilocode/hy3")).IsTrue(); // status row
     }
 }

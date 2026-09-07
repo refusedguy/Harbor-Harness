@@ -1,5 +1,4 @@
 using Harbor.App.Cli.Configuration;
-using Harbor.Application.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

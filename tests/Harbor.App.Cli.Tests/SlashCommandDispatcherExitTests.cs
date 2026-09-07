@@ -12,7 +12,6 @@ using Harbor.Terminal.Abstractions.Renderers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.App.Cli.Tests;
 
 /// <summary>
@@ -48,7 +47,7 @@ public class SlashCommandDispatcherExitTests
     [Test]
     public async Task HandleAsync_Exit_ReturnsQuitSignalWithZeroExitCode()
     {
-        SlashCommandOutcome outcome = await DispatchAsync("/exit");
+        var outcome = await DispatchAsync("/exit");
         await Assert.That(outcome.ShouldQuit).IsTrue();
         await Assert.That(outcome.ExitCode).IsEqualTo(0);
     }
@@ -56,7 +55,7 @@ public class SlashCommandDispatcherExitTests
     [Test]
     public async Task HandleAsync_Quit_ReturnsQuitSignalWithZeroExitCode()
     {
-        SlashCommandOutcome outcome = await DispatchAsync("/quit");
+        var outcome = await DispatchAsync("/quit");
         await Assert.That(outcome.ShouldQuit).IsTrue();
         await Assert.That(outcome.ExitCode).IsEqualTo(0);
     }
@@ -64,21 +63,21 @@ public class SlashCommandDispatcherExitTests
     [Test]
     public async Task HandleAsync_Help_DoesNotRequestQuit()
     {
-        SlashCommandOutcome outcome = await DispatchAsync("/help");
+        var outcome = await DispatchAsync("/help");
         await Assert.That(outcome.ShouldQuit).IsFalse();
     }
 
     [Test]
     public async Task HandleAsync_UnknownCommand_DoesNotRequestQuit()
     {
-        SlashCommandOutcome outcome = await DispatchAsync("/definitely-not-a-command");
+        var outcome = await DispatchAsync("/definitely-not-a-command");
         await Assert.That(outcome.ShouldQuit).IsFalse();
     }
 
     [Test]
     public async Task HandleAsync_EmptyInput_DoesNotRequestQuit()
     {
-        SlashCommandOutcome outcome = await DispatchAsync("/");
+        var outcome = await DispatchAsync("/");
         await Assert.That(outcome.ShouldQuit).IsFalse();
     }
 
@@ -107,7 +106,7 @@ public class SlashCommandDispatcherExitTests
 
         public Task<Result> ClearAsync(CancellationToken ct = default) => Task.FromResult(Result.Success());
 
-        public void Dispose() { }
+        public void Dispose() {}
     }
 
     private sealed class FakeAgent : IAgent
@@ -126,18 +125,18 @@ public class SlashCommandDispatcherExitTests
 
         public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
 
-        public void ResetAbortSource() { }
+        public void ResetAbortSource() {}
 
-        public void Initialize(Session session, AgentDefinition agent) { }
+        public void Initialize(Session session, AgentDefinition agent) {}
 
-        public void Steer(AgentMessage message) { }
+        public void Steer(AgentMessage message) {}
 
 
-        public void Dispose() { }
+        public void Dispose() {}
 
         private sealed class NopDisposable : IDisposable
         {
-            public void Dispose() { }
+            public void Dispose() {}
         }
     }
 
@@ -166,7 +165,7 @@ public class SlashCommandDispatcherExitTests
         public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default) =>
             Task.FromResult(Result.Failure<IReadOnlyList<ModelInfo>>("No providers registered in tests."));
 
-        public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
+        public void Register(ProviderId providerId, Func<ILlmClient> factory) {}
 
         public Result Unregister(ProviderId providerId) => Result.Failure("Unregistration is not supported in tests.");
     }

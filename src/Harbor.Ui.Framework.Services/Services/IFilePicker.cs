@@ -1,4 +1,5 @@
 namespace Harbor.Ui.Framework.Services;
+
 /// <summary>
 ///     Cross-platform file-picker contract. Each platform implements this with
 ///     its own native picker (Avalonia <c>IStorageProvider</c>, WPF

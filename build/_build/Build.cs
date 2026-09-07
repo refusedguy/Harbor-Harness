@@ -1,11 +1,12 @@
-using System.Diagnostics;
 using Harbor.Build.Components;
 using Harbor.Build.Meta;
 using Harbor.Build.Targets;
 using Nuke.Common;
 using Nuke.Common.IO;
 using Nuke.Common.ProjectModel;
+using System.Diagnostics;
 namespace Harbor.Build;
+
 /// <summary>
 ///     NUKE build entry point for the Harbor solution.
 /// </summary>
@@ -34,16 +35,32 @@ internal class Build : NukeBuild
 {
     [Parameter("App name to publish (default Harbor.App.Cli)")] private readonly string AppName = "Harbor.App.Cli";
     [Parameter("Archive format (None, TarGz, Zip)")] private readonly ArchiveFormat Archive = ArchiveFormat.None;
+    [Parameter("Comma-separated doctor check ids to run (default: all)")]
+    private readonly string? Check;
 
     // ── Build settings parameters ───────────────────────────────────────────
     [Parameter("Configuration: Debug or Release")] private readonly BuildConfiguration Configuration = BuildConfiguration.Release;
+    [Parameter("Show the plan (argv + planned artifacts) without executing")]
+    private readonly bool DryRun;
+
+    // ── Meta command parameters ─────────────────────────────────────────────
+    [Parameter("Output format: Pretty (human) or Json (JSON-lines on stdout)")]
+    private readonly OutputFormat Format = OutputFormat.Pretty;
+    [Parameter("Include Publish commands in the 'what' plan for app changes")]
+    private readonly bool IncludePublish;
     [Parameter("Minimal build — shorthand for all of the above = false")] private readonly bool Minimal;
+    [Parameter("Duplicate the machine-readable stream to this file")]
+    private readonly string? Out;
+    [Parameter("Path for the 'what' command (file or directory)")]
+    private readonly string? Path;
     [Parameter("GitHub repo (owner/name) for the Release target")] private readonly string ReleaseRepo = "harbor-sh/harbor";
     [Parameter("Release tag (e.g. v0.7.0) for the Release target")] private readonly string ReleaseTag = string.Empty;
     [Parameter("Runtime identifier (default linux-x64)")] private readonly string Runtime = "linux-x64";
 
     // ── Solution / paths ────────────────────────────────────────────────────
     [Solution("Harbor.slnx")] private readonly Solution Solution;
+    [Parameter("Exit 4 when 'what' confidence is low")]
+    private readonly bool Strict;
     [Parameter("Target framework (default net10.0)")] private readonly string TargetFramework = "net10.0";
 
     // ── Publish / Release parameters ────────────────────────────────────────
@@ -58,27 +75,11 @@ internal class Build : NukeBuild
     [Parameter("Include scripting (Jint JS engine) — not AOT-compatible")] private readonly bool WithScripting = true;
     [Parameter("Include Spectre.TUI interactive renderer — not AOT-compatible")]
     private readonly bool WithSpectreTui = true;
-
-    // ── Meta command parameters ─────────────────────────────────────────────
-    [Parameter("Output format: Pretty (human) or Json (JSON-lines on stdout)")]
-    private readonly OutputFormat Format = OutputFormat.Pretty;
-    [Parameter("Show the plan (argv + planned artifacts) without executing")]
-    private readonly bool DryRun;
-    [Parameter("Duplicate the machine-readable stream to this file")]
-    private readonly string? Out;
-    [Parameter("Path for the 'what' command (file or directory)")]
-    private readonly string? Path;
-    [Parameter("Exit 4 when 'what' confidence is low")]
-    private readonly bool Strict;
-    [Parameter("Include Publish commands in the 'what' plan for app changes")]
-    private readonly bool IncludePublish;
-    [Parameter("Comma-separated doctor check ids to run (default: all)")]
-    private readonly string? Check;
-
-    private TextWriter? _realStdout;
-    private BuildOutput? _output;
     private readonly HashSet<string> _invokedTargets =
         TargetCatalog.ParseInvokedTargetNames(Environment.GetCommandLineArgs());
+    private BuildOutput? _output;
+
+    private TextWriter? _realStdout;
 
     private ArtifactPathResolver Resolver => new(RootDirectory, ArtifactsDirectory);
     private AbsolutePath ArtifactsDirectory => RootDirectory / "artifacts";
@@ -111,89 +112,6 @@ internal class Build : NukeBuild
     private PublishVariantBuilder VariantBuilder => new(Settings, Configurator);
     private ArchiveBuilder Archiver => new();
     private GitHubReleaseUploader Uploader => new();
-
-    // ── Lifecycle hooks: stream routing + final run_end ─────────────────────
-    protected override void OnBuildCreated()
-    {
-        // Capture the real stdout before anything can re-point Console.Out.
-        _realStdout = Console.Out;
-        base.OnBuildCreated();
-    }
-
-    protected override void OnBuildInitialized()
-    {
-        if (Format == OutputFormat.Json)
-        {
-            // Machine lines flow through the captured stdout; everything else
-            // (NUKE/msbuild/human noise) goes to stderr from here on.
-            Console.SetOut(Console.Error);
-            NoLogo = true;
-            Verbosity = Nuke.Common.Verbosity.Minimal;
-        }
-        base.OnBuildInitialized();
-    }
-
-    protected override void OnBuildFinished()
-    {
-        try
-        {
-            var output = Output;
-            var failed = output.FailedTargets;
-            var status = DryRun && failed.Count == 0 ? "planned"
-                : failed.Count > 0 ? "failed"
-                : "success";
-            var exitCode = ExitCode ?? (failed.Count > 0 ? 1 : 0);
-            output.RunEnd(status, failed, exitCode);
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"run_end emission failed: {ex.Message}");
-        }
-        base.OnBuildFinished();
-    }
-
-    // ── Target wrapper: events + failure bookkeeping ────────────────────────
-    private void Run(string name, Action body)
-    {
-        var output = Output;
-        output.TargetStart(name);
-        var stopwatch = Stopwatch.StartNew();
-        try
-        {
-            body();
-            output.TargetEnd(name, TargetStatus(name), stopwatch.ElapsedMilliseconds);
-        }
-        catch (Exception ex)
-        {
-            output.MarkFailed(name);
-            output.TargetEnd(name, "failed", stopwatch.ElapsedMilliseconds);
-            output.Error(name, ex.Message);
-            throw;
-        }
-    }
-
-    private async Task RunAsync(string name, Func<Task> body)
-    {
-        var output = Output;
-        output.TargetStart(name);
-        var stopwatch = Stopwatch.StartNew();
-        try
-        {
-            await body();
-            output.TargetEnd(name, TargetStatus(name), stopwatch.ElapsedMilliseconds);
-        }
-        catch (Exception ex)
-        {
-            output.MarkFailed(name);
-            output.TargetEnd(name, "failed", stopwatch.ElapsedMilliseconds);
-            output.Error(name, ex.Message);
-            throw;
-        }
-    }
-
-    private string TargetStatus(string name) => DryRun
-        ? _invokedTargets.Contains(name) ? "planned" : "skipped-dryrun"
-        : "success";
 
     // ── Targets ─────────────────────────────────────────────────────────────
     private Target Clean => _ => _.Before(Restore)
@@ -267,7 +185,7 @@ internal class Build : NukeBuild
         .Executes(() => Run("Doctor", () =>
         {
             var filter = ParseCheckFilter();
-            if (filter is { } parsedFilter && parsedFilter.Unknown.Count > 0)
+            if (filter is {} parsedFilter && parsedFilter.Unknown.Count > 0)
             {
                 Output.Error("Doctor",
                     $"unknown check id(s): {string.Join(", ", parsedFilter.Unknown)}. " +
@@ -313,13 +231,96 @@ internal class Build : NukeBuild
             }
         }));
 
+    // ── Lifecycle hooks: stream routing + final run_end ─────────────────────
+    protected override void OnBuildCreated()
+    {
+        // Capture the real stdout before anything can re-point Console.Out.
+        _realStdout = Console.Out;
+        base.OnBuildCreated();
+    }
+
+    protected override void OnBuildInitialized()
+    {
+        if (Format == OutputFormat.Json)
+        {
+            // Machine lines flow through the captured stdout; everything else
+            // (NUKE/msbuild/human noise) goes to stderr from here on.
+            Console.SetOut(Console.Error);
+            NoLogo = true;
+            Verbosity = Verbosity.Minimal;
+        }
+        base.OnBuildInitialized();
+    }
+
+    protected override void OnBuildFinished()
+    {
+        try
+        {
+            var output = Output;
+            var failed = output.FailedTargets;
+            string status = DryRun && failed.Count == 0 ? "planned"
+                : failed.Count > 0 ? "failed"
+                : "success";
+            int exitCode = ExitCode ?? (failed.Count > 0 ? 1 : 0);
+            output.RunEnd(status, failed, exitCode);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"run_end emission failed: {ex.Message}");
+        }
+        base.OnBuildFinished();
+    }
+
+    // ── Target wrapper: events + failure bookkeeping ────────────────────────
+    private void Run(string name, Action body)
+    {
+        var output = Output;
+        output.TargetStart(name);
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            body();
+            output.TargetEnd(name, TargetStatus(name), stopwatch.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            output.MarkFailed(name);
+            output.TargetEnd(name, "failed", stopwatch.ElapsedMilliseconds);
+            output.Error(name, ex.Message);
+            throw;
+        }
+    }
+
+    private async Task RunAsync(string name, Func<Task> body)
+    {
+        var output = Output;
+        output.TargetStart(name);
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            await body();
+            output.TargetEnd(name, TargetStatus(name), stopwatch.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            output.MarkFailed(name);
+            output.TargetEnd(name, "failed", stopwatch.ElapsedMilliseconds);
+            output.Error(name, ex.Message);
+            throw;
+        }
+    }
+
+    private string TargetStatus(string name) => DryRun
+        ? _invokedTargets.Contains(name) ? "planned" : "skipped-dryrun"
+        : "success";
+
     private (HashSet<string>? Ids, List<string> Unknown)? ParseCheckFilter()
     {
         if (string.IsNullOrWhiteSpace(Check))
         {
             return null;
         }
-        var ids = Check.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string[] ids = Check.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var unknown = ids
             .Where(id => !DoctorChecks.AllCheckIds.Contains(id, StringComparer.Ordinal))
             .ToList();
@@ -338,22 +339,22 @@ internal class Build : NukeBuild
         {
             byPath[project.Path.ToString()] = new ImpactProject(project.Name, project.Path.ToString());
         }
-        foreach (var relativeRoot in new[] { "src", "apps", "tests" })
+        foreach (string relativeRoot in new[] { "src", "apps", "tests" })
         {
             var absoluteRoot = RootDirectory / relativeRoot;
             if (!Directory.Exists(absoluteRoot))
             {
                 continue;
             }
-            foreach (var csproj in Directory.EnumerateFiles(absoluteRoot, "*.csproj", SearchOption.AllDirectories))
+            foreach (string csproj in Directory.EnumerateFiles(absoluteRoot, "*.csproj", SearchOption.AllDirectories))
             {
-                var normalized = csproj.Replace('\\', '/');
+                string normalized = csproj.Replace('\\', '/');
                 if (normalized.Contains("/bin/", StringComparison.Ordinal) ||
                     normalized.Contains("/obj/", StringComparison.Ordinal))
                 {
                     continue;
                 }
-                var name = System.IO.Path.GetFileNameWithoutExtension(csproj);
+                string name = System.IO.Path.GetFileNameWithoutExtension(csproj);
                 byPath.TryAdd(normalized, new ImpactProject(name, normalized));
             }
         }

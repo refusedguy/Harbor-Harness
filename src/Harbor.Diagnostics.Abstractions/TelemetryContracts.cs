@@ -8,13 +8,13 @@ namespace Harbor.Diagnostics;
 public interface ITelemetrySpan : IDisposable
 {
     /// <summary>False when the span is not being recorded (sampling off).</summary>
-    bool IsRecorded { get; }
+    public bool IsRecorded { get; }
 
     /// <summary>Attach an attribute (e.g. tool.name, model, session.id).</summary>
-    void SetTag(string key, object? value);
+    public void SetTag(string key, object? value);
 
     /// <summary>Mark the span as failed with an optional description.</summary>
-    void SetError(string? description = null);
+    public void SetError(string? description = null);
 }
 
 /// <summary>
@@ -29,7 +29,7 @@ public interface ITracer
     ///     "tool.execute", "llm.stream", "agent.turn"). Returns null when
     ///     tracing is disabled entirely.
     /// </summary>
-    ITelemetrySpan? StartSpan(string name, params KeyValuePair<string, object?>[] tags);
+    public ITelemetrySpan? StartSpan(string name, params KeyValuePair<string, object?>[] tags);
 }
 
 /// <summary>
@@ -40,8 +40,8 @@ public interface ITracer
 public interface IMetrics
 {
     /// <summary>Add <paramref name="value" /> to a monotonically increasing counter.</summary>
-    void Counter(string name, double value = 1, params KeyValuePair<string, object?>[] tags);
+    public void Counter(string name, double value = 1, params KeyValuePair<string, object?>[] tags);
 
     /// <summary>Record a value into a distribution histogram (duration ms, token counts, context size).</summary>
-    void Histogram(string name, double value, params KeyValuePair<string, object?>[] tags);
+    public void Histogram(string name, double value, params KeyValuePair<string, object?>[] tags);
 }

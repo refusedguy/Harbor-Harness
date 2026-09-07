@@ -1,20 +1,10 @@
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Tools;
+using Harbor.Abstractions.Lsp;
+using Harbor.Lsp;
 using Harbor.Telemetry;
 #if HARBOR_WITH_PLUGINS
 using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Compilation;
-using Harbor.Plugins.Hosting;
-using Harbor.Plugins.Instantiation;
-using Harbor.Plugins.Registration;
 using Harbor.Plugins.Storage;
 #endif
-using Harbor.Ui.Framework.Panels;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 // DI014/DI016 (Excubo): the registries are eager artifacts — plugins mutate
 // them before Freeze, so a temporary provider is constructed deliberately to
@@ -42,20 +32,20 @@ internal static class RegistriesModule
         // (ISessionStore — registered later in AddHarborStorage; IAgentLoop — DI-built)
         // only exist inside the container. The deferred forwarder closes that gap: the
         // tool holds it now, the real runner attaches on first resolution (F4-decouple).
-        var subAgents = new Harbor.Application.Agents.DeferredSubAgentRunner();
+        var subAgents = new DeferredSubAgentRunner();
         // LSP facade: one manager for the whole process — the `lsp` tool and the
         // desktop editor share the same auto-spawned language servers + cache.
-        var lspService = new Harbor.Lsp.LspManager(
-            ctx.LoggerFactory.CreateLogger<Harbor.Lsp.LspManager>());
-        services.AddSingleton<Harbor.Abstractions.Lsp.ILspService>(lspService);
+        var lspService = new LspManager(
+            ctx.LoggerFactory.CreateLogger<LspManager>());
+        services.AddSingleton<ILspService>(lspService);
         var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents, lspService);
-        services.AddSingleton<Harbor.Abstractions.Agents.ISubAgentRunner>(sp =>
+        services.AddSingleton<ISubAgentRunner>(sp =>
         {
-            var real = new Harbor.Application.Agents.SubAgentRunner(
-                sp.GetRequiredService<Harbor.Abstractions.Sessions.ISessionStore>(),
-                sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentLoop>(),
-                sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
-                    .CreateLogger<Harbor.Application.Agents.SubAgentRunner>());
+            var real = new SubAgentRunner(
+                sp.GetRequiredService<ISessionStore>(),
+                sp.GetRequiredService<IAgentLoop>(),
+                sp.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger<SubAgentRunner>());
             subAgents.Attach(real);
             return real;
         });
@@ -80,7 +70,7 @@ internal static class RegistriesModule
         services.AddSingleton<IProviderRegistry>(new InstrumentedProviderRegistry(
             providerRegistry, MeterMetrics.Instance, ActivityTracer.Instance));
         services.AddSingleton<IAgentRegistry>(agentRegistry);
-        services.AddSingleton<IMcpRegistry>(mcpRegistry);
+        services.AddSingleton(mcpRegistry);
         services.AddSingleton(panelRegistry);
         services.AddSingleton<IPanelRegistry>(panelRegistry);
 
@@ -98,7 +88,7 @@ internal static class RegistriesModule
         services.AddSingleton(sp => new PluginAutoReloader(
             sp.GetRequiredService<PluginReloadService>(),
             ctx.Options.HarborDir,
-            autoReloadEnabled: ctx.Harbor.Tooling.AutoReloadPlugins,
+            ctx.Harbor.Tooling.AutoReloadPlugins,
             sp.GetRequiredService<ILoggerFactory>()));
 #endif
 
@@ -135,8 +125,8 @@ internal static class RegistriesModule
             panelRegistry,
             globalPluginsDir,
             projectPluginsDir,
-            trustPrompt: null,
-            capabilityPrompt: interactive
+            null,
+            interactive
                 ? (script, declared) => PromptForPluginCapabilitiesAsync(script, declared, ctx.Logger)
                 : null);
 
@@ -194,7 +184,7 @@ internal static class RegistriesModule
         }
 
         int index = 0;
-        foreach (PluginCapability capability in declared)
+        foreach (var capability in declared)
         {
             index++;
             Console.Write($"  [{index}/{declared.Count}] {PluginCapabilities.ToName(capability)} [y/N] ");

@@ -1,54 +1,32 @@
-using Harbor.Tui.CellForge.Rendering;
-using Harbor.Ui.Framework.Rendering.Markdown;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Live streaming assistant block (codex stream-cell): wraps a
-/// <see cref="StreamingMarkdownRenderer"/>, re-renders its tail on every
-/// layout pass and paints styled markdown lines into the grid. Committed by
-/// swapping this slot for an <see cref="AssistantMarkdownBlock"/>.
+///     Live streaming assistant block (codex stream-cell): wraps a
+///     <see cref="StreamingMarkdownRenderer" />, re-renders its tail on every
+///     layout pass and paints styled markdown lines into the grid. Committed by
+///     swapping this slot for an <see cref="AssistantMarkdownBlock" />.
 /// </summary>
 public sealed class StreamingMarkdownBlock : IChatBlock
 {
     private readonly StreamingMarkdownRenderer _renderer = new();
     private int _lastRenderWidth;
 
-    public StreamingMarkdownBlock() { }
+    public StreamingMarkdownBlock() {}
 
     /// <summary>Test seam: start from pre-accumulated text.</summary>
-    public StreamingMarkdownBlock(StreamingMarkdownRenderer renderer) =>
+    public StreamingMarkdownBlock(StreamingMarkdownRenderer renderer)
+    {
         _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
-
-    private int EffectiveWidth(int requested)
-    {
-        if (requested > 0)
-        {
-            return requested;
-        }
-
-        return _lastRenderWidth > 0 ? _lastRenderWidth : 80;
     }
 
-    private void EnsureRendered(int width)
-    {
-        _lastRenderWidth = EffectiveWidth(width);
-        _ = _renderer.RenderTail(_lastRenderWidth);
-    }
+    public bool IsLive => !_renderer.IsComplete;
 
     public string Kind => "stream";
 
     public bool IsStreamContinuation => true;
 
-    public int BudgetBytes => 96 + (_renderer.Checkpoint.SourceChars * 2);
-
-    public bool IsLive => !_renderer.IsComplete;
-
-    public void Push(ReadOnlySpan<char> chunk) => _renderer.Push(chunk);
-
-    public void Complete() => _renderer.Complete();
-
-    public override string ToString() => $"stream({_renderer.LineCount} lines)";
+    public int BudgetBytes => 96 + _renderer.Checkpoint.SourceChars * 2;
 
     public BlockMeasure Measure(int width)
     {
@@ -71,7 +49,7 @@ public sealed class StreamingMarkdownBlock : IChatBlock
     public string RawText()
     {
         EnsureRendered(_lastRenderWidth);
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         for (int i = 0; i < _renderer.LineCount; i++)
         {
             foreach (var s in _renderer.LineAt(i).Spans)
@@ -84,4 +62,26 @@ public sealed class StreamingMarkdownBlock : IChatBlock
 
         return sb.ToString();
     }
+
+    private int EffectiveWidth(int requested)
+    {
+        if (requested > 0)
+        {
+            return requested;
+        }
+
+        return _lastRenderWidth > 0 ? _lastRenderWidth : 80;
+    }
+
+    private void EnsureRendered(int width)
+    {
+        _lastRenderWidth = EffectiveWidth(width);
+        _ = _renderer.RenderTail(_lastRenderWidth);
+    }
+
+    public void Push(ReadOnlySpan<char> chunk) => _renderer.Push(chunk);
+
+    public void Complete() => _renderer.Complete();
+
+    public override string ToString() => $"stream({_renderer.LineCount} lines)";
 }

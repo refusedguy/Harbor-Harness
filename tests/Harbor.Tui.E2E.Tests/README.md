@@ -20,7 +20,7 @@ dotnet test tests/Harbor.Tui.E2E.Tests --filter "FullyQualifiedName~E2E"
 
 ## Layer
 
-Tests — depends on the project(s) under test + TUnit (test framework). No production code.
+Tests — depends on the project (s) under test + TUnit (test framework). No production code.
 
 ## See also
 

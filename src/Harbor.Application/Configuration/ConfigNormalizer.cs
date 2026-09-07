@@ -1,4 +1,5 @@
 namespace Harbor.Application.Configuration;
+
 /// <summary>
 ///     Normalizes a <see cref="RawConfigDto" /> (which may carry legacy
 ///     <c>CommonConfig</c> aliases) into a canonical <see cref="HarborConfig" />.
@@ -53,7 +54,7 @@ public static class ConfigNormalizer
             .Where(static s => !string.IsNullOrEmpty(s))
             .Or(() => Maybe.From(fallback).Where(static s => !string.IsNullOrEmpty(s)));
 
-        return candidate.TryGetValue(out var value) ? value : null;
+        return candidate.TryGetValue(out string? value) ? value : null;
     }
 
     private static Result SetProvider(HarborConfig config, string? providerStr)
@@ -110,7 +111,7 @@ public static class ConfigNormalizer
             raw.Storage ?? raw.StorageBackend ?? PresentationConfig.Default.Storage,
             raw.Onboarded ?? raw.OnboardingCompleted ?? PresentationConfig.Default.Onboarded)
         {
-            CellForge = raw.Ui?.CellForge ?? raw.CellForge ?? CellForgeUiConfig.Default,
+            CellForge = raw.Ui?.CellForge ?? raw.CellForge ?? CellForgeUiConfig.Default
         };
     }
 

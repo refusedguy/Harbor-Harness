@@ -1,10 +1,9 @@
 using Harbor.Abstractions.Models;
-
 namespace Harbor.Abstractions.Sessions;
 
 public interface ITokenTracker
 {
-    void RecordTurnUsage(Usage usage);
+    public void RecordTurnUsage(Usage usage);
 
     /// <summary>
     ///     Records a message that was appended to the session history so the tracker can
@@ -17,15 +16,15 @@ public interface ITokenTracker
     ///     <see cref="ShouldCompact" /> already uses.
     /// </remarks>
     /// <param name="message">The message that was appended to the history.</param>
-    void RecordAppendedMessage(AgentMessage message)
+    public void RecordAppendedMessage(AgentMessage message)
     {
     }
 
-    int Estimate(string text);
-    int EstimateMessage(AgentMessage message);
-    int EstimateTokens(IReadOnlyList<AgentMessage> messages);
-    bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model);
-    TokenStats GetStats();
+    public int Estimate(string text);
+    public int EstimateMessage(AgentMessage message);
+    public int EstimateTokens(IReadOnlyList<AgentMessage> messages);
+    public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model);
+    public TokenStats GetStats();
 }
 
 public sealed record TokenStats(int TotalInputTokens, int TotalOutputTokens, int? TotalReasoningTokens, int? TotalCacheReadTokens, int? TotalCacheWriteTokens);

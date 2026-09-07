@@ -1,16 +1,13 @@
-namespace Harbor.Tui.RendererTests;
-
 using Harbor.Tui.NickConsoleEx;
 using Harbor.Tui.RendererTests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
+namespace Harbor.Tui.RendererTests;
 
 /// <summary>
 ///     Golden-frame visual regression for the NickConsoleEx backend
 ///     (renderer-unification sprint Phase 5): the wrapper over the vendored
 ///     nickprotop/ConsoleEx renders onto a fixed 120x40
-///     <see cref="RecordingConsoleDriver"/> (headless + cell capture), and the
+///     <see cref="RecordingConsoleDriver" /> (headless + cell capture), and the
 ///     composed visible screen is pinned against a committed golden frame.
 /// </summary>
 public class NickConsoleExGoldenFrameTests
