@@ -1,7 +1,4 @@
 using Harbor.Tui.AnsiPlain;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Tui.Tests;
 
 public class TerminalQrRendererTests
@@ -32,10 +29,7 @@ public class TerminalQrRendererTests
     }
 
     [Test]
-    public async Task Render_ThrowsArgumentNullException_ForNullUri()
-    {
-        await Assert.That(() => TerminalQrRenderer.Render(null!)).Throws<ArgumentNullException>();
-    }
+    public async Task Render_ThrowsArgumentNullException_ForNullUri() => await Assert.That(() => TerminalQrRenderer.Render(null!)).Throws<ArgumentNullException>();
 
     [Test]
     public async Task Render_ContainsNewlines_ForMultiLineOutput()

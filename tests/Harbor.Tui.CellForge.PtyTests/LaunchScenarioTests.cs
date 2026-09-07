@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -16,7 +14,7 @@ public sealed class LaunchScenarioTests : CellForgePtyScenarioBase
     public async Task Launch_AltScreenFrame_WelcomeComposerStatusRendered()
     {
         VerboseLogging = true;
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
 
         // 1. Exact alt-screen entry prefix (REPL constants, design §5.2/§7).
         bool entered = await WaitForRawTextAsync(

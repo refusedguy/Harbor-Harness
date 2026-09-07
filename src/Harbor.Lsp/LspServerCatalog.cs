@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-
 namespace Harbor.Lsp;
 
 /// <summary>One builtin language server definition.</summary>
@@ -85,7 +84,7 @@ public sealed record LspServerDefinition(
     public static IReadOnlyList<LspServerDefinition> Builtin { get; } =
     [
         TypeScript, Python, Go, Rust, CSharp,
-        Clangd, Java, Html, Css, Json, Lua,
+        Clangd, Java, Html, Css, Json, Lua
     ];
 
     /// <summary>True when this server handles the file (by extension, case-insensitive).</summary>
@@ -102,8 +101,10 @@ public sealed record LspServerDefinition(
     }
 }
 
-/// <summary>LSP wire DTOs. Flat, explicit, and AOT-safe — all serialization goes
-/// through <see cref="LspJsonContext" /> (§PERF-002: no reflection serialization).</summary>
+/// <summary>
+///     LSP wire DTOs. Flat, explicit, and AOT-safe — all serialization goes
+///     through <see cref="LspJsonContext" /> (§PERF-002: no reflection serialization).
+/// </summary>
 public static class LspWire
 {
     /// <summary><c>initialize</c> request parameters.</summary>

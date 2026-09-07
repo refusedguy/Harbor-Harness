@@ -1,13 +1,9 @@
+using Harbor.Tools.Mcp;
+using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Tools.Mcp;
-using Microsoft.Extensions.Logging;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
@@ -23,12 +19,12 @@ public class McpRemoteTransportTests
     [Test]
     public async Task HttpTransport_JsonResponse_ReturnsMatchingFrame()
     {
-        using FakeServer server = FakeServer.Start();
+        using var server = FakeServer.Start();
         server.JsonResponder = static body => $$"""{"jsonrpc":"2.0","id":{{JsonDocument.Parse(body).RootElement.GetProperty("id").GetInt32()}},"result":{"tools":[]} }""";
 
         await using var transport = new McpHttpTransport(server.Url);
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":42,"method":"tools/list","params":{}}""");
-        using JsonDocument? response = await transport.RoundTripAsync(request.RootElement.Clone(), 42);
+        using var response = await transport.RoundTripAsync(request.RootElement.Clone(), 42);
 
         await Assert.That(response).IsNotNull();
         await Assert.That(response!.RootElement.GetProperty("id").GetInt32()).IsEqualTo(42);
@@ -38,21 +34,22 @@ public class McpRemoteTransportTests
     [Test]
     public async Task HttpTransport_Transient500_IsRetried()
     {
-        using FakeServer server = FakeServer.Start();
+        using var server = FakeServer.Start();
         server.QueueStatusCodes.AddRange([500, 200]);
         server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
 
         await using var transport = new McpHttpTransport(server.Url);
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
-        using JsonDocument? response = await transport.RoundTripAsync(request.RootElement.Clone(), 1);
+        using var response = await transport.RoundTripAsync(request.RootElement.Clone(), 1);
 
         await Assert.That(response).IsNotNull();
-        await Assert.That(server.HandledRequests).IsEqualTo(2);    }
+        await Assert.That(server.HandledRequests).IsEqualTo(2);
+    }
 
     [Test]
     public async Task HttpTransport_OAuthToken_IsAttachedAsBearer()
     {
-        using FakeServer server = FakeServer.Start();
+        using var server = FakeServer.Start();
         server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
 
         await using var transport = new McpHttpTransport(server.Url, oauthTokenProvider: _ => Task.FromResult<string?>("tok-123"));
@@ -65,7 +62,7 @@ public class McpRemoteTransportTests
     [Test]
     public async Task HttpTransport_SessionIdFromFirstResponse_IsReplayed()
     {
-        using FakeServer server = FakeServer.Start();
+        using var server = FakeServer.Start();
         server.SessionIdToAssign = "sess-7";
         server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
 
@@ -80,7 +77,7 @@ public class McpRemoteTransportTests
     [Test]
     public async Task HttpTransport_SseResponseStream_IsParsed()
     {
-        using FakeServer server = FakeServer.Start();
+        using var server = FakeServer.Start();
         server.SseResponseBody =
             """
             event: message
@@ -90,7 +87,7 @@ public class McpRemoteTransportTests
 
         await using var transport = new McpHttpTransport(server.Url);
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{}}""");
-        using JsonDocument? response = await transport.RoundTripAsync(request.RootElement.Clone(), 7);
+        using var response = await transport.RoundTripAsync(request.RootElement.Clone(), 7);
 
         await Assert.That(response).IsNotNull();
         await Assert.That(response!.RootElement.GetProperty("result").GetProperty("ok").GetBoolean()).IsTrue();
@@ -101,12 +98,12 @@ public class McpRemoteTransportTests
     [Test]
     public async Task SseTransport_EndpointAnnounce_ThenResponseFrame()
     {
-        using FakeServer server = FakeServer.Start();
+        using var server = FakeServer.Start();
         server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":3,"result":{"echo":true}}""";
 
         await using var transport = new McpSseTransport(new Uri(server.Url + "/sse"));
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}""");
-        using JsonDocument? response = await transport.RoundTripAsync(request.RootElement.Clone(), 3);
+        using var response = await transport.RoundTripAsync(request.RootElement.Clone(), 3);
 
         await Assert.That(response).IsNotNull();
         await Assert.That(response!.RootElement.GetProperty("result").GetProperty("echo").GetBoolean()).IsTrue();
@@ -118,7 +115,7 @@ public class McpRemoteTransportTests
     [Test]
     public async Task Registry_RemoteUrlConfig_InvokesOverHttp()
     {
-        using FakeServer server = FakeServer.Start();
+        using var server = FakeServer.Start();
         server.JsonResponder = static body =>
             $$"""{"jsonrpc":"2.0","id":{{JsonDocument.Parse(body).RootElement.GetProperty("id").GetInt32()}},"result":{"tools":[{"name":"echo"}] } }""";
 
@@ -126,19 +123,19 @@ public class McpRemoteTransportTests
         try
         {
             File.WriteAllText(tempFile, $$"""
-                {
-                    "mcpServers": {
-                        "remote": { "url": "{{server.Url}}", "transport": "http" }
-                    }
-                }
-                """);
+                                          {
+                                              "mcpServers": {
+                                                  "remote": { "url": "{{server.Url}}", "transport": "http" }
+                                              }
+                                          }
+                                          """);
 
-            var loggerFactory = LoggerFactory.Create(_ => { });
+            var loggerFactory = LoggerFactory.Create(_ => {});
             var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>());
             await Assert.That(registry.RegisterFromConfig(tempFile).IsSuccess).IsTrue();
 
             using var args = JsonDocument.Parse("{}");
-            Result<string> result = await registry.InvokeAsync("remote", "tools/list", args.RootElement);
+            var result = await registry.InvokeAsync("remote", "tools/list", args.RootElement);
             await Assert.That(result.IsSuccess).IsTrue();
             await Assert.That(result.Value).Contains("echo");
         }
@@ -151,7 +148,7 @@ public class McpRemoteTransportTests
     [Test]
     public async Task Registry_RegisterUrl_RejectsInvalidTransportAndUrl()
     {
-        var registry = new McpRegistry(null);
+        var registry = new McpRegistry();
         await Assert.That(registry.Register("a", "not-a-url", "http").IsSuccess).IsFalse();
         await Assert.That(registry.Register("b", "http://localhost/x", "grpc").IsSuccess).IsFalse();
         await Assert.That(registry.Register("c", "http://localhost/x", "sse").IsSuccess).IsTrue();
@@ -162,9 +159,18 @@ public class McpRemoteTransportTests
     /// <summary>Minimal HTTP fake: streamable-JSON, SSE-bodied and legacy-SSE MCP servers in one.</summary>
     private sealed class FakeServer : IDisposable
     {
-        private readonly HttpListener _listener;
-        private readonly CancellationTokenSource _cts = new(TimeSpan.FromSeconds(10));
         private readonly Task _acceptLoop;
+        private readonly CancellationTokenSource _cts = new(TimeSpan.FromSeconds(10));
+        private readonly HttpListener _listener;
+
+        private readonly TaskCompletionSource _postArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private FakeServer(HttpListener listener, Uri url)
+        {
+            _listener = listener;
+            Url = url;
+            _acceptLoop = Task.Run(AcceptLoopAsync);
+        }
 
         public Uri Url { get; }
         public List<int> QueueStatusCodes { get; } = [];
@@ -176,13 +182,18 @@ public class McpRemoteTransportTests
         public string? SseResponseBody { get; set; }
         public Func<string, string>? JsonResponder { get; set; }
 
-        private readonly TaskCompletionSource _postArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        private FakeServer(HttpListener listener, Uri url)
+        public void Dispose()
         {
-            _listener = listener;
-            Url = url;
-            _acceptLoop = Task.Run(AcceptLoopAsync);
+            _cts.Cancel();
+            try { _listener.Stop(); }
+            catch
+            { /* not started */
+            }
+            try { _acceptLoop.Wait(1000); }
+            catch
+            { /* loop ended */
+            }
+            _cts.Dispose();
         }
 
         public static FakeServer Start()
@@ -228,7 +239,7 @@ public class McpRemoteTransportTests
                 {
                     // Legacy SSE channel: announce the POST endpoint, then emit the response.
                     context.Response.ContentType = "text/event-stream";
-                    await WriteSseAsync(context.Response, $"event: endpoint\ndata: /message\n\n");
+                    await WriteSseAsync(context.Response, "event: endpoint\ndata: /message\n\n");
                     // The client POSTs next; once handled, emit the response frame.
                     await WaitForPostAsync(context.Response);
                 }
@@ -237,7 +248,7 @@ public class McpRemoteTransportTests
                     RequestBodies.Add(body);
                     _postArrived.TrySetResult();
 
-                    if (SessionIdToAssign is { } sessionId)
+                    if (SessionIdToAssign is {} sessionId)
                     {
                         context.Response.Headers["Mcp-Session-Id"] = sessionId;
                     }
@@ -257,7 +268,7 @@ public class McpRemoteTransportTests
                         }
 
                         context.Response.StatusCode = status;
-                        if (status == 200 && JsonResponder is { } responder)
+                        if (status == 200 && JsonResponder is {} responder)
                         {
                             context.Response.ContentType = "application/json";
                             byte[] json = Encoding.UTF8.GetBytes(responder(body));
@@ -274,7 +285,10 @@ public class McpRemoteTransportTests
             }
             catch
             {
-                try { context.Response.Close(); } catch { /* already gone */ }
+                try { context.Response.Close(); }
+                catch
+                { /* already gone */
+                }
             }
         }
 
@@ -288,7 +302,7 @@ public class McpRemoteTransportTests
         private async Task WaitForPostAsync(HttpListenerResponse response)
         {
             await _postArrived.Task.WaitAsync(_cts.Token);
-            if (JsonResponder is { } responder)
+            if (JsonResponder is {} responder)
             {
                 string payload = $"event: message\ndata: {responder("{}")}\n\n";
                 await WriteSseAsync(response, payload);
@@ -302,14 +316,6 @@ public class McpRemoteTransportTests
             int port = ((IPEndPoint)probe.LocalEndpoint).Port;
             probe.Stop();
             return port;
-        }
-
-        public void Dispose()
-        {
-            _cts.Cancel();
-            try { _listener.Stop(); } catch { /* not started */ }
-            try { _acceptLoop.Wait(1000); } catch { /* loop ended */ }
-            _cts.Dispose();
         }
     }
 }

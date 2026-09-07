@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
@@ -6,7 +5,9 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Sessions;
+using System.Text.Json;
 namespace Harbor.Core.Tests;
+
 /// <summary>
 ///     Tests for <see cref="SystemPromptBuilder" /> — verifies that the assembled prompt
 ///     contains the expected sections: environment metadata, agent-specific instructions,

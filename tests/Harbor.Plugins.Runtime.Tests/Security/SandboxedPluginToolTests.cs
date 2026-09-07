@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -10,7 +8,8 @@ using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Registration;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Collections.Concurrent;
+using System.Text.Json;
 namespace Harbor.Plugins.Runtime.Tests.Security;
 
 /// <summary>
@@ -23,15 +22,15 @@ namespace Harbor.Plugins.Runtime.Tests.Security;
 public sealed class SandboxedPluginToolTests
 {
     private static readonly ToolContext Ctx = new(
-        SessionId: "session-1",
-        MessageId: "msg-1",
-        CallId: "call-1",
-        Agent: "code",
-        Abort: CancellationToken.None,
-        Messages: Array.Empty<AgentMessage>(),
-        ReportProgress: (_, _) => Task.CompletedTask,
-        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        Services: null!);
+        "session-1",
+        "msg-1",
+        "call-1",
+        "code",
+        CancellationToken.None,
+        Array.Empty<AgentMessage>(),
+        (_, _) => Task.CompletedTask,
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
+        null!);
 
     private static JsonElement Args(string json) =>
         JsonDocument.Parse(json).RootElement.Clone();
@@ -91,12 +90,12 @@ public sealed class SandboxedPluginToolTests
         var inner = new FakeTool(
             Args("{}"),
             ToolResult.Success("never"),
-            delay: TimeSpan.FromSeconds(5));
+            TimeSpan.FromSeconds(5));
         var tool = Wrap(
             inner,
             bus,
             audit,
-            timeout: TimeSpan.FromMilliseconds(100),
+            TimeSpan.FromMilliseconds(100),
             capabilities: new HashSet<PluginCapability> { PluginCapability.ReadFiles });
 
         var result = await tool.ExecuteAsync(Args("{}"), Ctx);
@@ -116,13 +115,13 @@ public sealed class SandboxedPluginToolTests
         var inner = new FakeTool(
             Args("{}"),
             ToolResult.Success("never"),
-            delay: TimeSpan.FromSeconds(5),
-            ignoresToken: true);
+            TimeSpan.FromSeconds(5),
+            true);
         var tool = Wrap(
             inner,
             bus,
             audit,
-            timeout: TimeSpan.FromMilliseconds(100));
+            TimeSpan.FromMilliseconds(100));
 
         var result = await tool.ExecuteAsync(Args("{}"), Ctx);
 
@@ -152,12 +151,12 @@ public sealed class SandboxedPluginToolTests
     {
         var bus = new RecordingEventBus();
         var audit = new RecordingAuditLog();
-        var inner = new FakeTool(Args("{}"), ToolResult.Success("x"), delay: TimeSpan.FromSeconds(5));
+        var inner = new FakeTool(Args("{}"), ToolResult.Success("x"), TimeSpan.FromSeconds(5));
         var tool = Wrap(
             inner,
             bus,
             audit,
-            timeout: TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(30),
             capabilities: new HashSet<PluginCapability> { PluginCapability.ReadFiles });
 
         using var cancelledCts = new CancellationTokenSource();
@@ -192,10 +191,10 @@ public sealed class SandboxedPluginToolTests
 
     private sealed class FakeTool : ITool
     {
-        private readonly ToolResult _result;
+        private readonly long _allocateBytes;
         private readonly TimeSpan? _delay;
         private readonly bool _ignoresToken;
-        private readonly long _allocateBytes;
+        private readonly ToolResult _result;
 
         public FakeTool(
             JsonElement schemaArgs,
@@ -227,7 +226,7 @@ public sealed class SandboxedPluginToolTests
             ToolContext context,
             CancellationToken cancellationToken = default)
         {
-            if (_delay is { } delay)
+            if (_delay is {} delay)
             {
                 if (_ignoresToken)
                 {

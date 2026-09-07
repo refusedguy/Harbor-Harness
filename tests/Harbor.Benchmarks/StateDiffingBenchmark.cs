@@ -1,11 +1,11 @@
 using BenchmarkDotNet.Attributes;
-using System.Collections.Immutable;
-using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.State;
+using System.Collections.Immutable;
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks structural equality and diffing of <see cref=\"AppState\" />
+///     Benchmarks structural equality and diffing of <see cref=\"AppState" />
 ///     snapshots — the operation renderers perform to decide whether a
 ///     full repaint is necessary. Measures <see cref=\"EqualityComparer\" />
 ///     on immutable record trees of varying depth, plus manual field-by-field
@@ -15,12 +15,12 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class StateDiffingBenchmark
 {
-    private AppState _oldState = null!;
-    private AppState _newState = null!;
-    private AppState _identicalState = null!;
 
     [Params(0, 100, 1000)]
     public int LineCount;
+    private AppState _identicalState = null!;
+    private AppState _newState = null!;
+    private AppState _oldState = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -32,8 +32,7 @@ public class StateDiffingBenchmark
                 ChatRole.Assistant,
                 $"Line {i}",
                 null,
-                $"msg-{i}",
-                default);
+                $"msg-{i}");
         }
 
         _oldState = new AppState

@@ -1,9 +1,9 @@
 namespace Harbor.DesignSystem;
 
 /// <summary>
-/// Catppuccin-Mocha (dark) and Catppuccin-Latte (light) palette as
-/// framework-agnostic <see cref="RgbColor" /> constants. Source:
-/// <see href="https://catppuccin.com/palette" />.
+///     Catppuccin-Mocha (dark) and Catppuccin-Latte (light) palette as
+///     framework-agnostic <see cref="RgbColor" /> constants. Source:
+///     <see href="https://catppuccin.com/palette" />.
 /// </summary>
 public static class ColorPalette
 {

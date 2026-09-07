@@ -1,10 +1,10 @@
-using Harbor.Abstractions.Results;
 using Harbor.Abstractions.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Loads a <c>SKILL.md</c> skill body by name. Skills are discovered from
 ///     the project-local <c>.harbor/skills/</c> directory (wins on collisions)
@@ -23,11 +23,11 @@ public sealed class SkillTool : ITool
 
     /// <summary>Refuse to read skill files larger than this (likely a mistake, not a skill).</summary>
     internal const long MaxFileBytes = 1024 * 1024;
+    private readonly string? _globalSkillsDir;
 
     private readonly ILogger<SkillTool> _logger;
-    private readonly ISessionStore? _store;
     private readonly string? _projectSkillsDir;
-    private readonly string? _globalSkillsDir;
+    private readonly ISessionStore? _store;
 
     /// <summary>
     ///     Construct a <see cref="SkillTool" /> that resolves the session store
@@ -94,7 +94,7 @@ public sealed class SkillTool : ITool
     [
         "Use `skill` to load the full workflow for a named skill from <available_skills>",
         "Project skills shadow same-named global skills",
-        "The result is Markdown — follow its steps, do not paste it back verbatim",
+        "The result is Markdown — follow its steps, do not paste it back verbatim"
     ];
 
     /// <inheritdoc />
@@ -145,10 +145,10 @@ public sealed class SkillTool : ITool
         string? body = null;
         string? foundScope = null;
         string? foundPath = null;
-        if ((scope is "any" or "project") && roots.Project is not null
-            && TryLoadFromRoot(roots.Project, name, out body, out foundPath))
+        if (scope is "any" or "project" && roots.Project is not null
+                                        && TryLoadFromRoot(roots.Project, name, out body, out foundPath))
             foundScope = "project";
-        if (body is null && (scope is "any" or "global") && roots.Global is not null
+        if (body is null && scope is "any" or "global" && roots.Global is not null
             && TryLoadFromRoot(roots.Global, name, out body, out foundPath))
             foundScope = "global";
 
@@ -171,8 +171,8 @@ public sealed class SkillTool : ITool
 
     private static bool IsKnownScope(string? scope) =>
         scope is not null && (scope.Equals("project", StringComparison.OrdinalIgnoreCase)
-            || scope.Equals("global", StringComparison.OrdinalIgnoreCase)
-            || scope.Equals("any", StringComparison.OrdinalIgnoreCase));
+                              || scope.Equals("global", StringComparison.OrdinalIgnoreCase)
+                              || scope.Equals("any", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Plain file/dir names only — no separators, no parent traversal.</summary>
     internal static bool IsSafeName(string name)

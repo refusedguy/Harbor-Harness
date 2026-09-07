@@ -1,24 +1,15 @@
 # Harbor.Desktop.Shared
 
-Cross-platform implementations built on top of `Harbor.Desktop.Abstractions`.
-No UI-framework references — depends only on `Markdig` (already used by every
-desktop app) and `Microsoft.Extensions.Logging.Abstractions`.
+Cross-platform implementations built on top of `Harbor.Desktop.Abstractions`. No UI-framework references — depends only on `Markdig` (already used by every desktop app) and `Microsoft.Extensions.Logging.Abstractions`.
 
 ## What's shared
 
-- **`Services/FuzzySearchService`**: subsequence-match scoring for the command
-  palette. Same algorithm as Sublime Text / VS Code — no external deps.
-- **`Services/MarkdownToPlainTextService`**: Markdig-based Markdown → plain
-  text. Used by the command palette to fuzzy-search chat messages and by
-  toast notifications to render a one-line summary.
-- **`Services/RecentItemsService`**: most-recently-used items list persisted
-  to `~/.harbor/recent.json`. Used by the command palette and the recent-files
-  menu.
+- **`Services/FuzzySearchService`**: subsequence-match scoring for the command palette. Same algorithm as Sublime Text / VS Code — no external deps.
+- **`Services/MarkdownToPlainTextService`**: Markdig-based Markdown → plain text. Used by the command palette to fuzzy-search chat messages and by toast notifications to render a one-line summary.
+- **`Services/RecentItemsService`**: most-recently-used items list persisted to `~/.harbor/recent.json`. Used by the command palette and the recent-files menu.
 - **`Locators/ViewModelLocator` (+ `IViewModelLocator`, `LocatorRegistration`,
-  `IShowPlaceholderFactory`)**: design-time-friendly VM resolution used by
-  platform views that construct view-models by contract.
-- **`Commands/BuiltInCommands`**: catalog of built-in command-palette item
-  templates (Open Session, New Session, Branch, Toggle Theme, etc.).
+  `IShowPlaceholderFactory`)**: design-time-friendly VM resolution used by platform views that construct view-models by contract.
+- **`Commands/BuiltInCommands`**: catalog of built-in command-palette item templates (Open Session, New Session, Branch, Toggle Theme, etc.).
 - **`Commands/SlashCommands`**: catalog of slash commands (`/help`, `/clear`,
   `/quit`, etc.) with descriptions and aliases.
 

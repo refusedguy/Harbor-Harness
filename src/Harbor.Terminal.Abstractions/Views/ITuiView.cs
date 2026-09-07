@@ -3,6 +3,7 @@ using Harbor.Abstractions.Tui;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 namespace Harbor.Terminal.Abstractions.Views;
+
 /// <summary>
 ///     Base view contract — a visual component rendered by the TUI.
 ///     Implements the View part of MVVM. Views are stateless visualizations
@@ -54,7 +55,7 @@ public abstract class TuiViewBase<TViewModel> : ITuiView
     public virtual bool HandleKey(KeyPress key) => false;
     public virtual Task OnEventAsync(AgentEvent @event, CancellationToken ct = default) => Task.CompletedTask;
 
-    public virtual void Dispose() { }
+    public virtual void Dispose() {}
 }
 
 /// <summary>

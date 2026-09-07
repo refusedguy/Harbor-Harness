@@ -1,19 +1,17 @@
-using System.Collections.Concurrent;
-using System.Linq;
 using Harbor.Application.Configuration;
 using Harbor.Application.Resources;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 namespace Harbor.Application.Permissions;
+
 /// <summary>
 ///     Default permission service. Implements Specification pattern (GOF).
 /// </summary>
 public sealed class PermissionService : IPermissionService
 {
     private readonly IAgentRegistry _agents;
-    private readonly ILogger<PermissionService> _logger;
-    private readonly Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? _userAsker;
-    private readonly string? _workspaceRoot;
     private readonly IConfigStore? _configStore;
+    private readonly ILogger<PermissionService> _logger;
 
     /// <summary>
     ///     Persisted user decisions (A2): agent name → rule key ("toolName:argPath") → the
@@ -22,6 +20,8 @@ public sealed class PermissionService : IPermissionService
     ///     across checks. Thread-safe via concurrent dictionaries.
     /// </summary>
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, PermissionRule>> _persisted = new();
+    private readonly Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? _userAsker;
+    private readonly string? _workspaceRoot;
 
     /// <summary>
     ///     Construct a <see cref="PermissionService" /> wired to the supplied registry.
@@ -71,6 +71,75 @@ public sealed class PermissionService : IPermissionService
         return AgentName.TryCreate(agentName)
             .Bind(_agents.GetAgent)
             .Bind(agent => EvaluateActionAsync(agent, agentName, toolName, args, ct));
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<PermissionResponse>> AskUserAsync(
+        PermissionRequest request,
+        CancellationToken ct = default)
+    {
+        if (_userAsker is null)
+            return Result.Success(new PermissionResponse(PermissionAction.Deny, false));
+
+        try
+        {
+            var response = await _userAsker(request, ct).ConfigureAwait(false);
+            return Result.Success(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, CoreResources.GetError("PermissionDenied"), request.Permission, request.Pattern);
+            return Result.Success(new PermissionResponse(PermissionAction.Deny, false));
+        }
+    }
+
+    /// <inheritdoc />
+    public PermissionRuleset GetRuleset(string agentName)
+    {
+        // ROP-B П.12 (residual): same railway as CheckAsync — name parsing and
+        // registry lookup ride one Bind chain with no .Value read compiling in.
+        // GetRuleset's contract is "best-effort lookup", so any failure (bad
+        // name, unknown agent) collapses to the empty ruleset at the Match
+        // boundary — callers (e.g. /permissions) get a safe default rather
+        // than an exception bubbling up to the UI.
+        return AgentName.TryCreate(agentName)
+            .Bind(_agents.GetAgent)
+            .Match(
+                agent => MergePersisted(agent.Name.Value, agent.Permission),
+                _ => PermissionRuleset.Empty);
+    }
+
+    /// <summary>
+    ///     Persist the current in-memory permission decisions to the config store.
+    ///     Call this after the user changes permissions via the UI or slash commands.
+    /// </summary>
+    public async Task<Result> SaveAsync(CancellationToken ct = default)
+    {
+        if (_configStore is null)
+            return Result.Failure("No config store configured — permissions cannot be persisted.");
+
+        var permissions = new Dictionary<string, List<PermissionRule>>();
+        foreach ((string agentKey, var byRule) in _persisted)
+        {
+            if (byRule.IsEmpty) continue;
+            var rules = new List<PermissionRule>();
+            foreach (var kvp in byRule)
+            {
+                rules.Add(kvp.Value);
+            }
+            permissions[agentKey] = rules;
+        }
+
+        var updateResult = await _configStore.UpdateAsync(c =>
+        {
+            c.Permissions = permissions;
+            return c;
+        }, ct).ConfigureAwait(false);
+        if (updateResult.IsFailure)
+        {
+            _logger.LogWarning("Failed to save persisted permissions: {Error}", updateResult.Error);
+        }
+        return updateResult;
     }
 
     private async Task<Result<PermissionResponse>> EvaluateActionAsync(
@@ -140,42 +209,6 @@ public sealed class PermissionService : IPermissionService
         return askResult;
     }
 
-    /// <inheritdoc />
-    public async Task<Result<PermissionResponse>> AskUserAsync(
-        PermissionRequest request,
-        CancellationToken ct = default)
-    {
-        if (_userAsker is null)
-            return Result.Success(new PermissionResponse(PermissionAction.Deny, false));
-
-        try
-        {
-            var response = await _userAsker(request, ct).ConfigureAwait(false);
-            return Result.Success(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, CoreResources.GetError("PermissionDenied"), request.Permission, request.Pattern);
-            return Result.Success(new PermissionResponse(PermissionAction.Deny, false));
-        }
-    }
-
-    /// <inheritdoc />
-    public PermissionRuleset GetRuleset(string agentName)
-    {
-        // ROP-B П.12 (residual): same railway as CheckAsync — name parsing and
-        // registry lookup ride one Bind chain with no .Value read compiling in.
-        // GetRuleset's contract is "best-effort lookup", so any failure (bad
-        // name, unknown agent) collapses to the empty ruleset at the Match
-        // boundary — callers (e.g. /permissions) get a safe default rather
-        // than an exception bubbling up to the UI.
-        return AgentName.TryCreate(agentName)
-            .Bind(_agents.GetAgent)
-            .Match(
-                agent => MergePersisted(agent.Name.Value, agent.Permission),
-                _ => PermissionRuleset.Empty);
-    }
-
     private PermissionRuleset MergePersisted(string agentKey, PermissionRuleset ruleset)
     {
         // A2: merge persisted user decisions on top of the agent's static ruleset so
@@ -207,7 +240,7 @@ public sealed class PermissionService : IPermissionService
         var config = loadResult.Value;
         if (config.Permissions is null || config.Permissions.Count == 0) return;
 
-        foreach (var (agentKey, rules) in config.Permissions)
+        foreach ((string agentKey, var rules) in config.Permissions)
         {
             var byRule = new ConcurrentDictionary<string, PermissionRule>();
             foreach (var rule in rules)
@@ -220,39 +253,6 @@ public sealed class PermissionService : IPermissionService
 
         _logger.LogInformation("Loaded {Count} persisted permission rule(s) for {AgentCount} agent(s)",
             config.Permissions.Values.Sum(list => list.Count), config.Permissions.Count);
-    }
-
-    /// <summary>
-    ///     Persist the current in-memory permission decisions to the config store.
-    ///     Call this after the user changes permissions via the UI or slash commands.
-    /// </summary>
-    public async Task<Result> SaveAsync(CancellationToken ct = default)
-    {
-        if (_configStore is null)
-            return Result.Failure("No config store configured — permissions cannot be persisted.");
-
-        var permissions = new Dictionary<string, List<PermissionRule>>();
-        foreach (var (agentKey, byRule) in _persisted)
-        {
-            if (byRule.IsEmpty) continue;
-            var rules = new List<PermissionRule>();
-            foreach (var kvp in byRule)
-            {
-                rules.Add(kvp.Value);
-            }
-            permissions[agentKey] = rules;
-        }
-
-        var updateResult = await _configStore.UpdateAsync(c =>
-        {
-            c.Permissions = permissions;
-            return c;
-        }, ct).ConfigureAwait(false);
-        if (updateResult.IsFailure)
-        {
-            _logger.LogWarning("Failed to save persisted permissions: {Error}", updateResult.Error);
-        }
-        return updateResult;
     }
 
     /// <summary>Raw argument extraction (legacy, un-normalized). Kept for compatibility.</summary>
@@ -275,8 +275,6 @@ public sealed class PermissionService : IPermissionService
             return "*";
         }
     }
-
-    private readonly record struct PathExtraction(string ArgPath, bool IsOutsideWorkspace);
 
     /// <summary>
     ///     Extracts the rule-matching string for a tool call, normalizing file paths before
@@ -350,4 +348,6 @@ public sealed class PermissionService : IPermissionService
             start++;
         return full[start..];
     }
+
+    private readonly record struct PathExtraction(string ArgPath, bool IsOutsideWorkspace);
 }

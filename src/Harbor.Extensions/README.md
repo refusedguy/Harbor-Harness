@@ -18,10 +18,10 @@
 
 ## Dependencies
 
-| Dependency                         | Why                                                                                                                                                                                                                                                                                   |
-|------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `CommunityToolkit.HighPerformance` | FrozenDictionary/FrozenSet helpers and incidental performance types used across the pooling code.                                                                                                                                                                                      |
-| `MemoryPack`                       | `MemoryPackSerializer.Serialize<T>` / `Deserialize<T>` — the `IMemoryPackable<T>` constraint and the serializer entry-point. `MemoryPackExtensions` is generic over `IMemoryPackable<T>`, so **no** concrete Harbor assembly is required.                                              |
+| Dependency                         | Why                                                                                                                                                                                                                                       |
+|------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `CommunityToolkit.HighPerformance` | FrozenDictionary/FrozenSet helpers and incidental performance types used across the pooling code.                                                                                                                                         |
+| `MemoryPack`                       | `MemoryPackSerializer.Serialize<T>` / `Deserialize<T>` — the `IMemoryPackable<T>` constraint and the serializer entry-point. `MemoryPackExtensions` is generic over `IMemoryPackable<T>`, so **no** concrete Harbor assembly is required. |
 
 `System.Buffers` (`ArrayPool<T>`) is in-box for `net10.0` — no package ref needed.
 

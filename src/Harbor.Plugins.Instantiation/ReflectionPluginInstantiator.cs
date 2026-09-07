@@ -1,7 +1,8 @@
-using System.Reflection;
 using Harbor.Abstractions.Plugins;
 using Harbor.Plugins.Abstractions;
+using System.Reflection;
 namespace Harbor.Plugins.Instantiation;
+
 /// <summary>
 ///     Default <see cref="IPluginInstantiator" />. Uses plain reflection to find
 ///     <see cref="IPlugin" /> implementations and <see cref="Activator.CreateInstance" />

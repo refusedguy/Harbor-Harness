@@ -1,11 +1,9 @@
-using System.Globalization;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
-
+using System.Globalization;
 namespace Harbor.Tui.CellForge.Panels;
 
 // Cell-native builtin panels for the CellForge renderer (CF-E-002, TOP-1 #27).
@@ -31,7 +29,7 @@ namespace Harbor.Tui.CellForge.Panels;
 /// <summary>
 ///     Cell-native todo-list panel: the freshest <c>[ ]</c> / <c>[~]</c> /
 ///     <c>[x]</c> block parsed from the transcript via
-///     <see cref="PanelExtractors.ExtractTodos(UiState)"/>. Non-interactive.
+///     <see cref="PanelExtractors.ExtractTodos(UiState)" />. Non-interactive.
 /// </summary>
 public sealed class CellForgeTodoListPanel : IPanelProvider
 {
@@ -101,7 +99,7 @@ public sealed class CellForgeTodoListPanel : IPanelProvider
 /// <summary>
 ///     Cell-native diff-preview panel: recent <c>edit</c> / <c>write</c> /
 ///     <c>read</c> / <c>patch</c> tool calls paired with their results via
-///     <see cref="PanelExtractors.ExtractRecentChanges(UiState, int)"/>. One header
+///     <see cref="PanelExtractors.ExtractRecentChanges(UiState, int)" />. One header
 ///     row per change (<c>tool-icon ok-icon path</c>) plus up to 4 diff body lines.
 ///     Non-interactive.
 /// </summary>
@@ -123,7 +121,7 @@ public sealed class CellForgeDiffPreviewPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        var changes = PanelExtractors.ExtractRecentChanges(ctx.State, 8);
+        var changes = PanelExtractors.ExtractRecentChanges(ctx.State);
         var rows = new List<string>(changes.Count * 5 + 4);
         rows.Add($"Diff Preview ({changes.Count} recent change(s))");
         rows.Add(CellPanelText.Separator);
@@ -143,7 +141,7 @@ public sealed class CellForgeDiffPreviewPanel : IPanelProvider
                     "write" => "✚",
                     "read" => "▸",
                     "patch" => "⌥",
-                    _ => "·",
+                    _ => "·"
                 };
                 string ok = change.IsError ? "✗" : "✓";
                 string path = CellPanelText.ShortenTail(change.FilePath, Math.Max(4, ctx.Width - 12));
@@ -174,10 +172,10 @@ public sealed class CellForgeDiffPreviewPanel : IPanelProvider
 
 /// <summary>
 ///     Cell-native diagnostics panel: transcript errors classified via
-///     <see cref="PanelExtractors.CollectDiagnostics(UiState)"/>, one row per issue
+///     <see cref="PanelExtractors.CollectDiagnostics(UiState)" />, one row per issue
 ///     (<c>✗ message</c> for errors, <c>▲ message</c> for warnings).
 ///     Deliberately cursor-free (pure <c>Build</c>, <c>OnKey</c> returns
-///     <see langword="false"/>); j/k navigation lands in a follow-up.
+///     <see langword="false" />); j/k navigation lands in a follow-up.
 /// </summary>
 public sealed class CellForgeDiagnosticsPanel : IPanelProvider
 {
@@ -231,7 +229,7 @@ public sealed class CellForgeDiagnosticsPanel : IPanelProvider
 // ── token-breakdown (Bottom/10, pure) ──────────────────────────────────────
 
 /// <summary>
-///     Cell-native token-breakdown panel: cumulative <see cref="UiState.Cost"/>
+///     Cell-native token-breakdown panel: cumulative <see cref="UiState.Cost" />
 ///     totals with <c>█</c> / <c>░</c> bars and K/M formatting.
 ///     Non-interactive.
 /// </summary>
@@ -305,7 +303,7 @@ public sealed class CellForgeTokenBreakdownPanel : IPanelProvider
 
 /// <summary>
 ///     Cell-native help panel: static hotkey text plus one row per registered panel
-///     (from <see cref="IPanelRegistry"/> in <c>ctx.Services</c>) plus the slash
+///     (from <see cref="IPanelRegistry" /> in <c>ctx.Services</c>) plus the slash
 ///     command list. <c>?</c> while focused dispatches
 ///     <c>UiMsg.TogglePanel("help")</c>.
 /// </summary>
@@ -395,7 +393,7 @@ public sealed class CellForgeHelpPanel : IPanelProvider
 
 /// <summary>
 ///     Cell-native logs panel: live <c>ILogger</c> output surfaced from
-///     <see cref="IDiagnosticsPanel"/> in <c>ctx.Services</c>. <c>F12</c> while
+///     <see cref="IDiagnosticsPanel" /> in <c>ctx.Services</c>. <c>F12</c> while
 ///     focused dispatches <c>UiMsg.TogglePanel("logs")</c>.
 /// </summary>
 public sealed class CellForgeLogsPanel : IPanelProvider
@@ -448,7 +446,7 @@ public sealed class CellForgeLogsPanel : IPanelProvider
                 LogLevel.Warning => "WARN",
                 LogLevel.Error => "ERRO",
                 LogLevel.Critical => "CRIT",
-                _ => "????",
+                _ => "????"
             };
             string time = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
             string category = ShortenCategory(entry.Category);
@@ -511,7 +509,7 @@ public sealed class CellForgeLogsPanel : IPanelProvider
 /// <remarks>
 ///     TODO(principles)[FP-005, TEA]: cursor + directory cache are provider-local
 ///     mutable state (same compromise as the Spectre original) instead of living in
-///     <see cref="UiState"/> keyed by panel id. Guarded by a small lock so
+///     <see cref="UiState" /> keyed by panel id. Guarded by a small lock so
 ///     <c>Build</c> (render thread) and <c>OnKey</c> (input thread) stay thread-safe;
 ///     moving the cursor into the store is follow-up work.
 /// </remarks>
@@ -591,7 +589,7 @@ public sealed class CellForgeFileTreePanel : IPanelProvider
     public bool OnKey(UiKey key, PanelContext ctx)
     {
         if (key.Code == UiKeyCode.Enter
-            || (key.Code == UiKeyCode.Char && (key.Character == '\r' || key.Character == '\n')))
+            || key.Code == UiKeyCode.Char && (key.Character == '\r' || key.Character == '\n'))
         {
             Entry? current;
             lock (_gate)
@@ -657,7 +655,7 @@ public sealed class CellForgeFileTreePanel : IPanelProvider
                     currentDir = string.IsNullOrEmpty(_currentDir) ? Environment.CurrentDirectory : _currentDir;
                 }
 
-                if (Directory.GetParent(currentDir) is { } parent)
+                if (Directory.GetParent(currentDir) is {} parent)
                 {
                     lock (_gate)
                     {
@@ -757,7 +755,7 @@ public sealed class CellForgeFileTreePanel : IPanelProvider
 
 /// <summary>
 ///     Cell-native session sidebar panel: lists all known sessions from
-///     <see cref="UiState.Sessions"/> with the active session highlighted.
+///     <see cref="UiState.Sessions" /> with the active session highlighted.
 ///     Non-interactive (read-only view).
 /// </summary>
 public sealed class CellForgeSessionSidebarPanel : IPanelProvider
@@ -827,8 +825,8 @@ internal static class CellPanelText
     internal const string Separator = "────────────────────────";
 
     /// <summary>
-    ///     Clip rows to the available geometry: at most <paramref name="height"/>
-    ///     rows, each at most <paramref name="width"/> columns (hard-truncated with
+    ///     Clip rows to the available geometry: at most <paramref name="height" />
+    ///     rows, each at most <paramref name="width" /> columns (hard-truncated with
     ///     <c>…</c>). Returns an empty list for non-positive geometry instead of
     ///     throwing, so tiny viewports degrade gracefully.
     /// </summary>
@@ -850,7 +848,7 @@ internal static class CellPanelText
         return clipped;
     }
 
-    /// <summary>Hard-truncate <paramref name="text"/> to <paramref name="max"/> columns.</summary>
+    /// <summary>Hard-truncate <paramref name="text" /> to <paramref name="max" /> columns.</summary>
     internal static string Truncate(string text, int max)
     {
         if (string.IsNullOrEmpty(text) || max <= 0)

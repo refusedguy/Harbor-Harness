@@ -1,11 +1,8 @@
 using Harbor.Abstractions.Events;
-using Harbor.Ipc.Client;
 using Harbor.Ipc.Protocol;
-using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -44,12 +41,12 @@ public class ReconnectableRpcClientTests
                 try
                 {
                     await foreach (var frame in wrapper.SubscribeWithReconnectAsync(
-                        _ =>
-                        {
-                            Interlocked.Increment(ref snapshotCalls);
-                            return Task.CompletedTask;
-                        },
-                        consumeCts.Token))
+                                       _ =>
+                                       {
+                                           Interlocked.Increment(ref snapshotCalls);
+                                           return Task.CompletedTask;
+                                       },
+                                       consumeCts.Token))
                     {
                         lock (received)
                         {
@@ -118,9 +115,9 @@ public class ReconnectableRpcClientTests
             _ => throw new InvalidOperationException("not dialed in this test"),
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<ReconnectableRpcClient>());
 
-        TimeSpan first = wrapper.NextBackoffDelay();
-        TimeSpan second = wrapper.NextBackoffDelay();
-        TimeSpan tenth = wrapper.NextBackoffDelay();
+        var first = wrapper.NextBackoffDelay();
+        var second = wrapper.NextBackoffDelay();
+        var tenth = wrapper.NextBackoffDelay();
 
         // ~500ms * [0.8..1.2]
         await Assert.That(first.TotalMilliseconds).IsGreaterThan(300);

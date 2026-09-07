@@ -1,9 +1,10 @@
+using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Find files by glob. Supports **, *, ?, and simple *.{a,b} braces.
 ///     Prunes heavy dirs (not a full .gitignore parser).

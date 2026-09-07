@@ -9,17 +9,29 @@ namespace Harbor.Ui.Framework.Rendering.PerformanceContracts;
 ///         Every renderer backend must declare (and meet) three ceilings:
 ///     </para>
 ///     <list type="number">
-///         <item><description><see cref="Throughput"/> — minimum streamed
-///             events per second for a 1000-token stream on a 24×80 surface;</description></item>
-///         <item><description><see cref="Latency"/> — p99 render latency per
-///             single event;</description></item>
-///         <item><description><see cref="Memory"/> — allocation ceiling per
-///             1000 streamed events (steady-state streaming must not balloon
-///             the heap).</description></item>
+///         <item>
+///             <description>
+///                 <see cref="Throughput" /> — minimum streamed
+///                 events per second for a 1000-token stream on a 24×80 surface;
+///             </description>
+///         </item>
+///         <item>
+///             <description>
+///                 <see cref="Latency" /> — p99 render latency per
+///                 single event;
+///             </description>
+///         </item>
+///         <item>
+///             <description>
+///                 <see cref="Memory" /> — allocation ceiling per
+///                 1000 streamed events (steady-state streaming must not balloon
+///                 the heap).
+///             </description>
+///         </item>
 ///     </list>
 ///     <para>
 ///         Adding a new renderer backend REQUIRES declaring its contract here
-///         (or in its own assembly via <see cref="RendererPerformanceContract"/>)
+///         (or in its own assembly via <see cref="RendererPerformanceContract" />)
 ///         and passing <c>tests/Harbor.Tui.PerfTests</c> — enforced by the
 ///         <c>renderer-perf-gate</c> CI job and the PR-template check.
 ///     </para>
@@ -48,7 +60,7 @@ public sealed record RendererPerformanceContract(
         new("nickconsoleex",
             new ThroughputContract(MinimumEventsPerSec: 2_000),
             new LatencyContract(P99Budget: TimeSpan.FromMilliseconds(10)),
-            new MemoryContract(MaxAllocatedMbPerThousandEvents: 4.0)),
+            new MemoryContract(MaxAllocatedMbPerThousandEvents: 4.0))
     ];
 }
 

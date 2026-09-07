@@ -1,6 +1,4 @@
-using Harbor.DesignSystem;
 using Harbor.Ui.Framework.Projection;
-
 namespace Harbor.DesignSystem.Tests;
 
 public class TerminalBackgroundProbeTests
@@ -8,7 +6,7 @@ public class TerminalBackgroundProbeTests
     [Test]
     public async Task TryParseOsc11_BelTerminated_8Bit_Parses()
     {
-        bool ok = TerminalBackgroundProbe.TryParseOsc11("\u001B]11;rgb:0a/0e/14\u0007", out RgbColor bg);
+        bool ok = TerminalBackgroundProbe.TryParseOsc11("\u001B]11;rgb:0a/0e/14\u0007", out var bg);
         await Assert.That(ok).IsTrue();
         await Assert.That(bg.R).IsEqualTo((byte)0x0A);
         await Assert.That(bg.G).IsEqualTo((byte)0x0E);
@@ -18,7 +16,7 @@ public class TerminalBackgroundProbeTests
     [Test]
     public async Task TryParseOsc11_StTerminated_16Bit_Parses()
     {
-        bool ok = TerminalBackgroundProbe.TryParseOsc11("\u001B]11;rgb:ffff/ffff/ffff\u001B\\", out RgbColor bg);
+        bool ok = TerminalBackgroundProbe.TryParseOsc11("\u001B]11;rgb:ffff/ffff/ffff\u001B\\", out var bg);
         await Assert.That(ok).IsTrue();
         await Assert.That(bg.R).IsEqualTo((byte)0xFF);
         await Assert.That(bg.G).IsEqualTo((byte)0xFF);
@@ -28,7 +26,7 @@ public class TerminalBackgroundProbeTests
     [Test]
     public async Task TryParseOsc11_MixedForms_Parses()
     {
-        bool ok = TerminalBackgroundProbe.TryParseOsc11("\u001B]11;rgb:ab/cdef/12\u0007", out RgbColor bg);
+        bool ok = TerminalBackgroundProbe.TryParseOsc11("\u001B]11;rgb:ab/cdef/12\u0007", out var bg);
         await Assert.That(ok).IsTrue();
         await Assert.That(bg.R).IsEqualTo((byte)0xAB);
         await Assert.That(bg.G).IsEqualTo((byte)0xCD);
@@ -74,8 +72,5 @@ public class TerminalBackgroundProbeTests
     }
 
     [Test]
-    public async Task Detect_LightResponse_PicksHarborLight()
-    {
-        await Assert.That(TerminalBackgroundProbe.Detect("\u001B]11;rgb:ff/ff/ff\u0007").Name).IsEqualTo("harbor-light");
-    }
+    public async Task Detect_LightResponse_PicksHarborLight() => await Assert.That(TerminalBackgroundProbe.Detect("\u001B]11;rgb:ff/ff/ff\u0007").Name).IsEqualTo("harbor-light");
 }

@@ -1,9 +1,4 @@
-using System.Globalization;
-using System.Text.Json;
 using System.Text.Json.Serialization;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
-
 namespace Harbor.Storage.Jsonl;
 
 /// <summary>
@@ -17,7 +12,7 @@ namespace Harbor.Storage.Jsonl;
 ///         Serialization rides the SAME AOT-safe <see cref="JsonlCodecContext" /> used by
 ///         <c>JsonlSessionStore</c> — no second encoding of messages exists, so an export
 ///         is byte-compatible with what the store itself persists and import decodes it
-///         through the identical, diagnostics-preserving <see cref="JsonlMessageCodec"/> railway.
+///         through the identical, diagnostics-preserving <see cref="JsonlMessageCodec" /> railway.
 ///     </para>
 ///     <para>
 ///         Import is append-only by contract (<see cref="ISessionPorter" /> remarks): a fresh
@@ -33,7 +28,10 @@ public sealed class JsonlSessionPorter : ISessionPorter
 
     private readonly ILogger<JsonlSessionPorter> _logger;
 
-    public JsonlSessionPorter(ILogger<JsonlSessionPorter> logger) => _logger = logger;
+    public JsonlSessionPorter(ILogger<JsonlSessionPorter> logger)
+    {
+        _logger = logger;
+    }
 
     /// <inheritdoc />
     public async Task<Result> ExportAsync(
@@ -52,25 +50,25 @@ public sealed class JsonlSessionPorter : ISessionPorter
         var stats = await store.GetStatsAsync(sessionId, ct).ConfigureAwait(false);
 
         var envelope = new ExportEnvelope(
-            Marker: EnvelopeMarker,
-            Version: SchemaVersion,
-            Session: session.Value,
-            Metadata: stats.IsSuccess ? stats.Value : null);
+            EnvelopeMarker,
+            SchemaVersion,
+            session.Value,
+            stats.IsSuccess ? stats.Value : null);
         await output.WriteLineAsync(JsonSerializer.Serialize(envelope, JsonlCodecContext.JsonOptions)).ConfigureAwait(false);
 
         var messages = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
         if (messages.IsFailure) // §4.6-ok: header written → surface a clear partial-export failure.
             return Result.Failure($"Cannot export messages of session '{sessionId}': {messages.Error}");
 
-        foreach (AgentMessage message in messages.Value)
+        foreach (var message in messages.Value)
         {
             var entry = new MessageEntry(
-                Type: "message",
-                Id: message.Id,
-                ParentId: message.ParentId,
-                Role: message.Role,
-                CreatedAt: message.CreatedAt,
-                Payload: JsonlMessageCodec.SerializeMessagePayload(message));
+                "message",
+                message.Id,
+                message.ParentId,
+                message.Role,
+                message.CreatedAt,
+                JsonlMessageCodec.SerializeMessagePayload(message));
             await output.WriteLineAsync(JsonSerializer.Serialize(entry, JsonlCodecContext.JsonOptions)).ConfigureAwait(false);
         }
 
@@ -97,7 +95,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
             ex => $"Invalid export header: {ex.Message}");
         if (envelopeResult.IsFailure)
             return Result.Failure<string>(envelopeResult.Error);
-        ExportEnvelope? envelope = envelopeResult.Value;
+        var envelope = envelopeResult.Value;
 
         if (envelope is null || envelope.Marker != EnvelopeMarker)
             return Result.Failure<string>(
@@ -108,7 +106,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
         if (string.IsNullOrWhiteSpace(envelope.Session.Id))
             return Result.Failure<string>("Export header has no source session id.");
 
-        Session source = envelope.Session;
+        var source = envelope.Session;
         // Minted fresh ALWAYS — see ISessionPorter remarks (idempotent double-import).
         // NOTE: stores generate their OWN ids inside CreateAsync, so the enriched
         // target record is derived from created.Value AFTER the call, never before.
@@ -117,7 +115,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
         if (created.IsFailure) // §4.6-ok: single rail-step to the transport type.
             return Result.Failure<string>($"Import failed while creating session: {created.Error}");
 
-        Session target = created.Value with
+        var target = created.Value with
         {
             Title = source.Title,
             CreatedAt = source.CreatedAt,
@@ -159,7 +157,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
             line = await ReadNonEmptyLineAsync(input).ConfigureAwait(false);
         }
 
-        if (envelope.Metadata is { } metadata)
+        if (envelope.Metadata is {} metadata)
         {
             var stats = await store.UpdateStatsAsync(target.Id, metadata, ct).ConfigureAwait(false);
             if (stats.IsFailure)

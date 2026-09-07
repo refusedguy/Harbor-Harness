@@ -14,20 +14,19 @@
 
 using Harbor.Abstractions.Models;
 using Harbor.Application.Agents;
-using Harbor.Registries.Tools;
 using Harbor.Plugins.Hosting;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.Registries.Tools;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
+using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Tools.Builtin;
 using Harbor.Tui.AnsiPlain;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using Harbor.Terminal.Abstractions.Renderers;
 using NetArchTest.Rules;
 // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Application.Agents namespace for backward compat
 // InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Registries.Tools namespace for backward compat
@@ -35,6 +34,7 @@ using NetArchTest.Rules;
 using TestResult = NetArchTest.Rules.TestResult;
 
 namespace Harbor.Architecture.Tests;
+
 /// <summary>
 ///     NetArchTest-based layer dependency rules — mirrors
 ///     <see cref="LayerDependencyTests" /> using the fluent
@@ -545,7 +545,7 @@ public sealed class NetArchLayerRules
             typeof(SqliteSessionStore).Assembly,
             typeof(ReadTool).Assembly,
             typeof(AnsiTuiRenderer).Assembly,
-            typeof(PlainTuiRenderer).Assembly,
+            typeof(PlainTuiRenderer).Assembly
         };
         foreach (var asm in assemblies)
         {

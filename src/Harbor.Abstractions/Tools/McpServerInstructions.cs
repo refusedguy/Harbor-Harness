@@ -1,4 +1,5 @@
 namespace Harbor.Abstractions.Tools;
+
 /// <summary>
 ///     Instructions advertised by one connected MCP server (the
 ///     <c>instructions</c> field of the JSON-RPC <c>initialize</c> result, or a

@@ -1,18 +1,10 @@
 #if HARBOR_WITH_PLUGINS
 using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Runtime;
 using Harbor.Terminal.Abstractions.Plugins;
-using Harbor.Ui.Framework.Panels;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 namespace Harbor.Hosting;
+
 /// <summary>
 ///     Adapter that exposes the already-constructed <c>ToolRegistry</c>,
 ///     <c>ProviderRegistry</c>, and <c>AgentRegistry</c> instances (plus the host's

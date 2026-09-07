@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 namespace Harbor.Ui.Framework.State;
+
 /// <summary>
 ///     Declarative UI-driven side-effect. Renderers never call <c>IAgent</c>
 ///     directly; instead they emit effects that the host executes. This keeps the

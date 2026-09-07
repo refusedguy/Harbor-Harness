@@ -1,7 +1,8 @@
-using System.Diagnostics;
 using Harbor.Application.Resources;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 namespace Harbor.Application.Agents.Pipeline;
+
 /// <summary>
 ///     Logs the run lifecycle around the rest of the pipeline: the localized
 ///     "AgentLoopStarting" entry (moved verbatim out of <c>AgentLoop.RunAsync</c>,
@@ -10,7 +11,7 @@ namespace Harbor.Application.Agents.Pipeline;
 public sealed class LoggingBehavior(ILogger logger) : IPipelineBehavior
 {
     /// <inheritdoc />
-    public async Task<CSharpFunctionalExtensions.Result> HandleAsync(
+    public async Task<Result> HandleAsync(
         PromptRequest request, PipelineNext next, CancellationToken ct)
     {
         logger.LogInformation(CoreResources.GetLog("AgentLoopStarting"), request.Agent.Name.Value);

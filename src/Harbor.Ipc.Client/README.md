@@ -43,15 +43,15 @@ Out-of-process `IHarborClient` implementation. Talks to a remote `HarborIpcServe
 
 ## Files
 
-| File                               | Purpose                                                                                                                 |
-|------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| `IpcHarborClient.cs`               | `IHarborClient` impl. Maps each call to a `HarborRequest`, sends via RPC, awaits response, deserializes domain payload. |
-| `IpcHarborClientExtensions.cs`     | `UseIpcHarborClient()` DI helper.                                                                                       |
-| `Protocol/MessagePackRpcClient.cs` | Request/response multiplexer with demultiplexed event stream.                                                           |
-| `Protocol/ReconnectableRpcClient.cs` | Auto-reconnect decorator that re-establishes the pipe after a drop and re-subscribes event listeners.                 |
-| `Protocol/EventSubscription.cs`    | Adapter from RPC client's event channel to `IAsyncEnumerable<HarborEvent>`.                                             |
-| `Transport/ClientPipeTransport.cs` | Named Pipe (Windows) / Unix Domain Socket (Linux/Mac) outbound connect.                                                 |
-| `Transport/TcpClientTransport.cs`  | Outbound TCP connect (Tailscale / cross-host scenarios).                                                                |
+| File                                 | Purpose                                                                                                                 |
+|--------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| `IpcHarborClient.cs`                 | `IHarborClient` impl. Maps each call to a `HarborRequest`, sends via RPC, awaits response, deserializes domain payload. |
+| `IpcHarborClientExtensions.cs`       | `UseIpcHarborClient()` DI helper.                                                                                       |
+| `Protocol/MessagePackRpcClient.cs`   | Request/response multiplexer with demultiplexed event stream.                                                           |
+| `Protocol/ReconnectableRpcClient.cs` | Auto-reconnect decorator that re-establishes the pipe after a drop and re-subscribes event listeners.                   |
+| `Protocol/EventSubscription.cs`      | Adapter from RPC client's event channel to `IAsyncEnumerable<HarborEvent>`.                                             |
+| `Transport/ClientPipeTransport.cs`   | Named Pipe (Windows) / Unix Domain Socket (Linux/Mac) outbound connect.                                                 |
+| `Transport/TcpClientTransport.cs`    | Outbound TCP connect (Tailscale / cross-host scenarios).                                                                |
 
 ## Registration
 

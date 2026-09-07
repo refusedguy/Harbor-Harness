@@ -2,7 +2,6 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Registries.Events;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Core.Tests;
 
 public class EventBusMiddlewareTests
@@ -76,7 +75,7 @@ public class EventBusMiddlewareTests
         await Assert.That(received.Count).IsEqualTo(0);
 
         // Now publish without the throwing middleware
-        var bus2 = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000);
+        var bus2 = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
         var received2 = new List<AgentEvent>();
         bus2.Subscribe(async (evt, ct) => received2.Add(evt));
         await bus2.PublishAsync(new TurnStartEvent(2));
@@ -91,7 +90,7 @@ public class EventBusMiddlewareTests
         var mw2 = new RecordingMiddleware("mw2", order);
         var mw3 = new RecordingMiddleware("mw3", order);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000, new[] { mw1, mw2, mw3 });
-        bus.Subscribe(async (evt, ct) => { });
+        bus.Subscribe(async (evt, ct) => {});
 
         await bus.PublishAsync(new TurnStartEvent(1));
 
@@ -116,7 +115,7 @@ public class EventBusMiddlewareTests
     [Test]
     public async Task SamplingMiddleware_PassAll_Rate1()
     {
-        var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, rate: 1.0);
+        var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, 1.0);
         int passed = 0;
         const int total = 1000;
 
@@ -135,7 +134,7 @@ public class EventBusMiddlewareTests
     [Test]
     public async Task SamplingMiddleware_DropAll_Rate0()
     {
-        var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, rate: 0.0);
+        var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, 0.0);
         int passed = 0;
         const int total = 1000;
 
@@ -154,7 +153,7 @@ public class EventBusMiddlewareTests
     [Test]
     public async Task SamplingMiddleware_NonMessageUpdateEvent_PassThrough()
     {
-        var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, rate: 0.0);
+        var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, 0.0);
         AgentEvent evt = new TurnStartEvent(1);
         bool result = await mw.ProcessAsync(ref evt, CancellationToken.None);
         await Assert.That(result).IsTrue();
@@ -163,7 +162,7 @@ public class EventBusMiddlewareTests
     [Test]
     public async Task SamplingMiddleware_StatisticalRateApproximately10Percent()
     {
-        var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, rate: 0.1);
+        var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance);
         int passed = 0;
         const int total = 10000;
 
@@ -237,7 +236,7 @@ public class EventBusMiddlewareTests
     [Test]
     public async Task SamplingMiddleware_ProcessAsync_ZeroAlloc()
     {
-        var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, rate: 1.0);
+        var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, 1.0);
         AgentEvent evt = new MessageUpdateEvent(
             new TextDeltaEvent("id", "delta"),
             AssistantMessage.Empty("s", "m"));

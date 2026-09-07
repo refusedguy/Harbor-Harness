@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Registries.Events;
 
 /// <summary>
@@ -21,11 +20,10 @@ namespace Harbor.Registries.Events;
 /// </remarks>
 public sealed class TypeFilterMiddleware : IEventBusMiddleware
 {
-    public string Name => "type-filter";
+    private readonly bool _allowAll;
+    private readonly Type[] _allowedTypes;
 
     private readonly ILogger _logger;
-    private readonly Type[] _allowedTypes;
-    private readonly bool _allowAll;
 
     public TypeFilterMiddleware(ILogger<TypeFilterMiddleware> logger, params Type[] allowedTypes)
     {
@@ -41,6 +39,7 @@ public sealed class TypeFilterMiddleware : IEventBusMiddleware
             _allowedTypes = allowedTypes;
         }
     }
+    public string Name => "type-filter";
 
     public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default)
     {

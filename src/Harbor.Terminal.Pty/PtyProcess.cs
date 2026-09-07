@@ -1,7 +1,7 @@
+using System.Collections;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-
 namespace Harbor.Terminal.Pty;
 
 /// <summary>Launch spec for <see cref="PtyProcess.Start" />.</summary>
@@ -33,21 +33,20 @@ public sealed class PtyProcess : IAsyncDisposable
 {
     /// <summary>Size of the master-side read chunks.</summary>
     private const int ReadBufferSize = 8192;
+    private readonly Task<int> _exitTask;
 
     private readonly int _masterFd;
-    private readonly int _pid;
-    private readonly Task<int> _exitTask;
     private readonly Lock _writeLock = new();
     private int _disposed;
 
     private PtyProcess(int masterFd, int pid)
     {
         _masterFd = masterFd;
-        _pid = pid;
+        Pid = pid;
 
         _exitTask = Task.Run(() =>
         {
-            _ = NativeMethods.waitpid(_pid, out int status, 0);
+            _ = NativeMethods.waitpid(Pid, out int status, 0);
             return DecodeStatus(status);
         });
 
@@ -59,20 +58,42 @@ public sealed class PtyProcess : IAsyncDisposable
             TaskScheduler.Default);
     }
 
+    /// <summary>false off-Unix.</summary>
+    public static bool IsSupported => OperatingSystem.IsLinux() || OperatingSystem.IsMacOS();
+
+    /// <summary>Process id of the child.</summary>
+    public int Pid { get; }
+
+    /// <summary>True once the child has been reaped.</summary>
+    public bool HasExited => _exitTask.IsCompleted;
+
+    // ── Dispose ────────────────────────────────────────────────────────────
+
+    public ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return ValueTask.CompletedTask;
+
+        OutputReceived = null;
+        OutputClosed = null;
+        try
+        {
+            _ = NativeMethods.kill(Pid, NativeMethods.SIGKILL);
+        }
+        catch (Exception ex)
+        {
+            // Already reaped — nothing to do.
+            Debug.WriteLine($"PtyProcess kill skipped: {ex.Message}");
+        }
+
+        _ = NativeMethods.close(_masterFd);
+        return ValueTask.CompletedTask;
+    }
+
     /// <summary>Raised on the reader thread for every raw output chunk from the child.</summary>
     public event EventHandler<PtyOutputEventArgs>? OutputReceived;
 
     /// <summary>Raised on the reader thread once the child's output side reached EOF.</summary>
     public event EventHandler? OutputClosed;
-
-    /// <summary>false off-Unix.</summary>
-    public static bool IsSupported => OperatingSystem.IsLinux() || OperatingSystem.IsMacOS();
-
-    /// <summary>Process id of the child.</summary>
-    public int Pid => _pid;
-
-    /// <summary>True once the child has been reaped.</summary>
-    public bool HasExited => _exitTask.IsCompleted;
 
     /// <summary>Exit code (throws before exit; negative when SIGKILLed).</summary>
     public Task<int> WaitForExitAsync(CancellationToken ct = default) => _exitTask.WaitAsync(ct);
@@ -102,7 +123,7 @@ public sealed class PtyProcess : IAsyncDisposable
             Resize(master, spec.Cols, spec.Rows);
 
             var env = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+            foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
             {
                 env[(string)entry.Key] = (string)entry.Value!;
             }
@@ -166,7 +187,7 @@ public sealed class PtyProcess : IAsyncDisposable
 
     private void ReaderLoop()
     {
-        var buffer = new byte[ReadBufferSize];
+        byte[] buffer = new byte[ReadBufferSize];
         try
         {
             while (true)
@@ -184,7 +205,7 @@ public sealed class PtyProcess : IAsyncDisposable
 
                 if (n == 0) break; // EOF
 
-                var chunk = new byte[n];
+                byte[] chunk = new byte[n];
                 Array.Copy(buffer, chunk, n);
                 OutputReceived?.Invoke(this, new PtyOutputEventArgs(chunk));
             }
@@ -205,7 +226,7 @@ public sealed class PtyProcess : IAsyncDisposable
         var size = new NativeMethods.WinSize
         {
             Cols = (ushort)Math.Clamp(cols, 2, ushort.MaxValue),
-            Rows = (ushort)Math.Clamp(rows, 2, ushort.MaxValue),
+            Rows = (ushort)Math.Clamp(rows, 2, ushort.MaxValue)
         };
         if (NativeMethods.ioctl(fd, NativeMethods.TIOCSWINSZ, ref size) != 0)
         {
@@ -217,28 +238,6 @@ public sealed class PtyProcess : IAsyncDisposable
     {
         // waitpid status: low byte = signal (if non-zero), else high byte = exit code.
         return (status & 0x7f) != 0 ? -(status & 0x7f) : status >> 8;
-    }
-
-    // ── Dispose ────────────────────────────────────────────────────────────
-
-    public ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return ValueTask.CompletedTask;
-
-        OutputReceived = null;
-        OutputClosed = null;
-        try
-        {
-            _ = NativeMethods.kill(_pid, NativeMethods.SIGKILL);
-        }
-        catch (Exception ex)
-        {
-            // Already reaped — nothing to do.
-            Debug.WriteLine($"PtyProcess kill skipped: {ex.Message}");
-        }
-
-        _ = NativeMethods.close(_masterFd);
-        return ValueTask.CompletedTask;
     }
 }
 

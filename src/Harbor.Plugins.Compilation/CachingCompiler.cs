@@ -1,7 +1,8 @@
-using System.Reflection;
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
+using System.Reflection;
 namespace Harbor.Plugins.Compilation;
+
 /// <summary>
 ///     <see cref="IPluginCompiler" /> decorator that caches compiled assemblies on disk
 ///     under <c>{cacheDir}/{sha256}.dll</c>. On a cache hit, the assembly is loaded via
@@ -23,10 +24,10 @@ namespace Harbor.Plugins.Compilation;
 /// </remarks>
 public sealed class CachingCompiler : IPluginCompiler
 {
+    private readonly Func<PluginScript, string, Assembly>? _assemblyLoader;
     private readonly string _cacheDir;
     private readonly IPluginCompiler _inner;
     private readonly ILogger<CachingCompiler> _logger;
-    private readonly Func<PluginScript, string, Assembly>? _assemblyLoader;
 
     /// <summary>
     ///     Construct a new caching decorator.
@@ -71,7 +72,7 @@ public sealed class CachingCompiler : IPluginCompiler
                     ? CollectiblePluginLoadContext.ForScript(script)
                     : null;
                 var cachedAsm = _assemblyLoader?.Invoke(script, cachePath)
-                    ?? sandbox!.LoadFromPluginPath(cachePath);
+                                ?? sandbox!.LoadFromPluginPath(cachePath);
 #pragma warning restore S3885
                 _logger.LogDebug("Cache hit for {Path} ({Hash})", script.Path, script.Hash);
                 return CompilationResult.Cached(new CompiledPluginAssembly(
@@ -91,7 +92,7 @@ public sealed class CachingCompiler : IPluginCompiler
         // Persist the freshly compiled assembly bytes for next time. The inner compiler
         // supplies the PE image via CompiledPluginAssembly.AssemblyBytes; if it didn't
         // (e.g. a custom compiler that only loads from a path), persistence is skipped.
-        if (inner.Value.AssemblyBytes is { } bytes)
+        if (inner.Value.AssemblyBytes is {} bytes)
         {
             try
             {
@@ -111,7 +112,9 @@ public sealed class CachingCompiler : IPluginCompiler
     private static void TryDelete(string path)
     {
         try
-        { File.Delete(path); }
+        {
+            File.Delete(path);
+        }
         catch (IOException)
         { /* ignore — best-effort */
         }

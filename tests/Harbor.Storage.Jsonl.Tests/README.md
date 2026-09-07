@@ -20,7 +20,7 @@ dotnet test tests/Harbor.Storage.Jsonl.Tests --filter "FullyQualifiedName~JsonlS
 
 ## Layer
 
-Tests — depends on the project(s) under test + TUnit (test framework). No production code.
+Tests — depends on the project (s) under test + TUnit (test framework). No production code.
 
 ## See also
 

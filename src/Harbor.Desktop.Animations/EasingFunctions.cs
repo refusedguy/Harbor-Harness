@@ -1,4 +1,5 @@
 namespace Harbor.Desktop.Animations;
+
 /// <summary>
 ///     Easing-function delegates and a registry of named easings. Each
 ///     platform app uses the <see cref="Apply" /> function to interpolate an

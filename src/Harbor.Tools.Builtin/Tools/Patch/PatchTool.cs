@@ -1,10 +1,11 @@
-using System.Globalization;
-using System.Text;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
+using System.Globalization;
+using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Applies a unified-diff patch to a single file. Validates context lines match before
 ///     applying; writes to a temp file and renames atomically. Returns a compact preview of
@@ -100,7 +101,7 @@ public sealed class PatchTool : ITool
 
         string original = prep.Value.Original;
         string[] originalLines = prep.Value.Lines;
-        List<Hunk> hunks = prep.Value.Hunks;
+        var hunks = prep.Value.Hunks;
 
         // B7perf: stream applied lines straight into the temp file instead of
         // materializing List<string> + one giant string.Join copy (~9 MB at
@@ -121,7 +122,7 @@ public sealed class PatchTool : ITool
         {
             await using var file = new FileStream(
                 tempPath, FileMode.Create, FileAccess.Write, FileShare.Read,
-                bufferSize: 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
             using var writer = new StreamWriter(file, utf8);
 
             var applied = ApplyHunks(originalLines, hunks, writer, originalEndsWithNewline, originalHasCr);
@@ -132,7 +133,7 @@ public sealed class PatchTool : ITool
                 // Failure field on stateful DTO.
                 return ToolResult.Error(applied.Error);
             }
-            PatchApplyState apply = applied.Value;
+            var apply = applied.Value;
 
             await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
 
@@ -175,23 +176,6 @@ public sealed class PatchTool : ITool
     }
 
     /// <summary>
-    ///     Outcome of <see cref="ApplyHunks" /> (ROP-A Z1 п.4: failures travel
-    ///     through <c>Result</c>, not through a mutable field).
-    /// </summary>
-    private sealed class PatchApplyState
-    {
-        /// <summary>True when the patched output is byte-identical to the original (historical "already applied?" error).</summary>
-        public bool ProducedNoChanges;
-
-        /// <summary>
-        ///     Trailing LF bytes that the historical <c>TrimEnd('\n')</c> would
-        ///     have removed from the joined output (blank-line artifacts of the
-        ///     no-trailing-newline rule). Zero when nothing needs trimming.
-        /// </summary>
-        public long TrailingArtifactLfBytes;
-    }
-
-    /// <summary>
     ///     Walks hunks in order, validates context, and streams output lines
     ///     straight into <paramref name="output" /> — byte-identical to the
     ///     historical <c>string.Join("\n", applied)</c> (first line has no
@@ -229,8 +213,8 @@ public sealed class PatchTool : ITool
 
         // ── Positional-equality bookkeeping ──
         bool mismatch = false;
-        int emitted = 0;         // total lines emitted so far (incl. blank lines)
-        int pendingEmpties = 0;  // consecutive blank emissions not yet judged (always a suffix run)
+        int emitted = 0; // total lines emitted so far (incl. blank lines)
+        int pendingEmpties = 0; // consecutive blank emissions not yet judged (always a suffix run)
         bool wroteAny = false;
 
         void FlushPendingVerdict()
@@ -356,38 +340,31 @@ public sealed class PatchTool : ITool
         return Result.Success(state);
     }
 
-    /// <summary>
-    ///     ROP-A Z1 п.3: prelude railway — existence guards, capped read and
-    ///     hunk parsing compose into one result; FormatException stops being a
-    ///     cross-method control-flow channel.
-    /// </summary>
-    private sealed record PatchInput(string Original, string[] Lines, List<Hunk> Hunks);
-
     private async Task<Result<PatchInput>> LoadPatchInputAsync(string path, string patch, CancellationToken ct)
     {
-        Result<string> exists =
+        var exists =
             Result.Success(path)
                 .Ensure(static p => !Directory.Exists(p), p => $"Path is a directory: {p}")
                 .Ensure(static p => File.Exists(p), p => $"File not found: {p}");
         if (exists.IsFailure)
             return Result.Failure<PatchInput>(exists.Error);
 
-        Result<string> read = await Result.Try(
+        var read = await Result.Try(
                 () => File.ReadAllTextAsync(path, Encoding.UTF8, ct),
                 ex => $"Failed to read: {ex.Message}")
             .ConfigureAwait(false);
         if (read.IsFailure)
             return Result.Failure<PatchInput>(read.Error);
 
-        Result<string> sized =
+        var sized =
             read.Ensure(s => s.Length <= MaxFileChars,
                 s => $"File too large ({s.Length} chars; max {MaxFileChars}).");
         if (sized.IsFailure)
             return Result.Failure<PatchInput>(sized.Error);
 
-        Result<List<Hunk>> parsed = Result.Try(
-                () => ParseHunks(patch),
-                ex => $"Failed to parse patch: {ex.Message}");
+        var parsed = Result.Try(
+            () => ParseHunks(patch),
+            ex => $"Failed to parse patch: {ex.Message}");
         if (parsed.IsFailure)
             return Result.Failure<PatchInput>(parsed.Error);
 
@@ -593,6 +570,30 @@ public sealed class PatchTool : ITool
         { /* best effort */
         }
     }
+
+    /// <summary>
+    ///     Outcome of <see cref="ApplyHunks" /> (ROP-A Z1 п.4: failures travel
+    ///     through <c>Result</c>, not through a mutable field).
+    /// </summary>
+    private sealed class PatchApplyState
+    {
+        /// <summary>True when the patched output is byte-identical to the original (historical "already applied?" error).</summary>
+        public bool ProducedNoChanges;
+
+        /// <summary>
+        ///     Trailing LF bytes that the historical <c>TrimEnd('\n')</c> would
+        ///     have removed from the joined output (blank-line artifacts of the
+        ///     no-trailing-newline rule). Zero when nothing needs trimming.
+        /// </summary>
+        public long TrailingArtifactLfBytes;
+    }
+
+    /// <summary>
+    ///     ROP-A Z1 п.3: prelude railway — existence guards, capped read and
+    ///     hunk parsing compose into one result; FormatException stops being a
+    ///     cross-method control-flow channel.
+    /// </summary>
+    private sealed record PatchInput(string Original, string[] Lines, List<Hunk> Hunks);
 
     private enum HunkLineType { Context, Deletion, Addition }
 

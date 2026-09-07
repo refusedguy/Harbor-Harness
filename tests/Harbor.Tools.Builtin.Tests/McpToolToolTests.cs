@@ -1,10 +1,11 @@
-using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Registries.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
+
 /// <summary>
 ///     Tests for <see cref="McpToolTool" /> — argument validation, missing-registry error
 ///     path, and the InMemoryMcpRegistry stub behaviour (registered-but-no-transport

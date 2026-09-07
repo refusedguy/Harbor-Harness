@@ -1,7 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Tools;
 using System.Text.Json;
-
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>Scriptable <see cref="IMcpRegistry" />: InvokeAsync answers from a handler, recording the last call.</summary>
@@ -9,13 +8,10 @@ internal sealed class ScriptedMcpRegistry : IMcpRegistry
 {
     private readonly Func<string, string, JsonElement, Result<string>> _invoke;
 
-    public ScriptedMcpRegistry(Func<string, string, JsonElement, Result<string>> invoke) => _invoke = invoke;
-
-    public static ScriptedMcpRegistry Succeed(string payload) =>
-        new((_, _, _) => Result.Success(payload));
-
-    public static ScriptedMcpRegistry Fail(string error) =>
-        new((_, _, _) => Result.Failure<string>(error));
+    public ScriptedMcpRegistry(Func<string, string, JsonElement, Result<string>> invoke)
+    {
+        _invoke = invoke;
+    }
 
     public string? LastServer { get; private set; }
     public string? LastMethod { get; private set; }
@@ -33,4 +29,10 @@ internal sealed class ScriptedMcpRegistry : IMcpRegistry
         LastArgsJson = args.ValueKind == JsonValueKind.Undefined ? null : args.GetRawText();
         return Task.FromResult(_invoke(server, method, args));
     }
+
+    public static ScriptedMcpRegistry Succeed(string payload) =>
+        new((_, _, _) => Result.Success(payload));
+
+    public static ScriptedMcpRegistry Fail(string error) =>
+        new((_, _, _) => Result.Failure<string>(error));
 }

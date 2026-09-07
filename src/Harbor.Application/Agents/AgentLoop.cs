@@ -1,14 +1,14 @@
-using System.Globalization;
-using Harbor.Diagnostics;
-using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Resilience;
 using Harbor.Application.Resources;
 using Harbor.Application.Sessions;
 using Harbor.Application.Telemetry;
+using Harbor.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Globalization;
 namespace Harbor.Application.Agents;
+
 /// <summary>
 ///     Default agent loop. Implements Chain of Responsibility pattern (GOF):
 ///     prompt → LLM stream → tool execution → next turn → (compaction if needed) → repeat.
@@ -25,27 +25,27 @@ namespace Harbor.Application.Agents;
 /// </summary>
 public sealed class AgentLoop : IAgentLoop
 {
+
+    // C7: bounded retry budget for the LLM streaming call site only.
+    private static readonly RetryOptions StreamRetryOptions = new(3, TimeSpan.FromSeconds(1), true);
     private readonly IAgentRegistry _agents;
     private readonly ICompactionService _compaction;
+    private readonly CompactionBehavior _compactionBehavior;
     private readonly IEventBus _eventBus;
     private readonly ILogger<AgentLoop> _logger;
+    private readonly IMcpRegistry? _mcpRegistry;
     private readonly MessageConverter _messageConverter;
+    private readonly IMetrics _metrics;
     private readonly IPermissionService _permissions;
-    private readonly IRetryPolicy _retryPolicy;
+    private readonly AgentPipeline _pipeline;
     private readonly ISystemPromptBuilder _promptBuilder;
     private readonly IProviderRegistry _providers;
+    private readonly IRetryPolicy _retryPolicy;
+    private readonly SteeringDrainBehavior _steering;
     private readonly ITokenTracker _tokenTracker;
     private readonly IToolDispatcher _toolDispatcher;
     private readonly IToolRegistry _tools;
-    private readonly AgentPipeline _pipeline;
-    private readonly CompactionBehavior _compactionBehavior;
-    private readonly SteeringDrainBehavior _steering;
-    private readonly IMcpRegistry? _mcpRegistry;
-    private readonly IMetrics _metrics;
     private readonly ITracer _tracer;
-
-    // C7: bounded retry budget for the LLM streaming call site only.
-    private static readonly RetryOptions StreamRetryOptions = new(MaxAttempts: 3, BaseDelay: TimeSpan.FromSeconds(1), UseJitter: true);
 
     /// <summary>
     ///     Construct an <see cref="AgentLoop" /> wired to the supplied services.
@@ -88,7 +88,7 @@ public sealed class AgentLoop : IAgentLoop
         // fallback uses a NullLogger because the loop's own typed logger must
         // not be lent out under a foreign category (S6672).
         _toolDispatcher = toolDispatcher
-            ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance);
+                          ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance);
         // §3.5 pipeline: run-level cross-cutting concerns are middleware over the
         // whole run; per-turn behaviors (compaction, steering, max steps) are
         // extracted classes the core loop calls each turn. Behaviors share the
@@ -96,7 +96,7 @@ public sealed class AgentLoop : IAgentLoop
         _pipeline = new AgentPipeline(
         [
             new LoggingBehavior(logger),
-            new PermissionCheckBehavior(logger),
+            new PermissionCheckBehavior(logger)
         ]);
         _compactionBehavior = new CompactionBehavior(compaction, tokenTracker, eventBus, _metrics, logger);
         _steering = new SteeringDrainBehavior(tokenTracker, logger);
@@ -128,8 +128,8 @@ public sealed class AgentLoop : IAgentLoop
     /// </summary>
     private async Task<Result> RunCoreAsync(PromptRequest run, CancellationToken ct)
     {
-        ISessionContext session = run.Session;
-        AgentDefinition agent = run.Agent;
+        var session = run.Session;
+        var agent = run.Agent;
         using var activity = HarborTelemetry.Source.StartActivity("Agent.Run");
         activity?.SetTag(GenAiTags.AgentName, agent.Name.Value);
         activity?.SetTag(GenAiTags.RequestModel, agent.Model);
@@ -164,12 +164,12 @@ public sealed class AgentLoop : IAgentLoop
                 // list: after a summary was produced, ShouldCompact and the
                 // request both see [summary] + kept tail, so compaction does
                 // not re-trigger on every subsequent turn.
-                IReadOnlyList<AgentMessage> turnMessages = CompactionService.MaterializeCompactedView(session.Messages);
+                var turnMessages = CompactionService.MaterializeCompactedView(session.Messages);
 
                 // 2. Compaction check + truncation fallback — the per-turn
                 // CompactionBehavior owns threshold check, summarization,
                 // events/metrics and the fallback decision (§3.5).
-                CompactionOutcome compactionOutcome = await _compactionBehavior
+                var compactionOutcome = await _compactionBehavior
                     .BeforeTurnAsync(session, turnMessages, model, truncationFallback, ct)
                     .ConfigureAwait(false);
                 turnMessages = compactionOutcome.TurnMessages;
@@ -248,7 +248,7 @@ public sealed class AgentLoop : IAgentLoop
                 var partial = streamed.Partial;
                 var toolCalls = streamed.ToolCalls;
                 var malformedCalls = streamed.MalformedCalls;
-                Usage? finalUsage = streamed.FinalUsage;
+                var finalUsage = streamed.FinalUsage;
                 var stopReason = streamed.StopReason;
 
                 await session.AppendMessageAsync(partial, ct).ConfigureAwait(false);
@@ -264,7 +264,7 @@ public sealed class AgentLoop : IAgentLoop
                 // tool activity, or the stream was aborted mid-flight (never
                 // execute tools for a cancelled run).
                 _logger.LogDebug("Turn {Turn}: toolCalls={ToolCalls} malformed={Malformed} stopReason={StopReason}", turn, toolCalls.Count, malformedCalls.Count, stopReason);
-                if ((toolCalls.Count == 0 && malformedCalls.Count == 0) || stopReason == StopReason.Aborted)
+                if (toolCalls.Count == 0 && malformedCalls.Count == 0 || stopReason == StopReason.Aborted)
                 {
                     _logger.LogDebug("Turn {Turn} end (no tool calls)", turn);
                     await _eventBus.PublishAsync(
@@ -327,7 +327,7 @@ public sealed class AgentLoop : IAgentLoop
                 // can reflect the aborted state instead of a clean finish.
                 _logger.LogInformation("Agent run cancelled: session={SessionId} agent={Agent}", session.Session.Id, agent.Name.Value);
                 await _eventBus.PublishAsync(
-                    new AgentEndEvent(SnapshotMessages(session.Messages), Cancelled: true), CancellationToken.None).ConfigureAwait(false);
+                    new AgentEndEvent(SnapshotMessages(session.Messages), true), CancellationToken.None).ConfigureAwait(false);
 
                 return Result.Failure("Agent run was cancelled.");
             }
@@ -353,7 +353,7 @@ public sealed class AgentLoop : IAgentLoop
     ///     Resolve the provider id, LLM client and concrete model for this run.
     ///     Errors are routed structurally by the Bind chain: any step failing
     ///     short-circuits to the single <c>IsFailure</c> exit. The "model may be
-    ///     absent" case is expressed as <see cref="Maybe{T}"/> → ToResult rather
+    ///     absent" case is expressed as <see cref="Maybe{T}" /> → ToResult rather
     ///     than a null-check convention.
     /// </summary>
     private async Task<Result<(ILlmClient Client, ModelInfo Model)>> ResolveModelAsync(
@@ -467,7 +467,7 @@ public sealed class AgentLoop : IAgentLoop
 
                     case StepFinishEvent sf:
                     {
-                        StepOutcome outcome = await FinalizeStepAsync(sf, coalescer, partial, malformedCalls, ct).ConfigureAwait(false);
+                        var outcome = await FinalizeStepAsync(sf, coalescer, partial, malformedCalls, ct).ConfigureAwait(false);
                         partial = outcome.Partial;
                         toolCalls.AddRange(outcome.MaterializedCalls);
                         finalUsage = outcome.FinalUsage;
@@ -523,7 +523,7 @@ public sealed class AgentLoop : IAgentLoop
     /// </summary>
     private static AssistantMessage FlushAll(StreamingCoalescer coalescer, AssistantMessage partial)
     {
-        AssistantMessage flushedText = FlushText(coalescer, partial);
+        var flushedText = FlushText(coalescer, partial);
         return FlushThinking(coalescer, flushedText);
     }
 
@@ -558,13 +558,6 @@ public sealed class AgentLoop : IAgentLoop
         return new StepOutcome(partial, materializedCalls, sf.Usage, stopReason);
     }
 
-    /// <summary>Per-step finalize result handed back to the stream loop.</summary>
-    private sealed record StepOutcome(
-        AssistantMessage Partial,
-        List<ToolCallPart> MaterializedCalls,
-        Usage? FinalUsage,
-        StopReason StopReason);
-
     /// <summary>
     ///     Surface malformed tool calls (C4): keep the assistant message's
     ///     wire shape consistent by appending a placeholder part per call —
@@ -587,17 +580,6 @@ public sealed class AgentLoop : IAgentLoop
     }
 
     /// <summary>
-    ///     Terminal outcome of one streaming attempt (see
-    ///     <see cref="ConsumeTurnStreamAsync" />).
-    /// </summary>
-    private sealed record TurnStreamResult(
-        AssistantMessage Partial,
-        List<ToolCallPart> ToolCalls,
-        List<MalformedToolCall> MalformedCalls,
-        Usage? FinalUsage,
-        StopReason StopReason);
-
-    /// <summary>
     ///     Execute the turn's tool calls and synthesize error results for
     ///     malformed ones. Valid calls go through <see cref="ToolDispatcher" />
     ///     (permission gating + events); malformed calls never reach a tool —
@@ -618,7 +600,7 @@ public sealed class AgentLoop : IAgentLoop
         {
             var executed = await _toolDispatcher.ExecuteAsync(
                 toolCalls, session, partial, agent, ct,
-                agent.ToolTimeoutSeconds is { } seconds
+                agent.ToolTimeoutSeconds is {} seconds
                     ? TimeSpan.FromSeconds(seconds)
                     : null).ConfigureAwait(false);
             results.AddRange(executed.Results);
@@ -700,4 +682,22 @@ public sealed class AgentLoop : IAgentLoop
         }
         return snapshot;
     }
+
+    /// <summary>Per-step finalize result handed back to the stream loop.</summary>
+    private sealed record StepOutcome(
+        AssistantMessage Partial,
+        List<ToolCallPart> MaterializedCalls,
+        Usage? FinalUsage,
+        StopReason StopReason);
+
+    /// <summary>
+    ///     Terminal outcome of one streaming attempt (see
+    ///     <see cref="ConsumeTurnStreamAsync" />).
+    /// </summary>
+    private sealed record TurnStreamResult(
+        AssistantMessage Partial,
+        List<ToolCallPart> ToolCalls,
+        List<MalformedToolCall> MalformedCalls,
+        Usage? FinalUsage,
+        StopReason StopReason);
 }

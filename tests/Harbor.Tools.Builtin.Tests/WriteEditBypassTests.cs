@@ -1,9 +1,8 @@
-using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
 
 public class WriteEditBypassTests
@@ -51,7 +50,7 @@ public class WriteEditBypassTests
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(root, true);
         }
     }
 
@@ -76,7 +75,7 @@ public class WriteEditBypassTests
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(root, true);
         }
     }
 
@@ -103,7 +102,7 @@ public class WriteEditBypassTests
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(root, true);
         }
     }
 
@@ -131,7 +130,7 @@ public class WriteEditBypassTests
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(root, true);
         }
     }
 }

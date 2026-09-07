@@ -1,12 +1,10 @@
-using System.Net;
-using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
-using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
+using System.Net;
+using System.Text;
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
@@ -14,7 +12,7 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     The gate itself (per-hop DNS re-resolution, non-public address
 ///     refusal, scheme pinning on redirects, redirect-count cap) shipped
 ///     with zero adversarial tests. Every scenario here is offline: literal
-     /// IP hosts resolve without DNS traffic, the .invalid TLD is guaranteed
+///     IP hosts resolve without DNS traffic, the .invalid TLD is guaranteed
 ///     NXDOMAIN, and the injected handler records whether the gate ever let
 ///     a request through.
 /// </summary>
@@ -35,22 +33,9 @@ public class WebFetchSsrfNegativeTests
     private static JsonElement Args(string url) =>
         JsonDocument.Parse($"{{\"url\":\"{url}\"}}").RootElement.Clone();
 
-    private sealed class CountingHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
-        : HttpMessageHandler
-    {
-        public int Calls { get; private set; }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Calls++;
-            return Task.FromResult(responder(request));
-        }
-    }
-
     private static HttpResponseMessage Html(string body = "<p>x</p>") => new(HttpStatusCode.OK)
     {
-        Content = new StringContent(body, System.Text.Encoding.UTF8, "text/html")
+        Content = new StringContent(body, Encoding.UTF8, "text/html")
     };
 
     private static HttpResponseMessage Redirect(string location)
@@ -118,10 +103,7 @@ public class WebFetchSsrfNegativeTests
 
     [Test]
     [Skip("Sandbox DNS wildcards NXDOMAIN: .invalid resolved to a captive 200 page, so the fail-closed branch cannot be exercised here. The code path is SocketException → fail-closed block (WebFetchTool.GetBlockedReasonAsync); covered implicitly by CI networks without intercepting resolvers.")]
-    public async Task Execute_UnresolvableHost_FailsClosed()
-    {
-        await Task.CompletedTask;
-    }
+    public async Task Execute_UnresolvableHost_FailsClosed() => await Task.CompletedTask;
 
     // ── 6: allowlist bypass is the ONLY way to reach a local host ──
 
@@ -132,7 +114,7 @@ public class WebFetchSsrfNegativeTests
         var tool = new WebFetchTool(
             NullLogger<WebFetchTool>.Instance,
             () => new HttpClient(handler),
-            allowedHosts: ["localhost"]);
+            ["localhost"]);
 
         var result = await tool.ExecuteAsync(Args("http://localhost:59999/ping"), Ctx());
 
@@ -150,7 +132,7 @@ public class WebFetchSsrfNegativeTests
         var tool = new WebFetchTool(
             NullLogger<WebFetchTool>.Instance,
             () => new HttpClient(handler),
-            allowedHosts: ["example.com"]);
+            ["example.com"]);
 
         var result = await tool.ExecuteAsync(Args("http://example.com/redirect"), Ctx());
 
@@ -165,7 +147,7 @@ public class WebFetchSsrfNegativeTests
         var tool = new WebFetchTool(
             NullLogger<WebFetchTool>.Instance,
             () => new HttpClient(handler),
-            allowedHosts: ["example.com"]);
+            ["example.com"]);
 
         var result = await tool.ExecuteAsync(Args("http://example.com/down"), Ctx());
 
@@ -185,12 +167,25 @@ public class WebFetchSsrfNegativeTests
         var tool = new WebFetchTool(
             NullLogger<WebFetchTool>.Instance,
             () => new HttpClient(handler),
-            allowedHosts: ["example.com"]);
+            ["example.com"]);
 
         var result = await tool.ExecuteAsync(Args("http://example.com/start"), Ctx());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("exceeded");
         await Assert.That(handler.Calls).IsLessThanOrEqualTo(WebFetchTool.MaxRedirectHops + 1);
+    }
+
+    private sealed class CountingHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
+        : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(responder(request));
+        }
     }
 }

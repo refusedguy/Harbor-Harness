@@ -1,6 +1,7 @@
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 namespace Harbor.Terminal.Abstractions.Views;
+
 /// <summary>
 ///     Builtin chat history view — renders <see cref="ChatHistoryViewModel" /> state: accumulated
 ///     <see cref="ChatEntry" /> records plus optional live streaming text and thinking buffer.
@@ -31,7 +32,7 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
     /// <inheritdoc />
     public override Task RenderAsync(ITuiRenderContext context, CancellationToken ct = default)
     {
-        var vm = this.ViewModel;
+        var vm = ViewModel;
         if (vm is null)
         {
             return Task.CompletedTask;

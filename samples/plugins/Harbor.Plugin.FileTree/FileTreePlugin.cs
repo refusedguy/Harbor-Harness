@@ -1,11 +1,12 @@
-using System.Text;
-using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
+using System.Text;
+using System.Text.Json;
 namespace Harbor.Plugin.FileTree;
+
 /// <summary>
 ///     FileTree plugin — adds a `tree` tool that visualizes directory structure.
 ///     Demonstrates a read-only tool with custom output formatting.

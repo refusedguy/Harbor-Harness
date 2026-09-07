@@ -8,15 +8,15 @@ Session orchestration for the Harbor UI Framework — session factory, manager, 
 
 ## What's in it
 
-| File | Purpose |
-|------|---------|
-| `Sessions/ISessionManager.cs` | `ISessionManager` — create, open, close, list, switch sessions. |
-| `Sessions/SessionManager.cs` | `SessionManager` — in-memory session lifecycle with status/message-count events. |
-| `Sessions/SessionFactory.cs` | `SessionFactory` — creates default, new, or branched sessions; resolves provider/model/agent from config. |
-| `Sessions/SessionSwitcher.cs` | `SessionSwitcher` — opens a session and hydrates its `UiStore` into a target store. |
-| `Sessions/SessionContext.cs` | `SessionContext` — binds a `Session`, `UiStore`, status, git branch, and hydration flag together. |
-| `Sessions/SessionGitTracker.cs` | `SessionGitTracker` — refreshes git status for a session directory. |
-| `Sessions/IChatViewBinder.cs` | `IChatViewBinder` — rebinds a `UiStore` to a chat view after session switch. |
+| File                            | Purpose                                                                                                   |
+|---------------------------------|-----------------------------------------------------------------------------------------------------------|
+| `Sessions/ISessionManager.cs`   | `ISessionManager` — create, open, close, list, switch sessions.                                           |
+| `Sessions/SessionManager.cs`    | `SessionManager` — in-memory session lifecycle with status/message-count events.                          |
+| `Sessions/SessionFactory.cs`    | `SessionFactory` — creates default, new, or branched sessions; resolves provider/model/agent from config. |
+| `Sessions/SessionSwitcher.cs`   | `SessionSwitcher` — opens a session and hydrates its `UiStore` into a target store.                       |
+| `Sessions/SessionContext.cs`    | `SessionContext` — binds a `Session`, `UiStore`, status, git branch, and hydration flag together.         |
+| `Sessions/SessionGitTracker.cs` | `SessionGitTracker` — refreshes git status for a session directory.                                       |
+| `Sessions/IChatViewBinder.cs`   | `IChatViewBinder` — rebinds a `UiStore` to a chat view after session switch.                              |
 
 ## Public API summary
 
@@ -28,19 +28,19 @@ Session orchestration for the Harbor UI Framework — session factory, manager, 
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `Microsoft.Extensions.Logging.Abstractions` | Logging |
-| `Microsoft.Extensions.Logging` | Logging (concrete) |
-| `CSharpFunctionalExtensions` | Result types |
+| Package                                     | Purpose            |
+|---------------------------------------------|--------------------|
+| `Microsoft.Extensions.Logging.Abstractions` | Logging            |
+| `Microsoft.Extensions.Logging`              | Logging (concrete) |
+| `CSharpFunctionalExtensions`                | Result types       |
 
-| Project | Purpose |
-|---------|---------|
-| `Harbor.Abstractions` | `Session`, `AgentEvent`, `AgentDefinition` |
-| `Harbor.Ui.Framework.State` | `UiStore`, state records |
-| `Harbor.Ui.Framework.Services` | `SessionStatusTracker`, `GitService` |
-| `Harbor.Ui.Framework.ViewModels` | View models |
-| `Harbor.Ui.Framework.Abstractions` | Contracts |
+| Project                            | Purpose                                    |
+|------------------------------------|--------------------------------------------|
+| `Harbor.Abstractions`              | `Session`, `AgentEvent`, `AgentDefinition` |
+| `Harbor.Ui.Framework.State`        | `UiStore`, state records                   |
+| `Harbor.Ui.Framework.Services`     | `SessionStatusTracker`, `GitService`       |
+| `Harbor.Ui.Framework.ViewModels`   | View models                                |
+| `Harbor.Ui.Framework.Abstractions` | Contracts                                  |
 
 ## Tests
 

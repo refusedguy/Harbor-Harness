@@ -2,6 +2,7 @@ using Harbor.Build.Meta;
 using Nuke.Common.ProjectModel;
 using Nuke.Common.Tools.DotNet;
 namespace Harbor.Build.Targets;
+
 /// <summary>
 ///     Test target — runs every unit-test project in the solution as a plain
 ///     executable (<c>dotnet run --project</c>), one process per project,
@@ -35,7 +36,7 @@ public static class TestTarget
         "PerfTests",
         "Benchmarks",
         "TestKit",
-        "PtyTests",
+        "PtyTests"
     ];
 
     /// <summary>
@@ -43,10 +44,10 @@ public static class TestTarget
     /// </summary>
     public static void Execute(Solution solution, BuildSettings settings, BuildOutput output)
     {
-        var configuration = settings.ConfigurationString;
+        string configuration = settings.ConfigurationString;
         var projects = solution.AllProjects
             .Where(p => p.Name.EndsWith("Tests", StringComparison.Ordinal)
-                && !ExcludedSubstrings.Any(s => p.Name.Contains(s, StringComparison.Ordinal)))
+                        && !ExcludedSubstrings.Any(s => p.Name.Contains(s, StringComparison.Ordinal)))
             .OrderBy(p => p.Name, StringComparer.Ordinal)
             .ToArray();
 
@@ -55,7 +56,7 @@ public static class TestTarget
         var failed = new List<string>();
         foreach (var project in projects)
         {
-            var projectPath = project.Path.ToString();
+            string projectPath = project.Path.ToString();
             output.Cmd("Test", ["dotnet", "run", "--project", projectPath, "-c", configuration, "--no-build", "--", "--minimum-expected-tests", "1"]);
             if (output.IsDryRun)
             {

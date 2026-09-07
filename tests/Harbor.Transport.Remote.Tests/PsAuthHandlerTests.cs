@@ -1,7 +1,3 @@
-using System.Security.Cryptography;
-using Harbor.Transport.Remote;
-using TUnit.Assertions;
-
 namespace Harbor.Transport.Remote.Tests;
 
 /// <summary>
@@ -18,16 +14,10 @@ namespace Harbor.Transport.Remote.Tests;
 public class PsAuthHandlerTests
 {
     [Test]
-    public async Task Validate_NullProvided_ReturnsFalse()
-    {
-        await Assert.That(PsAuthHandler.Validate(null, "expected")).IsFalse();
-    }
+    public async Task Validate_NullProvided_ReturnsFalse() => await Assert.That(PsAuthHandler.Validate(null, "expected")).IsFalse();
 
     [Test]
-    public async Task Validate_EmptyProvided_ReturnsFalse()
-    {
-        await Assert.That(PsAuthHandler.Validate(string.Empty, "expected")).IsFalse();
-    }
+    public async Task Validate_EmptyProvided_ReturnsFalse() => await Assert.That(PsAuthHandler.Validate(string.Empty, "expected")).IsFalse();
 
     [Test]
     public async Task Validate_WrongKey_ReturnsFalse()
@@ -48,16 +38,10 @@ public class PsAuthHandlerTests
     }
 
     [Test]
-    public async Task Validate_IsCaseSensitive()
-    {
-        await Assert.That(PsAuthHandler.Validate("EXPECTED", "expected")).IsFalse();
-    }
+    public async Task Validate_IsCaseSensitive() => await Assert.That(PsAuthHandler.Validate("EXPECTED", "expected")).IsFalse();
 
     [Test]
-    public async Task Validate_LengthMismatch_ReturnsFalse()
-    {
-        await Assert.That(PsAuthHandler.Validate("short", "a-much-longer-expected-value")).IsFalse();
-    }
+    public async Task Validate_LengthMismatch_ReturnsFalse() => await Assert.That(PsAuthHandler.Validate("short", "a-much-longer-expected-value")).IsFalse();
 
     [Test]
     public async Task Validate_ExpectedEmpty_AlwaysFalse()

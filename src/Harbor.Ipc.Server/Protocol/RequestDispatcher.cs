@@ -1,4 +1,5 @@
 namespace Harbor.Ipc.Protocol;
+
 /// <summary>
 ///     Server-side dispatcher: takes a <see cref="HarborRequest" /> and
 ///     produces a <see cref="HarborResponse" /> by calling the in-process
@@ -26,8 +27,8 @@ namespace Harbor.Ipc.Protocol;
 public sealed class RequestDispatcher
 {
     private readonly EventBroadcaster _broadcaster;
-    private readonly IServiceProvider _serviceProvider;
     private readonly SessionLeaseRegistry _leases;
+    private readonly IServiceProvider _serviceProvider;
 
     /// <summary>
     ///     Construct a dispatcher backed by the host's service provider.
@@ -256,7 +257,7 @@ public sealed class RequestDispatcher
             return new ErrorResponse { RequestId = r.RequestId, Message = "Cannot subscribe: no reply stream / write lock" };
         }
 
-        EventBroadcaster.SubscriptionAckData ack = await _broadcaster
+        var ack = await _broadcaster
             .RegisterAsync(replyStream, replyWriteLock, r.LastSequence, clientId ?? "anonymous")
             .ConfigureAwait(false);
 

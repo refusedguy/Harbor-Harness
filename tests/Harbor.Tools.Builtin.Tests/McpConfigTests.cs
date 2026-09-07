@@ -1,8 +1,5 @@
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Tools.Builtin.Tests;
 
 public class McpConfigTests
@@ -21,12 +18,12 @@ public class McpConfigTests
         try
         {
             File.WriteAllText(tempFile, """
-            {
-                "test-server": "echo hello"
-            }
-            """);
+                                        {
+                                            "test-server": "echo hello"
+                                        }
+                                        """);
 
-            var loggerFactory = LoggerFactory.Create(b => { });
+            var loggerFactory = LoggerFactory.Create(b => {});
             var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>());
             var result = registry.RegisterFromConfig(tempFile);
             await Assert.That(result.IsSuccess).IsTrue();
@@ -41,7 +38,7 @@ public class McpConfigTests
     [Test]
     public async Task RegisterFromConfig_ReturnsSuccess_WhenFileMissing()
     {
-            var loggerFactory = LoggerFactory.Create(b => { });
+        var loggerFactory = LoggerFactory.Create(b => {});
         var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>());
         var result = registry.RegisterFromConfig("/nonexistent/path/harbor.mcp.json");
         await Assert.That(result.IsSuccess).IsTrue();
@@ -54,15 +51,15 @@ public class McpConfigTests
         try
         {
             File.WriteAllText(tempFile, """
-            {
-                "my-server": {
-                    "command": "node",
-                    "args": ["-e", "console.log('ok')"]
-                }
-            }
-            """);
+                                        {
+                                            "my-server": {
+                                                "command": "node",
+                                                "args": ["-e", "console.log('ok')"]
+                                            }
+                                        }
+                                        """);
 
-            var loggerFactory = LoggerFactory.Create(b => { });
+            var loggerFactory = LoggerFactory.Create(b => {});
             var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>());
             var result = registry.RegisterFromConfig(tempFile);
             await Assert.That(result.IsSuccess).IsTrue();

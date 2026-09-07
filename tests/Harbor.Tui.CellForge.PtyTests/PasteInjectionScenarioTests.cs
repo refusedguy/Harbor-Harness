@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -16,7 +14,7 @@ public sealed class PasteInjectionScenarioTests : CellForgePtyScenarioBase
     public async Task BracketedPaste_WithDangerInjection_InsertsAsText_NeverExecutes()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 

@@ -8,8 +8,8 @@ Serilog-based logging bootstrap for Harbor. Configures sinks (file, console, asy
 
 ## What's in it
 
-| File | Purpose |
-|------|---------|
+| File             | Purpose                                                                                                                                                    |
+|------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `LoggerSetup.cs` | `Create(...)` and `CreateWithDiagnostics(...)` factory methods that build Serilog loggers from Harbor config. Also `CleanupOldLogs(...)` for log rotation. |
 
 ## Public API summary
@@ -20,13 +20,13 @@ Serilog-based logging bootstrap for Harbor. Configures sinks (file, console, asy
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `Serilog` | Core logging API |
-| `Serilog.Extensions.Hosting` | `ILoggerFactory` integration |
-| `Serilog.Sinks.File` | Rolling file sink |
-| `Serilog.Sinks.Console` | Console sink |
-| `Serilog.Sinks.Async` | Async wrapper for other sinks |
+| Package                                     | Purpose                                |
+|---------------------------------------------|----------------------------------------|
+| `Serilog`                                   | Core logging API                       |
+| `Serilog.Extensions.Hosting`                | `ILoggerFactory` integration           |
+| `Serilog.Sinks.File`                        | Rolling file sink                      |
+| `Serilog.Sinks.Console`                     | Console sink                           |
+| `Serilog.Sinks.Async`                       | Async wrapper for other sinks          |
 | `Microsoft.Extensions.Logging.Abstractions` | `ILoggerFactory` / `ILogger` contracts |
 
 ## Tests

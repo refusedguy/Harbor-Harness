@@ -1,13 +1,12 @@
-namespace Harbor.Tui.AnsiPlain;
-
 using Harbor.Abstractions.Contracts;
 using Harbor.Tui.AnsiPlain.EscapeCodes;
 using Microsoft.Extensions.Logging;
+namespace Harbor.Tui.AnsiPlain;
 
 /// <summary>
 ///     ANSI mode of the unified renderer — full color/style support on a real
-///     terminal. Thin subclass of <see cref="AnsiPlainTuiRenderer"/> selecting
-///     <see cref="AnsiEscapeStrategy"/>; all render logic lives in the base.
+///     terminal. Thin subclass of <see cref="AnsiPlainTuiRenderer" /> selecting
+///     <see cref="AnsiEscapeStrategy" />; all render logic lives in the base.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -16,26 +15,26 @@ using Microsoft.Extensions.Logging;
 ///         <c>Harbor.Tui.Sixel</c>) can extend it and reuse the streaming
 ///         token feed while adding image-emission hooks. We chose inheritance
 ///         over composition here because the Sixel renderer needs to override
-///         <see cref="BaseTuiRenderer.RenderAsync"/> with minimal logic —
+///         <see cref="BaseTuiRenderer.RenderAsync" /> with minimal logic —
 ///         calling <c>base.RenderAsync</c> for the common case and only
 ///         intercepting <c>ToolExecutionEndEvent</c> payloads that may carry
 ///         image bytes.
 ///     </para>
 /// </remarks>
 [TuiRenderer(Backend = "ansi")]
-public partial class AnsiTuiRenderer : AnsiPlainTuiRenderer
+public class AnsiTuiRenderer : AnsiPlainTuiRenderer
 {
     public AnsiTuiRenderer(ILogger<AnsiTuiRenderer> logger)
-        : base(Console.Out, ownsWriter: false, AnsiEscapeStrategy.Instance, logger)
+        : base(Console.Out, false, AnsiEscapeStrategy.Instance, logger)
     {
     }
 
     /// <summary>
     ///     ANSI mode over a caller-supplied writer (golden-frame tests, string
-    ///     capture). Production code keeps using <see cref="Console.Out"/>.
+    ///     capture). Production code keeps using <see cref="Console.Out" />.
     /// </summary>
     public AnsiTuiRenderer(ILogger<AnsiTuiRenderer> logger, TextWriter writer)
-        : base(writer, ownsWriter: false, AnsiEscapeStrategy.Instance, logger)
+        : base(writer, false, AnsiEscapeStrategy.Instance, logger)
     {
     }
 

@@ -1,5 +1,3 @@
-using Harbor.Lsp;
-
 namespace Harbor.Lsp.Tests;
 
 public class LspServerCatalogTests
@@ -9,14 +7,16 @@ public class LspServerCatalogTests
     {
         await Assert.That(LspServerDefinition.Builtin).HasCount().EqualTo(11);
         await Assert.That(LspServerDefinition.Builtin.Select(d => d.Id))
-            .IsEquivalentTo(["typescript", "python", "go", "rust", "csharp",
-                "clangd", "java", "html", "css", "json", "lua"]);
+            .IsEquivalentTo([
+                "typescript", "python", "go", "rust", "csharp",
+                "clangd", "java", "html", "css", "json", "lua"
+            ]);
     }
 
     [Test]
     public async Task Handles_MatchesDeclaredExtensions_Only()
     {
-        LspServerDefinition ts = LspServerDefinition.TypeScript;
+        var ts = LspServerDefinition.TypeScript;
         await Assert.That(ts.Handles("/a/b/App.tsx")).IsTrue();
         await Assert.That(ts.Handles("/a/b/App.TS")).IsTrue(); // case-insensitive
         await Assert.That(ts.Handles("/a/b/App.py")).IsFalse();
@@ -49,7 +49,7 @@ public class LspServerCatalogTests
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(root, true);
         }
     }
 
@@ -66,7 +66,7 @@ public class LspServerCatalogTests
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(root, true);
         }
     }
 }
@@ -74,10 +74,7 @@ public class LspServerCatalogTests
 public class LspUriTests
 {
     [Test]
-    public async Task FileUri_AbsolutePath_Prefixed()
-    {
-        await Assert.That(LspServerSession.FileUri("/tmp/a.ts")).IsEqualTo("file:///tmp/a.ts");
-    }
+    public async Task FileUri_AbsolutePath_Prefixed() => await Assert.That(LspServerSession.FileUri("/tmp/a.ts")).IsEqualTo("file:///tmp/a.ts");
 
     [Test]
     public async Task FileUri_ThenFromUri_RoundTrips_WithSpaces()

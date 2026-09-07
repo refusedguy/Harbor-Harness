@@ -1,14 +1,13 @@
 using Harbor.Abstractions.Models;
 using Harbor.App.Cli.Commands;
 using Harbor.Storage.Memory;
-
 namespace Harbor.App.Cli.Tests;
 
 public class SessionForkRunnerTests
 {
     private readonly MemorySessionStore _store = new();
 
-    private static async Task<Harbor.Abstractions.Models.Session> SeedAsync(
+    private static async Task<Session> SeedAsync(
         MemorySessionStore store, string title, params AgentMessage[] messages)
     {
         var created = (await store.CreateAsync("/tmp", "code", "test", "test-model")).Value;
@@ -43,7 +42,7 @@ public class SessionForkRunnerTests
     {
         var source = await SeedAsync(_store, "lineage root", User("q1"), Assistant("a1"), User("q2"), Assistant("a2"));
         var history = (await _store.GetMessagesAsync(source.Id)).Value;
-        string cutPoint = history[1].Id.ToString(); // inclusive cut after a1
+        string cutPoint = history[1].Id; // inclusive cut after a1
 
         var forked = await new SessionForkRunner(_store).ForkAsync(source.Id, cutPoint);
 
@@ -63,15 +62,15 @@ public class SessionForkRunnerTests
 
         var forkMessages = (await _store.GetMessagesAsync(forked.Value.ForkId)).Value;
         await Assert.That(forkMessages.Count).IsEqualTo(2);
-        await Assert.That(forkMessages[0].Id.ToString()).IsEqualTo(history[0].Id.ToString());
-        await Assert.That(forkMessages[1].Id.ToString()).IsEqualTo(history[1].Id.ToString());
+        await Assert.That(forkMessages[0].Id).IsEqualTo(history[0].Id);
+        await Assert.That(forkMessages[1].Id).IsEqualTo(history[1].Id);
     }
 
     [Test]
     public async Task Fork_LastMessage_CopiesEverything()
     {
         var source = await SeedAsync(_store, "", User("only question"), Assistant("only answer"));
-        var last = (await _store.GetMessagesAsync(source.Id)).Value[^1].Id.ToString();
+        string last = (await _store.GetMessagesAsync(source.Id)).Value[^1].Id;
 
         var forked = await new SessionForkRunner(_store).ForkAsync(source.Id, last);
 

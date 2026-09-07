@@ -1,13 +1,9 @@
 using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Immutable;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Ui.Framework.Tests;
 
 /// <summary>
@@ -16,8 +12,6 @@ namespace Harbor.Ui.Framework.Tests;
 internal sealed class TestDispatcherAdapter : IDispatcherAdapter
 {
     public event EventHandler<UiState>? StateChanged;
-
-    public void Raise(UiState state) => StateChanged?.Invoke(this, state);
 
     public void Post(Action action) => action();
 
@@ -30,6 +24,8 @@ internal sealed class TestDispatcherAdapter : IDispatcherAdapter
     public void Unbind(UiStore store)
     {
     }
+
+    public void Raise(UiState state) => StateChanged?.Invoke(this, state);
 }
 
 /// <summary>

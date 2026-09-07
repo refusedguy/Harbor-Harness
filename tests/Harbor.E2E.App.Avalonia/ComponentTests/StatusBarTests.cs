@@ -1,10 +1,7 @@
 using Harbor.Abstractions.Events;
-using Harbor.App.Avalonia.ViewModels;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.DependencyInjection;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core.Enums;
-
+using System.Globalization;
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
 /// <summary>
@@ -22,7 +19,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 [NotInParallel]
 public sealed class StatusBarTests : ComponentTestBase
 {
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupAsync() => await GetDriverAsync("StatusBar").ConfigureAwait(false);
 
     /// <summary>
@@ -38,11 +35,11 @@ public sealed class StatusBarTests : ComponentTestBase
         UI(() => Vm.StatusText = "idle");
         await Task.Delay(200).ConfigureAwait(false);
 
-        var hasIdle = await Driver.WaitForTextAsync("idle", TimeSpan.FromSeconds(2))
+        bool hasIdle = await Driver.WaitForTextAsync("idle", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasIdle).IsTrue();
 
-        var path = await CaptureAsync("statusbar-idle").ConfigureAwait(false);
+        string path = await CaptureAsync("statusbar-idle").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -62,11 +59,11 @@ public sealed class StatusBarTests : ComponentTestBase
         });
         await Task.Delay(200).ConfigureAwait(false);
 
-        var hasRunning = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
+        bool hasRunning = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasRunning).IsTrue();
 
-        var path = await CaptureAsync("statusbar-running").ConfigureAwait(false);
+        string path = await CaptureAsync("statusbar-running").ConfigureAwait(false);
 
         UI(() =>
         {
@@ -92,11 +89,11 @@ public sealed class StatusBarTests : ComponentTestBase
         });
         await Task.Delay(200).ConfigureAwait(false);
 
-        var hasModel = await Driver.WaitForTextAsync("qwen2.5-coder:7b", TimeSpan.FromSeconds(2))
+        bool hasModel = await Driver.WaitForTextAsync("qwen2.5-coder:7b", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasModel).IsTrue();
 
-        var path = await CaptureAsync("statusbar-model-label").ConfigureAwait(false);
+        string path = await CaptureAsync("statusbar-model-label").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -114,24 +111,24 @@ public sealed class StatusBarTests : ComponentTestBase
         // transition now that the app fully boots. StepFinishEvent carries
         // usage into state.Cost (AppReducer.OnStepFinish).
         var eventBus = Driver.Host.Services
-            .GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
-        var partial = Harbor.Abstractions.Models.AssistantMessage.Empty(
+            .GetRequiredService<IEventBus>();
+        var partial = AssistantMessage.Empty(
             "e2e-tok-session", "qwen2.5-coder:7b");
         await eventBus.PublishAsync(new MessageUpdateEvent(
-            new StepFinishEvent(0, "stop", new Harbor.Abstractions.Models.Usage(1234, 5678)),
+            new StepFinishEvent(0, "stop", new Usage(1234, 5678)),
             partial)).ConfigureAwait(false);
 
         // N0 grouping is culture-dependent ("1,234" vs "1 234") — build the
         // expected strings with the process culture instead of hardcoding.
-        string expectedIn = 1234.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
-        string expectedOut = 5678.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
-        var hasIn = await Driver.WaitForTextAsync(expectedIn, TimeSpan.FromSeconds(3))
+        string expectedIn = 1234.ToString("N0", CultureInfo.CurrentCulture);
+        string expectedOut = 5678.ToString("N0", CultureInfo.CurrentCulture);
+        bool hasIn = await Driver.WaitForTextAsync(expectedIn, TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        var hasOut = await Driver.WaitForTextAsync(expectedOut, TimeSpan.FromSeconds(3))
+        bool hasOut = await Driver.WaitForTextAsync(expectedOut, TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(hasIn && hasOut).IsTrue();
 
-        var path = await CaptureAsync("statusbar-token-counts").ConfigureAwait(false);
+        string path = await CaptureAsync("statusbar-token-counts").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -147,11 +144,11 @@ public sealed class StatusBarTests : ComponentTestBase
         UI(() => Vm.CostUsd = 0.0234m);
         await Task.Delay(200).ConfigureAwait(false);
 
-        var hasCost = await Driver.WaitForTextAsync("$0.0234", TimeSpan.FromSeconds(2))
+        bool hasCost = await Driver.WaitForTextAsync("$0.0234", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasCost).IsTrue();
 
-        var path = await CaptureAsync("statusbar-cost").ConfigureAwait(false);
+        string path = await CaptureAsync("statusbar-cost").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -178,13 +175,13 @@ public sealed class StatusBarTests : ComponentTestBase
         });
         await Task.Delay(250).ConfigureAwait(false);
 
-        var hasRunning = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
+        bool hasRunning = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        var hasCost = await Driver.WaitForTextAsync("$0.1234", TimeSpan.FromSeconds(2))
+        bool hasCost = await Driver.WaitForTextAsync("$0.1234", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasRunning && hasCost).IsTrue();
 
-        var path = await CaptureAsync("statusbar-full-population").ConfigureAwait(false);
+        string path = await CaptureAsync("statusbar-full-population").ConfigureAwait(false);
 
         UI(() =>
         {

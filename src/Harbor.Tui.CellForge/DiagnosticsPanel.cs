@@ -1,6 +1,5 @@
-using Microsoft.Extensions.Logging;
 using Harbor.Ui.Framework.Diagnostics;
-
+using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.CellForge.Diagnostics;
 
 public sealed class DiagnosticsPanel : IDiagnosticsPanel

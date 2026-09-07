@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 namespace Harbor.Abstractions.Agents;
+
 /// <summary>
 ///     Minimal runner surface for an agent — the subset of <see cref="IAgent" /> that
 ///     presentation and orchestration layers need to drive a conversation.

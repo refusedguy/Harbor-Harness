@@ -1,7 +1,6 @@
 using Harbor.Abstractions.Events;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Diagnostics;
 namespace Harbor.Core.Tests;
 
 /// <summary>
@@ -12,7 +11,7 @@ namespace Harbor.Core.Tests;
 public class EventBusBackpressureTests
 {
     private static InMemoryEventBus BusWithBudget(TimeSpan budget) => new(
-        NullLogger<InMemoryEventBus>.Instance, maxScrollback: 0, handlerBudget: budget);
+        NullLogger<InMemoryEventBus>.Instance, 0, budget);
 
     [Test]
     public async Task FastSubscriber_ReceivesEventSynchronously()
@@ -36,19 +35,20 @@ public class EventBusBackpressureTests
     {
         var bus = BusWithBudget(TimeSpan.FromMilliseconds(50));
         int deliveries = 0;
+
         ValueTask SlowHandler(AgentEvent evt, CancellationToken ct)
         {
             Interlocked.Increment(ref deliveries);
             return new ValueTask(Task.Delay(TimeSpan.FromSeconds(30), ct));
         }
 
-        IDisposable sub = bus.Subscribe(SlowHandler);
+        var sub = bus.Subscribe(SlowHandler);
 
         // Three strikes → eviction. Each publish must return promptly
         // instead of waiting out the 30-second handler.
         for (int i = 0; i < 3; i++)
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var sw = Stopwatch.StartNew();
             await bus.PublishAsync(new TurnStartEvent(i));
             sw.Stop();
             await Assert.That(sw.ElapsedMilliseconds).IsLessThan(2_000);
@@ -60,7 +60,7 @@ public class EventBusBackpressureTests
 
         // After eviction the slow subscriber no longer receives anything —
         // and publishes stay fast.
-        var fourth = System.Diagnostics.Stopwatch.StartNew();
+        var fourth = Stopwatch.StartNew();
         await bus.PublishAsync(new TurnStartEvent(99));
         fourth.Stop();
         await Assert.That(fourth.ElapsedMilliseconds).IsLessThan(500);
@@ -72,7 +72,7 @@ public class EventBusBackpressureTests
     public async Task DisabledBudget_KeepsLegacyBlockingSemantics()
     {
         var bus = new InMemoryEventBus(
-            NullLogger<InMemoryEventBus>.Instance, 0, handlerBudget: TimeSpan.Zero);
+            NullLogger<InMemoryEventBus>.Instance, 0, TimeSpan.Zero);
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) =>
         {

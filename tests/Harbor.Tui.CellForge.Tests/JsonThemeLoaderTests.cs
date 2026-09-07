@@ -1,13 +1,12 @@
 using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Projection;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Custom JSON themes: hex parsing (#RGB/#RRGGBB), full and partial catalogs
-/// (omitted slots merge over the active theme), error reporting, and file
-/// loading.
+///     Custom JSON themes: hex parsing (#RGB/#RRGGBB), full and partial catalogs
+///     (omitted slots merge over the active theme), error reporting, and file
+///     loading.
 /// </summary>
 public class JsonThemeLoaderTests
 {
@@ -32,13 +31,13 @@ public class JsonThemeLoaderTests
     public async Task Parse_FullCatalog_ProducesNamedTheme()
     {
         string json = """
-            {
-              "name": "sunset",
-              "accent": "#ff8800",
-              "text": "#ffffff",
-              "background": "#10080a"
-            }
-            """;
+                      {
+                        "name": "sunset",
+                        "accent": "#ff8800",
+                        "text": "#ffffff",
+                        "background": "#10080a"
+                      }
+                      """;
 
         var result = JsonThemeLoader.Parse(json);
 
@@ -59,7 +58,7 @@ public class JsonThemeLoaderTests
 
             await Assert.That(result.IsSuccess).IsTrue();
             await Assert.That(result.Value.Accent).IsEqualTo(new RgbColor(0x12, 0x34, 0x56));
-            await Assert.That(result.Value.Text).IsEqualTo(HarborTheme.HarborCool.Text);       // merged
+            await Assert.That(result.Value.Text).IsEqualTo(HarborTheme.HarborCool.Text); // merged
             await Assert.That(result.Value.Background).IsEqualTo(HarborTheme.HarborCool.Background);
         }
         finally

@@ -1,6 +1,4 @@
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -40,10 +38,7 @@ public abstract class ToastNotificationViewModelBase : StoreSubscriberViewModel
     ///     declared selectors to project state slices into view-model properties.
     /// </summary>
     /// <param name="state">The current UI state snapshot.</param>
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 
     /// <summary>Add a toast to <see cref="ActiveToasts" />.</summary>
     protected void AddToast(ToastNotification toast)

@@ -1,5 +1,3 @@
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
 namespace Harbor.Application.Sessions;
 
 /// <summary>
@@ -51,11 +49,11 @@ public sealed class SessionForkService
         string? title = null,
         CancellationToken ct = default)
     {
-        Result<Session> parentRes = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
+        var parentRes = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
         if (parentRes.IsFailure)
             return Result.Failure<SessionFork>(parentRes.Error);
 
-        Result<IReadOnlyList<AgentMessage>> msgsRes = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
+        var msgsRes = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
         if (msgsRes.IsFailure)
             return Result.Failure<SessionFork>(msgsRes.Error);
 
@@ -68,7 +66,7 @@ public sealed class SessionForkService
         {
             // Linear scan keeps this allocation-free for the "cut at Nth message" case.
             int boundary = -1;
-            IReadOnlyList<AgentMessage> source = msgsRes.Value;
+            var source = msgsRes.Value;
             for (int i = 0; i < source.Count; i++)
             {
                 if (string.Equals(source[i].Id, upToMessageId, StringComparison.Ordinal))
@@ -85,23 +83,23 @@ public sealed class SessionForkService
             count = boundary + 1;
         }
 
-        Session parent = parentRes.Value;
-        Result<Session> created = await store.CreateAsync(
+        var parent = parentRes.Value;
+        var created = await store.CreateAsync(
             parent.Directory, parent.Agent, parent.ProviderId, parent.Model, ct).ConfigureAwait(false);
         if (created.IsFailure)
             return Result.Failure<SessionFork>(created.Error);
 
-        Session child = created.Value;
+        var child = created.Value;
 
         // Lineage must be durable before any message lands — otherwise a crash between
         // Create and Update leaves a sibling with no visible branch relationship. The
         // requested/defaulted title rides along on the same write.
-        Session stampedChild = child with
+        var stampedChild = child with
         {
             ParentSessionId = sessionId,
-            Title = title ?? $"Fork of {parent.Title}",
+            Title = title ?? $"Fork of {parent.Title}"
         };
-        Result stamped = await store.UpdateAsync(stampedChild, ct).ConfigureAwait(false);
+        var stamped = await store.UpdateAsync(stampedChild, ct).ConfigureAwait(false);
         if (stamped.IsFailure)
         {
             await store.DeleteAsync(child.Id, CancellationToken.None).ConfigureAwait(false);
@@ -110,8 +108,8 @@ public sealed class SessionForkService
 
         for (int i = 0; i < count; i++)
         {
-            AgentMessage copy = msgsRes.Value[i] with { SessionId = child.Id };
-            Result appended = await store.AppendMessageAsync(child.Id, copy, ct).ConfigureAwait(false);
+            var copy = msgsRes.Value[i] with { SessionId = child.Id };
+            var appended = await store.AppendMessageAsync(child.Id, copy, ct).ConfigureAwait(false);
             if (appended.IsFailure)
                 return Result.Failure<SessionFork>(appended.Error);
         }

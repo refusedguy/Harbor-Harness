@@ -1,19 +1,27 @@
 using System.Text;
 using System.Text.Json;
+using System.Xml;
 using System.Xml.Linq;
 namespace Harbor.Build.Meta;
+
 /// <summary>One project known to the mapper (name + csproj path, absolute or root-relative).</summary>
 public sealed record ImpactProject(string Name, string CsprojPath);
+
 /// <summary>Everything the mapper needs; decoupled from NUKE so it is testable offline.</summary>
 public sealed record ImpactInput(string RootDirectory, IReadOnlyList<ImpactProject> Projects);
+
 /// <summary>Options for the what-command.</summary>
 public sealed record ImpactOptions(bool Strict = false, bool IncludePublish = false);
+
 /// <summary>An affected project and why it is affected.</summary>
 public sealed record AffectedProject(string Name, string Reason);
+
 /// <summary>A suggested command with its justification.</summary>
 public sealed record PlannedCommand(IReadOnlyList<string> Argv, string Why);
+
 /// <summary>A deliberately omitted command and why.</summary>
 public sealed record SkippedCommand(string Command, string Why);
+
 /// <summary>The what-command answer: projects, plan, notes, confidence.</summary>
 public sealed record ImpactAnswer(
     string Input,
@@ -26,6 +34,7 @@ public sealed record ImpactAnswer(
     public const string High = "high";
     public const string Low = "low";
 }
+
 /// <summary>
 ///     Deterministic offline mapping "changed path → affected projects →
 ///     minimal build plan" for <c>./build.sh what</c>. Reads files only,
@@ -47,7 +56,7 @@ public static class ImpactMapper
     /// <summary>Runs the analysis for a raw (absolute or relative) path.</summary>
     public static ImpactAnswer Analyze(ImpactInput input, string rawPath, ImpactOptions options)
     {
-        var normalized = Normalize(input.RootDirectory, rawPath, out var insideRoot);
+        string normalized = Normalize(input.RootDirectory, rawPath, out bool insideRoot);
         if (!insideRoot)
         {
             return new ImpactAnswer(
@@ -99,15 +108,18 @@ public static class ImpactMapper
                 ["path is not inside any known project (src/, apps/, tests/)"],
                 ImpactAnswer.Low);
         }
-        var (affected, closureUsedConditionalEdges) = graph.ReverseClosure(owner);
+        (var affected, bool closureUsedConditionalEdges) = graph.ReverseClosure(owner);
         var answer = BuildPlan(rawPath, affected, normalized, options);
         if (graph.HasParseFailures || closureUsedConditionalEdges)
         {
             answer = answer with
             {
                 Confidence = ImpactAnswer.Low,
-                Notes = [.. answer.Notes,
-                    "csproj graph contains conditional/wildcard/unparseable references — treat the plan as advisory"]
+                Notes =
+                [
+                    ..answer.Notes,
+                    "csproj graph contains conditional/wildcard/unparseable references — treat the plan as advisory"
+                ]
             };
         }
         return answer;
@@ -125,7 +137,7 @@ public static class ImpactMapper
             WriteProjects(writer, answer.AffectedProjects);
             WritePlan(writer, answer.Commands, answer.Skipped);
             writer.WriteStartArray("notes");
-            foreach (var note in answer.Notes)
+            foreach (string note in answer.Notes)
             {
                 writer.WriteStringValue(note);
             }
@@ -143,7 +155,7 @@ public static class ImpactMapper
         {
             output.Human($"  affected: {project.Name} ({project.Reason})");
         }
-        foreach (var note in answer.Notes)
+        foreach (string note in answer.Notes)
         {
             output.Human($"  note: {note}");
         }
@@ -179,7 +191,7 @@ public static class ImpactMapper
         {
             writer.WriteStartObject();
             writer.WriteStartArray("argv");
-            foreach (var arg in command.Argv)
+            foreach (string arg in command.Argv)
             {
                 writer.WriteStringValue(arg);
             }
@@ -202,15 +214,15 @@ public static class ImpactMapper
     /// <summary>
     ///     Normalizes a raw path to a slash-separated path relative to the
     ///     repository root (per design §2.3: absolute or relative-to-root
-    ///    inputs both land on the same canonical form).
+    ///     inputs both land on the same canonical form).
     /// </summary>
     internal static string Normalize(string rootDirectory, string rawPath, out bool insideRoot)
     {
         insideRoot = true;
-        var full = System.IO.Path.IsPathRooted(rawPath)
-            ? System.IO.Path.GetFullPath(rawPath)
-            : System.IO.Path.GetFullPath(System.IO.Path.Combine(rootDirectory, rawPath));
-        var fullRoot = System.IO.Path.GetFullPath(rootDirectory);
+        string full = Path.IsPathRooted(rawPath)
+            ? Path.GetFullPath(rawPath)
+            : Path.GetFullPath(Path.Combine(rootDirectory, rawPath));
+        string fullRoot = Path.GetFullPath(rootDirectory);
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         if (!full.StartsWith(fullRoot, comparison))
         {
@@ -239,12 +251,12 @@ public static class ImpactMapper
         ImpactOptions options)
     {
         var affectedNames = affected.Select(a => a.Project.Name).ToHashSet(StringComparer.Ordinal);
-        var touchesSrc = affected.Any(a => a.Project.RelativeDir.StartsWith("src/", StringComparison.Ordinal));
-        var touchesTests = affected.Any(a => a.Project.RelativeDir.StartsWith("tests/", StringComparison.Ordinal));
-        var touchesCli = affectedNames.Contains("Harbor.App.Cli");
-        var touchesAvalonia = affectedNames.Contains("Harbor.App.Avalonia");
-        var touchesIpc = affectedNames.Any(n => n.StartsWith("Harbor.Ipc.", StringComparison.Ordinal));
-        var touchesArchitectureTests = affectedNames.Contains("Harbor.Architecture.Tests");
+        bool touchesSrc = affected.Any(a => a.Project.RelativeDir.StartsWith("src/", StringComparison.Ordinal));
+        bool touchesTests = affected.Any(a => a.Project.RelativeDir.StartsWith("tests/", StringComparison.Ordinal));
+        bool touchesCli = affectedNames.Contains("Harbor.App.Cli");
+        bool touchesAvalonia = affectedNames.Contains("Harbor.App.Avalonia");
+        bool touchesIpc = affectedNames.Any(n => n.StartsWith("Harbor.Ipc.", StringComparison.Ordinal));
+        bool touchesArchitectureTests = affectedNames.Contains("Harbor.Architecture.Tests");
         var commands = new List<PlannedCommand>();
         var skipped = new List<SkippedCommand>();
         var notes = new List<string>();
@@ -303,6 +315,7 @@ public static class ImpactMapper
     }
     private static string[] Command(string target) => [BootstrapName(), target];
     private static string BootstrapName() => OperatingSystem.IsWindows() ? "build.ps1" : "./build.sh";
+
     /// <summary>csproj reference graph built by parsing ProjectReference items from every known project.</summary>
     private sealed class ProjectGraph
     {
@@ -312,13 +325,12 @@ public static class ImpactMapper
         {
             foreach (var project in input.Projects)
             {
-                var absolute = System.IO.Path.IsPathRooted(project.CsprojPath)
-                    ? System.IO.Path.GetFullPath(project.CsprojPath)
-                    : System.IO.Path.GetFullPath(System.IO.Path.Combine(input.RootDirectory, project.CsprojPath));
+                string absolute = Path.IsPathRooted(project.CsprojPath)
+                    ? Path.GetFullPath(project.CsprojPath)
+                    : Path.GetFullPath(Path.Combine(input.RootDirectory, project.CsprojPath));
                 _byPath[absolute] = new GraphProject(project.Name, absolute, ToRelative(input.RootDirectory, absolute));
             }
         }
-        private sealed record ReferrerEdge(GraphProject Project, bool Conditional);
         /// <summary>True when any csproj could not be parsed (graph may be incomplete).</summary>
         public bool HasParseFailures { get; private set; }
         public static ProjectGraph Load(ImpactInput input)
@@ -326,7 +338,7 @@ public static class ImpactMapper
             var graph = new ProjectGraph(input);
             foreach (var project in graph._byPath.Values)
             {
-                foreach (var (referencedPath, conditional) in graph.ParseReferences(project.CsprojPath))
+                foreach ((string referencedPath, bool conditional) in graph.ParseReferences(project.CsprojPath))
                 {
                     if (!graph._referrers.TryGetValue(referencedPath, out var list))
                     {
@@ -341,15 +353,15 @@ public static class ImpactMapper
         public GraphProject? FindOwningProject(string normalizedRelativePath)
         {
             GraphProject? best = null;
-            var bestLength = -1;
+            int bestLength = -1;
             foreach (var project in _byPath.Values)
             {
-                var dir = project.RelativeDir;
+                string dir = project.RelativeDir;
                 if (dir.Length == 0 ||
                     bestLength >= dir.Length ||
                     !normalizedRelativePath.StartsWith(dir, StringComparison.Ordinal) ||
-                    (normalizedRelativePath.Length > dir.Length &&
-                     normalizedRelativePath[dir.Length] != '/'))
+                    normalizedRelativePath.Length > dir.Length &&
+                    normalizedRelativePath[dir.Length] != '/')
                 {
                     continue;
                 }
@@ -363,8 +375,8 @@ public static class ImpactMapper
             var closure = new List<(GraphProject, int)> { (owner, 0) };
             var seen = new HashSet<string>(StringComparer.Ordinal) { owner.Name };
             var frontier = new List<(GraphProject Project, bool Conditional)> { (owner, false) };
-            var depth = 0;
-            var usedConditional = false;
+            int depth = 0;
+            bool usedConditional = false;
             while (frontier.Count > 0)
             {
                 depth++;
@@ -392,7 +404,7 @@ public static class ImpactMapper
         private List<(string Path, bool Conditional)> ParseReferences(string csprojPath)
         {
             var references = new List<(string, bool)>();
-            var directory = System.IO.Path.GetDirectoryName(csprojPath);
+            string? directory = Path.GetDirectoryName(csprojPath);
             if (directory is null)
             {
                 // csproj directly at a filesystem root — nothing sane to resolve.
@@ -405,37 +417,40 @@ public static class ImpactMapper
                 document = XDocument.Load(csprojPath, LoadOptions.None);
             }
             catch (Exception ex) when (
-                ex is IOException or System.Xml.XmlException or UnauthorizedAccessException or ArgumentException)
+                ex is IOException or XmlException or UnauthorizedAccessException or ArgumentException)
             {
                 HasParseFailures = true;
                 return references;
             }
             foreach (var element in document.Descendants().Where(e => e.Name.LocalName == "ProjectReference"))
             {
-                var include = element.Attribute("Include")?.Value;
+                string? include = element.Attribute("Include")?.Value;
                 if (string.IsNullOrWhiteSpace(include))
                 {
                     continue;
                 }
                 // Conservative rule: keep the dependency but distrust the plan
                 // when the reference is conditional or computed.
-                var conditional = element.Attribute("Condition") is not null ||
-                                  element.HasElements ||
-                                  include.Contains('$') ||
-                                  include.Contains('*');
-                references.Add((System.IO.Path.GetFullPath(
-                    System.IO.Path.Combine(directory, include)), conditional));
+                bool conditional = element.Attribute("Condition") is not null ||
+                                   element.HasElements ||
+                                   include.Contains('$') ||
+                                   include.Contains('*');
+                references.Add((Path.GetFullPath(
+                    Path.Combine(directory, include)), conditional));
             }
             return references;
         }
         private static string ToRelative(string root, string absolutePath)
         {
-            var fullRoot = System.IO.Path.GetFullPath(root);
+            string fullRoot = Path.GetFullPath(root);
             var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
             return absolutePath.StartsWith(fullRoot, comparison)
                 ? absolutePath[fullRoot.Length..].TrimStart('/', '\\').Replace('\\', '/')
                 : absolutePath.Replace('\\', '/');
         }
+
+        private sealed record ReferrerEdge(GraphProject Project, bool Conditional);
     }
+
     private sealed record GraphProject(string Name, string CsprojPath, string RelativeDir);
 }

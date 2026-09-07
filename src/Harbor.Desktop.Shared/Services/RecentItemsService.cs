@@ -1,5 +1,6 @@
 using System.Text.Json;
 namespace Harbor.Desktop.Shared.Services;
+
 /// <summary>
 ///     Most-recently-used items service for the command palette and the file
 ///     recent-items menu. Persists to <c>~/.harbor/recent.json</c>.

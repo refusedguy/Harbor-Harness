@@ -2,7 +2,7 @@ using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Text;
 namespace Harbor.Plugins.Runtime.Tests;
 
 /// <summary>
@@ -21,7 +21,7 @@ public sealed class SamplePluginsIntegrationTests
         ("samples/plugins/Harbor.Plugin.WebSearch/WebSearchPlugin.cs", "websearch", "websearch"),
         ("samples/plugins/Harbor.Plugin.TodoWrite/TodoWritePlugin.cs", "todowrite", "todo"),
         ("samples/plugins/Harbor.Plugin.GitTools/GitToolsPlugin.cs", "gittools", "git"),
-        ("samples/plugins/Harbor.Plugin.FileTree/FileTreePlugin.cs", "filetree", "tree"),
+        ("samples/plugins/Harbor.Plugin.FileTree/FileTreePlugin.cs", "filetree", "tree")
     };
 
     /// <summary>
@@ -75,7 +75,7 @@ public sealed class SamplePluginsIntegrationTests
         }
 
         // And every sample's registered tool reached the host registry.
-        string[] expectedTools = [.. Samples.Select(s => s.ToolName)];
+        string[] expectedTools = [..Samples.Select(s => s.ToolName)];
         var registered = host.RegisteredTools.Select(t => t.Name.Value).ToHashSet(StringComparer.Ordinal);
         foreach (string toolName in expectedTools)
         {
@@ -91,7 +91,7 @@ public sealed class SamplePluginsIntegrationTests
     private static async Task<string> DescribeFailuresAsync(IReadOnlyList<PluginScript> scripts)
     {
         var compiler = new RoslynPluginCompiler(new PluginAssemblyReferences(NullLogger<PluginAssemblyReferences>.Instance));
-        var report = new System.Text.StringBuilder();
+        var report = new StringBuilder();
         foreach (var script in scripts)
         {
             var compiled = await compiler.CompileAsync(script).ConfigureAwait(false);

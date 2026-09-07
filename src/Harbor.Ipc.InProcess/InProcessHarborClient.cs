@@ -1,6 +1,3 @@
-using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
-using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -10,7 +7,11 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 namespace Harbor.Ipc.InProcess;
+
 /// <summary>
 ///     Default <see cref="IHarborClient" /> implementation. Calls
 ///     <see cref="IAgent" />, <see cref="ISessionStore" />,
@@ -99,15 +100,6 @@ public sealed class InProcessHarborClient : IHarborClient
         _eventBusSubscription = _eventBus.Subscribe(OnEventBusEventAsync);
     }
 
-    /// <inheritdoc />
-    public bool IsConnected => Volatile.Read(ref _disposed) == 0;
-
-    /// <inheritdoc />
-    public Task ConnectAsync(CancellationToken ct = default) => Task.CompletedTask;
-
-    /// <inheritdoc />
-    public Task DisconnectAsync(CancellationToken ct = default) => Task.CompletedTask;
-
     /// <summary>Completes when the event subscription has started receiving events.</summary>
     public Task SubscriptionReady
     {
@@ -121,6 +113,15 @@ public sealed class InProcessHarborClient : IHarborClient
             return _subscriptionReady.Task;
         }
     }
+
+    /// <inheritdoc />
+    public bool IsConnected => Volatile.Read(ref _disposed) == 0;
+
+    /// <inheritdoc />
+    public Task ConnectAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task DisconnectAsync(CancellationToken ct = default) => Task.CompletedTask;
 
     // ── Agent ──────────────────────────────────────────────────────────────
 

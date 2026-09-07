@@ -3,15 +3,13 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Sessions;
-using Harbor.Application.Tests.Fakes;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
+using Harbor.Application.Tests.Fakes;
 using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
 namespace Harbor.Application.Tests;
@@ -28,9 +26,13 @@ public class SkillLoopTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); }
-        catch (IOException) { /* temp dir cleanup is best-effort */ }
-        catch (UnauthorizedAccessException) { /* temp dir cleanup is best-effort */ }
+        try { Directory.Delete(_root, true); }
+        catch (IOException)
+        { /* temp dir cleanup is best-effort */
+        }
+        catch (UnauthorizedAccessException)
+        { /* temp dir cleanup is best-effort */
+        }
     }
 
     [Test]
@@ -42,20 +44,16 @@ public class SkillLoopTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
             "# Review\nFollow the house review checklist.\n");
 
-        var client = new ScriptedLlmClient(
-        [
-            new LlmEvent[]
-            {
-                new ToolCallStartEvent("call-1", "skill"),
-                new ToolCallDeltaEvent("call-1", """{"name":"review"}"""),
-                new StepFinishEvent(0, "stop", new Usage(4, 2))
-            },
-            new LlmEvent[]
-            {
-                new TextDeltaEvent("t", "reviewed"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
-            }
-        ]);
+        var client = new ScriptedLlmClient(new LlmEvent[]
+        {
+            new ToolCallStartEvent("call-1", "skill"),
+            new ToolCallDeltaEvent("call-1", """{"name":"review"}"""),
+            new StepFinishEvent(0, "stop", new Usage(4, 2))
+        }, new LlmEvent[]
+        {
+            new TextDeltaEvent("t", "reviewed"),
+            new StepFinishEvent(1, "stop", new Usage(1, 1))
+        });
         var skill = new SkillTool(null, NullLogger<SkillTool>.Instance, projectSkills, null);
         var loop = CreateLoop(client, new FakeToolRegistry(skill));
         var session = new TestSessionContext(

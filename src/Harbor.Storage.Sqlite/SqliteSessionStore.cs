@@ -1,13 +1,14 @@
-using System.Data.Common;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Results;
 using Harbor.Abstractions.Sessions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
+using System.Data.Common;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 namespace Harbor.Storage.Sqlite;
+
 /// <summary>
 ///     SQLite-backed session storage.
 ///     Implements Repository pattern (GOF) via ISessionStore.
@@ -50,17 +51,6 @@ public sealed class SqliteSessionStore : ISessionStore
                                   """;
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
-    private static JsonSerializerOptions CreateJsonOptions()
-    {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
-        {
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        };
-        options.Converters.Add(new ContentPartJsonConverter());
-        options.Converters.Add(new JsonStringEnumConverter());
-        return options;
-    }
-
     private readonly string _connectionString;
     private readonly object _lock = new();
     private readonly ILogger<SqliteSessionStore> _logger;
@@ -79,64 +69,40 @@ public sealed class SqliteSessionStore : ISessionStore
         CancellationToken ct = default)
     {
         return Task.FromResult(Result.Try(() =>
-        {
-            var session = Session.Create(directory, agentName, providerId, modelId);
-
-            lock (_lock)
             {
-                using var conn = OpenConnection();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
-                                  INSERT INTO sessions (id, project_id, directory, title, agent, model, provider_id, version, created_at, updated_at, metadata)
-                                  VALUES (@id, @pid, @dir, @title, @agent, @model, @provider, @ver, @created, @updated, @meta)
-                                  """;
-                cmd.Parameters.AddWithValue("@id", session.Id);
-                cmd.Parameters.AddWithValue("@pid", session.ProjectId);
-                cmd.Parameters.AddWithValue("@dir", session.Directory);
-                cmd.Parameters.AddWithValue("@title", session.Title);
-                cmd.Parameters.AddWithValue("@agent", session.Agent);
-                cmd.Parameters.AddWithValue("@model", session.Model);
-                cmd.Parameters.AddWithValue("@provider", session.ProviderId);
-                cmd.Parameters.AddWithValue("@ver", "0.2.0");
-                cmd.Parameters.AddWithValue("@created", session.CreatedAt.ToString("O"));
-                cmd.Parameters.AddWithValue("@updated", session.UpdatedAt.ToString("O"));
-                cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(session.Metadata, JsonOptions));
-                cmd.ExecuteNonQuery();
-            }
+                var session = Session.Create(directory, agentName, providerId, modelId);
 
-            return session;
-        }, ResultErrors.Message))
-        .TapError(e => _logger.LogError("Failed to create session: {Error}", e));
+                lock (_lock)
+                {
+                    using var conn = OpenConnection();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = """
+                                      INSERT INTO sessions (id, project_id, directory, title, agent, model, provider_id, version, created_at, updated_at, metadata)
+                                      VALUES (@id, @pid, @dir, @title, @agent, @model, @provider, @ver, @created, @updated, @meta)
+                                      """;
+                    cmd.Parameters.AddWithValue("@id", session.Id);
+                    cmd.Parameters.AddWithValue("@pid", session.ProjectId);
+                    cmd.Parameters.AddWithValue("@dir", session.Directory);
+                    cmd.Parameters.AddWithValue("@title", session.Title);
+                    cmd.Parameters.AddWithValue("@agent", session.Agent);
+                    cmd.Parameters.AddWithValue("@model", session.Model);
+                    cmd.Parameters.AddWithValue("@provider", session.ProviderId);
+                    cmd.Parameters.AddWithValue("@ver", "0.2.0");
+                    cmd.Parameters.AddWithValue("@created", session.CreatedAt.ToString("O"));
+                    cmd.Parameters.AddWithValue("@updated", session.UpdatedAt.ToString("O"));
+                    cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(session.Metadata, JsonOptions));
+                    cmd.ExecuteNonQuery();
+                }
+
+                return session;
+            }, ResultErrors.Message))
+            .TapError(e => _logger.LogError("Failed to create session: {Error}", e));
     }
 
     public async Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
     {
         return (await ReadRowAsync(sessionId, ct).ConfigureAwait(false))
             .Bind(row => row.ToResult($"Session '{sessionId}' not found."));
-    }
-
-    /// <summary>
-    ///     Read one session row. Query failures travel the Result channel
-    ///     (cancellation rethrown via <see cref="ResultErrors.Message" />);
-    ///     a missing row is absence (<see cref="Maybe{T}.None" />), not an
-    ///     error — "not found" stays distinguishable from a storage failure
-    ///     instead of sharing the same Error channel (ROP-B П.24).
-    /// </summary>
-    private Task<Result<Maybe<Session>>> ReadRowAsync(string sessionId, CancellationToken ct)
-    {
-        return Result.Try(async () =>
-        {
-            using var conn = OpenConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT * FROM sessions WHERE id = @id";
-            cmd.Parameters.AddWithValue("@id", sessionId);
-
-            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-            if (!await reader.ReadAsync(ct).ConfigureAwait(false))
-                return Maybe<Session>.None;
-
-            return Maybe.From(ReadSession(reader));
-        }, ResultErrors.Message);
     }
 
     public async Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
@@ -170,39 +136,39 @@ public sealed class SqliteSessionStore : ISessionStore
     public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
         return Task.FromResult(Result.Try(() =>
-        {
-            lock (_lock)
             {
-                using var conn = OpenConnection();
-                using var tx = conn.BeginTransaction();
-                using var cmd = conn.CreateCommand();
-                cmd.Transaction = tx;
-                cmd.CommandText = """
-                                  INSERT INTO messages (id, session_id, parent_id, role, agent, model, created_at, payload)
-                                  VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @payload)
-                                  """;
-                cmd.Parameters.AddWithValue("@id", message.Id);
-                cmd.Parameters.AddWithValue("@sid", sessionId);
-                cmd.Parameters.AddWithValue("@pid", (object?)message.ParentId ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@role", message.Role);
-                cmd.Parameters.AddWithValue("@agent", message is UserMessage u ? u.Agent : DBNull.Value);
-                cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : message is AssistantMessage a ? a.Model : DBNull.Value);
-                cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
-                cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), JsonOptions));
-                cmd.ExecuteNonQuery();
+                lock (_lock)
+                {
+                    using var conn = OpenConnection();
+                    using var tx = conn.BeginTransaction();
+                    using var cmd = conn.CreateCommand();
+                    cmd.Transaction = tx;
+                    cmd.CommandText = """
+                                      INSERT INTO messages (id, session_id, parent_id, role, agent, model, created_at, payload)
+                                      VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @payload)
+                                      """;
+                    cmd.Parameters.AddWithValue("@id", message.Id);
+                    cmd.Parameters.AddWithValue("@sid", sessionId);
+                    cmd.Parameters.AddWithValue("@pid", (object?)message.ParentId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@role", message.Role);
+                    cmd.Parameters.AddWithValue("@agent", message is UserMessage u ? u.Agent : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : message is AssistantMessage a ? a.Model : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
+                    cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), JsonOptions));
+                    cmd.ExecuteNonQuery();
 
-                // Update session.updated_at
-                using var upd = conn.CreateCommand();
-                upd.Transaction = tx;
-                upd.CommandText = "UPDATE sessions SET updated_at = @now WHERE id = @sid";
-                upd.Parameters.AddWithValue("@now", DateTimeOffset.UtcNow.ToString("O"));
-                upd.Parameters.AddWithValue("@sid", sessionId);
-                upd.ExecuteNonQuery();
+                    // Update session.updated_at
+                    using var upd = conn.CreateCommand();
+                    upd.Transaction = tx;
+                    upd.CommandText = "UPDATE sessions SET updated_at = @now WHERE id = @sid";
+                    upd.Parameters.AddWithValue("@now", DateTimeOffset.UtcNow.ToString("O"));
+                    upd.Parameters.AddWithValue("@sid", sessionId);
+                    upd.ExecuteNonQuery();
 
-                tx.Commit();
-            }
-        }, ResultErrors.Message))
-        .TapError(e => _logger.LogError("Failed to append message to session {SessionId}: {Error}", sessionId, e));
+                    tx.Commit();
+                }
+            }, ResultErrors.Message))
+            .TapError(e => _logger.LogError("Failed to append message to session {SessionId}: {Error}", sessionId, e));
     }
 
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
@@ -288,9 +254,9 @@ public sealed class SqliteSessionStore : ISessionStore
                     // Anchor: created_at of the kept message; ties broken by its rowid.
                     cmd.Transaction = scope;
                     cmd.CommandText = """
-                        SELECT created_at, rowid FROM messages
-                        WHERE session_id = @sid AND id = @mid LIMIT 1
-                        """;
+                                      SELECT created_at, rowid FROM messages
+                                      WHERE session_id = @sid AND id = @mid LIMIT 1
+                                      """;
                     cmd.Parameters.AddWithValue("@sid", sessionId);
                     cmd.Parameters.AddWithValue("@mid", messageId);
 
@@ -309,10 +275,10 @@ public sealed class SqliteSessionStore : ISessionStore
                     }
 
                     cmd.CommandText = """
-                        DELETE FROM messages
-                        WHERE session_id = @sid
-                          AND (created_at > @anchor OR (created_at = @anchor AND rowid > @rid))
-                        """;
+                                      DELETE FROM messages
+                                      WHERE session_id = @sid
+                                        AND (created_at > @anchor OR (created_at = @anchor AND rowid > @rid))
+                                      """;
                     cmd.Parameters.AddWithValue("@anchor", anchorCreatedAt);
                     cmd.Parameters.AddWithValue("@rid", anchorRowId);
                     deleted = cmd.ExecuteNonQuery();
@@ -391,6 +357,41 @@ public sealed class SqliteSessionStore : ISessionStore
             .Bind(rows => rows == 0
                 ? Result.Failure($"Session '{session.Id}' not found.")
                 : Result.Success());
+    }
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+        options.Converters.Add(new ContentPartJsonConverter());
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
+    }
+
+    /// <summary>
+    ///     Read one session row. Query failures travel the Result channel
+    ///     (cancellation rethrown via <see cref="ResultErrors.Message" />);
+    ///     a missing row is absence (<see cref="Maybe{T}.None" />), not an
+    ///     error — "not found" stays distinguishable from a storage failure
+    ///     instead of sharing the same Error channel (ROP-B П.24).
+    /// </summary>
+    private Task<Result<Maybe<Session>>> ReadRowAsync(string sessionId, CancellationToken ct)
+    {
+        return Result.Try(async () =>
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT * FROM sessions WHERE id = @id";
+            cmd.Parameters.AddWithValue("@id", sessionId);
+
+            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+                return Maybe<Session>.None;
+
+            return Maybe.From(ReadSession(reader));
+        }, ResultErrors.Message);
     }
 
     private void Initialize()

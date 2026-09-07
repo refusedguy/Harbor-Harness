@@ -1,39 +1,19 @@
 using Harbor.Tui.CellForge.Input;
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CF-B-006 + CF-C-002/C-003: scroll goes through the store. PageUp/PageDown,
-/// arrows, Home/End and mouse-wheel ticks are <see cref="UiMsg"/> values
-/// (verified names: <c>KeyInput</c> + <c>ScrollResetToTail</c> + <c>ScrollClamp</c>,
-/// geometry via <c>Viewport</c> + <c>HistoryMeasured</c>) dispatched to a real
-/// <see cref="UiStore"/>; <see cref="VirtualizedChatTimeline"/> mirrors the
-/// snapshot back via <c>ApplyStoreState</c> (tail-follow derived from
-/// <c>ScrollOffset == 0</c>); resize re-ports geometry via <c>MeasureMsgs</c>.
+///     CF-B-006 + CF-C-002/C-003: scroll goes through the store. PageUp/PageDown,
+///     arrows, Home/End and mouse-wheel ticks are <see cref="UiMsg" /> values
+///     (verified names: <c>KeyInput</c> + <c>ScrollResetToTail</c> + <c>ScrollClamp</c>,
+///     geometry via <c>Viewport</c> + <c>HistoryMeasured</c>) dispatched to a real
+///     <see cref="UiStore" />; <see cref="VirtualizedChatTimeline" /> mirrors the
+///     snapshot back via <c>ApplyStoreState</c> (tail-follow derived from
+///     <c>ScrollOffset == 0</c>); resize re-ports geometry via <c>MeasureMsgs</c>.
 /// </summary>
 public class ScrollStoreTests
 {
-    private sealed class StoreBlock : IChatBlock
-    {
-        public StoreBlock(string text) => Text = text;
-        public string Text { get; }
-        public string Kind => "fixed";
-        public bool IsStreamContinuation => false;
-        public int BudgetBytes => 64;
-        public BlockMeasure Measure(int width) => BlockMeasure.Exact(1);
-        public int CheapEstimate(int width) => 1;
-
-        public void Paint(in BlockPaintContext ctx)
-        {
-            ctx.Buffer.SetText(ctx.Rect.X, ctx.Rect.Y, Text, CellStyle.Plain);
-        }
-
-        public string RawText() => Text;
-    }
 
     private static UiStore SeededStore(int viewportLines, int totalLines)
     {
@@ -76,7 +56,7 @@ public class ScrollStoreTests
     [Test]
     public async Task PageDown_PageUp_ViaDispatch_MovesAndClampsOffset()
     {
-        var store = SeededStore(viewportLines: 10, totalLines: 30); // max = 20
+        var store = SeededStore(10, 30); // max = 20
         _ = store.Dispatch(VirtualizedChatTimeline.ScrollTopMsg());
         await Assert.That(store.State.ScrollOffset).IsEqualTo(20);
 
@@ -93,7 +73,7 @@ public class ScrollStoreTests
     [Test]
     public async Task Wheel_ViaRouter_DispatchesLineScroll()
     {
-        var store = SeededStore(viewportLines: 10, totalLines: 30);
+        var store = SeededStore(10, 30);
         var target = new TimelineWheelTarget("timeline", msg => { _ = store.Dispatch(msg); });
         var router = new MouseRouter();
         router.Bind(target, new Rect(0, 0, 80, 24));
@@ -120,27 +100,27 @@ public class ScrollStoreTests
     [Test]
     public async Task TailFollow_UnpinRepin_ViaStore()
     {
-        var timeline = Populated(blocks: 20, width: 40, viewportH: 5);
-        var store = SeededStore(viewportLines: 5, totalLines: 20);
+        var timeline = Populated(20, 40, 5);
+        var store = SeededStore(5, 20);
 
-        _ = timeline.ApplyStoreState(store.State, width: 40, viewportH: 5);
+        _ = timeline.ApplyStoreState(store.State, 40, 5);
         await Assert.That(timeline.FollowTail).IsTrue();
         await Assert.That(timeline.ScrollY).IsEqualTo(15);
 
         _ = store.Dispatch(VirtualizedChatTimeline.PageUpMsg()); // offset 0 -> 3
         await Assert.That(store.State.ScrollOffset).IsEqualTo(3);
 
-        _ = timeline.ApplyStoreState(store.State, width: 40, viewportH: 5);
+        _ = timeline.ApplyStoreState(store.State, 40, 5);
         await Assert.That(timeline.FollowTail).IsFalse();
         await Assert.That(timeline.ScrollY).IsEqualTo(12);
 
         timeline.Append(new StoreBlock("new arrival"));
-        _ = timeline.ApplyStoreState(store.State, width: 40, viewportH: 5);
+        _ = timeline.ApplyStoreState(store.State, 40, 5);
         await Assert.That(timeline.FollowTail).IsFalse();
         await Assert.That(timeline.ScrollY).IsEqualTo(13); // tail moved on, view did not jump
 
         _ = store.Dispatch(VirtualizedChatTimeline.ResetToTailMsg());
-        _ = timeline.ApplyStoreState(store.State, width: 40, viewportH: 5);
+        _ = timeline.ApplyStoreState(store.State, 40, 5);
         await Assert.That(timeline.FollowTail).IsTrue();
         await Assert.That(timeline.ScrollY).IsEqualTo(16);
     }
@@ -148,7 +128,7 @@ public class ScrollStoreTests
     [Test]
     public async Task Clamp_Boundaries()
     {
-        var store = SeededStore(viewportLines: 10, totalLines: 30); // max = 20
+        var store = SeededStore(10, 30); // max = 20
 
         _ = store.Dispatch(VirtualizedChatTimeline.ScrollBottomMsg());
         await Assert.That(store.State.ScrollOffset).IsEqualTo(0);
@@ -175,7 +155,7 @@ public class ScrollStoreTests
     [Test]
     public async Task Resize_Viewport_HistoryMeasured_ScrollClamp()
     {
-        var store = SeededStore(viewportLines: 10, totalLines: 30);
+        var store = SeededStore(10, 30);
         _ = store.Dispatch(VirtualizedChatTimeline.ScrollTopMsg());
         await Assert.That(store.State.ScrollOffset).IsEqualTo(20);
 
@@ -188,14 +168,14 @@ public class ScrollStoreTests
         _ = store.Dispatch(new UiMsg.ScrollClamp(5));
         await Assert.That(store.State.ScrollOffset).IsEqualTo(5);
 
-        var timeline = Populated(blocks: 30, width: 40, viewportH: 25);
-        UiMsg[] msgs = timeline.MeasureMsgs(25);
+        var timeline = Populated(30, 40, 25);
+        var msgs = timeline.MeasureMsgs(25);
         await Assert.That(msgs.Length).IsEqualTo(3);
         await Assert.That(((UiMsg.Viewport)msgs[0]).HistoryHeight).IsEqualTo(25);
         await Assert.That(((UiMsg.HistoryMeasured)msgs[1]).TotalLines).IsEqualTo(30);
         await Assert.That(((UiMsg.ScrollClamp)msgs[2]).MaxScroll).IsEqualTo(5);
 
-        _ = timeline.ApplyStoreState(store.State, width: 40, viewportH: 25);
+        _ = timeline.ApplyStoreState(store.State, 40, 25);
         await Assert.That(timeline.FollowTail).IsFalse();
         await Assert.That(timeline.ScrollY).IsEqualTo(0); // offset 5 = max -> top row
     }
@@ -203,9 +183,9 @@ public class ScrollStoreTests
     [Test]
     public async Task Roundtrip_Timeline_Store_Timeline()
     {
-        var timeline = Populated(blocks: 30, width: 40, viewportH: 10);
+        var timeline = Populated(30, 40, 10);
         var store = new UiStore();
-        foreach (UiMsg msg in timeline.MeasureMsgs(10))
+        foreach (var msg in timeline.MeasureMsgs(10))
         {
             _ = store.Dispatch(msg);
         }
@@ -214,13 +194,31 @@ public class ScrollStoreTests
         await Assert.That(store.State.TotalLines).IsEqualTo(30);
 
         _ = store.Dispatch(VirtualizedChatTimeline.ScrollTopMsg());
-        _ = timeline.ApplyStoreState(store.State, width: 40, viewportH: 10);
+        _ = timeline.ApplyStoreState(store.State, 40, 10);
         await Assert.That(timeline.FollowTail).IsFalse();
         await Assert.That(timeline.ScrollY).IsEqualTo(0);
 
         _ = store.Dispatch(VirtualizedChatTimeline.ResetToTailMsg());
-        _ = timeline.ApplyStoreState(store.State, width: 40, viewportH: 10);
+        _ = timeline.ApplyStoreState(store.State, 40, 10);
         await Assert.That(timeline.FollowTail).IsTrue();
         await Assert.That(timeline.ScrollY).IsEqualTo(20);
+    }
+
+    private sealed class StoreBlock : IChatBlock
+    {
+        public StoreBlock(string text)
+        {
+            Text = text;
+        }
+        public string Text { get; }
+        public string Kind => "fixed";
+        public bool IsStreamContinuation => false;
+        public int BudgetBytes => 64;
+        public BlockMeasure Measure(int width) => BlockMeasure.Exact(1);
+        public int CheapEstimate(int width) => 1;
+
+        public void Paint(in BlockPaintContext ctx) => ctx.Buffer.SetText(ctx.Rect.X, ctx.Rect.Y, Text, CellStyle.Plain);
+
+        public string RawText() => Text;
     }
 }

@@ -1,4 +1,5 @@
 namespace Harbor.Terminal.Abstractions.Rendering;
+
 /// <summary>
 ///     Block-level GFM pipe-table detection + parsing. No layout, no color,
 ///     no Spectre — just lines in, <see cref="GfmTable" /> out. Shared by every

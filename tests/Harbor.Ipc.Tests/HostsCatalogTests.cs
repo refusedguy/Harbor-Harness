@@ -1,5 +1,4 @@
 using Harbor.Ipc.Protocol;
-
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -27,12 +26,12 @@ public class HostsCatalogTests
     public async Task Load_ParsesAllKinds_WithDefaults()
     {
         string path = WriteTempHostsFile("""
-            {
-              "dell":  { "kind": "tailscale", "port": 48710 },
-              "nuc":   { "kind": "tcp", "host": "192.168.88.42" },
-              "local": { "kind": "uds", "path": "/tmp/harbor.sock" }
-            }
-            """);
+                                         {
+                                           "dell":  { "kind": "tailscale", "port": 48710 },
+                                           "nuc":   { "kind": "tcp", "host": "192.168.88.42" },
+                                           "local": { "kind": "uds", "path": "/tmp/harbor.sock" }
+                                         }
+                                         """);
         try
         {
             var result = HostsCatalog.Load(path);

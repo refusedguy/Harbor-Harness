@@ -1,5 +1,3 @@
-using System;
-
 namespace Harbor.Abstractions.Contracts;
 
 /// <summary>
@@ -8,7 +6,7 @@ namespace Harbor.Abstractions.Contracts;
 ///     partial class with backend metadata (id, frame-boundary constants) that the
 ///     host frame loop consumes to specialise output per backend.
 /// </summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class TuiRendererAttribute : Attribute
 {
     /// <summary>

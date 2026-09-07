@@ -1,4 +1,5 @@
 namespace Harbor.E2E.Framework;
+
 /// <summary>
 ///     Strip ANSI escape sequences from terminal output so the TUI driver's
 ///     rolling screen buffer can be searched with plain <c>string.Contains</c>.

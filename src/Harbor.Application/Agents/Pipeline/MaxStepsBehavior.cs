@@ -1,5 +1,5 @@
-using Harbor.Abstractions.Agents;
 namespace Harbor.Application.Agents.Pipeline;
+
 /// <summary>
 ///     Turn-budget enforcement (audit v2 §3.5 concern #5): a run ends once it has
 ///     consumed <see cref="AgentDefinition.MaxSteps" /> turns. Extracted from the

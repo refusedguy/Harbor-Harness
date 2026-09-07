@@ -1,22 +1,22 @@
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
-/// Draws the composer line(s) into an <see cref="AnsiWriter"/>: visible slice
-/// per logical line (horizontal scroll via <see cref="PromptViewport"/>),
-/// dim placeholder when empty, and caret parking at the end of the frame
-/// (celldiff §3.3 — DECTCEM is not toggled per frame).
+///     Draws the composer line(s) into an <see cref="AnsiWriter" />: visible slice
+///     per logical line (horizontal scroll via <see cref="PromptViewport" />),
+///     dim placeholder when empty, and caret parking at the end of the frame
+///     (celldiff §3.3 — DECTCEM is not toggled per frame).
 /// </summary>
 public static class PromptRenderer
 {
-    public static readonly CellStyle PlaceholderStyle = new(PackedColor.Indexed(243));
     public const char CaretGlyph = '\u2588'; // full block as the visual caret
+    public static readonly CellStyle PlaceholderStyle = new(PackedColor.Indexed(243));
 
     /// <summary>Number of screen rows the prompt occupies for current content.</summary>
     public static int MeasureLineCount(in PromptBuffer buffer)
     {
         int lines = 1;
-        var text = buffer.SnapshotText();
-        foreach (var c in text)
+        string text = buffer.SnapshotText();
+        foreach (char c in text)
         {
             if (c == '\n')
             {
@@ -28,9 +28,9 @@ public static class PromptRenderer
     }
 
     /// <summary>
-    /// Renders the whole prompt starting at the current pen position (caller
-    /// guarantees the region below is clear). Returns the display column of
-    /// the caret on its last row.
+    ///     Renders the whole prompt starting at the current pen position (caller
+    ///     guarantees the region below is clear). Returns the display column of
+    ///     the caret on its last row.
     /// </summary>
     public static int Render(AnsiWriter writer, in PromptBuffer buffer, int widthCells, string? placeholder = null)
     {
@@ -44,7 +44,7 @@ public static class PromptRenderer
             return 0;
         }
 
-        var text = buffer.SnapshotText();
+        string text = buffer.SnapshotText();
         int caret = buffer.Cursor;
 
         // Iterate logical lines with their char ranges.

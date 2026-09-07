@@ -1,9 +1,10 @@
-using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
+
 /// <summary>
 ///     Tests for <see cref="TreeTool" /> — directory tree rendering against a synthetic
 ///     temp directory. Hidden files, depth caps, and the file/dir summary line are checked.

@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -13,7 +11,7 @@ public sealed class CtrlCScenarioTests : CellForgePtyScenarioBase
 {
     private static readonly string[] SpinnerFrames =
     [
-        "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",
+        "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"
     ];
 
     [Test]
@@ -22,7 +20,7 @@ public sealed class CtrlCScenarioTests : CellForgePtyScenarioBase
     {
         // ~800 chars at the mock's 4-chars/50ms cadence ≈ a long turn.
         Server.SetResponse("test-model", new string('х', 800));
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 

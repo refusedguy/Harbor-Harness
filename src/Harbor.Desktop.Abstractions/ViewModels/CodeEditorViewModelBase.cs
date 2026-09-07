@@ -1,6 +1,4 @@
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 public abstract partial class CodeEditorViewModelBase : StoreSubscriberViewModel
@@ -32,10 +30,7 @@ public abstract partial class CodeEditorViewModelBase : StoreSubscriberViewModel
         }
     }
 
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 }
 
 public abstract partial class EditorTabViewModelBase : StoreSubscriberViewModel
@@ -44,13 +39,13 @@ public abstract partial class EditorTabViewModelBase : StoreSubscriberViewModel
     private string _content;
 
     [ObservableProperty]
-    private bool _isDirty;
+    private string _fileName;
 
     [ObservableProperty]
     private string _filePath;
 
     [ObservableProperty]
-    private string _fileName;
+    private bool _isDirty;
 
     protected EditorTabViewModelBase(
         string filePath,
@@ -71,8 +66,5 @@ public abstract partial class EditorTabViewModelBase : StoreSubscriberViewModel
 
     partial void OnContentChanged(string value) => IsDirty = true;
 
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 }

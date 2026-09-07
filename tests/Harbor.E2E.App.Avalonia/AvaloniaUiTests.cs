@@ -1,22 +1,18 @@
-using System.Globalization;
-using System.IO;
-using System.Text;
-using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
 using Harbor.E2E.Framework;
-using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using Harbor.Ui.Framework.ViewModels;
-using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
-using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 using Microsoft.Extensions.DependencyInjection;
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 // See HeadlessAvaloniaDriver.cs for the rationale — the test namespace
 // Harbor.E2E.App.Avalonia shadows Harbor.App.Avalonia for name lookup,
 // so we alias the production App class to 'HarborApp' (not 'App' — that
@@ -24,6 +20,7 @@ using Microsoft.Extensions.DependencyInjection;
 using HarborApp = Harbor.App.Avalonia.App;
 
 namespace Harbor.E2E.App.Avalonia;
+
 /// <summary>
 ///     Real headless Avalonia E2E tests with SCREENSHOT capture.
 /// </summary>
@@ -483,10 +480,10 @@ public sealed class AvaloniaUiTests
     {
         switch (visual)
         {
-            case TextBlock tb when tb.Text is { } t:
+            case TextBlock tb when tb.Text is {} t:
                 sb.AppendLine(t);
                 break;
-            case TextBox txb when txb.Text is { } tx:
+            case TextBox txb when txb.Text is {} tx:
                 sb.AppendLine(tx);
                 break;
             case ContentControl cc when cc.Content is string s:
@@ -722,8 +719,8 @@ public sealed class AvaloniaUiTests
         });
         // Poll for the sidebar state instead of a fixed delay.
         await Driver.WaitForConditionAsync(() =>
-            !Driver.OnUIThread(() =>
-                Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
+                !Driver.OnUIThread(() =>
+                    Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
             TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         await Driver.ScreenshotAsync("14-sidebar-hidden").ConfigureAwait(false);
 
@@ -740,8 +737,8 @@ public sealed class AvaloniaUiTests
         });
         // Poll for the sidebar state instead of a fixed delay.
         await Driver.WaitForConditionAsync(() =>
-            Driver.OnUIThread(() =>
-                Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
+                Driver.OnUIThread(() =>
+                    Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
             TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         await Driver.ScreenshotAsync("15-sidebar-shown").ConfigureAwait(false);
 
@@ -842,13 +839,13 @@ public sealed class AvaloniaUiTests
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
-        var startModel = new Harbor.Abstractions.Models.ModelInfo(
+        var eventBus = Driver.Host.Services.GetRequiredService<IEventBus>();
+        var startModel = new ModelInfo(
             "qwen2.5-coder:7b", "ollama", "Qwen2.5 Coder 7B", 32_768, 4_096, false, false, true,
-            Harbor.Abstractions.Models.Pricing.Unknown, "ollama");
+            Pricing.Unknown, "ollama");
         await eventBus.PublishAsync(new AgentStartEvent(
             "e2e-streaming-session",
-            Array.Empty<Harbor.Abstractions.Models.AgentMessage>(),
+            Array.Empty<AgentMessage>(),
             startModel)).ConfigureAwait(false);
 
         // Honest visibility probe (C1): collapsed banners no longer satisfy it.
@@ -860,7 +857,7 @@ public sealed class AvaloniaUiTests
 
         // Stop the agent through the same production path.
         await eventBus.PublishAsync(new AgentEndEvent(
-            Array.Empty<Harbor.Abstractions.Models.AgentMessage>(), Cancelled: false)).ConfigureAwait(false);
+            Array.Empty<AgentMessage>(), false)).ConfigureAwait(false);
 
         // Poll until the running indicator is gone instead of a fixed delay.
         await Driver.WaitForConditionAsync(
@@ -984,8 +981,8 @@ public sealed class AvaloniaUiTests
         // A1b: the view renders the Timeline, which is projected from store
         // state — seed through the REAL event path instead of mutating
         // vm.Chat.ToolCalls (that collection no longer drives the UI).
-        var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
-        var partial = Harbor.Abstractions.Models.AssistantMessage.Empty(
+        var eventBus = Driver.Host.Services.GetRequiredService<IEventBus>();
+        var partial = AssistantMessage.Empty(
             "e2e-tool-session", "qwen2.5-coder:7b");
         await eventBus.PublishAsync(new MessageUpdateEvent(
             new ToolCallStartEvent("tc-e2e-1", "read"), partial)).ConfigureAwait(false);
@@ -1001,7 +998,7 @@ public sealed class AvaloniaUiTests
 
         // Close the call through the matching production event.
         await eventBus.PublishAsync(new MessageUpdateEvent(
-            new ToolCallEndEvent("tc-e2e-1", "read", System.Text.Json.JsonDocument.Parse("{}").RootElement), partial)).ConfigureAwait(false);
+            new ToolCallEndEvent("tc-e2e-1", "read", JsonDocument.Parse("{}").RootElement), partial)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1101,8 +1098,8 @@ public sealed class AvaloniaUiTests
         });
         // Poll for the sidebar state instead of a fixed delay.
         await Driver.WaitForConditionAsync(() =>
-            !Driver.OnUIThread(() =>
-                Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
+                !Driver.OnUIThread(() =>
+                    Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
             TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         await Driver.ScreenshotAsync("27b-sidebar-hidden").ConfigureAwait(false);
 
@@ -1119,8 +1116,8 @@ public sealed class AvaloniaUiTests
             }
         });
         await Driver.WaitForConditionAsync(() =>
-            Driver.OnUIThread(() =>
-                Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
+                Driver.OnUIThread(() =>
+                    Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
             TimeSpan.FromSeconds(2)).ConfigureAwait(false);
     }
 
@@ -1187,8 +1184,8 @@ public sealed class AvaloniaUiTests
         });
         // Poll for the input text to propagate instead of a fixed delay.
         await Driver.WaitForConditionAsync(() =>
-            Driver.OnUIThread(() =>
-                (Driver.MainWindow.DataContext as MainViewModel)?.Chat.InputText) == "previous command from history",
+                Driver.OnUIThread(() =>
+                    (Driver.MainWindow.DataContext as MainViewModel)?.Chat.InputText) == "previous command from history",
             TimeSpan.FromSeconds(2)).ConfigureAwait(false);
 
         string? historyText = Driver.OnUIThread(() =>
@@ -1236,15 +1233,15 @@ public sealed class AvaloniaUiTests
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
-        var model = new Harbor.Abstractions.Models.ModelInfo(
+        var eventBus = Driver.Host.Services.GetRequiredService<IEventBus>();
+        var model = new ModelInfo(
             "qwen2.5-coder:7b", "ollama", "Qwen2.5 Coder 7B", 32_768, 4_096, false, false, true,
-            Harbor.Abstractions.Models.Pricing.Unknown, "ollama");
-        var users = new[]
+            Pricing.Unknown, "ollama");
+        string[] users = new[]
         {
             "Line 1: Hello", "Line 2: How are you?", "Line 3: What's up?", "Line 4: Goodbye"
         };
-        var userMessages = users.Select(u => (Harbor.Abstractions.Models.AgentMessage)new Harbor.Abstractions.Models.UserMessage(
+        var userMessages = users.Select(u => (AgentMessage)new UserMessage(
             Guid.NewGuid().ToString("N"),
             "e2e-scroll-session",
             DateTimeOffset.UtcNow,
@@ -1257,14 +1254,14 @@ public sealed class AvaloniaUiTests
 
         foreach (string response in new[] { "Response 1", "Response 2", "Response 3", "Response 4" })
         {
-            var partial = Harbor.Abstractions.Models.AssistantMessage.Empty(
+            var partial = AssistantMessage.Empty(
                 "e2e-scroll-session", "qwen2.5-coder:7b");
             await eventBus.PublishAsync(new MessageStartEvent(partial)).ConfigureAwait(false);
             await eventBus.PublishAsync(new MessageUpdateEvent(
                 new TextDeltaEvent("t-" + response, response), partial)).ConfigureAwait(false);
             await eventBus.PublishAsync(new MessageEndEvent(partial.WithFinish(
-                Harbor.Abstractions.Models.StopReason.Stop,
-                new Harbor.Abstractions.Models.Usage(0, 0)))).ConfigureAwait(false);
+                StopReason.Stop,
+                new Usage(0, 0)))).ConfigureAwait(false);
         }
 
         // Poll for the chat lines to render instead of a fixed delay.
@@ -1297,7 +1294,8 @@ internal sealed class KnownFlakeAttribute : SkipAttribute
 {
     public KnownFlakeAttribute()
         : base("known flake: headless Avalonia virtualization — skipped by default (HARBOR_E2E_STRICT=1 to enforce)")
-    { }
+    {
+    }
 
     /// <inheritdoc />
     public override Task<bool> ShouldSkip(TestRegisteredContext context)

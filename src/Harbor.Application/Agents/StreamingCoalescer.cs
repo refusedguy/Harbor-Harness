@@ -1,6 +1,7 @@
-using System.Text;
 using Harbor.Abstractions.Extensions;
+using System.Text;
 namespace Harbor.Application.Agents;
+
 /// <summary>
 ///     A tool call whose accumulated args JSON failed to parse. The call is
 ///     never materialized as an executable <see cref="ToolCallPart" />; the
@@ -41,6 +42,22 @@ internal sealed record MalformedToolCall(string Id, string ToolName, string RawA
 /// </remarks>
 internal sealed class StreamingCoalescer : IDisposable
 {
+
+    /// <summary>
+    ///     Maximum number of trailing characters of the raw args JSON preserved
+    ///     in <see cref="MalformedToolCall.RawArgsTail" />.
+    /// </summary>
+    internal const int RawArgsTailLength = 200;
+
+    /// <summary>
+    ///     Frozen empty-JSON-object element shared by every tool call that
+    ///     streamed zero args deltas. The backing <see cref="JsonDocument" />
+    ///     is never disposed (it is process-lifetime state), so the element
+    ///     stays valid for all consumers; concurrent reads of a
+    ///     <see cref="JsonElement" /> are safe because parsing is immutable.
+    ///     Avoids a per-call <c>Parse("{}")</c> allocation.
+    /// </summary>
+    private static readonly JsonElement EmptyArgsElement = JsonDocument.Parse("{}").RootElement;
     private readonly Dictionary<string, (string Name, StringBuilderPool.PooledStringBuilder Args)> _pendingToolCalls = new(capacity: 4);
     private readonly StringBuilderPool.PooledStringBuilder _textBuffer = StringBuilderPool.Rent(4096);
     private readonly StringBuilderPool.PooledStringBuilder _thinkingBuffer = StringBuilderPool.Rent(1024);
@@ -124,30 +141,14 @@ internal sealed class StreamingCoalescer : IDisposable
     }
 
     /// <summary>
-    ///     Maximum number of trailing characters of the raw args JSON preserved
-    ///     in <see cref="MalformedToolCall.RawArgsTail" />.
-    /// </summary>
-    internal const int RawArgsTailLength = 200;
-
-    /// <summary>
-    ///     Frozen empty-JSON-object element shared by every tool call that
-    ///     streamed zero args deltas. The backing <see cref="JsonDocument" />
-    ///     is never disposed (it is process-lifetime state), so the element
-    ///     stays valid for all consumers; concurrent reads of a
-    ///     <see cref="JsonElement" /> are safe because parsing is immutable.
-    ///     Avoids a per-call <c>Parse("{}")</c> allocation.
-    /// </summary>
-    private static readonly JsonElement EmptyArgsElement = JsonDocument.Parse("{}").RootElement;
-
-    /// <summary>
     ///     Materialize all accumulated tool calls into <see cref="ToolCallPart" />
     ///     list. Args JSON is parsed EXACTLY ONCE per call, at materialization
     ///     (deltas are only appended to the pooled builder — never parsed
     ///     per-delta). The parse reads the builder's buffer DIRECTLY when it is
-    ///     a single chunk (<see cref="JsonElement.ParseValue(ReadOnlyMemory{char})"/>),
+    ///     a single chunk (<see cref="JsonElement.ParseValue(ReadOnlyMemory{char})" />),
     ///     eliminating the intermediate <c>ToString()</c> copy AND the old
     ///     <c>Parse + RootElement.Clone()</c> double copy
-    ///     (<see cref="JsonElement.ParseValue"/> returns a self-rooted element).
+    ///     (<see cref="JsonElement.ParseValue" /> returns a self-rooted element).
     ///     Pooled StringBuilders are returned to the pool afterwards.
     ///     <para>
     ///         Tool calls whose args JSON fails to parse are NOT materialized
@@ -174,7 +175,7 @@ internal sealed class StreamingCoalescer : IDisposable
         var result = new List<ToolCallPart>(_pendingToolCalls.Count);
         foreach ((string id, (string name, var args)) in _pendingToolCalls)
         {
-            StringBuilder builder = args.Builder;
+            var builder = args.Builder;
             string rawTail = string.Empty;
             JsonElement parsedArgs = default;
             bool parsed;

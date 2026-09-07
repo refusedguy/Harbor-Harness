@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace Harbor.Tools.Mcp;
 
 /// <summary>
@@ -26,9 +24,6 @@ public sealed record McpRemoteConfig(
 /// </summary>
 public sealed class McpServersConfigLoader
 {
-    public string ProjectRoot { get; }
-    public string Home { get; }
-    public string HarborHome { get; }
 
     public McpServersConfigLoader(string projectRoot, string? home = null, string? harborHome = null)
     {
@@ -36,6 +31,9 @@ public sealed class McpServersConfigLoader
         Home = home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         HarborHome = harborHome ?? Path.Combine(Home, ".harbor");
     }
+    public string ProjectRoot { get; }
+    public string Home { get; }
+    public string HarborHome { get; }
 
     /// <summary>
     ///     Load and overlay config from the given files, in order (later overrides earlier for the
@@ -44,7 +42,7 @@ public sealed class McpServersConfigLoader
     public IReadOnlyList<McpServerEntry> Load(params string[] paths)
     {
         var merged = new Dictionary<string, McpServerConfig>(StringComparer.Ordinal);
-        foreach (var path in paths)
+        foreach (string path in paths)
         {
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
                 continue;
@@ -59,7 +57,7 @@ public sealed class McpServersConfigLoader
                 continue;
             }
 
-            foreach (var (name, cfg) in ParseToMap(json))
+            foreach ((string name, var cfg) in ParseToMap(json))
                 merged[name] = cfg;
         }
 
@@ -87,7 +85,7 @@ public sealed class McpServersConfigLoader
     private IReadOnlyList<McpServerEntry> ToEntries(Dictionary<string, McpServerConfig> map)
     {
         var entries = new List<McpServerEntry>(map.Count);
-        foreach (var (name, cfg) in map)
+        foreach ((string name, var cfg) in map)
         {
             if (cfg is null) continue;
             if (cfg.Disabled == true) continue;
@@ -110,7 +108,7 @@ public sealed class McpServersConfigLoader
 
             if (string.IsNullOrWhiteSpace(cfg.Command)) continue;
 
-            var args = cfg.Args is null
+            string[] args = cfg.Args is null
                 ? Array.Empty<string>()
                 : cfg.Args.Select(Expand).ToArray();
 

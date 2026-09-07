@@ -1,6 +1,5 @@
 using Harbor.Abstractions.Events;
-using TUnit.Assertions;
-
+using System.Net;
 namespace Harbor.Providers.Tests;
 
 /// <summary>
@@ -13,17 +12,17 @@ public class ProviderErrorClassificationTests
     [Test]
     public async Task FromStatus_MapsRateLimitAuthAndServerErrors()
     {
-        await Assert.That(ProviderErrors.FromStatus(System.Net.HttpStatusCode.TooManyRequests))
+        await Assert.That(ProviderErrors.FromStatus(HttpStatusCode.TooManyRequests))
             .IsEqualTo(ProviderErrorKind.RateLimit);
-        await Assert.That(ProviderErrors.FromStatus(System.Net.HttpStatusCode.Unauthorized))
+        await Assert.That(ProviderErrors.FromStatus(HttpStatusCode.Unauthorized))
             .IsEqualTo(ProviderErrorKind.Auth);
-        await Assert.That(ProviderErrors.FromStatus(System.Net.HttpStatusCode.Forbidden))
+        await Assert.That(ProviderErrors.FromStatus(HttpStatusCode.Forbidden))
             .IsEqualTo(ProviderErrorKind.Auth);
-        await Assert.That(ProviderErrors.FromStatus(System.Net.HttpStatusCode.InternalServerError))
+        await Assert.That(ProviderErrors.FromStatus(HttpStatusCode.InternalServerError))
             .IsEqualTo(ProviderErrorKind.ServerError);
-        await Assert.That(ProviderErrors.FromStatus(System.Net.HttpStatusCode.BadGateway))
+        await Assert.That(ProviderErrors.FromStatus(HttpStatusCode.BadGateway))
             .IsEqualTo(ProviderErrorKind.ServerError);
-        await Assert.That(ProviderErrors.FromStatus(System.Net.HttpStatusCode.BadRequest))
+        await Assert.That(ProviderErrors.FromStatus(HttpStatusCode.BadRequest))
             .IsEqualTo(ProviderErrorKind.Unknown);
     }
 

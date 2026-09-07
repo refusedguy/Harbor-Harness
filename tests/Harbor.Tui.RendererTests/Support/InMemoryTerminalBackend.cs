@@ -1,10 +1,9 @@
+using Harbor.Tui.CellForge.Rendering;
+using System.Text;
 namespace Harbor.Tui.RendererTests.Support;
 
-using System.Text;
-using Harbor.Tui.CellForge.Rendering;
-
 /// <summary>
-///     In-memory <see cref="ITerminalBackend"/> capturing every frame the
+///     In-memory <see cref="ITerminalBackend" /> capturing every frame the
 ///     CellForge pipeline emits — the golden-frame capture seam the
 ///     <c>ITerminalBackend</c> doc comment anticipated ("tests capture frames
 ///     with an in-memory backend").
@@ -16,8 +15,6 @@ public sealed class InMemoryTerminalBackend : ITerminalBackend
     /// <summary>Everything written so far, as a single string.</summary>
     public string Output => _buffer.ToString();
 
-    public void Reset() => _buffer.Clear();
-
     public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
     {
         Append(bytes.Span);
@@ -25,6 +22,8 @@ public sealed class InMemoryTerminalBackend : ITerminalBackend
     }
 
     public void Write(ReadOnlySpan<byte> bytes) => Append(bytes);
+
+    public void Reset() => _buffer.Clear();
 
     private void Append(ReadOnlySpan<byte> bytes)
     {

@@ -1,13 +1,12 @@
 using Harbor.App.Cli.Commands;
-
 namespace Harbor.App.Cli.Tests;
 
 public class PluginsCommandTests : IDisposable
 {
-    private readonly string _homeRoot;
-    private readonly string _projectRoot;
-    private readonly StringWriter _out = new();
     private readonly StringWriter _err = new();
+    private readonly string _homeRoot;
+    private readonly StringWriter _out = new();
+    private readonly string _projectRoot;
 
     public PluginsCommandTests()
     {
@@ -19,11 +18,11 @@ public class PluginsCommandTests : IDisposable
 
     public void Dispose()
     {
-        Directory.Delete(Path.GetDirectoryName(_homeRoot)!, recursive: true);
-        Directory.Delete(Path.GetDirectoryName(_projectRoot)!, recursive: true);
+        Directory.Delete(Path.GetDirectoryName(_homeRoot)!, true);
+        Directory.Delete(Path.GetDirectoryName(_projectRoot)!, true);
     }
 
-    private PluginsCommand CreateCommand() => new(_out, _err, globalRoot: _homeRoot, projectRoot: _projectRoot);
+    private PluginsCommand CreateCommand() => new(_out, _err, _homeRoot, _projectRoot);
 
     private async Task<string> WriteSourceFileAsync(string name, string content = "public sealed class P : IPlugin { }")
     {
@@ -153,7 +152,7 @@ public class PluginsCommandTests : IDisposable
         string outsideFile = Path.Combine(outsideDir, "victim.cs");
         await File.WriteAllTextAsync(outsideFile, "keep me");
 
-        int exit = await CreateCommand().ExecuteAsync(["uninstall", $"../outside/victim.cs"]);
+        int exit = await CreateCommand().ExecuteAsync(["uninstall", "../outside/victim.cs"]);
 
         await Assert.That(exit).IsEqualTo(1);
         await Assert.That(File.Exists(outsideFile)).IsTrue();

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 namespace Harbor.E2E.Framework;
 
 /// <summary>
@@ -59,11 +60,10 @@ public enum AvaloniaE2eMode
 public sealed class HeadlessAvaloniaDriver : IE2eDriver
 {
     private readonly string _projectRelativePath;
-    private readonly AvaloniaE2eMode _mode;
+    private readonly string _screenshotDir;
+    private string? _display;
     private CliDriver? _proxy;
     private Process? _xvfbProcess;
-    private string? _display;
-    private readonly string _screenshotDir;
 
     /// <summary>
     ///     Create a driver for the Avalonia app at <paramref name="projectRelativePath" />.
@@ -75,41 +75,24 @@ public sealed class HeadlessAvaloniaDriver : IE2eDriver
     {
         _projectRelativePath = projectRelativePath;
         _screenshotDir = screenshotDir;
-        _mode = mode ?? GetModeFromEnv();
+        Mode = mode ?? GetModeFromEnv();
         Directory.CreateDirectory(_screenshotDir);
-    }
-
-    private static AvaloniaE2eMode GetModeFromEnv()
-    {
-        string? env = Environment.GetEnvironmentVariable("HARBOR_AVALONIA_E2E_MODE");
-        if (env is not null)
-        {
-            if (Enum.TryParse<AvaloniaE2eMode>(env, ignoreCase: true, out var parsed))
-                return parsed;
-        }
-        return AvaloniaE2eMode.Headless; // default
     }
 
     /// <summary>
     ///     Whether the chosen mode is supported on the current OS.
     /// </summary>
-    public bool IsSupportedOnCurrentOs
+    public bool IsSupportedOnCurrentOs => Mode switch
     {
-        get
-        {
-            return _mode switch
-            {
-                AvaloniaE2eMode.Headless => OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(),
-                AvaloniaE2eMode.Xvfb => OperatingSystem.IsLinux(),
-                _ => false
-            };
-        }
-    }
+        AvaloniaE2eMode.Headless => OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(),
+        AvaloniaE2eMode.Xvfb => OperatingSystem.IsLinux(),
+        _ => false
+    };
 
     /// <summary>
     ///     The active rendering mode.
     /// </summary>
-    public AvaloniaE2eMode Mode => _mode;
+    public AvaloniaE2eMode Mode { get; }
 
     /// <inheritdoc />
     public bool IsRunning => _proxy?.IsRunning ?? false;
@@ -120,11 +103,11 @@ public sealed class HeadlessAvaloniaDriver : IE2eDriver
         if (!IsSupportedOnCurrentOs)
         {
             throw new PlatformNotSupportedException(
-                $"Avalonia E2E mode '{_mode}' is not supported on the current OS. " +
+                $"Avalonia E2E mode '{Mode}' is not supported on the current OS. " +
                 $"Headless works on Windows/Linux/macOS, Xvfb requires Linux.");
         }
 
-        switch (_mode)
+        switch (Mode)
         {
             case AvaloniaE2eMode.Xvfb:
                 await StartXvfbAsync(ct).ConfigureAwait(false);
@@ -133,7 +116,7 @@ public sealed class HeadlessAvaloniaDriver : IE2eDriver
                 // No setup needed for headless mode
                 break;
             default:
-                throw new InvalidOperationException($"Unknown mode: {_mode}");
+                throw new InvalidOperationException($"Unknown mode: {Mode}");
         }
 
         // Prepare environment with DISPLAY if using Xvfb
@@ -214,6 +197,17 @@ public sealed class HeadlessAvaloniaDriver : IE2eDriver
         }
     }
 
+    private static AvaloniaE2eMode GetModeFromEnv()
+    {
+        string? env = Environment.GetEnvironmentVariable("HARBOR_AVALONIA_E2E_MODE");
+        if (env is not null)
+        {
+            if (Enum.TryParse<AvaloniaE2eMode>(env, true, out var parsed))
+                return parsed;
+        }
+        return AvaloniaE2eMode.Headless; // default
+    }
+
     /// <summary>
     ///     Take a screenshot of the Avalonia window.
     ///     In Xvfb mode, uses xwininfo/import to capture the window.
@@ -223,7 +217,7 @@ public sealed class HeadlessAvaloniaDriver : IE2eDriver
     /// <returns>Path to the saved PNG, or null if screenshot failed</returns>
     public async Task<string?> ScreenshotAsync(string name, CancellationToken ct = default)
     {
-        if (_mode != AvaloniaE2eMode.Xvfb)
+        if (Mode != AvaloniaE2eMode.Xvfb)
             return null; // Screenshots only supported in Xvfb mode
 
         if (_display is null)
@@ -254,7 +248,7 @@ public sealed class HeadlessAvaloniaDriver : IE2eDriver
                 {
                     if (line.Contains("Harbor") && line.Contains("0x"))
                     {
-                        var match = System.Text.RegularExpressions.Regex.Match(line, @"(0x[0-9a-f]+)");
+                        var match = Regex.Match(line, @"(0x[0-9a-f]+)");
                         if (match.Success)
                         {
                             windowId = match.Groups[1].Value;

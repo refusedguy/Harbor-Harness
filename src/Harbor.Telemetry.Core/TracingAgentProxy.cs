@@ -1,10 +1,9 @@
-using System.Diagnostics;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Diagnostics;
-
+using System.Diagnostics;
 namespace Harbor.Telemetry;
 
 /// <summary>
@@ -12,8 +11,10 @@ namespace Harbor.Telemetry;
 ///     <list type="bullet">
 ///         <item>span agent.turn{agent.name} around both prompt overloads,</item>
 ///         <item>turn.count / turn.duration.ms metrics,</item>
-///         <item>an ambient <see cref="Correlation" /> scope so every nested
-///         span/metric and log line carries session.id/agent/turn.</item>
+///         <item>
+///             an ambient <see cref="Correlation" /> scope so every nested
+///             span/metric and log line carries session.id/agent/turn.
+///         </item>
 ///     </list>
 /// </summary>
 public sealed class TracingAgentProxy(IAgent inner, IMetrics metrics, ITracer tracer) : IAgent
@@ -49,7 +50,7 @@ public sealed class TracingAgentProxy(IAgent inner, IMetrics metrics, ITracer tr
         string agentName = inner.State?.Agent.Name.Value ?? "unknown";
         string? sessionId = inner.State?.SessionId;
 
-        using Harbor.Diagnostics.ITelemetrySpan? span = tracer.StartSpan(
+        using var span = tracer.StartSpan(
             "agent.turn",
             new KeyValuePair<string, object?>(TelemetryTagNames.Agent, agentName),
             new KeyValuePair<string, object?>(TelemetryTagNames.SessionId, sessionId));
@@ -57,7 +58,7 @@ public sealed class TracingAgentProxy(IAgent inner, IMetrics metrics, ITracer tr
         // AgentState.CurrentTurn is known-stale (deep2-core F9 note); count
         // turns locally instead so the correlation value is monotonic and real.
         int turn = Interlocked.Increment(ref _turnCounter);
-        using IDisposable correlation = Correlation.Push(new CorrelationContext(sessionId, agentName, turn));
+        using var correlation = Correlation.Push(new CorrelationContext(sessionId, agentName, turn));
         long start = Stopwatch.GetTimestamp();
         Result result;
         try

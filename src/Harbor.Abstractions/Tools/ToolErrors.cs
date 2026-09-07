@@ -1,7 +1,5 @@
-using System.Diagnostics;
-using System.IO;
 using Microsoft.Extensions.Logging;
-
+using System.Diagnostics;
 namespace Harbor.Abstractions.Tools;
 
 /// <summary>
@@ -32,7 +30,7 @@ public static class ToolErrors
         };
 
     /// <summary>Kill a process tree, swallowing and tracing the failure (ROP-A П.14).</summary>
-    public static void KillQuietly(System.Diagnostics.Process process, ILogger? logger = null)
+    public static void KillQuietly(Process process, ILogger? logger = null)
     {
         try
         {

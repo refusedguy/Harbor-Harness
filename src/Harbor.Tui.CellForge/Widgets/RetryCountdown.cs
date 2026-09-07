@@ -1,12 +1,11 @@
 using System.Globalization;
-
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Retry countdown (killer features §P6.3): renders the «retrying tool call»
-/// status line — attempt fraction, seconds until the next attempt, and a
-/// proportional braille-block progress bar. Pure formatter; the host owns
-/// the timer and feeds remaining seconds.
+///     Retry countdown (killer features §P6.3): renders the «retrying tool call»
+///     status line — attempt fraction, seconds until the next attempt, and a
+///     proportional braille-block progress bar. Pure formatter; the host owns
+///     the timer and feeds remaining seconds.
 /// </summary>
 public static class RetryCountdown
 {
@@ -18,9 +17,9 @@ public static class RetryCountdown
         $"retry {Math.Max(1, attempt)}/{maxAttempts} in {Math.Max(0, secondsRemaining)}s";
 
     /// <summary>
-    /// Status segments for the status bar: the retry line plus an optional
-    /// trailing bar segment (when <paramref name="barWidth" /> ≥ 3). The bar
-    /// depletes left-to-right as the countdown burns down.
+    ///     Status segments for the status bar: the retry line plus an optional
+    ///     trailing bar segment (when <paramref name="barWidth" /> ≥ 3). The bar
+    ///     depletes left-to-right as the countdown burns down.
     /// </summary>
     public static (string Line, string Bar) Segments(int attempt, int maxAttempts, int secondsRemaining, int totalSeconds, int barWidth)
     {
@@ -49,7 +48,7 @@ public static class RetryCountdown
         int clamped = Math.Clamp(fill, 0, width);
         return string.Create(width, (clamped, width), static (span, state) =>
         {
-            var (f, w) = state;
+            (int f, int w) = state;
             int i = 0;
             for (; i < f; i++)
             {

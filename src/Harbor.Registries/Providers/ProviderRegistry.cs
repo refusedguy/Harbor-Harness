@@ -1,8 +1,9 @@
-using System.Collections.Frozen;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NonBlocking;
+using System.Collections.Frozen;
 namespace Harbor.Abstractions.Providers;
+
 /// <summary>
 ///     Thread-safe provider registry with lazy instantiation and frozen lookup table.
 ///     Implements Registry pattern (GOF).
@@ -14,6 +15,15 @@ namespace Harbor.Abstractions.Providers;
 /// </summary>
 public sealed class ProviderRegistry : IProviderRegistry
 {
+
+    private static readonly TimeSpan ModelCatalogTtl = TimeSpan.FromMinutes(5);
+
+    // ROP-C П.7: shared short-TTL catalog cache keyed by provider id.
+    // GetModelsAsync is a real HTTP round-trip on some providers (Ollama),
+    // yet the catalog rarely changes within minutes. The registry owns the
+    // entry so every consumer shares one round-trip budget instead of each
+    // AgentLoop instance keeping its own map. Failures are never cached.
+    private readonly ConcurrentDictionary<ProviderId, CatalogEntry> _catalogCache = new();
     // Architecture audit v2 §CONCURRENCY-001 (RESOLVED): InvalidateFrozenSnapshot
     // previously took `lock(_frozenLock)` to null a single reference field.
     // Under plugin hot-reload or runtime provider re-registration this
@@ -24,18 +34,6 @@ public sealed class ProviderRegistry : IProviderRegistry
     private readonly ConcurrentDictionary<ProviderId, Lazy<ILlmClient>> _clients = new();
     private readonly ILogger<ProviderRegistry> _logger;
     private readonly ConcurrentDictionary<ProviderId, IReadOnlyList<ModelInfo>> _modelCache = new();
-
-    // ROP-C П.7: shared short-TTL catalog cache keyed by provider id.
-    // GetModelsAsync is a real HTTP round-trip on some providers (Ollama),
-    // yet the catalog rarely changes within minutes. The registry owns the
-    // entry so every consumer shares one round-trip budget instead of each
-    // AgentLoop instance keeping its own map. Failures are never cached.
-    private readonly ConcurrentDictionary<ProviderId, CatalogEntry> _catalogCache = new();
-
-    private static readonly TimeSpan ModelCatalogTtl = TimeSpan.FromMinutes(5);
-
-    /// <summary>TTL-cached model catalog entry (ROP-C П.7).</summary>
-    private sealed record CatalogEntry(IReadOnlyList<ModelInfo> Models, DateTimeOffset ExpiresAt);
     /// <summary>
     ///     The frozen lookup table for fast lock-free reads; <see langword="null" /> until
     ///     <see cref="Freeze" /> is called. Marked <c>volatile</c> so reads have
@@ -45,7 +43,7 @@ public sealed class ProviderRegistry : IProviderRegistry
     /// </summary>
     private volatile FrozenDictionary<ProviderId, Lazy<ILlmClient>>? _frozenClients;
 
-    public ProviderRegistry() : this(NullLogger<ProviderRegistry>.Instance) { }
+    public ProviderRegistry() : this(NullLogger<ProviderRegistry>.Instance) {}
 
     public ProviderRegistry(ILogger<ProviderRegistry> logger)
     {
@@ -92,14 +90,6 @@ public sealed class ProviderRegistry : IProviderRegistry
         _logger.LogDebug("Provider not registered: {ProviderId}", providerId);
         return Result.Failure<ILlmClient>($"Provider '{providerId}' is not registered.");
     }
-
-    /// <summary>Force the lazy factory and classify any instantiation failure.</summary>
-    private Result<ILlmClient> Instantiate(Lazy<ILlmClient> lazy, ProviderId providerId) =>
-        Result.Success(lazy)
-            .MapTry(static l => l.Value,
-                ex => $"Failed to instantiate provider '{providerId}': {ex.Message}")
-            .TapError(e => _logger.LogWarning(
-                "Provider instantiation failed: {ProviderId}: {Error}", providerId, e));
 
     /// <inheritdoc />
     public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
@@ -254,6 +244,14 @@ public sealed class ProviderRegistry : IProviderRegistry
         return Result.Failure($"Provider '{providerId}' is not registered.");
     }
 
+    /// <summary>Force the lazy factory and classify any instantiation failure.</summary>
+    private Result<ILlmClient> Instantiate(Lazy<ILlmClient> lazy, ProviderId providerId) =>
+        Result.Success(lazy)
+            .MapTry(static l => l.Value,
+                ex => $"Failed to instantiate provider '{providerId}': {ex.Message}")
+            .TapError(e => _logger.LogWarning(
+                "Provider instantiation failed: {ProviderId}: {Error}", providerId, e));
+
     /// <summary>
     ///     Invalidate the model cache for a specific provider. The next call to
     ///     <see cref="GetAllModelsAsync" /> will re-fetch the model list from the provider.
@@ -287,6 +285,9 @@ public sealed class ProviderRegistry : IProviderRegistry
         Interlocked.Exchange(ref _frozenClients, null);
     }
 
+    /// <summary>TTL-cached model catalog entry (ROP-C П.7).</summary>
+    private sealed record CatalogEntry(IReadOnlyList<ModelInfo> Models, DateTimeOffset ExpiresAt);
+
     /// <summary>
     ///     Readonly struct result holder for parallel model fetches. Avoids boxing
     ///     ValueTuple into an object on the heap when stored in a Task.
@@ -302,8 +303,8 @@ public sealed class ProviderRegistry : IProviderRegistry
 /// </summary>
 public sealed class ProviderRegistryBuilder : IProviderRegistryBuilder
 {
-    private readonly IProviderRegistry _registry;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IProviderRegistry _registry;
 
     /// <summary>
     ///     Construct a builder backed by the supplied registry.

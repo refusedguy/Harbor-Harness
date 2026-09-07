@@ -1,13 +1,10 @@
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-
+using System.Text.Json;
 namespace Harbor.TestKit;
 
 /// <summary>Registry containing exactly the given agents (P.6 canonical fake).</summary>
@@ -16,10 +13,10 @@ public sealed class FakeAgentRegistry(params AgentDefinition[] agents) : IAgentR
     private readonly Dictionary<string, AgentDefinition> _agents =
         agents.ToDictionary(a => a.Name.Value, StringComparer.Ordinal);
 
-    public IReadOnlyList<AgentDefinition> GetAllAgents() => [.. _agents.Values];
+    public IReadOnlyList<AgentDefinition> GetAllAgents() => [.._agents.Values];
 
     public Result<AgentDefinition> GetAgent(AgentName name) =>
-        _agents.TryGetValue(name.Value, out AgentDefinition? definition)
+        _agents.TryGetValue(name.Value, out var definition)
             ? Result.Success(definition)
             : Result.Failure<AgentDefinition>($"Agent '{name.Value}' is not registered.");
 
@@ -46,7 +43,7 @@ public sealed class FakeToolRegistry(params ITool[] tools) : IToolRegistry
         => Snapshot();
 
     public Result<ITool> GetTool(ToolName name) =>
-        _tools.TryGetValue(name.Value, out ITool? tool)
+        _tools.TryGetValue(name.Value, out var tool)
             ? Result.Success(tool)
             : Result.Failure<ITool>($"Unknown tool '{name.Value}'.");
 
@@ -63,7 +60,7 @@ public sealed class FakeToolRegistry(params ITool[] tools) : IToolRegistry
     private IReadOnlyList<ToolDescriptor> Snapshot()
     {
         var list = new List<ToolDescriptor>(_tools.Values.Count);
-        foreach (ITool t in _tools.Values)
+        foreach (var t in _tools.Values)
         {
             list.Add(new ToolDescriptor(
                 t.Name, t.DisplayName, t.Description, t.ParameterSchema,

@@ -1,8 +1,9 @@
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 namespace Harbor.Plugins.Storage;
+
 /// <summary>
 ///     <see cref="IPluginSource" /> that reads <c>.cs</c> files from
 ///     <see cref="Assembly.GetManifestResourceStream(string)" /> entries. Each entry is

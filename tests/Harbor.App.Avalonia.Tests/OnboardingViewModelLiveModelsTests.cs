@@ -1,6 +1,5 @@
-using System.Collections.ObjectModel;
-using CSharpFunctionalExtensions;
 using CommunityToolkit.Mvvm.Messaging;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
@@ -9,8 +8,8 @@ using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.App.Avalonia.Tests;
+
 /// <summary>
 ///     PROD-UI-0 З.4 — desktop onboarding VM fetches a live model list for the
 ///     selected provider and degrades explicitly to free-text when unavailable.
@@ -93,17 +92,21 @@ public class OnboardingViewModelLiveModelsTests
     {
         public string Current => "dark";
         public bool IsDark => true;
-        public void Apply(string theme) { }
-        public void ApplyDark() { }
-        public void ApplyLight() { }
-        public void Toggle() { }
-        public void ApplyHds(string theme) { }
-        public void SetThemeVariant(bool isDark) { }
+        public void Apply(string theme) {}
+        public void ApplyDark() {}
+        public void ApplyLight() {}
+        public void Toggle() {}
+        public void ApplyHds(string theme) {}
+        public void SetThemeVariant(bool isDark) {}
         public event EventHandler<string>? ThemeJsonApplied;
-        public CSharpFunctionalExtensions.Result<string> LoadJson(string path) => CSharpFunctionalExtensions.Result.Success<string>(string.Empty);
-        public CSharpFunctionalExtensions.Result ApplyJson(string json) => CSharpFunctionalExtensions.Result.Success();
-        public System.IDisposable Watch(string path) => new NoopDisposable();
-        private sealed class NoopDisposable : System.IDisposable { public void Dispose() { } }
+        public Result<string> LoadJson(string path) => Result.Success<string>(string.Empty);
+        public Result ApplyJson(string json) => Result.Success();
+        public IDisposable Watch(string path) => new NoopDisposable();
+
+        private sealed class NoopDisposable : IDisposable
+        {
+            public void Dispose() {}
+        }
     }
 
     private sealed class StubToastService : IToastService
@@ -112,7 +115,7 @@ public class OnboardingViewModelLiveModelsTests
         public event EventHandler<ToastNotification>? ToastAdded;
 #pragma warning restore CS0067
 
-        public void Show(string message, ToastKind kind = ToastKind.Info) { }
+        public void Show(string message, ToastKind kind = ToastKind.Info) {}
     }
 
     /// <summary>Registry serving one canned catalog (null → unregistered).</summary>
@@ -132,7 +135,7 @@ public class OnboardingViewModelLiveModelsTests
         public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default) =>
             GetAllModelsAsync(cancellationToken);
 
-        public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
+        public void Register(ProviderId providerId, Func<ILlmClient> factory) {}
 
         public Result Unregister(ProviderId providerId) => Result.Failure("n/a");
 
@@ -147,6 +150,7 @@ public class OnboardingViewModelLiveModelsTests
                     await Task.CompletedTask;
                     yield break;
                 }
+
                 return Empty();
             }
 

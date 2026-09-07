@@ -1,8 +1,5 @@
-using Harbor.Abstractions.Tools;
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
@@ -24,10 +21,7 @@ public class McpRegistryInstructionsTests : IDisposable
     }
 
     [Test]
-    public async Task GetInstructions_NoServers_ReturnsEmpty()
-    {
-        await Assert.That(_registry.GetInstructions()).IsEmpty();
-    }
+    public async Task GetInstructions_NoServers_ReturnsEmpty() => await Assert.That(_registry.GetInstructions()).IsEmpty();
 
     [Test]
     public async Task GetInstructions_ServerWithoutInstructions_IsAbsent()
@@ -43,14 +37,14 @@ public class McpRegistryInstructionsTests : IDisposable
     {
         string path = Path.Combine(_dir, "mcp.json");
         await File.WriteAllTextAsync(path, """
-            {
-              "mcpServers": {
-                "zeta": { "command": "uvx", "args": ["mcp-zeta"], "instructions": "Zeta serves z-files." },
-                "alpha": { "command": "uvx", "args": ["mcp-alpha"], "instructions": "Alpha serves a-files." },
-                "quiet": { "command": "uvx", "args": ["mcp-quiet"] }
-              }
-            }
-            """);
+                                           {
+                                             "mcpServers": {
+                                               "zeta": { "command": "uvx", "args": ["mcp-zeta"], "instructions": "Zeta serves z-files." },
+                                               "alpha": { "command": "uvx", "args": ["mcp-alpha"], "instructions": "Alpha serves a-files." },
+                                               "quiet": { "command": "uvx", "args": ["mcp-quiet"] }
+                                             }
+                                           }
+                                           """);
 
         var load = _registry.RegisterFromConfig(path);
         var snapshot = _registry.GetInstructions();
@@ -68,8 +62,8 @@ public class McpRegistryInstructionsTests : IDisposable
     {
         string path = Path.Combine(_dir, "mcp.json");
         await File.WriteAllTextAsync(path, """
-            { "solo": { "command": "uvx", "args": ["mcp-solo"], "instructions": "Solo rules." } }
-            """);
+                                           { "solo": { "command": "uvx", "args": ["mcp-solo"], "instructions": "Solo rules." } }
+                                           """);
         _registry.RegisterFromConfig(path);
 
         var unregister = _registry.Unregister("solo");

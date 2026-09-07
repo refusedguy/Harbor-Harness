@@ -1,20 +1,17 @@
 using System.Buffers.Binary;
 using System.Text;
-
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
-/// Inline image graphics for terminals that advertise them (HDS v1 §Media):
-/// kitty graphics passthrough and a self-contained Sixel encoder.
-///
-/// The cell-diff pipeline owns exactly one output seam —
-/// <see cref="ITerminalBackend.WriteAsync" /> — so images ride INSIDE the
-/// composed frame byte span; terminals draw DCS payloads on arrival while
-/// the diff layer keeps treating cells as opaque text.
-///
-/// Pure byte functions — deterministic, AOT-safe, no decoding libraries:
-/// PNG dimensions come straight from the IHDR header; Sixel quantizes raw
-/// RGB24 against the fixed catalog palette below.
+///     Inline image graphics for terminals that advertise them (HDS v1 §Media):
+///     kitty graphics passthrough and a self-contained Sixel encoder.
+///     The cell-diff pipeline owns exactly one output seam —
+///     <see cref="ITerminalBackend.WriteAsync" /> — so images ride INSIDE the
+///     composed frame byte span; terminals draw DCS payloads on arrival while
+///     the diff layer keeps treating cells as opaque text.
+///     Pure byte functions — deterministic, AOT-safe, no decoding libraries:
+///     PNG dimensions come straight from the IHDR header; Sixel quantizes raw
+///     RGB24 against the fixed catalog palette below.
 /// </summary>
 public static class Graphics
 {
@@ -27,8 +24,8 @@ public static class Graphics
     public const int SixelBandRows = 6;
 
     /// <summary>
-    /// Fixed quantization palette (RGB triplets): primaries + grey ramp.
-    /// Slot indices are the Sixel color numbers emitted as #&lt;n&gt; headers.
+    ///     Fixed quantization palette (RGB triplets): primaries + grey ramp.
+    ///     Slot indices are the Sixel color numbers emitted as #&lt;n&gt; headers.
     /// </summary>
     public static readonly byte[][] SixelPalette =
     [
@@ -41,7 +38,7 @@ public static class Graphics
         [0xD2, 0xA6, 0xFF], // 6 tool
         [0xF2, 0x96, 0x68], // 7 system
         [0x5C, 0x67, 0x73], // 8 muted
-        [0xB3, 0xB9, 0xC5], // 9 text grey
+        [0xB3, 0xB9, 0xC5] // 9 text grey
     ];
 
     /// <summary>PNG dimensions from the IHDR header (width @16, height @20, big-endian).</summary>
@@ -61,10 +58,10 @@ public static class Graphics
     }
 
     /// <summary>
-    /// Kitty graphics passthrough for a raw PNG payload: f=100 (PNG format),
-    /// a=T (display inline at cursor), base64 transfer chunked every
-    /// <see cref="KittyChunkChars" /> (m=1 more-chunks / m=0 final). Empty or
-    /// non-PNG input yields an empty result — callers skip emission.
+    ///     Kitty graphics passthrough for a raw PNG payload: f=100 (PNG format),
+    ///     a=T (display inline at cursor), base64 transfer chunked every
+    ///     <see cref="KittyChunkChars" /> (m=1 more-chunks / m=0 final). Empty or
+    ///     non-PNG input yields an empty result — callers skip emission.
     /// </summary>
     public static byte[] KittyPngInline(ReadOnlySpan<byte> pngBytes)
     {
@@ -74,7 +71,7 @@ public static class Graphics
         }
 
         string b64 = Convert.ToBase64String(pngBytes);
-        var sb = new StringBuilder(b64.Length + ((b64.Length / KittyChunkChars) * 16) + 32);
+        var sb = new StringBuilder(b64.Length + b64.Length / KittyChunkChars * 16 + 32);
         for (int offset = 0; offset < b64.Length; offset += KittyChunkChars)
         {
             int len = Math.Min(KittyChunkChars, b64.Length - offset);
@@ -88,14 +85,13 @@ public static class Graphics
     }
 
     /// <summary>
-    /// Encodes 24-bit RGB bytes as a complete Sixel sequence (DCS header,
-    /// raster attributes, palette definitions, body, ST terminator).
-    ///
-    /// Layout per 6-row band: every palette slot used anywhere in the band is
-    /// printed as its own pass — '#&lt;slot&gt;' then RLE-compressed column
-    /// masks ('!' repeat) with '?' no-op filler keeping columns aligned — and
-    /// passes are separated by '$'; bands end with '-'. Bits inside a mask
-    /// char map LSB→topmost row (DEC order).
+    ///     Encodes 24-bit RGB bytes as a complete Sixel sequence (DCS header,
+    ///     raster attributes, palette definitions, body, ST terminator).
+    ///     Layout per 6-row band: every palette slot used anywhere in the band is
+    ///     printed as its own pass — '#&lt;slot&gt;' then RLE-compressed column
+    ///     masks ('!' repeat) with '?' no-op filler keeping columns aligned — and
+    ///     passes are separated by '$'; bands end with '-'. Bits inside a mask
+    ///     char map LSB→topmost row (DEC order).
     /// </summary>
     public static byte[] EncodeSixel(ReadOnlySpan<byte> rgb24, int width, int height)
     {
@@ -108,21 +104,21 @@ public static class Graphics
 
         int bandCount = (height + SixelBandRows - 1) / SixelBandRows;
 
-        var sb = new StringBuilder((bandCount * width * 3) + 128);
+        var sb = new StringBuilder(bandCount * width * 3 + 128);
         sb.Append(EscChar).Append("Pq\"1;1;").Append(width).Append(';').Append(height);
 
-        foreach (var p in SixelPalette)
+        foreach (byte[] p in SixelPalette)
         {
             sb.Append($"#{Array.IndexOf(SixelPalette, p)};2;");
-            sb.Append((p[0] * 100) / 255).Append(';')
-              .Append((p[1] * 100) / 255).Append(';')
-              .Append((p[2] * 100) / 255);
+            sb.Append(p[0] * 100 / 255).Append(';')
+                .Append(p[1] * 100 / 255).Append(';')
+                .Append(p[2] * 100 / 255);
         }
         sb.Append('\n');
 
         for (int band = 0; band < bandCount; band++)
         {
-            var slotsUsed = SlotsUsedInBand(rgb24, width, height, band);
+            bool[] slotsUsed = SlotsUsedInBand(rgb24, width, height, band);
             bool firstPass = true;
             for (int slot = 0; slot < SixelPalette.Length; slot++)
             {
@@ -150,14 +146,14 @@ public static class Graphics
 
     private static bool[] SlotsUsedInBand(ReadOnlySpan<byte> rgb24, int width, int height, int band)
     {
-        var used = new bool[SixelPalette.Length];
+        bool[] used = new bool[SixelPalette.Length];
         int yStart = band * SixelBandRows;
         int yEnd = Math.Min(height, yStart + SixelBandRows);
         for (int y = yStart; y < yEnd; y++)
         {
             for (int x = 0; x < width; x++)
             {
-                int off = ((y * width) + x) * 3;
+                int off = (y * width + x) * 3;
                 used[NearestSlot(rgb24[off], rgb24[off + 1], rgb24[off + 2])] = true;
             }
         }
@@ -195,10 +191,10 @@ public static class Graphics
             int yEnd = Math.Min(height, yStart + SixelBandRows);
             for (int y = yStart; y < yEnd; y++)
             {
-                int off = ((y * width) + x) * 3;
+                int off = (y * width + x) * 3;
                 if (NearestSlot(rgb24[off], rgb24[off + 1], rgb24[off + 2]) == slot)
                 {
-                    bits |= 1 << (y - yStart); // LSB = topmost row of the band
+                    bits |= 1 << y - yStart; // LSB = topmost row of the band
                 }
             }
 
@@ -225,7 +221,7 @@ public static class Graphics
             long dr = r - SixelPalette[i][0];
             long dg = g - SixelPalette[i][1];
             long db = b - SixelPalette[i][2];
-            long dist = (dr * dr) + (dg * dg) + (db * db);
+            long dist = dr * dr + dg * dg + db * db;
             if (dist < bestDist)
             {
                 bestDist = dist;

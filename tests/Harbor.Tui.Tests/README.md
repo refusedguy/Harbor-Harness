@@ -20,7 +20,7 @@ dotnet test tests/Harbor.Tui.Tests --filter "FullyQualifiedName~UiReducer"
 
 ## Layer
 
-Tests — depends on the project(s) under test + TUnit (test framework). No production code.
+Tests — depends on the project (s) under test + TUnit (test framework). No production code.
 
 ## See also
 

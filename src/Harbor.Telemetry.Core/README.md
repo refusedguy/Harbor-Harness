@@ -8,14 +8,14 @@ Harbor's **core telemetry** implementation — `ActivitySource`/`Meter` wrappers
 
 ## What's in it
 
-| File | Purpose |
-|------|---------|
-| `HarborTelemetrySources.cs` | Singleton `ActivitySource` (`Harbor.Telemetry`) and `Meter` with version `0.4.0`. |
-| `ActivityTracer.cs` | `ITracer` implementation backed by `System.Diagnostics.Activity`. |
-| `MeterMetrics.cs` | `IMetrics` implementation backed by `System.Diagnostics.Metrics.Meter`. |
-| `InstrumentedLlmClient.cs` | `IProviderRegistry` + `ILlmClient` decorators that emit LLM streaming/turn metrics and spans. |
-| `InstrumentedToolRegistry.cs` | `IToolRegistry` + `ITool` decorators that emit tool execution metrics and spans. |
-| `TracingAgentProxy.cs` | `IAgent` decorator that wraps agent turns in a single parent span. |
+| File                          | Purpose                                                                                       |
+|-------------------------------|-----------------------------------------------------------------------------------------------|
+| `HarborTelemetrySources.cs`   | Singleton `ActivitySource` (`Harbor.Telemetry`) and `Meter` with version `0.4.0`.             |
+| `ActivityTracer.cs`           | `ITracer` implementation backed by `System.Diagnostics.Activity`.                             |
+| `MeterMetrics.cs`             | `IMetrics` implementation backed by `System.Diagnostics.Metrics.Meter`.                       |
+| `InstrumentedLlmClient.cs`    | `IProviderRegistry` + `ILlmClient` decorators that emit LLM streaming/turn metrics and spans. |
+| `InstrumentedToolRegistry.cs` | `IToolRegistry` + `ITool` decorators that emit tool execution metrics and spans.              |
+| `TracingAgentProxy.cs`        | `IAgent` decorator that wraps agent turns in a single parent span.                            |
 
 ## Public API summary
 
@@ -27,14 +27,14 @@ Harbor's **core telemetry** implementation — `ActivitySource`/`Meter` wrappers
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
+| Package                                            | Purpose                        |
+|----------------------------------------------------|--------------------------------|
 | `System.Diagnostics.DiagnosticSource` (transitive) | ActivitySource / Activity APIs |
 
-| Project | Purpose |
-|---------|---------|
-| `Harbor.Diagnostics.Abstractions` | `ITracer`, `IMetrics`, `ITelemetrySpan` |
-| `Harbor.Abstractions` | Domain types (`AgentEvent`, `ProviderId`, etc.) |
+| Project                           | Purpose                                         |
+|-----------------------------------|-------------------------------------------------|
+| `Harbor.Diagnostics.Abstractions` | `ITracer`, `IMetrics`, `ITelemetrySpan`         |
+| `Harbor.Abstractions`             | Domain types (`AgentEvent`, `ProviderId`, etc.) |
 
 ## Tests
 

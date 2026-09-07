@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -15,7 +13,7 @@ public sealed class KittyKeysScenarioTests : CellForgePtyScenarioBase
     public async Task KittyShiftEnter_InsertsNewline_AndDoesNotSubmit()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -44,7 +42,7 @@ public sealed class KittyKeysScenarioTests : CellForgePtyScenarioBase
             _ => Server.ReceivedRequests.Count > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(submitted).IsTrue();
 
-        var body = Server.ReceivedRequests[^1].RawBody;
+        string body = Server.ReceivedRequests[^1].RawBody;
         await Assert.That(body).Contains("AA\\nBB");
     }
 }

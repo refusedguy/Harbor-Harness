@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 namespace Harbor.Lsp.Tests;
 
 /// <summary>Framing and demux behavior of the client half of the wire protocol.</summary>
@@ -16,7 +15,7 @@ public class LspClientTests
         server.Client.Start();
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        JsonElement? result = await server.Client.SendRequestAsync(
+        var result = await server.Client.SendRequestAsync(
             "initialize",
             JsonSerializer.SerializeToElement(new { processId = (int?)1, rootUri = "file:///tmp" }),
             cts.Token);
@@ -61,7 +60,7 @@ public class LspClientTests
         await server.NotifyAsync("textDocument/publishDiagnostics",
             new Dictionary<string, object?> { ["uri"] = "file:///tmp/a.ts", ["diagnostics"] = Array.Empty<object>() });
 
-        LspNotificationEventArgs args = await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var args = await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Assert.That(args.Method).IsEqualTo("textDocument/publishDiagnostics");
         await Assert.That(args.Parameters.GetProperty("uri").GetString()).IsEqualTo("file:///tmp/a.ts");
     }

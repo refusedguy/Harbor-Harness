@@ -1,6 +1,7 @@
 using Harbor.Ipc.Protocol;
-namespace Harbor.Ipc;
 using System.Threading.Channels;
+namespace Harbor.Ipc;
+
 /// <summary>
 ///     Bidirectional transport abstraction for the IPC layer. One
 ///     implementation lives in <c>Harbor.Ipc.Server</c> (accepts inbound
@@ -43,30 +44,30 @@ public interface IPipeTransport : IAsyncDisposable
 /// <summary>
 ///     Client-side dialing contract: opens an outbound <see cref="Stream" />
 ///     to a daemon endpoint. Implemented by
-///     <see cref="ClientPipeTransport"/> (named pipe / UDS) and
-///     <see cref="TcpClientTransport"/> (TCP / tailscale) — the RPC client
+///     <see cref="ClientPipeTransport" /> (named pipe / UDS) and
+///     <see cref="TcpClientTransport" /> (TCP / tailscale) — the RPC client
 ///     is transport-agnostic above this seam.
 /// </summary>
 public interface IIpcClientTransport : IPipeTransport
 {
     /// <summary>Open (or return the existing healthy) connection stream.</summary>
-    Task<Stream> ConnectAsync(CancellationToken ct = default);
+    public Task<Stream> ConnectAsync(CancellationToken ct = default);
 
     /// <summary>Close the current connection; the next ConnectAsync dials afresh.</summary>
-    Task DisconnectAsync(CancellationToken ct = default);
+    public Task DisconnectAsync(CancellationToken ct = default);
 }
 
 /// <summary>
 ///     Server-side listening contract: binds an endpoint and yields accepted
 ///     connection streams. Implemented by
-///     <see cref="ServerPipeTransport"/> (named pipe / UDS) and
-///     <see cref="TcpServerTransport"/> (TCP / tailscale).
+///     <see cref="ServerPipeTransport" /> (named pipe / UDS) and
+///     <see cref="TcpServerTransport" /> (TCP / tailscale).
 /// </summary>
 public interface IIpcServerTransport : IPipeTransport
 {
     /// <summary>Bind and begin accepting; returns the reader of accepted streams.</summary>
-    Task<ChannelReader<Stream>> BindAsync(CancellationToken ct = default);
+    public Task<ChannelReader<Stream>> BindAsync(CancellationToken ct = default);
 
     /// <summary>Stop accepting, drain, release the endpoint.</summary>
-    Task UnbindAsync(CancellationToken ct = default);
+    public Task UnbindAsync(CancellationToken ct = default);
 }

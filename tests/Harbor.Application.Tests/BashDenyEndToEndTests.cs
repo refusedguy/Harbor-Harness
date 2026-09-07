@@ -1,16 +1,13 @@
-using System.Text.Json;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
-using Harbor.Application.Tests.Fakes;
 using Harbor.Application.Permissions;
-using Harbor.Application.Sessions;
+using Harbor.Application.Tests.Fakes;
 using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
+using System.Text.Json;
 namespace Harbor.Application.Tests;
 
 /// <summary>
@@ -125,7 +122,7 @@ public class BashDenyEndToEndTests
         }
         finally
         {
-            Directory.Delete(probe, recursive: true);
+            Directory.Delete(probe, true);
         }
     }
 

@@ -1,11 +1,10 @@
-using System.Net.Http.Headers;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
-
+using System.Net.Http.Headers;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 namespace Harbor.Providers.OpenAI;
 
 /// <summary>
@@ -85,10 +84,7 @@ internal static class OpenAiRequestBuilder
         return msg;
     }
 
-    public static void AddBearerAuth(HttpRequestMessage msg, string apiKey)
-    {
-        msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-    }
+    public static void AddBearerAuth(HttpRequestMessage msg, string apiKey) => msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
     public static HttpRequestMessage BuildResponsesRequest(LlmRequest request, string baseUrl, ILogger logger)
     {

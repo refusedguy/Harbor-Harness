@@ -1,9 +1,6 @@
-using System.Diagnostics;
 using OpenTelemetry;
-using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
-
 namespace Harbor.Telemetry;
 
 /// <summary>
@@ -50,7 +47,7 @@ public static class HarborOtlpExporter
     {
         public void Dispose()
         {
-            foreach (IDisposable disposable in disposables)
+            foreach (var disposable in disposables)
             {
                 disposable.Dispose();
             }

@@ -1,11 +1,10 @@
 using Harbor.Tui.CellForge.Rendering;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Spring physics (HDS v1 panel-resize motion): determinism, overshoot,
-/// settling, and snap contract. All assertions run on discrete frames —
-/// no wall clock anywhere.
+///     Spring physics (HDS v1 panel-resize motion): determinism, overshoot,
+///     settling, and snap contract. All assertions run on discrete frames —
+///     no wall clock anywhere.
 /// </summary>
 public class SpringFxTests
 {
@@ -69,7 +68,7 @@ public class SpringFxTests
     {
         var spring = new SpringFx(from);
         spring.Retarget(to);
-        var path = new double[24];
+        double[] path = new double[24];
         for (int i = 0; i < path.Length; i++)
         {
             path[i] = spring.Step();

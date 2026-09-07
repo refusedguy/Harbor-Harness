@@ -1,20 +1,17 @@
-using System.IO;
-using System.Security.Cryptography;
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
+using System.Security.Cryptography;
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Screenshot-diff harness with baseline hashes: renders canonical widget
-/// states (chat screen, status variants, tool card, user block), hashes each
-/// capture (SHA-256 over the grid art + cell dump) and compares against a
-/// checked-in manifest — tests/fixtures/celldiff/screenshot-baselines.txt.
-///
-/// Stricter and cheaper than existence checks: any color/style/geometry drift
-/// changes the hash and fails loudly with the offending name, while
-/// regeneration stays one HARBOR_UPDATE_GOLDENS=1 run away.
+///     Screenshot-diff harness with baseline hashes: renders canonical widget
+///     states (chat screen, status variants, tool card, user block), hashes each
+///     capture (SHA-256 over the grid art + cell dump) and compares against a
+///     checked-in manifest — tests/fixtures/celldiff/screenshot-baselines.txt.
+///     Stricter and cheaper than existence checks: any color/style/geometry drift
+///     changes the hash and fails loudly with the offending name, while
+///     regeneration stays one HARBOR_UPDATE_GOLDENS=1 run away.
 /// </summary>
 public class ScreenshotHashTests
 {
@@ -24,7 +21,7 @@ public class ScreenshotHashTests
     public async Task All_Baseline_Hashes_Match_Manifest()
     {
         Dictionary<string, string> actual = [];
-        foreach ((string name, ScreenBuffer buffer) in RenderCaptures())
+        foreach ((string name, var buffer) in RenderCaptures())
         {
             actual[name] = HashOf(buffer);
         }
@@ -35,7 +32,7 @@ public class ScreenshotHashTests
             File.WriteAllLines(
                 manifestPath,
                 actual.OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                      .Select(kv => $"{kv.Key}:{kv.Value}"));
+                    .Select(kv => $"{kv.Key}:{kv.Value}"));
             return;
         }
 
@@ -110,7 +107,7 @@ public class ScreenshotHashTests
         var status = new StatusViewModel
         {
             Model = "kilocode/tencent/hy3:free",
-            Mode = StatusBarMode.Running,
+            Mode = StatusBarMode.Running
         };
         status.SetContext(7200, 10_000);
         status.SetUsage(120_000, 45_500, 0.0042m);
@@ -151,7 +148,7 @@ public class ScreenshotHashTests
         var back = new ScreenBuffer(48, 4);
         var block = new ToolCallBlock(new ToolCallInfo("tc2", "edit", "{\"path\":\"src/app.cs\"}"));
         block.Measure(48);
-        block.Paint(new BlockPaintContext(back, new Rect(0, 0, 48, 4), tick: 0));
+        block.Paint(new BlockPaintContext(back, new Rect(0, 0, 48, 4), 0));
         return back;
     }
 
@@ -159,7 +156,7 @@ public class ScreenshotHashTests
     {
         var back = new ScreenBuffer(40, 2);
         var block = new UserBlock("refactor the renderer loop");
-        block.Paint(new BlockPaintContext(back, new Rect(0, 0, 40, 2), tick: 0));
+        block.Paint(new BlockPaintContext(back, new Rect(0, 0, 40, 2), 0));
         return back;
     }
 }

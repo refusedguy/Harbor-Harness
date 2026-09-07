@@ -1,5 +1,4 @@
 using Harbor.App.Cli.Commands;
-
 namespace Harbor.App.Cli.Tests;
 
 /// <summary>
@@ -17,9 +16,9 @@ public class McpLoginRunnerTests : IDisposable
     public void Dispose()
     {
         Environment.SetEnvironmentVariable("HARBOR_MCP_CONFIG", _savedEnv);
-        try { Directory.Delete(_root, recursive: true); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        try { Directory.Delete(_root, true); }
+        catch (IOException) {}
+        catch (UnauthorizedAccessException) {}
     }
 
     private (int Exit, string Out, string Err) Run(params string[] args)
@@ -100,7 +99,7 @@ public class McpLoginRunnerTests : IDisposable
     [Test]
     public async Task Usage_UnknownSubcommand_ReturnsTwo()
     {
-        (int exit, _, _) = Run(["bogus"]);
+        (int exit, _, _) = Run("bogus");
         await Assert.That(exit).IsEqualTo(2);
     }
 

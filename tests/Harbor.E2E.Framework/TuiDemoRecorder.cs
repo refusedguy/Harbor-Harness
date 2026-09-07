@@ -1,5 +1,4 @@
-using System.Diagnostics;
-
+using System.Globalization;
 namespace Harbor.E2E.Framework;
 
 /// <summary>Options for one <see cref="TuiDemoRecorder.RecordAsync" /> run.</summary>
@@ -46,15 +45,15 @@ public sealed record TuiDemoRecording(
 /// </remarks>
 public sealed class TuiDemoRecorder
 {
-    private TuiDemoRecorder()
-    {
-    }
 
     /// <summary>CLI project driven by the recorder, relative to the repo root.</summary>
     public const string CliProjectRelativePath = "apps/Harbor.App.Cli/Harbor.App.Cli.csproj";
 
     /// <summary>Boot banner text written by <c>harbor demo</c>; frames are only captured once it is visible.</summary>
     public const string StartMarker = "harbor demo";
+    private TuiDemoRecorder()
+    {
+    }
 
     /// <summary>Record one demo scene and assemble the GIF.</summary>
     public static async Task<TuiDemoRecording> RecordAsync(TuiDemoRecordingOptions options, CancellationToken ct = default)
@@ -70,7 +69,7 @@ public sealed class TuiDemoRecorder
         string framesDir = Path.Combine(outputDir, "frames", options.Scene);
         if (Directory.Exists(framesDir))
         {
-            Directory.Delete(framesDir, recursive: true);
+            Directory.Delete(framesDir, true);
         }
 
         int maxFrames = Math.Max(4, options.MaxSeconds * 1000 / Math.Max(1, options.FrameIntervalMs));
@@ -83,7 +82,7 @@ public sealed class TuiDemoRecorder
         string[] args = ["--demo", "--scene", options.Scene, "--tui", options.TuiName];
 
         await driver.StartAsync(args, env, ct).ConfigureAwait(false);
-        IReadOnlyList<string> frames = await driver
+        var frames = await driver
             .CaptureFramesAsync(framesDir, options.FrameIntervalMs, maxFrames, StartMarker, ct)
             .ConfigureAwait(false);
         int exitCode = await driver.WaitForExitAsync(TimeSpan.FromSeconds(options.MaxSeconds + 20), ct).ConfigureAwait(false);
@@ -121,7 +120,7 @@ public sealed class TuiDemoRecorder
         IReadOnlyList<string> frames, string outputGif, int frameIntervalMs, CancellationToken ct)
     {
         double fps = 1000.0 / Math.Max(1, frameIntervalMs);
-        string fpsText = fps.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        string fpsText = fps.ToString("0.###", CultureInfo.InvariantCulture);
         string firstFrame = frames[0];
 
         if (FindOnPath("ffmpeg") is not null)
@@ -143,9 +142,9 @@ public sealed class TuiDemoRecorder
         {
             await RunToolAsync("magick",
             [
-                "-delay", Math.Max(1, frameIntervalMs / 10).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "-delay", Math.Max(1, frameIntervalMs / 10).ToString(CultureInfo.InvariantCulture),
                 "-loop", "0",
-                .. frames,
+                ..frames,
                 "-layers", "Optimize",
                 outputGif
             ], ct).ConfigureAwait(false);
@@ -164,7 +163,7 @@ public sealed class TuiDemoRecorder
         {
             if (!string.Equals(rawGif, outputGif, StringComparison.Ordinal))
             {
-                File.Move(rawGif, outputGif, overwrite: true);
+                File.Move(rawGif, outputGif, true);
             }
 
             return;

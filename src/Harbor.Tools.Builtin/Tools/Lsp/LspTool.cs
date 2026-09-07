@@ -1,11 +1,6 @@
-using System.Text.Json;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Lsp;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Tools.Builtin;
 
 /// <summary>
@@ -32,8 +27,11 @@ public sealed class LspTool : ITool
         _logger = logger;
     }
 
-    /// <summary>Construct resolving <see cref="ILspService"/> from DI per call (tests).</summary>
-    public LspTool(ILogger<LspTool> logger) => _logger = logger;
+    /// <summary>Construct resolving <see cref="ILspService" /> from DI per call (tests).</summary>
+    public LspTool(ILogger<LspTool> logger)
+    {
+        _logger = logger;
+    }
 
     /// <inheritdoc />
     public ToolName Name => ToolName.Create("lsp");
@@ -65,23 +63,23 @@ public sealed class LspTool : ITool
 
     /// <inheritdoc />
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "action":  { "type": "string", "enum": ["diagnostics", "definition", "references"],
-                         "description": "Which LSP query to run" },
-            "path":    { "type": "string", "description": "File path (absolute or workspace-relative)" },
-            "line":    { "type": "integer", "description": "1-based line of the symbol (required for definition/references)" },
-            "column":  { "type": "integer", "description": "0-based column of the symbol (default 0)" }
-          },
-          "required": ["action", "path"]
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "action":  { "type": "string", "enum": ["diagnostics", "definition", "references"],
+                                                                                       "description": "Which LSP query to run" },
+                                                                          "path":    { "type": "string", "description": "File path (absolute or workspace-relative)" },
+                                                                          "line":    { "type": "integer", "description": "1-based line of the symbol (required for definition/references)" },
+                                                                          "column":  { "type": "integer", "description": "0-based column of the symbol (default 0)" }
+                                                                        },
+                                                                        "required": ["action", "path"]
+                                                                      }
+                                                                      """);
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("action", out JsonElement actionEl)
+        if (!args.TryGetProperty("action", out var actionEl)
             || actionEl.ValueKind != JsonValueKind.String
             || string.IsNullOrWhiteSpace(actionEl.GetString()))
             return Result.Failure("Missing or empty 'action' (diagnostics | definition | references).");
@@ -90,18 +88,18 @@ public sealed class LspTool : ITool
         if (action is not ("diagnostics" or "definition" or "references"))
             return Result.Failure($"Unknown action '{action}' — expected diagnostics, definition or references.");
 
-        if (!args.TryGetProperty("path", out JsonElement pathEl)
+        if (!args.TryGetProperty("path", out var pathEl)
             || pathEl.ValueKind != JsonValueKind.String
             || string.IsNullOrWhiteSpace(pathEl.GetString()))
             return Result.Failure("Missing or empty 'path'.");
 
         if (action is not "diagnostics")
         {
-            if (!args.TryGetProperty("line", out JsonElement lineEl) || lineEl.ValueKind != JsonValueKind.Number)
+            if (!args.TryGetProperty("line", out var lineEl) || lineEl.ValueKind != JsonValueKind.Number)
                 return Result.Failure($"'line' (1-based) is required for action '{action}'.");
         }
 
-        if (args.TryGetProperty("column", out JsonElement columnEl) && columnEl.ValueKind != JsonValueKind.Number)
+        if (args.TryGetProperty("column", out var columnEl) && columnEl.ValueKind != JsonValueKind.Number)
             return Result.Failure("'column' must be an integer.");
 
         return Result.Success();
@@ -115,7 +113,7 @@ public sealed class LspTool : ITool
     {
         string action = args.GetProperty("action").GetString()!;
         string path = args.GetProperty("path").GetString()!;
-        ILspService? lsp = _lsp;
+        var lsp = _lsp;
         if (lsp is null && context.Services is not null)
         {
             lsp = context.Services.GetService<ILspService>();
@@ -140,13 +138,13 @@ public sealed class LspTool : ITool
         {
             "diagnostics" => await DiagnosticsAsync(lsp, path, cancellationToken).ConfigureAwait(false),
             "definition" => await DefinitionAsync(lsp, args, path, cancellationToken).ConfigureAwait(false),
-            _ => await ReferencesAsync(lsp, args, path, cancellationToken).ConfigureAwait(false),
+            _ => await ReferencesAsync(lsp, args, path, cancellationToken).ConfigureAwait(false)
         };
     }
 
     private static async Task<ToolResult> DiagnosticsAsync(ILspService lsp, string path, CancellationToken ct)
     {
-        IReadOnlyList<LspDiagnostic> diagnostics = await lsp.GetDiagnosticsAsync(path, ct).ConfigureAwait(false);
+        var diagnostics = await lsp.GetDiagnosticsAsync(path, ct).ConfigureAwait(false);
         if (diagnostics.Count == 0)
         {
             return ToolResult.Success(
@@ -155,10 +153,10 @@ public sealed class LspTool : ITool
                 new { path, count = 0 });
         }
 
-        var lines = new string[diagnostics.Count];
+        string[] lines = new string[diagnostics.Count];
         for (int i = 0; i < diagnostics.Count; i++)
         {
-            LspDiagnostic d = diagnostics[i];
+            var d = diagnostics[i];
             // +1 on line/column for the 1-based human form.
             lines[i] = $"[{d.Severity.ToString().ToLowerInvariant()}] {d.FilePath}:{d.Line + 1}:{d.Column + 1}: {d.Message} ({d.Source})";
         }
@@ -171,7 +169,7 @@ public sealed class LspTool : ITool
     private static async Task<ToolResult> DefinitionAsync(ILspService lsp, JsonElement args, string path, CancellationToken ct)
     {
         (int line, int column) = PositionOf(args);
-        LspLocation? location = await lsp.FindDefinitionAsync(path, line, column, ct).ConfigureAwait(false);
+        var location = await lsp.FindDefinitionAsync(path, line, column, ct).ConfigureAwait(false);
         if (location is null)
         {
             return ToolResult.Success($"No definition found for symbol at {path}:{line + 1}:{column}.", new { path });
@@ -185,13 +183,13 @@ public sealed class LspTool : ITool
     private static async Task<ToolResult> ReferencesAsync(ILspService lsp, JsonElement args, string path, CancellationToken ct)
     {
         (int line, int column) = PositionOf(args);
-        IReadOnlyList<LspLocation> references = await lsp.FindReferencesAsync(path, line, column, ct).ConfigureAwait(false);
+        var references = await lsp.FindReferencesAsync(path, line, column, ct).ConfigureAwait(false);
         if (references.Count == 0)
         {
             return ToolResult.Success($"No references found for symbol at {path}:{line + 1}:{column}.", new { path, count = 0 });
         }
 
-        var lines = new string[references.Count];
+        string[] lines = new string[references.Count];
         for (int i = 0; i < references.Count; i++)
         {
             lines[i] = $"{references[i].FilePath}:{references[i].Line + 1}:{references[i].Column}";
@@ -205,10 +203,10 @@ public sealed class LspTool : ITool
     /// <summary>Reads the 1-based line + 0-based column (defaults: column 0).</summary>
     private static (int Line, int Column) PositionOf(JsonElement args)
     {
-        int line = args.TryGetProperty("line", out JsonElement l) && l.ValueKind == JsonValueKind.Number
+        int line = args.TryGetProperty("line", out var l) && l.ValueKind == JsonValueKind.Number
             ? Math.Max(0, l.GetInt32() - 1)
             : 0;
-        int column = args.TryGetProperty("column", out JsonElement c) && c.ValueKind == JsonValueKind.Number
+        int column = args.TryGetProperty("column", out var c) && c.ValueKind == JsonValueKind.Number
             ? Math.Max(0, c.GetInt32())
             : 0;
         return (line, column);

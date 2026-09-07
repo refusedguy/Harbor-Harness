@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -17,7 +15,7 @@ public sealed class TerminalModesScenarioTests : CellForgePtyScenarioBase
     [Timeout(60_000)]
     public async Task ModeLifecycle_AltScreenPasteOnly_NoGlobalMouseGrab()
     {
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
 
         // 1. Exact entry sequence lands atomically at startup.
         bool entered = await WaitForRawTextAsync(
@@ -68,7 +66,7 @@ public sealed class TerminalModesScenarioTests : CellForgePtyScenarioBase
     public async Task FocusEvents_AndDsrRequests_IgnoredGracefully()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 

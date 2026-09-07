@@ -2,6 +2,7 @@ using Serilog;
 using Serilog.Core;
 using Serilog.Events;
 namespace Harbor.Logging;
+
 /// <summary>
 ///     Centralized Serilog configuration — shared by CLI, Avalonia, and all desktop apps.
 ///     Writes to:

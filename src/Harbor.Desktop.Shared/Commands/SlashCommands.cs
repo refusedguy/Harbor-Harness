@@ -1,4 +1,5 @@
 namespace Harbor.Desktop.Shared.Commands;
+
 /// <summary>
 ///     Catalog of slash commands (e.g. <c>/help</c>, <c>/clear</c>,
 ///     <c>/quit</c>) shared by every desktop app. The platform app's chat

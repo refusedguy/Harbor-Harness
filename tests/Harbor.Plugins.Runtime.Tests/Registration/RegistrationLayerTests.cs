@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
@@ -8,7 +7,9 @@ using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Registration;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 namespace Harbor.Plugins.Runtime.Tests.Registration;
+
 /// <summary>
 ///     Tests for the Registration layer: <see cref="PluginRegistrar" /> and
 ///     <see cref="SafePluginRegistrar" />.

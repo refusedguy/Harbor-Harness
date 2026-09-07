@@ -1,6 +1,4 @@
 using Harbor.E2E.Framework;
-using Harbor.E2E.Framework.Pty;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -17,7 +15,7 @@ public class PtyHarnessSanityTests
     public async Task Cat_EchoesLinesThroughPty()
     {
         PtySession.RequireUnix();
-        await using var session = PtySession.Start(new PtyStartSpec("cat", [], Cols: 80, Rows: 24));
+        await using var session = PtySession.Start(new PtyStartSpec("cat", [], 80, 24));
 
         session.WriteLine("hello-pty");
         bool echoed = await session.WaitForTextAsync("hello-pty", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
@@ -32,7 +30,7 @@ public class PtyHarnessSanityTests
         PtySession.RequireUnix();
         // stty size prints "<rows> <cols>" of its controlling terminal.
         await using var session = PtySession.Start(new PtyStartSpec(
-            "sh", ["-c", "sleep 0.5; stty size"], Cols: 80, Rows: 24));
+            "sh", ["-c", "sleep 0.5; stty size"], 80, 24));
         await session.ResizeAsync(100, 30).ConfigureAwait(false);
 
         int exit = await session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
@@ -47,7 +45,7 @@ public class PtyHarnessSanityTests
         PtySession.RequireLinux();
         // Baseline BEFORE the child flips raw mode (child sleeps first).
         await using var session = PtySession.Start(new PtyStartSpec(
-            "sh", ["-c", "sleep 0.4; stty raw -echo"], Cols: 80, Rows: 24));
+            "sh", ["-c", "sleep 0.4; stty raw -echo"], 80, 24));
         byte[] before = session.CaptureTermios();
 
         int exit = await session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
@@ -71,7 +69,7 @@ public class PtyHarnessSanityTests
     {
         PtySession.RequireUnix();
         await using var session = PtySession.Start(new PtyStartSpec(
-            "sh", ["-c", "exit 7"], Cols: 80, Rows: 24));
+            "sh", ["-c", "exit 7"], 80, 24));
 
         int exit = await session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 

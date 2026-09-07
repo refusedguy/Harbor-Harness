@@ -1,6 +1,7 @@
-using System.Text.Json;
 using Harbor.Ui.Framework.Diagnostics;
+using System.Text.Json;
 namespace Harbor.App.Cli.Hosting;
+
 /// <summary>
 ///     Resolves the active TUI renderer id from <c>HARBOR_TUI</c> /
 ///     <c>CliConfig.DefaultTuiRenderer</c>, and classifies it as interactive
@@ -29,15 +30,6 @@ namespace Harbor.App.Cli.Hosting;
 /// </remarks>
 internal static class TuiMode
 {
-    /// <summary>
-    ///     TUI renderer ids that take over the alternate screen buffer. Console
-    ///     logging must be suppressed while one of these is active.
-    /// </summary>
-    private static readonly HashSet<string> InteractiveTuis = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "spectre-tui", "spectre", "fullscreen", "termina", "terminal-gui", "razor",
-        "consoleex",
-    };
 
     /// <summary>The canonical CellForge renderer id (<c>HARBOR_TUI=cellforge</c>, <c>tui: "cellforge"</c>).</summary>
     public const string CellForgeId = "cellforge";
@@ -48,6 +40,15 @@ internal static class TuiMode
     ///     renderer-unification rename (project is now Harbor.Tui.CellForge).
     /// </summary>
     public const string LegacyConsoleExId = "consoleex";
+    /// <summary>
+    ///     TUI renderer ids that take over the alternate screen buffer. Console
+    ///     logging must be suppressed while one of these is active.
+    /// </summary>
+    private static readonly HashSet<string> InteractiveTuis = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "spectre-tui", "spectre", "fullscreen", "termina", "terminal-gui", "razor",
+        "consoleex"
+    };
 
     /// <summary>True for both the canonical <c>cellforge</c> id and the legacy <c>consoleex</c> alias.</summary>
     public static bool IsCellForgeId(string? value) =>

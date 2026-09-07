@@ -1,9 +1,7 @@
-using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
-using Harbor.Ui.Framework.ViewModels;
 using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
-using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 namespace Harbor.App.Avalonia.Tests;
+
 /// <summary>
 ///     Unit tests for the platform-agnostic <see cref="ChatLineVm" />
 ///     record. Verifies that the role-to-brush-key / role-to-label /

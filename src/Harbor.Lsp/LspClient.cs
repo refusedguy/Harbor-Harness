@@ -1,13 +1,12 @@
+using Microsoft.Extensions.Logging;
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Lsp;
 
 /// <summary>
 ///     JSON-RPC over the LSP wire format (Content-Length framed) on a pair of
-///     <see cref="Stream"/>s — one running language server connection.
+///     <see cref="Stream" />s — one running language server connection.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -21,28 +20,22 @@ namespace Harbor.Lsp;
 ///         <see cref="ServerNotification" />.
 ///     </para>
 ///     <para>
-///         <b>AOT:</b> params serialize through <see cref="LspJsonContext"/>
+///         <b>AOT:</b> params serialize through <see cref="LspJsonContext" />
 ///         source generation; responses are read as raw
-///         <see cref="JsonElement"/>s and normalized by callers.
+///         <see cref="JsonElement" />s and normalized by callers.
 ///     </para>
 /// </remarks>
 public sealed class LspClient : IAsyncDisposable
 {
     private readonly Stream _input;
-    private readonly Stream _output;
+    private readonly CancellationTokenSource _lifetimeCts = new();
     private readonly ILogger _logger;
-    private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly Stream _output;
     private readonly Dictionary<int, TaskCompletionSource<JsonElement>> _pending = [];
     private readonly Lock _pendingLock = new();
-    private readonly CancellationTokenSource _lifetimeCts = new();
-    private int _nextId;
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
     private int _disposed;
-
-    /// <summary>Raised for every server→client notification (method, params).</summary>
-    public event EventHandler<LspNotificationEventArgs>? ServerNotification;
-
-    /// <summary>Raised when the read loop ends (process exited / stream closed).</summary>
-    public event EventHandler? Disconnected;
+    private int _nextId;
 
     public LspClient(Stream input, Stream output, ILogger logger)
     {
@@ -51,12 +44,38 @@ public sealed class LspClient : IAsyncDisposable
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        await _lifetimeCts.CancelAsync().ConfigureAwait(false);
+        lock (_pendingLock)
+        {
+            foreach (var tcs in _pending.Values)
+            {
+                _ = tcs.TrySetCanceled();
+            }
+
+            _pending.Clear();
+        }
+
+        _lifetimeCts.Dispose();
+        _writeLock.Dispose();
+    }
+
+    /// <summary>Raised for every server→client notification (method, params).</summary>
+    public event EventHandler<LspNotificationEventArgs>? ServerNotification;
+
+    /// <summary>Raised when the read loop ends (process exited / stream closed).</summary>
+    public event EventHandler? Disconnected;
+
     /// <summary>Starts the background read loop.</summary>
     public void Start() => _ = ReadLoopAsync(_lifetimeCts.Token);
 
     /// <summary>
     ///     Sends a request and awaits the server's result. The returned
-    ///     <see cref="JsonElement"/> is a clone — valid after the frame is freed.
+    ///     <see cref="JsonElement" /> is a clone — valid after the frame is freed.
     /// </summary>
     public async Task<JsonElement?> SendRequestAsync(string method, object? parameters, CancellationToken ct = default)
     {
@@ -88,26 +107,6 @@ public sealed class LspClient : IAsyncDisposable
     public Task SendNotificationAsync(string method, object? parameters, CancellationToken ct = default)
         => WriteFrameAsync(BuildFrame("2.0", null, method, parameters), ct);
 
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-
-        await _lifetimeCts.CancelAsync().ConfigureAwait(false);
-        lock (_pendingLock)
-        {
-            foreach (var tcs in _pending.Values)
-            {
-                _ = tcs.TrySetCanceled();
-            }
-
-            _pending.Clear();
-        }
-
-        _lifetimeCts.Dispose();
-        _writeLock.Dispose();
-    }
-
     // ── Framing ────────────────────────────────────────────────────────────
 
     private static string BuildFrame(string jsonrpc, int? id, string method, object? parameters)
@@ -117,7 +116,7 @@ public sealed class LspClient : IAsyncDisposable
         {
             json.WriteStartObject();
             json.WriteString("jsonrpc", jsonrpc);
-            if (id is { } requestId)
+            if (id is {} requestId)
             {
                 json.WriteNumber("id", requestId);
             }
@@ -126,7 +125,7 @@ public sealed class LspClient : IAsyncDisposable
             if (parameters is not null)
             {
                 json.WritePropertyName("params");
-                json.WriteRawValue(JsonSerializeParams(parameters), skipInputValidation: false);
+                json.WriteRawValue(JsonSerializeParams(parameters), false);
             }
 
             json.WriteEndObject();
@@ -146,7 +145,7 @@ public sealed class LspClient : IAsyncDisposable
             LspWire.DidChangeTextDocumentParams p => JsonSerializer.Serialize(p, LspJsonContext.Default.DidChangeTextDocumentParams),
             LspWire.DidCloseTextDocumentParams p => JsonSerializer.Serialize(p, LspJsonContext.Default.DidCloseTextDocumentParams),
             LspWire.PositionParams p => JsonSerializer.Serialize(p, LspJsonContext.Default.PositionParams),
-            _ => throw new InvalidOperationException($"No source-generated serializer for {parameters.GetType().Name}."),
+            _ => throw new InvalidOperationException($"No source-generated serializer for {parameters.GetType().Name}.")
         };
     }
 
@@ -175,7 +174,7 @@ public sealed class LspClient : IAsyncDisposable
         {
             while (!ct.IsCancellationRequested)
             {
-                JsonDocument? doc = await ReadFrameAsync(ct).ConfigureAwait(false);
+                var doc = await ReadFrameAsync(ct).ConfigureAwait(false);
                 if (doc is null) break;
 
                 using (doc)
@@ -199,26 +198,26 @@ public sealed class LspClient : IAsyncDisposable
     private void HandleFrame(JsonElement root)
     {
         if (root.ValueKind != JsonValueKind.Object) return;
-        if (root.TryGetProperty("method", out JsonElement methodEl) && methodEl.ValueKind == JsonValueKind.String)
+        if (root.TryGetProperty("method", out var methodEl) && methodEl.ValueKind == JsonValueKind.String)
         {
-            JsonElement paramsElement = root.TryGetProperty("params", out JsonElement p) ? p.Clone() : default;
+            var paramsElement = root.TryGetProperty("params", out var p) ? p.Clone() : default;
             ServerNotification?.Invoke(this, new LspNotificationEventArgs(methodEl.GetString()!, paramsElement));
             return;
         }
 
-        if (root.TryGetProperty("id", out JsonElement idEl) && idEl.ValueKind == JsonValueKind.Number)
+        if (root.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.Number)
         {
             lock (_pendingLock)
             {
                 if (_pending.TryGetValue(idEl.GetInt32(), out var tcs))
                 {
-                    if (root.TryGetProperty("result", out JsonElement result))
+                    if (root.TryGetProperty("result", out var result))
                     {
                         _ = tcs.TrySetResult(result.Clone());
                     }
-                    else if (root.TryGetProperty("error", out JsonElement error))
+                    else if (root.TryGetProperty("error", out var error))
                     {
-                        string message = error.TryGetProperty("message", out JsonElement m) && m.ValueKind == JsonValueKind.String
+                        string message = error.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String
                             ? m.GetString()!
                             : "LSP request failed";
                         _ = tcs.TrySetException(new LspRequestException(message));
@@ -286,7 +285,7 @@ public sealed class LspClient : IAsyncDisposable
 
     private async ValueTask<int> ReadByteAsync(CancellationToken ct)
     {
-        var one = new byte[1];
+        byte[] one = new byte[1];
         int read = await _input.ReadAsync(one, ct).ConfigureAwait(false);
         return read == 0 ? -1 : one[0];
     }

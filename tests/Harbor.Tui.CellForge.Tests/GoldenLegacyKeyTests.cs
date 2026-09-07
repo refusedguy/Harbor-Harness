@@ -1,13 +1,11 @@
-using System.Text;
-using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Golden-byte vectors: legacy xterm/VT key encodings (raw bytes → expected events).
-/// These are the fallback-path contract — kitty-encoded equivalents must decode
-/// to the SAME logical keys (zone З.1 golden table cross-checks this).
+///     Golden-byte vectors: legacy xterm/VT key encodings (raw bytes → expected events).
+///     These are the fallback-path contract — kitty-encoded equivalents must decode
+///     to the SAME logical keys (zone З.1 golden table cross-checks this).
 /// </summary>
 public class GoldenLegacyKeyTests
 {
@@ -48,8 +46,8 @@ public class GoldenLegacyKeyTests
     }
 
     [Test]
-    [Arguments(1, 5, KeyCode.Up, KeyModifiers.Ctrl)]  // 5−1 = bit2 = Ctrl (xterm legacy order!)
-    [Arguments(1, 3, KeyCode.Up, KeyModifiers.Alt)]   // 3−1 = bit1 = Alt
+    [Arguments(1, 5, KeyCode.Up, KeyModifiers.Ctrl)] // 5−1 = bit2 = Ctrl (xterm legacy order!)
+    [Arguments(1, 3, KeyCode.Up, KeyModifiers.Alt)] // 3−1 = bit1 = Alt
     [Arguments(1, 7, KeyCode.Up, KeyModifiers.Alt | KeyModifiers.Ctrl)]
     [Arguments(1, 2, KeyCode.Up, KeyModifiers.Shift)]
     [Arguments(1, 5, KeyCode.Down, KeyModifiers.Ctrl)]
@@ -57,7 +55,7 @@ public class GoldenLegacyKeyTests
     [Arguments(1, 5, KeyCode.Left, KeyModifiers.Ctrl)]
     public async Task Csi_Modified_Arrows_Decode_Modifier_Bits(int firstParam, int mods, KeyCode key, KeyModifiers expectedMods)
     {
-        var final = ArrowFinal(key);
+        string final = ArrowFinal(key);
         var events = T.Feed(_parser, $"\u001B[{firstParam};{mods}{final}");
 
         await Assert.That(events.Length).IsEqualTo(1);
@@ -69,7 +67,7 @@ public class GoldenLegacyKeyTests
         KeyCode.Up => "A",
         KeyCode.Down => "B",
         KeyCode.Right => "C",
-        _ => "D",
+        _ => "D"
     };
 
     [Test]

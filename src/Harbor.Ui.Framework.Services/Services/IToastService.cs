@@ -1,4 +1,5 @@
 namespace Harbor.Ui.Framework.Services;
+
 /// <summary>
 ///     Abstraction for toast notifications. Each desktop app implements this
 ///     to show toasts in its own UI framework.

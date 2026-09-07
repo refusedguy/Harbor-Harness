@@ -4,12 +4,11 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tui;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
-using Harbor.Application.Permissions;
 namespace Harbor.App.Cli.Commands;
+
 /// <summary>
 ///     /setup — run onboarding wizard.
 /// </summary>
@@ -130,12 +129,12 @@ public sealed class AuthCommand : ISlashCommand
 /// </remarks>
 public sealed class ModelCommand : ISlashCommand
 {
+    private readonly IAgent? _agent;
 
     private readonly IConfigStore _configStore;
     private readonly IProviderRegistry _providers;
-    private readonly Action<string> _writer;
-    private readonly IAgent? _agent;
     private readonly Session? _session;
+    private readonly Action<string> _writer;
 
     public ModelCommand(IConfigStore configStore, IProviderRegistry providers, Action<string> writer)
         : this(configStore, providers, writer, null, null)
@@ -428,12 +427,12 @@ public sealed class ConfigCommand : ISlashCommand
 /// </summary>
 public sealed class PermissionsCommand : ISlashCommand
 {
-    private readonly IPermissionService _permissions;
+    private readonly IAgent? _agent;
     private readonly IAgentRegistry _agentRegistry;
     private readonly IConfigStore _configStore;
-    private readonly Action<string> _writer;
-    private readonly IAgent? _agent;
+    private readonly IPermissionService _permissions;
     private readonly Session? _session;
+    private readonly Action<string> _writer;
 
     public PermissionsCommand(
         IPermissionService permissions,

@@ -1,12 +1,10 @@
-using System.Text.Json;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
-using Harbor.Application.Tests.Fakes;
 using Harbor.Application.Permissions;
+using Harbor.Application.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
+using System.Text.Json;
 namespace Harbor.Application.Tests;
 
 public class PermissionBypassTests
@@ -105,6 +103,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_RmRfSlashWithSwappedFlags_IsDeniedWithoutPrompt()
     {
         int prompts = 0;
+
         Task<PermissionResponse> CountingAsker(PermissionRequest req, CancellationToken ct)
         {
             prompts++;
@@ -125,6 +124,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_CompoundRmRfDotPath_IsDeniedWithoutPrompt()
     {
         int prompts = 0;
+
         Task<PermissionResponse> CountingAsker(PermissionRequest req, CancellationToken ct)
         {
             prompts++;
@@ -145,6 +145,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_SudoViaAbsolutePath_IsDeniedWithoutPrompt()
     {
         int prompts = 0;
+
         Task<PermissionResponse> CountingAsker(PermissionRequest req, CancellationToken ct)
         {
             prompts++;
@@ -165,6 +166,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_DirectSudoCommand_IsDeniedWithoutPrompt()
     {
         int prompts = 0;
+
         Task<PermissionResponse> CountingAsker(PermissionRequest req, CancellationToken ct)
         {
             prompts++;
@@ -185,6 +187,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_DirectRmRfRootCommand_IsDeniedWithoutPrompt()
     {
         int prompts = 0;
+
         Task<PermissionResponse> CountingAsker(PermissionRequest req, CancellationToken ct)
         {
             prompts++;

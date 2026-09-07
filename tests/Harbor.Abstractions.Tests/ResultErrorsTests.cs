@@ -1,7 +1,5 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Results;
-using TUnit.Assertions;
-
 namespace Harbor.Abstractions.Tests;
 
 /// <summary>
@@ -15,7 +13,7 @@ public class ResultErrorsTests
     [Test]
     public async Task Message_RegularException_ReturnsMessage()
     {
-        var error = ResultErrors.Message(new InvalidOperationException("boom"));
+        string error = ResultErrors.Message(new InvalidOperationException("boom"));
 
         await Assert.That(error).IsEqualTo("boom");
     }
@@ -30,7 +28,7 @@ public class ResultErrorsTests
     [Test]
     public async Task Try_Success_WrapsValue()
     {
-        Result<int> result = Result.Try(() => 42, ResultErrors.Message);
+        var result = Result.Try(() => 42, ResultErrors.Message);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value).IsEqualTo(42);
@@ -41,7 +39,7 @@ public class ResultErrorsTests
     {
         static int Boom() => throw new ArgumentException("bad input");
 
-        Result<int> result = Result.Try(Boom, ResultErrors.Message);
+        var result = Result.Try(Boom, ResultErrors.Message);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).IsEqualTo("bad input");
@@ -59,7 +57,7 @@ public class ResultErrorsTests
     [Test]
     public async Task TryAsync_Success_WrapsValue()
     {
-        Result<int> result = await Result.Try(async () => await Task.FromResult(42), ResultErrors.Message);
+        var result = await Result.Try(async () => await Task.FromResult(42), ResultErrors.Message);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value).IsEqualTo(42);
@@ -70,7 +68,7 @@ public class ResultErrorsTests
     {
         static Task<int> Boom() => throw new InvalidOperationException("boom");
 
-        Result<int> result = await Result.Try(Boom, ResultErrors.Message);
+        var result = await Result.Try(Boom, ResultErrors.Message);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).IsEqualTo("boom");
@@ -83,7 +81,7 @@ public class ResultErrorsTests
         cts.Cancel();
 
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
-            await Result.Try<int>(async () =>
+            await Result.Try(async () =>
             {
                 await Task.Delay(Timeout.Infinite, cts.Token);
                 return 0;

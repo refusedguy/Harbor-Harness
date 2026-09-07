@@ -1,29 +1,27 @@
 using System.Text;
-using Harbor.Ui.Framework.Rendering;
-
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Modal dialog kind. Drives button layout and default Enter behaviour.
+///     Modal dialog kind. Drives button layout and default Enter behaviour.
 /// </summary>
 public enum DialogKind
 {
     Alert,
     Confirm,
-    Prompt,
+    Prompt
 }
 
 /// <summary>
-/// One button on a <see cref="DialogOverlay"/>.
+///     One button on a <see cref="DialogOverlay" />.
 /// </summary>
 public sealed record DialogButton(string Label, string Id);
 
 /// <summary>
-/// Cell-native modal dialog overlay (CellForge EPIC H).
-/// Hosts a single centered modal box on top of the chat feed.
-/// Hosts are responsible for advancing <see cref="Tick"/> for animations
-/// (none today; the field is reserved for future spinner integration) and
-/// for invoking <see cref="Dismiss"/> after a button commits.
+///     Cell-native modal dialog overlay (CellForge EPIC H).
+///     Hosts a single centered modal box on top of the chat feed.
+///     Hosts are responsible for advancing <see cref="Tick" /> for animations
+///     (none today; the field is reserved for future spinner integration) and
+///     for invoking <see cref="Dismiss" /> after a button commits.
 /// </summary>
 public sealed class DialogOverlay
 {
@@ -35,40 +33,31 @@ public sealed class DialogOverlay
     private const int ButtonRowHeight = 2;
 
     private readonly List<DialogButton> _buttons = new();
-    private string _title = string.Empty;
-    private string _message = string.Empty;
-    private string _input = string.Empty;
-    private int _focusedButton;
-    private DialogKind _kind = DialogKind.Alert;
-
-    public DialogOverlay()
-    {
-    }
 
     public bool Visible { get; private set; }
 
-    public string Title => _title;
+    public string Title { get; private set; } = string.Empty;
 
-    public string Message => _message;
+    public string Message { get; private set; } = string.Empty;
 
-    public string Input => _input;
+    public string Input { get; private set; } = string.Empty;
 
     public IReadOnlyList<DialogButton> Buttons => _buttons;
 
-    public int FocusedButtonIndex => _focusedButton;
+    public int FocusedButtonIndex { get; private set; }
 
-    public DialogKind Kind => _kind;
+    public DialogKind Kind { get; private set; } = DialogKind.Alert;
 
     public void ShowAlert(string title, string message, string okLabel = "OK")
     {
         ArgumentNullException.ThrowIfNull(okLabel);
-        _kind = DialogKind.Alert;
-        _title = title ?? string.Empty;
-        _message = message ?? string.Empty;
-        _input = string.Empty;
+        Kind = DialogKind.Alert;
+        Title = title ?? string.Empty;
+        Message = message ?? string.Empty;
+        Input = string.Empty;
         _buttons.Clear();
         _buttons.Add(new DialogButton(okLabel, "ok"));
-        _focusedButton = 0;
+        FocusedButtonIndex = 0;
         Visible = true;
     }
 
@@ -80,14 +69,14 @@ public sealed class DialogOverlay
     {
         ArgumentNullException.ThrowIfNull(okLabel);
         ArgumentNullException.ThrowIfNull(cancelLabel);
-        _kind = DialogKind.Confirm;
-        _title = title ?? string.Empty;
-        _message = message ?? string.Empty;
-        _input = string.Empty;
+        Kind = DialogKind.Confirm;
+        Title = title ?? string.Empty;
+        Message = message ?? string.Empty;
+        Input = string.Empty;
         _buttons.Clear();
         _buttons.Add(new DialogButton(okLabel, "ok"));
         _buttons.Add(new DialogButton(cancelLabel, "cancel"));
-        _focusedButton = 0;
+        FocusedButtonIndex = 0;
         Visible = true;
     }
 
@@ -100,21 +89,18 @@ public sealed class DialogOverlay
     {
         ArgumentNullException.ThrowIfNull(okLabel);
         ArgumentNullException.ThrowIfNull(cancelLabel);
-        _kind = DialogKind.Prompt;
-        _title = title ?? string.Empty;
-        _message = message ?? string.Empty;
-        _input = defaultValue ?? string.Empty;
+        Kind = DialogKind.Prompt;
+        Title = title ?? string.Empty;
+        Message = message ?? string.Empty;
+        Input = defaultValue ?? string.Empty;
         _buttons.Clear();
         _buttons.Add(new DialogButton(okLabel, "ok"));
         _buttons.Add(new DialogButton(cancelLabel, "cancel"));
-        _focusedButton = 0;
+        FocusedButtonIndex = 0;
         Visible = true;
     }
 
-    public void Dismiss()
-    {
-        Visible = false;
-    }
+    public void Dismiss() => Visible = false;
 
     public void Tick()
     {
@@ -143,7 +129,7 @@ public sealed class DialogOverlay
                 CycleFocus(forward: true);
                 return true;
         }
-        if (_kind == DialogKind.Prompt)
+        if (Kind == DialogKind.Prompt)
         {
             return HandlePromptKey(key);
         }
@@ -158,16 +144,16 @@ public sealed class DialogOverlay
         }
         if (key.Key == ConsoleKey.Backspace)
         {
-            if (_input.Length > 0)
+            if (Input.Length > 0)
             {
-                _input = _input[..^1];
+                Input = Input[..^1];
             }
             return true;
         }
         char ch = key.KeyChar;
         if (!char.IsControl(ch))
         {
-            _input += ch;
+            Input += ch;
             return true;
         }
         return false;
@@ -181,17 +167,17 @@ public sealed class DialogOverlay
         }
         if (forward)
         {
-            _focusedButton = (_focusedButton + 1) % _buttons.Count;
+            FocusedButtonIndex = (FocusedButtonIndex + 1) % _buttons.Count;
         }
         else
         {
-            _focusedButton = (_focusedButton - 1 + _buttons.Count) % _buttons.Count;
+            FocusedButtonIndex = (FocusedButtonIndex - 1 + _buttons.Count) % _buttons.Count;
         }
     }
 
     /// <summary>
-    /// Paint the modal centered inside <paramref name="rect"/> (typically the
-    /// full screen). No-op when hidden or the rect is too small.
+    ///     Paint the modal centered inside <paramref name="rect" /> (typically the
+    ///     full screen). No-op when hidden or the rect is too small.
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect rect)
     {
@@ -205,7 +191,7 @@ public sealed class DialogOverlay
         }
 
         int width = Math.Min(MaxWidth, rect.Width - 2);
-        int contentRows = CountMessageRows(width) + ButtonRowHeight + (Padding * 2) + (_kind == DialogKind.Prompt ? 1 : 0);
+        int contentRows = CountMessageRows(width) + ButtonRowHeight + Padding * 2 + (Kind == DialogKind.Prompt ? 1 : 0);
         int height = Math.Min(MaxHeight, Math.Max(MinHeight, Math.Min(rect.Height - 2, contentRows + 2)));
         int x = rect.X + (rect.Width - width) / 2;
         int y = rect.Y + (rect.Height - height) / 2;
@@ -214,12 +200,12 @@ public sealed class DialogOverlay
 
         int textX = box.X + Padding;
         int textY = box.Y + Padding;
-        int innerW = box.Width - (Padding * 2);
+        int innerW = box.Width - Padding * 2;
         DrawTitle(buffer, textX, textY, innerW);
         textY += 1;
 
-        int messageRows = Math.Max(1, height - (Padding * 2) - 2 - ButtonRowHeight - (_kind == DialogKind.Prompt ? 1 : 0));
-        string[] wrapped = WrapText(_message, innerW);
+        int messageRows = Math.Max(1, height - Padding * 2 - 2 - ButtonRowHeight - (Kind == DialogKind.Prompt ? 1 : 0));
+        string[] wrapped = WrapText(Message, innerW);
         int drawn = 0;
         for (int i = 0; i < wrapped.Length && drawn < messageRows; i++)
         {
@@ -228,10 +214,10 @@ public sealed class DialogOverlay
         }
         textY += messageRows;
 
-        if (_kind == DialogKind.Prompt)
+        if (Kind == DialogKind.Prompt)
         {
             buffer.SetText(textX, textY, "› ", new CellStyle(ChatPalette.Accent));
-            string input = _input.Length > innerW - 2 ? _input[(^Math.Max(1, innerW - 2))..] : _input;
+            string input = Input.Length > innerW - 2 ? Input[^Math.Max(1, innerW - 2)..] : Input;
             buffer.SetText(textX + 2, textY, input, new CellStyle(ChatPalette.Accent));
         }
 
@@ -240,7 +226,7 @@ public sealed class DialogOverlay
 
     private void DrawTitle(ScreenBuffer buffer, int x, int y, int innerW)
     {
-        string title = _title.Length > innerW ? _title[..Math.Max(0, innerW - 1)] + "…" : _title;
+        string title = Title.Length > innerW ? Title[..Math.Max(0, innerW - 1)] + "…" : Title;
         buffer.SetText(x, y, title, new CellStyle(ChatPalette.Accent));
     }
 
@@ -289,7 +275,7 @@ public sealed class DialogOverlay
         for (int i = 0; i < span; i++)
         {
             var button = _buttons[i];
-            var style = i == _focusedButton ? new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold) : new CellStyle(ChatPalette.Muted);
+            var style = i == FocusedButtonIndex ? new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold) : new CellStyle(ChatPalette.Muted);
             buffer.SetText(cursor, y, "[", style);
             buffer.SetText(cursor + 1, y, button.Label, style);
             buffer.SetText(cursor + 1 + button.Label.Length, y, "]", style);
@@ -303,7 +289,7 @@ public sealed class DialogOverlay
         {
             return 1;
         }
-        return Math.Max(1, WrapText(_message, innerW).Length);
+        return Math.Max(1, WrapText(Message, innerW).Length);
     }
 
     private static string[] WrapText(string text, int width)

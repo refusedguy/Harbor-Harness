@@ -8,13 +8,13 @@ The **composition root** for all Harbor applications. `Registration.AddHarbor(..
 
 ## What's in it
 
-| File | Purpose |
-|------|---------|
-| `Registration.cs` | `AddHarbor(...)` — the single entry point for wiring Harbor services. |
-| `HarborComposeOptions.cs` | App-specific configuration passed into composition (storage backend, TUI renderer, event bus middleware, config paths). |
-| `HarborCompositionContext.cs` | Runtime bag holding resolved options, logger factory, common config, event bus, and registries. |
-| `HarborFeatureSet.cs` | Record capturing which optional feature flags are active. |
-| `Modules/*.cs` | Individual DI modules: `CoreModule`, `IntelligenceModule`, `IpcModule`, `TelemetryModule`, `TuiModule`, `PluginLoadHostAdapter`, `StorageModule`, `ConfigurationModule`, `RegistriesModule`, `ToolsCatalog`, `ProviderFactories`, `JsonProviderDiscovery`, `ConfigAuthResolver`. |
+| File                          | Purpose                                                                                                                                                                                                                                                                          |
+|-------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Registration.cs`             | `AddHarbor(...)` — the single entry point for wiring Harbor services.                                                                                                                                                                                                            |
+| `HarborComposeOptions.cs`     | App-specific configuration passed into composition (storage backend, TUI renderer, event bus middleware, config paths).                                                                                                                                                          |
+| `HarborCompositionContext.cs` | Runtime bag holding resolved options, logger factory, common config, event bus, and registries.                                                                                                                                                                                  |
+| `HarborFeatureSet.cs`         | Record capturing which optional feature flags are active.                                                                                                                                                                                                                        |
+| `Modules/*.cs`                | Individual DI modules: `CoreModule`, `IntelligenceModule`, `IpcModule`, `TelemetryModule`, `TuiModule`, `PluginLoadHostAdapter`, `StorageModule`, `ConfigurationModule`, `RegistriesModule`, `ToolsCatalog`, `ProviderFactories`, `JsonProviderDiscovery`, `ConfigAuthResolver`. |
 
 ## Public API summary
 
@@ -25,12 +25,12 @@ The **composition root** for all Harbor applications. `Registration.AddHarbor(..
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `Microsoft.Extensions.DependencyInjection.Abstractions` | DI container contracts |
-| `Microsoft.Extensions.Logging.Abstractions` | Logging contracts |
-| `Microsoft.Extensions.Configuration.Abstractions` | Configuration contracts |
-| `Microsoft.Extensions.Http` | `IHttpClientFactory` for providers |
+| Package                                                 | Purpose                            |
+|---------------------------------------------------------|------------------------------------|
+| `Microsoft.Extensions.DependencyInjection.Abstractions` | DI container contracts             |
+| `Microsoft.Extensions.Logging.Abstractions`             | Logging contracts                  |
+| `Microsoft.Extensions.Configuration.Abstractions`       | Configuration contracts            |
+| `Microsoft.Extensions.Http`                             | `IHttpClientFactory` for providers |
 
 ## Tests
 

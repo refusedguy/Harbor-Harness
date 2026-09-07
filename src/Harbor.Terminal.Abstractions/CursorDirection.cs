@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Contracts;
-
 namespace Harbor.Terminal.Abstractions;
 
 /// <summary>
@@ -60,5 +59,5 @@ public enum CursorDirection : byte
     EnterAlternateScreen = 16,
 
     /// <summary>Exit alternate screen buffer (DECRST 1047/1048/1049).</summary>
-    ExitAlternateScreen = 17,
+    ExitAlternateScreen = 17
 }

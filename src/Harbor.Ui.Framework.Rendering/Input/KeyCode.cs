@@ -1,15 +1,15 @@
 namespace Harbor.Ui.Framework.Rendering.Input;
 
 /// <summary>
-/// Logical key identity. <see cref="KeyCode.Char"/> keys carry the actual
-/// character in <see cref="KeyEvent.Character"/>; every other member is a
-/// named function key.
+///     Logical key identity. <see cref="KeyCode.Char" /> keys carry the actual
+///     character in <see cref="KeyEvent.Character" />; every other member is a
+///     named function key.
 /// </summary>
 public enum KeyCode : byte
 {
     None = 0,
 
-    /// <summary>Printable character input (<see cref="KeyEvent.Character"/> is set).</summary>
+    /// <summary>Printable character input (<see cref="KeyEvent.Character" /> is set).</summary>
     Char,
 
     Enter,
@@ -42,8 +42,10 @@ public enum KeyCode : byte
     F11,
     F12,
 
-    /// <summary>A key the decoder could not name. Raw codepoint is preserved
-    /// in <see cref="KeyEvent.Codepoint"/> when known (forward compatibility
-    /// with unmappped kitty functional codes).</summary>
-    Unknown,
+    /// <summary>
+    ///     A key the decoder could not name. Raw codepoint is preserved
+    ///     in <see cref="KeyEvent.Codepoint" /> when known (forward compatibility
+    ///     with unmappped kitty functional codes).
+    /// </summary>
+    Unknown
 }

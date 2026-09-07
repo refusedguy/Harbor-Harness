@@ -1,7 +1,6 @@
-using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>Shared helpers for golden-byte tests: raw byte strings → parser → events.</summary>
@@ -13,7 +12,7 @@ internal static class T
     /// <summary>Feeds each chunk as a separate read (chunk boundaries are part of the vector).</summary>
     public static InputEvent[] Feed(EscapeSequenceParser parser, params string[] chunks)
     {
-        foreach (var chunk in chunks)
+        foreach (string chunk in chunks)
         {
             parser.Parse(Encoding.UTF8.GetBytes(chunk));
         }
@@ -23,7 +22,7 @@ internal static class T
 
     public static InputEvent[] FeedBytes(EscapeSequenceParser parser, params byte[][] chunks)
     {
-        foreach (var chunk in chunks)
+        foreach (byte[] chunk in chunks)
         {
             parser.Parse(chunk);
         }

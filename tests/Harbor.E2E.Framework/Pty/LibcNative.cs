@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-
 namespace Harbor.E2E.Framework.Pty;
 
 /// <summary>
@@ -12,15 +11,18 @@ namespace Harbor.E2E.Framework.Pty;
 /// </summary>
 internal static class LibcNative
 {
-    private static readonly bool IsDarwin = OperatingSystem.IsMacOS();
 
     // open(2) flags — O_NOCTTY/O_CLOEXEC differ between asm-generic and Darwin.
     internal const int O_RDWR = 0x2;
-    internal static readonly int O_NOCTTY = IsDarwin ? 0x20000 : 0x400;
-    internal static readonly int O_CLOEXEC = IsDarwin ? 0x1000000 : 0x80000;
 
     // termios optional actions (same value on every BSD/POSIX system).
     internal const int TCSANOW = 0;
+
+    internal const int SIGKILL = 9;
+    internal const int WNOHANG = 1;
+    private static readonly bool IsDarwin = OperatingSystem.IsMacOS();
+    internal static readonly int O_NOCTTY = IsDarwin ? 0x20000 : 0x400;
+    internal static readonly int O_CLOEXEC = IsDarwin ? 0x1000000 : 0x80000;
 
     // ioctl request for TIOCSWINSZ: Linux x86_64/arm64 = 0x5414;
     // Darwin encodes it through the IOC machinery = 0x80087414.
@@ -31,114 +33,78 @@ internal static class LibcNative
     // to 0x80 (older headers had 0x400 — probed empirically before pinning).
     internal static readonly ushort POSIX_SPAWN_SETSID = IsDarwin ? (ushort)0x400 : (ushort)0x80;
 
-    internal const int SIGKILL = 9;
-    internal const int WNOHANG = 1;
-
-    /// <summary>struct winsize — kernel layout, 8 bytes.</summary>
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct WinSize
-    {
-        public ushort Rows;
-        public ushort Cols;
-        public ushort XPixel;
-        public ushort YPixel;
-    }
-
-    /// <summary>
-    ///     Kernel struct termios (asm-generic/termbits.h), 60 bytes on
-    ///     Linux x64/arm64: 4×tcflag_t + cc_t c_line + cc_t c_cc[32] +
-    ///     speed_t c_ispeed/c_ospeed. Layout verified empirically against
-    ///     ctypes on this host: offsets iflag=0 oflag=4 cflag=8 lflag=12
-    ///     line=16 cc=17 ispeed=52 ospeed=56, sizeof=60.
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct TermiosKernel
-    {
-        public uint IFlag;
-        public uint OFlag;
-        public uint CFlag;
-        public uint LFlag;
-        public byte Line;
-
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
-        public byte[] Cc;
-
-        public uint ISpeed;
-        public uint OSpeed;
-    }
+    [DllImport("libc", SetLastError = true)]
+    internal extern static int posix_openpt(int flags);
 
     [DllImport("libc", SetLastError = true)]
-    internal static extern int posix_openpt(int flags);
+    internal extern static int grantpt(int fd);
 
     [DllImport("libc", SetLastError = true)]
-    internal static extern int grantpt(int fd);
-
-    [DllImport("libc", SetLastError = true)]
-    internal static extern int unlockpt(int fd);
+    internal extern static int unlockpt(int fd);
 
     /// <returns>0 on success; slave name written into <paramref name="buf" />.</returns>
     [DllImport("libc", SetLastError = true)]
-    private static extern int ptsname_r(int fd, [Out] byte[] buf, nuint buflen);
+    private extern static int ptsname_r(int fd, [Out] byte[] buf, nuint buflen);
 
     [DllImport("libc", SetLastError = true)]
-    internal static extern int open(string path, int flags);
+    internal extern static int open(string path, int flags);
 
     [DllImport("libc", SetLastError = true)]
-    internal static extern int close(int fd);
+    internal extern static int close(int fd);
 
     [DllImport("libc", SetLastError = true)]
-    internal static extern int ioctl(int fd, uint request, ref WinSize winsize);
+    internal extern static int ioctl(int fd, uint request, ref WinSize winsize);
 
     [DllImport("libc", SetLastError = true)]
-    internal static extern int tcgetattr(int fd, ref TermiosKernel termios);
+    internal extern static int tcgetattr(int fd, ref TermiosKernel termios);
 
     [DllImport("libc", SetLastError = true)]
-    internal static extern int tcsetattr(int fd, int optionalActions, ref TermiosKernel termios);
+    internal extern static int tcsetattr(int fd, int optionalActions, ref TermiosKernel termios);
 
     [DllImport("libc", SetLastError = true)]
-    internal static extern int read(int fd, [Out] byte[] buffer, int count);
+    internal extern static int read(int fd, [Out] byte[] buffer, int count);
 
     [DllImport("libc", SetLastError = true)]
-    internal static extern int write(int fd, ref byte buffer, int count);
+    internal extern static int write(int fd, ref byte buffer, int count);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawn_file_actions_init(IntPtr fileActions);
+    private extern static int posix_spawn_file_actions_init(IntPtr fileActions);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawn_file_actions_addopen(
+    private extern static int posix_spawn_file_actions_addopen(
         IntPtr fileActions, int fileDescriptor, string path, int flags, int mode);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawn_file_actions_adddup2(
+    private extern static int posix_spawn_file_actions_adddup2(
         IntPtr fileActions, int fromFileDescriptor, int toFileDescriptor);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawn_file_actions_destroy(IntPtr fileActions);
+    private extern static int posix_spawn_file_actions_destroy(IntPtr fileActions);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawnattr_init(IntPtr attr);
+    private extern static int posix_spawnattr_init(IntPtr attr);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawnattr_setflags(IntPtr attr, ushort flags);
+    private extern static int posix_spawnattr_setflags(IntPtr attr, ushort flags);
 
     [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawnattr_destroy(IntPtr attr);
+    private extern static int posix_spawnattr_destroy(IntPtr attr);
 
     /// <summary>Exact-path spawn (no PATH search). argv/envp are native char*[] blocks.</summary>
     [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawn(
+    private extern static int posix_spawn(
         out int pid, string path, IntPtr fileActions, IntPtr attrp, IntPtr argv, IntPtr envp);
 
     /// <summary>PATH-searching spawn variant (<c>posix_spawnp</c>).</summary>
     [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawnp(
+    private extern static int posix_spawnp(
         out int pid, string path, IntPtr fileActions, IntPtr attrp, IntPtr argv, IntPtr envp);
 
     [DllImport("libc", SetLastError = true)]
-    internal static extern int waitpid(int pid, out int status, int options);
+    internal extern static int waitpid(int pid, out int status, int options);
 
     [DllImport("libc", SetLastError = true)]
-    internal static extern int kill(int pid, int sig);
+    internal extern static int kill(int pid, int sig);
 
     /// <summary>
     ///     Resolves the slave-side device path of a freshly allocated PTY
@@ -146,7 +112,7 @@ internal static class LibcNative
     /// </summary>
     internal static string GetSlaveName(int masterFd)
     {
-        var buf = new byte[256];
+        byte[] buf = new byte[256];
         int rc = ptsname_r(masterFd, buf, (nuint)buf.Length);
         return rc != 0
             ? throw new IOException($"ptsname_r({masterFd}) failed with errno {rc}.")
@@ -191,10 +157,10 @@ internal static class LibcNative
             // argv/envp are built as native NULL-terminated char*[] blocks —
             // no reliance on the interop marshaller's array handling (the
             // default string[] marshalling produced EFAULT on this host).
-            string[] argv = [fileName, .. args];
-            string[] envp = [.. environment.Select(kv => kv.Key + "=" + kv.Value)];
-            NativeArgv argvBlock = NativeArgv.Alloc(argv);
-            NativeArgv envpBlock = NativeArgv.Alloc(envp);
+            string[] argv = [fileName, ..args];
+            string[] envp = [..environment.Select(kv => kv.Key + "=" + kv.Value)];
+            var argvBlock = NativeArgv.Alloc(argv);
+            var envpBlock = NativeArgv.Alloc(envp);
             try
             {
                 int pid;
@@ -234,6 +200,39 @@ internal static class LibcNative
         }
     }
 
+    /// <summary>struct winsize — kernel layout, 8 bytes.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct WinSize
+    {
+        public ushort Rows;
+        public ushort Cols;
+        public ushort XPixel;
+        public ushort YPixel;
+    }
+
+    /// <summary>
+    ///     Kernel struct termios (asm-generic/termbits.h), 60 bytes on
+    ///     Linux x64/arm64: 4×tcflag_t + cc_t c_line + cc_t c_cc[32] +
+    ///     speed_t c_ispeed/c_ospeed. Layout verified empirically against
+    ///     ctypes on this host: offsets iflag=0 oflag=4 cflag=8 lflag=12
+    ///     line=16 cc=17 ispeed=52 ospeed=56, sizeof=60.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct TermiosKernel
+    {
+        public uint IFlag;
+        public uint OFlag;
+        public uint CFlag;
+        public uint LFlag;
+        public byte Line;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
+        public byte[] Cc;
+
+        public uint ISpeed;
+        public uint OSpeed;
+    }
+
     /// <summary>A NULL-terminated native <c>char*[]</c> block with owned string storage.</summary>
     private readonly struct NativeArgv(nint root, nint[] strings) : IDisposable
     {
@@ -241,7 +240,7 @@ internal static class LibcNative
 
         public static NativeArgv Alloc(IReadOnlyList<string> items)
         {
-            var strings = new nint[items.Count + 1];
+            IntPtr[] strings = new nint[items.Count + 1];
             for (int i = 0; i < items.Count; i++)
             {
                 byte[] bytes = Encoding.UTF8.GetBytes(items[i]);

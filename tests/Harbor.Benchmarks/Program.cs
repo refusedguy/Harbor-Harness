@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Running;
 namespace Harbor.Benchmarks;
+
 /// <summary>
 ///     Entry point for the Harbor.Benchmarks console runner.
 ///     Usage:

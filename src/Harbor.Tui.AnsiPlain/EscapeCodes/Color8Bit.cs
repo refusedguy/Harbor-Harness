@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Contracts;
-
 namespace Harbor.Tui.AnsiPlain.EscapeCodes;
 
 /// <summary>8-bit palette slot (0 = default, 1–7 = normal, 8–15 = bright).</summary>

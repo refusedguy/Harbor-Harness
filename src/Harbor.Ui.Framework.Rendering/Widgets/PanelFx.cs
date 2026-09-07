@@ -1,17 +1,14 @@
 using Harbor.Desktop.Animations;
-using Harbor.Ui.Framework.Rendering;
-
 namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>
-/// HDS v1 motion primitives for the CellForge renderer (widgets §3.x):
-/// entrance fades/slides, the approval warn-glow pulse, and status-accent
-/// crossfades. Every helper is a pure function of monotonic frame ticks —
-/// no timers, no allocations (same contract as <see cref="SpinnerStrip" />).
-///
-/// Durations come from <see cref="AnimationTokens" /> (Fast=150 ms micro,
-/// Normal=300 ms standard) converted to frames at the display cadence of
-/// 60 fps; easing curves mirror EasingEaseOut/EasingEaseIn/EasingCubicInOut.
+///     HDS v1 motion primitives for the CellForge renderer (widgets §3.x):
+///     entrance fades/slides, the approval warn-glow pulse, and status-accent
+///     crossfades. Every helper is a pure function of monotonic frame ticks —
+///     no timers, no allocations (same contract as <see cref="SpinnerStrip" />).
+///     Durations come from <see cref="AnimationTokens" /> (Fast=150 ms micro,
+///     Normal=300 ms standard) converted to frames at the display cadence of
+///     60 fps; easing curves mirror EasingEaseOut/EasingEaseIn/EasingCubicInOut.
 /// </summary>
 public static class PanelFx
 {
@@ -24,14 +21,14 @@ public static class PanelFx
     /// <summary>Standard duration (HDS v1) — 300 ms.</summary>
     public const int SlideMs = AnimationTokens.NormalMs;
 
+    /// <summary>Rows a block slides up while entering (kept small — cell grid).</summary>
+    public const int SlideMaxRows = 2;
+
     /// <summary>Fade length in frames at 60 fps (9).</summary>
     public static readonly int FadeFrames = Frames(FadeMs);
 
     /// <summary>Slide length in frames at 60 fps (18).</summary>
     public static readonly int SlideFrames = Frames(SlideMs);
-
-    /// <summary>Rows a block slides up while entering (kept small — cell grid).</summary>
-    public const int SlideMaxRows = 2;
 
     /// <summary>Approval warn-glow cycle length in frames (≈500 ms round trip).</summary>
     public static readonly int PulseFrames = 2 * Frames(AnimationTokens.NormalMs);
@@ -43,7 +40,7 @@ public static class PanelFx
         (3, 0xFF, 0xB4, 0x54), // warning
         (4, 0x39, 0xBA, 0xE6), // accent
         (5, 0xD2, 0xA6, 0xFF), // tool
-        (6, 0xF2, 0x96, 0x68), // system
+        (6, 0xF2, 0x96, 0x68) // system
     ];
 
     private static int Frames(int ms) => Math.Max(1, (int)Math.Round(ms / MsPerFrame));
@@ -52,7 +49,7 @@ public static class PanelFx
     public static double EaseOut(double t)
     {
         double c = Math.Clamp(t, 0.0, 1.0);
-        return 1.0 - ((1.0 - c) * (1.0 - c) * (1.0 - c));
+        return 1.0 - (1.0 - c) * (1.0 - c) * (1.0 - c);
     }
 
     /// <summary>EasingEaseIn — cubic ease-in.</summary>
@@ -63,9 +60,9 @@ public static class PanelFx
     }
 
     /// <summary>
-    /// Settled-or-animating progress in [0..1] (ease-out applied). An elapsed
-    /// time ≤ 0 — the first frame a block is seen, or any tick captured before
-    /// its append marker — resolves to 1 so single-frame renders stay settled.
+    ///     Settled-or-animating progress in [0..1] (ease-out applied). An elapsed
+    ///     time ≤ 0 — the first frame a block is seen, or any tick captured before
+    ///     its append marker — resolves to 1 so single-frame renders stay settled.
     /// </summary>
     public static double Progress(long startTick, long nowTick, int durationFrames)
     {
@@ -78,8 +75,8 @@ public static class PanelFx
     }
 
     /// <summary>
-    /// Approval warn-glow amount in [0..1] — a sine round-trip over
-    /// <see cref="PulseFrames" />; 0 until <paramref name="birthTick" />.
+    ///     Approval warn-glow amount in [0..1] — a sine round-trip over
+    ///     <see cref="PulseFrames" />; 0 until <paramref name="birthTick" />.
     /// </summary>
     public static double WarnPulse(long birthTick, long nowTick)
     {
@@ -89,21 +86,21 @@ public static class PanelFx
         }
 
         long phase = (nowTick - birthTick) % PulseFrames;
-        double w = Math.Sin((phase / (double)PulseFrames) * (Math.PI * 2));
+        double w = Math.Sin(phase / (double)PulseFrames * (Math.PI * 2));
         return Math.Max(0.0, w);
     }
 
     /// <summary>
-    /// Header tone for a pending gate: full warning, eased toward a dimmed
-    /// blend while the warn-glow pulse oscillates. Single source for the gate
-    /// painter and the post-fx glow ledger's accent capture (renderer-moat
-    /// T3) — the two can never drift apart.
+    ///     Header tone for a pending gate: full warning, eased toward a dimmed
+    ///     blend while the warn-glow pulse oscillates. Single source for the gate
+    ///     painter and the post-fx glow ledger's accent capture (renderer-moat
+    ///     T3) — the two can never drift apart.
     /// </summary>
     public static CellStyle WarnTone(long birthTick, long nowTick)
     {
         var warning = new CellStyle(ChatPalette.Warning, attrs: StyleAttr.Bold);
         double glow = WarnPulse(birthTick, nowTick);
-        return glow > 0 ? WithAlpha(warning, 0.55 + (0.45 * glow)) : warning;
+        return glow > 0 ? WithAlpha(warning, 0.55 + 0.45 * glow) : warning;
     }
 
     /// <summary>Linear RGB channel interpolation (mirrors ColorTransition.Interpolate).</summary>
@@ -121,9 +118,9 @@ public static class PanelFx
     }
 
     /// <summary>
-    /// Alpha-blended copy of a cell style for entrance fades: foreground and
-    /// background both ease in from the panel surface. Styles pass through
-    /// unchanged at α ≥ 1 (bit-identical, keeping settled frames diff-free).
+    ///     Alpha-blended copy of a cell style for entrance fades: foreground and
+    ///     background both ease in from the panel surface. Styles pass through
+    ///     unchanged at α ≥ 1 (bit-identical, keeping settled frames diff-free).
     /// </summary>
     public static CellStyle WithAlpha(CellStyle style, double alpha)
     {
@@ -144,9 +141,9 @@ public static class PanelFx
         Progress(flippedTick, nowTick, FadeFrames);
 
     /// <summary>
-    /// Alpha-blends an already-painted buffer region toward the panel surface
-    /// (entrance fades / status crossfades). Bounded callers only — runs per
-    /// cell during transition frames and is skipped entirely once settled.
+    ///     Alpha-blends an already-painted buffer region toward the panel surface
+    ///     (entrance fades / status crossfades). Bounded callers only — runs per
+    ///     cell during transition frames and is skipped entirely once settled.
     /// </summary>
     public static void BlendRegion(ScreenBuffer buffer, Rect region, double alpha)
     {

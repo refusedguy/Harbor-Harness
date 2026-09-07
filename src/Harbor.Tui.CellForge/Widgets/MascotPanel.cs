@@ -1,7 +1,4 @@
 using Harbor.Tui.CellForge.Rendering;
-using Harbor.Ui.Framework.Rendering;
-using Harbor.Ui.Framework.Rendering.Widgets;
-
 namespace Harbor.Tui.CellForge.Widgets;
 
 public sealed class MascotPanel : Panel
@@ -10,8 +7,8 @@ public sealed class MascotPanel : Panel
 
     private readonly MascotDirector _director = new();
     private readonly SpringFx _entranceSpring = new(0.0);
-    private readonly PostFxPipeline _postFx = new();
     private readonly GlowEffect _glow = new();
+    private readonly PostFxPipeline _postFx = new();
     private bool _entranceArmed;
 
     public MascotPanel(string id, StatusViewModel status, int minWidth = AmbientMascot.PanelMinWidth, int minHeight = AmbientMascot.PanelRows, int priority = 4)
@@ -46,16 +43,16 @@ public sealed class MascotPanel : Panel
             PanelFx.BlendRegion(buffer, Rect, Math.Clamp(entrance, 0.0, 1.0));
         }
 
-        MascotReaction signal = Vm.ConsumeMascotSignal();
+        var signal = Vm.ConsumeMascotSignal();
         if (signal != MascotReaction.None)
         {
             _director.Notify(signal, Tick);
         }
 
-        MascotMood mood = _director.Advance(Vm, Tick);
+        var mood = _director.Advance(Vm, Tick);
         string ears, face, paws;
         var style = ChatPalette.Dim;
-        if (_director.TryReactionFrame(Tick, out MascotReaction active, out int ridx))
+        if (_director.TryReactionFrame(Tick, out var active, out int ridx))
         {
             face = AmbientMascot.ReactionFramesOf(active)[ridx];
             ears = AmbientMascot.ReactionEars(active)[ridx];
@@ -91,13 +88,13 @@ public sealed class MascotPanel : Panel
     private void ApplyPostFx(ScreenBuffer buffer)
     {
         _postFx.Clear();
-        if (_director.TryReactionFrame(Tick, out MascotReaction active, out _))
+        if (_director.TryReactionFrame(Tick, out var active, out _))
         {
             var accent = active switch
             {
                 MascotReaction.ErrorBlink => ChatPalette.Error,
                 MascotReaction.SuccessBounce => ChatPalette.Success,
-                _ => ChatPalette.Warning,
+                _ => ChatPalette.Warning
             };
             _glow.Update(new GlowRegion(Rect, accent, GlowEffect.PeakStrength));
             _postFx.Set(0, _glow);

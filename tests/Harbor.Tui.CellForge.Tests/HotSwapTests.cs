@@ -1,16 +1,14 @@
-using System.Collections.Concurrent;
 using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
-using TUnit.Core;
-
+using System.Collections.Concurrent;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Lock-free hot-swap runtime (renderer-moat T2): ScreenBuffer backends swap
-/// under a running render loop via an atomic double-buffer handoff — no locks,
-/// no torn frames. Theme swaps publish a new palette catalog mid-stream while
-/// the pinned frame snapshot keeps every painted cell on one coherent palette.
+///     Lock-free hot-swap runtime (renderer-moat T2): ScreenBuffer backends swap
+///     under a running render loop via an atomic double-buffer handoff — no locks,
+///     no torn frames. Theme swaps publish a new palette catalog mid-stream while
+///     the pinned frame snapshot keeps every painted cell on one coherent palette.
 /// </summary>
 [NotInParallel]
 public class HotSwapTests
@@ -198,7 +196,7 @@ public class HotSwapTests
             {
                 while (!drained.IsSet)
                 {
-                    if (chain.TryTake() is { } offer)
+                    if (chain.TryTake() is {} offer)
                     {
                         // Pair coherence: the two grids travel as one unit.
                         if (offer.Back.Cols != offer.Front.Cols || offer.Back.Rows != offer.Front.Rows)
@@ -255,7 +253,7 @@ public class HotSwapTests
     private static ScreenSession MakeSession(int cols, int rows, out RecordingBackend backend)
     {
         backend = new RecordingBackend();
-        return new ScreenSession(new AnsiWriter(backend, syncUpdates: false), cols, rows);
+        return new ScreenSession(new AnsiWriter(backend, false), cols, rows);
     }
 
     private static void PaintIdleFrame(ScreenSession session)

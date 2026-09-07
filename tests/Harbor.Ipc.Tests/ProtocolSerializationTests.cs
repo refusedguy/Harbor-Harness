@@ -1,6 +1,6 @@
+using Harbor.Abstractions.Models;
 using Harbor.Ipc.Protocol;
 using MessagePack;
-
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -11,7 +11,7 @@ namespace Harbor.Ipc.Tests;
 ///     — long before they reach a non-.NET client.
 /// </summary>
 [NotInParallel]
-    public class ProtocolSerializationTests
+public class ProtocolSerializationTests
 {
     /// <summary>
     ///     Every concrete HarborRequest subtype must round-trip through
@@ -37,10 +37,10 @@ namespace Harbor.Ipc.Tests;
     {
         // Construct via parameterless or default-arg constructor.
         var request = (HarborRequest?)Activator.CreateInstance(requestType, true)
-            ?? throw new InvalidOperationException($"Could not construct {requestType.Name}");
+                      ?? throw new InvalidOperationException($"Could not construct {requestType.Name}");
 
-        byte[] bytes = MessagePackSerializer.Serialize((HarborRequest)request);
-        HarborRequest deserialized = MessagePackSerializer.Deserialize<HarborRequest>(bytes);
+        byte[] bytes = MessagePackSerializer.Serialize(request);
+        var deserialized = MessagePackSerializer.Deserialize<HarborRequest>(bytes);
 
         await Assert.That(deserialized).IsNotNull();
         await Assert.That(deserialized.GetType()).IsEqualTo(requestType);
@@ -154,8 +154,8 @@ namespace Harbor.Ipc.Tests;
 
         foreach (var sample in samples)
         {
-            byte[] bytes = MessagePackSerializer.Serialize((HarborEventData)sample);
-            HarborEventData deserialized = MessagePackSerializer.Deserialize<HarborEventData>(bytes);
+            byte[] bytes = MessagePackSerializer.Serialize(sample);
+            var deserialized = MessagePackSerializer.Deserialize<HarborEventData>(bytes);
 
             await Assert.That(deserialized).IsNotNull();
             await Assert.That(deserialized.GetType()).IsEqualTo(sample.GetType());
@@ -169,11 +169,11 @@ namespace Harbor.Ipc.Tests;
     [Test]
     public async Task WireCodec_SerializeDomain_RoundTrips_Session()
     {
-        var session = Harbor.Abstractions.Models.Session.Create(
+        var session = Session.Create(
             "/tmp/test", "code", "ollama", "qwen2.5-coder:7b");
 
         byte[] bytes = WireCodec.SerializeDomain(session);
-        var restored = WireCodec.DeserializeDomain<Harbor.Abstractions.Models.Session>(bytes);
+        var restored = WireCodec.DeserializeDomain<Session>(bytes);
 
         await Assert.That(restored).IsNotNull();
         await Assert.That(restored!.Id).IsEqualTo(session.Id);
@@ -189,16 +189,15 @@ namespace Harbor.Ipc.Tests;
     {
         var sessions = new[]
         {
-            Harbor.Abstractions.Models.Session.Create("/tmp/a", "code", "ollama", "m1"),
-            Harbor.Abstractions.Models.Session.Create("/tmp/b", "plan", "anthropic", "m2")
+            Session.Create("/tmp/a", "code", "ollama", "m1"),
+            Session.Create("/tmp/b", "plan", "anthropic", "m2")
         };
 
-        byte[] bytes = WireCodec.SerializeDomain<IReadOnlyList<Harbor.Abstractions.Models.Session>>(sessions);
-        var restored = WireCodec.DeserializeDomain<IReadOnlyList<Harbor.Abstractions.Models.Session>>(bytes);
+        byte[] bytes = WireCodec.SerializeDomain<IReadOnlyList<Session>>(sessions);
+        var restored = WireCodec.DeserializeDomain<IReadOnlyList<Session>>(bytes);
 
         await Assert.That(restored).IsNotNull();
         await Assert.That(restored!.Count).IsEqualTo(2);
         await Assert.That(restored[0].Id).IsEqualTo(sessions[0].Id);
     }
-
 }

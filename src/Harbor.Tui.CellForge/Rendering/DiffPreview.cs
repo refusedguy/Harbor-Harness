@@ -1,14 +1,13 @@
 using System.Text;
 using System.Text.Json;
-
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
-/// CellForge port of the Avalonia <c>DiffPreviewHelper</c>
-/// (<c>apps/Harbor.App.Avalonia/Services/DiffPreviewHelper.cs</c>, CF-E-011):
-/// builds inline diff previews for the <c>edit</c> / <c>write</c> / <c>patch</c>
-/// tool cards. BCL-only (<c>string</c> / <c>StringBuilder</c> /
-/// <c>System.Text.Json</c> DOM) — no Avalonia, no reflection, AOT-clean.
+///     CellForge port of the Avalonia <c>DiffPreviewHelper</c>
+///     (<c>apps/Harbor.App.Avalonia/Services/DiffPreviewHelper.cs</c>, CF-E-011):
+///     builds inline diff previews for the <c>edit</c> / <c>write</c> / <c>patch</c>
+///     tool cards. BCL-only (<c>string</c> / <c>StringBuilder</c> /
+///     <c>System.Text.Json</c> DOM) — no Avalonia, no reflection, AOT-clean.
 /// </summary>
 public static class DiffPreview
 {
@@ -31,12 +30,12 @@ public static class DiffPreview
     public const string UnknownPath = "<unknown>";
 
     /// <summary>
-    /// Extracts an inline diff preview for diff-capable tools
-    /// (<c>edit</c>, <c>write</c>, <c>patch</c>). Other tools return
-    /// <c>IsDiffTool: false</c> with null payloads. <paramref name="resultText"/>
-    /// is accepted for signature parity with the Avalonia source and reserved
-    /// for future use (the preview is derived from args alone).
-    /// Malformed args JSON degrades gracefully to "not a diff tool".
+    ///     Extracts an inline diff preview for diff-capable tools
+    ///     (<c>edit</c>, <c>write</c>, <c>patch</c>). Other tools return
+    ///     <c>IsDiffTool: false</c> with null payloads. <paramref name="resultText" />
+    ///     is accepted for signature parity with the Avalonia source and reserved
+    ///     for future use (the preview is derived from args alone).
+    ///     Malformed args JSON degrades gracefully to "not a diff tool".
     /// </summary>
     public static (bool IsDiffTool, string? FilePath, string? Preview, string? FullDiff) ExtractDiff(
         string toolName, string argsJson, string? resultText)
@@ -58,7 +57,9 @@ public static class DiffPreview
                 if (doc.RootElement.TryGetProperty("newString", out var nsEl) && nsEl.ValueKind == JsonValueKind.String)
                     newString = nsEl.GetString();
             }
-            catch (JsonException) { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */ }
+            catch (JsonException)
+            { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */
+            }
 
             if (!string.IsNullOrEmpty(oldString) && newString != null)
             {
@@ -76,7 +77,9 @@ public static class DiffPreview
                 if (doc.RootElement.TryGetProperty("content", out var cEl) && cEl.ValueKind == JsonValueKind.String)
                     content = cEl.GetString();
             }
-            catch (JsonException) { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */ }
+            catch (JsonException)
+            { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */
+            }
 
             if (!string.IsNullOrEmpty(content))
             {
@@ -94,7 +97,9 @@ public static class DiffPreview
                 if (doc.RootElement.TryGetProperty("patch", out var pEl) && pEl.ValueKind == JsonValueKind.String)
                     patch = pEl.GetString();
             }
-            catch (JsonException) { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */ }
+            catch (JsonException)
+            { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */
+            }
 
             if (!string.IsNullOrEmpty(patch))
             {
@@ -108,10 +113,10 @@ public static class DiffPreview
     }
 
     /// <summary>
-    /// Returns the first string-valued field whose name contains
-    /// <c>file</c> or <c>path</c> (case-insensitive), else
-    /// <see cref="UnknownPath"/>. Malformed/empty JSON also yields
-    /// <see cref="UnknownPath"/>.
+    ///     Returns the first string-valued field whose name contains
+    ///     <c>file</c> or <c>path</c> (case-insensitive), else
+    ///     <see cref="UnknownPath" />. Malformed/empty JSON also yields
+    ///     <see cref="UnknownPath" />.
     /// </summary>
     public static string ExtractFilePath(string argsJson)
     {
@@ -131,7 +136,9 @@ public static class DiffPreview
                 }
             }
         }
-        catch (JsonException) { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */ }
+        catch (JsonException)
+        { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */
+        }
         return UnknownPath;
     }
 
@@ -186,10 +193,10 @@ public static class DiffPreview
 
     private static string GenerateContentDiff(string content, int maxLines)
     {
-        var lines = SplitLines(content);
+        string[] lines = SplitLines(content);
         var sb = new StringBuilder();
         int count = 0;
-        foreach (var line in lines)
+        foreach (string line in lines)
         {
             if (count >= maxLines)
             {
@@ -204,7 +211,7 @@ public static class DiffPreview
 
     private static string TruncateLines(string text, int maxLines)
     {
-        var lines = SplitLines(text);
+        string[] lines = SplitLines(text);
         if (lines.Length <= maxLines)
             return text;
 

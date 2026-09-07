@@ -1,8 +1,9 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using Harbor.Abstractions.Sessions;
 namespace Harbor.Application.Sessions;
+
 /// <summary>
 ///     Memoizing decorator over <see cref="ISystemPromptBuilder" /> (Ф6/A2).
 ///     The loop rebuilds the prompt context every turn even though the inputs
@@ -32,17 +33,17 @@ public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISy
 {
     private const char Separator = '\u001f';
 
-    private static readonly ConcurrentDictionary<System.Text.Json.JsonDocument, string> _schemaTextCache = new();
+    private static readonly ConcurrentDictionary<JsonDocument, string> _schemaTextCache = new();
     private readonly ConcurrentDictionary<string, string> _cache = new(StringComparer.Ordinal);
+
+    private int _hits;
+    private int _misses;
 
     /// <summary>Number of prompts served from cache (diagnostics/tests).</summary>
     public int CacheHits => Volatile.Read(ref _hits);
 
     /// <summary>Number of prompts built through the inner builder.</summary>
     public int Misses => Volatile.Read(ref _misses);
-
-    private int _hits;
-    private int _misses;
 
     /// <inheritdoc />
     public async Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default)
@@ -73,7 +74,7 @@ public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISy
         AppendField(sb, context.Agent.Description);
         AppendField(sb, context.Agent.Model);
         AppendField(sb, context.Agent.ProviderId);
-        AppendField(sb, context.Agent.Temperature?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AppendField(sb, context.Agent.Temperature?.ToString(CultureInfo.InvariantCulture));
         AppendField(sb, context.Agent.ReasoningEffort?.ToString());
         AppendField(sb, context.Agent.SystemPromptAppend);
         AppendField(sb, context.Model.Id);

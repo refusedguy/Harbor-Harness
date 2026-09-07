@@ -1,8 +1,9 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using System.Collections.ObjectModel;
 namespace Harbor.Ui.Framework.ViewModels;
+
 /// <summary>
 ///     Side-by-side diff view-model. Accepts two text inputs (left = before, right = after)
 ///     and computes a simple line-by-line diff. Real production would use a proper diff

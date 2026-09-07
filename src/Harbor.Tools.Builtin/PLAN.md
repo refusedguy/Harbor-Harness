@@ -48,8 +48,7 @@
 
 ## Permission defaults review
 
-Current defaults (ask for `write`/`edit`/`bash` outside safe patterns) are balanced by the
-prefix allow-list in `PermissionRuleset.Default`. Plan to add:
+Current defaults (ask for `write`/`edit`/`bash` outside safe patterns) are balanced by the prefix allow-list in `PermissionRuleset.Default`. Plan to add:
 
 - Project-local permission profiles
 - Auto-allow rules for read-only operations

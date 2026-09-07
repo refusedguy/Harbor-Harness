@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Permissions;
 namespace Harbor.Abstractions.Tests;
+
 public class PermissionRulesetTests
 {
     [Test]

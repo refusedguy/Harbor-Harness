@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 namespace Harbor.Ui.Framework.State;
+
 /// <summary>
 ///     All interactive actions the chat UI understands, decoupled from the raw key
 ///     that triggers them. The concrete key bindings live in <see cref="ChatKeyMap" />

@@ -1,15 +1,14 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Golden grid-dump suite (celldiff §8): every scenario renders through the
-/// real DiffEngine + AnsiWriter into a recording backend, then compares the
-/// three-layer dump (row art, exact cell map, escaped ANSI frames) against
-/// <c>tests/fixtures/celldiff/*.golden.txt</c>. Regenerate with
-/// HARBOR_UPDATE_GOLDENS=1; companion SVGs are written for human review.
+///     Golden grid-dump suite (celldiff §8): every scenario renders through the
+///     real DiffEngine + AnsiWriter into a recording backend, then compares the
+///     three-layer dump (row art, exact cell map, escaped ANSI frames) against
+///     <c>tests/fixtures/celldiff/*.golden.txt</c>. Regenerate with
+///     HARBOR_UPDATE_GOLDENS=1; companion SVGs are written for human review.
 /// </summary>
 public class GoldenGridDumpTests
 {
@@ -17,7 +16,7 @@ public class GoldenGridDumpTests
     public async Task EmptyScreen_IdleFrameCostsNothing()
     {
         var backend = new RecordingBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var writer = new AnsiWriter(backend, true);
         var engine = new DiffEngine(20, 6);
         var back = new ScreenBuffer(20, 6);
 
@@ -36,14 +35,14 @@ public class GoldenGridDumpTests
     public async Task BorderPanel_LayoutSolve_PaintsGoldenFrame()
     {
         var backend = new RecordingBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var writer = new AnsiWriter(backend, true);
         var session = new ScreenSession(writer, 24, 8);
 
         var tree = new LayoutTree();
-        var chat = new BorderPanel("chat", 4, 3, priority: 5, title: "Chat");
-        var status = new BorderPanel("status", 4, 1, priority: int.MaxValue, title: "ready");
+        var chat = new BorderPanel("chat", 4, 3, 5, "Chat");
+        var status = new BorderPanel("status", 4, 1, int.MaxValue, "ready");
         tree.AddRoot(chat);
-        tree.Split("chat", SplitDir.Vertical, 0.7f, status, gap: 1);
+        tree.Split("chat", SplitDir.Vertical, 0.7f, status, 1);
         tree.Solve(session.CurrentCols, session.CurrentRows);
         chat.Focused = true;
 
@@ -65,18 +64,18 @@ public class GoldenGridDumpTests
     public async Task WideCharBoundary_AndOverwriteRepaint_Golden()
     {
         var backend = new RecordingBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var writer = new AnsiWriter(backend, true);
         var engine = new DiffEngine(10, 3);
         var back = new ScreenBuffer(10, 3);
 
         // Frame 1: CJK lead+tail pair, emoji past the BMP, wide rune at the
         // last fitting column, a wide rune that does not fit before the right
         // edge (ratatui skip policy), and a mixed narrow/wide text run.
-        back.SetRune(0, 0, new Rune(0x4E2D), CellStyle.Plain);          // 中 at 0..1
-        back.SetRune(3, 0, new Rune(0x1F44D), CellStyle.Plain);         // 👍 at 3..4
-        back.SetRune(7, 0, new Rune(0x3042), CellStyle.Plain);          // あ at 7..8
-        back.SetRune(9, 1, new Rune(0x4E2D), CellStyle.Plain);          // tail would fall off → skip
-        back.SetText(2, 2, "ok中!", CellStyle.Plain);                    // mixed run on row 2
+        back.SetRune(0, 0, new Rune(0x4E2D), CellStyle.Plain); // 中 at 0..1
+        back.SetRune(3, 0, new Rune(0x1F44D), CellStyle.Plain); // 👍 at 3..4
+        back.SetRune(7, 0, new Rune(0x3042), CellStyle.Plain); // あ at 7..8
+        back.SetRune(9, 1, new Rune(0x4E2D), CellStyle.Plain); // tail would fall off → skip
+        back.SetText(2, 2, "ok中!", CellStyle.Plain); // mixed run on row 2
 
         writer.BeginFrame();
         engine.Flush(back, writer);
@@ -106,7 +105,7 @@ public class GoldenGridDumpTests
     public async Task ResizeShrink_EmitsEd2InsideSyncWrapper_Golden()
     {
         var backend = new RecordingBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var writer = new AnsiWriter(backend, true);
         var session = new ScreenSession(writer, 40, 8);
 
         session.Back.FillAll(Cell.From(new Rune('#'), CellStyle.Plain));
@@ -137,12 +136,12 @@ public class GoldenGridDumpTests
         var bareBackend = new RecordingBackend();
         var syncBackend = new RecordingBackend();
 
-        await PaintOneCellAsync(bareBackend, syncUpdates: false);
-        await PaintOneCellAsync(syncBackend, syncUpdates: true);
+        await PaintOneCellAsync(bareBackend, false);
+        await PaintOneCellAsync(syncBackend, true);
 
         string doc = "# golden: sync-wrapper\n"
-            + "## sync off\n" + GridDump.Frames(bareBackend)
-            + "## sync on\n" + GridDump.Frames(syncBackend);
+                     + "## sync off\n" + GridDump.Frames(bareBackend)
+                     + "## sync on\n" + GridDump.Frames(syncBackend);
         string expected = Golden.Verify("sync-wrapper", doc);
         await Assert.That(doc).IsEqualTo(expected);
     }
@@ -162,7 +161,7 @@ public class GoldenGridDumpTests
     public async Task SgrMinimization_SecondFrameCarriesOnlyDelta()
     {
         var backend = new RecordingBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var writer = new AnsiWriter(backend, true);
         var engine = new DiffEngine(20, 2);
         var back = new ScreenBuffer(20, 2);
 
@@ -175,7 +174,7 @@ public class GoldenGridDumpTests
         long firstBytes = backend.TotalBytes;
 
         back.SetStyleAt(5, 1, new CellStyle(attrs: StyleAttr.Underline)); // bold→underline, one cell
-        back.SetRune(9, 1, new Rune('!'), CellStyle.Plain);               // one glyph swap
+        back.SetRune(9, 1, new Rune('!'), CellStyle.Plain); // one glyph swap
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -187,9 +186,9 @@ public class GoldenGridDumpTests
         await Assert.That(engine.FrontMatches(back)).IsTrue();
 
         string delta = Encoding.UTF8.GetString(backend.Writes[^1]);
-        await Assert.That(delta.Contains('E')).IsFalse();         // ERR untouched
-        await Assert.That(delta.Contains('W')).IsFalse();         // WARN untouched
-        await Assert.That(delta.Contains('k')).IsFalse();         // "ok" untouched
-        await Assert.That(secondBytes < firstBytes).IsTrue();     // delta smaller than the initial frame
+        await Assert.That(delta.Contains('E')).IsFalse(); // ERR untouched
+        await Assert.That(delta.Contains('W')).IsFalse(); // WARN untouched
+        await Assert.That(delta.Contains('k')).IsFalse(); // "ok" untouched
+        await Assert.That(secondBytes < firstBytes).IsTrue(); // delta smaller than the initial frame
     }
 }

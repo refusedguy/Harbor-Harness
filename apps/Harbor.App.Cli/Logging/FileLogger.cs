@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Cli.Logging;
+
 /// <summary>
 ///     File logger provider that writes every log entry (from <see cref="LogLevel.Trace" />
 ///     upward by default) to a per-run, timestamped file under
@@ -224,7 +225,7 @@ public sealed class FileLoggerProvider : ILoggerProvider
         private sealed class NullScope : IDisposable
         {
             public static readonly NullScope Instance = new();
-            public void Dispose() { }
+            public void Dispose() {}
         }
     }
 }

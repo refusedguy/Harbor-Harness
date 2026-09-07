@@ -1,11 +1,4 @@
-using Harbor.Application.Agents;
-using Harbor.Tools.Builtin;
-using Harbor.Tools.Mcp;
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Tools;
-using Harbor.Ui.Framework.Panels;
-using Microsoft.Extensions.Logging;
-
+using Harbor.Abstractions.Lsp;
 namespace Harbor.Hosting;
 
 internal static class ToolsCatalog
@@ -28,7 +21,7 @@ internal static class ToolsCatalog
     }
 
     /// <summary>HARBOR_MODEL env, else CommonConfig DefaultProvider/DefaultModel (desktop).</summary>
-    internal static string ResolveDefaultModelFromCommon(Harbor.Desktop.Abstractions.Configuration.CommonConfig commonConfig)
+    internal static string ResolveDefaultModelFromCommon(CommonConfig commonConfig)
     {
         string? env = Environment.GetEnvironmentVariable("HARBOR_MODEL");
         if (!string.IsNullOrWhiteSpace(env)) return env;
@@ -85,8 +78,8 @@ internal static class ToolsCatalog
 
     internal static ToolRegistry CreateToolRegistry(
         HarborCompositionContext ctx, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry,
-        Harbor.Abstractions.Agents.ISubAgentRunner subAgentRunner,
-        Harbor.Abstractions.Lsp.ILspService? lspService = null)
+        ISubAgentRunner subAgentRunner,
+        ILspService? lspService = null)
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);

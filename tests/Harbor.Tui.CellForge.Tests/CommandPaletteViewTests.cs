@@ -1,14 +1,11 @@
-using System.Text;
-using Harbor.Tui.CellForge.Input;
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Command palette (ctrl+p pattern): open/close, fuzzy filtering, keyboard
-/// navigation, commit contract, and painted content. Deterministic — pure
-/// state transitions plus one-off buffer paints.
+///     Command palette (ctrl+p pattern): open/close, fuzzy filtering, keyboard
+///     navigation, commit contract, and painted content. Deterministic — pure
+///     state transitions plus one-off buffer paints.
 /// </summary>
 public class CommandPaletteViewTests
 {
@@ -18,10 +15,10 @@ public class CommandPaletteViewTests
         new("fork", "Fork session", "branch from a message"),
         new("model", "Switch model", "pick another provider model", "ctrl+m"),
         new("quit", "Quit", "leave harbor"),
-        new("help", "Help", "list commands"),
+        new("help", "Help", "list commands")
     ];
 
-    private static CommandPaletteView Open() 
+    private static CommandPaletteView Open()
     {
         var palette = new CommandPaletteView();
         palette.Show(Commands);

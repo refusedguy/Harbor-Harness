@@ -1,18 +1,17 @@
 using System.Runtime.CompilerServices;
-
 namespace Harbor.Ipc.Protocol;
 
 /// <summary>
 ///     Self-healing RPC client (sprint 6 A1): wraps dialing, the raw
-///     <see cref="MessagePackRpcClient"/>, and a reconnecting event stream.
+///     <see cref="MessagePackRpcClient" />, and a reconnecting event stream.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Reconnect protocol</b> (reference: t3code ws.ts): exponential
 ///         backoff 0.5 s → 30 s cap with ±20 % jitter; on every redial the
 ///         client re-subscribes FIRST, presenting its last processed
-///         <see cref="EventEnvelope.Sequence"/>; the server then replays the
-///         missed range in order (<see cref="EventBroadcaster.MaxReplayEnvelopes"/>)
+///         <see cref="EventEnvelope.Sequence" />; the server then replays the
+///         missed range in order (<see cref="EventBroadcaster.MaxReplayEnvelopes" />)
 ///         or answers <c>ResyncRequired</c>.
 ///     </para>
 ///     <para>
@@ -28,22 +27,19 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
 {
     private const double BaseDelayMs = 500;
     private const double MaxDelayMs = 30_000;
+    private readonly Random _jitter = Random.Shared;
 
     private readonly object _lock = new();
-    private readonly Func<CancellationToken, Task<IIpcClientTransport>> _transportFactory;
     private readonly ILogger _logger;
     private readonly string? _psk;
-    private readonly Random _jitter = Random.Shared;
-    private int _disposed;
+    private readonly Func<CancellationToken, Task<IIpcClientTransport>> _transportFactory;
+    private int _attempt;
 
     private MessagePackRpcClient? _current;
     private IIpcClientTransport? _currentTransport;
-    private ulong _lastSeen;
+    private int _disposed;
     private bool _hasSeen;
-    private int _attempt;
-
-    /// <summary>Raised every time a new underlying connection is up (tests/diagnostics).</summary>
-    public event EventHandler? Connected = delegate { };
+    private ulong _lastSeen;
 
     public ReconnectableRpcClient(
         Func<CancellationToken, Task<IIpcClientTransport>> transportFactory,
@@ -54,6 +50,16 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
         _logger = logger;
         _psk = psk;
     }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        await DropConnectionAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Raised every time a new underlying connection is up (tests/diagnostics).</summary>
+    public event EventHandler? Connected = delegate {};
 
     /// <summary>Backoff for the Nth consecutive failed attempt (1-based), with jitter.</summary>
     public TimeSpan NextBackoffDelay()
@@ -91,7 +97,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
     /// <summary>
     ///     The reconnecting event stream. Enumerated frames are exactly-once
     ///     per server sequence (duplicates dropped), ordered, and survive
-    ///     arbitrary connection loss. <paramref name="loadSnapshotAsync"/>
+    ///     arbitrary connection loss. <paramref name="loadSnapshotAsync" />
     ///     is invoked only after a subscription exists AND the server asked
     ///     for a resync (or on first subscribe).
     /// </summary>
@@ -115,7 +121,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
                 continue;
             }
 
-            SubscribeToEventsRequest subscribeRequest = _lastSeen > 0
+            var subscribeRequest = _lastSeen > 0
                 ? new SubscribeToEventsRequest(_lastSeen)
                 : new SubscribeToEventsRequest();
 
@@ -167,7 +173,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
             {
                 while (!linked.IsCancellationRequested && !ct.IsCancellationRequested)
                 {
-                    (bool frameOk, bool connDied, EventFrame frame) =
+                    (bool frameOk, bool connDied, var frame) =
                         await ReadOneFrameAsync(inner.EventFrames, linked.Token).ConfigureAwait(false);
                     if (!frameOk)
                     {
@@ -205,13 +211,6 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
         }
     }
 
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        await DropConnectionAsync().ConfigureAwait(false);
-    }
-
     // ── Plumbing ───────────────────────────────────────────────────────────
 
     /// <summary>Read one frame; reports connection death instead of throwing.</summary>
@@ -220,7 +219,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
     {
         try
         {
-            EventFrame frame = await reader.ReadAsync(ct).ConfigureAwait(false);
+            var frame = await reader.ReadAsync(ct).ConfigureAwait(false);
             return (true, false, frame);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -243,7 +242,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
             }
         }
 
-        IIpcClientTransport transport = await _transportFactory(ct).ConfigureAwait(false);
+        var transport = await _transportFactory(ct).ConfigureAwait(false);
         var inner = new MessagePackRpcClient(transport, _logger, _psk);
         try
         {
@@ -283,7 +282,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
 
     private async Task DelayBackoffAsync(CancellationToken ct)
     {
-        TimeSpan delay = NextBackoffDelay();
+        var delay = NextBackoffDelay();
         _logger.LogInformation("Reconnecting in {Delay}ms", delay.TotalMilliseconds);
         try
         {
@@ -321,8 +320,8 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
             _inner.ConnectionLost += Handler;
         }
 
-        private void Handler(object? sender, EventArgs e) => _onLost();
-
         public void Dispose() => _inner.ConnectionLost -= Handler;
+
+        private void Handler(object? sender, EventArgs e) => _onLost();
     }
 }

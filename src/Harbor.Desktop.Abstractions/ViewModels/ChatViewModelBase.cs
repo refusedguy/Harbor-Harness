@@ -1,10 +1,6 @@
-using ChatLineViewModel = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
-using CommunityToolkit.Mvvm.ComponentModel;
-using Harbor.Ui.Framework.Services;
-using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
-using Harbor.Ui.Framework.ViewModels;
-using Microsoft.Extensions.Logging;
+using Harbor.Ui.Framework.State;
+using ChatLineViewModel = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 using ToolCallStatus = Harbor.Ui.Framework.ViewModels.ToolCallStatus;
 using ToolCallViewModel = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 
@@ -31,6 +27,14 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// </remarks>
 public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
 {
+
+    /// <summary>True while there may be older history to load.</summary>
+    [ObservableProperty]
+    private bool _canLoadOlder = true;
+
+    /// <summary>Zoom/content scale factor (Ctrl+=/Ctrl+-).</summary>
+    [ObservableProperty]
+    private double _contentScale = 1.0;
     /// <summary>User input text bound to the chat input box.</summary>
     [ObservableProperty]
     private string _inputText = string.Empty;
@@ -39,6 +43,11 @@ public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(InputPlaceholder))]
     private bool _isAgentRunning;
+
+    /// <summary>True while older history is being loaded (pull-to-refresh).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PullRefreshStatusText))]
+    private bool _isLoadingHistory;
 
     /// <summary>True while tokens are actively arriving.</summary>
     [ObservableProperty]
@@ -50,38 +59,25 @@ public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
     [NotifyPropertyChangedFor(nameof(InputPlaceholder))]
     private bool _isThinking;
 
-    /// <summary>
-    ///     Human-readable status message shown while the agent is running
-    ///     (e.g. <c>"Agent is running…"</c>). Cleared on completion.
-    /// </summary>
+    /// <summary>Pull-to-refresh pixel offset.</summary>
     [ObservableProperty]
-    private string _statusMessage = string.Empty;
-
-    /// <summary>True while older history is being loaded (pull-to-refresh).</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PullRefreshStatusText))]
-    private bool _isLoadingHistory;
+    private double _pullOffset;
 
     /// <summary>Pull-to-refresh progress (0..1).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PullRefreshStatusText))]
     private double _pullProgress;
 
-    /// <summary>Pull-to-refresh pixel offset.</summary>
-    [ObservableProperty]
-    private double _pullOffset;
-
-    /// <summary>Zoom/content scale factor (Ctrl+=/Ctrl+-).</summary>
-    [ObservableProperty]
-    private double _contentScale = 1.0;
-
-    /// <summary>True while there may be older history to load.</summary>
-    [ObservableProperty]
-    private bool _canLoadOlder = true;
-
     /// <summary>True while the pull indicator is visible.</summary>
     [ObservableProperty]
     private bool _showPullIndicator;
+
+    /// <summary>
+    ///     Human-readable status message shown while the agent is running
+    ///     (e.g. <c>"Agent is running…"</c>). Cleared on completion.
+    /// </summary>
+    [ObservableProperty]
+    private string _statusMessage = string.Empty;
 
     /// <summary>Active streaming buffer (partial assistant text).</summary>
     [ObservableProperty]
@@ -99,7 +95,7 @@ public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
         Select(state => state.Input.Text, v => InputText = v);
         Select(state => state.IsAgentRunning && !state.IsStreaming, v => IsThinking = v);
         Select(state => state.IsAgentRunning
-            ? (state.IsStreaming ? "Streaming response…" : "Agent is running…")
+            ? state.IsStreaming ? "Streaming response…" : "Agent is running…"
             : "Idle", v => StatusMessage = v);
     }
 

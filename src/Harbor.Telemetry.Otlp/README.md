@@ -8,8 +8,8 @@ OpenTelemetry OTLP telemetry exporter for Harbor. Depends on `Harbor.Telemetry.C
 
 ## What's in it
 
-| File | Purpose |
-|------|---------|
+| File                    | Purpose                                                                                                                |
+|-------------------------|------------------------------------------------------------------------------------------------------------------------|
 | `HarborOtlpExporter.cs` | `HarborOtlpExporter.Attach(...)` — configures and starts an OTLP exporter using the Core `ActivitySource` and `Meter`. |
 
 ## Public API summary
@@ -18,13 +18,13 @@ OpenTelemetry OTLP telemetry exporter for Harbor. Depends on `Harbor.Telemetry.C
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `OpenTelemetry` | SDK core |
+| Package                                        | Purpose            |
+|------------------------------------------------|--------------------|
+| `OpenTelemetry`                                | SDK core           |
 | `OpenTelemetry.Exporter.OpenTelemetryProtocol` | OTLP gRPC exporter |
 
-| Project | Purpose |
-|---------|---------|
+| Project                 | Purpose                                                    |
+|-------------------------|------------------------------------------------------------|
 | `Harbor.Telemetry.Core` | `ActivityTracer`, `MeterMetrics`, `HarborTelemetrySources` |
 
 ## Tests

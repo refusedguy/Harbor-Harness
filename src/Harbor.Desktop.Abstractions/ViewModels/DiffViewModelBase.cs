@@ -1,11 +1,5 @@
-using System.Linq;
-using CommunityToolkit.Mvvm.ComponentModel;
-using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using Harbor.Ui.Framework.ViewModels;
-using Microsoft.Extensions.Logging;
-
+using System.Text;
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -51,7 +45,7 @@ public abstract partial class DiffViewModelBase : StoreSubscriberViewModel
         foreach (var line in state.Lines)
         {
             if (line.ToolCallId is null) continue;
-            var text = line.Text;
+            string text = line.Text;
             if (text.Length >= 6 && text[..4] == "+++ " && text.Contains('/'))
                 return text[4..].Trim();
             if (text.Length >= 6 && text[..4] == "--- " && text.Contains('/'))
@@ -62,7 +56,7 @@ public abstract partial class DiffViewModelBase : StoreSubscriberViewModel
 
     private static string ExtractDiffText(UiState state)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         foreach (var line in state.Lines)
         {
             if (line.ToolCallId is null) continue;
@@ -76,8 +70,5 @@ public abstract partial class DiffViewModelBase : StoreSubscriberViewModel
     ///     Apply declared selectors against the new state snapshot.
     /// </summary>
     /// <param name="state">The current <see cref="UiState" /> snapshot.</param>
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 }

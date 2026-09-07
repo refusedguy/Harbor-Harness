@@ -1,4 +1,3 @@
-using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -10,6 +9,7 @@ using Harbor.App.Avalonia;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
 using Microsoft.Extensions.Hosting;
+using System.Text;
 // The test project lives in the Harbor.E2E.App.Avalonia namespace, which
 // shadows Harbor.App.Avalonia for unqualified name lookup. Alias the
 // production App class to 'HarborApp' (not 'App' — that collides with the
@@ -18,6 +18,7 @@ using Microsoft.Extensions.Hosting;
 using HarborApp = Harbor.App.Avalonia.App;
 
 namespace Harbor.E2E.App.Avalonia;
+
 /// <summary>
 ///     Real in-process headless driver for the Harbor Avalonia desktop app.
 /// </summary>
@@ -178,7 +179,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         // Hide the window so it doesn't keep rendering frames in the background.
         try
         {
-            if (_lifetime?.MainWindow is { } mw)
+            if (_lifetime?.MainWindow is {} mw)
             {
                 OnUIThread(() => mw.Hide());
             }
@@ -415,10 +416,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     ///         we walk the visual tree depth-first and match by <see cref="StyledElement.Name" />.
     ///     </para>
     /// </remarks>
-    public T? FindControlByName<T>(string name) where T : Control
-    {
-        return OnUIThread<T?>(() => FindByName<T>(MainWindow, name));
-    }
+    public T? FindControlByName<T>(string name) where T : Control => OnUIThread(() => FindByName<T>(MainWindow, name));
 
     /// <summary>
     ///     Run an arbitrary delegate on the UI thread and return its result.
@@ -477,9 +475,9 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// </summary>
     public RadioButton? FindRadioButtonByText(string text)
     {
-        return OnUIThread<RadioButton?>(() =>
+        return OnUIThread(() =>
             FindFirst<RadioButton>(MainWindow, b =>
-                b.Content is { } c &&
+                b.Content is {} c &&
                 string.Equals(c.ToString()?.Trim(), text, StringComparison.Ordinal)));
     }
 
@@ -490,9 +488,9 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// </summary>
     public Button? FindButtonByText(string text)
     {
-        return OnUIThread<Button?>(() =>
+        return OnUIThread(() =>
             FindFirst<Button>(MainWindow, b =>
-                b.Content is { } c &&
+                b.Content is {} c &&
                 string.Equals(c.ToString()?.Trim(), text, StringComparison.Ordinal)));
     }
 
@@ -549,7 +547,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                 return;
             }
 
-            if (button.Command is { } cmd && cmd.CanExecute(null))
+            if (button.Command is {} cmd && cmd.CanExecute(null))
             {
                 cmd.Execute(null);
             }
@@ -739,7 +737,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                 // (e.g. SendMessage_AddsToChatHistory) leaves StatusText="running"
                 // for every subsequent test.
                 try { vm.Chat.ClearCommand.Execute(null); }
-                catch { }
+                catch {}
                 vm.SwitchViewCommand.Execute("chat");
             }
         });
@@ -752,10 +750,10 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     {
         switch (visual)
         {
-            case TextBlock tb when tb.Text is { } t:
+            case TextBlock tb when tb.Text is {} t:
                 sb.AppendLine(t);
                 break;
-            case TextBox txb when txb.Text is { } tx:
+            case TextBox txb when txb.Text is {} tx:
                 sb.AppendLine(tx);
                 break;
             case ContentControl cc when cc.Content is string s:
@@ -784,7 +782,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         return OnUIThread(() =>
         {
             var sb = new StringBuilder();
-            AppendRenderedText(MainWindow, sb, parentVisible: true);
+            AppendRenderedText(MainWindow, sb, true);
             return sb.ToString();
         });
     }
@@ -798,10 +796,10 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
 
         switch (visual)
         {
-            case TextBlock tb when tb.Text is { } t:
+            case TextBlock tb when tb.Text is {} t:
                 sb.AppendLine(t);
                 break;
-            case TextBox txb when txb.Text is { } tx:
+            case TextBox txb when txb.Text is {} tx:
                 sb.AppendLine(tx);
                 break;
             case ContentControl cc when cc.Content is string s:
@@ -811,7 +809,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
 
         foreach (var child in visual.GetVisualChildren())
         {
-            AppendRenderedText(child, sb, parentVisible: true);
+            AppendRenderedText(child, sb, true);
         }
     }
 
@@ -824,7 +822,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         }
         foreach (var child in root.GetVisualChildren())
         {
-            if (FindFirst(child, predicate) is { } found)
+            if (FindFirst(child, predicate) is {} found)
             {
                 return found;
             }
@@ -847,7 +845,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         }
         foreach (var child in root.GetVisualChildren())
         {
-            if (FindByName<T>(child, name) is { } found)
+            if (FindByName<T>(child, name) is {} found)
             {
                 return found;
             }

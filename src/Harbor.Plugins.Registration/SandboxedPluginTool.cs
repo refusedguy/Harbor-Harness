@@ -1,11 +1,10 @@
-using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
-
+using System.Text.Json;
 namespace Harbor.Plugins.Registration;
 
 /// <summary>
@@ -17,37 +16,43 @@ namespace Harbor.Plugins.Registration;
 ///     <para>
 ///         Enforcement:
 ///         <list type="bullet">
-///             <item><b>Timeout</b> — a linked <see cref="CancellationTokenSource" /> fires
-///             after <see cref="DefaultTimeout" /> (30s). The plugin's
-///             <see cref="ITool.ExecuteAsync" /> races a <c>WaitAsync</c>; when the timer
-///             wins, the abandoned execution is left to die on its own (a synchronous
-///             loop cannot be thread-aborted in .NET) and the agent loop receives an
-///             error result immediately.</item>
-///             <item><b>Memory guard</b> — a process-wide allocated-bytes delta is sampled
-///             around the call; over the budget, the result is converted to an error and
-///             a <c>memory</c> block event is published.</item>
-///             <item><b>Audit + events</b> — every block publishes
-///             <see cref="PluginBlockedEvent" /> and appends an audit line, so the agent
-///             loop sees <see cref="ToolResult.IsError" /> and the operator sees why.</item>
+///             <item>
+///                 <b>Timeout</b> — a linked <see cref="CancellationTokenSource" /> fires
+///                 after <see cref="DefaultTimeout" /> (30s). The plugin's
+///                 <see cref="ITool.ExecuteAsync" /> races a <c>WaitAsync</c>; when the timer
+///                 wins, the abandoned execution is left to die on its own (a synchronous
+///                 loop cannot be thread-aborted in .NET) and the agent loop receives an
+///                 error result immediately.
+///             </item>
+///             <item>
+///                 <b>Memory guard</b> — a process-wide allocated-bytes delta is sampled
+///                 around the call; over the budget, the result is converted to an error and
+///                 a <c>memory</c> block event is published.
+///             </item>
+///             <item>
+///                 <b>Audit + events</b> — every block publishes
+///                 <see cref="PluginBlockedEvent" /> and appends an audit line, so the agent
+///                 loop sees <see cref="ToolResult.IsError" /> and the operator sees why.
+///             </item>
 ///         </list>
 ///     </para>
 /// </remarks>
 public sealed class SandboxedPluginTool : ITool
 {
-    /// <summary>Default wall-clock budget per plugin tool execution.</summary>
-    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>Default per-call allocation budget (10 MB).</summary>
     public const long DefaultMemoryBudgetBytes = 10 * 1024 * 1024;
-
-    private readonly ITool _inner;
-    private readonly string _pluginName;
-    private readonly IEventBus _eventBus;
-    private readonly ILogger _logger;
-    private readonly TimeSpan _timeout;
-    private readonly long _memoryBudgetBytes;
+    /// <summary>Default wall-clock budget per plugin tool execution.</summary>
+    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
     private readonly IPluginAuditLog? _audit;
     private readonly IReadOnlySet<PluginCapability> _capabilities;
+    private readonly IEventBus _eventBus;
+
+    private readonly ITool _inner;
+    private readonly ILogger _logger;
+    private readonly long _memoryBudgetBytes;
+    private readonly string _pluginName;
+    private readonly TimeSpan _timeout;
 
     /// <summary>
     ///     Wrap a plugin-contributed tool with the execution sandbox.
@@ -124,7 +129,7 @@ public sealed class SandboxedPluginTool : ITool
         try
         {
             result = await _inner
-                .ExecuteAsync(args: args, context, cts.Token)
+                .ExecuteAsync(args, context, cts.Token)
                 .WaitAsync(_timeout, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -163,7 +168,7 @@ public sealed class SandboxedPluginTool : ITool
         if (result.IsError)
             return result;
 
-        await AuditCallAsync(args, "allow", detail: null, cancellationToken).ConfigureAwait(false);
+        await AuditCallAsync(args, "allow", null, cancellationToken).ConfigureAwait(false);
         return result;
     }
 
@@ -180,7 +185,7 @@ public sealed class SandboxedPluginTool : ITool
             reason,
             detail);
 
-        await AuditCallAsync(args, "deny", detail: $"{reason}: {detail}", ct).ConfigureAwait(false);
+        await AuditCallAsync(args, "deny", $"{reason}: {detail}", ct).ConfigureAwait(false);
 
         await _eventBus.PublishAsync(
             new PluginBlockedEvent(_pluginName, reason, detail),
@@ -210,7 +215,7 @@ public sealed class SandboxedPluginTool : ITool
         bool evidenceBased = result == "allow";
         foreach (var capability in _capabilities)
         {
-            var target = ExtractTarget(capability, args);
+            string? target = ExtractTarget(capability, args);
             if (target is null)
             {
                 if (evidenceBased)
@@ -234,11 +239,11 @@ public sealed class SandboxedPluginTool : ITool
         {
             if (args.ValueKind == JsonValueKind.Object)
             {
-                foreach (var key in keys)
+                foreach (string key in keys)
                 {
                     if (args.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String)
                     {
-                        var s = value.GetString();
+                        string? s = value.GetString();
                         if (!string.IsNullOrEmpty(s))
                             return s;
                     }
@@ -252,7 +257,7 @@ public sealed class SandboxedPluginTool : ITool
             PluginCapability.HttpRequests => Pick("url", "endpoint", "query", "search", "q"),
             PluginCapability.ReadFiles or PluginCapability.WriteFiles => Pick("path", "file", "filename"),
             PluginCapability.RunProcesses => Pick("command", "process", "exe"),
-            _ => null,
+            _ => null
         };
     }
 

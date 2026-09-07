@@ -9,12 +9,12 @@ using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Application.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
-using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Sessions;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 namespace Harbor.App.Avalonia.Tests;
+
 /// <summary>
 ///     DI registration tests for <see cref="AppHost.BuildAsync" />.
 ///     Mirrors Harbor.App.Cli.Tests/HostBuilderDiTests.cs but exercises the
@@ -30,7 +30,7 @@ public class AppHostDiTests
         // these pure-DI assertions. Without this, BuildAsync_Registers_CommonConfig
         // fails on any machine whose saved config differs from the code default
         // ("anthropic").
-        var tempHome = Path.Combine(Path.GetTempPath(), $"harbor-di-tests-{Guid.NewGuid():N}");
+        string tempHome = Path.Combine(Path.GetTempPath(), $"harbor-di-tests-{Guid.NewGuid():N}");
         Environment.SetEnvironmentVariable("HOME", tempHome);
         Directory.CreateDirectory(tempHome);
         return AppHost.BuildAsync(Array.Empty<string>());

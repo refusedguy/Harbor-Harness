@@ -1,7 +1,6 @@
-using System.Collections.Immutable;
-using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
-
+using Harbor.Ui.Framework.State;
+using System.Collections.Immutable;
 namespace Harbor.Ui.Framework.Projection;
 
 /// <summary>
@@ -77,37 +76,41 @@ public sealed class DefaultUiProjector : IUiProjector
 
         // ── Chrome fingerprint (header / status bar / input) ──
         bool chromeSame = cache is not null
-            && ReferenceEquals(cache.Model, state.Model)
-            && ReferenceEquals(cache.Provider, state.Provider)
-            && ReferenceEquals(cache.AgentName, state.AgentName)
-            && ReferenceEquals(cache.Status, state.Status)
-            && ReferenceEquals(cache.InputText, state.Input.Text)
-            && cache.IsAgentRunning == state.IsAgentRunning
-            && cache.IsStreaming == state.IsStreaming
-            && cache.ShouldQuit == state.ShouldQuit
-            && cache.Focus == state.Focus
-            && cache.Cost == state.Cost
-            && cache.TotalLines == state.TotalLines
-            && cache.ViewportLines == state.ViewportLines
-            && cache.ScrollOffset == state.ScrollOffset;
+                          && ReferenceEquals(cache.Model, state.Model)
+                          && ReferenceEquals(cache.Provider, state.Provider)
+                          && ReferenceEquals(cache.AgentName, state.AgentName)
+                          && ReferenceEquals(cache.Status, state.Status)
+                          && ReferenceEquals(cache.InputText, state.Input.Text)
+                          && cache.IsAgentRunning == state.IsAgentRunning
+                          && cache.IsStreaming == state.IsStreaming
+                          && cache.ShouldQuit == state.ShouldQuit
+                          && cache.Focus == state.Focus
+                          && cache.Cost == state.Cost
+                          && cache.TotalLines == state.TotalLines
+                          && cache.ViewportLines == state.ViewportLines
+                          && cache.ScrollOffset == state.ScrollOffset;
 
-        var header = chromeSame ? cache!.Header : new UiHeaderModel(
-            Model: state.Model,
-            Provider: state.Provider,
-            AgentName: state.AgentName,
-            IsAgentRunning: state.IsAgentRunning,
-            IsStreaming: state.IsStreaming,
-            ShouldQuit: state.ShouldQuit,
-            Cost: state.Cost,
-            FooterText: ProjectFooter(state));
+        var header = chromeSame
+            ? cache!.Header
+            : new UiHeaderModel(
+                state.Model,
+                state.Provider,
+                state.AgentName,
+                state.IsAgentRunning,
+                state.IsStreaming,
+                state.ShouldQuit,
+                state.Cost,
+                ProjectFooter(state));
 
         var statusBar = chromeSame ? cache!.StatusBar : ProjectStatusBar(state);
 
-        var input = chromeSame ? cache!.Input : new UiInputModel(
-            Text: state.Input.Text,
-            Caret: state.Input.Text.Length,
-            IsEnabled: !state.IsAgentRunning,
-            Placeholder: state.IsAgentRunning ? "Agent is running…" : "Type a message…");
+        var input = chromeSame
+            ? cache!.Input
+            : new UiInputModel(
+                state.Input.Text,
+                state.Input.Text.Length,
+                !state.IsAgentRunning,
+                state.IsAgentRunning ? "Agent is running…" : "Type a message…");
 
         // ── History rows ──
         bool linesSame = cache is not null && state.Lines.Equals(cache.Lines);
@@ -152,21 +155,21 @@ public sealed class DefaultUiProjector : IUiProjector
 
             for (int i = commonPrefix; i < state.Lines.Length; i++)
             {
-                ChatLine line = state.Lines[i];
+                var line = state.Lines[i];
                 string id = line.ToolCallId ?? BlockId(line.Role, firstIndex[line]);
                 var spans = ResolveSpans(line.Role, line.Text);
 
                 renderedBuilder.Add(new UiRenderedLine(
-                    Id: id,
-                    Spans: spans,
-                    Kind: UiLineKind.Body,
-                    TimestampUtc: line.TimestampUtc));
+                    id,
+                    spans,
+                    UiLineKind.Body,
+                    line.TimestampUtc));
 
                 blockBuilder.Add(new UiMessageBlock(
-                    Id: id,
-                    Role: line.Role,
-                    Spans: spans,
-                    Phase: MessageRenderPhase.Complete));
+                    id,
+                    line.Role,
+                    spans,
+                    MessageRenderPhase.Complete));
             }
 
             baseRendered = renderedBuilder.MoveToImmutable();
@@ -175,9 +178,9 @@ public sealed class DefaultUiProjector : IUiProjector
 
         // ── Streaming tail (rebuilt only when a buffer reference changed) ──
         bool tailSame = cache is not null
-            && cache.IsStreaming == state.IsStreaming
-            && ReferenceEquals(cache.ThinkBuf, thinkBuf)
-            && ReferenceEquals(cache.TextBuf, textBuf);
+                        && cache.IsStreaming == state.IsStreaming
+                        && ReferenceEquals(cache.ThinkBuf, thinkBuf)
+                        && ReferenceEquals(cache.TextBuf, textBuf);
 
         ImmutableArray<UiRenderedLine> tailRendered;
         ImmutableArray<UiBlock> tailBlocks;
@@ -196,16 +199,16 @@ public sealed class DefaultUiProjector : IUiProjector
                 const string thinkId = "streaming-thinking";
                 var thinkSpans = ResolveSpans(ChatRole.Thinking, thinkBuf);
                 renderedBuilder.Add(new UiRenderedLine(
-                    Id: thinkId,
-                    Spans: thinkSpans,
-                    Kind: UiLineKind.Thinking,
-                    TimestampUtc: DateTime.UtcNow));
+                    thinkId,
+                    thinkSpans,
+                    UiLineKind.Thinking,
+                    DateTime.UtcNow));
 
                 blockBuilder.Add(new UiMessageBlock(
-                    Id: thinkId,
-                    Role: ChatRole.Thinking,
-                    Spans: thinkSpans,
-                    Phase: MessageRenderPhase.Thinking));
+                    thinkId,
+                    ChatRole.Thinking,
+                    thinkSpans,
+                    MessageRenderPhase.Thinking));
             }
 
             if (textBuf is not null)
@@ -213,16 +216,16 @@ public sealed class DefaultUiProjector : IUiProjector
                 const string textId = "streaming-text";
                 var textSpans = ResolveSpans(ChatRole.Assistant, textBuf);
                 renderedBuilder.Add(new UiRenderedLine(
-                    Id: textId,
-                    Spans: textSpans,
-                    Kind: UiLineKind.Body,
-                    TimestampUtc: DateTime.UtcNow));
+                    textId,
+                    textSpans,
+                    UiLineKind.Body,
+                    DateTime.UtcNow));
 
                 blockBuilder.Add(new UiMessageBlock(
-                    Id: textId,
-                    Role: ChatRole.Assistant,
-                    Spans: textSpans,
-                    Phase: MessageRenderPhase.Streaming));
+                    textId,
+                    ChatRole.Assistant,
+                    textSpans,
+                    MessageRenderPhase.Streaming));
             }
 
             // Capacity-sized builders may hold fewer items (e.g. thinking
@@ -235,8 +238,8 @@ public sealed class DefaultUiProjector : IUiProjector
         // ── Compose the transcript (copy-on-write: only changed frames copy) ──
         string? streamingBlockId = state.IsStreaming ? "streaming" : null;
         bool transcriptSame = linesSame
-            && tailSame
-            && cache is not null;
+                              && tailSame
+                              && cache is not null;
         UiTranscriptModel transcript;
         if (transcriptSame)
         {
@@ -252,9 +255,9 @@ public sealed class DefaultUiProjector : IUiProjector
             renderedBuilder.AddRange(tailRendered.AsSpan());
 
             transcript = new UiTranscriptModel(
-                Blocks: blockBuilder.ToImmutable(),
-                RenderedLines: renderedBuilder.ToImmutable(),
-                StreamingBlockId: streamingBlockId);
+                blockBuilder.ToImmutable(),
+                renderedBuilder.ToImmutable(),
+                streamingBlockId);
         }
 
         // ── Screen assembly ──
@@ -267,12 +270,12 @@ public sealed class DefaultUiProjector : IUiProjector
         else
         {
             screen = new UiScreenModel(
-                Header: header,
-                Transcript: transcript,
-                StatusBar: statusBar,
-                Input: input,
-                Focus: state.Focus,
-                StateRevision: ComputeRevision(state));
+                header,
+                transcript,
+                statusBar,
+                input,
+                state.Focus,
+                ComputeRevision(state));
         }
 
         _cache = new ProjectionCache
@@ -308,52 +311,9 @@ public sealed class DefaultUiProjector : IUiProjector
         return screen;
     }
 
-    /// <summary>Immutable snapshot of the last projection and its cache keys.</summary>
-    private sealed class ProjectionCache
-    {
-        public UiState State = null!;
-        public UiScreenModel Screen = null!;
-        public UiTranscriptModel Transcript = null!;
+    private static UiStatusBarModel ProjectStatusBar(UiState state) => StatusProjector.ProjectStatusBar(state);
 
-        // History rows: keyed by the Lines backing-array reference.
-        public ImmutableArray<ChatLine> Lines;
-        public ImmutableArray<UiRenderedLine> BaseRendered;
-        public ImmutableArray<UiBlock> BaseBlocks;
-
-        // Streaming tail: keyed by IsStreaming + normalized buffer references.
-        public bool IsStreaming;
-        public string? ThinkBuf;
-        public string? TextBuf;
-        public ImmutableArray<UiRenderedLine> TailRendered;
-        public ImmutableArray<UiBlock> TailBlocks;
-
-        // Chrome fingerprint + reusable chrome models.
-        public string Model = string.Empty;
-        public string Provider = string.Empty;
-        public string AgentName = string.Empty;
-        public string Status = string.Empty;
-        public string? InputText;
-        public bool IsAgentRunning;
-        public bool ShouldQuit;
-        public FocusMode Focus;
-        public CostSnapshot Cost;
-        public int TotalLines;
-        public int ViewportLines;
-        public int ScrollOffset;
-        public UiHeaderModel Header = null!;
-        public UiStatusBarModel StatusBar = null!;
-        public UiInputModel Input = null!;
-    }
-
-    private static UiStatusBarModel ProjectStatusBar(UiState state)
-    {
-        return StatusProjector.ProjectStatusBar(state);
-    }
-
-    private static string ProjectFooter(UiState state)
-    {
-        return StatusProjector.ProjectFooter(state);
-    }
+    private static string ProjectFooter(UiState state) => StatusProjector.ProjectFooter(state);
 
     private static IReadOnlyList<StyledSpan> ResolveSpans(ChatRole role, string text)
     {
@@ -386,10 +346,7 @@ public sealed class DefaultUiProjector : IUiProjector
         };
     }
 
-    private static string ComputeRevision(UiState state)
-    {
-        return $"{state.Lines.Length}:{state.IsStreaming}:{state.Active.TextBuffer?.Length ?? 0}:{state.Active.ThinkBuffer?.Length ?? 0}";
-    }
+    private static string ComputeRevision(UiState state) => $"{state.Lines.Length}:{state.IsStreaming}:{state.Active.TextBuffer?.Length ?? 0}:{state.Active.ThinkBuffer?.Length ?? 0}";
 
     /// <summary>
     ///     Extract rendered lines from a <see cref="UiScreenModel" /> preserving
@@ -397,8 +354,42 @@ public sealed class DefaultUiProjector : IUiProjector
     ///     and semantic <see cref="UiSpanStyle" />). All viewports consume this
     ///     instead of duplicating the span-to-text stripping logic.
     /// </summary>
-    public static ImmutableArray<UiRenderedLine> ExtractRenderedLines(UiScreenModel screen)
+    public static ImmutableArray<UiRenderedLine> ExtractRenderedLines(UiScreenModel screen) => screen.Transcript.RenderedLines.ToImmutableArray();
+
+    /// <summary>Immutable snapshot of the last projection and its cache keys.</summary>
+    private sealed class ProjectionCache
     {
-        return screen.Transcript.RenderedLines.ToImmutableArray();
+        public string AgentName = string.Empty;
+        public ImmutableArray<UiBlock> BaseBlocks;
+        public ImmutableArray<UiRenderedLine> BaseRendered;
+        public CostSnapshot Cost;
+        public FocusMode Focus;
+        public UiHeaderModel Header = null!;
+        public UiInputModel Input = null!;
+        public string? InputText;
+        public bool IsAgentRunning;
+
+        // Streaming tail: keyed by IsStreaming + normalized buffer references.
+        public bool IsStreaming;
+
+        // History rows: keyed by the Lines backing-array reference.
+        public ImmutableArray<ChatLine> Lines;
+
+        // Chrome fingerprint + reusable chrome models.
+        public string Model = string.Empty;
+        public string Provider = string.Empty;
+        public UiScreenModel Screen = null!;
+        public int ScrollOffset;
+        public bool ShouldQuit;
+        public UiState State = null!;
+        public string Status = string.Empty;
+        public UiStatusBarModel StatusBar = null!;
+        public ImmutableArray<UiBlock> TailBlocks;
+        public ImmutableArray<UiRenderedLine> TailRendered;
+        public string? TextBuf;
+        public string? ThinkBuf;
+        public int TotalLines;
+        public UiTranscriptModel Transcript = null!;
+        public int ViewportLines;
     }
 }

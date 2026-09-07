@@ -1,4 +1,3 @@
-using System.Text.Json;
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
@@ -6,7 +5,9 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Sessions;
+using System.Text.Json;
 namespace Harbor.Benchmarks;
+
 /// <summary>
 ///     Benchmarks <see cref="SystemPromptBuilder.BuildAsync" />. The builder
 ///     assembles the system prompt from: base template + environment + agent

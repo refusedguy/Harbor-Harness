@@ -1,35 +1,34 @@
-using System.Text;
-using Harbor.Ui.Framework.Rendering;
-
 namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>
-/// Width-keyed wrap cache for an immutable text: the wrapped line list is
-/// rebuilt only when the layout width changes, so repeated Measure/Paint at a
-/// stable width allocate nothing. Lines are stored pre-trimmed, ready to be
-/// blitted with <see cref="ScreenBuffer.SetText"/>.
+///     Width-keyed wrap cache for an immutable text: the wrapped line list is
+///     rebuilt only when the layout width changes, so repeated Measure/Paint at a
+///     stable width allocate nothing. Lines are stored pre-trimmed, ready to be
+///     blitted with <see cref="ScreenBuffer.SetText" />.
 /// </summary>
 public sealed class WrappedText
 {
     private string[] _lines = [];
     private int _width = -1;
-    private readonly string _source;
 
-    public WrappedText(string source) => _source = source;
+    public WrappedText(string source)
+    {
+        Source = source;
+    }
 
-    public int SourceLength => _source.Length;
+    public int SourceLength => Source.Length;
 
     /// <summary>The unwrapped source text.</summary>
-    public string Source => _source;
+    public string Source { get; }
 
-    /// <summary>Wrapped lines at <paramref name="width"/>; rebuilds on width change.</summary>
+    /// <summary>Wrapped lines at <paramref name="width" />; rebuilds on width change.</summary>
     public ReadOnlyMemory<string> GetLines(int width)
     {
         if (width != _width)
         {
             var rebuilt = new List<string>(Math.Max(1, _lines.Length));
-            Rendering.TextWrap.WrapDocument(_source, Math.Max(1, width), rebuilt);
-            _lines = [.. rebuilt];
+            TextWrap.WrapDocument(Source, Math.Max(1, width), rebuilt);
+            _lines = [..rebuilt];
             _width = width;
         }
 
@@ -68,13 +67,16 @@ public sealed class UserBlock : IChatBlock
     private const string Prefix = "› ";
     private readonly WrappedText _text;
 
-    public UserBlock(string text) => _text = new WrappedText(text ?? string.Empty);
+    public UserBlock(string text)
+    {
+        _text = new WrappedText(text ?? string.Empty);
+    }
 
     public string Kind => "user";
 
     public bool IsStreamContinuation => false;
 
-    public int BudgetBytes => 64 + (_text.SourceLength * 2);
+    public int BudgetBytes => 64 + _text.SourceLength * 2;
 
     public BlockMeasure Measure(int width) =>
         BlockMeasure.Exact(Math.Max(1, _text.GetLines(BodyWidth(width)).Length));
@@ -114,13 +116,16 @@ public sealed class SystemBlock : IChatBlock
 {
     private readonly WrappedText _text;
 
-    public SystemBlock(string text) => _text = new WrappedText(text ?? string.Empty);
+    public SystemBlock(string text)
+    {
+        _text = new WrappedText(text ?? string.Empty);
+    }
 
     public string Kind => "system";
 
     public bool IsStreamContinuation => false;
 
-    public int BudgetBytes => 48 + (_text.SourceLength * 2);
+    public int BudgetBytes => 48 + _text.SourceLength * 2;
 
     public BlockMeasure Measure(int width) =>
         BlockMeasure.Exact(Math.Max(1, _text.GetLines(Math.Max(1, width)).Length));

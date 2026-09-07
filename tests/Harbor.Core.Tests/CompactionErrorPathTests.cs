@@ -1,15 +1,11 @@
-using System.Runtime.CompilerServices;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
-using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
+using System.Runtime.CompilerServices;
 namespace Harbor.Core.Tests;
 
 /// <summary>
@@ -70,11 +66,11 @@ public class CompactionErrorPathTests
         var svc = Configured(CreateService(new HangingLlmClient()));
         using var cts = new CancellationTokenSource();
 
-        Task<CSharpFunctionalExtensions.Result<CompactionResult>> pending =
+        var pending =
             svc.CompactAsync("session-1", FourLongMessages(), HugeModel, cts.Token);
         cts.Cancel();
 
-        CSharpFunctionalExtensions.Result<CompactionResult> result = await pending;
+        var result = await pending;
 
         await Assert.That(result.IsFailure).IsTrue();
         // The distinguishing marker: cancellation is reported as cancelled, so the

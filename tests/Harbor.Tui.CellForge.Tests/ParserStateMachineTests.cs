@@ -1,7 +1,6 @@
-using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>State-machine transition and chunking tests for the raw parser.</summary>
@@ -133,7 +132,7 @@ public class ParserStateMachineTests
     [Test]
     public async Task Param_Budget_Overflow_Enters_Ignore_And_Resyncs_On_Final()
     {
-        var overflow = new string('9', ParserOptions.DefaultMaxParamsBytes + 5);
+        string overflow = new('9', ParserOptions.DefaultMaxParamsBytes + 5);
         var events = T.Feed(_parser, $"\u001B[{overflow}A\u001B[B");
 
         await Assert.That(events.Any(e => e.Kind == InputEventKind.Unknown)).IsTrue();
@@ -249,17 +248,17 @@ public class ParserStateMachineTests
     public async Task Queue_Grows_Beyond_Initial_Capacity_Without_Loss()
     {
         const int count = 200;
-        var sb = new System.Text.StringBuilder();
-        for (var i = 0; i < count; i++)
+        var sb = new StringBuilder();
+        for (int i = 0; i < count; i++)
         {
-            sb.Append((char)('a' + (i % 26)));
+            sb.Append((char)('a' + i % 26));
         }
 
         var events = T.Feed(_parser, sb.ToString());
 
         await Assert.That(events.Length).IsEqualTo(count);
         await Assert.That(events[0].Key.Character).IsEqualTo(new Rune('a'));
-        await Assert.That(events[count - 1].Key.Character).IsEqualTo(new Rune((char)('a' + ((count - 1) % 26))));
+        await Assert.That(events[count - 1].Key.Character).IsEqualTo(new Rune((char)('a' + (count - 1) % 26)));
     }
 
     [Test]
@@ -296,7 +295,7 @@ public class ParserStateMachineTests
     {
         // ISIG is off in raw mode: the 0x03 byte itself must become the abort key
         // (Char 'c' + Ctrl) the REPL abort path relies on.
-        var events = T.FeedBytes(_parser, [(byte)0x03]);
+        var events = T.FeedBytes(_parser, [0x03]);
 
         await A.IsChar(events[0], new Rune('c'), KeyModifiers.Ctrl);
         await Assert.That(_parser.State).IsEqualTo(ParserState.Ground);

@@ -1,11 +1,8 @@
-namespace Harbor.Tui.RendererTests;
-
-using System.Text;
 using Harbor.Tui.AnsiPlain;
 using Harbor.Tui.RendererTests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
+using System.Text;
+namespace Harbor.Tui.RendererTests;
 
 /// <summary>
 ///     Golden-frame visual regression for the unified AnsiPlain renderer

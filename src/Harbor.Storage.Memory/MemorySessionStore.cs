@@ -1,8 +1,9 @@
-using System.Collections.Concurrent;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using System.Collections.Concurrent;
 namespace Harbor.Storage.Memory;
+
 /// <summary>
 ///     In-memory session storage — for tests and ephemeral sessions.
 ///     Implements Repository pattern (GOF) via ISessionStore.
@@ -142,7 +143,7 @@ public sealed class MemorySessionStore : ISessionStore
             _sessions[session.Id] = session;
             return Task.FromResult(Result.Success());
         }
-                return Task.FromResult(Result.Failure($"Session '{session.Id}' not found."));
+        return Task.FromResult(Result.Failure($"Session '{session.Id}' not found."));
     }
 
     public void Clear()

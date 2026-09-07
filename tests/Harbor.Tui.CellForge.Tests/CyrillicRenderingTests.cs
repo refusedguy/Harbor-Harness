@@ -1,8 +1,7 @@
-using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 public class CyrillicRenderingTests
@@ -17,7 +16,7 @@ public class CyrillicRenderingTests
         int totalCells = PromptBuffer.DisplayCells(line);
         await Assert.That(totalCells).IsEqualTo(12);
 
-        var vp = PromptViewport.ScrollIntoView(line, caretInLine: 12, widthCells: 10);
+        var vp = PromptViewport.ScrollIntoView(line, 12, 10);
         // totalCells(12) - width(10)=2, caretCell(12)-width+1=3 => startCell=2 => Start=2
         await Assert.That(vp.Start).IsEqualTo(2);
         await Assert.That(line[vp.Start..]).IsEqualTo("иветпривет");
@@ -31,7 +30,7 @@ public class CyrillicRenderingTests
     public async Task Viewport_CyrillicShortLine_FitsWidth_StartsAtZero()
     {
         const string line = "привет";
-        var vp = PromptViewport.ScrollIntoView(line, caretInLine: 3, widthCells: 10);
+        var vp = PromptViewport.ScrollIntoView(line, 3, 10);
         await Assert.That(vp.Start).IsEqualTo(0);
     }
 
@@ -39,7 +38,7 @@ public class CyrillicRenderingTests
     public async Task Viewport_CyrillicCaretAtStart_NoScroll()
     {
         const string line = "приветпривет";
-        var vp = PromptViewport.ScrollIntoView(line, caretInLine: 0, widthCells: 10);
+        var vp = PromptViewport.ScrollIntoView(line, 0, 10);
         await Assert.That(vp.Start).IsEqualTo(0);
     }
 
@@ -48,7 +47,7 @@ public class CyrillicRenderingTests
     {
         // "привет мир" = 10 cells; width 6; caret at end(10) => startCell 4 => Start 4
         const string line = "привет мир";
-        var vp = PromptViewport.ScrollIntoView(line, caretInLine: line.Length, widthCells: 6);
+        var vp = PromptViewport.ScrollIntoView(line, line.Length, 6);
         await Assert.That(vp.Start).IsEqualTo(4);
         await Assert.That(line[vp.Start..]).IsEqualTo("ет мир");
         // caret must be inside window [startCell .. startCell+width-1]
@@ -62,7 +61,7 @@ public class CyrillicRenderingTests
     public async Task Viewport_CyrillicWidthOne_ShowsLastChar()
     {
         const string line = "привет";
-        var vp = PromptViewport.ScrollIntoView(line, caretInLine: 6, widthCells: 1);
+        var vp = PromptViewport.ScrollIntoView(line, 6, 1);
         // total 6, width 1 => startCell 5 => Start 5 => last char "т"
         await Assert.That(vp.Start).IsEqualTo(5);
         await Assert.That(line[vp.Start..]).IsEqualTo("т");
@@ -193,7 +192,7 @@ public class CyrillicRenderingTests
         await w.EndFrameAsync();
 
         // collect raw bytes after CUP
-        var bytes = backend.Writes.SelectMany(b => b).ToArray();
+        byte[] bytes = backend.Writes.SelectMany(b => b).ToArray();
         // CUP "\x1B[1;1H" is 6 bytes, then D1 8F
         await Assert.That(bytes.Length).IsEqualTo(8);
         await Assert.That(bytes[6]).IsEqualTo((byte)0xD1);
@@ -211,7 +210,7 @@ public class CyrillicRenderingTests
         w.WriteText("привет");
         await w.EndFrameAsync();
 
-        var bytes = backend.Writes.SelectMany(b => b).ToArray();
+        byte[] bytes = backend.Writes.SelectMany(b => b).ToArray();
         string decoded = Encoding.UTF8.GetString(bytes);
         await Assert.That(decoded).IsEqualTo("привет");
         // each Cyrillic char is 2 bytes in UTF-8
@@ -225,7 +224,7 @@ public class CyrillicRenderingTests
         w2.WriteText("привет");
         await Assert.That(w2.TrackedX).IsEqualTo(6);
         await w2.EndFrameAsync();
-        var bytes2 = backend2.Writes.SelectMany(b => b).ToArray();
+        byte[] bytes2 = backend2.Writes.SelectMany(b => b).ToArray();
         // 6 bytes CUP + 12 bytes text
         await Assert.That(bytes2.Length).IsEqualTo(18);
         string textPart = Encoding.UTF8.GetString(bytes2, 6, 12);
@@ -241,7 +240,7 @@ public class CyrillicRenderingTests
         w.WriteText("hi привет");
         await w.EndFrameAsync();
 
-        var bytes = backend.Writes.SelectMany(b => b).ToArray();
+        byte[] bytes = backend.Writes.SelectMany(b => b).ToArray();
         string decoded = Encoding.UTF8.GetString(bytes, 6, bytes.Length - 6);
         await Assert.That(decoded).IsEqualTo("hi привет");
         // "hi " 3 cells + "привет" 6 cells = 9
@@ -321,7 +320,7 @@ public class CyrillicRenderingTests
         var events = T.FeedBytes(parser, all[..5], all[5..]);
 
         await Assert.That(events.Length).IsEqualTo(6);
-        string reassembled = new string(events.Select(e => (char)e.Key.Character.Value).ToArray());
+        string reassembled = new(events.Select(e => (char)e.Key.Character.Value).ToArray());
         await Assert.That(reassembled).IsEqualTo("привет");
     }
 
@@ -412,7 +411,7 @@ public class CyrillicRenderingTests
 
         var events = T.Drain(parser);
         await Assert.That(events.Length).IsEqualTo(6);
-        string text = new string(events.Select(e => (char)e.Key.Character.Value).ToArray());
+        string text = new(events.Select(e => (char)e.Key.Character.Value).ToArray());
         await Assert.That(text).IsEqualTo("привет");
     }
 }

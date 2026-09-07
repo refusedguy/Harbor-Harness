@@ -1,4 +1,5 @@
 namespace Harbor.Application.Configuration;
+
 /// <summary>
 ///     Provider / model / agent identity selection.
 ///     Replaces the flat <c>Provider</c>/<c>Model</c>/<c>Agent</c> string fields
@@ -50,7 +51,7 @@ public sealed record ToolingConfig(
     public static readonly ToolingConfig Default = new(
         Array.Empty<string>(),
         Array.Empty<string>(),
-        AutoReloadPlugins: true);
+        true);
 
     public Result<ToolingConfig> Validate()
     {
@@ -127,11 +128,11 @@ public sealed record PresentationConfig(
     string Storage,
     bool Onboarded)
 {
+
+    public static readonly PresentationConfig Default = new("ansi", "jsonl", false);
     /// <summary>CellForge renderer section — defaults apply when absent.</summary>
     [JsonPropertyName("consoleEx")]
     public CellForgeUiConfig CellForge { get; init; } = CellForgeUiConfig.Default;
-
-    public static readonly PresentationConfig Default = new("ansi", "jsonl", false);
 
     public Result<PresentationConfig> Validate()
     {

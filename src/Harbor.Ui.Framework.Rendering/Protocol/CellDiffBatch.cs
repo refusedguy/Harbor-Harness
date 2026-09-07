@@ -1,6 +1,5 @@
-namespace Harbor.Ui.Framework.Rendering.Protocol;
-
 using System.Collections.Immutable;
+namespace Harbor.Ui.Framework.Rendering.Protocol;
 
 /// <summary>
 ///     An immutable, sequence-numbered frame delta produced by a cell-diff

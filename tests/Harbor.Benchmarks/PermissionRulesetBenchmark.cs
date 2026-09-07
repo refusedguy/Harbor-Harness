@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 namespace Harbor.Benchmarks;
+
 /// <summary>
 ///     Benchmarks <see cref="PermissionRuleset.Evaluate" />, a hot path invoked for every tool
 ///     call to decide Allow/Ask/Deny. Measures:

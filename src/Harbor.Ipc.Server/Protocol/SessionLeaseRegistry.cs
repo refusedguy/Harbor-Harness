@@ -2,7 +2,7 @@ namespace Harbor.Ipc.Protocol;
 
 /// <summary>
 ///     Tracks which connected client "owns" a running session (sprint 6 A3).
-///     A second client's <see cref="StartAgentRequest"/> for an owned session
+///     A second client's <see cref="StartAgentRequest" /> for an owned session
 ///     is refused with a structured SESSION_BUSY error instead of silently
 ///     re-initializing the agent mid-run; events of an owned session are
 ///     addressed to the owner only.
@@ -28,7 +28,7 @@ public sealed class SessionLeaseRegistry
         }
     }
 
-    /// <summary>Release a lease held by <paramref name="clientId"/> (idempotent).</summary>
+    /// <summary>Release a lease held by <paramref name="clientId" /> (idempotent).</summary>
     public void Release(string sessionId, string clientId)
     {
         lock (_lock)
@@ -40,12 +40,12 @@ public sealed class SessionLeaseRegistry
         }
     }
 
-    /// <summary>Release every session owned by <paramref name="clientId"/>.</summary>
+    /// <summary>Release every session owned by <paramref name="clientId" />.</summary>
     public void ReleaseAll(string clientId)
     {
         lock (_lock)
         {
-            List<string> doomed = [.. _owners.Where(kv => kv.Value == clientId).Select(kv => kv.Key)];
+            List<string> doomed = [.._owners.Where(kv => kv.Value == clientId).Select(kv => kv.Key)];
             foreach (string session in doomed)
             {
                 _owners.Remove(session);

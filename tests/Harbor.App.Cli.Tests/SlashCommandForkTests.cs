@@ -6,8 +6,6 @@ using Harbor.App.Cli.Repl;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
 namespace Harbor.App.Cli.Tests;
 
 /// <summary>
@@ -16,56 +14,6 @@ namespace Harbor.App.Cli.Tests;
 /// </summary>
 public class SlashCommandForkTests
 {
-    private sealed class FakeStore : ISessionStore
-    {
-        public readonly Dictionary<string, Session> Sessions = [];
-        public readonly Dictionary<string, List<AgentMessage>> Messages = [];
-
-        public Task<Result<Session>> CreateAsync(
-            string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
-        {
-            var session = Session.Create(directory, agentName, providerId, modelId);
-            Sessions[session.Id] = session;
-            Messages[session.Id] = [];
-            return Task.FromResult(Result.Success(session));
-        }
-
-        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
-            => Task.FromResult(Sessions.TryGetValue(sessionId, out var s)
-                ? Result.Success(s)
-                : Result.Failure<Session>($"Session '{sessionId}' not found."));
-
-        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
-            => Task.FromResult(Messages.TryGetValue(sessionId, out var list)
-                ? Result.Success<IReadOnlyList<AgentMessage>>([.. list])
-                : Result.Failure<IReadOnlyList<AgentMessage>>($"Session '{sessionId}' not found."));
-
-        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
-        {
-            if (!Messages.TryGetValue(sessionId, out var list))
-                return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
-            list.Add(message);
-            return Task.FromResult(Result.Success());
-        }
-
-        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
-            => Task.FromResult(Sessions.ContainsKey(session.Id)
-                ? Result.Success()
-                : Result.Failure("store rejected update"));
-
-        // Unused by the fork flow — fail loudly if the runner starts touching them.
-        public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /fork tests.");
-        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /fork tests.");
-        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /fork tests.");
-        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /fork tests.");
-        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /fork tests.");
-        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) => Task.FromResult(Result.Success());
-    }
 
     [Test]
     public async Task HandleAsync_ForkWithoutArgs_ReportsUsage()
@@ -106,11 +54,62 @@ public class SlashCommandForkTests
             NullLoggerFactory.Instance.CreateLogger<SlashCommandDispatcher>());
         var lines = new List<string>();
         var outcome = await dispatcher.HandleCoreAsync(input, sp,
-            writer: lines.Add,
-            reader: _ => Task.FromResult(string.Empty),
-            agent: null!, agentRegistry: null!, configStore: null!, authStore: null!,
-            providers: null!, session: Session.Create("/harbor-fork-tests", "code", "t", "m"));
+            lines.Add,
+            _ => Task.FromResult(string.Empty),
+            null!, null!, null!, null!,
+            null!, Session.Create("/harbor-fork-tests", "code", "t", "m"));
         await Assert.That(outcome.ShouldQuit).IsFalse();
         return lines;
+    }
+
+    private sealed class FakeStore : ISessionStore
+    {
+        public readonly Dictionary<string, List<AgentMessage>> Messages = [];
+        public readonly Dictionary<string, Session> Sessions = [];
+
+        public Task<Result<Session>> CreateAsync(
+            string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
+        {
+            var session = Session.Create(directory, agentName, providerId, modelId);
+            Sessions[session.Id] = session;
+            Messages[session.Id] = [];
+            return Task.FromResult(Result.Success(session));
+        }
+
+        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
+            => Task.FromResult(Sessions.TryGetValue(sessionId, out var s)
+                ? Result.Success(s)
+                : Result.Failure<Session>($"Session '{sessionId}' not found."));
+
+        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
+            => Task.FromResult(Messages.TryGetValue(sessionId, out var list)
+                ? Result.Success<IReadOnlyList<AgentMessage>>([..list])
+                : Result.Failure<IReadOnlyList<AgentMessage>>($"Session '{sessionId}' not found."));
+
+        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+        {
+            if (!Messages.TryGetValue(sessionId, out var list))
+                return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
+            list.Add(message);
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
+            => Task.FromResult(Sessions.ContainsKey(session.Id)
+                ? Result.Success()
+                : Result.Failure("store rejected update"));
+
+        // Unused by the fork flow — fail loudly if the runner starts touching them.
+        public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default) =>
+            throw new NotSupportedException("Not exercised by /fork tests.");
+        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
+            throw new NotSupportedException("Not exercised by /fork tests.");
+        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default) =>
+            throw new NotSupportedException("Not exercised by /fork tests.");
+        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default) =>
+            throw new NotSupportedException("Not exercised by /fork tests.");
+        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default) =>
+            throw new NotSupportedException("Not exercised by /fork tests.");
+        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) => Task.FromResult(Result.Success());
     }
 }

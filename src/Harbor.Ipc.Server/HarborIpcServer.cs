@@ -1,4 +1,5 @@
 namespace Harbor.Ipc;
+
 /// <summary>
 ///     Harbor IPC server. Hosts the <see cref="MessagePackRpcServer" />,
 ///     which exposes the in-process <c>IAgent</c> / <c>ISessionStore</c> /
@@ -21,11 +22,11 @@ namespace Harbor.Ipc;
 public sealed class HarborIpcServer : IHarborServer
 {
     private readonly EventBroadcaster _broadcaster;
+    private readonly SessionLeaseRegistry _leases;
     private readonly ILoggerFactory _loggerFactory;
     private readonly MessagePackRpcServer _rpc;
     private readonly IServiceProvider _serviceProvider;
     private readonly IIpcServerTransport _transport;
-    private readonly SessionLeaseRegistry _leases;
     private int _disposed;
     private int _running;
 
@@ -76,14 +77,14 @@ public sealed class HarborIpcServer : IHarborServer
             _loggerFactory.CreateLogger<MessagePackRpcServer>(), psk);
     }
 
+    /// <summary>Completes when the first client subscribes to event streaming.</summary>
+    public Task SubscriptionReady => _broadcaster.SubscriptionReady;
+
     /// <inheritdoc />
     public bool IsRunning => Volatile.Read(ref _running) == 1;
 
     /// <inheritdoc />
     public string Endpoint => _transport.Endpoint;
-
-    /// <summary>Completes when the first client subscribes to event streaming.</summary>
-    public Task SubscriptionReady => _broadcaster.SubscriptionReady;
 
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken ct = default)

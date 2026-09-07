@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Models;
 using Harbor.Ipc.Protocol;
 namespace Harbor.Ipc;
+
 /// <summary>
 ///     Helpers for converting between the rich domain <see cref="HarborEvent" />
 ///     hierarchy and the MessagePack [Union] <see cref="HarborEventData" />

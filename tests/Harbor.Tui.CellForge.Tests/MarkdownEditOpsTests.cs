@@ -1,5 +1,4 @@
 using Harbor.Tui.CellForge.Rendering;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class MarkdownEditOpsTests
@@ -27,7 +26,7 @@ public class MarkdownEditOpsTests
     {
         var b = NewAt("code", 0);
         _ = MarkdownEditOps.ToggleWrap(b, "`");
-        var wrapped = b.SnapshotText();
+        string wrapped = b.SnapshotText();
         _ = MarkdownEditOps.ToggleWrap(b, "`");
 
         await Assert.That(wrapped).IsEqualTo("`code`");

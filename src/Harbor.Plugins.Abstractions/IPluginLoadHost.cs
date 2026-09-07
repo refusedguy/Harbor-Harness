@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Abstractions;
+
 /// <summary>
 ///     Sink that the Roslyn-based CS plugin loader calls into when a plugin contributes
 ///     tools, providers, agents, or TUI extensions. Implementations live in the host

@@ -1,12 +1,11 @@
-using Harbor.Ui.Framework.Rendering.Markdown;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// The CE-3 W2.1 main invariant (widgets §6.4): pushing a document
-/// token-by-token with arbitrary chunk boundaries and rendering after each
-/// push yields, at completion, styled lines IDENTICAL to a one-shot render of
-/// the whole document — per line, per span, per char.
+///     The CE-3 W2.1 main invariant (widgets §6.4): pushing a document
+///     token-by-token with arbitrary chunk boundaries and rendering after each
+///     push yields, at completion, styled lines IDENTICAL to a one-shot render of
+///     the whole document — per line, per span, per char.
 /// </summary>
 public class StreamingMarkdownTests
 {
@@ -46,7 +45,7 @@ public class StreamingMarkdownTests
 
         ## Notes
         Final thoughts here.
-        """,
+        """
     ];
 
     private static List<string> Flatten(IReadOnlyList<MdLine> lines)
@@ -54,7 +53,7 @@ public class StreamingMarkdownTests
         var flat = new List<string>(lines.Count);
         foreach (var l in lines)
         {
-            var sb = new System.Text.StringBuilder();
+            var sb = new StringBuilder();
             foreach (var s in l.Spans)
             {
                 sb.Append('[').Append(s.Style).Append(':').Append(s.Text).Append(']');
@@ -83,7 +82,7 @@ public class StreamingMarkdownTests
             _ = expected.RenderTail(width);
 
             // Char-by-char pushes with renders between each.
-            foreach (var chunk in Chunks(source))
+            foreach (string chunk in Chunks(source))
             {
                 streaming.Push(chunk);
                 _ = streaming.RenderTail(width);
@@ -103,7 +102,7 @@ public class StreamingMarkdownTests
     public async Task RandomChunkSplits_ProduceIdenticalFinalLines()
     {
         var rng = new Random(1337);
-        foreach (var source in Corpus)
+        foreach (string source in Corpus)
         {
             for (int trial = 0; trial < 8; trial++)
             {

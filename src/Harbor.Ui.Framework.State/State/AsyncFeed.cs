@@ -1,6 +1,5 @@
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ui.Framework.State;
 
 /// <summary>
@@ -11,12 +10,9 @@ namespace Harbor.Ui.Framework.State;
 public sealed class AsyncFeed<T> : IDisposable
 {
     private readonly Func<CancellationToken, Task<Result<T>>> _load;
+    private readonly ILogger? _logger;
     private readonly TimeSpan _timeout;
     private CancellationTokenSource? _cts;
-    private readonly ILogger? _logger;
-
-    public AsyncData<T> Current { get; private set; } = AsyncData<T>.Idle;
-    public event Action<AsyncData<T>>? Changed;
 
     public AsyncFeed(
         Func<CancellationToken, Task<Result<T>>> load,
@@ -27,6 +23,15 @@ public sealed class AsyncFeed<T> : IDisposable
         _timeout = timeout;
         _logger = logger;
     }
+
+    public AsyncData<T> Current { get; private set; } = AsyncData<T>.Idle;
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+    public event Action<AsyncData<T>>? Changed;
 
     public async Task RefreshAsync()
     {
@@ -56,11 +61,5 @@ public sealed class AsyncFeed<T> : IDisposable
     {
         Current = data;
         Changed?.Invoke(data);
-    }
-
-    public void Dispose()
-    {
-        _cts?.Cancel();
-        _cts?.Dispose();
     }
 }

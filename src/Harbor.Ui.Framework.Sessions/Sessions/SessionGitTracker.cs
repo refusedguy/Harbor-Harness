@@ -1,5 +1,6 @@
 using Harbor.Ui.Framework.Services;
 namespace Harbor.Ui.Framework.Sessions;
+
 /// <summary>
 ///     Tracks git status (branch + dirty flag) per session, keyed on session
 ///     id. Refreshed on every session switch via

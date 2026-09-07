@@ -1,165 +1,19 @@
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-using CSharpFunctionalExtensions;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
-using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
-using TUnit.Core;
-
 namespace Harbor.App.Avalonia.Tests;
 
 public class AvaloniaWorkspaceCommandsTests
 {
-    private sealed class FakeSessionStore : ISessionStore
-    {
-        public IReadOnlyList<Session> Sessions { get; set; } = new List<Session>();
-
-        public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<Session>>(Sessions));
-
-        public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
-            => Task.FromResult(Result.Failure<Session>("not implemented"));
-
-        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
-            => Task.FromResult(Result.Failure<Session>("not found"));
-
-        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
-            => Task.FromResult(Result.Success());
-
-        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
-            => Task.FromResult(Result.Success());
-
-        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<AgentMessage>>(new List<AgentMessage>()));
-
-        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
-            => Task.FromResult(Result.Success());
-
-        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
-            => Task.FromResult(Result.Failure<int>("DeleteMessagesAfter is not supported by this test fake."));
-
-        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
-            => Task.FromResult(Result.Success());
-
-        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
-            => Task.FromResult(Result.Success<SessionMetadata>(SessionMetadata.Empty));
-
-        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
-            => Task.FromResult(Result.Success());
-    }
-
-    private sealed class FakeSessionManager : ISessionManager
-    {
-        public Session? Active { get; set; }
-        public SessionContext? GetContext(string sessionId) => null;
-        public SessionStatus GetStatus(string sessionId) => SessionStatus.Idle;
-        public void SetStatus(string sessionId, SessionStatus status) { }
-        public void NotifyMessageCount(string sessionId, int count) { }
-        public GitSessionInfo GetGitInfo(string sessionId) => new(null, false, 0, null);
-        public void RefreshGitInfo(string sessionId, string directory) { }
-        public Task EnsureDefaultSessionAsync() => Task.CompletedTask;
-        public Task RebindFromCommonConfigAsync() => Task.CompletedTask;
-
-        public Session? NewSessionResult { get; set; }
-        public bool NewSessionCalled { get; private set; }
-
-        public Task<Session?> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null)
-        {
-            NewSessionCalled = true;
-            return Task.FromResult(NewSessionResult);
-        }
-
-        public Task<bool> OpenSessionAsync(string sessionId) => Task.FromResult(true);
-
-        public Session? BranchResult { get; set; }
-        public bool BranchCalled { get; private set; }
-
-        public Task<Session?> BranchActiveAsync()
-        {
-            BranchCalled = true;
-            return Task.FromResult(BranchResult);
-        }
-
-        public Task<bool> DeleteSessionAsync(string sessionId) => Task.FromResult(true);
-        public Task<bool> RenameSessionAsync(string sessionId, string newTitle) => Task.FromResult(true);
-
-        public event Action<string, SessionStatus>? StatusChanged;
-        public event Action<string, int>? MessageCountChanged;
-    }
-
-    private sealed class FakeDialogService : IDialogService
-    {
-        public Task<bool> ConfirmAsync(string title, string message, string okLabel = "OK", string cancelLabel = "Cancel", CancellationToken cancellationToken = default)
-            => Task.FromResult(true);
-
-        public Task<string?> PromptAsync(string title, string message, string defaultValue = "", CancellationToken cancellationToken = default)
-            => Task.FromResult<string?>(null);
-
-        public Task AlertAsync(string title, string message, string okLabel = "OK", CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
-    }
-
-    private sealed class FakeToastService : IToastService
-    {
-        public event EventHandler<ToastNotification>? ToastAdded;
-        public void Show(string message) => Show(message, ToastKind.Info);
-        public void Show(string message, ToastKind kind = ToastKind.Info)
-        {
-            LastMessage = message;
-            LastKind = kind;
-        }
-        public string? LastMessage { get; private set; }
-        public ToastKind LastKind { get; private set; }
-    }
-
-    private sealed class FakeDispatcherAdapter : IDispatcherAdapter
-    {
-        public void Post(Action action) => action();
-        public T Invoke<T>(Func<T> func) => func();
-        public void Bind(UiStore store) { }
-        public void Unbind(UiStore store) { }
-        public event EventHandler<UiState>? StateChanged;
-    }
-
-    private sealed class FakeFilePicker : IFilePicker
-    {
-        public Task<IReadOnlyList<string>> PickFilesAsync(string title, bool allowMultiple = false, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<string>>(PickFilesResult ?? Array.Empty<string>());
-
-        public Task<string?> PickSaveFileAsync(string title, string defaultFileName, CancellationToken cancellationToken = default)
-            => Task.FromResult(PickSaveFileResult);
-
-        public Task<string?> PickFolderAsync(string title = "Select Folder", CancellationToken cancellationToken = default)
-            => Task.FromResult(PickFolderResult);
-
-        public IReadOnlyList<string>? PickFilesResult { get; set; }
-        public string? PickSaveFileResult { get; set; }
-        public string? PickFolderResult { get; set; }
-    }
-
-    private sealed class FakeAgentRunner : IAgentRunner
-    {
-        public CancellationTokenSource AbortSource { get; } = new CancellationTokenSource();
-        public Task<Result> PromptAsync(string text, CancellationToken ct = default) => Task.FromResult(Result.Success());
-        public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
-        public void ResetAbortSource() => ResetAbortSourceCalled = true;
-        public bool ResetAbortSourceCalled { get; private set; }
-    }
-
-    private sealed class FakeLogger<T> : ILogger<T>, ILogger
-    {
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) { }
-        public bool IsEnabled(LogLevel logLevel) => true;
-        public IDisposable BeginScope<TState>(TState state) => null!;
-    }
 
     private static ChatViewModel CreateChatViewModel(IToastService? toasts = null, IAgentRunner? agentRunner = null)
     {
@@ -277,7 +131,7 @@ public class AvaloniaWorkspaceCommandsTests
 
         var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects);
 
-        var tempPath = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid()}.txt");
+        string tempPath = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid()}.txt");
         codeEditor.ActiveTab = new EditorTabViewModel(tempPath, "test.txt", "txt", "hello world");
 
         await commands.SaveFileAsync();
@@ -321,5 +175,148 @@ public class AvaloniaWorkspaceCommandsTests
 
         await Assert.That(chat.Lines).IsEmpty();
         await Assert.That(chat.ToolCalls).IsEmpty();
+    }
+
+    private sealed class FakeSessionStore : ISessionStore
+    {
+        public IReadOnlyList<Session> Sessions { get; } = new List<Session>();
+
+        public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
+            => Task.FromResult(Result.Success<IReadOnlyList<Session>>(Sessions));
+
+        public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
+            => Task.FromResult(Result.Failure<Session>("not implemented"));
+
+        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
+            => Task.FromResult(Result.Failure<Session>("not found"));
+
+        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+            => Task.FromResult(Result.Success());
+
+        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+            => Task.FromResult(Result.Success());
+
+        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
+            => Task.FromResult(Result.Success<IReadOnlyList<AgentMessage>>(new List<AgentMessage>()));
+
+        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
+            => Task.FromResult(Result.Success());
+
+        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+            => Task.FromResult(Result.Failure<int>("DeleteMessagesAfter is not supported by this test fake."));
+
+        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
+            => Task.FromResult(Result.Success());
+
+        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
+            => Task.FromResult(Result.Success<SessionMetadata>(SessionMetadata.Empty));
+
+        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
+            => Task.FromResult(Result.Success());
+    }
+
+    private sealed class FakeSessionManager : ISessionManager
+    {
+
+        public Session? NewSessionResult { get; set; }
+        public bool NewSessionCalled { get; private set; }
+
+        public Session? BranchResult { get; set; }
+        public bool BranchCalled { get; private set; }
+        public Session? Active { get; set; }
+        public SessionContext? GetContext(string sessionId) => null;
+        public SessionStatus GetStatus(string sessionId) => SessionStatus.Idle;
+        public void SetStatus(string sessionId, SessionStatus status) {}
+        public void NotifyMessageCount(string sessionId, int count) {}
+        public GitSessionInfo GetGitInfo(string sessionId) => new(null, false, 0, null);
+        public void RefreshGitInfo(string sessionId, string directory) {}
+        public Task EnsureDefaultSessionAsync() => Task.CompletedTask;
+        public Task RebindFromCommonConfigAsync() => Task.CompletedTask;
+
+        public Task<Session?> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null)
+        {
+            NewSessionCalled = true;
+            return Task.FromResult(NewSessionResult);
+        }
+
+        public Task<bool> OpenSessionAsync(string sessionId) => Task.FromResult(true);
+
+        public Task<Session?> BranchActiveAsync()
+        {
+            BranchCalled = true;
+            return Task.FromResult(BranchResult);
+        }
+
+        public Task<bool> DeleteSessionAsync(string sessionId) => Task.FromResult(true);
+        public Task<bool> RenameSessionAsync(string sessionId, string newTitle) => Task.FromResult(true);
+
+        public event Action<string, SessionStatus>? StatusChanged;
+        public event Action<string, int>? MessageCountChanged;
+    }
+
+    private sealed class FakeDialogService : IDialogService
+    {
+        public Task<bool> ConfirmAsync(string title, string message, string okLabel = "OK", string cancelLabel = "Cancel", CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
+
+        public Task<string?> PromptAsync(string title, string message, string defaultValue = "", CancellationToken cancellationToken = default)
+            => Task.FromResult<string?>(null);
+
+        public Task AlertAsync(string title, string message, string okLabel = "OK", CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class FakeToastService : IToastService
+    {
+        public string? LastMessage { get; private set; }
+        public ToastKind LastKind { get; private set; }
+        public event EventHandler<ToastNotification>? ToastAdded;
+        public void Show(string message, ToastKind kind = ToastKind.Info)
+        {
+            LastMessage = message;
+            LastKind = kind;
+        }
+        public void Show(string message) => Show(message, ToastKind.Info);
+    }
+
+    private sealed class FakeDispatcherAdapter : IDispatcherAdapter
+    {
+        public void Post(Action action) => action();
+        public T Invoke<T>(Func<T> func) => func();
+        public void Bind(UiStore store) {}
+        public void Unbind(UiStore store) {}
+        public event EventHandler<UiState>? StateChanged;
+    }
+
+    private sealed class FakeFilePicker : IFilePicker
+    {
+
+        public IReadOnlyList<string>? PickFilesResult { get; set; }
+        public string? PickSaveFileResult { get; set; }
+        public string? PickFolderResult { get; set; }
+        public Task<IReadOnlyList<string>> PickFilesAsync(string title, bool allowMultiple = false, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<string>>(PickFilesResult ?? Array.Empty<string>());
+
+        public Task<string?> PickSaveFileAsync(string title, string defaultFileName, CancellationToken cancellationToken = default)
+            => Task.FromResult(PickSaveFileResult);
+
+        public Task<string?> PickFolderAsync(string title = "Select Folder", CancellationToken cancellationToken = default)
+            => Task.FromResult(PickFolderResult);
+    }
+
+    private sealed class FakeAgentRunner : IAgentRunner
+    {
+        public bool ResetAbortSourceCalled { get; private set; }
+        public CancellationTokenSource AbortSource { get; } = new();
+        public Task<Result> PromptAsync(string text, CancellationToken ct = default) => Task.FromResult(Result.Success());
+        public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public void ResetAbortSource() => ResetAbortSourceCalled = true;
+    }
+
+    private sealed class FakeLogger<T> : ILogger<T>, ILogger
+    {
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) {}
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public IDisposable BeginScope<TState>(TState state) => null!;
     }
 }

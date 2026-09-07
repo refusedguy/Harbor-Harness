@@ -1,5 +1,4 @@
-using Harbor.Ui.Framework.Rendering;
-
+using System.Text;
 namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>Color accent of a status segment.</summary>
@@ -10,14 +9,14 @@ public enum StatusAccent : byte
     Accent,
     Success,
     Warning,
-    Error,
+    Error
 }
 
 /// <summary>
-/// One typed piece of the status bar (widgets §3.7). <see cref="FixedPriority"/>
-/// marks segments that must survive truncation (model, mode hint); flexible
-/// segments are cut from the right edge inward — tokens/cost sit rightmost,
-/// so they die first, the context bar lives leftmost of the flexible run.
+///     One typed piece of the status bar (widgets §3.7). <see cref="FixedPriority" />
+///     marks segments that must survive truncation (model, mode hint); flexible
+///     segments are cut from the right edge inward — tokens/cost sit rightmost,
+///     so they die first, the context bar lives leftmost of the flexible run.
 /// </summary>
 public record struct StatusSeg(string Text, StatusAccent Accent, bool FixedPriority);
 
@@ -27,7 +26,7 @@ public enum StatusBarMode : byte
     Idle = 0,
     Running,
     AwaitingApproval,
-    Compacting,
+    Compacting
 }
 
 /// <summary>Display width of segment texts (wide-rune aware, delegates to the core width table).</summary>
@@ -37,13 +36,13 @@ internal static class SegWidth
 }
 
 /// <summary>
-/// Width-aware truncation over a segment span (widgets §3.7): drop flexible
-/// segments right-to-left until the row fits, then hard-cut characters from
-/// the widest surviving segment. Operates in place — zero allocations.
+///     Width-aware truncation over a segment span (widgets §3.7): drop flexible
+///     segments right-to-left until the row fits, then hard-cut characters from
+///     the widest surviving segment. Operates in place — zero allocations.
 /// </summary>
 public static class StatusBarLayout
 {
-    /// <summary>Mutates <paramref name="segs"/>, packing survivors left-to-right with single-space gaps.</summary>
+    /// <summary>Mutates <paramref name="segs" />, packing survivors left-to-right with single-space gaps.</summary>
     /// <returns>Number of surviving segments at the front of the span.</returns>
     public static int Fit(Span<StatusSeg> segs, int width)
     {
@@ -155,7 +154,7 @@ public static class StatusBarLayout
         var slice = text.AsSpan();
         while (!slice.IsEmpty)
         {
-            System.Text.Rune.DecodeFromUtf16(slice, out var rune, out int consumed);
+            Rune.DecodeFromUtf16(slice, out var rune, out int consumed);
             int w = UnicodeWidth.Width(rune);
             if (cells + w > maxCells)
             {

@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Plugins;
 namespace Harbor.Plugins.Runtime;
+
 /// <summary>
 ///     Metadata + instance handle for a plugin that has been successfully compiled from
 ///     CS source and instantiated. Returned by <see cref="CsPluginLoader" /> on success.

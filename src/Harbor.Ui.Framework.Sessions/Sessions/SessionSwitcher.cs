@@ -5,6 +5,7 @@ using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Sessions;
+
 /// <summary>
 ///     Handles session-switching logic: bind the agent + replay persisted
 ///     message history into the per-session <see cref="UiStore" />.

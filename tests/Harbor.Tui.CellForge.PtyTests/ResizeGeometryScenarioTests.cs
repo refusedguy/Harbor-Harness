@@ -1,5 +1,3 @@
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -17,7 +15,7 @@ public sealed class ResizeGeometryScenarioTests : CellForgePtyScenarioBase
     public async Task RowsOnlyShrink_KeepsComposerAndStatus()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -47,7 +45,7 @@ public sealed class ResizeGeometryScenarioTests : CellForgePtyScenarioBase
     public async Task ExtremeAspectMismatch_SurvivesBothDirections()
     {
         Server.SetResponse("test-model", "ok");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -65,7 +63,7 @@ public sealed class ResizeGeometryScenarioTests : CellForgePtyScenarioBase
         await Task.Delay(1200).ConfigureAwait(false);
 
         string[] narrow = NormalizedLines();
-        await Assert.That(narrow.All(x => x.Length <= 30)).IsTrue().Because($"narrow widths: {string.Join(",", narrow.Select(x=>x.Length))}, screen:\n{ScreenText}");
+        await Assert.That(narrow.All(x => x.Length <= 30)).IsTrue().Because($"narrow widths: {string.Join(",", narrow.Select(x => x.Length))}, screen:\n{ScreenText}");
         // Height check relaxed — just ensure not excessive
         await Assert.That(narrow.Length <= 60).IsTrue().Because($"narrow len {narrow.Length}, screen:\n{ScreenText}");
 

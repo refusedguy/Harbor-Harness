@@ -1,11 +1,5 @@
-using System.Reflection;
-using Harbor.Abstractions.Providers;
-using Harbor.Application.Configuration;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Providers.OpenAiCompatible.Compat;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Hosting;
 
 /// <summary>
@@ -66,8 +60,8 @@ internal static class JsonProviderDiscovery
     /// </summary>
     public static void RegisterDesktopProviders(
         IProviderRegistryBuilder pb,
-        Harbor.Abstractions.Providers.IAuthResolver authResolver,
-        Harbor.Providers.OpenAiCompatible.IModelCatalog modelCatalog,
+        IAuthResolver authResolver,
+        IModelCatalog modelCatalog,
         ILoggerFactory loggerFactory)
     {
         var seenIds = new HashSet<string>(StringComparer.Ordinal) { "ollama" };
@@ -80,7 +74,7 @@ internal static class JsonProviderDiscovery
             {
                 try
                 {
-                    var result = Harbor.Providers.OpenAiCompatible.ProviderConfig.LoadFromFile(file);
+                    var result = ProviderConfig.LoadFromFile(file);
                     if (result.IsFailure) // §4.6-ok: discovery-резильенс — skip-and-log, битый файл не валид discovery.
                     {
                         logger.LogWarning("Skipping provider config '{File}': {Error}", file, result.Error);
@@ -100,11 +94,11 @@ internal static class JsonProviderDiscovery
                     }
 
                     var http = new HttpClient { Timeout = TimeSpan.FromSeconds(config.Timeout) };
-                    config.Quirks = Harbor.Providers.OpenAiCompatible.Compat.ProviderCompatFlags.For(config.GetProviderId());
+                    config.Quirks = ProviderCompatFlags.For(config.GetProviderId());
                     var configRef = config;
-                    pb.AddProvider(config.Id, () => new Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient(
+                    pb.AddProvider(config.Id, () => new OpenAiCompatibleLlmClient(
                         http, configRef, authResolver, modelCatalog,
-                        loggerFactory.CreateLogger<Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient>()));
+                        loggerFactory.CreateLogger<OpenAiCompatibleLlmClient>()));
                     logger.LogInformation("Registered OpenAI-compatible provider '{Id}' from '{File}'", config.Id, file);
                 }
                 catch (Exception ex)
@@ -122,7 +116,7 @@ internal static class JsonProviderDiscovery
 // native Anthropic/OpenAI factories stay behind the flag. (CE-5 PTY-suite
 // finding: plain slnx builds produced an app that registered ollama only,
 // so every scenarios-2..8 test failed with "Provider 'mock' is not registered".)
-public static void RegisterJsonProviders(
+    public static void RegisterJsonProviders(
         IProviderRegistryBuilder builder,
         IHttpClientFactory httpClientFactory,
         ILoggerFactory loggerFactory,

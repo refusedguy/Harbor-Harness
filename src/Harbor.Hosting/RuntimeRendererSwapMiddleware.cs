@@ -1,8 +1,5 @@
-namespace Harbor.Hosting;
-
-using Harbor.Abstractions.Tui;
 using Harbor.Hosting.Rendering;
-using Microsoft.Extensions.Logging;
+namespace Harbor.Hosting;
 
 /// <summary>
 ///     Guard + resolver for runtime renderer swap requests
@@ -17,16 +14,16 @@ using Microsoft.Extensions.Logging;
 ///         Env wins over config, matching HARBOR_TUI semantics.
 ///     </para>
 ///     <para>
-///         Registered as a singleton next to <see cref="IRendererPipeline"/>:
+///         Registered as a singleton next to <see cref="IRendererPipeline" />:
 ///         the slash command resolves a request through here, so the swap
 ///         policy lives in exactly one place.
 ///     </para>
 /// </remarks>
 public sealed class RuntimeRendererSwapMiddleware
 {
-    private readonly IRendererPipeline _pipeline;
-    private readonly ILogger _logger;
     private readonly HashSet<string>? _allowList;
+    private readonly ILogger _logger;
+    private readonly IRendererPipeline _pipeline;
 
     public RuntimeRendererSwapMiddleware(
         IRendererPipeline pipeline,
@@ -91,6 +88,8 @@ public sealed class RuntimeRendererSwapMiddleware
     }
 
     private static HashSet<string> ParseList(string csv) =>
-        [.. csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(static s => s.ToLowerInvariant())];
+    [
+        ..csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(static s => s.ToLowerInvariant())
+    ];
 }

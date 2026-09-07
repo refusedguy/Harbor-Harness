@@ -1,4 +1,5 @@
 namespace Harbor.Plugins.Hosting;
+
 /// <summary>
 ///     Tunable options for <see cref="PluginHost" />. Built up by
 ///     <see cref="PluginHostBuilder" /> in the composition root.

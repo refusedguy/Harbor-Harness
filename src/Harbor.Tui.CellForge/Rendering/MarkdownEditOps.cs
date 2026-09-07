@@ -47,16 +47,10 @@ public static class MarkdownEditOps
     ///     ATX heading toggle on the caret line: plain lines gain <c># </c>,
     ///     <c>#+ </c>-prefixed ones lose the whole run (any level collapses).
     /// </summary>
-    public static EditOutcome ToggleHeading(PromptBuffer buffer)
-    {
-        return ToggleLinePrefix(buffer, "# ", stripHashRunToo: true);
-    }
+    public static EditOutcome ToggleHeading(PromptBuffer buffer) => ToggleLinePrefix(buffer, "# ", true);
 
     /// <summary>Unordered list toggle on the caret line (<c>- </c> on/off).</summary>
-    public static EditOutcome ToggleListItem(PromptBuffer buffer)
-    {
-        return ToggleLinePrefix(buffer, "- ", stripHashRunToo: false);
-    }
+    public static EditOutcome ToggleListItem(PromptBuffer buffer) => ToggleLinePrefix(buffer, "- ", false);
 
     private static EditOutcome ToggleLinePrefix(PromptBuffer buffer, string prefix, bool stripHashRunToo)
     {
@@ -95,7 +89,7 @@ public static class MarkdownEditOps
         }
 
         if (hashes == 0 || hashes > 6 ||
-            (lineStart + hashes < text.Length && text[lineStart + hashes] != ' '))
+            lineStart + hashes < text.Length && text[lineStart + hashes] != ' ')
         {
             return 0;
         }

@@ -1,6 +1,7 @@
-using System.Text.Json.Serialization;
 using Harbor.Abstractions.Models;
+using System.Text.Json.Serialization;
 namespace Harbor.Abstractions.Events;
+
 /// <summary>
 ///     Discriminated union of all events emitted by the agent loop.
 ///     Subscribers receive these events via <see cref="IEventBus" />.

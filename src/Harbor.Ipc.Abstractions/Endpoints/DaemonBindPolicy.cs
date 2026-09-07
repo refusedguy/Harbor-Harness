@@ -1,10 +1,9 @@
+using CSharpFunctionalExtensions;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
-using CSharpFunctionalExtensions;
-
 namespace Harbor.Ipc.Protocol;
 
 /// <summary>
@@ -58,8 +57,8 @@ public static class DaemonBindPolicy
         if (address.AddressFamily != AddressFamily.InterNetwork) return false;
         byte[] b = address.GetAddressBytes();
         return b[0] == 10
-               || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
-               || (b[0] == 192 && b[1] == 168);
+               || b[0] == 172 && b[1] >= 16 && b[1] <= 31
+               || b[0] == 192 && b[1] == 168;
     }
 
     /// <summary>
@@ -137,7 +136,8 @@ public static class DaemonBindPolicy
 
             if (addresses.Count > 0) yield return (nic.Name, addresses);
         }
-    }}
+    }
+}
 
 /// <summary>
 ///     The daemon's pre-shared key store: <c>~/.harbor/daemon.psk</c>.
@@ -160,7 +160,7 @@ public static class PskStore
         return Convert.ToBase64String(bytes);
     }
 
-    /// <summary>Load the PSK from <paramref name="path"/>. Missing file → failure (callers decide policy).</summary>
+    /// <summary>Load the PSK from <paramref name="path" />. Missing file → failure (callers decide policy).</summary>
     public static Result<string> Load(string path)
     {
         try

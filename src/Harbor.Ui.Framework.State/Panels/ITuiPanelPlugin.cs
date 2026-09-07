@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Plugins;
 namespace Harbor.Ui.Framework.Panels;
+
 /// <summary>
 ///     Plugin contract for contributing dockable panels to any TUI renderer that
 ///     supports the Harbor panel system. Implementations register one or more

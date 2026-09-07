@@ -9,20 +9,20 @@ namespace Harbor.Terminal.Abstractions.Renderers;
 public interface ITuiRenderBackend
 {
     /// <summary>Write colored text (foreground, optional background).</summary>
-    void WriteColored(string text, TuiColor foreground, TuiColor? background = null);
+    public void WriteColored(string text, TuiColor foreground, TuiColor? background = null);
 
     /// <summary>Write styled text (bold, italic, underline, dim, strike, reverse).</summary>
-    void WriteStyled(string text, TuiStyle style);
+    public void WriteStyled(string text, TuiStyle style);
 
     /// <summary>Write a plain text line.</summary>
-    void WriteLine(string? text = null);
+    public void WriteLine(string? text = null);
 
     /// <summary>Write raw text without styling.</summary>
-    void Write(string text);
+    public void Write(string text);
 
     /// <summary>Show the terminal cursor.</summary>
-    void ShowCursor();
+    public void ShowCursor();
 
     /// <summary>Hide the terminal cursor.</summary>
-    void HideCursor();
+    public void HideCursor();
 }

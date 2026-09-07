@@ -1,10 +1,10 @@
-using Harbor.Ipc.Client;
 using Harbor.Ipc.Protocol;
-using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
+using System.Net.Sockets;
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -20,12 +20,12 @@ public class TcpPskTests
 
     private static int FreePort()
     {
-        var probe = new System.Net.Sockets.Socket(
-            System.Net.Sockets.AddressFamily.InterNetwork,
-            System.Net.Sockets.SocketType.Stream,
-            System.Net.Sockets.ProtocolType.Tcp);
-        probe.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
-        int port = ((System.Net.IPEndPoint)probe.LocalEndPoint!).Port;
+        var probe = new Socket(
+            AddressFamily.InterNetwork,
+            SocketType.Stream,
+            ProtocolType.Tcp);
+        probe.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        int port = ((IPEndPoint)probe.LocalEndPoint!).Port;
         probe.Dispose();
         return port;
     }
@@ -76,12 +76,12 @@ public class TcpPskTests
         {
             var lf = sp.GetRequiredService<ILoggerFactory>();
             var transport = new TcpClientTransport("127.0.0.1", port, lf.CreateLogger<TcpClientTransport>());
-            var client = new MessagePackRpcClient(transport, lf.CreateLogger<MessagePackRpcClient>(), psk: null);
+            var client = new MessagePackRpcClient(transport, lf.CreateLogger<MessagePackRpcClient>(), null);
             await client.ConnectAsync();
 
             // Any request before authentication must be rejected with the
             // structured error — fail-closed, no service without the key.
-            HarborResponse response = await client.SendAsync(new ConnectRequest());
+            var response = await client.SendAsync(new ConnectRequest());
             await Assert.That(response).IsTypeOf<ErrorResponse>();
             await Assert.That(((ErrorResponse)response).Message).Contains("PSK_REQUIRED");
         }
@@ -115,8 +115,8 @@ public class TcpPskTests
             await Assert.That(failure!.Message).Contains("PSK_AUTH_FAILED");
 
             // The daemon is unharmed: a correctly-keyed client connects.
-            (var good, _) = await DialRawAsync("127.0.0.1", port, Key, lf);
-            HarborResponse ok = await good.SendAsync(new ConnectRequest());
+            var (good, _) = await DialRawAsync("127.0.0.1", port, Key, lf);
+            var ok = await good.SendAsync(new ConnectRequest());
             await Assert.That(ok).IsTypeOf<OkResponse>();
         }
         finally
@@ -153,8 +153,8 @@ public class TcpPskTests
             await server.StopAsync();
         }
 
-        static Microsoft.Extensions.Logging.ILogger<TcpServerTransport> TestLogger() =>
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<TcpServerTransport>.Instance;
+        static ILogger<TcpServerTransport> TestLogger() =>
+            NullLogger<TcpServerTransport>.Instance;
     }
 
     [Test]
@@ -162,7 +162,7 @@ public class TcpPskTests
     {
         var sp = TestHost.Build();
         string pipe = TestHost.UniquePipeName("harbor-ipc-test-psk-uds");
-        await using var server = new HarborIpcServer(sp, pipe, sp.GetService<ILoggerFactory>(), psk: Key);
+        await using var server = new HarborIpcServer(sp, pipe, sp.GetService<ILoggerFactory>(), Key);
         await server.StartAsync();
         try
         {
@@ -171,9 +171,9 @@ public class TcpPskTests
             // Without the key → structured refusal.
             var anonymous = new MessagePackRpcClient(
                 new ClientPipeTransport(pipe, lf.CreateLogger<ClientPipeTransport>()),
-                lf.CreateLogger<MessagePackRpcClient>(), psk: null);
+                lf.CreateLogger<MessagePackRpcClient>());
             await anonymous.ConnectAsync();
-            HarborResponse denied = await anonymous.SendAsync(new ConnectRequest());
+            var denied = await anonymous.SendAsync(new ConnectRequest());
             await Assert.That(denied).IsTypeOf<ErrorResponse>();
             await Assert.That(((ErrorResponse)denied).Message).Contains("PSK_REQUIRED");
 

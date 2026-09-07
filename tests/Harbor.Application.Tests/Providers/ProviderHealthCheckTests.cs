@@ -5,8 +5,8 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Providers;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Application.Tests.Providers;
+
 /// <summary>
 ///     PROD-UI-0 З.2 — <see cref="ProviderHealthCheck" /> probes a provider
 ///     through its registered client and classifies failures into
@@ -90,7 +90,7 @@ public class ProviderHealthCheckTests
         var check = new ProviderHealthCheck(
             new FakeRegistry(new HangingClient()),
             NullLogger<ProviderHealthCheck>.Instance,
-            timeout: TimeSpan.FromMilliseconds(250));
+            TimeSpan.FromMilliseconds(250));
 
         var result = await check.CheckAsync(ProviderId.TryCreate("slow").Value);
 
@@ -115,16 +115,16 @@ public class ProviderHealthCheckTests
     }
 
     private static ModelInfo MakeModel(string id) => new(
-        Id: id,
-        ProviderId: "fake",
-        DisplayName: id,
-        ContextWindow: 8192,
-        MaxOutputTokens: 4096,
-        SupportsReasoning: false,
-        SupportsVision: false,
-        SupportsToolUse: false,
-        Pricing: Pricing.Unknown,
-        PromptTemplate: "openai");
+        id,
+        "fake",
+        id,
+        8192,
+        4096,
+        false,
+        false,
+        false,
+        Pricing.Unknown,
+        "openai");
 
     private sealed class FakeRegistry(ILlmClient? client) : IProviderRegistry
     {
@@ -146,7 +146,7 @@ public class ProviderHealthCheckTests
         public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default) =>
             GetAllModelsAsync(cancellationToken);
 
-        public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
+        public void Register(ProviderId providerId, Func<ILlmClient> factory) {}
 
         public Result Unregister(ProviderId providerId) =>
             client is null
@@ -165,6 +165,7 @@ public class ProviderHealthCheckTests
                 await Task.CompletedTask;
                 yield break;
             }
+
             return Empty();
         }
 
@@ -183,6 +184,7 @@ public class ProviderHealthCheckTests
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
                 yield break;
             }
+
             return Empty();
         }
 

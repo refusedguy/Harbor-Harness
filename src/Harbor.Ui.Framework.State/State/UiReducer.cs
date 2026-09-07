@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Panels;
 namespace Harbor.Ui.Framework.State;
+
 /// <summary>
 ///     Pure reducer: <c>(UiState, AgentEvent) → UiState</c>. This is the single
 ///     place that maps agent activity into UI state. Every interactive renderer
@@ -121,7 +122,7 @@ public static class UiReducer
         if (string.IsNullOrEmpty(delta))
             return state;
 
-        ChunkedBuffer pending = state.PendingStreamText.Append(delta);
+        var pending = state.PendingStreamText.Append(delta);
         if (!StreamingSync.ShouldFlush(state.Active.TextBuffer.Length, pending.Length))
             return state with { PendingStreamText = pending };
 
@@ -139,7 +140,7 @@ public static class UiReducer
         if (string.IsNullOrEmpty(delta))
             return state;
 
-        ChunkedBuffer pending = state.PendingStreamThink.Append(delta);
+        var pending = state.PendingStreamThink.Append(delta);
         if (!StreamingSync.ShouldFlush(state.Active.ThinkBuffer.Length, pending.Length))
             return state with { PendingStreamThink = pending };
 
@@ -314,7 +315,7 @@ public static class UiReducer
         {
             // Demote any Focused panel back to Visible.
             var states = state.PanelStates;
-            if (state.FocusedPanelId is { } prev && states.ContainsKey(prev))
+            if (state.FocusedPanelId is {} prev && states.ContainsKey(prev))
                 states = states.SetItem(prev, TuiPanelState.Visible);
             return state with { PanelStates = states, FocusedPanelId = null };
         }
@@ -323,7 +324,7 @@ public static class UiReducer
             return state;
 
         var next = state.PanelStates;
-        if (state.FocusedPanelId is { } prevFocused && next.ContainsKey(prevFocused) && prevFocused != id)
+        if (state.FocusedPanelId is {} prevFocused && next.ContainsKey(prevFocused) && prevFocused != id)
             next = next.SetItem(prevFocused, TuiPanelState.Visible);
         // Make sure the target is at least Visible before focusing.
         if (next[id] == TuiPanelState.Hidden)
@@ -443,7 +444,7 @@ public static class UiReducer
                         new InputMsg.Autocomplete(TuiEffectHost.KnownSlashCommands))), new TuiEffect.None())
                     : (state, new TuiEffect.None());
             case ChatAction.Char:
-                return state.Focus == FocusMode.Input && k.Pressed.Character is { } c
+                return state.Focus == FocusMode.Input && k.Pressed.Character is {} c
                     ? (state.SetInput(InputMsg.Update(state.Input, new InputMsg.Char(c))), new TuiEffect.None())
                     : (state, new TuiEffect.None());
 

@@ -8,11 +8,11 @@ Shared ViewModels, converters, and animation helpers for the Harbor UI Framework
 
 ## What's in it
 
-| Subfolder | Contents |
-|-----------|----------|
+| Subfolder     | Contents                                                                                                                                                                                                                |
+|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `ViewModels/` | `ChatLineViewModel`, `ToolCallViewModel`, `DiffViewModel`, `SessionItemViewModel`, `SessionRowViewModel`, `TokenUsageViewModel`, `StoreSubscriberViewModel` (base class that binds a `UiStore` selector to a property). |
-| `Converters/` | `StatusMappers` — static brush-key/text/duration/currency mappers for `SessionStatus`, `ToolCallStatus`, cost, time-ago. |
-| `Animation/` | `CostAnimator` — animates cost display from base to target value. |
+| `Converters/` | `StatusMappers` — static brush-key/text/duration/currency mappers for `SessionStatus`, `ToolCallStatus`, cost, time-ago.                                                                                                |
+| `Animation/`  | `CostAnimator` — animates cost display from base to target value.                                                                                                                                                       |
 
 ## Public API summary
 
@@ -27,17 +27,17 @@ Shared ViewModels, converters, and animation helpers for the Harbor UI Framework
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `Microsoft.Extensions.Logging.Abstractions` | Logging |
-| `CommunityToolkit.Mvvm` | `ObservableObject`, source generators |
+| Package                                     | Purpose                               |
+|---------------------------------------------|---------------------------------------|
+| `Microsoft.Extensions.Logging.Abstractions` | Logging                               |
+| `CommunityToolkit.Mvvm`                     | `ObservableObject`, source generators |
 
-| Project | Purpose |
-|---------|---------|
-| `Harbor.Abstractions` | Domain types |
-| `Harbor.Ui.Framework.State` | State records |
-| `Harbor.Ui.Framework.Services` | `SessionStatusTracker` |
-| `Harbor.Ui.Framework.Abstractions` | Contracts |
+| Project                            | Purpose                |
+|------------------------------------|------------------------|
+| `Harbor.Abstractions`              | Domain types           |
+| `Harbor.Ui.Framework.State`        | State records          |
+| `Harbor.Ui.Framework.Services`     | `SessionStatusTracker` |
+| `Harbor.Ui.Framework.Abstractions` | Contracts              |
 
 ## Tests
 

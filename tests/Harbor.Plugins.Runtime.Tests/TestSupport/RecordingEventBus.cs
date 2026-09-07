@@ -1,6 +1,5 @@
-using System.Collections.Concurrent;
 using Harbor.Abstractions.Events;
-
+using System.Collections.Concurrent;
 namespace Harbor.Plugins.Runtime.Tests.TestSupport;
 
 /// <summary>
@@ -12,10 +11,6 @@ public sealed class RecordingEventBus : IEventBus
 
     /// <summary>Events published so far, in order.</summary>
     public IReadOnlyList<AgentEvent> Events => _events.ToArray();
-
-    /// <summary>Events of type <typeparamref name="T" /> published so far.</summary>
-    public IReadOnlyList<T> Of<T>() where T : AgentEvent =>
-        _events.OfType<T>().ToArray();
 
     public Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
     {
@@ -29,6 +24,10 @@ public sealed class RecordingEventBus : IEventBus
         => new NoopDisposable();
 
     public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents) => Events.Take(maxEvents).ToArray();
+
+    /// <summary>Events of type <typeparamref name="T" /> published so far.</summary>
+    public IReadOnlyList<T> Of<T>() where T : AgentEvent =>
+        _events.OfType<T>().ToArray();
 
     private sealed class NoopDisposable : IDisposable
     {

@@ -1,10 +1,4 @@
-using Harbor.Application.Configuration;
-using Harbor.Registries.Events;
-using Harbor.Desktop.Abstractions.Configuration;
-
-using Harbor.Abstractions.Events;
-using Microsoft.Extensions.Logging;
-
+using Harbor.Providers.OpenAiCompatible;
 namespace Harbor.Hosting;
 
 /// <summary>Builtin tool catalog size (§3.3).</summary>
@@ -14,7 +8,7 @@ public enum HarborToolSetKind
     Standard10,
 
     /// <summary>All 14 builtins (+ Task, WebFetch, RipGrep, McpTool).</summary>
-    Full14,
+    Full14
 }
 
 /// <summary>Where the agent registry takes its default provider/model from.</summary>
@@ -24,7 +18,7 @@ public enum HarborAgentModelSource
     HarborConfig,
 
     /// <summary>HARBOR_MODEL env or CommonConfig.DefaultProvider/DefaultModel (desktop).</summary>
-    CommonConfig,
+    CommonConfig
 }
 
 /// <summary>Provider registry construction flavor.</summary>
@@ -34,7 +28,7 @@ public enum HarborProviderFlavor
     CliFull,
 
     /// <summary>Ollama direct (OLLAMA_HOST) + json discovery over injected resolver/catalog.</summary>
-    Desktop,
+    Desktop
 }
 
 /// <summary>
@@ -82,7 +76,7 @@ public sealed class HarborComposeOptions
     ///     Host configuration handed to plugins (CLI passes
     ///     builder.Configuration). Null → empty configuration.
     /// </summary>
-    public Microsoft.Extensions.Configuration.IConfiguration? Configuration { get; init; }
+    public IConfiguration? Configuration { get; init; }
 
     /// <summary>
     ///     App-provided bootstrap logger factory (already wired to the app's
@@ -106,10 +100,10 @@ public sealed class HarborComposeOptions
     public HarborProviderFlavor Providers { get; init; } = HarborProviderFlavor.CliFull;
 
     /// <summary>Desktop flavor only: auth resolver handed to OpenAI-compatible clients.</summary>
-    public Harbor.Abstractions.Providers.IAuthResolver? DesktopAuthResolver { get; init; }
+    public IAuthResolver? DesktopAuthResolver { get; init; }
 
     /// <summary>Desktop flavor only: model catalog handed to OpenAI-compatible clients.</summary>
-    public Harbor.Providers.OpenAiCompatible.IModelCatalog? DesktopModelCatalog { get; init; }
+    public IModelCatalog? DesktopModelCatalog { get; init; }
 
     /// <summary>
     ///     Register the Hosting-owned ICommonConfigStore + CommonConfig singleton.
@@ -124,13 +118,13 @@ public sealed class HarborComposeOptions
     public static HarborComposeOptions CliDefault() => new()
     {
         DefaultStorageBackend = "jsonl",
-        EventBusScrollback = 1000,
+        EventBusScrollback = 1000
     };
 
     /// <summary>Desktop preset: memory storage by default, no middlewares, no scrollback override.</summary>
     public static HarborComposeOptions DesktopDefault() => new()
     {
-        DefaultStorageBackend = "memory",
+        DefaultStorageBackend = "memory"
     };
 
     private static string DefaultHarborDir() => HarborPaths.GetHarborHome();

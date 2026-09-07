@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace Harbor.Tools.Mcp;
 
 /// <summary>
@@ -72,7 +70,7 @@ public sealed record McpOAuthConfig
 
         int port = 0;
         if (auth.TryGetProperty("redirectPort", out var portEl) && portEl.ValueKind == JsonValueKind.Number
-            && portEl.TryGetInt32(out int p) && p is > 0 and < 65536)
+                                                                && portEl.TryGetInt32(out int p) && p is > 0 and < 65536)
             port = p;
 
         return new McpOAuthConfig
@@ -83,7 +81,7 @@ public sealed record McpOAuthConfig
             AuthorizationEndpoint = Str(auth, "authorizationEndpoint"),
             TokenEndpoint = Str(auth, "tokenEndpoint"),
             RegistrationEndpoint = Str(auth, "registrationEndpoint"),
-            RedirectPort = port,
+            RedirectPort = port
         };
     }
 }

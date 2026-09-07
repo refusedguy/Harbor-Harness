@@ -1,4 +1,5 @@
 namespace Harbor.Desktop.Abstractions.Models;
+
 /// <summary>
 ///     One entry in the command palette. Title + subtitle drive fuzzy-match
 ///     scoring (see <c>Harbor.Desktop.Shared.Services.FuzzySearchService</c>);

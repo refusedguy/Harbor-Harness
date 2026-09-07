@@ -1,5 +1,3 @@
-using System;
-
 namespace Harbor.Abstractions.Contracts;
 
 /// <summary>
@@ -9,7 +7,7 @@ namespace Harbor.Abstractions.Contracts;
 ///     precomputed <see cref="ReadOnlySpan{Byte}" /> values — zero heap
 ///     allocations on the hot path, AOT-safe.
 /// </summary>
-[AttributeUsage(AttributeTargets.Enum, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Enum)]
 public sealed class TerminalEscapeAttribute : Attribute
 {
     /// <summary>

@@ -1,11 +1,10 @@
 using Harbor.Ui.Framework.Projection;
-
 namespace Harbor.DesignSystem.Tests;
 
 /// <summary>
-/// Theme marketplace store: built-in + user listing, defensive handling of
-/// broken files (errors captured, no crash), built-in seeding, and
-/// user-overrides-builtin name resolution.
+///     Theme marketplace store: built-in + user listing, defensive handling of
+///     broken files (errors captured, no crash), built-in seeding, and
+///     user-overrides-builtin name resolution.
 /// </summary>
 public class ThemeStoreTests
 {
@@ -71,7 +70,7 @@ public class ThemeStoreTests
         }
         finally
         {
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 
@@ -91,7 +90,7 @@ public class ThemeStoreTests
         }
         finally
         {
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 
@@ -119,7 +118,7 @@ public class ThemeStoreTests
         }
         finally
         {
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 
@@ -145,7 +144,7 @@ public class ThemeStoreTests
         }
         finally
         {
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 }

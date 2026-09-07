@@ -2,12 +2,12 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Services;
-using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Sessions;
+
 /// <summary>
 ///     Facade that owns the active session and delegates creation, switching,
 ///     git-tracking, and status-tracking to dedicated services. The sidebar
@@ -90,15 +90,15 @@ public sealed class SessionManager : ISessionManager
         _logger = logger;
     }
 
-    /// <summary>The active session, or null if none.</summary>
-    public Session? Active => ActiveContext?.Session;
-
     /// <summary>
     ///     The active <see cref="SessionContext" /> (holds the active session
     ///     + its UiStore + status + git info), or null if none. The ChatViewModel
     ///     is bound to <see cref="SessionContext.Store" /> of this context.
     /// </summary>
     public SessionContext? ActiveContext { get; private set; }
+
+    /// <summary>The active session, or null if none.</summary>
+    public Session? Active => ActiveContext?.Session;
 
     /// <summary>
     ///     Raised whenever a session's status changes. Forwards from

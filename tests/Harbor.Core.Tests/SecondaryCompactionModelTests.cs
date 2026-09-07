@@ -1,17 +1,12 @@
-using System.Runtime.CompilerServices;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
 using Harbor.Application.Sessions;
-using Harbor.Registries;
-using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
+using System.Runtime.CompilerServices;
 namespace Harbor.Core.Tests;
 
 /// <summary>
@@ -50,7 +45,7 @@ public class SecondaryCompactionModelTests
     public async Task CompactAsync_NoSecondary_PrimaryClientSummarizes()
     {
         var primary = new CapturingLlmClient("summary", [PrimaryModel]);
-        var svc = CreateService(primary, secondaryModel: null);
+        var svc = CreateService(primary, null);
 
         var result = await svc.CompactAsync("session-1", History(), HugeWindow(PrimaryModel));
 
@@ -73,7 +68,7 @@ public class SecondaryCompactionModelTests
             new TokenTracker(),
             providers,
             NullLogger<CompactionService>.Instance,
-            secondaryModel: "cheap/cheap-model")
+            "cheap/cheap-model")
         {
             KeepRecentTokens = 500,
             TailTurns = 0
@@ -100,7 +95,7 @@ public class SecondaryCompactionModelTests
             new TokenTracker(),
             providers,
             NullLogger<CompactionService>.Instance,
-            secondaryModel: "cheap/cheap-model")
+            "cheap/cheap-model")
         {
             KeepRecentTokens = 500,
             TailTurns = 0
@@ -189,7 +184,7 @@ public class SecondaryCompactionModelTests
     {
         public List<LlmRequest> Requests { get; } = [];
 
-        public ProviderId ProviderId { get; init; } = ProviderId.Create("test");
+        public ProviderId ProviderId { get; } = ProviderId.Create("test");
 
         public async IAsyncEnumerable<LlmEvent> StreamAsync(
             LlmRequest request,

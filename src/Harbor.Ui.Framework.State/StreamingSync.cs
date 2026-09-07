@@ -15,7 +15,7 @@ namespace Harbor.Ui.Framework.State;
 ///         delta is concatenated immediately, so short messages (and every
 ///         test/replay that inspects buffers mid-stream) stay byte-exact.
 ///         Beyond that, a flush happens once pending characters reach
-///         min(<see cref="MaxLagChars" />, max(<see cref="MinLagChars"/>, synced / 8)),
+///         min(<see cref="MaxLagChars" />, max(<see cref="MinLagChars" />, synced / 8)),
 ///         which caps both the visible lag (≤ 2 048 chars) and the total copy
 ///         work at ~9× the final message length instead of O(N²).
 ///     </para>

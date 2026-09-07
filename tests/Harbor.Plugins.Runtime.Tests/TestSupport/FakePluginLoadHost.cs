@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -12,7 +11,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Collections.Concurrent;
 namespace Harbor.Plugins.Runtime.Tests.TestSupport;
+
 /// <summary>
 ///     In-memory <see cref="IPluginLoadHost" /> for tests. Captures all Register* calls
 ///     so tests can assert on them. Thread-safe via ConcurrentDictionary / locks.

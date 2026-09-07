@@ -1,6 +1,5 @@
-using System.Text.Json;
 using CSharpFunctionalExtensions;
-
+using System.Text.Json;
 namespace Harbor.Ipc.Protocol;
 
 /// <summary>
@@ -23,7 +22,7 @@ namespace Harbor.Ipc.Protocol;
 ///     <para>
 ///         <c>host</c> on a tailscale entry is optional — when omitted the
 ///         entry name itself is dialed (MagicDNS resolves it inside the
-///         tailnet). <see cref="HostsCatalog.DefaultPort"/> applies when
+///         tailnet). <see cref="HostsCatalog.DefaultPort" /> applies when
 ///         <c>port</c> is absent.
 ///     </para>
 /// </remarks>
@@ -37,7 +36,7 @@ public static class HostsCatalog
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".harbor", "hosts.json");
 
     /// <summary>
-    ///     Load the catalog from <paramref name="path"/>. Missing file is an
+    ///     Load the catalog from <paramref name="path" />. Missing file is an
     ///     empty catalog, not an error — hosts are opt-in.
     /// </summary>
     public static Result<IReadOnlyDictionary<string, EndpointDescriptor>> Load(string path)
@@ -108,8 +107,8 @@ public static class HostsCatalog
     /// <summary>True for strings that look like a dialable address rather than a catalog name.</summary>
     private static bool IsDirectAddress(string name)
     {
-        return name.Contains(':')                    // IPv6 literal or host:port pair
-               || (name.Contains('.') && !name.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+        return name.Contains(':') // IPv6 literal or host:port pair
+               || name.Contains('.') && !name.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
     }
 
     private static Result<EndpointDescriptor> ParseEntry(string name, JsonElement value)

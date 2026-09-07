@@ -1,17 +1,10 @@
 #if HARBOR_WITH_PLUGINS
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Instantiation;
 using Harbor.Plugins.Registration;
 using Harbor.Plugins.Storage;
-using Harbor.Ui.Framework.Panels;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 namespace Harbor.Hosting;
 
 /// <summary>

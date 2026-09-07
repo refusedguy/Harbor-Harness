@@ -1,15 +1,16 @@
+using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Permissions;
+using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
-using Harbor.App.Cli.Repl;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
-using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Rendering.Widgets;
 using Microsoft.Extensions.DependencyInjection;
-
+using Microsoft.Extensions.Logging;
 namespace Harbor.App.Cli.Hosting;
 
 /// <summary>
@@ -25,18 +26,26 @@ namespace Harbor.App.Cli.Hosting;
 ///         владеет мутируемым состоянием кадра ровно один раз.
 ///     </para>
 ///     <list type="bullet">
-///         <item><see cref="ITerminalBackend" /> / <see cref="AnsiWriter" /> /
-///         <see cref="ScreenSession" /> — процессные одиночки: один stdout,
-///         один BACK/FRONT-буфер, одна точка флаша.</item>
-///         <item><see cref="ComposerController" /> / <see cref="StatusViewModel" /> /
-///         <see cref="ChatScreen" /> — одно состояние экрана на сессию.</item>
-///         <item><see cref="ChatScreenBridge" /> — подписывается на
-///         <see cref="IEventBus" /> в конструкторе и живёт до закрытия хоста.</item>
-///         <item><see cref="TerminalInputSource" /> — единственный читатель
-///         stdin (SingleReader-канал).</item>
+///         <item>
+///             <see cref="ITerminalBackend" /> / <see cref="AnsiWriter" /> /
+///             <see cref="ScreenSession" /> — процессные одиночки: один stdout,
+///             один BACK/FRONT-буфер, одна точка флаша.
+///         </item>
+///         <item>
+///             <see cref="ComposerController" /> / <see cref="StatusViewModel" /> /
+///             <see cref="ChatScreen" /> — одно состояние экрана на сессию.
+///         </item>
+///         <item>
+///             <see cref="ChatScreenBridge" /> — подписывается на
+///             <see cref="IEventBus" /> в конструкторе и живёт до закрытия хоста.
+///         </item>
+///         <item>
+///             <see cref="TerminalInputSource" /> — единственный читатель
+///             stdin (SingleReader-канал).
+///         </item>
 ///     </list>
 ///     <para>
-///         <b>Что НЕ регистрируется отдельно:</b> <see cref="Harbor.Tui.CellForge.Rendering.DiffEngine"/>,
+///         <b>Что НЕ регистрируется отдельно:</b> <see cref="Harbor.Tui.CellForge.Rendering.DiffEngine" />,
 ///         TimelineRing, CommitTickPacer, SpinnerStrip — внутренние владельцы
 ///         уже перечисленных корней (<c>ScreenSession.Engine</c>,
 ///         <c>VirtualizedChatTimeline</c>, <c>ChatScreenBridge._pacer</c>,
@@ -58,13 +67,13 @@ internal static class CellForgeModule
         services.AddSingleton<ITerminalBackend, StdoutBackend>();
         services.AddSingleton(sp => new AnsiWriter(
             sp.GetRequiredService<ITerminalBackend>(),
-            syncUpdates: ui.SyncUpdates));
+            ui.SyncUpdates));
 
         services.AddSingleton(sp => new ScreenSession(
             sp.GetRequiredService<AnsiWriter>(),
             ProbeInitialCols(),
             ProbeInitialRows(),
-            sizeSource: ReadTerminalSize));
+            ReadTerminalSize));
 
         services.AddSingleton<ComposerController>();
         services.AddSingleton<StatusViewModel>();
@@ -78,14 +87,14 @@ internal static class CellForgeModule
             new TerminalInputSourceOptions
             {
                 SizeProvider = ReadTerminalSizeForInput,
-                ResizePollInterval = ResizePollInterval,
+                ResizePollInterval = ResizePollInterval
             }));
 
         services.AddSingleton(sp => new ChatScreenBridge(
             sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ChatScreen>().Timeline,
             sp.GetRequiredService<StatusViewModel>(),
-            autoSubscribe: false)); // events pumped through the frame loop thread
+            false)); // events pumped through the frame loop thread
 
         // Permission asks вместо молчаливого fail-closed deny: карточка
         // ApprovalGateView в таймлайне + ожидание y/n/a. Ленивое замыкание на
@@ -95,29 +104,26 @@ internal static class CellForgeModule
         services.AddSingleton(sp => new CellForgePermissionAsker(
             () => sp.GetRequiredService<ChatScreenBridge>()));
         services.AddSingleton<IPermissionService>(sp => new PermissionService(
-            sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
-            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
-                Harbor.Application.Permissions.PermissionService>>(),
-            sp.GetRequiredService<Repl.CellForgePermissionAsker>().AskAsync,
-            workspaceRoot: Directory.GetCurrentDirectory()));
+            sp.GetRequiredService<IAgentRegistry>(),
+            sp.GetRequiredService<ILogger<
+                PermissionService>>(),
+            sp.GetRequiredService<CellForgePermissionAsker>().AskAsync,
+            Directory.GetCurrentDirectory()));
 
         return services;
     }
 
     /// <summary>Viewport probe for the frame pipeline. Never throws.</summary>
-    private static (int Cols, int Rows) ReadTerminalSize()
-    {
-        return TryGetTerminalSize(out var cols, out var rows) ? (cols, rows) : (FallbackCols, FallbackRows);
-    }
+    private static (int Cols, int Rows) ReadTerminalSize() => TryGetTerminalSize(out int cols, out int rows) ? (cols, rows) : (FallbackCols, FallbackRows);
 
-    private static int ProbeInitialCols() => TryGetTerminalSize(out var cols, out _) ? cols : FallbackCols;
+    private static int ProbeInitialCols() => TryGetTerminalSize(out int cols, out _) ? cols : FallbackCols;
 
-    private static int ProbeInitialRows() => TryGetTerminalSize(out _, out var rows) ? rows : FallbackRows;
+    private static int ProbeInitialRows() => TryGetTerminalSize(out _, out int rows) ? rows : FallbackRows;
 
     /// <summary>Input-pipeline probe shape ((Width, Height)). Never throws.</summary>
     private static (int Width, int Height) ReadTerminalSizeForInput()
     {
-        var (cols, rows) = ReadTerminalSize();
+        (int cols, int rows) = ReadTerminalSize();
         return (cols, rows);
     }
 

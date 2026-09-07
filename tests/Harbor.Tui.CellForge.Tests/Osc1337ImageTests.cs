@@ -1,15 +1,16 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
-/// <summary>OSC 1337 inline-image encoder (iTerm2 protocol family) —
-/// byte-golden vectors: envelope shape, name sanitization, payload caps.</summary>
+/// <summary>
+///     OSC 1337 inline-image encoder (iTerm2 protocol family) —
+///     byte-golden vectors: envelope shape, name sanitization, payload caps.
+/// </summary>
 public class Osc1337ImageTests
 {
     private static byte[] FakePng(int size = 64)
     {
-        var bytes = new byte[size];
+        byte[] bytes = new byte[size];
         bytes[0] = 0x89;
         bytes[1] = (byte)'P';
         return bytes;
@@ -42,23 +43,17 @@ public class Osc1337ImageTests
     }
 
     [Test]
-    public async Task Encode_EmptyPayload_ReturnsNull_TextCardStays()
-    {
-        await Assert.That(Osc1337Image.Encode("a.png", ReadOnlySpan<byte>.Empty)).IsNull();
-    }
+    public async Task Encode_EmptyPayload_ReturnsNull_TextCardStays() => await Assert.That(Osc1337Image.Encode("a.png", ReadOnlySpan<byte>.Empty)).IsNull();
 
     [Test]
     public async Task Encode_OversizePayload_ReturnsNull()
     {
-        var data = new byte[Osc1337Image.MaxDataBytes + 1];
+        byte[] data = new byte[Osc1337Image.MaxDataBytes + 1];
         await Assert.That(Osc1337Image.Encode("big.png", data)).IsNull();
     }
 
     [Test]
-    public async Task Encode_EmptyName_ReturnsNull()
-    {
-        await Assert.That(Osc1337Image.Encode("", [0x01])).IsNull();
-    }
+    public async Task Encode_EmptyName_ReturnsNull() => await Assert.That(Osc1337Image.Encode("", [0x01])).IsNull();
 
     [Test]
     public async Task Encode_JpegRidesSameEnvelope_TerminalSniffsFormat()

@@ -1,13 +1,12 @@
 namespace Harbor.DesignSystem;
 
 /// <summary>
-/// Terminal-specific design tokens matching the HTML design-system report.
-/// These are the exact colors specified for CellForge and TUI rendering.
-///
-/// Token reads resolve against the active <see cref="HarborTheme" /> —
-/// <see cref="Apply" /> swaps it atomically (volatile reference) and fires
-/// <see cref="ThemeChanged" /> so derived palettes (ChatPalette and friends)
-/// can re-project their styles. Default theme: <see cref="HarborTheme.HarborDark" />.
+///     Terminal-specific design tokens matching the HTML design-system report.
+///     These are the exact colors specified for CellForge and TUI rendering.
+///     Token reads resolve against the active <see cref="HarborTheme" /> —
+///     <see cref="Apply" /> swaps it atomically (volatile reference) and fires
+///     <see cref="ThemeChanged" /> so derived palettes (ChatPalette and friends)
+///     can re-project their styles. Default theme: <see cref="HarborTheme.HarborDark" />.
 /// </summary>
 public static class TerminalColorPalette
 {
@@ -16,39 +15,6 @@ public static class TerminalColorPalette
 
     /// <summary>The active theme instance (unpatched).</summary>
     public static HarborTheme Current => _current;
-
-    /// <summary>Fired after <see cref="Apply" /> or <see cref="SetOverrides" /> changed the effective catalog.</summary>
-    public static event EventHandler? ThemeChanged;
-
-    /// <summary>Installs <paramref name="theme" /> and raises <see cref="ThemeChanged" />. Re-applying the same instance is a no-op.</summary>
-    public static void Apply(HarborTheme theme)
-    {
-        ArgumentNullException.ThrowIfNull(theme);
-        if (ReferenceEquals(_current, theme))
-        {
-            return;
-        }
-
-        _current = theme;
-        ThemeChanged?.Invoke(null, EventArgs.Empty);
-    }
-
-    /// <summary>
-    /// Installs per-component theme overrides (null clears) and raises
-    /// <see cref="ThemeChanged" /> so scoped consumers re-project.
-    /// </summary>
-    public static void SetOverrides(ThemeOverrideSet? overrides)
-    {
-        _overrides = overrides;
-        ThemeChanged?.Invoke(null, EventArgs.Empty);
-    }
-
-    /// <summary>
-    /// Effective theme for a component scope: the scope's patch merged over
-    /// <see cref="Current" />; no scope / no patch → Current unchanged.
-    /// </summary>
-    public static HarborTheme EffectiveTheme(string? scope) =>
-        _overrides?.Merge(scope, _current) ?? _current;
 
     // ── Accent tokens ──────────────────────────────────────────────────────
     public static RgbColor Accent => _current.Accent;
@@ -69,4 +35,40 @@ public static class TerminalColorPalette
 
     public static RgbColor Text => _current.Text;
     public static RgbColor TextDim => _current.Muted;
+
+    /// <summary>Fired after <see cref="Apply" /> or <see cref="SetOverrides" /> changed the effective catalog.</summary>
+    public static event EventHandler? ThemeChanged;
+
+    /// <summary>
+    ///     Installs <paramref name="theme" /> and raises <see cref="ThemeChanged" />. Re-applying the same instance is a
+    ///     no-op.
+    /// </summary>
+    public static void Apply(HarborTheme theme)
+    {
+        ArgumentNullException.ThrowIfNull(theme);
+        if (ReferenceEquals(_current, theme))
+        {
+            return;
+        }
+
+        _current = theme;
+        ThemeChanged?.Invoke(null, EventArgs.Empty);
+    }
+
+    /// <summary>
+    ///     Installs per-component theme overrides (null clears) and raises
+    ///     <see cref="ThemeChanged" /> so scoped consumers re-project.
+    /// </summary>
+    public static void SetOverrides(ThemeOverrideSet? overrides)
+    {
+        _overrides = overrides;
+        ThemeChanged?.Invoke(null, EventArgs.Empty);
+    }
+
+    /// <summary>
+    ///     Effective theme for a component scope: the scope's patch merged over
+    ///     <see cref="Current" />; no scope / no patch → Current unchanged.
+    /// </summary>
+    public static HarborTheme EffectiveTheme(string? scope) =>
+        _overrides?.Merge(scope, _current) ?? _current;
 }

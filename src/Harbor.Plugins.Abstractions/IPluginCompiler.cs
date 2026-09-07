@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 namespace Harbor.Plugins.Abstractions;
+
 /// <summary>
 ///     Compiles a single <see cref="PluginScript" /> into a loaded
 ///     <see cref="CompiledPluginAssembly" />. Implementations encapsulate a specific

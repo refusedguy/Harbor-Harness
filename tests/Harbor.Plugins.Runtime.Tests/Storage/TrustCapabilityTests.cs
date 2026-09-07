@@ -1,7 +1,7 @@
-using System.Text.Json;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 namespace Harbor.Plugins.Runtime.Tests.Storage;
 
 /// <summary>
@@ -13,9 +13,9 @@ namespace Harbor.Plugins.Runtime.Tests.Storage;
 /// </summary>
 public sealed class TrustCapabilityTests : IDisposable
 {
-    private readonly string _root;
     private readonly string _globalDir;
     private readonly string _projectDir;
+    private readonly string _root;
     private readonly string _store;
 
     public TrustCapabilityTests()
@@ -30,7 +30,7 @@ public sealed class TrustCapabilityTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); }
+        try { Directory.Delete(_root, true); }
         catch (IOException)
         { /* best-effort cleanup */
         }
@@ -47,7 +47,7 @@ public sealed class TrustCapabilityTests : IDisposable
         Func<PluginScript, IReadOnlySet<PluginCapability>, Task<IReadOnlySet<PluginCapability>>>? capabilityPrompt = null,
         Func<PluginScript, Task<bool>>? trustPrompt = null) =>
         new(new[] { _globalDir }, _store, NullLogger<FileTrustPolicy>.Instance,
-            trustPrompt: trustPrompt, capabilityPrompt: capabilityPrompt);
+            trustPrompt, capabilityPrompt);
 
     private static JsonElement[] ReadStoreEntries(string store)
     {
@@ -62,8 +62,8 @@ public sealed class TrustCapabilityTests : IDisposable
         string path = WritePlugin("google.cs", body);
 
         var approved = await CreatePolicy((_, declared) =>
-            Task.FromResult<IReadOnlySet<PluginCapability>>(
-                declared.Where(c => c == PluginCapability.ReadFiles).ToHashSet()))
+                Task.FromResult<IReadOnlySet<PluginCapability>>(
+                    declared.Where(c => c == PluginCapability.ReadFiles).ToHashSet()))
             .DecideAsync(new PluginScript(path, body));
 
         await Assert.That(approved).IsEqualTo(PluginTrustDecision.Trusted);
@@ -71,7 +71,7 @@ public sealed class TrustCapabilityTests : IDisposable
         var entry = ReadStoreEntries(_store).Single();
         await Assert.That(entry.GetProperty("path").GetString()).IsEqualTo(Path.GetFullPath(path));
         await Assert.That(entry.GetProperty("hash").GetString()).IsEqualTo(new PluginScript(path, body).Hash);
-        var persisted = entry.GetProperty("capabilities").EnumerateArray().Select(e => e.GetString()!).ToArray();
+        string[] persisted = entry.GetProperty("capabilities").EnumerateArray().Select(e => e.GetString()!).ToArray();
         await Assert.That(persisted).IsEquivalentTo(["read_files"]);
     }
 
@@ -91,7 +91,11 @@ public sealed class TrustCapabilityTests : IDisposable
         await first.DecideAsync(new PluginScript(path, body));
 
         // Fresh instance simulates the next app start: grants come from the store.
-        var second = CreatePolicy((_, _) => { prompts++; return Task.FromResult<IReadOnlySet<PluginCapability>>(new HashSet<PluginCapability>()); });
+        var second = CreatePolicy((_, _) =>
+        {
+            prompts++;
+            return Task.FromResult<IReadOnlySet<PluginCapability>>(new HashSet<PluginCapability>());
+        });
         var granted = second.GetGrantedCapabilities(new PluginScript(path, body));
         var decision = await second.DecideAsync(new PluginScript(path, body));
 
@@ -127,13 +131,13 @@ public sealed class TrustCapabilityTests : IDisposable
         string path = WritePlugin("legacy.cs", body);
         var script = new PluginScript(path, body);
         File.WriteAllText(_store, $$"""
-            [
-              {
-                "path": "{{JsonSerializer.Serialize(Path.GetFullPath(path)).Trim('"')}}",
-                "hash": "{{script.Hash}}"
-              }
-            ]
-            """);
+                                    [
+                                      {
+                                        "path": "{{JsonSerializer.Serialize(Path.GetFullPath(path)).Trim('"')}}",
+                                        "hash": "{{script.Hash}}"
+                                      }
+                                    ]
+                                    """);
 
         var granted = CreatePolicy().GetGrantedCapabilities(script);
 
@@ -166,14 +170,14 @@ public sealed class TrustCapabilityTests : IDisposable
         string path = WritePlugin("overgrant.cs", body);
         var script = new PluginScript(path, body);
         File.WriteAllText(_store, $$"""
-            [
-              {
-                "path": "{{JsonSerializer.Serialize(Path.GetFullPath(path)).Trim('"')}}",
-                "hash": "{{script.Hash}}",
-                "capabilities": ["read_files", "run_processes", "http_requests"]
-              }
-            ]
-            """);
+                                    [
+                                      {
+                                        "path": "{{JsonSerializer.Serialize(Path.GetFullPath(path)).Trim('"')}}",
+                                        "hash": "{{script.Hash}}",
+                                        "capabilities": ["read_files", "run_processes", "http_requests"]
+                                      }
+                                    ]
+                                    """);
 
         var granted = CreatePolicy().GetGrantedCapabilities(script);
 

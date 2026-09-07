@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.Hosting;
 
 /// <summary>
@@ -20,13 +19,13 @@ public static class Registration
             ctx.Options.Features.Plugins, ctx.Options.Features.SpectreTui, ctx.Options.Features.AllProviders);
 
         services.AddHarborTelemetry()
-                .AddHarborCore(ctx)
-                .AddHarborHttpClients(ctx)
-                .AddHarborRegistries(ctx)
-                .AddHarborIntelligence(ctx)
-                .AddHarborStorage(ctx)
-                .AddHarborTui(ctx)
-                .AddHarborIpc(ctx);
+            .AddHarborCore(ctx)
+            .AddHarborHttpClients(ctx)
+            .AddHarborRegistries(ctx)
+            .AddHarborIntelligence(ctx)
+            .AddHarborStorage(ctx)
+            .AddHarborTui(ctx)
+            .AddHarborIpc(ctx);
 
         return ctx;
     }

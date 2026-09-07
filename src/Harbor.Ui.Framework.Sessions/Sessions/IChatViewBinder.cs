@@ -1,6 +1,6 @@
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 namespace Harbor.Ui.Framework.Sessions;
+
 /// <summary>
 ///     Platform-agnostic contract for binding the active chat view-model
 ///     to a different session's <see cref="UiStore" />. Implemented by

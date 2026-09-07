@@ -1,9 +1,7 @@
-using System.Collections.Immutable;
-using System.Linq;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
+using System.Collections.Immutable;
 namespace Harbor.App.Avalonia.Tests;
 
 public class StatusProjectionTests

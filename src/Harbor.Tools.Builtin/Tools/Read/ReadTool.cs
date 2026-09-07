@@ -1,11 +1,12 @@
-using System.Buffers;
-using System.Text;
 using Harbor.Abstractions.Lsp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Buffers;
+using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Reads text (optionally a line window) or reports image metadata.
 ///     Streams lines for offset/limit — never loads whole multi‑MB files just to slice.
@@ -260,7 +261,7 @@ public sealed class ReadTool : ITool
     {
         try
         {
-            if (context.Services?.GetService<ILspService>() is not { } lsp)
+            if (context.Services?.GetService<ILspService>() is not {} lsp)
                 return;
             if (!lsp.SupportsFile(path))
                 return;
@@ -273,7 +274,8 @@ public sealed class ReadTool : ITool
         }
     }
 
-    private static bool IsBinaryFile(string path, long length)   {
+    private static bool IsBinaryFile(string path, long length)
+    {
         try
         {
             int toRead = (int)Math.Min(length, BinaryProbeBytes);

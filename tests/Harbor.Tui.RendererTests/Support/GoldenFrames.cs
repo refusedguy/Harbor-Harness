@@ -15,7 +15,7 @@ namespace Harbor.Tui.RendererTests.Support;
 public static class GoldenFrames
 {
     /// <summary>
-    ///     Compares <paramref name="actual"/> against the committed golden
+    ///     Compares <paramref name="actual" /> against the committed golden
     ///     file <c>GoldenFrames/&lt;name&gt;.golden.txt</c>, or regenerates the
     ///     golden when <c>HARBOR_UPDATE_GOLDEN=1</c>.
     /// </summary>

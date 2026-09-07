@@ -1,13 +1,19 @@
 namespace Harbor.DesignSystem;
 
 /// <summary>
-/// WCAG 2.x accessibility math over the HDS catalog (§Accessibility):
-/// relative luminance, contrast ratios, and the AA/AAA pass levels used by
-/// every Harbor surface to validate focus indicators, hints, and role text.
-/// Pure functions — no platform deps.
+///     WCAG 2.x accessibility math over the HDS catalog (§Accessibility):
+///     relative luminance, contrast ratios, and the AA/AAA pass levels used by
+///     every Harbor surface to validate focus indicators, hints, and role text.
+///     Pure functions — no platform deps.
 /// </summary>
 public static class Accessibility
 {
+
+    // ── WCAG 2.x thresholds ────────────────────────────────────────────────
+    public const double TextAaRatio = 4.5; // normal text
+    public const double TextAaaRatio = 7.0; // enhanced normal text
+    public const double LargeTextAaRatio = 3.0; // ≥18 pt or ≥14 pt bold
+    public const double UiComponentRatio = 3.0; // borders, glyphs, focus rings
     /// <summary>WCAG relative luminance of an sRGB color.</summary>
     public static double RelativeLuminance(in RgbColor c)
     {
@@ -27,10 +33,4 @@ public static class Accessibility
         double hi = Math.Max(la, lb), lo = Math.Min(la, lb);
         return (hi + 0.05) / (lo + 0.05);
     }
-
-    // ── WCAG 2.x thresholds ────────────────────────────────────────────────
-    public const double TextAaRatio = 4.5;          // normal text
-    public const double TextAaaRatio = 7.0;         // enhanced normal text
-    public const double LargeTextAaRatio = 3.0;     // ≥18 pt or ≥14 pt bold
-    public const double UiComponentRatio = 3.0;     // borders, glyphs, focus rings
 }

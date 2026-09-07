@@ -1,8 +1,4 @@
 using System.Text;
-using Harbor.Tui.CellForge.Input;
-using Harbor.Tui.CellForge.Rendering;
-using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class ApprovalGateViewTests
@@ -127,23 +123,23 @@ public class ApprovalGateViewTests
     [Test]
     public async Task TryHitDecision_Maps_ButtonZones()
     {
-        var (gate, hintRow) = PaintedGate(60);
+        (var gate, int hintRow) = PaintedGate(60);
 
-        await Assert.That(gate.TryHitDecision(0, hintRow)).IsEqualTo(ApprovalChoice.Approve);      // "[y]"
-        await Assert.That(gate.TryHitDecision(5, hintRow)).IsEqualTo(ApprovalChoice.Approve);      // inside "approve"
-        await Assert.That(gate.TryHitDecision(14, hintRow)).IsEqualTo(ApprovalChoice.Deny);        // "[n]"
+        await Assert.That(gate.TryHitDecision(0, hintRow)).IsEqualTo(ApprovalChoice.Approve); // "[y]"
+        await Assert.That(gate.TryHitDecision(5, hintRow)).IsEqualTo(ApprovalChoice.Approve); // inside "approve"
+        await Assert.That(gate.TryHitDecision(14, hintRow)).IsEqualTo(ApprovalChoice.Deny); // "[n]"
         await Assert.That(gate.TryHitDecision(19, hintRow)).IsEqualTo(ApprovalChoice.Deny);
         await Assert.That(gate.TryHitDecision(27, hintRow)).IsEqualTo(ApprovalChoice.AlwaysAllow); // "[a] …"
-        await Assert.That(gate.TryHitDecision(45, hintRow)).IsNull();                              // past label tail
+        await Assert.That(gate.TryHitDecision(45, hintRow)).IsNull(); // past label tail
     }
 
     [Test]
     public async Task TryHitDecision_Ignores_OtherRows_AndResolvedGates()
     {
-        var (gate, hintRow) = PaintedGate(50);
-        await Assert.That(gate.TryHitDecision(0, 0)).IsNull();              // header
-        await Assert.That(gate.TryHitDecision(0, 1)).IsNull();              // detail
-        await Assert.That(gate.TryHitDecision(0, hintRow + 1)).IsNull();    // below card
+        (var gate, int hintRow) = PaintedGate(50);
+        await Assert.That(gate.TryHitDecision(0, 0)).IsNull(); // header
+        await Assert.That(gate.TryHitDecision(0, 1)).IsNull(); // detail
+        await Assert.That(gate.TryHitDecision(0, hintRow + 1)).IsNull(); // below card
 
         _ = gate.HandleKey(Y);
         await Assert.That(gate.IsPending).IsFalse();
@@ -172,7 +168,7 @@ public class ApprovalGateViewTests
     [Test]
     public async Task TryDecide_ClickPath_OneShot_AndRejectsNone()
     {
-        var (gate, hintRow) = PaintedGate(60);
+        (var gate, int hintRow) = PaintedGate(60);
         var choice = gate.TryHitDecision(1, hintRow);
         await Assert.That(choice).IsEqualTo(ApprovalChoice.Approve);
 

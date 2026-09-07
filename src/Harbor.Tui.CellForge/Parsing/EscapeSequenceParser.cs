@@ -1,20 +1,17 @@
-using System.Text;
 using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Input;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Parsing;
 
 /// <summary>
-/// Pure byte-level terminal input state machine (design §5).
-///
-/// Feeds raw stdin bytes in arbitrarily split chunks and produces typed
-/// <see cref="InputEvent"/>s. All cross-chunk state (half-received CSI,
-/// UTF-8 tails, paste payload) lives inside the parser instance.
-///
-/// Allocation budget (§5.4): key/mouse/resize/capability events are enqueued
-/// into a reused ring buffer — zero allocations steady-state. Char events
-/// are allocation-free as well (<see cref="Rune"/> is a struct); the sole
-/// heap allocation is the payload string of a completed <see cref="PasteEvent"/>.
+///     Pure byte-level terminal input state machine (design §5).
+///     Feeds raw stdin bytes in arbitrarily split chunks and produces typed
+///     <see cref="InputEvent" />s. All cross-chunk state (half-received CSI,
+///     UTF-8 tails, paste payload) lives inside the parser instance.
+///     Allocation budget (§5.4): key/mouse/resize/capability events are enqueued
+///     into a reused ring buffer — zero allocations steady-state. Char events
+///     are allocation-free as well (<see cref="Rune" /> is a struct); the sole
+///     heap allocation is the payload string of a completed <see cref="PasteEvent" />.
 /// </summary>
 public sealed class EscapeSequenceParser
 {
@@ -23,24 +20,17 @@ public sealed class EscapeSequenceParser
     private const byte Can = 0x18;
     private const byte Sub = 0x1A;
 
-    private readonly ParserOptions _options;
+    private static readonly byte[] PasteClose = [0x1B, (byte)'[', (byte)'2', (byte)'0', (byte)'1', (byte)'~'];
     private readonly byte[] _csiBuffer;
 
-    // Event queue — reused ring buffer, grows on demand only.
-    private InputEvent[] _queue = new InputEvent[64];
-    private int _head;
-    private int _count;
-
-    private ParserState _state;
-    private int _csiLength;
     private int _csiIntermediateStart = -1;
+    private int _csiLength;
     private byte _csiPrivatePrefix;
-    private Utf8IncrementalDecoder _utf8 = new();
-    private KeyModifiers _utf8PendingMods;
+    private int _head;
+    private bool _mouseMovedSincePress;
 
-    // OSC / DCS / APC / PM string consumption guard.
-    private int _stringLength;
-    private bool _stringEscSeen;
+    // SGR-mouse press context for Click/Drag/Release synthesis (§3.3).
+    private MouseButton _mousePressedButton;
 
     // OSC string capture (auto-theme §3.x): bytes of the current OSC string
     // body, lazily allocated, bounded by MaxStringBytes. Only OSC 11 reports
@@ -48,73 +38,83 @@ public sealed class EscapeSequenceParser
     private byte[]? _oscBuffer;
     private int _oscLength;
 
-    // SGR-mouse press context for Click/Drag/Release synthesis (§3.3).
-    private MouseButton _mousePressedButton;
-    private bool _mouseMovedSincePress;
-
     // Bracketed-paste payload assembly (§4). The payload buffer is reused
     // across pastes; only the final UTF-8 decode allocates one string.
     private byte[]? _pasteBuffer;
     private int _pasteLength;
-    private bool _pasteTruncated;
     private int _pasteMarkerProgress;
+    private bool _pasteTruncated;
 
-    private static readonly byte[] PasteClose = [(byte)0x1B, (byte)'[', (byte)'2', (byte)'0', (byte)'1', (byte)'~'];
+    // Event queue — reused ring buffer, grows on demand only.
+    private InputEvent[] _queue = new InputEvent[64];
+
+    private bool _stringEscSeen;
+
+    // OSC / DCS / APC / PM string consumption guard.
+    private int _stringLength;
+    private Utf8IncrementalDecoder _utf8;
+    private KeyModifiers _utf8PendingMods;
 
     public EscapeSequenceParser(ParserOptions? options = null)
     {
-        _options = options ?? new ParserOptions();
-        _csiBuffer = new byte[_options.MaxParamsBytes + _options.MaxIntermediatesBytes];
+        Options = options ?? new ParserOptions();
+        _csiBuffer = new byte[Options.MaxParamsBytes + Options.MaxIntermediatesBytes];
     }
 
-    public ParserOptions Options => _options;
-    public ParserState State => _state;
-    public int AvailableEvents => _count;
+    public ParserOptions Options { get; }
+    public ParserState State { get; private set; }
+    public int AvailableEvents { get; private set; }
     public int MalformedSequenceCount { get; private set; }
     public int IgnoredSequenceCount { get; private set; }
 
     /// <summary>True while a bracketed paste block has not been closed yet.</summary>
     public bool IsAwaitingPasteClose { get; private set; }
 
-    /// <summary>Nested open markers (200~ without close) seen inside paste
-    /// blocks — treated as literal content per §4.2 #5.</summary>
+    /// <summary>
+    ///     Nested open markers (200~ without close) seen inside paste
+    ///     blocks — treated as literal content per §4.2 #5.
+    /// </summary>
     public int NestedPasteMarkerCount { get; private set; }
 
-    /// <summary>Feeds a chunk of raw stdin bytes. Chunks may split escape
-    /// sequences or UTF-8 characters at any byte boundary.</summary>
+    /// <summary>
+    ///     Feeds a chunk of raw stdin bytes. Chunks may split escape
+    ///     sequences or UTF-8 characters at any byte boundary.
+    /// </summary>
     public void Parse(ReadOnlySpan<byte> bytes)
     {
-        for (var i = 0; i < bytes.Length; i++)
+        for (int i = 0; i < bytes.Length; i++)
         {
             Step(bytes[i]);
         }
     }
 
     /// <summary>
-    /// ESC-timeout policy (§2.4): a lone ESC at a chunk boundary is emitted as
-    /// the Escape key once no continuation arrived in time. Called by the
-    /// input source when its flush timer fires; never needed for in-chunk ESC.
+    ///     ESC-timeout policy (§2.4): a lone ESC at a chunk boundary is emitted as
+    ///     the Escape key once no continuation arrived in time. Called by the
+    ///     input source when its flush timer fires; never needed for in-chunk ESC.
     /// </summary>
     public void FlushPendingEscape()
     {
-        if (_state == ParserState.Escape)
+        if (State == ParserState.Escape)
         {
             Enqueue(InputEvent.FromKey(KeyEvent.Simple(KeyCode.Escape)));
-            _state = ParserState.Ground;
+            State = ParserState.Ground;
         }
-        else if (_state == ParserState.Ss3)
+        else if (State == ParserState.Ss3)
         {
             // Lone "ESC O" with nothing behind it — drop silently.
             IgnoredSequenceCount++;
-            _state = ParserState.Ground;
+            State = ParserState.Ground;
         }
     }
 
-    /// <summary>Returns every queued event to a reusable list. Allocates only
-    /// if the destination list must grow.</summary>
+    /// <summary>
+    ///     Returns every queued event to a reusable list. Allocates only
+    ///     if the destination list must grow.
+    /// </summary>
     public void DrainEvents(List<InputEvent> destination)
     {
-        for (var i = 0; i < _count; i++)
+        for (int i = 0; i < AvailableEvents; i++)
         {
             destination.Add(_queue[(_head + i) % _queue.Length]);
         }
@@ -124,7 +124,7 @@ public sealed class EscapeSequenceParser
 
     public bool TryTakeEvent(out InputEvent evt)
     {
-        if (_count == 0)
+        if (AvailableEvents == 0)
         {
             evt = default;
             return false;
@@ -133,7 +133,7 @@ public sealed class EscapeSequenceParser
         evt = _queue[_head];
         _queue[_head] = default;
         _head = (_head + 1) % _queue.Length;
-        _count--;
+        AvailableEvents--;
         return true;
     }
 
@@ -149,24 +149,24 @@ public sealed class EscapeSequenceParser
         _pasteMarkerProgress = 0;
         _mousePressedButton = MouseButton.None;
         _mouseMovedSincePress = false;
-        _state = ParserState.Ground;
+        State = ParserState.Ground;
         ClearEvents();
     }
 
     public void ClearEvents()
     {
-        for (var i = 0; i < _count; i++)
+        for (int i = 0; i < AvailableEvents; i++)
         {
             _queue[(_head + i) % _queue.Length] = default;
         }
 
         _head = 0;
-        _count = 0;
+        AvailableEvents = 0;
     }
 
     private void Step(byte b)
     {
-        switch (_state)
+        switch (State)
         {
             case ParserState.Ground:
                 Ground(b);
@@ -184,10 +184,10 @@ public sealed class EscapeSequenceParser
                 CsiByte(b);
                 break;
             case ParserState.OscString:
-                StringBody(b, belTerminates: true);
+                StringBody(b, true);
                 break;
             case ParserState.StringUntilSt:
-                StringBody(b, belTerminates: false);
+                StringBody(b, false);
                 break;
             case ParserState.PastePayload:
                 PastePayloadByte(b);
@@ -202,7 +202,7 @@ public sealed class EscapeSequenceParser
         if (b == Esc)
         {
             FlushBrokenUtf8();
-            _state = ParserState.Escape;
+            State = ParserState.Escape;
             return;
         }
 
@@ -334,10 +334,10 @@ public sealed class EscapeSequenceParser
         {
             case (byte)'[':
                 ResetSequenceBuffers();
-                _state = ParserState.CsiEntry;
+                State = ParserState.CsiEntry;
                 return;
             case (byte)'O':
-                _state = ParserState.Ss3;
+                State = ParserState.Ss3;
                 return;
             case (byte)']':
             case (byte)'P':
@@ -347,7 +347,7 @@ public sealed class EscapeSequenceParser
                 _stringLength = 0;
                 _stringEscSeen = false;
                 _oscLength = 0;
-                _state = b == (byte)']' ? ParserState.OscString : ParserState.StringUntilSt;
+                State = b == (byte)']' ? ParserState.OscString : ParserState.StringUntilSt;
                 return;
             case Esc:
                 // Double-ESC: first one stands alone as Escape, second restarts.
@@ -357,7 +357,7 @@ public sealed class EscapeSequenceParser
                 return; // ALT-backspace variants ignored
         }
 
-        _state = ParserState.Ground;
+        State = ParserState.Ground;
         if (b < 0x20)
         {
             EnqueueControlKey(b, KeyModifiers.Alt);
@@ -375,8 +375,8 @@ public sealed class EscapeSequenceParser
 
     private void Ss3Final(byte b)
     {
-        _state = ParserState.Ground;
-        KeyCode key = b switch
+        State = ParserState.Ground;
+        var key = b switch
         {
             (byte)'A' => KeyCode.Up,
             (byte)'B' => KeyCode.Down,
@@ -388,7 +388,7 @@ public sealed class EscapeSequenceParser
             (byte)'Q' => KeyCode.F2,
             (byte)'R' => KeyCode.F3,
             (byte)'S' => KeyCode.F4,
-            _ => KeyCode.None,
+            _ => KeyCode.None
         };
 
         if (key == KeyCode.None)
@@ -404,26 +404,26 @@ public sealed class EscapeSequenceParser
 
     private void CsiByte(byte b)
     {
-        switch (_state)
+        switch (State)
         {
             case ParserState.CsiEntry:
                 if (b is >= (byte)'0' and <= (byte)'9' or (byte)';' or (byte)':')
                 {
                     AppendParamByte(b);
-                    _state = ParserState.CsiParam;
+                    State = ParserState.CsiParam;
                     return;
                 }
                 if (b is >= 0x3C and <= 0x3F)
                 {
                     AppendParamByte(b);
                     _csiPrivatePrefix = b;
-                    _state = ParserState.CsiParam;
+                    State = ParserState.CsiParam;
                     return;
                 }
                 if (b is >= 0x20 and <= 0x2F)
                 {
                     AppendIntermediateByte(b);
-                    _state = ParserState.CsiIntermediate;
+                    State = ParserState.CsiIntermediate;
                     return;
                 }
                 break;
@@ -437,7 +437,7 @@ public sealed class EscapeSequenceParser
                 if (b is >= 0x20 and <= 0x2F)
                 {
                     AppendIntermediateByte(b);
-                    _state = ParserState.CsiIntermediate;
+                    State = ParserState.CsiIntermediate;
                     return;
                 }
                 break;
@@ -458,7 +458,7 @@ public sealed class EscapeSequenceParser
             case ParserState.CsiIgnore:
                 if (b is >= 0x40 and <= 0x7E)
                 {
-                    _state = ParserState.Ground;
+                    State = ParserState.Ground;
                     return;
                 }
                 ControlInsideCsi(b);
@@ -492,21 +492,19 @@ public sealed class EscapeSequenceParser
         {
             case Esc:
                 ResetSequenceBuffers();
-                _state = ParserState.Escape;
+                State = ParserState.Escape;
                 break;
             case Can:
             case Sub:
                 ResetSequenceBuffers();
-                _state = ParserState.Ground;
+                State = ParserState.Ground;
                 break;
-            default:
-                break; // other C0 execute-and-ignore inside CSI
         }
     }
 
     private void AppendParamByte(byte b)
     {
-        var limit = _csiIntermediateStart < 0 ? _csiBuffer.Length : Math.Min(_csiIntermediateStart, _options.MaxParamsBytes);
+        int limit = _csiIntermediateStart < 0 ? _csiBuffer.Length : Math.Min(_csiIntermediateStart, Options.MaxParamsBytes);
         if (_csiLength >= limit)
         {
             EnterIgnore();
@@ -523,7 +521,7 @@ public sealed class EscapeSequenceParser
             _csiIntermediateStart = _csiLength;
         }
 
-        if (_csiLength - _csiIntermediateStart >= _options.MaxIntermediatesBytes || _csiLength >= _csiBuffer.Length)
+        if (_csiLength - _csiIntermediateStart >= Options.MaxIntermediatesBytes || _csiLength >= _csiBuffer.Length)
         {
             EnterIgnore();
             return;
@@ -536,7 +534,7 @@ public sealed class EscapeSequenceParser
     {
         MalformedSequenceCount++;
         Enqueue(InputEvent.Unknown());
-        _state = ParserState.CsiIgnore;
+        State = ParserState.CsiIgnore;
     }
 
     private void DispatchCsi(byte finalByte)
@@ -548,15 +546,17 @@ public sealed class EscapeSequenceParser
             ? ReadOnlySpan<byte>.Empty
             : _csiBuffer.AsSpan(_csiIntermediateStart, _csiLength - _csiIntermediateStart);
 
-        var prefixByte = _csiPrivatePrefix;
+        byte prefixByte = _csiPrivatePrefix;
         ResetSequenceBuffers();
-        _state = ParserState.Ground;
+        State = ParserState.Ground;
 
         DecodeCsiFinal(finalByte, prefixByte, paramSpan, intermediateSpan);
     }
 
-    /// <summary>Routes a complete CSI sequence to its decoder. Zone З.2 adds
-    /// mouse M/m, zone З.3 adds paste ~ markers.</summary>
+    /// <summary>
+    ///     Routes a complete CSI sequence to its decoder. Zone З.2 adds
+    ///     mouse M/m, zone З.3 adds paste ~ markers.
+    /// </summary>
     private void DecodeCsiFinal(byte finalByte, byte privatePrefix, ReadOnlySpan<byte> parameters, ReadOnlySpan<byte> intermediates)
     {
         if (privatePrefix == (byte)'<')
@@ -632,8 +632,8 @@ public sealed class EscapeSequenceParser
                 return;
             case (byte)'R':
                 // Cursor position report: CSI row ; col R (probe-routable).
-                var row = IntParamAt(parameters, 0);
-                var col = IntParamAt(parameters, 1);
+                int row = IntParamAt(parameters, 0);
+                int col = IntParamAt(parameters, 1);
                 if (row > 0 && col > 0)
                 {
                     EnqueueCapability(CapabilityEvent.CursorPosition(row, col));
@@ -648,26 +648,26 @@ public sealed class EscapeSequenceParser
     }
 
     /// <summary>
-    /// Kitty keyboard protocol key decoding (design §2.3):
-    /// CSI unicode-key-code : shifted : base-layout ; modifiers : event-type ; text-codepoints u
-    /// Modifier bits follow the CellForge design contract: shift=1, ctrl=2,
-    /// alt=4 (super/hyper/meta collapse to the Meta bit); modifier value is 1-based.
+    ///     Kitty keyboard protocol key decoding (design §2.3):
+    ///     CSI unicode-key-code : shifted : base-layout ; modifiers : event-type ; text-codepoints u
+    ///     Modifier bits follow the CellForge design contract: shift=1, ctrl=2,
+    ///     alt=4 (super/hyper/meta collapse to the Meta bit); modifier value is 1-based.
     /// </summary>
     private void DecodeKittyKey(ReadOnlySpan<byte> parameters)
     {
-        var primary = IntSubParamAt(parameters, 0, 0);
+        int primary = IntSubParamAt(parameters, 0, 0);
         if (primary < 0)
         {
             IgnoredSequenceCount++;
             return;
         }
 
-        var shifted = IntSubParamAt(parameters, 0, 1);
-        var text = IntSubParamAt(parameters, 2, 0);
-        var modValue = Math.Max(1, IntParamAt(parameters, 1));
-        var eventTypeValue = IntSubParamAt(parameters, 1, 1);
+        int shifted = IntSubParamAt(parameters, 0, 1);
+        int text = IntSubParamAt(parameters, 2, 0);
+        int modValue = Math.Max(1, IntParamAt(parameters, 1));
+        int eventTypeValue = IntSubParamAt(parameters, 1, 1);
 
-        var bits = modValue - 1;
+        int bits = modValue - 1;
         var mods = KeyModifiers.None;
         if ((bits & 0x01) != 0)
         {
@@ -690,7 +690,7 @@ public sealed class EscapeSequenceParser
         {
             2 => KeyEventType.Repeat,
             3 => KeyEventType.Release,
-            _ => KeyEventType.Press,
+            _ => KeyEventType.Press
         };
 
         KeyCode key;
@@ -713,7 +713,7 @@ public sealed class EscapeSequenceParser
             case >= 32 and not 127 when primary is < 57344 or > 63743:
                 // Printable (excluding the Unicode private-use area where
                 // kitty parks its functional keys).
-                var scalar = text > 0 ? text : shifted > 0 ? shifted : primary;
+                int scalar = text > 0 ? text : shifted > 0 ? shifted : primary;
                 if (IsValidScalar(scalar))
                 {
                     key = KeyCode.Char;
@@ -732,24 +732,24 @@ public sealed class EscapeSequenceParser
                 break;
         }
 
-        Enqueue(InputEvent.FromKey(new KeyEvent(key, character, mods, eventType, isKittyEncoded: true, codepoint)));
+        Enqueue(InputEvent.FromKey(new KeyEvent(key, character, mods, eventType, true, codepoint)));
     }
 
     private static bool IsValidScalar(int scalar) =>
         scalar <= 0xD7FF || scalar is >= 0xE000 and <= 0x10FFFF;
 
     /// <summary>
-    /// SGR mouse decoding (design §3.2): CSI &lt; button ; column ; row M|m.
-    /// Button bits: id=bits0-1, shift=4, alt(meta)=8, ctrl=16, motion=32,
-    /// wheel=64. Coordinates are one-based on the wire, stored zero-based.
-    /// Click = clean press→release without motion; Drag = motion with a held
-    /// button; Release = release after drag (§3.2/§3.3).
+    ///     SGR mouse decoding (design §3.2): CSI &lt; button ; column ; row M|m.
+    ///     Button bits: id=bits0-1, shift=4, alt(meta)=8, ctrl=16, motion=32,
+    ///     wheel=64. Coordinates are one-based on the wire, stored zero-based.
+    ///     Click = clean press→release without motion; Drag = motion with a held
+    ///     button; Release = release after drag (§3.2/§3.3).
     /// </summary>
     private void DecodeSgrMouse(byte finalByte, ReadOnlySpan<byte> parameters)
     {
-        var buttonRaw = IntParamAt(parameters, 0);
-        var column = IntParamAt(parameters, 1);
-        var row = IntParamAt(parameters, 2);
+        int buttonRaw = IntParamAt(parameters, 0);
+        int column = IntParamAt(parameters, 1);
+        int row = IntParamAt(parameters, 2);
         if (buttonRaw < 0 || column < 0 || row < 0)
         {
             IgnoredSequenceCount++;
@@ -772,10 +772,10 @@ public sealed class EscapeSequenceParser
 
         // Zero-based viewport coordinates; values may exceed the window
         // (release-after-drag) — consumers clamp before indexing.
-        var col = column - 1;
-        var r = row - 1;
+        int col = column - 1;
+        int r = row - 1;
 
-        var buttonId = buttonRaw & 0x03;
+        int buttonId = buttonRaw & 0x03;
 
         if ((buttonRaw & 0x40) != 0)
         {
@@ -802,7 +802,7 @@ public sealed class EscapeSequenceParser
             }
 
             var releasedButton = _mousePressedButton;
-            var wasCleanClick = !_mouseMovedSincePress;
+            bool wasCleanClick = !_mouseMovedSincePress;
             _mousePressedButton = MouseButton.None;
             _mouseMovedSincePress = false;
 
@@ -847,9 +847,9 @@ public sealed class EscapeSequenceParser
 
     private void DecodeLegacyTilde(ReadOnlySpan<byte> parameters)
     {
-        var code = FirstIntParam(parameters);
+        int code = FirstIntParam(parameters);
         var mods = LegacyModifiers(parameters);
-        KeyCode key = code switch
+        var key = code switch
         {
             1 => KeyCode.Home,
             2 => KeyCode.Insert,
@@ -871,7 +871,7 @@ public sealed class EscapeSequenceParser
             21 => KeyCode.F10,
             23 => KeyCode.F11,
             24 => KeyCode.F12,
-            _ => KeyCode.None,
+            _ => KeyCode.None
         };
 
         if (key == KeyCode.None)
@@ -884,13 +884,13 @@ public sealed class EscapeSequenceParser
     }
 
     /// <summary>
-    /// Legacy CSI/SS3 modifier parameter (xterm encoding): SECOND parameter,
-    /// value−1 with shift=bit0, alt=bit1, ctrl=bit2, meta=bit3. NOTE the
-    /// different bit order versus kitty CSI-u (kitty: shift=1, ctrl=2, alt=4).
+    ///     Legacy CSI/SS3 modifier parameter (xterm encoding): SECOND parameter,
+    ///     value−1 with shift=bit0, alt=bit1, ctrl=bit2, meta=bit3. NOTE the
+    ///     different bit order versus kitty CSI-u (kitty: shift=1, ctrl=2, alt=4).
     /// </summary>
     private static KeyModifiers LegacyModifiers(ReadOnlySpan<byte> parameters)
     {
-        var bits = IntParamAt(parameters, 1) - 1;
+        int bits = IntParamAt(parameters, 1) - 1;
         if (bits <= 0)
         {
             return KeyModifiers.None;
@@ -928,13 +928,13 @@ public sealed class EscapeSequenceParser
             {
                 // ST terminator — an OSC string just completed.
                 EmitOscReportIfPresent("\u001B\\");
-                _state = ParserState.Ground;
+                State = ParserState.Ground;
                 return;
             }
 
             // Embedded non-ST ESC — swallow both bytes, keep consuming.
             _stringLength += 2;
-            if (_stringLength > _options.MaxStringBytes)
+            if (_stringLength > Options.MaxStringBytes)
             {
                 ForceStringAbort();
             }
@@ -944,7 +944,7 @@ public sealed class EscapeSequenceParser
         if (belTerminates && b == Bel)
         {
             EmitOscReportIfPresent("\u0007");
-            _state = ParserState.Ground;
+            State = ParserState.Ground;
             return;
         }
 
@@ -956,24 +956,26 @@ public sealed class EscapeSequenceParser
 
         CaptureOscByte(b);
         _stringLength++;
-        if (_stringLength > _options.MaxStringBytes)
+        if (_stringLength > Options.MaxStringBytes)
         {
             ForceStringAbort();
         }
     }
 
-    /// <summary>Stashes one OSC-string body byte (OscString state only) so an
-    /// OSC 11 background report can be decoded on termination.</summary>
+    /// <summary>
+    ///     Stashes one OSC-string body byte (OscString state only) so an
+    ///     OSC 11 background report can be decoded on termination.
+    /// </summary>
     private void CaptureOscByte(byte b)
     {
-        if (_state != ParserState.OscString)
+        if (State != ParserState.OscString)
         {
             return;
         }
 
         if (_oscBuffer is null)
         {
-            _oscBuffer = new byte[_options.MaxStringBytes];
+            _oscBuffer = new byte[Options.MaxStringBytes];
         }
 
         if (_oscLength < _oscBuffer.Length)
@@ -982,14 +984,16 @@ public sealed class EscapeSequenceParser
         }
     }
 
-    /// <summary>Decodes a just-terminated OSC string: «11;rgb:…» background
-    /// reports and «99;…» kitty notification capability answers become
-    /// capability events; every other OSC string stays discarded.</summary>
+    /// <summary>
+    ///     Decodes a just-terminated OSC string: «11;rgb:…» background
+    ///     reports and «99;…» kitty notification capability answers become
+    ///     capability events; every other OSC string stays discarded.
+    /// </summary>
     private void EmitOscReportIfPresent(string terminator)
     {
         int len = _oscLength;
         _oscLength = 0;
-        if (_state != ParserState.OscString || len < 3 || _oscBuffer is null)
+        if (State != ParserState.OscString || len < 3 || _oscBuffer is null)
         {
             return;
         }
@@ -1020,22 +1024,24 @@ public sealed class EscapeSequenceParser
         _stringEscSeen = false;
         _stringLength = 0;
         _oscLength = 0;
-        _state = ParserState.Ground;
+        State = ParserState.Ground;
     }
 
     // ── Bracketed paste (§4) ──────────────────────────────────────────────
 
-    /// <summary>Anti-injection invariant (§4.2): paste content is copied
-    /// verbatim into one atomic PasteEvent — escape bytes and control bytes
-    /// inside the block are NEVER decoded as key/mouse events.</summary>
+    /// <summary>
+    ///     Anti-injection invariant (§4.2): paste content is copied
+    ///     verbatim into one atomic PasteEvent — escape bytes and control bytes
+    ///     inside the block are NEVER decoded as key/mouse events.
+    /// </summary>
     private void StartPaste()
     {
-        _pasteBuffer ??= new byte[_options.MaxPasteBytes];
+        _pasteBuffer ??= new byte[Options.MaxPasteBytes];
         _pasteLength = 0;
         _pasteTruncated = false;
         _pasteMarkerProgress = 0;
         IsAwaitingPasteClose = true;
-        _state = ParserState.PastePayload;
+        State = ParserState.PastePayload;
     }
 
     private void PastePayloadByte(byte b)
@@ -1063,7 +1069,7 @@ public sealed class EscapeSequenceParser
                 NestedPasteMarkerCount++;
             }
 
-            for (var i = 0; i < _pasteMarkerProgress; i++)
+            for (int i = 0; i < _pasteMarkerProgress; i++)
             {
                 AppendPasteByte(PasteClose[i]);
             }
@@ -1093,8 +1099,10 @@ public sealed class EscapeSequenceParser
         _pasteBuffer[_pasteLength++] = b;
     }
 
-    /// <summary>Watchdog hook: force-closes a hung paste block (design §4.2),
-    /// emitting whatever was accumulated as a truncated paste.</summary>
+    /// <summary>
+    ///     Watchdog hook: force-closes a hung paste block (design §4.2),
+    ///     emitting whatever was accumulated as a truncated paste.
+    /// </summary>
     public void AbortPendingPaste()
     {
         if (!IsAwaitingPasteClose)
@@ -1104,12 +1112,12 @@ public sealed class EscapeSequenceParser
 
         _pasteMarkerProgress = 0;
         EmitPaste(wasTruncated: true);
-        _state = ParserState.Ground;
+        State = ParserState.Ground;
     }
 
     private void EmitPaste(bool wasTruncated)
     {
-        var text = _pasteBuffer is null || _pasteLength == 0
+        string text = _pasteBuffer is null || _pasteLength == 0
             ? string.Empty
             : Encoding.UTF8.GetString(_pasteBuffer, 0, _pasteLength);
 
@@ -1117,7 +1125,7 @@ public sealed class EscapeSequenceParser
         _pasteTruncated = false;
         _pasteMarkerProgress = 0;
         IsAwaitingPasteClose = false;
-        _state = ParserState.Ground;
+        State = ParserState.Ground;
 
         Enqueue(InputEvent.FromPaste(new PasteEvent(text, wasTruncated)));
     }
@@ -1126,16 +1134,18 @@ public sealed class EscapeSequenceParser
 
     private static int FirstIntParam(ReadOnlySpan<byte> parameters) => IntParamAt(parameters, 0);
 
-    /// <summary>Returns the sub-parameter at (group, sub) of the ';'/':'
-    /// parameter matrix — e.g. kitty CSI unicode:shifted ; mods:event u —
-    /// or −1 when absent.</summary>
+    /// <summary>
+    ///     Returns the sub-parameter at (group, sub) of the ';'/':'
+    ///     parameter matrix — e.g. kitty CSI unicode:shifted ; mods:event u —
+    ///     or −1 when absent.
+    /// </summary>
     private static int IntSubParamAt(ReadOnlySpan<byte> parameters, int groupIndex, int subIndex)
     {
-        var group = 0;
-        var sub = 0;
-        var value = 0;
-        var digits = 0;
-        foreach (var b in parameters)
+        int group = 0;
+        int sub = 0;
+        int value = 0;
+        int digits = 0;
+        foreach (byte b in parameters)
         {
             if (b == (byte)';')
             {
@@ -1177,14 +1187,16 @@ public sealed class EscapeSequenceParser
         return group == groupIndex && sub == subIndex && digits > 0 ? value : -1;
     }
 
-    /// <summary>Returns the <paramref name="index"/>-th ';'-separated parameter
-    /// (sub-parameters ':' are ignored), or −1 when absent.</summary>
+    /// <summary>
+    ///     Returns the <paramref name="index" />-th ';'-separated parameter
+    ///     (sub-parameters ':' are ignored), or −1 when absent.
+    /// </summary>
     private static int IntParamAt(ReadOnlySpan<byte> parameters, int index)
     {
-        var group = 0;
-        var value = 0;
-        var digits = 0;
-        foreach (var b in parameters)
+        int group = 0;
+        int value = 0;
+        int digits = 0;
+        foreach (byte b in parameters)
         {
             if (b == (byte)';')
             {
@@ -1238,19 +1250,19 @@ public sealed class EscapeSequenceParser
 
     private void Enqueue(in InputEvent evt)
     {
-        if (_count == _queue.Length)
+        if (AvailableEvents == _queue.Length)
         {
             GrowQueue();
         }
 
-        _queue[(_head + _count) % _queue.Length] = evt;
-        _count++;
+        _queue[(_head + AvailableEvents) % _queue.Length] = evt;
+        AvailableEvents++;
     }
 
     private void GrowQueue()
     {
         var grown = new InputEvent[_queue.Length * 2];
-        for (var i = 0; i < _count; i++)
+        for (int i = 0; i < AvailableEvents; i++)
         {
             grown[i] = _queue[(_head + i) % _queue.Length];
         }

@@ -1,8 +1,6 @@
-using System.Linq;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -45,10 +43,7 @@ public abstract partial class SessionListViewModelBase : StoreSubscriberViewMode
     ///     declared selectors to project state slices into view-model properties.
     /// </summary>
     /// <param name="state">The current UI state snapshot.</param>
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 
     /// <summary>Refresh the session list from the store. Implemented by the platform VM.</summary>
     protected abstract Task RefreshAsync(CancellationToken cancellationToken);

@@ -10,13 +10,13 @@ public enum MascotMode : byte
     Panel,
 
     /// <summary>No mascot at all.</summary>
-    Off,
+    Off
 }
 
 /// <summary>
-/// Env-resolved mascot mode — read once per process, never per frame.
-/// <c>HARBOR_MASCOT=off</c> stays the hard kill-switch used by CI / golden
-/// tests: it wins over <c>HARBOR_MASCOT_MODE</c> and disables everything.
+///     Env-resolved mascot mode — read once per process, never per frame.
+///     <c>HARBOR_MASCOT=off</c> stays the hard kill-switch used by CI / golden
+///     tests: it wins over <c>HARBOR_MASCOT_MODE</c> and disables everything.
 /// </summary>
 public static class MascotModeEnv
 {
@@ -37,7 +37,7 @@ public static class MascotModeEnv
         {
             "off" => MascotMode.Off,
             "panel" => MascotMode.Panel,
-            _ => MascotMode.Footer,
+            _ => MascotMode.Footer
         };
     }
 }

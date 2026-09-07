@@ -1,10 +1,5 @@
-using System.Globalization;
 using System.Text.RegularExpressions;
-using System.Xml;
 using System.Xml.Linq;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.App.Avalonia.Tests;
 
 /// <summary>
@@ -45,14 +40,14 @@ public class IconTests
         var doc = XDocument.Load(IconsPath);
         var icons = doc.Descendants()
             .Where(e => e.Name.LocalName == "StreamGeometry"
-                     && e.Attribute(XName.Get("Key", XNamespace)) is not null)
+                        && e.Attribute(XName.Get("Key", XNamespace)) is not null)
             .ToDictionary(
                 e => e.Attribute(XName.Get("Key", XNamespace))!.Value,
                 e => e.Value ?? string.Empty);
 
         await Assert.That(icons.Count).IsGreaterThanOrEqualTo(25);
 
-        foreach (var (name, pathData) in icons)
+        foreach ((string name, string pathData) in icons)
         {
             await Assert.That(!string.IsNullOrWhiteSpace(pathData)).IsTrue();
             await Assert.That(PathDataRegex.IsMatch(pathData.Trim())).IsTrue();
@@ -65,11 +60,12 @@ public class IconTests
         var doc = XDocument.Load(IconsPath);
         var keys = doc.Descendants()
             .Where(e => e.Name.LocalName == "StreamGeometry"
-                     && e.Attribute(XName.Get("Key", XNamespace)) is not null)
+                        && e.Attribute(XName.Get("Key", XNamespace)) is not null)
             .Select(e => e.Attribute(XName.Get("Key", XNamespace))!.Value)
             .ToHashSet();
 
-        string[] required = {
+        string[] required =
+        {
             "IcAdd", "IcSearch", "IcSettings", "IcSend", "IcStop",
             "IcTrash", "IcChevronRight", "IcChevronDown", "IcChevronUp",
             "IcChevronLeft", "IcHome", "IcTerminal", "IcFileCode", "IcMore",
@@ -83,7 +79,7 @@ public class IconTests
             "IcDiff", "IcTheme"
         };
 
-        foreach (var expected in required)
+        foreach (string expected in required)
         {
             await Assert.That(keys.Contains(expected)).IsTrue();
         }

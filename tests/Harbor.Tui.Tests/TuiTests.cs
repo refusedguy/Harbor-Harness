@@ -5,6 +5,7 @@ using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
 namespace Harbor.Tui.Tests;
+
 public class StatusBarViewModelTests
 {
     [Test]
@@ -514,5 +515,5 @@ internal sealed class TestView : ITuiView
     public ITuiViewModel? ViewModel { get; set; }
 
     public Task RenderAsync(ITuiRenderContext context, CancellationToken ct = default) => Task.CompletedTask;
-    public void Dispose() { }
+    public void Dispose() {}
 }

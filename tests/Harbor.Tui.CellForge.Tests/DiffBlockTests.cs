@@ -1,22 +1,20 @@
 using Harbor.Tui.CellForge.Rendering;
-using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class DiffBlockTests
 {
     private const string Sample = """
-        diff --git a/src/app.cs b/src/app.cs
-        index 83db48f..bf269f4 100644
-        --- a/src/app.cs
-        +++ b/src/app.cs
-        @@ -10,7 +10,8 @@ namespace App;
-         context line
-        -removed line one
-        -removed line two
-        +added line
-         more context
-        """;
+                                  diff --git a/src/app.cs b/src/app.cs
+                                  index 83db48f..bf269f4 100644
+                                  --- a/src/app.cs
+                                  +++ b/src/app.cs
+                                  @@ -10,7 +10,8 @@ namespace App;
+                                   context line
+                                  -removed line one
+                                  -removed line two
+                                  +added line
+                                   more context
+                                  """;
 
     [Test]
     public async Task Parse_ResolvesNumbersAndKinds()
@@ -30,7 +28,7 @@ public class DiffBlockTests
         await Assert.That(lines.Count(l => l.Kind == DiffLineKind.Context)).IsEqualTo(2);
 
         var ctx = lines.First(l => l.Kind == DiffLineKind.Context);
-        await Assert.That(ctx.OldNo).IsEqualTo(11);   // hunk starts at 10, first row consumed by "context"
+        await Assert.That(ctx.OldNo).IsEqualTo(11); // hunk starts at 10, first row consumed by "context"
         var del = lines.Where(l => l.Kind == DiffLineKind.Delete).ToList();
         await Assert.That(del[0].OldNo).IsEqualTo(12);
         await Assert.That(del[1].OldNo).IsEqualTo(13);
@@ -106,11 +104,11 @@ public class DiffBlockTests
     public async Task PairedDeleteAdd_WordDiff_AccentsChangedTokensOnly()
     {
         const string sample = """
-            @@ -1,2 +1,2 @@
-            -old line alpha
-            +new line beta
-             context tail
-            """;
+                              @@ -1,2 +1,2 @@
+                              -old line alpha
+                              +new line beta
+                               context tail
+                              """;
 
         var block = new DiffBlock(sample);
         var buffer = new ScreenBuffer(40, 4);
@@ -118,15 +116,15 @@ public class DiffBlockTests
 
         int signCol = DiffBlock.GutterWidth;
         // Row layout: 0 hunk header, 1 delete, 2 add, 3 context.
-        CellStyle delChanged = buffer.Get(signCol + 2, 1).Style;
-        CellStyle addChanged = buffer.Get(signCol + 2, 2).Style;
-        CellStyle addContext = buffer.Get(signCol + 6, 2).Style;
-        CellStyle addMark = buffer.Get(signCol + 10, 2).Style;
+        var delChanged = buffer.Get(signCol + 2, 1).Style;
+        var addChanged = buffer.Get(signCol + 2, 2).Style;
+        var addContext = buffer.Get(signCol + 6, 2).Style;
+        var addMark = buffer.Get(signCol + 10, 2).Style;
 
         await Assert.That(delChanged.Fg).IsEqualTo(ChatPalette.ToolError.Fg); // changed delete token
-        await Assert.That(addChanged.Fg).IsEqualTo(ChatPalette.ToolOk.Fg);    // changed add token
-        await Assert.That(addContext.Fg).IsEqualTo(ChatPalette.ToolBody.Fg);  // unchanged context
-        await Assert.That(addMark.Fg).IsEqualTo(ChatPalette.ToolOk.Fg);       // '+' gutter sign
+        await Assert.That(addChanged.Fg).IsEqualTo(ChatPalette.ToolOk.Fg); // changed add token
+        await Assert.That(addContext.Fg).IsEqualTo(ChatPalette.ToolBody.Fg); // unchanged context
+        await Assert.That(addMark.Fg).IsEqualTo(ChatPalette.ToolOk.Fg); // '+' gutter sign
 
         // Unpaired context row keeps plain styling.
         await Assert.That(buffer.Get(signCol + 2, 3).Style.Fg)
@@ -141,22 +139,22 @@ public class GoldenDiffBlockTests
     public async Task DiffBlock_Grid_Golden()
     {
         var backend = new RecordingBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var writer = new AnsiWriter(backend, true);
         var engine = new DiffEngine(56, 9);
         var back = new ScreenBuffer(56, 9);
 
         const string sample = """
-            --- a/src/app.cs
-            +++ b/src/app.cs
-            @@ -10,7 +10,8 @@ namespace App;
-             context line
-            -removed line one
-            -removed line two
-            +added line
-             more context
-            """;
+                              --- a/src/app.cs
+                              +++ b/src/app.cs
+                              @@ -10,7 +10,8 @@ namespace App;
+                               context line
+                              -removed line one
+                              -removed line two
+                              +added line
+                               more context
+                              """;
 
-        var block = new DiffBlock(sample, path: "src/app.cs");
+        var block = new DiffBlock(sample, "src/app.cs");
         var m = block.Measure(56);
         block.Paint(new BlockPaintContext(back, new Rect(0, 0, 56, m.MinLines), 0));
 

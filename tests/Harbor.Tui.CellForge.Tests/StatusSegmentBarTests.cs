@@ -1,6 +1,3 @@
-using Harbor.Tui.CellForge.Rendering;
-using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class StatusSegmentBarTests
@@ -8,7 +5,7 @@ public class StatusSegmentBarTests
     private static StatusViewModel Vm(StatusBarMode mode = StatusBarMode.Idle) => new()
     {
         Model = "kilocode/hy3",
-        Mode = mode,
+        Mode = mode
     };
 
     [Test]
@@ -51,7 +48,7 @@ public class StatusSegmentBarTests
 
         vm.SetContext(8_600, 10_000);
         _ = vm.BuildSegments(ws);
-        await Assert.That(ws[1].Accent).IsEqualTo(StatusAccent.Error);   // 86% ≥ 85
+        await Assert.That(ws[1].Accent).IsEqualTo(StatusAccent.Error); // 86% ≥ 85
         await Assert.That(ws[1].Text).IsEqualTo("▰▰▰▰▰▱");
 
         vm.SetContext(1_000, 10_000);
@@ -85,11 +82,11 @@ public class StatusSegmentBarTests
         string secondText = kept >= 2 ? ws[1].Text : "";
 
         await Assert.That(kept).IsGreaterThanOrEqualTo(1);
-        await Assert.That(modelText).IsEqualTo("kilocode/hy3");   // fixed survives everywhere
+        await Assert.That(modelText).IsEqualTo("kilocode/hy3"); // fixed survives everywhere
         await Assert.That(modelFixed).IsTrue();
         if (width >= 40)
         {
-            await Assert.That(kept).IsGreaterThanOrEqualTo(2);     // ctx bar fits from 40 up
+            await Assert.That(kept).IsGreaterThanOrEqualTo(2); // ctx bar fits from 40 up
             await Assert.That(secondText).Contains("▰");
         }
     }
@@ -99,8 +96,8 @@ public class StatusSegmentBarTests
     {
         var ws = new StatusSeg[]
         {
-            new("longmodelname/withsuffix", StatusAccent.Accent, FixedPriority: true),
-            new("⏸ awaiting approval", StatusAccent.Warning, FixedPriority: true),
+            new("longmodelname/withsuffix", StatusAccent.Accent, true),
+            new("⏸ awaiting approval", StatusAccent.Warning, true)
         };
         int kept = StatusBarLayout.Fit(ws, 18);
         int totalWidth = StatusBarLayout.TotalWidth(ws.AsSpan()[..kept]);
@@ -117,7 +114,7 @@ public class StatusSegmentBarTests
             new("model", StatusAccent.Accent, true),
             new("▰▱▱▱▱▱", StatusAccent.Success, false),
             new("9k↑ 1k↓", StatusAccent.Dim, false),
-            new("$0.99", StatusAccent.Dim, false),
+            new("$0.99", StatusAccent.Dim, false)
         };
 
         // Width that only fits model + ctx + tokens: cost dies first.
@@ -134,7 +131,7 @@ public class StatusSegmentBarTests
         {
             new("model", StatusAccent.Accent, true),
             new("▰▱▱▱▱▱", StatusAccent.Success, false),
-            new("9k↑ 1k↓", StatusAccent.Dim, false),
+            new("9k↑ 1k↓", StatusAccent.Dim, false)
         };
         kept = StatusBarLayout.Fit(ws2, 5 + 1 + 6);
         string second = kept >= 2 ? ws2[1].Text : "";
@@ -150,7 +147,7 @@ public class StatusSegmentBarTests
         var segs = new StatusSeg[]
         {
             new("mdl", StatusAccent.Accent, true),
-            new("ok", StatusAccent.Success, false),
+            new("ok", StatusAccent.Success, false)
         };
         StatusBarWidget.Paint(buffer, new Rect(0, 0, 30, 1), segs);
 

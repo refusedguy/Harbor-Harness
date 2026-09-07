@@ -2,6 +2,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Abstractions.Tools;
+
 /// <summary>
 ///     Registry of tools. Implements Registry pattern.
 /// </summary>

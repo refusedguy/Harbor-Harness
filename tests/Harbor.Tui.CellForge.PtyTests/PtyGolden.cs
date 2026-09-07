@@ -4,10 +4,8 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     Golden-file plumbing for PTY scenarios. Fixtures live in
 ///     <c>tests/fixtures/consoleex-pty</c> and are located by walking up from
 ///     the test binaries to the repo root (<c>Harbor.slnx</c> marker).
-///
 ///     Regeneration contract: run with <c>HARBOR_UPDATE_GOLDENS=1</c> to
 ///     overwrite goldens; CI never regenerates — a mismatching golden fails.
-///
 ///     Normalization contract (flake control, celldiff §8): only deterministic
 ///     screen states are goldenized — idle launch frame, settled post-resize
 ///     frame. Streaming phases are asserted by markers instead because the

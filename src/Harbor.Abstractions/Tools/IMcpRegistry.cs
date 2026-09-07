@@ -1,4 +1,5 @@
 namespace Harbor.Abstractions.Tools;
+
 /// <summary>
 ///     Registry of Model Context Protocol (MCP) servers reachable from the agent runtime.
 /// </summary>

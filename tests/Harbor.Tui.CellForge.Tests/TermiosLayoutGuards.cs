@@ -1,8 +1,6 @@
+using Harbor.Tui.CellForge.Input;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using Harbor.Tui.CellForge.Input;
-using TUnit.Core;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
@@ -23,7 +21,7 @@ namespace Harbor.Tui.CellForge.Tests;
 public sealed class TermiosLayoutGuards
 {
     [DllImport("libc", SetLastError = true)]
-    private static extern int isatty(int fd);
+    private extern static int isatty(int fd);
 
     /// <summary>
     ///     Раскладка приватного struct Termios должна точно совпадать с

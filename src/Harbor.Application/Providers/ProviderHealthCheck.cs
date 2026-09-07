@@ -1,8 +1,7 @@
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Providers;
 using Microsoft.Extensions.Logging;
-
+using System.Diagnostics;
 namespace Harbor.Application.Providers;
+
 /// <summary>
 ///     Default <see cref="IProviderHealthCheck" /> — probes the provider with a
 ///     models-list request (the cheapest metadata call every provider supports)
@@ -12,8 +11,8 @@ namespace Harbor.Application.Providers;
 /// </summary>
 public sealed class ProviderHealthCheck : IProviderHealthCheck
 {
-    private readonly IProviderRegistry _providers;
     private readonly ILogger<ProviderHealthCheck> _logger;
+    private readonly IProviderRegistry _providers;
     private readonly TimeSpan _timeout;
 
     /// <summary>Construct a health check bound to the provider registry.</summary>
@@ -40,7 +39,7 @@ public sealed class ProviderHealthCheck : IProviderHealthCheck
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(_timeout);
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         try
         {
             var result = await clientResult.Value.GetModelsAsync(cts.Token).ConfigureAwait(false);

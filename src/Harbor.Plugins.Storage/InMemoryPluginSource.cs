@@ -1,7 +1,8 @@
+using Harbor.Plugins.Abstractions;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
-using Harbor.Plugins.Abstractions;
 namespace Harbor.Plugins.Storage;
+
 /// <summary>
 ///     <see cref="IPluginSource" /> backed by an in-memory collection of
 ///     <see cref="PluginScript" /> values. Intended primarily for tests and for embedding
@@ -18,7 +19,7 @@ public sealed class InMemoryPluginSource : IPluginSource
     /// <summary>
     ///     Construct an empty in-memory source.
     /// </summary>
-    public InMemoryPluginSource() { }
+    public InMemoryPluginSource() {}
 
     /// <summary>
     ///     Construct an in-memory source pre-populated with the supplied scripts.

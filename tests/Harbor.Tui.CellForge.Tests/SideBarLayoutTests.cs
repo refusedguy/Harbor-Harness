@@ -1,6 +1,5 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class SideBarLayoutTests

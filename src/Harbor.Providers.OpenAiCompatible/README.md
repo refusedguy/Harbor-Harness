@@ -24,10 +24,7 @@ Infrastructure — LLM provider implementation. References `Harbor.Abstractions`
 
 ## Usage
 
-Registered in `src/Harbor.Hosting/Modules/ProviderFactories.cs` and driven by the
-JSON presets in `providers/*.json` (`apiType: "openai-compatible"`). Every OpenAI-compatible
-provider (kilocode, openrouter, deepseek, groq, mistral, xai, together,
-fireworks, cerebras, vllm) is a JSON file — no code.
+Registered in `src/Harbor.Hosting/Modules/ProviderFactories.cs` and driven by the JSON presets in `providers/*.json` (`apiType: "openai-compatible"`). Every OpenAI-compatible provider (kilocode, openrouter, deepseek, groq, mistral, xai, together, fireworks, cerebras, vllm) is a JSON file — no code.
 
 ## Configuration
 

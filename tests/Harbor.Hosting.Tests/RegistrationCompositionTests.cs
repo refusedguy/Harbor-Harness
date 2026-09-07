@@ -3,10 +3,9 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
-using Harbor.Tui.AnsiPlain;
 using Harbor.Terminal.Abstractions;
+using Harbor.Tui.AnsiPlain;
 using Microsoft.Extensions.DependencyInjection;
-
 namespace Harbor.Hosting.Tests;
 
 /// <summary>
@@ -65,7 +64,7 @@ public class RegistrationCompositionTests
         // Self-adjusting: verify all known tools are present and no duplicates, without hardcoding
         // the exact count. Adding a new tool will require updating this list, but the count check
         // below (frozen-registry equivalence) will stay green.
-        var expectedFull = new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt", "lsp", "skill" };
+        string[] expectedFull = new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt", "lsp", "skill" };
         // Self-adjusting: exact count will drift when new tools are added — pin that at least the
         // 18 known tools are present and there are no duplicates. The frozen-registry equivalence
         // test below guarantees the total count is consistent.
@@ -88,7 +87,7 @@ public class RegistrationCompositionTests
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",
             ToolSet = HarborToolSetKind.Standard10,
-            IncludeMcpTools = false,
+            IncludeMcpTools = false
         });
 
         var names = ToolNames(sp);
@@ -113,7 +112,7 @@ public class RegistrationCompositionTests
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",
             ToolSet = HarborToolSetKind.Standard10,
-            IncludeMcpTools = false,
+            IncludeMcpTools = false
         });
 
         // Desktop view-models resolve IMcpRegistry unconditionally — the
@@ -128,7 +127,7 @@ public class RegistrationCompositionTests
     {
         string harborDir = TempHarborDir();
         var services = new ServiceCollection();
-        HarborCompositionContext ctx = services.AddHarbor(
+        var ctx = services.AddHarbor(
             new HarborComposeOptions { HarborDir = harborDir, DefaultStorageBackend = "memory" });
         using var sp = services.BuildServiceProvider();
 
@@ -195,7 +194,7 @@ public class RegistrationCompositionTests
         {
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",
-            DefaultTuiRenderer = "plain",
+            DefaultTuiRenderer = "plain"
         });
 
         // Without the Spectre feature flag the renderer switch is forced plain;

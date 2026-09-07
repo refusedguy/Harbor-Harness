@@ -1,12 +1,9 @@
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
 using Harbor.Application.Telemetry;
 using Harbor.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Result = CSharpFunctionalExtensions.Result;
 namespace Harbor.Application.Agents.Pipeline;
+
 /// <summary>
 ///     Per-turn compaction behavior (audit v2 §3.5 concern #3), extracted verbatim
 ///     from the <c>AgentLoop</c> turn body: threshold check → LLM summary →
@@ -59,7 +56,7 @@ public sealed class CompactionBehavior(
             "session.context.size", tokenTracker.EstimateTokens(turnMessages),
             new KeyValuePair<string, object?>("context.phase", "pre-compaction"),
             new KeyValuePair<string, object?>("session.id", session.Session.Id));
-        Result<CompactionResult> compactionResult =
+        var compactionResult =
             await compaction.CompactAsync(session.Session.Id, turnMessages, model, ct).ConfigureAwait(false);
 
         // Railway Oriented Programming: Match dispatches to the
@@ -74,7 +71,7 @@ public sealed class CompactionBehavior(
                 // Recompute so THIS turn's request is already built
                 // from the compacted view instead of the overfull
                 // pre-compaction history.
-                IReadOnlyList<AgentMessage> compacted =
+                var compacted =
                     CompactionService.MaterializeCompactedView(session.Messages);
                 metrics.Histogram(
                     "session.context.size", tokenTracker.EstimateTokens(compacted),
@@ -117,7 +114,7 @@ public sealed class CompactionBehavior(
     {
         await eventBus.PublishAsync(new CompactionFailedEvent(sessionId, error), CancellationToken.None)
             .ConfigureAwait(false);
-        return new CompactionOutcome(turnMessages, TruncationFallback: true);
+        return new CompactionOutcome(turnMessages, true);
     }
 }
 

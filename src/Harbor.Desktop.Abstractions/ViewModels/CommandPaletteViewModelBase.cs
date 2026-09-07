@@ -1,6 +1,4 @@
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewModel
@@ -8,13 +6,13 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
     protected readonly List<CommandResultViewModel> AllCommands = new();
 
     [ObservableProperty]
+    private bool _isAgentRunning;
+
+    [ObservableProperty]
     private string _query = string.Empty;
 
     [ObservableProperty]
     private int _selectedIndex;
-
-    [ObservableProperty]
-    private bool _isAgentRunning;
 
     [ObservableProperty]
     private string _status = string.Empty;
@@ -106,8 +104,5 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
         }
     }
 
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 }

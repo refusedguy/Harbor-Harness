@@ -1,27 +1,25 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
-using CSharpFunctionalExtensions;
-
 namespace Harbor.Application.Sessions;
 
 /// <summary>
-/// Cross-process advisory lock backed by an exclusive-create claim file
-/// (<c>FileMode.CreateNew</c> ⇒ atomic O_EXCL semantics on POSIX and Windows).
-/// Claims belong to a scope name (e.g. <c>session:{id}</c>) and carry the
-/// owning pid plus a monotonic timestamp; claims whose owner died and aged
-/// past the grace window are stealable, so a crashed CLI cannot wedge a
-/// session forever. In-process double acquisition of one scope is refused
-/// via a registry-local index before any filesystem roundtrip.
+///     Cross-process advisory lock backed by an exclusive-create claim file
+///     (<c>FileMode.CreateNew</c> ⇒ atomic O_EXCL semantics on POSIX and Windows).
+///     Claims belong to a scope name (e.g. <c>session:{id}</c>) and carry the
+///     owning pid plus a monotonic timestamp; claims whose owner died and aged
+///     past the grace window are stealable, so a crashed CLI cannot wedge a
+///     session forever. In-process double acquisition of one scope is refused
+///     via a registry-local index before any filesystem roundtrip.
 /// </summary>
 public sealed class FileClaimRegistry : IDisposable
 {
+    private readonly ConcurrentDictionary<string, FileClaim> _active = new(StringComparer.Ordinal);
     private readonly string _directory;
     private readonly TimeSpan _staleGrace;
-    private readonly ConcurrentDictionary<string, FileClaim> _active = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Create a registry bound to a claims directory.
+    ///     Create a registry bound to a claims directory.
     /// </summary>
     /// <param name="directory">Directory holding <c>*.claim</c> files (created on demand).</param>
     /// <param name="staleGrace">Minimum age of a dead-owner claim before another process may steal it.</param>
@@ -32,16 +30,26 @@ public sealed class FileClaimRegistry : IDisposable
         _staleGrace = staleGrace ?? TimeSpan.FromSeconds(5);
     }
 
+    public void Dispose()
+    {
+        foreach (var claim in _active.Values)
+        {
+            claim.Dispose();
+        }
+
+        _active.Clear();
+    }
+
     /// <summary>
-    /// Try once to acquire <paramref name="scope"/>. Failure carries a caller-
-    /// presentable reason (another live holder / stolen-after-steal race);
-    /// contention is handled by callers polling at their own cadence.
+    ///     Try once to acquire <paramref name="scope" />. Failure carries a caller-
+    ///     presentable reason (another live holder / stolen-after-steal race);
+    ///     contention is handled by callers polling at their own cadence.
     /// </summary>
     public async Task<Result<FileClaim>> AcquireAsync(string scope, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scope);
 
-        var claimPath = Path.Combine(_directory, $"{ScopeToFileName(scope)}.claim");
+        string claimPath = Path.Combine(_directory, $"{ScopeToFileName(scope)}.claim");
         if (_active.ContainsKey(scope))
         {
             return Result.Failure<FileClaim>($"Scope '{scope}' is already claimed by this process.");
@@ -50,7 +58,7 @@ public sealed class FileClaimRegistry : IDisposable
         Directory.CreateDirectory(_directory);
 
         // Fresh create wins atomically.
-        FileClaim? created = await CreateClaimAsync(scope, claimPath, ct).ConfigureAwait(false);
+        var created = await CreateClaimAsync(scope, claimPath, ct).ConfigureAwait(false);
         if (created is not null)
         {
             _active[scope] = created;
@@ -82,7 +90,7 @@ public sealed class FileClaimRegistry : IDisposable
         return created;
     }
 
-    /// <summary>True while this registry instance holds <paramref name="scope"/>.</summary>
+    /// <summary>True while this registry instance holds <paramref name="scope" />.</summary>
     public bool IsHeld(string scope) => _active.ContainsKey(scope);
 
     private async Task<FileClaim?> CreateClaimAsync(string scope, string claimPath, CancellationToken ct)
@@ -92,7 +100,7 @@ public sealed class FileClaimRegistry : IDisposable
         {
             // FileMode.CreateNew fails when the file exists — the whole design.
             await using var stream = new FileStream(
-                claimPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 256);
+                claimPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 256);
             await using var writer = new StreamWriter(stream);
             await writer.WriteAsync(claim.Serialize().AsMemory(), ct).ConfigureAwait(false);
             return claim;
@@ -106,7 +114,7 @@ public sealed class FileClaimRegistry : IDisposable
     private bool ShouldSteal(string claimPath, out string? failure)
     {
         failure = null;
-        DateTime nowUtc = DateTime.UtcNow;
+        var nowUtc = DateTime.UtcNow;
 
         string content;
         try
@@ -119,7 +127,7 @@ public sealed class FileClaimRegistry : IDisposable
             return false;
         }
 
-        if (!FileClaim.TryParse(content, out int pid, out _, out DateTime stampedUtc))
+        if (!FileClaim.TryParse(content, out int pid, out _, out var stampedUtc))
         {
             failure = $"Claim '{claimPath}' is corrupt.";
             return nowUtc - stampedUtc > _staleGrace * 2;
@@ -190,16 +198,6 @@ public sealed class FileClaimRegistry : IDisposable
 
         return new string(buf);
     }
-
-    public void Dispose()
-    {
-        foreach (var claim in _active.Values)
-        {
-            claim.Dispose();
-        }
-
-        _active.Clear();
-    }
 }
 
 /// <summary>An owned cross-process claim; dispose releases (token-guarded delete).</summary>
@@ -224,6 +222,17 @@ public sealed class FileClaim : IDisposable
     internal string Token { get; }
     internal DateTime StampedUtc { get; }
 
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _released, 1) != 0)
+        {
+            return;
+        }
+
+        _owner.Release(this);
+        GC.SuppressFinalize(this);
+    }
+
     internal string Serialize() =>
         string.Create(CultureInfo.InvariantCulture, $"pid={OwnerPid};token={Token};ts={StampedUtc.ToString("o", CultureInfo.InvariantCulture)}");
 
@@ -233,7 +242,7 @@ public sealed class FileClaim : IDisposable
         token = string.Empty;
         stampedUtc = DateTime.MinValue;
 
-        foreach (var part in content.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (string part in content.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             int eq = part.IndexOf('=');
             if (eq <= 0)
@@ -261,21 +270,7 @@ public sealed class FileClaim : IDisposable
     }
 
     /// <summary>Refresh the timestamp so dead-pid theft does not fire early.</summary>
-    public void KeepAlive()
-    {
-        ClaimStamp.Rewrite(ClaimPath, Token, OwnerPid, DateTime.UtcNow);
-    }
-
-    public void Dispose()
-    {
-        if (Interlocked.Exchange(ref _released, 1) != 0)
-        {
-            return;
-        }
-
-        _owner.Release(this);
-        GC.SuppressFinalize(this);
-    }
+    public void KeepAlive() => ClaimStamp.Rewrite(ClaimPath, Token, OwnerPid, DateTime.UtcNow);
 }
 
 internal static class ClaimStamp

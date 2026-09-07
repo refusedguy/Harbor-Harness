@@ -1,11 +1,10 @@
+using BenchmarkDotNet.Attributes;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using BenchmarkDotNet.Attributes;
-
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks <see cref="JsonDocument.Parse(string, JsonDocumentOptions)"/> for
+///     Benchmarks <see cref="JsonDocument.Parse(string, JsonDocumentOptions)" /> for
 ///     tool-call argument payloads of varying sizes. Represents the cost of
 ///     <c>StreamingCoalescer.Materialize</c> / tool argument deserialization on
 ///     the hot path (every tool call parses its JSON args).
@@ -14,9 +13,9 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class ToolArgsJsonBenchmark
 {
-    private string _smallJson = null!;
-    private string _mediumJson = null!;
     private string _largeJson = null!;
+    private string _mediumJson = null!;
+    private string _smallJson = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -27,7 +26,7 @@ public class ToolArgsJsonBenchmark
         _mediumJson = JsonSerializer.Serialize(new { input = new string('a', 1024) });
 
         // Large ~4 KB: array of tool_calls with args.
-        var calls = new object[8];
+        object[] calls = new object[8];
         for (int i = 0; i < 8; i++)
             calls[i] = new { id = $"call_{i:D3}", name = "read", arguments = new { path = $"/tmp/file_{i}.txt", limit = 100, offset = i * 10 } };
         _largeJson = JsonSerializer.Serialize(new { tool_calls = calls });
@@ -57,22 +56,22 @@ public class ToolArgsJsonBenchmark
 
 /// <summary>
 ///     Benchmarks inline markdown scanning for <c>**bold**</c>, <c>*italic*</c>,
-///     and <c>`code`</c> patterns using <see cref="string.IndexOf(char)"/> loop
-///     vs <see cref="Regex"/>. Proxy for ChatMarkdown / streaming markdown
+///     and <c>`code`</c> patterns using <see cref="string.IndexOf(char)" /> loop
+///     vs <see cref="Regex" />. Proxy for ChatMarkdown / streaming markdown
 ///     rendering without taking a dependency on contrib.
 /// </summary>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class InlineMarkdownScanBenchmark
 {
-    private string _text = null!;
     private Regex _regex = null!;
+    private string _text = null!;
 
     [GlobalSetup]
     public void Setup()
     {
         // ~100 chars base + 10 bold segments spread through the text.
-        var filler = "hello world ";
+        string filler = "hello world ";
         var parts = new List<string>();
         for (int i = 0; i < 10; i++)
         {

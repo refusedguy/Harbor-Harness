@@ -1,12 +1,9 @@
-using System.Text;
-using System.Text.Json;
-using System.Threading.Channels;
 using Harbor.Abstractions.Models;
 using Harbor.Ipc.Ide;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
+using System.Text;
+using System.Text.Json;
+using System.Threading.Channels;
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -21,14 +18,14 @@ public class IdeBridgeTests
     [Test]
     public async Task ListSessions_Returns_Serialized_Sessions()
     {
-        Session session = Session.Create("/tmp/proj", "code", "kilocode", "kilocode/tencent/hy3:free");
+        var session = Session.Create("/tmp/proj", "code", "kilocode", "kilocode/tencent/hy3:free");
         await using var harness = new IdeHarness(sessionId: "s1");
         harness.Client.Sessions = [session];
 
-        JsonElement result = await harness.RequestAsync("list_sessions");
+        var result = await harness.RequestAsync("list_sessions");
 
         await Assert.That(result.GetProperty("sessions").GetArrayLength()).IsEqualTo(1);
-        JsonElement first = result.GetProperty("sessions")[0];
+        var first = result.GetProperty("sessions")[0];
         await Assert.That(first.GetProperty("id").GetString()).IsEqualTo(session.Id);
         await Assert.That(first.GetProperty("agent").GetString()).IsEqualTo("code");
         await Assert.That(first.GetProperty("provider").GetString()).IsEqualTo("kilocode");
@@ -37,10 +34,10 @@ public class IdeBridgeTests
     [Test]
     public async Task InjectPrompt_Accepts_Immediately_And_Runs_In_Background()
     {
-        Session bound = Session.Create("/tmp/proj", "code", "anthropic", "claude");
+        var bound = Session.Create("/tmp/proj", "code", "anthropic", "claude");
         await using var harness = new IdeHarness(sessionId: bound.Id);
 
-        JsonElement result = await harness.RequestAsync("inject_prompt",
+        var result = await harness.RequestAsync("inject_prompt",
             $$"""{"session_id":"{{bound.Id}}","prompt":"hello"}""");
 
         await Assert.That(result.GetProperty("accepted").GetBoolean()).IsTrue();
@@ -55,7 +52,7 @@ public class IdeBridgeTests
     {
         await using var harness = new IdeHarness(sessionId: "s1");
 
-        IdeRpcException ex = await Assert.That(async () =>
+        var ex = await Assert.That(async () =>
             await harness.RequestAsync("inject_prompt", """{"prompt":"  "}""")).Throws<IdeRpcException>();
         await Assert.That(ex.Code).IsEqualTo(IdeRpcException.InvalidParams);
     }
@@ -65,8 +62,8 @@ public class IdeBridgeTests
     {
         await using var harness = new IdeHarness(sessionId: "mine");
 
-        IdeRpcException ex = await Assert.That(async () =>
-            await harness.RequestAsync("inject_prompt", """{"session_id":"other","prompt":"hi"}"""))
+        var ex = await Assert.That(async () =>
+                await harness.RequestAsync("inject_prompt", """{"session_id":"other","prompt":"hi"}"""))
             .Throws<IdeRpcException>();
         await Assert.That(ex.Code).IsEqualTo(IdeRpcException.InvalidParams);
         await Assert.That(harness.Client.Prompts).IsEmpty();
@@ -77,7 +74,7 @@ public class IdeBridgeTests
     {
         await using var harness = new IdeHarness(sessionId: "s1");
 
-        IdeRpcException ex = await Assert.That(async () =>
+        var ex = await Assert.That(async () =>
             await harness.RequestAsync("inject_prompt")).Throws<IdeRpcException>();
         await Assert.That(ex.Code).IsEqualTo(IdeRpcException.InvalidParams);
     }
@@ -87,10 +84,10 @@ public class IdeBridgeTests
     {
         await using var harness = new IdeHarness(sessionId: "s1");
 
-        JsonElement result = await harness.RequestAsync("read_stream");
+        var result = await harness.RequestAsync("read_stream");
         await Assert.That(result.GetProperty("subscribed").GetBoolean()).IsTrue();
 
-        AssistantMessage partial = AssistantMessage.Empty("s1", "m").AppendText("Hel");
+        var partial = AssistantMessage.Empty("s1", "m").AppendText("Hel");
         await harness.Client.PublishEventAsync(new HarborEvent.AgentStarted("s1"));
         await harness.Client.PublishEventAsync(new HarborEvent.MessageUpdate(partial, "Hel"));
         await harness.Client.PublishEventAsync(new HarborEvent.ToolStart("tc1", "read"));
@@ -110,7 +107,7 @@ public class IdeBridgeTests
         await using var harness = new IdeHarness(sessionId: "s1");
 
         await harness.RequestAsync("read_stream");
-        JsonElement stopped = await harness.RequestAsync("stop_stream");
+        var stopped = await harness.RequestAsync("stop_stream");
         await Assert.That(stopped.GetProperty("subscribed").GetBoolean()).IsFalse();
 
         await harness.Client.PublishEventAsync(new HarborEvent.AgentStarted("s1"));
@@ -123,7 +120,7 @@ public class IdeBridgeTests
     {
         await using var harness = new IdeHarness(sessionId: "s1");
 
-        JsonElement result = await harness.RequestAsync("abort");
+        var result = await harness.RequestAsync("abort");
 
         await Assert.That(result.GetProperty("requested").GetBoolean()).IsTrue();
         await Assert.That(harness.Client.Aborted).IsTrue();
@@ -134,7 +131,7 @@ public class IdeBridgeTests
     {
         await using var harness = new IdeHarness(sessionId: "s1");
 
-        IdeRpcException ex = await Assert.That(async () =>
+        var ex = await Assert.That(async () =>
             await harness.RequestAsync("does_not_exist")).Throws<IdeRpcException>();
         await Assert.That(ex.Code).IsEqualTo(IdeRpcException.MethodNotFound);
     }
@@ -146,7 +143,7 @@ public class IdeBridgeTests
 
         harness.Input.PushLine("this is not json");
 
-        string line = await harness.WaitOutputAsync("\"error\"", timeout: TimeSpan.FromSeconds(5));
+        string line = await harness.WaitOutputAsync("\"error\"", TimeSpan.FromSeconds(5));
         await Assert.That(line).Contains("\"id\":null");
     }
 
@@ -167,14 +164,14 @@ public class IdeBridgeTests
         await using var harness = new IdeHarness(sessionId: "s1");
         harness.Client.GateListSessions();
 
-        Task<JsonElement> slow = harness.RequestAsync("list_sessions");
+        var slow = harness.RequestAsync("list_sessions");
         await harness.Client.WaitListSessionsStartedAsync(TimeSpan.FromSeconds(5));
 
-        JsonElement fast = await harness.RequestAsync("abort");
+        var fast = await harness.RequestAsync("abort");
         await Assert.That(fast.GetProperty("requested").GetBoolean()).IsTrue();
 
         harness.Client.ReleaseListSessions();
-        JsonElement slowResult = await slow;
+        var slowResult = await slow;
         await Assert.That(slowResult.GetProperty("sessions").GetArrayLength()).IsEqualTo(0);
     }
 
@@ -182,11 +179,11 @@ public class IdeBridgeTests
     public async Task Hung_Request_Times_Out_With_Error()
     {
         await using var harness = new IdeHarness(
-            sessionId: "s1",
-            options: new IdeSessionBridgeOptions { RequestTimeout = TimeSpan.FromMilliseconds(100) });
+            "s1",
+            new IdeSessionBridgeOptions { RequestTimeout = TimeSpan.FromMilliseconds(100) });
         harness.Client.GateListSessions();
 
-        IdeRpcException ex = await Assert.That(async () => await harness.RequestAsync(
+        var ex = await Assert.That(async () => await harness.RequestAsync(
             "list_sessions", timeout: TimeSpan.FromSeconds(10))).Throws<IdeRpcException>();
         await Assert.That(ex.Code).IsEqualTo(-32002);
 
@@ -202,7 +199,7 @@ public class IdeBridgeTests
         await harness.RequestAsync("inject_prompt", """{"prompt":"long running"}""");
         await harness.Client.WaitPromptAsync(TimeSpan.FromSeconds(5));
 
-        JsonElement result = await harness.RequestAsync("abort");
+        var result = await harness.RequestAsync("abort");
         await Assert.That(result.GetProperty("requested").GetBoolean()).IsTrue();
 
         harness.Client.ReleasePrompt();
@@ -252,8 +249,8 @@ public class IdeBridgeTests
     /// <summary>Full editor-side harness around <see cref="IdeSessionBridge" />.</summary>
     private sealed class IdeHarness : IAsyncDisposable
     {
-        private readonly Lock _outputLock = new();
         private readonly StringBuilder _output = new();
+        private readonly Lock _outputLock = new();
         private int _nextId;
 
         public IdeHarness(string? sessionId, IdeSessionBridgeOptions? options = null)
@@ -272,6 +269,21 @@ public class IdeBridgeTests
 
         public Task ServeTask { get; }
 
+        public async ValueTask DisposeAsync()
+        {
+            Input.Close();
+            try
+            {
+                await ServeTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                // Bridge is torn down by DisposeAsync below.
+            }
+
+            await Bridge.DisposeAsync().ConfigureAwait(false);
+        }
+
         /// <summary>Sends a JSON-RPC request and awaits the matching response.</summary>
         public async Task<JsonElement> RequestAsync(string method, string? paramsJson = null, TimeSpan? timeout = null)
         {
@@ -281,7 +293,7 @@ public class IdeBridgeTests
 
             string line = await WaitOutputAsync($"\"id\":{id}", timeout ?? TimeSpan.FromSeconds(5)).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(line);
-            if (doc.RootElement.TryGetProperty("error", out JsonElement error))
+            if (doc.RootElement.TryGetProperty("error", out var error))
             {
                 throw new IdeRpcException(
                     error.GetProperty("code").GetInt32(),
@@ -313,73 +325,76 @@ public class IdeBridgeTests
             }
         }
 
-        public async ValueTask DisposeAsync()
-        {
-            Input.Close();
-            try
-            {
-                await ServeTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-            }
-            catch (TimeoutException)
-            {
-                // Bridge is torn down by DisposeAsync below.
-            }
-
-            await Bridge.DisposeAsync().ConfigureAwait(false);
-        }
-
         /// <summary>
         ///     Writer that records into the harness buffer. The bridge serializes
         ///     all writes under its own semaphore; locking here is belt and braces.
         /// </summary>
         private sealed class LockingWriter(IdeHarness owner) : StringWriter
         {
+
+            public override Encoding Encoding => Encoding.UTF8;
             public override void Write(char value)
             {
-                lock (owner._outputLock) _ = owner._output.Append(value);
+                lock (owner._outputLock)
+                {
+                    _ = owner._output.Append(value);
+                }
             }
 
             public override void Write(string? value)
             {
-                lock (owner._outputLock) _ = owner._output.Append(value);
+                lock (owner._outputLock)
+                {
+                    _ = owner._output.Append(value);
+                }
             }
 
             public override void Write(char[] buffer, int index, int count)
             {
-                lock (owner._outputLock) _ = owner._output.Append(buffer, index, count);
+                lock (owner._outputLock)
+                {
+                    _ = owner._output.Append(buffer, index, count);
+                }
             }
 
             public override async Task WriteAsync(string? value)
             {
                 if (value is null) return;
-                lock (owner._outputLock) _ = owner._output.Append(value);
+                lock (owner._outputLock)
+                {
+                    _ = owner._output.Append(value);
+                }
                 await Task.CompletedTask.ConfigureAwait(false);
             }
 
             public override async Task WriteLineAsync(string? value)
             {
-                lock (owner._outputLock) _ = owner._output.Append(value).Append('\n');
+                lock (owner._outputLock)
+                {
+                    _ = owner._output.Append(value).Append('\n');
+                }
                 await Task.CompletedTask.ConfigureAwait(false);
             }
 
             public override async Task WriteAsync(ReadOnlyMemory<char> buffer, CancellationToken ct = default)
             {
-                lock (owner._outputLock) _ = owner._output.Append(buffer.Span);
+                lock (owner._outputLock)
+                {
+                    _ = owner._output.Append(buffer.Span);
+                }
                 await Task.CompletedTask.ConfigureAwait(false);
             }
 
             public override async Task WriteLineAsync(ReadOnlyMemory<char> buffer, CancellationToken ct = default)
             {
-                lock (owner._outputLock) _ = owner._output.Append(buffer.Span).Append('\n');
+                lock (owner._outputLock)
+                {
+                    _ = owner._output.Append(buffer.Span).Append('\n');
+                }
                 await Task.CompletedTask.ConfigureAwait(false);
             }
 
-            public override async Task FlushAsync(CancellationToken ct = default)
-            {
-                await Task.CompletedTask.ConfigureAwait(false);
-            }
-
-            public override Encoding Encoding => Encoding.UTF8;
+            public override async Task FlushAsync(CancellationToken ct = default) => await Task.CompletedTask.ConfigureAwait(false);
         }
     }
 }

@@ -1,4 +1,5 @@
 namespace Harbor.Ui.Framework.Configuration;
+
 /// <summary>
 ///     Cross-platform contract for reading the per-user Harbor
 ///     "common config" (provider, model, theme, etc.). Mirrors the

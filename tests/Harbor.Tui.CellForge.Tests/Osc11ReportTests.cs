@@ -1,11 +1,12 @@
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
-
 namespace Harbor.Tui.CellForge.Tests;
 
-/// <summary>OSC 11 background-report interception (auto-theme §P3.3): the
-/// parser captures OSC string bodies and surfaces «11;rgb:…» answers as
-/// capability events; every other OSC string stays discarded.</summary>
+/// <summary>
+///     OSC 11 background-report interception (auto-theme §P3.3): the
+///     parser captures OSC string bodies and surfaces «11;rgb:…» answers as
+///     capability events; every other OSC string stays discarded.
+/// </summary>
 public class Osc11ReportTests
 {
     private readonly EscapeSequenceParser _parser = new();

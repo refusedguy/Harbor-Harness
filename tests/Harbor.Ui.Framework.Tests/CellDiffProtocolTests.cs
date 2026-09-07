@@ -1,11 +1,8 @@
-namespace Harbor.Ui.Framework.Tests;
-
-using System.Collections.Immutable;
-using System.Text;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Protocol;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
+using System.Collections.Immutable;
+using System.Text;
+namespace Harbor.Ui.Framework.Tests;
 
 /// <summary>
 ///     Portable cell-diff protocol tests (renderer-unification sprint Phase
@@ -34,7 +31,7 @@ public class CellDiffProtocolTests
         var prev = MakeBuffer(20, 5, 'a');
         var next = MakeBuffer(20, 5, 'a');
 
-        CellDiffBatch batch = encoder.Encode(prev, next, hints: null, sequence: 1);
+        var batch = encoder.Encode(prev, next, null, 1);
 
         await Assert.That(batch.IsEmpty).IsTrue();
         await Assert.That(batch.Version).IsEqualTo(CellDiffProtocolVersion.V1);
@@ -49,12 +46,12 @@ public class CellDiffProtocolTests
         var next = MakeBuffer(20, 5, 'a');
         next.SetRune(3, 2, new Rune('X'), CellStyle.Plain);
 
-        CellDiffBatch batch = encoder.Encode(prev, next, hints: null, sequence: 7);
+        var batch = encoder.Encode(prev, next, null, 7);
 
         await Assert.That(batch.Changes.Length).IsEqualTo(1);
         await Assert.That(batch.Changes[0].X).IsEqualTo(3);
         await Assert.That(batch.Changes[0].Y).IsEqualTo(2);
-        await Assert.That(batch.Changes[0].NewCell.Rune).IsEqualTo((int)'X');
+        await Assert.That(batch.Changes[0].NewCell.Rune).IsEqualTo('X');
     }
 
     [Test]
@@ -69,12 +66,12 @@ public class CellDiffProtocolTests
         next.SetRune(2, 1, new Rune('Y'), CellStyle.Plain);
 
         var hints = new List<Rect> { new(0, 0, 10, 3) };
-        CellDiffBatch batch = encoder.Encode(prev, next, hints, sequence: 2);
+        var batch = encoder.Encode(prev, next, hints, 2);
 
         await Assert.That(batch.Version).IsEqualTo(CellDiffProtocolVersion.V2);
         await Assert.That(batch.FrameHints.Length).IsEqualTo(1);
         await Assert.That(batch.Changes.Length).IsEqualTo(1);
-        await Assert.That(batch.Changes[0].NewCell.Rune).IsEqualTo((int)'Y');
+        await Assert.That(batch.Changes[0].NewCell.Rune).IsEqualTo('Y');
     }
 
     [Test]
@@ -89,12 +86,12 @@ public class CellDiffProtocolTests
         // batch downgrades to V1 (no hints) because the reported damage rects
         // would under-invalidate a hint-driven consumer.
         var hints = new List<Rect> { new(0, 0, 10, 6) };
-        CellDiffBatch batch = encoder.Encode(prev, next, hints, sequence: 3);
+        var batch = encoder.Encode(prev, next, hints, 3);
 
         await Assert.That(batch.Version).IsEqualTo(CellDiffProtocolVersion.V1);
         await Assert.That(batch.FrameHints.IsEmpty).IsTrue();
         await Assert.That(batch.Changes.Length).IsEqualTo(1);
-        await Assert.That(batch.Changes[0].NewCell.Rune).IsEqualTo((int)'Z');
+        await Assert.That(batch.Changes[0].NewCell.Rune).IsEqualTo('Z');
     }
 
     [Test]
@@ -107,14 +104,14 @@ public class CellDiffProtocolTests
         var batch = new CellDiffBatch(
             CellDiffProtocolVersion.V2, 42, 80, 24, changes, hints);
 
-        CellDiffBatch decoded = CellDiffBatchCodec.Decode(CellDiffBatchCodec.Encode(batch));
+        var decoded = CellDiffBatchCodec.Decode(CellDiffBatchCodec.Encode(batch));
 
         await Assert.That(decoded.Version).IsEqualTo(CellDiffProtocolVersion.V2);
         await Assert.That(decoded.Sequence).IsEqualTo(42L);
         await Assert.That(decoded.Cols).IsEqualTo(80);
         await Assert.That(decoded.Rows).IsEqualTo(24);
         await Assert.That(decoded.Changes.Length).IsEqualTo(2);
-        await Assert.That(decoded.Changes[0].NewCell.Rune).IsEqualTo((int)'Ж');
+        await Assert.That(decoded.Changes[0].NewCell.Rune).IsEqualTo('Ж');
         await Assert.That(decoded.FrameHints.Length).IsEqualTo(1);
         await Assert.That(decoded.FrameHints[0]).IsEqualTo(new Rect(0, 1, 8, 3));
     }
@@ -128,7 +125,7 @@ public class CellDiffProtocolTests
         var v1 = new CellDiffBatch(
             CellDiffProtocolVersion.V1, 1, 10, 10, changes, ImmutableArray<Rect>.Empty);
 
-        CellDiffBatch decoded = CellDiffBatchCodec.Decode(CellDiffBatchCodec.Encode(v1));
+        var decoded = CellDiffBatchCodec.Decode(CellDiffBatchCodec.Encode(v1));
 
         await Assert.That(decoded.Version).IsEqualTo(CellDiffProtocolVersion.V1);
         await Assert.That(decoded.Changes.Length).IsEqualTo(1);
@@ -144,17 +141,17 @@ public class CellDiffProtocolTests
 
         // Frame 1: full repaint of the initial content.
         var first = MakeBuffer(10, 2, 'a');
-        CellDiffBatch b1 = pipeline.Render(first);
+        var b1 = pipeline.Render(first);
         await Assert.That(b1.Sequence).IsEqualTo(1L);
         await Assert.That(b1.Changes.Length).IsEqualTo(20);
 
         // Frame 2: one cell changes — differential.
         var second = FillBuffer(new ScreenBuffer(10, 2), 'a');
         second.SetRune(5, 1, new Rune('Z'), CellStyle.Plain);
-        CellDiffBatch b2 = pipeline.Render(second);
+        var b2 = pipeline.Render(second);
         await Assert.That(b2.Sequence).IsEqualTo(2L);
         await Assert.That(b2.Changes.Length).IsEqualTo(1);
-        await Assert.That(b2.Changes[0].NewCell.Rune).IsEqualTo((int)'Z');
+        await Assert.That(b2.Changes[0].NewCell.Rune).IsEqualTo('Z');
 
         await Assert.That(batches.Count).IsEqualTo(2);
     }
@@ -167,13 +164,13 @@ public class CellDiffProtocolTests
         _ = pipeline.Render(producer);
 
         producer.SetRune(3, 0, new Rune('W'), CellStyle.Plain);
-        CellDiffBatch batch = pipeline.Render(producer);
+        var batch = pipeline.Render(producer);
 
         var consumer = new ScreenBuffer(10, 2);
         DifferentialRenderPipeline.ApplyTo(batch, consumer);
 
-        await Assert.That(consumer.Get(3, 0).Rune).IsEqualTo((int)'W');
-        await Assert.That(consumer.Get(0, 0).Rune).IsEqualTo((int)' '); // untouched cell is still blank
+        await Assert.That(consumer.Get(3, 0).Rune).IsEqualTo('W');
+        await Assert.That(consumer.Get(0, 0).Rune).IsEqualTo(' '); // untouched cell is still blank
     }
 
     private sealed class CollectingSink(List<CellDiffBatch> batches) : ICellDiffSink

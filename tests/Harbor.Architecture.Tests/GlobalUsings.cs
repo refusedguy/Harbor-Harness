@@ -11,6 +11,7 @@ global using TUnit.Core;
 using Assembly = System.Reflection.Assembly;
 
 namespace Harbor.Architecture.Tests;
+
 /// <summary>
 ///     Internal helpers for the architecture tests.
 /// </summary>
@@ -113,7 +114,7 @@ internal static class ArchitectureTestHelpers
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var refName in asm.GetReferencedAssemblies())
         {
-            if (refName.Name is { } n)
+            if (refName.Name is {} n)
             {
                 names.Add(n);
             }

@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 namespace Harbor.E2E.Framework;
+
 /// <summary>
 ///     In-process HTTP server that emulates an OpenAI-compatible LLM provider
 ///     for E2E tests. Returns canned chat-completion responses (SSE-streamed)
@@ -41,27 +43,27 @@ namespace Harbor.E2E.Framework;
 /// </remarks>
 public sealed class MockLlmServer : IAsyncDisposable
 {
+    private readonly object _echoLock = new();
+    private readonly HashSet<string> _echoModels = new(StringComparer.Ordinal);
     private readonly List<ChatCompletionRequest> _received = new();
     private readonly object _receivedLock = new();
+    private readonly object _replayLock = new();
+    // Replay: FIFO queues per model, filled by ReplayFrom. When non-empty, the
+    // dict path is bypassed and entries are consumed in serve order.
+    private readonly Dictionary<string, Queue<CannedResponse>> _replayQueues = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CannedResponse> _responses = new(StringComparer.Ordinal);
     private readonly object _responsesLock = new();
-    private readonly HashSet<string> _echoModels = new(StringComparer.Ordinal);
-    private readonly object _echoLock = new();
     // Inter-chunk delay for streamed text responses. Defaults to the historical
     // 50 ms provider cadence; load tests dilate it (e.g. 1-2 ms) via
     // SetChunkDelay so N concurrent streams still interleave on the wire while
     // wall-clock time stays compressed. Zero disables the delay entirely.
     private TimeSpan _chunkDelay = TimeSpan.FromMilliseconds(50);
-    // Recording: every served completion is appended to this JSONL file so a
-    // later run can replay the exact sequence without re-scripting.
-    private string? _recordingPath;
-    // Replay: FIFO queues per model, filled by ReplayFrom. When non-empty, the
-    // dict path is bypassed and entries are consumed in serve order.
-    private readonly Dictionary<string, Queue<CannedResponse>> _replayQueues = new(StringComparer.Ordinal);
-    private readonly object _replayLock = new();
     private CancellationTokenSource? _cts;
     private HttpListener _listener = new();
     private Task? _loopTask;
+    // Recording: every served completion is appended to this JSONL file so a
+    // later run can replay the exact sequence without re-scripting.
+    private string? _recordingPath;
     private int _requestCount;
 
     /// <summary>
@@ -178,10 +180,7 @@ public sealed class MockLlmServer : IAsyncDisposable
     ///     concurrent SSE streams still interleave without wall-clock sleeps
     ///     in the harness itself.
     /// </summary>
-    public void SetChunkDelay(TimeSpan delay)
-    {
-        _chunkDelay = delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
-    }
+    public void SetChunkDelay(TimeSpan delay) => _chunkDelay = delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
 
     /// <summary>
     ///     Put <paramref name="model" /> into echo mode: every request is
@@ -254,7 +253,7 @@ public sealed class MockLlmServer : IAsyncDisposable
     public void ReplayFrom(string filePath)
     {
         var queues = new Dictionary<string, Queue<CannedResponse>>(StringComparer.Ordinal);
-        foreach (var raw in File.ReadAllLines(filePath))
+        foreach (string raw in File.ReadAllLines(filePath))
         {
             if (string.IsNullOrWhiteSpace(raw))
                 continue;
@@ -443,7 +442,7 @@ public sealed class MockLlmServer : IAsyncDisposable
             }
         }
 
-        CannedResponse canned = isEcho
+        var canned = isEcho
             ? new CannedResponse(BuildEchoText(requestBody), false, null, null, false, null)
             : ResolveNextResponse(model);
 
@@ -530,7 +529,7 @@ public sealed class MockLlmServer : IAsyncDisposable
                 if (lastUser is not null)
                 {
                     string hash = Convert.ToHexString(
-                        System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(lastUser)));
+                        SHA256.HashData(Encoding.UTF8.GetBytes(lastUser)));
                     return "echo-" + hash[..12].ToLowerInvariant();
                 }
             }
@@ -561,24 +560,16 @@ public sealed class MockLlmServer : IAsyncDisposable
     private void RecordServed(string model, CannedResponse canned)
     {
         var entry = new RecordedCompletion(
-            Model: model,
-            Kind: canned.IsError ? "error" : canned.IsToolCall ? "tool" : "text",
-            Text: canned.Text,
-            ToolName: canned.ToolName,
-            ToolArgs: canned.ToolArgs,
-            ErrorMessage: canned.ErrorMessage);
+            model,
+            canned.IsError ? "error" : canned.IsToolCall ? "tool" : "text",
+            canned.Text,
+            canned.ToolName,
+            canned.ToolArgs,
+            canned.ErrorMessage);
 
         string line = JsonSerializer.Serialize(entry);
         File.AppendAllText(_recordingPath!, line + "\n");
     }
-
-    private sealed record RecordedCompletion(
-        string Model,
-        string Kind,
-        string? Text,
-        string? ToolName,
-        string? ToolArgs,
-        string? ErrorMessage);
 
     private static string BuildTextDeltaChunk(string model, string deltaText)
     {
@@ -662,6 +653,14 @@ public sealed class MockLlmServer : IAsyncDisposable
         };
         return JsonSerializer.Serialize(chunk);
     }
+
+    private sealed record RecordedCompletion(
+        string Model,
+        string Kind,
+        string? Text,
+        string? ToolName,
+        string? ToolArgs,
+        string? ErrorMessage);
 
     private readonly record struct CannedResponse(
         string? Text,

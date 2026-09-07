@@ -1,7 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Storage.Tests;
 
 public class SqliteDeleteMessagesAfterTests

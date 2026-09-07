@@ -1,6 +1,5 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 public class DiffEngineTests
@@ -34,13 +33,13 @@ public class DiffEngineTests
         var (engine, backend, writer) = Make();
         var back = new ScreenBuffer(20, 6);
         writer.BeginFrame();
-        engine.Flush(back, writer);   // first: blanks sync
+        engine.Flush(back, writer); // first: blanks sync
         await writer.EndFrameAsync();
         string firstFrame = backend.Text;
 
         backend.ResetForTests();
         writer.BeginFrame();
-        engine.Flush(back, writer);   // idle: nothing changed
+        engine.Flush(back, writer); // idle: nothing changed
         await writer.EndFrameAsync();
 
         await Assert.That(backend.Text).IsEqualTo("");
@@ -279,7 +278,7 @@ public class DiffEngineTests
     {
         var engine = new DiffEngine(10, 2);
         var back = new ScreenBuffer(10, 2);
-        var writer = new AnsiWriter(new RecordingBackend(), syncUpdates: true);
+        var writer = new AnsiWriter(new RecordingBackend(), true);
 
         // Full-width hint → FRONT row hash cache must be adopted (authoritative).
         back.SetText(0, 0, "full", CellStyle.Plain);

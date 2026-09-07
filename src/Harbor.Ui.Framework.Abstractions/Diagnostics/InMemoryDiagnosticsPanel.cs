@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Diagnostics;
+
 /// <summary>
 ///     Default <see cref="IDiagnosticsPanel" /> implementation: a fixed-capacity
 ///     ring buffer that keeps the last <see cref="DefaultCapacity" /> log entries.

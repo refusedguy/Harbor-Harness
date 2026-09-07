@@ -1,5 +1,6 @@
 using Nuke.Common.Tools.DotNet;
 namespace Harbor.Build.Meta;
+
 /// <summary>
 ///     Renders a configured <see cref="DotNetPublishSettings" /> as the
 ///     equivalent <c>dotnet publish</c> command-line. Used by dry-run to
@@ -12,24 +13,24 @@ public static class DotNetArgv
     public static IReadOnlyList<string> RenderPublish(DotNetPublishSettings settings)
     {
         var argv = new List<string> { "dotnet", "publish" };
-        var project = settings.Project?.ToString();
+        string project = settings.Project;
         if (!string.IsNullOrEmpty(project))
         {
             argv.Add(project);
         }
-        var configuration = settings.Configuration?.ToString();
+        string configuration = settings.Configuration;
         if (!string.IsNullOrEmpty(configuration))
         {
             argv.Add("-c");
             argv.Add(configuration.ToLowerInvariant());
         }
-        var framework = settings.Framework?.ToString();
+        string framework = settings.Framework;
         if (!string.IsNullOrEmpty(framework))
         {
             argv.Add("-f");
             argv.Add(framework);
         }
-        var runtime = settings.Runtime?.ToString();
+        string runtime = settings.Runtime;
         if (!string.IsNullOrEmpty(runtime))
         {
             argv.Add("-r");
@@ -48,7 +49,7 @@ public static class DotNetArgv
         {
             argv.Add("--no-restore");
         }
-        var output = settings.Output?.ToString();
+        string output = settings.Output;
         if (!string.IsNullOrEmpty(output))
         {
             argv.Add("-o");
@@ -56,7 +57,7 @@ public static class DotNetArgv
         }
         if (settings.Properties is not null)
         {
-            foreach (var (name, value) in settings.Properties)
+            foreach ((string name, object value) in settings.Properties)
             {
                 argv.Add($"-p:{name}={value}");
             }

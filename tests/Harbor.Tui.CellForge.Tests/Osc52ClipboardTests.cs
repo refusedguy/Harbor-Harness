@@ -1,6 +1,5 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 public class Osc52ClipboardTests
@@ -52,7 +51,7 @@ public class Osc52ClipboardTests
     [Test]
     public async Task Encode_HugeText_TruncatedToCap()
     {
-        string text = new string('a', 200_000);
+        string text = new('a', 200_000);
         string seq = Osc52Clipboard.Encode(text);
 
         int payloadStart = seq.LastIndexOf(';') + 1;

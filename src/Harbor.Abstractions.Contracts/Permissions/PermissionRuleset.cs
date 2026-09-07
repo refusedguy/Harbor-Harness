@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 namespace Harbor.Abstractions.Permissions;
+
 /// <summary>
 ///     Permission ruleset for an agent or session.
 ///     Implements Specification pattern (GOF).
@@ -31,6 +32,15 @@ namespace Harbor.Abstractions.Permissions;
 /// </remarks>
 public sealed record PermissionRuleset
 {
+
+    /// <summary>
+    ///     Tools whose primary argument is a workspace-relative file path and therefore get the
+    ///     unsafe-path guard applied in <see cref="Evaluate" /> (A2).
+    /// </summary>
+    private static readonly FrozenSet<string> PathGuardTools = new[]
+    {
+        "read", "write", "edit", "ls", "glob", "grep", "tree", "ripgrep", "notebook", "patch", "mcp"
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
     /// <summary>
     ///     Pre-sorted array of rules: most-specific first, Deny before Allow before Ask on ties.
     ///     Materialized once in the constructor; <see cref="Evaluate" /> iterates this directly
@@ -199,7 +209,7 @@ public sealed record PermissionRuleset
         bool bashMetachars = isBash && BashArgMatcher.HasShellMetacharacters(argPath);
         // A2: computed for EVERY bash command, not just metacharacter-bearing ones, so
         // Deny rules see argv[0] / basename / normalized-command targets of all segments.
-        IReadOnlyList<string>? denyTargets = isBash ? BashArgMatcher.GetDenyMatchTargets(argPath) : null;
+        var denyTargets = isBash ? BashArgMatcher.GetDenyMatchTargets(argPath) : null;
         bool pathGuard = PathGuardTools.Contains(permission) && HasUnsafePathShape(argPath);
 
         for (int i = 0; i < rules.Length; i++)
@@ -232,15 +242,6 @@ public sealed record PermissionRuleset
 
         return PermissionAction.Ask; // default: ask user
     }
-
-    /// <summary>
-    ///     Tools whose primary argument is a workspace-relative file path and therefore get the
-    ///     unsafe-path guard applied in <see cref="Evaluate" /> (A2).
-    /// </summary>
-    private static readonly FrozenSet<string> PathGuardTools = new[]
-    {
-        "read", "write", "edit", "ls", "glob", "grep", "tree", "ripgrep", "notebook", "patch", "mcp"
-    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     ///     Returns <see langword="true" /> when <paramref name="argPath" /> either contains a
@@ -333,7 +334,7 @@ public sealed record PermissionRule(
     /// <summary>
     ///     Returns <see langword="true" /> if this rule applies to the given permission name
     ///     (case-insensitive), if <see cref="Permission" /> is <c>"*"</c>, or — since sprint 6 C2 —
-    ///     if <see cref="Permission"/> names a <see cref="ToolCategory"/> that contains the tool
+    ///     if <see cref="Permission" /> names a <see cref="ToolCategory" /> that contains the tool
     ///     (e.g. permission <c>"exec"</c> matches the <c>bash</c> tool).
     /// </summary>
     /// <param name="permission">The permission name to test.</param>

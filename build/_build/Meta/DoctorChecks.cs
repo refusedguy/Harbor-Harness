@@ -1,7 +1,10 @@
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 namespace Harbor.Build.Meta;
+
 /// <summary>Inputs the doctor needs from the build instance.</summary>
 public sealed record DoctorContext(
     string RootDirectory,
@@ -9,6 +12,7 @@ public sealed record DoctorContext(
     bool AotVariantRequested,
     bool ReleaseRequested,
     string ReleaseTag);
+
 /// <summary>Result of one doctor check.</summary>
 public sealed record CheckResult(string Id, string Status, string Detail, string? Fix = null)
 {
@@ -17,6 +21,7 @@ public sealed record CheckResult(string Id, string Status, string Detail, string
     public const string Fail = "fail";
     public const string NotApplicable = "na";
 }
+
 /// <summary>Aggregated doctor report: checks + verdict + exit code.</summary>
 public sealed record DoctorReport(
     IReadOnlyList<CheckResult> Checks,
@@ -27,6 +32,7 @@ public sealed record DoctorReport(
     public const string VerdictDegraded = "degraded";
     public const string VerdictBroken = "broken";
 }
+
 /// <summary>
 ///     Offline environment diagnostics for <c>./build.sh doctor</c>. Checks
 ///     never throw and never touch the network (token presence is checked,
@@ -37,7 +43,7 @@ public sealed record DoctorReport(
 public static class DoctorChecks
 {
     private const long WarnBytesThreshold = 10L * 1024 * 1024 * 1024; // 10 GB
-    private const long FailBytesThreshold = 2L * 1024 * 1024 * 1024;  // 2 GB
+    private const long FailBytesThreshold = 2L * 1024 * 1024 * 1024; // 2 GB
     /// <summary>All stable check ids in canonical order.</summary>
     public static readonly string[] AllCheckIds =
     [
@@ -77,9 +83,9 @@ public static class DoctorChecks
         var checks = checkFilter is null
             ? all
             : all.Where(c => checkFilter.Contains(c.Id)).ToList();
-        var hasFail = checks.Any(c => c.Status == CheckResult.Fail);
-        var hasWarn = checks.Any(c => c.Status == CheckResult.Warn);
-        var verdict = hasFail ? DoctorReport.VerdictBroken
+        bool hasFail = checks.Any(c => c.Status == CheckResult.Fail);
+        bool hasWarn = checks.Any(c => c.Status == CheckResult.Warn);
+        string verdict = hasFail ? DoctorReport.VerdictBroken
             : hasWarn ? DoctorReport.VerdictDegraded
             : DoctorReport.VerdictOk;
         return new DoctorReport(checks, verdict, hasFail ? 3 : 0);
@@ -123,7 +129,7 @@ public static class DoctorChecks
         output.Human($"Doctor — scope: local machine only, no network. Verdict: {report.Verdict} (exit {report.ExitCode})");
         foreach (var check in report.Checks)
         {
-            var marker = check.Status switch
+            string marker = check.Status switch
             {
                 CheckResult.Ok => "[ ok ]",
                 CheckResult.Warn => "[WARN]",
@@ -139,7 +145,7 @@ public static class DoctorChecks
     }
     private static CheckResult CheckDotnetSdk(DoctorContext ctx)
     {
-        var dotnet = FindDotnetExecutable();
+        string? dotnet = FindDotnetExecutable();
         if (dotnet is null)
         {
             return new CheckResult(
@@ -153,9 +159,9 @@ public static class DoctorChecks
                 "dotnet.sdk", CheckResult.Fail, $"dotnet found at {dotnet} but '--version' did not answer",
                 "Verify the SDK installation (dotnet --info)");
         }
-        var version = result.Value.stdout.Trim();
-        if (TryGetTfmMajor(ctx.TargetFramework, out var expectedMajor) &&
-            !version.StartsWith(expectedMajor.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal))
+        string version = result.Value.stdout.Trim();
+        if (TryGetTfmMajor(ctx.TargetFramework, out int expectedMajor) &&
+            !version.StartsWith(expectedMajor.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
         {
             return new CheckResult(
                 "dotnet.sdk", CheckResult.Warn, $"{version} at {dotnet}, but solution expects .NET {expectedMajor}",
@@ -171,15 +177,15 @@ public static class DoctorChecks
         {
             return false;
         }
-        var rest = targetFramework[3..];
-        var dot = rest.IndexOf('.');
-        var digits = dot > 0 ? rest[..dot] : rest;
-        return int.TryParse(digits, System.Globalization.NumberStyles.None,
-            System.Globalization.CultureInfo.InvariantCulture, out major);
+        string rest = targetFramework[3..];
+        int dot = rest.IndexOf('.');
+        string digits = dot > 0 ? rest[..dot] : rest;
+        return int.TryParse(digits, NumberStyles.None,
+            CultureInfo.InvariantCulture, out major);
     }
     private static CheckResult CheckSdkPin(DoctorContext ctx)
     {
-        var path = System.IO.Path.Combine(ctx.RootDirectory, "global.json");
+        string path = Path.Combine(ctx.RootDirectory, "global.json");
         if (!File.Exists(path))
         {
             return new CheckResult(
@@ -206,7 +212,7 @@ public static class DoctorChecks
     }
     private static CheckResult CheckGitState(DoctorContext ctx)
     {
-        var git = FindOnPath(IsWindows() ? "git.exe" : "git");
+        string? git = FindOnPath(IsWindows() ? "git.exe" : "git");
         if (git is null)
         {
             return new CheckResult("git.state", CheckResult.NotApplicable, "git not on PATH");
@@ -217,9 +223,9 @@ public static class DoctorChecks
         {
             return new CheckResult("git.state", CheckResult.Warn, "git commands failed; repository state unknown");
         }
-        var lines = statusResult.Value.stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var dirty = lines.Count(l => !l.StartsWith("??", StringComparison.Ordinal));
-        var untracked = lines.Length - dirty;
+        string[] lines = statusResult.Value.stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        int dirty = lines.Count(l => !l.StartsWith("??", StringComparison.Ordinal));
+        int untracked = lines.Length - dirty;
         if (dirty == 0 && untracked == 0)
         {
             return new CheckResult(
@@ -240,7 +246,7 @@ public static class DoctorChecks
             {
                 return new CheckResult("disk.space", CheckResult.NotApplicable, "could not resolve drive for the repository");
             }
-            var free = root.AvailableFreeSpace;
+            long free = root.AvailableFreeSpace;
             return free switch
             {
                 < FailBytesThreshold => new CheckResult(
@@ -277,7 +283,7 @@ public static class DoctorChecks
         {
             return new CheckResult("gh.token", CheckResult.NotApplicable, "only needed for the Release target");
         }
-        var token = Environment.GetEnvironmentVariable("GH_TOKEN");
+        string? token = Environment.GetEnvironmentVariable("GH_TOKEN");
         return string.IsNullOrEmpty(token)
             ? new CheckResult(
                 "gh.token", CheckResult.Warn, "GH_TOKEN not set — release upload will be skipped",
@@ -304,7 +310,7 @@ public static class DoctorChecks
         }
         if (IsWindows())
         {
-            var vswhere = System.IO.Path.Combine(
+            string vswhere = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
                 "Microsoft Visual Studio", "Installer", "vswhere.exe");
             return File.Exists(vswhere)
@@ -313,7 +319,7 @@ public static class DoctorChecks
                     "aot.toolchain", CheckResult.Warn, "MSVC toolchain not detected (vswhere missing)",
                     "Install Visual Studio 2022 with 'Desktop development with C++' for NativeAOT on Windows");
         }
-        var compiler = FindOnPath("clang") ?? FindOnPath("clang-18") ?? FindOnPath("gcc");
+        string? compiler = FindOnPath("clang") ?? FindOnPath("clang-18") ?? FindOnPath("gcc");
         if (compiler is null)
         {
             return new CheckResult(
@@ -323,30 +329,30 @@ public static class DoctorChecks
         if (!File.Exists("/usr/include/zlib.h"))
         {
             return new CheckResult(
-                "aot.toolchain", CheckResult.Warn, $"compiler {System.IO.Path.GetFileName(compiler)} found but zlib headers missing",
+                "aot.toolchain", CheckResult.Warn, $"compiler {Path.GetFileName(compiler)} found but zlib headers missing",
                 "'apt install zlib1g-dev' (NativeAOT links against zlib)");
         }
         return new CheckResult(
-            "aot.toolchain", CheckResult.Ok, $"compiler {System.IO.Path.GetFileName(compiler)} + zlib headers present");
+            "aot.toolchain", CheckResult.Ok, $"compiler {Path.GetFileName(compiler)} + zlib headers present");
     }
     private static CheckResult CheckSolutionFiles(DoctorContext ctx)
     {
-        var required = new[]
+        string[] required = new[]
         {
-            System.IO.Path.Combine(ctx.RootDirectory, "Harbor.slnx"),
-            System.IO.Path.Combine(ctx.RootDirectory, "build", "_build.csproj"),
-            System.IO.Path.Combine(ctx.RootDirectory, ".nuke")
+            Path.Combine(ctx.RootDirectory, "Harbor.slnx"),
+            Path.Combine(ctx.RootDirectory, "build", "_build.csproj"),
+            Path.Combine(ctx.RootDirectory, ".nuke")
         };
         var missing = required.Where(p => !File.Exists(p) && !Directory.Exists(p)).ToList();
         return missing.Count == 0
             ? new CheckResult("solution.files", CheckResult.Ok, "Harbor.slnx, build/_build.csproj, .nuke/ present")
             : new CheckResult(
-                "solution.files", CheckResult.Fail, $"missing: {string.Join(", ", missing.Select(System.IO.Path.GetFileName))}",
+                "solution.files", CheckResult.Fail, $"missing: {string.Join(", ", missing.Select(Path.GetFileName))}",
                 "Run from the repository root; restore deleted solution files");
     }
     private static CheckResult CheckBootstrapCache(DoctorContext ctx)
     {
-        var dll = System.IO.Path.Combine(ctx.RootDirectory, ".nuke", "bin", "net10.0", "_build.dll");
+        string dll = Path.Combine(ctx.RootDirectory, ".nuke", "bin", "net10.0", "_build.dll");
         if (!File.Exists(dll))
         {
             return new CheckResult(
@@ -354,7 +360,7 @@ public static class DoctorChecks
                 "First ./build.sh run will compile the tool automatically (slower)");
         }
         var newestSource = Directory
-            .EnumerateFiles(System.IO.Path.Combine(ctx.RootDirectory, "build"), "*", SearchOption.AllDirectories)
+            .EnumerateFiles(Path.Combine(ctx.RootDirectory, "build"), "*", SearchOption.AllDirectories)
             .Where(f => f.EndsWith(".cs", StringComparison.Ordinal) || f.EndsWith(".csproj", StringComparison.Ordinal))
             .Select(File.GetLastWriteTimeUtc)
             .DefaultIfEmpty(DateTime.MinValue)
@@ -373,18 +379,18 @@ public static class DoctorChecks
     }
     private static string? FindDotnetExecutable()
     {
-        var exeName = IsWindows() ? "dotnet.exe" : "dotnet";
-        var installDir = Environment.GetEnvironmentVariable("DOTNET_INSTALL_DIR");
+        string exeName = IsWindows() ? "dotnet.exe" : "dotnet";
+        string? installDir = Environment.GetEnvironmentVariable("DOTNET_INSTALL_DIR");
         if (!string.IsNullOrEmpty(installDir))
         {
-            var candidate = System.IO.Path.Combine(installDir, exeName);
+            string candidate = Path.Combine(installDir, exeName);
             if (File.Exists(candidate))
             {
                 return candidate;
             }
         }
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var homeCandidate = System.IO.Path.Combine(home, ".dotnet", exeName);
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string homeCandidate = Path.Combine(home, ".dotnet", exeName);
         if (File.Exists(homeCandidate))
         {
             return homeCandidate;
@@ -393,16 +399,16 @@ public static class DoctorChecks
     }
     private static string? FindOnPath(string fileName)
     {
-        var path = Environment.GetEnvironmentVariable("PATH");
+        string? path = Environment.GetEnvironmentVariable("PATH");
         if (string.IsNullOrEmpty(path))
         {
             return null;
         }
-        foreach (var dir in path.Split(System.IO.Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        foreach (string dir in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             try
             {
-                var candidate = System.IO.Path.Combine(dir.Trim(), fileName);
+                string candidate = Path.Combine(dir.Trim(), fileName);
                 if (File.Exists(candidate))
                 {
                     return candidate;
@@ -445,7 +451,7 @@ public static class DoctorChecks
             }
             return (process.ExitCode, stdoutTask.GetAwaiter().GetResult(), stderrTask.GetAwaiter().GetResult());
         }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
         {
             return null;
         }
@@ -453,6 +459,6 @@ public static class DoctorChecks
     private static bool IsWindows() => OperatingSystem.IsWindows();
     private static string HumanBytes(long bytes) =>
         bytes >= FailBytesThreshold
-            ? $"{(bytes / (1024.0 * 1024 * 1024)).ToString("F1", System.Globalization.CultureInfo.InvariantCulture)} GB"
-            : $"{(bytes / (1024.0 * 1024)).ToString("F0", System.Globalization.CultureInfo.InvariantCulture)} MB";
+            ? $"{(bytes / (1024.0 * 1024 * 1024)).ToString("F1", CultureInfo.InvariantCulture)} GB"
+            : $"{(bytes / (1024.0 * 1024)).ToString("F0", CultureInfo.InvariantCulture)} MB";
 }

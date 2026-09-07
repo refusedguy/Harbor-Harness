@@ -1,17 +1,7 @@
 using Avalonia.Controls;
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Events;
-using Harbor.App.Avalonia.ViewModels;
-using Microsoft.Extensions.DependencyInjection;
-using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
-using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core.Enums;
-
-using ChatRole = Harbor.Abstractions.Models.ChatRole;
-
+using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
 /// <summary>
@@ -24,7 +14,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         cleared, error) and captures a screenshot with the <c>ct-</c> prefix.
 ///     </para>
 ///     <para>
-///         Every test calls <see cref="HeadlessAvaloniaDriver.ResetStateAsync"/>
+///         Every test calls <see cref="HeadlessAvaloniaDriver.ResetStateAsync" />
 ///         first so it starts from a known baseline — no test depends on
 ///         another test's side effects.
 ///     </para>
@@ -32,7 +22,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 [NotInParallel]
 public sealed class ChatViewTests : ComponentTestBase
 {
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupAsync() => await GetDriverAsync("ChatView").ConfigureAwait(false);
 
     /// <summary>
@@ -46,16 +36,16 @@ public sealed class ChatViewTests : ComponentTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        var sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(3))
+        bool sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(sawPlaceholder).IsTrue();
 
         var send = Driver.FindButtonByText("Send ▶");
         await Assert.That(send).IsNotNull();
-        var enabled = UI(() => send!.IsEffectivelyEnabled);
+        bool enabled = UI(() => send!.IsEffectivelyEnabled);
         await Assert.That(enabled).IsFalse();
 
-        var path = await CaptureAsync("chat-empty").ConfigureAwait(false);
+        string path = await CaptureAsync("chat-empty").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -73,14 +63,14 @@ public sealed class ChatViewTests : ComponentTestBase
         await Assert.That(input).IsNotNull();
         await Driver.TypeAsync(input!, "Hello").ConfigureAwait(false);
 
-        var typedText = UI(() => input!.Text);
+        string? typedText = UI(() => input!.Text);
         await Assert.That(typedText).IsEqualTo("Hello");
 
         var send = Driver.FindButtonByText("Send ▶");
-        var isEnabled = UI(() => send!.IsEffectivelyEnabled);
+        bool isEnabled = UI(() => send!.IsEffectivelyEnabled);
         await Assert.That(isEnabled).IsTrue();
 
-        var path = await CaptureAsync("chat-typing").ConfigureAwait(false);
+        string path = await CaptureAsync("chat-typing").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -100,15 +90,15 @@ public sealed class ChatViewTests : ComponentTestBase
         await Driver.TypeAsync(input!, "Hello AI!").ConfigureAwait(false);
         await Driver.ClickAsync(send!).ConfigureAwait(false);
 
-        var sawMessage = await Driver.WaitForTextAsync("Hello AI!", TimeSpan.FromSeconds(2))
+        bool sawMessage = await Driver.WaitForTextAsync("Hello AI!", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawMessage).IsTrue();
 
-        var inputText = UI(() => input!.Text);
+        string? inputText = UI(() => input!.Text);
         await Assert.That(string.IsNullOrEmpty(inputText)).IsTrue();
 
         await Task.Delay(200).ConfigureAwait(false);
-        var path = await CaptureAsync("chat-message-sent").ConfigureAwait(false);
+        string path = await CaptureAsync("chat-message-sent").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -126,31 +116,31 @@ public sealed class ChatViewTests : ComponentTestBase
         // Drive streaming through the REAL event path: direct VM property
         // sets are stomped by the selector pipeline on the next store
         // transition now that the app fully boots (see C1).
-        var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
-        var streamModel = new Harbor.Abstractions.Models.ModelInfo(
+        var eventBus = Driver.Host.Services.GetRequiredService<IEventBus>();
+        var streamModel = new ModelInfo(
             "qwen2.5-coder:7b", "ollama", "Qwen2.5 Coder 7B", 32_768, 4_096, false, false, true,
-            Harbor.Abstractions.Models.Pricing.Unknown, "ollama");
-        var partial = Harbor.Abstractions.Models.AssistantMessage.Empty("e2e-stream-session", "qwen2.5-coder:7b");
+            Pricing.Unknown, "ollama");
+        var partial = AssistantMessage.Empty("e2e-stream-session", "qwen2.5-coder:7b");
 
         await eventBus.PublishAsync(new MessageStartEvent(partial)).ConfigureAwait(false);
         await eventBus.PublishAsync(new MessageUpdateEvent(
             new TextDeltaEvent("t1", "The model is streaming a response token by token, character by character…"),
             partial)).ConfigureAwait(false);
 
-        var hasStreaming = await Driver.WaitForTextAsync("streaming", TimeSpan.FromSeconds(3))
+        bool hasStreaming = await Driver.WaitForTextAsync("streaming", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(hasStreaming).IsTrue();
 
-        var hasBuffer = await Driver.WaitForTextAsync("streaming a response", TimeSpan.FromSeconds(3))
+        bool hasBuffer = await Driver.WaitForTextAsync("streaming a response", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(hasBuffer).IsTrue();
 
-        var path = await CaptureAsync("chat-streaming").ConfigureAwait(false);
+        string path = await CaptureAsync("chat-streaming").ConfigureAwait(false);
 
         // Reset through the matching production event.
         await eventBus.PublishAsync(new MessageEndEvent(partial.WithFinish(
-            Harbor.Abstractions.Models.StopReason.Stop,
-            new Harbor.Abstractions.Models.Usage(0, 0)))).ConfigureAwait(false);
+            StopReason.Stop,
+            new Usage(0, 0)))).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -173,11 +163,11 @@ public sealed class ChatViewTests : ComponentTestBase
         });
         await Task.Delay(300).ConfigureAwait(false);
 
-        var hasIndicator = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
+        bool hasIndicator = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasIndicator).IsTrue();
 
-        var path = await CaptureAsync("chat-agent-running").ConfigureAwait(false);
+        string path = await CaptureAsync("chat-agent-running").ConfigureAwait(false);
 
         UI(() =>
         {
@@ -206,7 +196,7 @@ public sealed class ChatViewTests : ComponentTestBase
         await Driver.ClickAsync(send!).ConfigureAwait(false);
         await Task.Delay(150).ConfigureAwait(false);
 
-        var had = await Driver.WaitForTextAsync("Message that will be cleared", TimeSpan.FromSeconds(2))
+        bool had = await Driver.WaitForTextAsync("Message that will be cleared", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(had).IsTrue();
 
@@ -214,14 +204,14 @@ public sealed class ChatViewTests : ComponentTestBase
         UI(() => Vm.Chat.ClearCommand.Execute(null));
         await Task.Delay(200).ConfigureAwait(false);
 
-        var sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(2))
+        bool sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawPlaceholder).IsTrue();
 
-        var stillThere = Driver.GetAllVisibleText().Contains("Message that will be cleared", StringComparison.Ordinal);
+        bool stillThere = Driver.GetAllVisibleText().Contains("Message that will be cleared", StringComparison.Ordinal);
         await Assert.That(stillThere).IsFalse();
 
-        var path = await CaptureAsync("chat-cleared").ConfigureAwait(false);
+        string path = await CaptureAsync("chat-cleared").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -240,16 +230,16 @@ public sealed class ChatViewTests : ComponentTestBase
         // is stomped by SyncLines on the next store transition (the selector
         // pipeline re-projects from UiState.Lines, which never saw our manual
         // add). AgentErrorEvent is exactly what production raises.
-        var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
-        await eventBus.PublishAsync(new Harbor.Abstractions.Events.AgentErrorEvent(
+        var eventBus = Driver.Host.Services.GetRequiredService<IEventBus>();
+        await eventBus.PublishAsync(new AgentErrorEvent(
             "Something went wrong: provider returned 503 Service Unavailable")).ConfigureAwait(false);
         await Task.Delay(200).ConfigureAwait(false);
 
-        var hasError = await Driver.WaitForTextAsync("Something went wrong", TimeSpan.FromSeconds(2))
+        bool hasError = await Driver.WaitForTextAsync("Something went wrong", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasError).IsTrue();
 
-        var path = await CaptureAsync("chat-error").ConfigureAwait(false);
+        string path = await CaptureAsync("chat-error").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -271,11 +261,11 @@ public sealed class ChatViewTests : ComponentTestBase
         });
         await Task.Delay(300).ConfigureAwait(false);
 
-        var hasThinking = await Driver.WaitForTextAsync("thinking", TimeSpan.FromSeconds(2))
+        bool hasThinking = await Driver.WaitForTextAsync("thinking", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasThinking).IsTrue();
 
-        var path = await CaptureAsync("chat-thinking").ConfigureAwait(false);
+        string path = await CaptureAsync("chat-thinking").ConfigureAwait(false);
 
         UI(() =>
         {

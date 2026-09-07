@@ -1,6 +1,7 @@
 using Nuke.Common.IO;
 using Nuke.Common.ProjectModel;
 namespace Harbor.Build.Components;
+
 /// <summary>
 ///     Resolves filesystem paths for build outputs (publish artifacts,
 ///     archives, source dirs) per app + variant. Centralizes the path

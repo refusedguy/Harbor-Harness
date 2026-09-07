@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 namespace Harbor.Benchmarks;
+
 /// <summary>
 ///     Benchmarks <see cref="ProviderRegistry" /> hot paths:
 ///     - <see cref="ProviderRegistry.GetClient" />: frozen vs unfrozen lookup

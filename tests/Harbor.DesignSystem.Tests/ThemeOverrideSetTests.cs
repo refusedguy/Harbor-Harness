@@ -1,6 +1,4 @@
-using Harbor.DesignSystem;
 using Harbor.Ui.Framework.Projection;
-
 namespace Harbor.DesignSystem.Tests;
 
 public class ThemeOverrideSetTests
@@ -18,7 +16,7 @@ public class ThemeOverrideSetTests
     [Test]
     public async Task Merge_PatchedSlots_Override_OthersInherit()
     {
-        var patch = new PartialTheme(Accent: R(0x11), Border: R(0x22));
+        var patch = new PartialTheme(R(0x11), Border: R(0x22));
         var merged = patch.Merge(HarborTheme.HarborDark);
 
         await Assert.That(merged.Accent).IsEqualTo(R(0x11));

@@ -1,8 +1,7 @@
-using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 public class ScreenSessionResizeTests
@@ -77,7 +76,7 @@ public class ScreenSessionResizeTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend);
         int cols = 40, rows = 10;
-        var session = new ScreenSession(writer, cols, rows, sizeSource: () => (cols, rows));
+        var session = new ScreenSession(writer, cols, rows, () => (cols, rows));
 
         cols = 55;
         session.CheckAutoSize();
@@ -87,10 +86,6 @@ public class ScreenSessionResizeTests
 
 public class LayoutTreeTests
 {
-    private sealed class StubPanel(string id, int minW, int minH, int priority = 0) : Panel(id, new Size(minW, minH), priority)
-    {
-        public override void Paint(ScreenBuffer buffer) { }
-    }
 
     [Test]
     public async Task Solve_HonorsRatio()
@@ -109,7 +104,7 @@ public class LayoutTreeTests
     {
         var tree = new LayoutTree();
         tree.AddRoot(new StubPanel("a", 1, 1));
-        tree.Split("a", SplitDir.Horizontal, 0.5f, new StubPanel("b", 1, 1), gap: 1);
+        tree.Split("a", SplitDir.Horizontal, 0.5f, new StubPanel("b", 1, 1), 1);
         tree.Solve(11, 5);
 
         var a = tree.Panels.First(p => p.Id == "a").Rect;
@@ -134,7 +129,7 @@ public class LayoutTreeTests
     public async Task Collapse_SacrificesLowerPriority()
     {
         var tree = new LayoutTree();
-        tree.AddRoot(new StubPanel("status", 80, 1, priority: int.MaxValue));
+        tree.AddRoot(new StubPanel("status", 80, 1, int.MaxValue));
         tree.Split("status", SplitDir.Vertical, 0.9f, new StubPanel("chat", 1, 50));
         // Height 30 < 50 + 1 → chat collapses, status survives.
         tree.Solve(100, 30);
@@ -170,6 +165,11 @@ public class LayoutTreeTests
         tree.Solve(80, 24);
         await Assert.That(tree.Panels.Single().Id).IsEqualTo("z");
     }
+
+    private sealed class StubPanel(string id, int minW, int minH, int priority = 0) : Panel(id, new Size(minW, minH), priority)
+    {
+        public override void Paint(ScreenBuffer buffer) {}
+    }
 }
 
 public class BorderPanelTests
@@ -192,12 +192,6 @@ public class BorderPanelTests
 
 public class FocusRouterTests
 {
-    private sealed class Target(string id) : IFocusTarget
-    {
-        public string Id { get; } = id;
-        public bool Focused { get; private set; }
-        public void OnFocusChanged(bool focused) => Focused = focused;
-    }
 
     [Test]
     public async Task Tab_WrapsAround()
@@ -250,18 +244,17 @@ public class FocusRouterTests
         await Assert.That(a.Focused).IsFalse();
         await Assert.That(b.Focused).IsTrue();
     }
+
+    private sealed class Target(string id) : IFocusTarget
+    {
+        public bool Focused { get; private set; }
+        public string Id { get; } = id;
+        public void OnFocusChanged(bool focused) => Focused = focused;
+    }
 }
 
 public class MouseRouterTests
 {
-    private sealed class Sink(string id) : IPointerTarget
-    {
-        public string Id { get; } = id;
-        public List<string> Events { get; } = [];
-        public void OnPress(int col, int row) => Events.Add($"press {col},{row}");
-        public void OnRelease(int col, int row) => Events.Add($"release {col},{row}");
-        public void OnWheel(int col, int row, int delta) => Events.Add($"wheel {col},{row} {delta}");
-    }
 
     [Test]
     public async Task Press_DispatchesToLocalCoordinates()
@@ -277,7 +270,7 @@ public class MouseRouterTests
     [Test]
     public async Task ReleaseOutsideScreen_ClampsBeforeHitTest()
     {
-        var router = new MouseRouter(screenCols: 80, screenRows: 24);
+        var router = new MouseRouter(80, 24);
         var sink = new Sink("panel");
         router.Bind(sink, new Rect(70, 0, 10, 8)); // panel hugging the right edge
 
@@ -305,5 +298,14 @@ public class MouseRouterTests
         router.Bind(sink, new Rect(0, 0, 5, 5));
         router.Wheel(1, 1, 3);
         await Assert.That(sink.Events).IsEquivalentTo(["wheel 1,1 3"]);
+    }
+
+    private sealed class Sink(string id) : IPointerTarget
+    {
+        public List<string> Events { get; } = [];
+        public string Id { get; } = id;
+        public void OnPress(int col, int row) => Events.Add($"press {col},{row}");
+        public void OnRelease(int col, int row) => Events.Add($"release {col},{row}");
+        public void OnWheel(int col, int row, int delta) => Events.Add($"wheel {col},{row} {delta}");
     }
 }

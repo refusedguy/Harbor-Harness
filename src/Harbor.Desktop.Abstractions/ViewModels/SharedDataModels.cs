@@ -1,5 +1,4 @@
-using Harbor.Desktop.Abstractions.Models;
-
+using ToastKind = Harbor.Desktop.Abstractions.Models.ToastKind;
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 // Framework-neutral data-holder classes extracted from the isolated WPF
@@ -14,9 +13,6 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// <summary>One chat transcript line.</summary>
 public class ChatMessageViewModel
 {
-    public string Role { get; init; }
-    public string Content { get; init; }
-    public DateTimeOffset Timestamp { get; init; }
 
     public ChatMessageViewModel(string role, string content, DateTimeOffset timestamp)
     {
@@ -24,6 +20,9 @@ public class ChatMessageViewModel
         Content = content;
         Timestamp = timestamp;
     }
+    public string Role { get; init; }
+    public string Content { get; init; }
+    public DateTimeOffset Timestamp { get; init; }
 
     public string DisplayTime => Timestamp.ToLocalTime().ToString("HH:mm");
     public bool IsUser => Role == "user";
@@ -45,11 +44,6 @@ public class ChatMessageViewModel
 /// <summary>Sidebar entry for a session.</summary>
 public class SessionEntryViewModel
 {
-    public string Id { get; init; }
-    public string Title { get; init; }
-    public string AgentName { get; init; }
-    public DateTimeOffset UpdatedAt { get; init; }
-    public string? ParentId { get; init; }
 
     public SessionEntryViewModel(string id, string title, string agentName, DateTimeOffset updatedAt, string? parentId)
     {
@@ -59,6 +53,11 @@ public class SessionEntryViewModel
         UpdatedAt = updatedAt;
         ParentId = parentId;
     }
+    public string Id { get; init; }
+    public string Title { get; init; }
+    public string AgentName { get; init; }
+    public DateTimeOffset UpdatedAt { get; init; }
+    public string? ParentId { get; init; }
 
     public string DisplayTime => UpdatedAt.ToLocalTime().ToString("MM-dd HH:mm");
     public bool IsFork => ParentId is not null;
@@ -72,10 +71,6 @@ public class SessionEntryViewModel
 /// <summary>One provider in the browser.</summary>
 public class ProviderEntryViewModel
 {
-    public string Id { get; init; }
-    public string DisplayName { get; init; }
-    public string Description { get; init; }
-    public IReadOnlyList<ModelEntryViewModel> Models { get; init; }
 
     public ProviderEntryViewModel(string id, string displayName, string description, IReadOnlyList<ModelEntryViewModel> models)
     {
@@ -84,17 +79,15 @@ public class ProviderEntryViewModel
         Description = description;
         Models = models;
     }
+    public string Id { get; init; }
+    public string DisplayName { get; init; }
+    public string Description { get; init; }
+    public IReadOnlyList<ModelEntryViewModel> Models { get; init; }
 }
 
 /// <summary>One model offered by a provider.</summary>
 public class ModelEntryViewModel
 {
-    public string Id { get; init; }
-    public string DisplayName { get; init; }
-    public int ContextWindow { get; init; }
-    public int MaxOutputTokens { get; init; }
-    public bool SupportsVision { get; init; }
-    public bool SupportsTools { get; init; }
 
     public ModelEntryViewModel(string id, string displayName, int contextWindow, int maxOutputTokens, bool supportsVision, bool supportsTools)
     {
@@ -105,6 +98,12 @@ public class ModelEntryViewModel
         SupportsVision = supportsVision;
         SupportsTools = supportsTools;
     }
+    public string Id { get; init; }
+    public string DisplayName { get; init; }
+    public int ContextWindow { get; init; }
+    public int MaxOutputTokens { get; init; }
+    public bool SupportsVision { get; init; }
+    public bool SupportsTools { get; init; }
 
     public string Summary =>
         $"{ContextWindow / 1000}K ctx · {MaxOutputTokens / 1000}K out" +
@@ -119,10 +118,6 @@ public class ModelEntryViewModel
 /// <summary>A command entry in the palette.</summary>
 public class CommandEntry
 {
-    public string Id { get; init; }
-    public string Title { get; init; }
-    public string Description { get; init; }
-    public string Category { get; init; }
 
     public CommandEntry(string id, string title, string description, string category)
     {
@@ -131,6 +126,10 @@ public class CommandEntry
         Description = description;
         Category = category;
     }
+    public string Id { get; init; }
+    public string Title { get; init; }
+    public string Description { get; init; }
+    public string Category { get; init; }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -148,14 +147,14 @@ public enum DiffLineKind
 /// <summary>A single diff line.</summary>
 public class DiffLineViewModel
 {
-    public string Text { get; init; }
-    public DiffLineKind Kind { get; init; }
 
     public DiffLineViewModel(string text, DiffLineKind kind)
     {
         Text = text;
         Kind = kind;
     }
+    public string Text { get; init; }
+    public DiffLineKind Kind { get; init; }
 
     public string LineBrushKey => Kind switch
     {
@@ -168,14 +167,14 @@ public class DiffLineViewModel
 /// <summary>A single diff hunk.</summary>
 public class DiffHunkViewModel
 {
-    public string Header { get; init; }
-    public IReadOnlyList<DiffLineViewModel> Lines { get; init; }
 
     public DiffHunkViewModel(string header, IReadOnlyList<DiffLineViewModel> lines)
     {
         Header = header;
         Lines = lines;
     }
+    public string Header { get; init; }
+    public IReadOnlyList<DiffLineViewModel> Lines { get; init; }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -185,11 +184,6 @@ public class DiffHunkViewModel
 /// <summary>One bar in the token usage chart.</summary>
 public class TokenBarViewModel
 {
-    public string Label { get; init; }
-    public double InputHeight { get; init; }
-    public double OutputHeight { get; init; }
-    public string InputBrushKey { get; init; }
-    public string OutputBrushKey { get; init; }
 
     public TokenBarViewModel(string label, double inputHeight, double outputHeight, string inputBrushKey = "", string outputBrushKey = "")
     {
@@ -199,6 +193,11 @@ public class TokenBarViewModel
         InputBrushKey = inputBrushKey;
         OutputBrushKey = outputBrushKey;
     }
+    public string Label { get; init; }
+    public double InputHeight { get; init; }
+    public double OutputHeight { get; init; }
+    public string InputBrushKey { get; init; }
+    public string OutputBrushKey { get; init; }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -208,13 +207,8 @@ public class TokenBarViewModel
 /// <summary>A single toast notification.</summary>
 public class ToastViewModel
 {
-    public string Id { get; init; }
-    public string Message { get; init; }
-    public Harbor.Desktop.Abstractions.Models.ToastKind Kind { get; init; }
-    public DateTimeOffset CreatedAt { get; init; }
-    public TimeSpan TimeToLive { get; init; }
 
-    public ToastViewModel(string id, string message, Harbor.Desktop.Abstractions.Models.ToastKind kind, DateTimeOffset createdAt, TimeSpan timeToLive)
+    public ToastViewModel(string id, string message, ToastKind kind, DateTimeOffset createdAt, TimeSpan timeToLive)
     {
         Id = id;
         Message = message;
@@ -222,12 +216,17 @@ public class ToastViewModel
         CreatedAt = createdAt;
         TimeToLive = timeToLive;
     }
+    public string Id { get; init; }
+    public string Message { get; init; }
+    public ToastKind Kind { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public TimeSpan TimeToLive { get; init; }
 
     public string Icon => Kind switch
     {
-        Harbor.Desktop.Abstractions.Models.ToastKind.Success => "✓",
-        Harbor.Desktop.Abstractions.Models.ToastKind.Warning => "▲",
-        Harbor.Desktop.Abstractions.Models.ToastKind.Error => "✕",
+        ToastKind.Success => "✓",
+        ToastKind.Warning => "▲",
+        ToastKind.Error => "✕",
         _ => "ℹ"
     };
 }

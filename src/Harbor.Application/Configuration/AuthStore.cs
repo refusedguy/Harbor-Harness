@@ -1,6 +1,7 @@
-using System.Collections;
 using Microsoft.Extensions.Logging;
+using System.Collections;
 namespace Harbor.Application.Configuration;
+
 /// <summary>
 ///     Auth store — manages API keys per provider.
 ///     Stored in ~/.harbor/config.json (in ApiKeys dictionary).
@@ -131,7 +132,7 @@ public sealed class AuthStore
     {
         return _configStore.LoadAsync(ct).Bind(config =>
         {
-            Dictionary<string, bool> result = config.ApiKeys.ToDictionary(
+            var result = config.ApiKeys.ToDictionary(
                 static kv => kv.Key,
                 static kv => !string.IsNullOrEmpty(kv.Value),
                 StringComparer.OrdinalIgnoreCase);

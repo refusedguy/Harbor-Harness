@@ -1,13 +1,11 @@
+using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Providers;
+using Harbor.Providers.Ollama;
+using Harbor.Providers.OpenAI;
+using Harbor.Providers.OpenAiCompatible;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 using System.Text;
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Providers;
-using Harbor.Providers.OpenAI;
-using Harbor.Providers.Ollama;
-using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-
 namespace Harbor.Providers.Tests;
 
 /// <summary>
@@ -129,13 +127,13 @@ public class ProviderStreamTests
             """{"choices":[{"delta":{"content":"after"}}],"finish_reason":"stop"}""",
             "[DONE]"));
 
-        var config = new OpenAiCompatible.ProviderConfig { Id = "stub", BaseUrl = "http://stub" };
-        var client = new OpenAiCompatible.OpenAiCompatibleLlmClient(
+        var config = new ProviderConfig { Id = "stub", BaseUrl = "http://stub" };
+        var client = new OpenAiCompatibleLlmClient(
             new HttpClient(handler),
             config,
             StubAuthResolver.Instance,
             StubModelCatalog.Instance,
-            NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
+            NullLogger<OpenAiCompatibleLlmClient>.Instance);
 
         var events = await CollectAsync(client.StreamAsync(new LlmRequest(
             "m1", [LlmUserMessage.Text("hello")], "", [])));

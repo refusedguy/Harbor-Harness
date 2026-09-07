@@ -1,6 +1,5 @@
+using System.Text;
 using System.Text.Json;
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -20,12 +19,12 @@ public sealed class Utf8ScenarioTests : CellForgePtyScenarioBase
     public async Task MixedWidthUtf8_SplitAcrossWrites_RoundTripsToModel()
     {
         Server.SetResponse("test-model", "UTF8-OK");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
         // Byte-level send split mid-codepoint (the 🚀 emoji is 4 UTF-8 bytes).
-        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(MixedText + "\r");
+        byte[] bytes = Encoding.UTF8.GetBytes(MixedText + "\r");
         Session.Write(bytes[..7]);
         await Task.Delay(20).ConfigureAwait(false);
         Session.Write(bytes[7..13]);

@@ -1,6 +1,7 @@
-using System.Threading.Channels;
 using Harbor.Abstractions.Models;
+using System.Threading.Channels;
 namespace Harbor.Abstractions.Sessions;
+
 /// <summary>
 ///     Storage abstraction for sessions (Repository pattern, GOF).
 ///     Implementations: JSONL (default), SQLite (opt), Postgres (future plugin).

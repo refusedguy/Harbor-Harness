@@ -1,6 +1,4 @@
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 public abstract partial class TokenUsageViewModelBase : StoreSubscriberViewModel
@@ -30,10 +28,7 @@ public abstract partial class TokenUsageViewModelBase : StoreSubscriberViewModel
 
     protected abstract Task RefreshAsync(CancellationToken cancellationToken);
 
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 }
 
 public sealed record TokenUsageRow(

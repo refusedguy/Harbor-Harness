@@ -60,10 +60,10 @@ public sealed record SubAgentRunResult(
 public interface ISubAgentRunner
 {
     /// <summary>
-        ///     Whether a NEW sub-agent spawn is legal from the current async call chain.
-        ///     <see langword="true" /> at top level; <see langword="false" /> while this chain is
-        ///     already executing inside a sub-agent run (recursion guard).
-        /// </summary>
+    ///     Whether a NEW sub-agent spawn is legal from the current async call chain.
+    ///     <see langword="true" /> at top level; <see langword="false" /> while this chain is
+    ///     already executing inside a sub-agent run (recursion guard).
+    /// </summary>
     public bool CanSpawn { get; }
 
     /// <summary>

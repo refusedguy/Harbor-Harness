@@ -7,12 +7,9 @@
 // under NativeAOT), and that malformed input surfaces as Result.Failure
 // rather than an exception.
 
-using System.Collections.Immutable;
 using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
+using System.Collections.Immutable;
 namespace Harbor.Ui.Framework.Tests;
 
 /// <summary>
@@ -50,7 +47,7 @@ public class ConfigStoreAotTests
         UserAgent = "HarborTest/1.0",
         CompactionReserveTokens = 4096,
         CompactionKeepRecentTokens = 8192,
-        CompactionTailTurns = 5,
+        CompactionTailTurns = 5
     };
 
     [Test]
@@ -106,7 +103,7 @@ public class ConfigStoreAotTests
         }
         finally
         {
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 
@@ -128,7 +125,7 @@ public class ConfigStoreAotTests
         }
         finally
         {
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 
@@ -151,7 +148,7 @@ public class ConfigStoreAotTests
         {
             if (Directory.Exists(dir))
             {
-                Directory.Delete(dir, recursive: true);
+                Directory.Delete(dir, true);
             }
         }
     }
@@ -192,7 +189,7 @@ public class ConfigStoreAotTests
         }
         finally
         {
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 
@@ -230,7 +227,7 @@ public class ConfigStoreAotTests
         }
         finally
         {
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 
@@ -261,7 +258,7 @@ public class ConfigStoreAotTests
         }
         finally
         {
-            Directory.Delete(dir, recursive: true);
+            Directory.Delete(dir, true);
         }
     }
 }

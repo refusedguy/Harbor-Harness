@@ -1,8 +1,6 @@
-using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Contracts;
 using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Tui;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
@@ -12,35 +10,40 @@ using SharpConsoleUI.Builders;
 using SharpConsoleUI.Configuration;
 using SharpConsoleUI.Controls;
 using SharpConsoleUI.Drivers;
-
+using System.Text;
 namespace Harbor.Tui.NickConsoleEx;
 
 /// <summary>
 ///     Wrapper backend over <c>nickprotop/ConsoleEx</c> (the SharpConsoleUI
 ///     window system) — renderer-unification sprint Phase 3. ADDITIVE by hard
-///     rule: this backend complements <see cref="Harbor.Tui.CellForge"/>, it
+///     rule: this backend complements <see cref="Harbor.Tui.CellForge" />, it
 ///     does not replace it. Selected via <c>HARBOR_TUI=nickconsoleex</c> or
 ///     <c>ui.renderer: "nickconsoleex"</c>.
 ///     <para>
 ///         The Harbor chat state is mirrored into a SharpConsoleUI window with
-///         a <see cref="MarkupControl"/> log surface; every agent event appends
+///         a <see cref="MarkupControl" /> log surface; every agent event appends
 ///         markup lines and drives one differential render cycle through their
 ///         window system (<c>ForceRender</c> — their own cell-diff blitter).
-///         On a redirected stdout (pipes, CI) a <see cref="HeadlessConsoleDriver"/>
-///         is used; on a real terminal, their <see cref="NetConsoleDriver"/>.
+///         On a redirected stdout (pipes, CI) a <see cref="HeadlessConsoleDriver" />
+///         is used; on a real terminal, their <see cref="NetConsoleDriver" />.
 ///     </para>
 /// </summary>
 [TuiRenderer(Backend = "nickconsoleex")]
-public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
+public sealed class NickConsoleExTuiRenderer : BaseTuiRenderer
 {
+
+    /// <summary>Serializes buffer swaps with the render cycle.</summary>
+    private static readonly object ScreenGate = new();
+
+    private readonly IConsoleDriver? _driverOverride;
     private readonly Lock _gate = new();
     private readonly List<string> _lines = [];
-    private readonly Dictionary<string, string> _toolNames = new();
     private readonly int _maxLines;
-    private ConsoleWindowSystem? _windowSystem;
-    private Window? _window;
+    private readonly Dictionary<string, string> _toolNames = new();
     private MarkupControl? _log;
     private StringBuilder? _pendingTokenLine;
+    private Window? _window;
+    private ConsoleWindowSystem? _windowSystem;
 
     public NickConsoleExTuiRenderer(
         ILogger<NickConsoleExTuiRenderer> logger,
@@ -51,8 +54,6 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
         _maxLines = maxLines;
         _driverOverride = driverOverride;
     }
-
-    private readonly IConsoleDriver? _driverOverride;
 
     public override ITuiRenderContext Context { get; } = new NickConsoleExRenderContext();
 
@@ -112,7 +113,7 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
                 string toolName = "tool";
                 lock (_gate)
                 {
-                    if (_toolNames.Remove(tee.ToolCallId, out var found))
+                    if (_toolNames.Remove(tee.ToolCallId, out string? found))
                     {
                         toolName = found;
                     }
@@ -165,7 +166,7 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
         lock (_gate)
         {
             _lines.Clear();
-            _log?.SetContent([.. _lines]);
+            _log?.SetContent([.._lines]);
         }
 
         ForceRender();
@@ -236,7 +237,7 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
             {
                 lock (ScreenGate)
                 {
-                    _log.SetContent([.. _lines]);
+                    _log.SetContent([.._lines]);
                 }
             }
         }
@@ -254,7 +255,7 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
             {
                 lock (ScreenGate)
                 {
-                    _log.SetContent([.. _lines]);
+                    _log.SetContent([.._lines]);
                 }
             }
         }
@@ -279,10 +280,10 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
             return;
         }
 
-        IConsoleDriver driver = _driverOverride
-            ?? (Console.IsOutputRedirected
-                ? new HeadlessConsoleDriver(120, 40)
-                : new NetConsoleDriver(new NetConsoleDriverOptions { RenderMode = RenderMode.Buffer }));
+        var driver = _driverOverride
+                     ?? (Console.IsOutputRedirected
+                         ? new HeadlessConsoleDriver(120, 40)
+                         : new NetConsoleDriver(new NetConsoleDriverOptions { RenderMode = RenderMode.Buffer }));
 
         // Harbor provides its own status surface; the SharpConsoleUI default
         // desktop panels (app-name + live clock top bar, task bar bottom bar)
@@ -292,7 +293,7 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
             ShowTopPanel: false,
             ShowBottomPanel: false);
 
-        var system = new ConsoleWindowSystem(driver, options: options);
+        var system = new ConsoleWindowSystem(driver, options);
         _log = new MarkupControl([]);
         var window = new WindowBuilder(system)
             .WithTitle("Harbor — nickprotop/ConsoleEx backend")
@@ -325,9 +326,6 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
             }
         }
     }
-
-    /// <summary>Serializes buffer swaps with the render cycle.</summary>
-    private static readonly object ScreenGate = new();
 
     private static string Escape(string text) =>
         text.Replace("[", "[[", StringComparison.Ordinal).Replace("]", "]]", StringComparison.Ordinal);
@@ -382,25 +380,25 @@ public sealed class NickConsoleExRenderContext : ITuiRenderContext
     public void WriteStyled(string text, TuiStyle style)
     {
         string codes = (style.HasFlag(TuiStyle.Bold) ? "1;" : string.Empty)
-            + (style.HasFlag(TuiStyle.Dim) ? "2;" : string.Empty)
-            + (style.HasFlag(TuiStyle.Italic) ? "3;" : string.Empty)
-            + (style.HasFlag(TuiStyle.Underline) ? "4;" : string.Empty);
+                       + (style.HasFlag(TuiStyle.Dim) ? "2;" : string.Empty)
+                       + (style.HasFlag(TuiStyle.Italic) ? "3;" : string.Empty)
+                       + (style.HasFlag(TuiStyle.Underline) ? "4;" : string.Empty);
         Console.Write(codes.Length > 0 ? $"\x1b[{codes.TrimEnd(';')}m{text}\x1b[0m" : text);
     }
 
-    public void SetCursorPosition(int row, int col) { }
+    public void SetCursorPosition(int row, int col) {}
 
-    public void ClearLine() { }
+    public void ClearLine() {}
 
-    public void Clear() { }
+    public void Clear() {}
 
-    public void HideCursor() { }
+    public void HideCursor() {}
 
-    public void ShowCursor() { }
+    public void ShowCursor() {}
 
-    public void EnterAlternateScreen() { }
+    public void EnterAlternateScreen() {}
 
-    public void ExitAlternateScreen() { }
+    public void ExitAlternateScreen() {}
 
-    public void Flush() { }
+    public void Flush() {}
 }

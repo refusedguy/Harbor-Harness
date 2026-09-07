@@ -1,7 +1,5 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
-
+using System.Diagnostics;
 namespace Harbor.Tools.Mcp;
 
 /// <summary>
@@ -11,11 +9,13 @@ namespace Harbor.Tools.Mcp;
 /// </summary>
 internal sealed class McpProcessClient : IAsyncDisposable
 {
-    private readonly Process _process;
+
+    private const int MillisecondsToWaitForExit = 5000;
+    private readonly SafeJobHandle? _job;
     private readonly ILogger<McpProcessClient>? _logger;
+    private readonly Process _process;
     private readonly CancellationTokenSource _stderrCts = new();
     private readonly Task _stderrPump;
-    private readonly SafeJobHandle? _job;
     private bool _disposed;
 
     public McpProcessClient(ProcessStartInfo startInfo, ILogger<McpProcessClient>? logger = null)
@@ -41,6 +41,34 @@ internal sealed class McpProcessClient : IAsyncDisposable
     public int Pid => _process.Id;
     public bool HasExited => _process.HasExited;
 
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _stderrCts.Cancel();
+        try { await _stderrPump.ConfigureAwait(false); }
+        catch
+        { /* ignore */
+        }
+        _stderrCts.Dispose();
+
+        if (!_process.HasExited)
+        {
+            try { ProcessTree.KillTree(_process, _job); }
+            catch
+            { /* ignore */
+            }
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try { await _process.WaitForExitAsync(cts.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException)
+            { /* process didn't exit within timeout, proceed with dispose */
+            }
+        }
+
+        _process.Dispose();
+    }
+
     public async Task WaitForExitAsync(CancellationToken ct = default)
         => await _process.WaitForExitAsync(ct).ConfigureAwait(false);
 
@@ -57,7 +85,7 @@ internal sealed class McpProcessClient : IAsyncDisposable
             var reader = new StreamReader(_process.StandardError.BaseStream, leaveOpen: true);
             while (!ct.IsCancellationRequested)
             {
-                var line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+                string? line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
                 if (line is null) break;
                 if (!string.IsNullOrWhiteSpace(line))
                     _logger?.LogWarning("[mcp stderr] {Line}", line);
@@ -71,26 +99,6 @@ internal sealed class McpProcessClient : IAsyncDisposable
         {
             _logger?.LogDebug(ex, "stderr pump ended");
         }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (_disposed) return;
-        _disposed = true;
-
-        _stderrCts.Cancel();
-        try { await _stderrPump.ConfigureAwait(false); } catch { /* ignore */ }
-        _stderrCts.Dispose();
-
-        if (!_process.HasExited)
-        {
-            try { ProcessTree.KillTree(_process, _job); } catch { /* ignore */ }
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try { await _process.WaitForExitAsync(cts.Token).ConfigureAwait(false); }
-            catch (OperationCanceledException) { /* process didn't exit within timeout, proceed with dispose */ }
-        }
-
-        _process.Dispose();
     }
 
     /// <summary>
@@ -110,12 +118,16 @@ internal sealed class McpProcessClient : IAsyncDisposable
 
         if (!_process.HasExited)
         {
-            try { ProcessTree.KillTree(_process, _job); } catch { /* ignore */ }
-            try { _process.WaitForExit(MillisecondsToWaitForExit); } catch { /* timeout — proceed with dispose */ }
+            try { ProcessTree.KillTree(_process, _job); }
+            catch
+            { /* ignore */
+            }
+            try { _process.WaitForExit(MillisecondsToWaitForExit); }
+            catch
+            { /* timeout — proceed with dispose */
+            }
         }
 
         _process.Dispose();
     }
-
-    private const int MillisecondsToWaitForExit = 5000;
 }

@@ -1,9 +1,7 @@
-using System.Text.Json;
 using Harbor.Abstractions.Permissions;
 using Harbor.Tui.CellForge.Streaming;
-using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering.Widgets;
-
+using System.Text.Json;
 namespace Harbor.App.Cli.Repl;
 
 /// <summary>
@@ -66,8 +64,8 @@ internal sealed class CellForgePermissionAsker(Func<ChatScreenBridge> bridge)
 
     private static PermissionResponse Map(ApprovalChoice choice) => choice switch
     {
-        ApprovalChoice.AlwaysAllow => new(PermissionAction.Allow, PersistDecision: true),
-        ApprovalChoice.Approve => new(PermissionAction.Allow, false),
-        _ => new(PermissionAction.Deny, false),
+        ApprovalChoice.AlwaysAllow => new PermissionResponse(PermissionAction.Allow, true),
+        ApprovalChoice.Approve => new PermissionResponse(PermissionAction.Allow, false),
+        _ => new PermissionResponse(PermissionAction.Deny, false)
     };
 }

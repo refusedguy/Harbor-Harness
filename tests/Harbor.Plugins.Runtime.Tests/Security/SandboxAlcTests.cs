@@ -1,9 +1,9 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Reflection;
+using Harbor.Abstractions.Plugins;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
-using Harbor.Plugins.Runtime.Tests.TestSupport;
-
+using Harbor.Plugins.Storage;
+using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 namespace Harbor.Plugins.Runtime.Tests.Security;
 
 /// <summary>
@@ -67,7 +67,7 @@ public sealed class SandboxAlcTests
             "// harbor:capabilities read_files\n// any plugin body");
         using var alc = CollectiblePluginLoadContext.ForScript(script);
 
-        var hostPluginsAsm = typeof(Harbor.Abstractions.Plugins.IPlugin).Assembly;
+        var hostPluginsAsm = typeof(IPlugin).Assembly;
         var hostAbstractionsAsm = typeof(PluginScript).Assembly;
         var resolvedPluginsAsm = alc.LoadFromAssemblyName(new AssemblyName(hostPluginsAsm.GetName().Name!));
         var resolvedAbstractionsAsm = alc.LoadFromAssemblyName(new AssemblyName(hostAbstractionsAsm.GetName().Name!));
@@ -89,12 +89,12 @@ public sealed class SandboxAlcTests
             var alc = CollectiblePluginLoadContext.ForScript(script);
             // Load a real (non-shared) PE image into the collectible context so the
             // unloading path exercises loaded collectible assemblies, not an empty ALC.
-            alc.LoadFromPluginPath(typeof(Harbor.Plugins.Storage.PluginAuditLog).Assembly.Location);
+            alc.LoadFromPluginPath(typeof(PluginAuditLog).Assembly.Location);
             alc.Unload();
             return new WeakReference(alc);
         }
 
-        WeakReference alcRef = CreateLoadUnloadAndTrack();
+        var alcRef = CreateLoadUnloadAndTrack();
         bool unloaded = false;
         for (int i = 0; i < 10 && !unloaded; i++)
         {

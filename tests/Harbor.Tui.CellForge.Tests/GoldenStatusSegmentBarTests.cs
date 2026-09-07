@@ -1,12 +1,10 @@
 using Harbor.Tui.CellForge.Rendering;
-using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CE-3 widget goldens: status rows at several widths painted through the
-/// real DiffEngine into a recording backend; three-layer dump compared against
-/// tests/fixtures/celldiff/ce3-status-*.golden.txt.
+///     CE-3 widget goldens: status rows at several widths painted through the
+///     real DiffEngine into a recording backend; three-layer dump compared against
+///     tests/fixtures/celldiff/ce3-status-*.golden.txt.
 /// </summary>
 public class GoldenStatusSegmentBarTests
 {
@@ -14,14 +12,14 @@ public class GoldenStatusSegmentBarTests
     public async Task StatusRow_Widths_80_and_24_Golden()
     {
         var backend = new RecordingBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var writer = new AnsiWriter(backend, true);
         var engine = new DiffEngine(80, 2);
         var back = new ScreenBuffer(80, 2);
 
         var vm = new StatusViewModel
         {
             Model = "kilocode/tencent/hy3:free",
-            Mode = StatusBarMode.Running,
+            Mode = StatusBarMode.Running
         };
         vm.SetContext(7200, 10_000);
         vm.SetUsage(120_000, 45_500, 0.0042m);

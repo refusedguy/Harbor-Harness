@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Harbor.Ui.Framework.Overlays;
 using Harbor.Ui.Framework.Services;
 namespace Harbor.Tui.Tests;
@@ -80,7 +79,7 @@ public class OverlayControllerTests
         controller.Register("diff", v => calls.Add(v));
         controller.Open("diff");
 
-        var result = controller.CloseTop();
+        bool result = controller.CloseTop();
 
         await Assert.That(result).IsTrue();
         await Assert.That(stack.Current).IsNull();
@@ -97,7 +96,7 @@ public class OverlayControllerTests
         var controller = new OverlayController();
         var calls = new List<bool>();
 
-        var result = controller.CloseTop();
+        bool result = controller.CloseTop();
 
         await Assert.That(result).IsFalse();
         await Assert.That(calls).IsEmpty();
@@ -115,7 +114,7 @@ public class OverlayControllerTests
 
         await Assert.That(controller.HasOverlay).IsFalse();
 
-        controller.Register("settings", _ => { });
+        controller.Register("settings", _ => {});
         controller.Open("settings");
 
         await Assert.That(controller.HasOverlay).IsTrue();
@@ -166,7 +165,7 @@ public class OverlayControllerTests
     {
         var controller = new OverlayController();
 
-        var ex = Assert.Throws<System.ArgumentException>(() => controller.Register(string.Empty, _ => { }));
+        var ex = Assert.Throws<ArgumentException>(() => controller.Register(string.Empty, _ => {}));
         await Assert.That(ex.ParamName).IsEqualTo("id");
     }
 
@@ -179,7 +178,7 @@ public class OverlayControllerTests
     {
         var controller = new OverlayController();
 
-        var ex = Assert.Throws<System.ArgumentNullException>(() => controller.Register("x", null!));
+        var ex = Assert.Throws<ArgumentNullException>(() => controller.Register("x", null!));
         await Assert.That(ex.ParamName).IsEqualTo("setter");
     }
 }

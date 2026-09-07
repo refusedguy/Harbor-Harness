@@ -1,6 +1,5 @@
 #if HARBOR_WITH_PLUGINS
 using Harbor.Plugins.Hosting;
-using Microsoft.Extensions.Logging;
 namespace Harbor.Hosting;
 
 /// <summary>
@@ -15,14 +14,13 @@ namespace Harbor.Hosting;
 ///     disposal happens with the host container (<c>using var host</c> entry points),
 ///     which stops all watchers. Gated by <c>tooling.autoReloadPlugins</c>
 ///     (default true) — set it to false to require explicit <c>/plugins reload</c>.
-
-/// <summary>See class summary above.</summary>
+///     <summary>See class summary above.</summary>
 public sealed class PluginAutoReloader : IDisposable
 {
     private const int DebounceMs = 500;
+    private readonly ILogger<PluginAutoReloader> _logger;
 
     private readonly PluginReloadService _reload;
-    private readonly ILogger<PluginAutoReloader> _logger;
     private readonly DebouncedPluginWatcher? _watcher;
     private int _inFlight;
 
@@ -53,9 +51,12 @@ public sealed class PluginAutoReloader : IDisposable
             loggerFactory.CreateLogger<DebouncedPluginWatcher>());
         _watcher.ChangesReady += OnChange;
 
-        var watched = string.Join(", ", _watcher.WatchedDirectories);
+        string watched = string.Join(", ", _watcher.WatchedDirectories);
         _logger.LogInformation("Plugin auto-reload watching: {Dirs}", watched.Length == 0 ? "(none)" : watched);
     }
+
+    /// <inheritdoc />
+    public void Dispose() => _watcher?.Dispose();
 
     private void OnChange(object? sender, PluginSourceChangeEventArgs e)
     {
@@ -94,8 +95,5 @@ public sealed class PluginAutoReloader : IDisposable
             Interlocked.Exchange(ref _inFlight, 0);
         }
     }
-
-    /// <inheritdoc />
-    public void Dispose() => _watcher?.Dispose();
 }
 #endif

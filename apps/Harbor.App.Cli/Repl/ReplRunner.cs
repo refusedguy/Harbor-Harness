@@ -1,13 +1,13 @@
-using System.Runtime.InteropServices;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
+using Harbor.App.Cli.Hosting;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
-using Harbor.App.Cli.Hosting;
+using Harbor.Hosting;
 using Harbor.Terminal.Abstractions;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
@@ -15,7 +15,9 @@ using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Runtime.InteropServices;
 namespace Harbor.App.Cli.Repl;
+
 /// <summary>
 ///     REPL and interactive session runner — single responsibility: run the user interaction loop.
 ///     Extracted from Program.cs.
@@ -33,7 +35,7 @@ internal sealed class ReplRunner
     {
         // Plugin hot-reload: resolve (and thereby start) the FS watcher glue for the
         // interactive session; disposal rides on the host container teardown.
-        _ = sp.GetService<Harbor.Hosting.PluginAutoReloader>();
+        _ = sp.GetService<PluginAutoReloader>();
 
         // ── CE-4: CellForge gate (второй путь рендера) ────────────────────
         // Режим включается значением consoleex у переменной окружения HARBOR_TUI
@@ -134,7 +136,7 @@ internal sealed class ReplRunner
             int? slashExitCode = null;
             interactive.SetSlashHandler(async raw =>
             {
-                SlashCommandOutcome outcome = await dispatcher.HandleAsync(
+                var outcome = await dispatcher.HandleAsync(
                     raw, sp, renderer, agent, agentRegistry, configStore, authStore, providers, sessionResult.Value).ConfigureAwait(false);
                 if (outcome.ShouldQuit)
                 {
@@ -276,7 +278,7 @@ internal sealed class ReplRunner
             {
                 _logger.LogDebug("Slash command: {Command}", trimmed);
                 var dispatcher = new SlashCommandDispatcher(sp.GetRequiredService<ILogger<SlashCommandDispatcher>>());
-                SlashCommandOutcome outcome = await dispatcher.HandleAsync(
+                var outcome = await dispatcher.HandleAsync(
                     trimmed, sp, renderer, agent, agentRegistry, configStore, authStore, providers, session).ConfigureAwait(false);
                 if (outcome.ShouldQuit)
                 {

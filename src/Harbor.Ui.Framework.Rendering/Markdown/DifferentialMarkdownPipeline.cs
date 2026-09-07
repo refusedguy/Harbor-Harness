@@ -1,60 +1,55 @@
-namespace Harbor.Ui.Framework.Rendering.Markdown;
-
-using System.Text;
-
-using System.Collections.Immutable;
 using Harbor.Ui.Framework.Rendering.Protocol;
+using System.Text;
+namespace Harbor.Ui.Framework.Rendering.Markdown;
 
 /// <summary>
 ///     Differential markdown pipeline (renderer-unification sprint Phase
-///     6.4): bridges the shared <see cref="StreamingMarkdownRenderer"/>
+///     6.4): bridges the shared <see cref="StreamingMarkdownRenderer" />
 ///     frozen-tail algorithm and the portable cell-diff protocol, giving every
 ///     renderer backend <b>O(1) re-render cost for completed blocks</b> — the
 ///     tail is the only thing that ever gets re-styled and re-diffed.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Completed blocks freeze into the <see cref="Cache"/> as immutable
+///         Completed blocks freeze into the <see cref="Cache" /> as immutable
 ///         cell snapshots; the active tail block re-renders per token and its
-///         cells flow through <see cref="DifferentialRenderPipeline"/>, so the
-///         emitted <see cref="CellDiffBatch"/> contains tail-only changes.
+///         cells flow through <see cref="DifferentialRenderPipeline" />, so the
+///         emitted <see cref="CellDiffBatch" /> contains tail-only changes.
 ///         Consumers (SpectreTui, Blazor DOM, remote renderers) subscribe as
-///         <see cref="ICellDiffSink"/>s on <see cref="Diffs"/>.
+///         <see cref="ICellDiffSink" />s on <see cref="Diffs" />.
 ///     </para>
 ///     <para>
-///         Style mapping: <see cref="MdStyle"/> → <see cref="CellStyle"/> via
-///         SGR attribute bits; <see cref="MdStyle.Code"/> additionally renders
-///         on a dim background, <see cref="MdStyle.Heading"/> bold+dim, and
-///         <see cref="MdStyle.Fence"/> dim.
+///         Style mapping: <see cref="MdStyle" /> → <see cref="CellStyle" /> via
+///         SGR attribute bits; <see cref="MdStyle.Code" /> additionally renders
+///         on a dim background, <see cref="MdStyle.Heading" /> bold+dim, and
+///         <see cref="MdStyle.Fence" /> dim.
 ///     </para>
 /// </remarks>
 public sealed class DifferentialMarkdownPipeline
 {
-    private readonly DifferentialRenderPipeline _diff;
-    private readonly FrozenTailMarkdownCache _cache;
-    private readonly ScreenBuffer _screen;
     private readonly Dictionary<int, int> _blockRows; // blockId → top row
+    private readonly ScreenBuffer _screen;
     private int _lastTailRow;
 
     public DifferentialMarkdownPipeline(int cols, int rows)
     {
-        _diff = new DifferentialRenderPipeline();
-        _cache = new FrozenTailMarkdownCache();
+        Diffs = new DifferentialRenderPipeline();
+        Cache = new FrozenTailMarkdownCache();
         _screen = new ScreenBuffer(cols, rows);
         _blockRows = new Dictionary<int, int>();
     }
 
     /// <summary>Subscribe backend sinks here to receive tail-only cell diffs.</summary>
-    public DifferentialRenderPipeline Diffs => _diff;
+    public DifferentialRenderPipeline Diffs { get; }
 
     /// <summary>The frozen-block snapshot cache (LRU, observable).</summary>
-    public FrozenTailMarkdownCache Cache => _cache;
+    public FrozenTailMarkdownCache Cache { get; }
 
     /// <summary>Height of the compositing screen.</summary>
     public int Rows => _screen.Rows;
 
     /// <summary>
-    ///     Renders one markdown block at row <paramref name="y"/>: a frozen
+    ///     Renders one markdown block at row <paramref name="y" />: a frozen
     ///     block is restored from the cache (O(1) copy), an incomplete tail
     ///     block is re-styled from its spans, and a just-completed block
     ///     freezes after its first (final) render. The returned batch carries
@@ -73,7 +68,7 @@ public sealed class DifferentialMarkdownPipeline
         }
 
         bool restored = false;
-        if (isComplete && _cache.TryGet(blockId, out Cell[]? frozen) && frozen.Length == height * _screen.Cols)
+        if (isComplete && Cache.TryGet(blockId, out var frozen) && frozen.Length == height * _screen.Cols)
         {
             BlitFrozen(frozen, y, height);
             restored = true;
@@ -92,13 +87,13 @@ public sealed class DifferentialMarkdownPipeline
 
         if (isComplete && !restored)
         {
-            _cache.Freeze(blockId, CopyBlock(y, height));
+            Cache.Freeze(blockId, CopyBlock(y, height));
         }
 
         // Damage rect = this block's rows: the row-hash fast path skips the
         // rest of the screen, so the batch is tail-only by construction.
         var hints = new[] { new Rect(0, y, _screen.Cols, height) };
-        return _diff.Render(_screen, hints);
+        return Diffs.Render(_screen, hints);
     }
 
     /// <summary>
@@ -107,7 +102,7 @@ public sealed class DifferentialMarkdownPipeline
     /// </summary>
     public CellDiffBatch RestoreFrozenBlock(int blockId, int y, int height)
     {
-        if (!_cache.TryGet(blockId, out Cell[]? frozen) || frozen.Length != height * _screen.Cols)
+        if (!Cache.TryGet(blockId, out var frozen) || frozen.Length != height * _screen.Cols)
         {
             throw new InvalidOperationException(
                 $"Block {blockId} is not frozen with the requested geometry ({height} rows).");
@@ -115,15 +110,15 @@ public sealed class DifferentialMarkdownPipeline
 
         BlitFrozen(frozen, y, height);
         var hints = new[] { new Rect(0, y, _screen.Cols, height) };
-        return _diff.Render(_screen, hints);
+        return Diffs.Render(_screen, hints);
     }
 
     /// <summary>Drops all frozen state (resize/theme change): next renders are full repaints.</summary>
     public void InvalidateAll()
     {
-        _cache.Clear();
+        Cache.Clear();
         _blockRows.Clear();
-        _diff.Reset();
+        Diffs.Reset();
     }
 
     private void RenderSpans(MdLine line, int row)
@@ -135,11 +130,11 @@ public sealed class DifferentialMarkdownPipeline
         }
 
         int cursor = 0;
-        IReadOnlyList<MdSpan> spans = line.Spans;
+        var spans = line.Spans;
         for (int i = 0; i < spans.Count && cursor < _screen.Cols; i++)
         {
-            MdSpan span = spans[i];
-            CellStyle style = StyleFor(span.Style);
+            var span = spans[i];
+            var style = StyleFor(span.Style);
             string text = span.Text;
             for (int c = 0; c < text.Length && cursor < _screen.Cols; c++)
             {
@@ -171,7 +166,7 @@ public sealed class DifferentialMarkdownPipeline
         {
             for (int x = 0; x < cols; x++)
             {
-                snapshot[(row * cols) + x] = _screen.Get(x, y + row);
+                snapshot[row * cols + x] = _screen.Get(x, y + row);
             }
         }
 
@@ -190,7 +185,7 @@ public sealed class DifferentialMarkdownPipeline
             _screen.MarkRowDirty(y);
         }
 
-        return _diff.Render(_screen, new[] { new Rect(0, y, _screen.Cols, 1) });
+        return Diffs.Render(_screen, new[] { new Rect(0, y, _screen.Cols, 1) });
     }
 
     internal static CellStyle StyleFor(MdStyle style) => style switch
@@ -200,10 +195,9 @@ public sealed class DifferentialMarkdownPipeline
         MdStyle.BoldItalic => new CellStyle(PackedColor.Default, PackedColor.Default, StyleAttr.Bold | StyleAttr.Italic),
         MdStyle.Code => new CellStyle(
             PackedColor.Default,
-            PackedColor.Rgb(40, 40, 40),
-            StyleAttr.None),
+            PackedColor.Rgb(40, 40, 40)),
         MdStyle.Heading => new CellStyle(PackedColor.Default, PackedColor.Default, StyleAttr.Bold | StyleAttr.Underline),
         MdStyle.Fence => new CellStyle(PackedColor.Default, PackedColor.Default, StyleAttr.Dim),
-        _ => CellStyle.Plain,
+        _ => CellStyle.Plain
     };
 }

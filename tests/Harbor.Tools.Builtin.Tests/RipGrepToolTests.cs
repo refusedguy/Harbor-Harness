@@ -1,9 +1,10 @@
-using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
+
 /// <summary>
 ///     Tests for <see cref="RipGrepTool" />. The tool wraps the external <c>rg</c> binary;
 ///     when <c>rg</c> is not installed (CI sandbox without ripgrep) the "_WhenRgInstalled"
@@ -204,7 +205,7 @@ public class RipGrepToolTests
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
 internal sealed class SkipWhenRgMissingAttribute : SkipAttribute
 {
-    public SkipWhenRgMissingAttribute() : base(RipGrepToolTests.RgMissingReason) { }
+    public SkipWhenRgMissingAttribute() : base(RipGrepToolTests.RgMissingReason) {}
 
     /// <inheritdoc />
     public override Task<bool> ShouldSkip(TestRegisteredContext context)
@@ -217,7 +218,7 @@ internal sealed class SkipWhenRgMissingAttribute : SkipAttribute
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
 internal sealed class SkipWhenRgPresentAttribute : SkipAttribute
 {
-    public SkipWhenRgPresentAttribute() : base(RipGrepToolTests.RgPresentReason) { }
+    public SkipWhenRgPresentAttribute() : base(RipGrepToolTests.RgPresentReason) {}
 
     /// <inheritdoc />
     public override Task<bool> ShouldSkip(TestRegisteredContext context)

@@ -1,12 +1,6 @@
 using Harbor.Ipc;
-using Harbor.Ipc.Client;
-using Harbor.Ipc.InProcess;
 using Harbor.Ipc.Protocol;
-using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Hosting;
 
 internal static class IpcModule
@@ -46,7 +40,7 @@ internal static class IpcModule
     ///     <c>HARBOR_LISTEN</c> to loopback | tailscale0 | all (port via
     ///     <c>HARBOR_PORT</c>, default 48710). The listener is always
     ///     PSK-gated with the key from ~/.harbor/daemon.psk (bootstrapped on
-    ///     first run), and a <see cref="DaemonPairingInfo"/> is registered so
+    ///     first run), and a <see cref="DaemonPairingInfo" /> is registered so
     ///     the CLI can print the pairing block.
     /// </summary>
     private static void AddNetworkedListenerIfConfigured(IServiceCollection services, HarborCompositionContext ctx)
@@ -82,7 +76,7 @@ internal static class IpcModule
 
         services.AddSingleton<IHarborServer>(sp =>
         {
-            ILoggerFactory loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
             var transport = new TcpServerTransport(bindText, port,
                 loggerFactory.CreateLogger<TcpServerTransport>());
             return new HarborIpcServer(sp, transport, loggerFactory, psk.Value);

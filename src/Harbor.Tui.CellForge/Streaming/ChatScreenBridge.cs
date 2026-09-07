@@ -1,66 +1,81 @@
-using System.Collections.Concurrent;
-using System.Text;
-using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Widgets;
-using Harbor.Ui.Framework.Rendering.Markdown;
 using Harbor.Ui.Framework.State;
-
+using System.Collections.Concurrent;
+using System.Text;
+using System.Text.Json;
 namespace Harbor.Tui.CellForge.Streaming;
 
 /// <summary>
-/// Alt-screen counterpart of <see cref="InlineAgentStreamBridge"/> (CE-3 W2.4):
-/// feeds agent events into the <see cref="ChatTimelinePanel"/> feed instead of
-/// the inline scrollback. Deltas pass through the CE-1
-/// <see cref="CommitTickPacer"/> — completed source lines queue up and reveal
-/// at typing rate in Smooth mode or burst in CatchUp (widgets §3.4), so token
-/// storms never outpace frames. The event bus remains the only seam: no
-/// direct AgentLoop coupling.
-///
-/// Event → block map:
-///   AgentStart            → history replay (UserBlock / AssistantMarkdownBlock)
-///   MessageStart          → live StreamingMarkdownBlock appended
-///   TextDelta             → pacer-gated pushes into the live block
-///   ToolCallStart         → ToolCallBlock(Running)
-///   ToolExecutionStart    → args summary + start timestamp
-///   ToolExecutionEnd      → Ok/Error + duration (+ unified-diff body when present)
-///   MessageEnd            → committed AssistantMarkdownBlock replaces the stream slot
-///   AgentError/AgentEnd   → SystemBlock notice, footer back to Idle
+///     Alt-screen counterpart of <see cref="InlineAgentStreamBridge" /> (CE-3 W2.4):
+///     feeds agent events into the <see cref="ChatTimelinePanel" /> feed instead of
+///     the inline scrollback. Deltas pass through the CE-1
+///     <see cref="CommitTickPacer" /> — completed source lines queue up and reveal
+///     at typing rate in Smooth mode or burst in CatchUp (widgets §3.4), so token
+///     storms never outpace frames. The event bus remains the only seam: no
+///     direct AgentLoop coupling.
+///     Event → block map:
+///     AgentStart            → history replay (UserBlock / AssistantMarkdownBlock)
+///     MessageStart          → live StreamingMarkdownBlock appended
+///     TextDelta             → pacer-gated pushes into the live block
+///     ToolCallStart         → ToolCallBlock(Running)
+///     ToolExecutionStart    → args summary + start timestamp
+///     ToolExecutionEnd      → Ok/Error + duration (+ unified-diff body when present)
+///     MessageEnd            → committed AssistantMarkdownBlock replaces the stream slot
+///     AgentError/AgentEnd   → SystemBlock notice, footer back to Idle
 /// </summary>
 public sealed class ChatScreenBridge : IDisposable
 {
+
+    // ── Approval gates ─────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     Bound on simultaneously pending gates; overflow auto-denies the
+    ///     oldest so its host-side await always wakes and no unreachable
+    ///     <c>IsPending</c> block survives.
+    /// </summary>
+    private const int MaxPendingGates = 8;
     private readonly IEventBus _bus;
-    private readonly ChatTimelinePanel _panel;
-    private readonly StatusViewModel _status;
-    private readonly CommitTickPacer _pacer = new();
-    private readonly Queue<PendingLine> _pending = new();
     private readonly Dictionary<string, ToolCard> _cards = new(StringComparer.Ordinal);
+
+    /// <summary>Gates posted off the render thread (tool-execution context), drained by <see cref="Tick" />.</summary>
+    private readonly ConcurrentQueue<ApprovalGateView> _gateQueue = new();
     private readonly StringBuilder _incoming = new();
+    private readonly CommitTickPacer _pacer = new();
+    private readonly ChatTimelinePanel _panel;
+    private readonly Queue<PendingLine> _pending = new();
+
+    /// <summary>
+    ///     Undecided <see cref="ApprovalGateView" />s in arrival order —
+    ///     the front one owns key/click routing (hotfix: a single slot turned every
+    ///     earlier gate into a zombie the user could never answer).
+    /// </summary>
+    private readonly Queue<ApprovalGateView> _pendingGates = new();
+
+    private readonly Queue<InlineImage> _pendingImages = new();
+    private readonly StatusViewModel _status;
     private readonly StringBuilder _streamSource = new();
-    private StreamingMarkdownBlock? _stream;
-    private StreamingThinkingBlock? _thinkStream;
     private readonly StringBuilder _thinkingIncoming = new();
     private long _nowMs;
 
-    /// <summary>How many history messages the timeline already shows. The
-    /// agent republishes the FULL history snapshot on every run
-    /// (AgentLoop → AgentStartEvent.Messages), so replays must skip the
-    /// already-rendered prefix or turn 2+ would duplicate every block.</summary>
+    /// <summary>
+    ///     How many history messages the timeline already shows. The
+    ///     agent republishes the FULL history snapshot on every run
+    ///     (AgentLoop → AgentStartEvent.Messages), so replays must skip the
+    ///     already-rendered prefix or turn 2+ would duplicate every block.
+    /// </summary>
     private int _replayedMessages;
 
-    /// <summary>AgentErrorEvent seen since the last AgentStart — decides
-    /// whether AgentEnd flags the run as errored or succeeded (mascot moods).</summary>
+    /// <summary>
+    ///     AgentErrorEvent seen since the last AgentStart — decides
+    ///     whether AgentEnd flags the run as errored or succeeded (mascot moods).
+    /// </summary>
     private bool _runHadError;
-
-    private readonly record struct PendingLine(string Text, long AtMs);
-
-    private sealed class ToolCard
-    {
-        public required ToolCallBlock Block { get; init; }
-        public long StartedMs { get; set; } = long.MinValue;
-    }
+    private StreamingMarkdownBlock? _stream;
+    private StreamingThinkingBlock? _thinkStream;
 
     public ChatScreenBridge(IEventBus bus, ChatTimelinePanel panel, StatusViewModel status, bool autoSubscribe = true)
     {
@@ -76,22 +91,16 @@ public sealed class ChatScreenBridge : IDisposable
 
     public IDisposable Subscription { get; }
 
+    public void Dispose() => Subscription.Dispose();
+
     /// <summary>
     ///     Loop-driven entry point: process one real bus event on the caller's
     ///     (render) thread. Pair with <c>autoSubscribe: false</c>.
     /// </summary>
     public ValueTask AcceptAsync(AgentEvent evt, CancellationToken ct = default) => HandleEvent(evt, ct);
 
-    private sealed class NoSubscription : IDisposable
-    {
-        public static readonly NoSubscription Instance = new();
-        public void Dispose()
-        {
-        }
-    }
-
     /// <summary>
-    ///     The REPL echoed the submitted prompt as a <see cref="UserBlock"/>
+    ///     The REPL echoed the submitted prompt as a <see cref="UserBlock" />
     ///     before <c>PromptAsync</c> ran. Marks that message as already shown
     ///     so the next <c>AgentStart</c> replay skips it instead of doubling it.
     /// </summary>
@@ -161,20 +170,20 @@ public sealed class ChatScreenBridge : IDisposable
                         FinishThinkingStream();
                         break;
                     case ToolCallStartEvent callStart:
-                        EnsureCard(callStart.Id, callStart.ToolName, argsSummary: null);
+                        EnsureCard(callStart.Id, callStart.ToolName, null);
                         break;
                 }
 
                 break;
 
             case ToolExecutionStartEvent execStart:
-                {
-                    var card = EnsureCard(execStart.ToolCallId, execStart.ToolName, Summarize(execStart.Args));
-                    card.StartedMs = _nowMs;
-                    _status.Phase = AgentPhase.ToolCall;
-                    _status.Mode = StatusBarMode.Running;
-                    break;
-                }
+            {
+                var card = EnsureCard(execStart.ToolCallId, execStart.ToolName, Summarize(execStart.Args));
+                card.StartedMs = _nowMs;
+                _status.Phase = AgentPhase.ToolCall;
+                _status.Mode = StatusBarMode.Running;
+                break;
+            }
 
             case ToolExecutionEndEvent execEnd:
                 CompleteCard(execEnd);
@@ -287,8 +296,10 @@ public sealed class ChatScreenBridge : IDisposable
         _status.Mode = StatusBarMode.Running;
     }
 
-    /// <summary>Deltas land in the incoming buffer; complete source lines join
-    /// the paced queue (codex MarkdownStreamCollector pattern).</summary>
+    /// <summary>
+    ///     Deltas land in the incoming buffer; complete source lines join
+    ///     the paced queue (codex MarkdownStreamCollector pattern).
+    /// </summary>
     internal void Incoming(string delta)
     {
         if (_stream is null)
@@ -297,7 +308,7 @@ public sealed class ChatScreenBridge : IDisposable
         }
 
         _incoming.Append(delta);
-        var rest = _incoming.ToString();
+        string rest = _incoming.ToString();
         _incoming.Clear();
 
         int consumed = 0;
@@ -309,7 +320,7 @@ public sealed class ChatScreenBridge : IDisposable
                 break;
             }
 
-            var segment = rest.Substring(consumed, nl - consumed + 1);
+            string segment = rest.Substring(consumed, nl - consumed + 1);
             _pending.Enqueue(new PendingLine(segment, _nowMs));
             consumed = nl + 1;
         }
@@ -335,7 +346,7 @@ public sealed class ChatScreenBridge : IDisposable
         }
 
         _thinkingIncoming.Append(delta);
-        var rest = _thinkingIncoming.ToString();
+        string rest = _thinkingIncoming.ToString();
         _thinkingIncoming.Clear();
 
         int consumed = 0;
@@ -347,7 +358,7 @@ public sealed class ChatScreenBridge : IDisposable
                 break;
             }
 
-            var segment = rest.Substring(consumed, nl - consumed + 1);
+            string segment = rest.Substring(consumed, nl - consumed + 1);
             _thinkStream!.Append(segment);
             consumed = nl + 1;
         }
@@ -373,7 +384,7 @@ public sealed class ChatScreenBridge : IDisposable
             _thinkingIncoming.Clear();
         }
 
-        var text = _thinkStream.RawText();
+        string text = _thinkStream.RawText();
         if (!string.IsNullOrEmpty(text))
         {
             _panel.Timeline.Replace(_thinkStream, new ThinkingBlock(text));
@@ -432,8 +443,10 @@ public sealed class ChatScreenBridge : IDisposable
         }
     }
 
-    /// <summary>Render-thread drain of gates requested off-thread; every queued
-    /// gate lands on the timeline and joins the pending queue in arrival order.</summary>
+    /// <summary>
+    ///     Render-thread drain of gates requested off-thread; every queued
+    ///     gate lands on the timeline and joins the pending queue in arrival order.
+    /// </summary>
     private void DrainGateQueue()
     {
         bool appended = false;
@@ -510,18 +523,17 @@ public sealed class ChatScreenBridge : IDisposable
         }
     }
 
-    /// <summary>One drained attachment for the inline-image pipeline.</summary>
-    public readonly record struct InlineImage(string Path, string MimeType, byte[] Data);
-
-    private readonly Queue<InlineImage> _pendingImages = new();
-
-    /// <summary>Dequeues the next image attachment awaiting inline emission
-    /// (kitty APC / OSC 1337 per terminal capability); false when drained.</summary>
+    /// <summary>
+    ///     Dequeues the next image attachment awaiting inline emission
+    ///     (kitty APC / OSC 1337 per terminal capability); false when drained.
+    /// </summary>
     public bool TryTakePendingImage(out InlineImage image) => _pendingImages.TryDequeue(out image!);
 
-    /// <summary>Typed-ish diff extraction (widgets §5): tools that attach a
-    /// unified diff in Metadata win; otherwise a raw diff-shaped Output is
-    /// used verbatim. No heuristics beyond shape checks.</summary>
+    /// <summary>
+    ///     Typed-ish diff extraction (widgets §5): tools that attach a
+    ///     unified diff in Metadata win; otherwise a raw diff-shaped Output is
+    ///     used verbatim. No heuristics beyond shape checks.
+    /// </summary>
     internal static string? TryExtractDiff(ToolResult result)
     {
         if (result.Metadata is string meta && UnifiedDiffParser.LooksLikeDiff(meta))
@@ -539,12 +551,14 @@ public sealed class ChatScreenBridge : IDisposable
             return string.Empty;
         }
 
-        var raw = args.GetRawText().Replace("\n", " ", StringComparison.Ordinal).Replace("  ", " ", StringComparison.Ordinal);
+        string raw = args.GetRawText().Replace("\n", " ", StringComparison.Ordinal).Replace("  ", " ", StringComparison.Ordinal);
         return raw.Length <= 48 ? raw : raw[..47] + "…";
     }
 
-    /// <summary>Host-driven notice into the timeline (slash-command output,
-    /// submit errors). Rendered as a system line and flagged dirty.</summary>
+    /// <summary>
+    ///     Host-driven notice into the timeline (slash-command output,
+    ///     submit errors). Rendered as a system line and flagged dirty.
+    /// </summary>
     public void AppendSystemLine(string text)
     {
         AppendSystem(text);
@@ -554,26 +568,11 @@ public sealed class ChatScreenBridge : IDisposable
     private void AppendSystem(string text) =>
         _panel.Timeline.Append(new SystemBlock(text));
 
-    // ── Approval gates ─────────────────────────────────────────────────────
-
-    /// <summary>Bound on simultaneously pending gates; overflow auto-denies the
-    /// oldest so its host-side await always wakes and no unreachable
-    /// <c>IsPending</c> block survives.</summary>
-    private const int MaxPendingGates = 8;
-
-    /// <summary>Undecided <see cref="ApprovalGateView" />s in arrival order —
-    /// the front one owns key/click routing (hotfix: a single slot turned every
-    /// earlier gate into a zombie the user could never answer).</summary>
-    private readonly Queue<ApprovalGateView> _pendingGates = new();
-
-    /// <summary>Gates posted off the render thread (tool-execution context), drained by <see cref="Tick" />.</summary>
-    private readonly ConcurrentQueue<ApprovalGateView> _gateQueue = new();
-
     /// <summary>
-    /// Thread-safe approval request for the agent-loop side of the seam:
-    /// creates a gate the caller can await via <c>DecisionRecorded</c>, and
-    /// enqueues it so the frame loop appends it onto the timeline on its next
-    /// tick — all list mutation stays on the render thread.
+    ///     Thread-safe approval request for the agent-loop side of the seam:
+    ///     creates a gate the caller can await via <c>DecisionRecorded</c>, and
+    ///     enqueues it so the frame loop appends it onto the timeline on its next
+    ///     tick — all list mutation stays on the render thread.
     /// </summary>
     public ApprovalGateView RequestApprovalGate(string toolName, string detail)
     {
@@ -584,9 +583,9 @@ public sealed class ChatScreenBridge : IDisposable
     }
 
     /// <summary>
-    /// Appends a permission gate to the timeline and arms it at the tail of
-    /// the pending queue. Every queued gate stays interactable in arrival
-    /// order — the front one is answered first; deciding it exposes the next.
+    ///     Appends a permission gate to the timeline and arms it at the tail of
+    ///     the pending queue. Every queued gate stays interactable in arrival
+    ///     order — the front one is answered first; deciding it exposes the next.
     /// </summary>
     public ApprovalGateView BeginApprovalGate(string toolName, string detail)
     {
@@ -598,8 +597,10 @@ public sealed class ChatScreenBridge : IDisposable
         return gate;
     }
 
-    /// <summary>Appends to the pending queue, auto-denying the oldest gate on
-    /// overflow (the bound keeps both the queue and host-side waiters finite).</summary>
+    /// <summary>
+    ///     Appends to the pending queue, auto-denying the oldest gate on
+    ///     overflow (the bound keeps both the queue and host-side waiters finite).
+    /// </summary>
     private void EnqueuePendingGate(ApprovalGateView gate)
     {
         _pendingGates.Enqueue(gate);
@@ -609,8 +610,10 @@ public sealed class ChatScreenBridge : IDisposable
         }
     }
 
-    /// <summary>Drops gates resolved off the routing path (e.g. host called
-    /// <see cref="Widgets.ApprovalGateView.TryDecide" /> directly).</summary>
+    /// <summary>
+    ///     Drops gates resolved off the routing path (e.g. host called
+    ///     <see cref="Widgets.ApprovalGateView.TryDecide" /> directly).
+    /// </summary>
     private void PruneResolvedGates()
     {
         while (_pendingGates.Count > 0 && !_pendingGates.Peek().IsPending)
@@ -620,10 +623,10 @@ public sealed class ChatScreenBridge : IDisposable
     }
 
     /// <summary>
-    /// Routes one key event to the OLDEST pending gate BEFORE composer input.
-    /// Consumed keys always wake the frame pipeline (decision stamps repaint).
-    /// Returns false while no gate is armed or the key is not one of y/n/a/
-    /// Enter/Escape — callers fall through to normal routing.
+    ///     Routes one key event to the OLDEST pending gate BEFORE composer input.
+    ///     Consumed keys always wake the frame pipeline (decision stamps repaint).
+    ///     Returns false while no gate is armed or the key is not one of y/n/a/
+    ///     Enter/Escape — callers fall through to normal routing.
     /// </summary>
     public bool TryRouteApprovalKey(in KeyEvent key)
     {
@@ -649,12 +652,12 @@ public sealed class ChatScreenBridge : IDisposable
     }
 
     /// <summary>
-    /// Routes a left-button press/click to the OLDEST pending gate's hint-row
-    /// buttons (see <see cref="Widgets.ApprovalGateView.TryHitDecision" />).
-    /// Returns false when no gate is armed or the click lands outside its
-    /// decision zones — callers keep normal scroll/routing behavior.
+    ///     Routes a left-button press/click to the OLDEST pending gate's hint-row
+    ///     buttons (see <see cref="Widgets.ApprovalGateView.TryHitDecision" />).
+    ///     Returns false when no gate is armed or the click lands outside its
+    ///     decision zones — callers keep normal scroll/routing behavior.
     /// </summary>
-    public bool TryRouteApprovalClick(in Input.MouseEvent mouse)
+    public bool TryRouteApprovalClick(in MouseEvent mouse)
     {
         PruneResolvedGates();
         if (_pendingGates.Count == 0)
@@ -663,13 +666,13 @@ public sealed class ChatScreenBridge : IDisposable
         }
 
         var gate = _pendingGates.Peek();
-        if (mouse.Type is not (Input.MouseEventType.Press or Input.MouseEventType.Click)
-            || mouse.Button != Input.MouseButton.Left)
+        if (mouse.Type is not (MouseEventType.Press or MouseEventType.Click)
+            || mouse.Button != MouseButton.Left)
         {
             return false;
         }
 
-        if (gate.TryHitDecision(mouse.Column, mouse.Row) is not { } choice
+        if (gate.TryHitDecision(mouse.Column, mouse.Row) is not {} choice
             || !gate.TryDecide(choice))
         {
             return false;
@@ -684,8 +687,6 @@ public sealed class ChatScreenBridge : IDisposable
         return true;
     }
 
-    public void Dispose() => Subscription.Dispose();
-
     public void RouteDiffNavigation(DiffPreviewViewModel diffVm, ChatAction action)
     {
         if (diffVm is null) return;
@@ -699,4 +700,23 @@ public sealed class ChatScreenBridge : IDisposable
                 break;
         }
     }
+
+    private readonly record struct PendingLine(string Text, long AtMs);
+
+    private sealed class ToolCard
+    {
+        public required ToolCallBlock Block { get; init; }
+        public long StartedMs { get; set; } = long.MinValue;
+    }
+
+    private sealed class NoSubscription : IDisposable
+    {
+        public static readonly NoSubscription Instance = new();
+        public void Dispose()
+        {
+        }
+    }
+
+    /// <summary>One drained attachment for the inline-image pipeline.</summary>
+    public readonly record struct InlineImage(string Path, string MimeType, byte[] Data);
 }

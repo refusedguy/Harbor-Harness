@@ -1,12 +1,11 @@
 using System.Buffers.Binary;
-
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Проверка JPEG-заголовка без декодера: сигнатура SOI + размеры из первого
-/// SOF-маркера (baseline C0 / extended sequential C1 / progressive C2).
-/// Хватает для превью-карточки («name · W×H»); полноценную растеризацию
-/// позже отдают графику-протоколам терминала (sixel/kitty).
+///     Проверка JPEG-заголовка без декодера: сигнатура SOI + размеры из первого
+///     SOF-маркера (baseline C0 / extended sequential C1 / progressive C2).
+///     Хватает для превью-карточки («name · W×H»); полноценную растеризацию
+///     позже отдают графику-протоколам терминала (sixel/kitty).
 /// </summary>
 public static class JpegProbe
 {

@@ -6,6 +6,7 @@
 
 using CSharpFunctionalExtensions;
 namespace Harbor.Desktop.Abstractions.Configuration;
+
 /// <summary>
 ///     Repository contract for the shared <see cref="CommonConfig" />. Every
 ///     Harbor app (CLI, Avalonia, WPF, MAUI, Blazor) registers a single

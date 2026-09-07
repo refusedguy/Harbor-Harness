@@ -1,22 +1,17 @@
-using System.Collections.Immutable;
-using System.ComponentModel;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Contracts;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Tui;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
-using Harbor.Terminal.Abstractions.Views;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-using Harbor.Ui.Framework.Panels;
-using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
-
+using System.Collections.Immutable;
+using System.ComponentModel;
 namespace Harbor.Tui.CellForge;
 
 /// <summary>
@@ -26,45 +21,25 @@ namespace Harbor.Tui.CellForge;
 ///     raw-mode entry point remains <c>CellForgeReplRunner</c>; this adapter serves
 ///     the non-interactive/event-driven path so <c>HARBOR_TUI=cellforge</c>
 ///     produces a first-class CellForge renderer instead of falling back to
-///     the Ansi backend. Output goes through <see cref="AnsiWriter"/>'s SGR
+///     the Ansi backend. Output goes through <see cref="AnsiWriter" />'s SGR
 ///     automaton: styles are diffed against the writer's tracked state, so
 ///     redundant escape codes are never emitted.
 /// </summary>
-[Harbor.Abstractions.Contracts.TuiRenderer(Backend = "cellforge")]
-public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
+[TuiRenderer(Backend = "cellforge")]
+public sealed class CellForgeTuiRenderer : BaseTuiRenderer
 {
     /// <summary>Input placeholder while the agent is idle and waiting for a prompt.</summary>
     internal const string IdlePlaceholder = "Type your message...";
 
     /// <summary>Input placeholder while the agent is running a prompt.</summary>
     internal const string BusyPlaceholder = "Agent is running… (Esc to stop)";
-
-    /// <summary>
-    /// CF-D-002: host-provided <see cref="ChatScreen"/> so
-    /// <see cref="ProjectStateIntoWidgets"/> can feed projected state into
-    /// <see cref="Widgets.StatusPanel.ProjectedState"/>. Null (default) means
-    /// the renderer is running in a context without a layout tree
-    /// (e.g. event-driven non-interactive path) — projected state is skipped.
-    /// </summary>
-    public ChatScreen? Screen { get; set; }
-
-    private readonly UiStore _store;
-    private readonly StatusBarViewModel _statusVm;
     private readonly ChatHistoryViewModel _chatVm;
-    private readonly InputViewModel _inputVm;
     private readonly ComposerController _composer = new();
+    private readonly InputViewModel _inputVm;
     private readonly QuickSwitchSlots _quickSwitchSlots = new();
-    private bool _syncingInput;
+    private readonly StatusBarViewModel _statusVm;
 
-    /// <summary>
-    /// CF-E-002 wiring (TOP-1 #27): renderer-owned panel registry holding the 7
-    /// cell-native builtin providers (see <see cref="RegisterBuiltinPanels"/>).
-    /// Registration order is significant — Alt+1..9 hotkey slots follow it.
-    /// All visibility / focus / size state lives in <see cref="UiState"/> (seeded
-    /// via <see cref="CellForgePanelRegistry.EnsureSeeded"/> in
-    /// <see cref="InitializeAsync"/>); the registry itself is registration-only.
-    /// </summary>
-    public CellForgePanelRegistry Panels { get; }
+    private bool _syncingInput;
 
     public CellForgeTuiRenderer(
         ILogger<CellForgeTuiRenderer> logger,
@@ -73,7 +48,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         InputViewModel? inputVm = null)
         : base(logger)
     {
-        _store = new UiStore();
+        Store = new UiStore();
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
@@ -91,7 +66,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         InputViewModel? inputVm = null)
         : base(logger)
     {
-        _store = new UiStore();
+        Store = new UiStore();
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
@@ -101,10 +76,46 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     }
 
     /// <summary>
-    /// CF-E-002: registers the 8 cell-native builtin panels. Slot order mirrors
-    /// <c>SpectreTuiRenderer.RunInteractiveAsync</c> (Alt+1..9 follow registration
-    /// order): help, todo-list, diff-preview, file-tree, token-breakdown,
-    /// diagnostics, logs, session-sidebar.
+    ///     CF-D-002: host-provided <see cref="ChatScreen" /> so
+    ///     <see cref="ProjectStateIntoWidgets" /> can feed projected state into
+    ///     <see cref="Widgets.StatusPanel.ProjectedState" />. Null (default) means
+    ///     the renderer is running in a context without a layout tree
+    ///     (e.g. event-driven non-interactive path) — projected state is skipped.
+    /// </summary>
+    public ChatScreen? Screen { get; set; }
+
+    /// <summary>
+    ///     CF-E-002 wiring (TOP-1 #27): renderer-owned panel registry holding the 7
+    ///     cell-native builtin providers (see <see cref="RegisterBuiltinPanels" />).
+    ///     Registration order is significant — Alt+1..9 hotkey slots follow it.
+    ///     All visibility / focus / size state lives in <see cref="UiState" /> (seeded
+    ///     via <see cref="CellForgePanelRegistry.EnsureSeeded" /> in
+    ///     <see cref="InitializeAsync" />); the registry itself is registration-only.
+    /// </summary>
+    public CellForgePanelRegistry Panels { get; }
+
+    public override ITuiRenderContext Context { get; }
+
+    /// <summary>Composer buffer mirrored from <see cref="UiState.Input" /> (test seam).</summary>
+    internal PromptBuffer PromptBuffer => _composer.Buffer;
+
+    /// <summary>TEA store owning the <see cref="UiState" /> snapshot (test seam for panel-seeding assertions).</summary>
+    internal UiStore Store { get; }
+
+    /// <summary>Last projected session list (test seam; SideBarView/QuickSwitchSlots wiring is CF-B-008).</summary>
+    internal ImmutableArray<SessionInfo> SessionsSnapshot { get; private set; } = ImmutableArray<SessionInfo>.Empty;
+
+    /// <summary>Last projected active session id (test seam, see <see cref="SessionsSnapshot" />).</summary>
+    internal SessionId? ActiveSessionIdSnapshot { get; private set; }
+
+    /// <summary>Last projected session-list loading flag (test seam, see <see cref="SessionsSnapshot" />).</summary>
+    internal bool SessionsLoading { get; private set; }
+
+    /// <summary>
+    ///     CF-E-002: registers the 8 cell-native builtin panels. Slot order mirrors
+    ///     <c>SpectreTuiRenderer.RunInteractiveAsync</c> (Alt+1..9 follow registration
+    ///     order): help, todo-list, diff-preview, file-tree, token-breakdown,
+    ///     diagnostics, logs, session-sidebar.
     /// </summary>
     private static void RegisterBuiltinPanels(CellForgePanelRegistry panels)
     {
@@ -131,8 +142,6 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         return resolved;
     }
 
-    public override ITuiRenderContext Context { get; }
-
     // CF-F-001: intentionally no ShouldRenderPlacement override — the base filter
     // already paints the ChatHistory/Input placements, and both builtin views write
     // only through ITuiRenderContext (CellForgeRenderContext/AnsiWriter), so no
@@ -142,11 +151,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     {
         try
         {
-            _store.Changed += OnStoreChanged;
+            Store.Changed += OnStoreChanged;
             // CF-E-002: seed registered panel ids + Hidden states + DefaultSizes
             // into UiState so the reducer becomes the single source of truth.
             // Already-known states/sizes survive re-seeding (plugin reload path).
-            _ = Panels.EnsureSeeded(_store);
+            _ = Panels.EnsureSeeded(Store);
             Context.HideCursor();
             return base.InitializeAsync(ct);
         }
@@ -156,14 +165,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         }
     }
 
-    private void OnStoreChanged(object? sender, UiStateChangedEventArgs e)
-    {
-        ProjectStateIntoWidgets(e.State);
-    }
+    private void OnStoreChanged(object? sender, UiStateChangedEventArgs e) => ProjectStateIntoWidgets(e.State);
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        _store.Dispatch(@event);
+        Store.Dispatch(@event);
         return base.RenderAsync(@event, ct);
     }
 
@@ -184,21 +190,6 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
                 break;
         }
     }
-
-    /// <summary>Composer buffer mirrored from <see cref="UiState.Input"/> (test seam).</summary>
-    internal PromptBuffer PromptBuffer => _composer.Buffer;
-
-    /// <summary>TEA store owning the <see cref="UiState"/> snapshot (test seam for panel-seeding assertions).</summary>
-    internal UiStore Store => _store;
-
-    /// <summary>Last projected session list (test seam; SideBarView/QuickSwitchSlots wiring is CF-B-008).</summary>
-    internal ImmutableArray<SessionInfo> SessionsSnapshot { get; private set; } = ImmutableArray<SessionInfo>.Empty;
-
-    /// <summary>Last projected active session id (test seam, see <see cref="SessionsSnapshot"/>).</summary>
-    internal SessionId? ActiveSessionIdSnapshot { get; private set; }
-
-    /// <summary>Last projected session-list loading flag (test seam, see <see cref="SessionsSnapshot"/>).</summary>
-    internal bool SessionsLoading { get; private set; }
 
     internal void ProjectStateIntoWidgets(UiState state)
     {
@@ -232,7 +223,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         SessionsLoading = state.IsLoading;
         _quickSwitchSlots.SyncFromStore(state);
 
-        if (Screen is { } screen)
+        if (Screen is {} screen)
         {
             screen.Status.ProjectedState = state;
             if (screen.Sidebar is SideBarPanel sidebar)
@@ -244,8 +235,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     /// <summary>
     ///     Store → VM + composer-buffer sync: draft text and idle/busy placeholder
-    ///     flow from <see cref="UiState"/> (the source of truth). The
-    ///     <c>_syncingInput</c> flag suppresses the <see cref="OnInputVmChanged"/>
+    ///     flow from <see cref="UiState" /> (the source of truth). The
+    ///     <c>_syncingInput</c> flag suppresses the <see cref="OnInputVmChanged" />
     ///     echo while VM properties are being applied.
     ///     NOTE(CF-B-005): <c>InputModel.History/HistoryIndex</c> are intentionally
     ///     not mirrored here — history recall stays in
@@ -282,7 +273,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     /// <summary>
     ///     VM → composer-buffer sync: user edits applied to the
-    ///     <see cref="InputViewModel"/> (text or caret) are mirrored into the
+    ///     <see cref="InputViewModel" /> (text or caret) are mirrored into the
     ///     composer buffer so the interactive prompt paints the same draft.
     /// </summary>
     private void OnInputVmChanged(object? sender, PropertyChangedEventArgs e)
@@ -307,7 +298,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     public override void Dispose()
     {
         _inputVm.PropertyChanged -= OnInputVmChanged;
-        _store.Changed -= OnStoreChanged;
+        Store.Changed -= OnStoreChanged;
         Context.ShowCursor();
         base.Dispose();
     }
@@ -348,7 +339,6 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 /// </summary>
 public sealed class CellForgeRenderContext : ITuiRenderContext
 {
-    private readonly AnsiWriter _writer;
 
     public CellForgeRenderContext() : this(new StdoutBackend())
     {
@@ -356,11 +346,11 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
 
     public CellForgeRenderContext(ITerminalBackend backend)
     {
-        _writer = new AnsiWriter(backend);
+        Writer = new AnsiWriter(backend);
     }
 
     /// <summary>Exposed for diagnostics and golden-frame tests.</summary>
-    public AnsiWriter Writer => _writer;
+    public AnsiWriter Writer { get; }
 
     public int Width
     {
@@ -396,7 +386,7 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
 
     public void Write(string text)
     {
-        _writer.WriteText(text);
+        Writer.WriteText(text);
         Flush();
     }
 
@@ -404,10 +394,10 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
     {
         if (!string.IsNullOrEmpty(text))
         {
-            _writer.WriteText(text);
+            Writer.WriteText(text);
         }
 
-        _writer.WriteLineBreak();
+        Writer.WriteLineBreak();
         Flush();
     }
 
@@ -416,64 +406,64 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
         var style = new CellStyle(
             PackedColor.Rgb(foreground.R, foreground.G, foreground.B),
             background.HasValue ? PackedColor.Rgb(background.Value.R, background.Value.G, background.Value.B) : default);
-        _writer.WriteStyledText(text, style);
+        Writer.WriteStyledText(text, style);
         Flush();
     }
 
     public void WriteStyled(string text, TuiStyle style)
     {
-        _writer.WriteStyledText(text, MapStyle(default, style));
+        Writer.WriteStyledText(text, MapStyle(default, style));
         Flush();
     }
 
-    public void SetCursorPosition(int row, int col) => _writer.MoveTo(col, row);
+    public void SetCursorPosition(int row, int col) => Writer.MoveTo(col, row);
 
     public void ClearLine()
     {
-        _writer.EraseEntireLine();
+        Writer.EraseEntireLine();
         Flush();
     }
 
     public void Clear()
     {
-        _writer.EmitEraseInDisplay(2);
-        _writer.InvalidateCursorPosition();
+        Writer.EmitEraseInDisplay(2);
+        Writer.InvalidateCursorPosition();
         Flush();
     }
 
     public void HideCursor()
     {
-        _writer.HideCursor();
+        Writer.HideCursor();
         Flush();
     }
 
     public void ShowCursor()
     {
-        _writer.ShowCursor();
+        Writer.ShowCursor();
         Flush();
     }
 
     public void EnterAlternateScreen()
     {
-        _writer.Raw("\x1B[?1049h");
+        Writer.Raw("\x1B[?1049h");
         Flush();
     }
 
     public void ExitAlternateScreen()
     {
-        _writer.Raw("\x1B[?1049l");
+        Writer.Raw("\x1B[?1049l");
         Flush();
     }
 
     /// <summary>
-    ///     AnsiWriter buffers; the sync <see cref="AnsiWriter.FlushSync"/> path
+    ///     AnsiWriter buffers; the sync <see cref="AnsiWriter.FlushSync" /> path
     ///     keeps the render-context contract synchronous without sync-over-async.
     /// </summary>
-    public void Flush() => _writer.FlushSync();
+    public void Flush() => Writer.FlushSync();
 
     private static CellStyle MapStyle(PackedColor color, TuiStyle style)
     {
-        StyleAttr attrs = StyleAttr.None;
+        var attrs = StyleAttr.None;
         if (style.HasFlag(TuiStyle.Bold)) attrs |= StyleAttr.Bold;
         if (style.HasFlag(TuiStyle.Italic)) attrs |= StyleAttr.Italic;
         if (style.HasFlag(TuiStyle.Underline)) attrs |= StyleAttr.Underline;

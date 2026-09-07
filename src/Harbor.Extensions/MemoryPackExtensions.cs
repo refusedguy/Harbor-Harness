@@ -1,5 +1,6 @@
 using MemoryPack;
 namespace Harbor.Abstractions.Extensions;
+
 /// <summary>
 ///     MemoryPack serialization helpers for zero-copy binary serialization.
 ///     Use for internal snapshots, caching, and inter-process communication.

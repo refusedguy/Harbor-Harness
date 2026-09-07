@@ -1,12 +1,6 @@
-using Harbor.App.Avalonia.ViewModels;
-using Avalonia.VisualTree;
 using Harbor.E2E.Framework;
 using Harbor.Ui.Framework.Sessions;
 using Microsoft.Extensions.DependencyInjection;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core.Enums;
-
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
 /// <summary>
@@ -27,7 +21,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 [NotInParallel]
 public sealed class SessionListTests : ComponentTestBase
 {
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupAsync() => await GetDriverAsync("SessionList").ConfigureAwait(false);
 
     /// <summary>Create a persisted session with the given title (real store path).</summary>
@@ -36,7 +30,7 @@ public sealed class SessionListTests : ComponentTestBase
         var manager = Driver.Host.Services.GetRequiredService<ISessionManager>();
         var session = await manager.NewSessionAsync(
             workingDirectory: E2EHelpers.FindRepoRoot()).ConfigureAwait(false);
-        var renamed = await manager.RenameSessionAsync(session.Id, title).ConfigureAwait(false);
+        bool renamed = await manager.RenameSessionAsync(session.Id, title).ConfigureAwait(false);
         await Assert.That(renamed).IsTrue();
         return session.Id;
     }
@@ -69,10 +63,10 @@ public sealed class SessionListTests : ComponentTestBase
         });
         await Task.Delay(200).ConfigureAwait(false);
 
-        var sidebarVisible = UI(() => Vm.IsSidebarVisible);
+        bool sidebarVisible = UI(() => Vm.IsSidebarVisible);
         await Assert.That(sidebarVisible).IsTrue();
 
-        var path = await CaptureAsync("sessions-empty").ConfigureAwait(false);
+        string path = await CaptureAsync("sessions-empty").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -92,14 +86,14 @@ public sealed class SessionListTests : ComponentTestBase
         await SeedSessionAsync("Polish onboarding flow").ConfigureAwait(false);
         await RefreshSidebarAsync().ConfigureAwait(false);
 
-        var has1 = await Driver.WaitForTextAsync("Refactor agent loop", TimeSpan.FromSeconds(3))
+        bool has1 = await Driver.WaitForTextAsync("Refactor agent loop", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        var has2 = await Driver.WaitForTextAsync("Investigate IPC deadlock", TimeSpan.FromSeconds(3))
+        bool has2 = await Driver.WaitForTextAsync("Investigate IPC deadlock", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
 
         await Assert.That(has1 && has2).IsTrue();
 
-        var path = await CaptureAsync("sessions-with-items").ConfigureAwait(false);
+        string path = await CaptureAsync("sessions-with-items").ConfigureAwait(false);
 
         UI(() => Vm.IsSessionsFlyoutOpen = false);
     }
@@ -130,10 +124,10 @@ public sealed class SessionListTests : ComponentTestBase
         });
         await Task.Delay(250).ConfigureAwait(false);
 
-        var activeId = UI(() => Vm.Sessions.ActiveSession?.Id);
+        string? activeId = UI(() => Vm.Sessions.ActiveSession?.Id);
         await Assert.That(activeId).IsEqualTo("s2");
 
-        var path = await CaptureAsync("sessions-active-highlighted").ConfigureAwait(false);
+        string path = await CaptureAsync("sessions-active-highlighted").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -157,14 +151,14 @@ public sealed class SessionListTests : ComponentTestBase
         UI(() => Vm.Sessions.SearchText = "IPC");
         await RefreshSidebarAsync().ConfigureAwait(false);
 
-        var hasMatch = await Driver.WaitForTextAsync("Investigate IPC deadlock", TimeSpan.FromSeconds(3))
+        bool hasMatch = await Driver.WaitForTextAsync("Investigate IPC deadlock", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(hasMatch).IsTrue();
 
-        var hasOther = Driver.GetRenderedText().Contains("Refactor agent loop", StringComparison.Ordinal);
+        bool hasOther = Driver.GetRenderedText().Contains("Refactor agent loop", StringComparison.Ordinal);
         await Assert.That(hasOther).IsFalse();
 
-        var path = await CaptureAsync("sessions-search-filtered").ConfigureAwait(false);
+        string path = await CaptureAsync("sessions-search-filtered").ConfigureAwait(false);
 
         UI(() => Vm.IsSessionsFlyoutOpen = false);
     }
@@ -200,11 +194,11 @@ public sealed class SessionListTests : ComponentTestBase
         });
         await Task.Delay(250).ConfigureAwait(false);
 
-        var hasNew = await Driver.WaitForTextAsync("New session", TimeSpan.FromSeconds(2))
+        bool hasNew = await Driver.WaitForTextAsync("New session", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasNew).IsTrue();
 
-        var path = await CaptureAsync("sessions-new-created").ConfigureAwait(false);
+        string path = await CaptureAsync("sessions-new-created").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -261,7 +255,7 @@ public sealed class SessionListTests : ComponentTestBase
         }
         await Assert.That(toastGone).IsTrue();
 
-        var path = await CaptureAsync("sessions-deleted").ConfigureAwait(false);
+        string path = await CaptureAsync("sessions-deleted").ConfigureAwait(false);
 
         UI(() => Vm.IsSessionsFlyoutOpen = false);
     }
@@ -298,7 +292,7 @@ public sealed class SessionListTests : ComponentTestBase
         }
         await Assert.That(hasFeature).IsTrue();
 
-        var path = await CaptureAsync("sessions-git-info").ConfigureAwait(false);
+        string path = await CaptureAsync("sessions-git-info").ConfigureAwait(false);
 
         UI(() => Vm.IsSessionsFlyoutOpen = false);
     }

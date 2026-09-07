@@ -1,17 +1,16 @@
 using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CF-E-016: the CellForge theme default is the Harbor Terminal palette 1-to-1
-/// with <c>apps/Harbor.App.Avalonia/Themes/Hds/HarborDesignTokens.axaml</c>.
-/// Expected hexes are hardcoded from the axaml — any drift fails loudly.
-/// Merge tests pin that JSON overrides win over <see cref="JsonThemeLoader.Default" />
-/// while omitted slots fall back to it (explicit-fallback overload; the
-/// single-arg <c>Parse</c> / <c>LoadFile</c> active-theme merge and the
-/// <c>ThemeFileWatcher</c> live-reload path are untouched — see
-/// <c>JsonThemeLoaderTests</c> / <c>ThemeFileWatcherTests</c>).
+///     CF-E-016: the CellForge theme default is the Harbor Terminal palette 1-to-1
+///     with <c>apps/Harbor.App.Avalonia/Themes/Hds/HarborDesignTokens.axaml</c>.
+///     Expected hexes are hardcoded from the axaml — any drift fails loudly.
+///     Merge tests pin that JSON overrides win over <see cref="JsonThemeLoader.Default" />
+///     while omitted slots fall back to it (explicit-fallback overload; the
+///     single-arg <c>Parse</c> / <c>LoadFile</c> active-theme merge and the
+///     <c>ThemeFileWatcher</c> live-reload path are untouched — see
+///     <c>JsonThemeLoaderTests</c> / <c>ThemeFileWatcherTests</c>).
 /// </summary>
 public class ThemeDefaultTests
 {

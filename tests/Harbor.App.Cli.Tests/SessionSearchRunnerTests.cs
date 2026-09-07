@@ -1,16 +1,15 @@
 using Harbor.Abstractions.Models;
 using Harbor.App.Cli.Commands;
 using Harbor.Storage.Memory;
-
 namespace Harbor.App.Cli.Tests;
 
 public class SessionSearchRunnerTests
 {
-    private readonly StringWriter _out = new();
     private readonly StringWriter _err = new();
+    private readonly StringWriter _out = new();
     private readonly MemorySessionStore _store = new();
 
-    private static async Task<Harbor.Abstractions.Models.Session> SeedAsync(
+    private static async Task<Session> SeedAsync(
         MemorySessionStore store, string title, params AgentMessage[] messages)
     {
         var created = (await store.CreateAsync("/tmp", "code", "test", "test-model")).Value;
@@ -35,7 +34,7 @@ public class SessionSearchRunnerTests
         Guid.NewGuid().ToString("N"),
         "s",
         DateTimeOffset.UtcNow,
-        [.. parts.Select(p => (ContentPart)new TextPart(p))],
+        [..parts.Select(p => (ContentPart)new TextPart(p))],
         StopReason.Stop,
         new Usage(0, 0),
         "test-model");
@@ -120,7 +119,7 @@ public class SessionSearchRunnerTests
         var withMatch = await SeedAsync(_store, "has it", User("unique-marble-query"));
         await SeedAsync(_store, "also has", User("unique-marble-query"));
 
-        int exit = await SearchAsync("unique-marble-query", filter: withMatch.Id);
+        int exit = await SearchAsync("unique-marble-query", withMatch.Id);
 
         await Assert.That(exit).IsEqualTo(0);
         // Only the filtered session's header appears.

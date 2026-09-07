@@ -1,15 +1,12 @@
-using System.Collections.Generic;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.ViewModels;
-
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Quick-switch slots (Kilo pattern): nine fixed slots for recent sessions,
-/// resolved via leader chords <c>&lt;leader&gt;1..9</c>. Slot 0 is untouched by
-/// <see cref="Push" /> (stable pin), slots 1..8 rotate most-recent-first — the
-/// most recent session lands in slot 1. Pure state, host owns session switching.
+///     Quick-switch slots (Kilo pattern): nine fixed slots for recent sessions,
+///     resolved via leader chords <c>&lt;leader&gt;1..9</c>. Slot 0 is untouched by
+///     <see cref="Push" /> (stable pin), slots 1..8 rotate most-recent-first — the
+///     most recent session lands in slot 1. Pure state, host owns session switching.
 /// </summary>
 public sealed class QuickSwitchSlots
 {
@@ -46,9 +43,9 @@ public sealed class QuickSwitchSlots
     }
 
     /// <summary>
-    /// MRU registration: shifts slots 1..8 down one and puts
-    /// <paramref name="sessionId" /> in slot 1. The session's previous slot
-    /// entry is removed so it never appears twice.
+    ///     MRU registration: shifts slots 1..8 down one and puts
+    ///     <paramref name="sessionId" /> in slot 1. The session's previous slot
+    ///     entry is removed so it never appears twice.
     /// </summary>
     public void Push(string sessionId)
     {
@@ -93,7 +90,7 @@ public sealed class QuickSwitchSlots
         var result = new List<SessionRowViewModel>(Count);
         for (int i = 0; i < Count; i++)
         {
-            var id = _slots[i];
+            string? id = _slots[i];
             if (string.IsNullOrEmpty(id)) continue;
             for (int j = 0; j < all.Count; j++)
             {
@@ -116,7 +113,7 @@ public sealed class QuickSwitchSlots
     {
         Array.Clear(_slots, 0, Count);
 
-        if (state.ActiveSessionId is { } activeId)
+        if (state.ActiveSessionId is {} activeId)
         {
             _slots[0] = activeId.Value;
         }

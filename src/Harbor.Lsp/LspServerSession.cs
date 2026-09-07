@@ -1,8 +1,7 @@
-using System.Diagnostics;
-using System.Text.Json;
 using Harbor.Abstractions.Lsp;
 using Microsoft.Extensions.Logging;
-
+using System.Diagnostics;
+using System.Text.Json;
 namespace Harbor.Lsp;
 
 /// <summary>
@@ -14,15 +13,14 @@ public sealed class LspServerSession : IAsyncDisposable
 {
     /// <summary>Budget for the initialize handshake — a hung server must not block file opens.</summary>
     public static readonly TimeSpan InitializeTimeout = TimeSpan.FromSeconds(15);
-
-    private readonly LspServerDefinition _definition;
     private readonly LspClient _client;
-    private readonly Process _process;
-    private readonly ILogger _logger;
+
     private readonly Dictionary<string, List<LspDiagnostic>> _diagnostics = [];
     private readonly Lock _diagnosticsLock = new();
-    private int _documentVersion;
+    private readonly ILogger _logger;
+    private readonly Process _process;
     private int _disposed;
+    private int _documentVersion;
 
     private LspServerSession(
         LspServerDefinition definition,
@@ -30,17 +28,52 @@ public sealed class LspServerSession : IAsyncDisposable
         Process process,
         ILogger logger)
     {
-        _definition = definition;
+        Definition = definition;
         _client = client;
         _process = process;
         _logger = logger;
         _client.ServerNotification += OnServerNotification;
     }
 
+    public LspServerDefinition Definition { get; }
+
+    // ── Dispose ────────────────────────────────────────────────────────────
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        _client.ServerNotification -= OnServerNotification;
+        try
+        {
+            await _client.SendRequestAsync("shutdown", null).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            await _client.SendNotificationAsync("exit", null).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "LSP: graceful shutdown of {Language} server failed — killing", Definition.Language);
+        }
+        finally
+        {
+            await _client.DisposeAsync().ConfigureAwait(false);
+            try
+            {
+                if (!_process.HasExited)
+                {
+                    _process.Kill(entireProcessTree: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "LSP: kill of {Language} server failed", Definition.Language);
+            }
+
+            _process.Dispose();
+        }
+    }
+
     /// <summary>Raised when diagnostics were re-published for a file (file path form).</summary>
     public event EventHandler<LspDiagnosticsChangedEventArgs>? DiagnosticsChanged;
-
-    public LspServerDefinition Definition => _definition;
 
     /// <summary>Spawn the server process and complete the initialize handshake.</summary>
     public static async Task<LspServerSession> StartAsync(
@@ -57,7 +90,7 @@ public sealed class LspServerSession : IAsyncDisposable
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = true,
+            CreateNoWindow = true
         };
         foreach (string arg in definition.Args)
         {
@@ -65,7 +98,7 @@ public sealed class LspServerSession : IAsyncDisposable
         }
 
         var process = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start language server '{definition.Command}'.");
+                      ?? throw new InvalidOperationException($"Failed to start language server '{definition.Command}'.");
 
         logger.LogInformation(
             "LSP: started {Language} server ({Command}) pid={Pid} root={Root}",
@@ -82,11 +115,11 @@ public sealed class LspServerSession : IAsyncDisposable
             await client.SendRequestAsync(
                 "initialize",
                 new LspWire.InitializeParams(
-                    ProcessId: Environment.ProcessId,
-                    RootUri: FileUri(workspaceRoot),
-                    Capabilities: new LspWire.ClientCapabilities(
+                    Environment.ProcessId,
+                    FileUri(workspaceRoot),
+                    new LspWire.ClientCapabilities(
                         new LspWire.TextDocumentCapabilities(new LspWire.SyncCapabilities()))),
-                ct: linked.Token).ConfigureAwait(false);
+                linked.Token).ConfigureAwait(false);
 
             await client.SendNotificationAsync("initialized", null, ct).ConfigureAwait(false);
         }
@@ -134,7 +167,7 @@ public sealed class LspServerSession : IAsyncDisposable
     /// <summary>Resolve definition at the position (normalized to a file path).</summary>
     public async Task<LspLocation?> FindDefinitionAsync(string filePath, int line, int column, CancellationToken ct)
     {
-        JsonElement? result = await _client.SendRequestAsync(
+        var result = await _client.SendRequestAsync(
             "textDocument/definition",
             new LspWire.PositionParams(
                 new LspWire.TextDocumentIdentifier(FileUri(filePath)),
@@ -146,7 +179,7 @@ public sealed class LspServerSession : IAsyncDisposable
     /// <summary>Resolve references to the symbol at the position.</summary>
     public async Task<IReadOnlyList<LspLocation>> FindReferencesAsync(string filePath, int line, int column, CancellationToken ct)
     {
-        JsonElement? result = await _client.SendRequestAsync(
+        var result = await _client.SendRequestAsync(
             "textDocument/references",
             new LspWire.PositionParams(
                 new LspWire.TextDocumentIdentifier(FileUri(filePath)),
@@ -161,8 +194,8 @@ public sealed class LspServerSession : IAsyncDisposable
     {
         lock (_diagnosticsLock)
         {
-            return _diagnostics.TryGetValue(filePath, out List<LspDiagnostic>? list)
-                ? [.. list]
+            return _diagnostics.TryGetValue(filePath, out var list)
+                ? [..list]
                 : [];
         }
     }
@@ -175,13 +208,13 @@ public sealed class LspServerSession : IAsyncDisposable
 
         try
         {
-            LspWire.PublishDiagnosticsParams? published =
+            var published =
                 args.Parameters.Deserialize(LspJsonContext.Default.PublishDiagnosticsParams);
             if (published is null) return;
 
             string filePath = FromUri(published.Uri);
             var list = new List<LspDiagnostic>(published.Diagnostics.Count);
-            foreach (LspWire.DiagnosticDto dto in published.Diagnostics)
+            foreach (var dto in published.Diagnostics)
             {
                 list.Add(new LspDiagnostic(
                     filePath,
@@ -190,7 +223,7 @@ public sealed class LspServerSession : IAsyncDisposable
                     dto.Range.End.Line,
                     dto.Range.End.Character,
                     (LspSeverity)(dto.Severity ?? (int)LspSeverity.Error),
-                    dto.Source ?? _definition.Id,
+                    dto.Source ?? Definition.Id,
                     dto.Message));
             }
 
@@ -217,16 +250,16 @@ public sealed class LspServerSession : IAsyncDisposable
     {
         if (element is not { ValueKind: JsonValueKind.Object or JsonValueKind.Array } e) return null;
 
-        if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty("targetUri", out JsonElement linkUri))
+        if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty("targetUri", out var linkUri))
         {
             return FromLocationLike(linkUri, e.GetProperty("targetSelectionRange").GetProperty("start"), fallbackPath);
         }
 
         if (e.ValueKind == JsonValueKind.Array)
         {
-            foreach (JsonElement item in e.EnumerateArray())
+            foreach (var item in e.EnumerateArray())
             {
-                LspLocation? location = NormalizeSingle(item, fallbackPath);
+                var location = NormalizeSingle(item, fallbackPath);
                 if (location is not null) return location;
             }
 
@@ -240,9 +273,9 @@ public sealed class LspServerSession : IAsyncDisposable
     {
         if (element is not { ValueKind: JsonValueKind.Array } e) return [];
         var list = new List<LspLocation>();
-        foreach (JsonElement item in e.EnumerateArray())
+        foreach (var item in e.EnumerateArray())
         {
-            LspLocation? location = NormalizeSingle(item, fallbackPath);
+            var location = NormalizeSingle(item, fallbackPath);
             if (location is not null) list.Add(location);
         }
 
@@ -252,15 +285,15 @@ public sealed class LspServerSession : IAsyncDisposable
     private static LspLocation? NormalizeSingle(JsonElement item, string fallbackPath)
     {
         if (item.ValueKind != JsonValueKind.Object) return null;
-        if (item.TryGetProperty("uri", out JsonElement uri))
+        if (item.TryGetProperty("uri", out var uri))
         {
-            JsonElement start = item.GetProperty("range").GetProperty("start");
+            var start = item.GetProperty("range").GetProperty("start");
             return FromLocationLike(uri, start, fallbackPath);
         }
 
-        if (item.TryGetProperty("targetUri", out JsonElement targetUri))
+        if (item.TryGetProperty("targetUri", out var targetUri))
         {
-            JsonElement start = item.GetProperty("targetSelectionRange").GetProperty("start");
+            var start = item.GetProperty("targetSelectionRange").GetProperty("start");
             return FromLocationLike(targetUri, start, fallbackPath);
         }
 
@@ -272,8 +305,8 @@ public sealed class LspServerSession : IAsyncDisposable
         if (uriElement.ValueKind != JsonValueKind.String) return null;
         string path = FromUri(uriElement.GetString() ?? string.Empty);
         if (string.IsNullOrEmpty(path)) path = fallbackPath;
-        int line = start.TryGetProperty("line", out JsonElement l) && l.ValueKind == JsonValueKind.Number ? l.GetInt32() : 0;
-        int character = start.TryGetProperty("character", out JsonElement c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : 0;
+        int line = start.TryGetProperty("line", out var l) && l.ValueKind == JsonValueKind.Number ? l.GetInt32() : 0;
+        int character = start.TryGetProperty("character", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : 0;
         return new LspLocation(path, line, character);
     }
 
@@ -299,41 +332,6 @@ public sealed class LspServerSession : IAsyncDisposable
         catch (UriFormatException)
         {
             return string.Empty;
-        }
-    }
-
-    // ── Dispose ────────────────────────────────────────────────────────────
-
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-
-        _client.ServerNotification -= OnServerNotification;
-        try
-        {
-            await _client.SendRequestAsync("shutdown", null).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-            await _client.SendNotificationAsync("exit", null).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "LSP: graceful shutdown of {Language} server failed — killing", _definition.Language);
-        }
-        finally
-        {
-            await _client.DisposeAsync().ConfigureAwait(false);
-            try
-            {
-                if (!_process.HasExited)
-                {
-                    _process.Kill(entireProcessTree: true);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "LSP: kill of {Language} server failed", _definition.Language);
-            }
-
-            _process.Dispose();
         }
     }
 }

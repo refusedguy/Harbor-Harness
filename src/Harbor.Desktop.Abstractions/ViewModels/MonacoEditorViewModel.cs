@@ -1,5 +1,3 @@
-using CommunityToolkit.Mvvm.ComponentModel;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -35,13 +33,13 @@ public static class Fibonacci
     }
 }";
 
-    /// <summary>Active language id for syntax highlighting.</summary>
-    [ObservableProperty]
-    private string _language = "csharp";
-
     /// <summary>Absolute path of the document on disk (null for an unsaved buffer).</summary>
     [ObservableProperty]
     private string? _filePath;
+
+    /// <summary>Active language id for syntax highlighting.</summary>
+    [ObservableProperty]
+    private string _language = "csharp";
 
     /// <summary>Construct a <see cref="MonacoEditorViewModel" /> with the default demo buffer.</summary>
     public MonacoEditorViewModel()

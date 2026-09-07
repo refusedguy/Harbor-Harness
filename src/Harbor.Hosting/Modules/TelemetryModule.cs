@@ -1,7 +1,5 @@
 using Harbor.Diagnostics;
 using Harbor.Telemetry;
-using Microsoft.Extensions.DependencyInjection;
-
 namespace Harbor.Hosting;
 
 /// <summary>

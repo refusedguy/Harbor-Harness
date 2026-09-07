@@ -1,6 +1,6 @@
-using System.Text;
 using Harbor.E2E.Framework;
-
+using System.Text;
+using System.Text.Json;
 namespace Harbor.E2E.Cli;
 
 /// <summary>
@@ -12,6 +12,19 @@ namespace Harbor.E2E.Cli;
 public class RecordingReplayTests : IAsyncDisposable
 {
     private readonly List<MockLlmServer> _servers = [];
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var server in _servers)
+        {
+            try { await server.StopAsync().ConfigureAwait(false); }
+            catch
+            { /* dispose-best-effort */
+            }
+
+            await server.DisposeAsync().ConfigureAwait(false);
+        }
+    }
 
     [Test]
     public async Task Recorded_Sequence_Replays_Identically_In_Order()
@@ -101,16 +114,16 @@ public class RecordingReplayTests : IAsyncDisposable
     private static string ExtractContent(string sseBody)
     {
         var sb = new StringBuilder();
-        foreach (var line in sseBody.Split('\n'))
+        foreach (string line in sseBody.Split('\n'))
         {
             if (!line.StartsWith("data: ", StringComparison.Ordinal) || line.Contains("[DONE]"))
                 continue;
 
-            using var doc = System.Text.Json.JsonDocument.Parse(line["data: ".Length..]);
+            using var doc = JsonDocument.Parse(line["data: ".Length..]);
             foreach (var choice in doc.RootElement.GetProperty("choices").EnumerateArray())
             {
                 if (choice.GetProperty("delta").TryGetProperty("content", out var content)
-                    && content.ValueKind == System.Text.Json.JsonValueKind.String)
+                    && content.ValueKind == JsonValueKind.String)
                 {
                     sb.Append(content.GetString());
                 }
@@ -125,7 +138,7 @@ public class RecordingReplayTests : IAsyncDisposable
         var body = new { model, messages = new[] { new { role = "user", content = "hi" } } };
         using var response = await client.PostAsync(
             new Uri(baseUri, "/chat/completions"),
-            new StringContent(System.Text.Json.JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"));
+            new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"));
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
     }
@@ -135,19 +148,8 @@ public class RecordingReplayTests : IAsyncDisposable
         var body = new { model, messages = new[] { new { role = "user", content = "hi" } } };
         using var response = await client.PostAsync(
             new Uri(baseUri, "/chat/completions"),
-            new StringContent(System.Text.Json.JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"));
+            new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"));
         await Assert.That((int)response.StatusCode).IsEqualTo(500);
         return await response.Content.ReadAsStringAsync();
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        foreach (var server in _servers)
-        {
-            try { await server.StopAsync().ConfigureAwait(false); }
-            catch { /* dispose-best-effort */ }
-
-            await server.DisposeAsync().ConfigureAwait(false);
-        }
     }
 }

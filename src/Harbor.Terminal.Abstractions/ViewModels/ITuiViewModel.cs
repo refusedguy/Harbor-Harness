@@ -1,6 +1,7 @@
-using System.ComponentModel;
 using Harbor.Abstractions.Events;
+using System.ComponentModel;
 namespace Harbor.Terminal.Abstractions.ViewModels;
+
 /// <summary>
 ///     Base view model contract — state + logic for a view.
 ///     Implements the ViewModel part of MVVM. ViewModels are testable,

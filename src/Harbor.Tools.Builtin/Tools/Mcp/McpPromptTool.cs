@@ -4,6 +4,7 @@ using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Renders an MCP prompt (<c>prompts/get</c>) from a registered server into
 ///     plain text the agent can follow. Prompt names come from
@@ -61,7 +62,7 @@ public sealed class McpPromptTool : ITool
     [
         "Use `mcp_prompt` to expand a server-side prompt template (review checklist, commit message, …)",
         "Discover prompt names with mcp {\"method\":\"prompts/list\"} before rendering",
-        "Pass template variables through `arguments` — check the prompt's required arguments first",
+        "Pass template variables through `arguments` — check the prompt's required arguments first"
     ];
 
     /// <inheritdoc />

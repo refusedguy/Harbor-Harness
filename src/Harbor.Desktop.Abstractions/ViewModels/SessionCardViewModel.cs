@@ -1,34 +1,23 @@
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
-using System.Globalization;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
+using Harbor.Desktop.Abstractions.Models;
 using Harbor.Ui.Framework.Converters;
-using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
-using Microsoft.Extensions.Logging;
-
+using System.Globalization;
+using ToastKind = Harbor.Ui.Framework.Services.ToastKind;
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 public partial class SessionCardViewModel : ObservableObject
 {
-    private readonly ISessionManager _sessionManager;
     private readonly IDialogService _dialogs;
-    private readonly IToastService _toasts;
     private readonly ILogger<SessionCardViewModel> _logger;
+    private readonly ISessionManager _sessionManager;
+    private readonly IToastService _toasts;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusText))]
     [NotifyPropertyChangedFor(nameof(StatusBrushKey))]
     [NotifyPropertyChangedFor(nameof(DotState))]
     private SessionStatus _status;
-
-    public string Id { get; }
-    public string Title { get; private set; }
-    public string PreviewText { get; }
-    public string Duration { get; private set; }
-    public DateTimeOffset CreatedAt { get; }
-    public DateTimeOffset UpdatedAt { get; }
 
     public SessionCardViewModel(
         string id,
@@ -55,18 +44,25 @@ public partial class SessionCardViewModel : ObservableObject
         _logger = logger;
     }
 
+    public string Id { get; }
+    public string Title { get; private set; }
+    public string PreviewText { get; }
+    public string Duration { get; private set; }
+    public DateTimeOffset CreatedAt { get; }
+    public DateTimeOffset UpdatedAt { get; }
+
     public string RelativeTime => StatusMappers.TimeAgo(UpdatedAt.UtcDateTime);
 
     public string StatusText => StatusMappers.SessionStatusToText(Status);
     public string StatusBrushKey => StatusMappers.SessionStatusToBrushKey(Status);
 
-    public Harbor.Desktop.Abstractions.Models.SessionDotState DotState => Status switch
+    public SessionDotState DotState => Status switch
     {
-        SessionStatus.Working => Harbor.Desktop.Abstractions.Models.SessionDotState.Running,
-        SessionStatus.Done => Harbor.Desktop.Abstractions.Models.SessionDotState.Done,
-        SessionStatus.Error => Harbor.Desktop.Abstractions.Models.SessionDotState.Error,
-        SessionStatus.Aborted => Harbor.Desktop.Abstractions.Models.SessionDotState.Error,
-        _ => Harbor.Desktop.Abstractions.Models.SessionDotState.Idle
+        SessionStatus.Working => SessionDotState.Running,
+        SessionStatus.Done => SessionDotState.Done,
+        SessionStatus.Error => SessionDotState.Error,
+        SessionStatus.Aborted => SessionDotState.Error,
+        _ => SessionDotState.Idle
     };
 
 
@@ -83,10 +79,7 @@ public partial class SessionCardViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task SelectSessionAsync()
-    {
-        await _sessionManager.OpenSessionAsync(Id);
-    }
+    private async Task SelectSessionAsync() => await _sessionManager.OpenSessionAsync(Id);
 
     [RelayCommand]
     private async Task RenameAsync()
@@ -106,16 +99,10 @@ public partial class SessionCardViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task DuplicateAsync()
-    {
-        _toasts.Show("Duplicate not yet implemented", ToastKind.Info);
-    }
+    private async Task DuplicateAsync() => _toasts.Show("Duplicate not yet implemented");
 
     [RelayCommand]
-    private async Task ArchiveAsync()
-    {
-        _toasts.Show("Archive not yet implemented", ToastKind.Info);
-    }
+    private async Task ArchiveAsync() => _toasts.Show("Archive not yet implemented");
 
     [RelayCommand]
     private async Task DeleteAsync()
@@ -123,8 +110,7 @@ public partial class SessionCardViewModel : ObservableObject
         bool confirmed = await _dialogs.ConfirmAsync(
             "Delete session",
             $"Delete \"{Title}\"? This cannot be undone.",
-            "Delete",
-            "Cancel");
+            "Delete");
         if (!confirmed) return;
 
         bool ok = await _sessionManager.DeleteSessionAsync(Id);

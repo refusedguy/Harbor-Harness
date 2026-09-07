@@ -1,6 +1,4 @@
 using System.Text;
-using CommunityToolkit.Mvvm.ComponentModel;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -13,13 +11,13 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// </summary>
 public sealed partial class DiffViewModel : ObservableObject
 {
-    /// <summary>The original (left) text.</summary>
-    [ObservableProperty]
-    private string _before = "Hello, world!\nThis is the original.";
 
     /// <summary>The modified (right) text.</summary>
     [ObservableProperty]
     private string _after = "Hello, Harbor!\nThis is the original.\nWith a new line.";
+    /// <summary>The original (left) text.</summary>
+    [ObservableProperty]
+    private string _before = "Hello, world!\nThis is the original.";
 
     /// <summary>The computed line-level diff (empty until <see cref="ComputeDiff" /> runs).</summary>
     [ObservableProperty]
@@ -47,14 +45,14 @@ public sealed partial class DiffViewModel : ObservableObject
     /// </summary>
     public void ComputeDiff()
     {
-        var beforeLines = Before.Split('\n');
-        var afterLines = After.Split('\n');
+        string[] beforeLines = Before.Split('\n');
+        string[] afterLines = After.Split('\n');
         var sb = new StringBuilder();
-        var max = Math.Max(beforeLines.Length, afterLines.Length);
-        for (var i = 0; i < max; i++)
+        int max = Math.Max(beforeLines.Length, afterLines.Length);
+        for (int i = 0; i < max; i++)
         {
-            var b = i < beforeLines.Length ? beforeLines[i] : string.Empty;
-            var a = i < afterLines.Length ? afterLines[i] : string.Empty;
+            string b = i < beforeLines.Length ? beforeLines[i] : string.Empty;
+            string a = i < afterLines.Length ? afterLines[i] : string.Empty;
             if (b == a)
             {
                 sb.AppendLine("  " + a);

@@ -1,8 +1,6 @@
+using Harbor.Abstractions.Events;
 using System.Reflection;
 using System.Text.Json.Serialization;
-using Harbor.Abstractions.Events;
-using TUnit.Assertions;
-
 namespace Harbor.Abstractions.Tests;
 
 /// <summary>
@@ -17,21 +15,21 @@ public class AgentEventPolymorphismGuardTests
     [Test]
     public async Task EveryConcreteAgentEvent_IsRegisteredAsJsonDerivedType()
     {
-        Type baseType = typeof(AgentEvent);
+        var baseType = typeof(AgentEvent);
 
-        HashSet<Type> registered = baseType
+        var registered = baseType
             .GetCustomAttributes<JsonDerivedTypeAttribute>()
             .Select(attribute => attribute.DerivedType)
             .ToHashSet();
 
-        List<Type> concreteEvents = baseType.Assembly.GetTypes()
+        var concreteEvents = baseType.Assembly.GetTypes()
             .Where(type => type is { IsAbstract: false, IsInterface: false })
             .Where(baseType.IsAssignableFrom)
             .ToList();
 
         await Assert.That(concreteEvents).IsNotEmpty();
 
-        var unregistered = concreteEvents
+        string[] unregistered = concreteEvents
             .Where(type => !registered.Contains(type))
             .Select(type => type.Name)
             .OrderBy(name => name)
@@ -43,7 +41,7 @@ public class AgentEventPolymorphismGuardTests
     [Test]
     public async Task EveryRegisteredDiscriminator_IsUniqueAndNonEmpty()
     {
-        IEnumerable<JsonDerivedTypeAttribute> attributes =
+        var attributes =
             typeof(AgentEvent).GetCustomAttributes<JsonDerivedTypeAttribute>();
 
         string[] discriminators = attributes

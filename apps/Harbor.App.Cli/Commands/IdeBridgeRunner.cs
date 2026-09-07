@@ -1,10 +1,7 @@
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Models;
 using Harbor.Ipc;
 using Harbor.Ipc.Ide;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
@@ -17,7 +14,7 @@ namespace Harbor.App.Cli.Commands;
 /// <remarks>
 ///     <para>
 ///         <b>Attach semantics:</b> the bridge talks to a live Harbor host
-///         through <see cref="IHarborClient"/>. With
+///         through <see cref="IHarborClient" />. With
 ///         <c>HARBOR_MODE=ipc-client</c> (the default for this verb) it connects
 ///         to the running daemon/TUI, so an injected prompt streams in the
 ///         user's TUI in real time. With <c>inprocess</c> it drives its own
@@ -40,8 +37,8 @@ public static class IdeBridgeRunner
         }
 
         var loggerFactory = services.GetRequiredService<ILoggerFactory>();
-        ILogger logger = loggerFactory.CreateLogger("Harbor.App.Cli.IdeBridge");
-        IHarborClient client = services.GetRequiredService<IHarborClient>();
+        var logger = loggerFactory.CreateLogger("Harbor.App.Cli.IdeBridge");
+        var client = services.GetRequiredService<IHarborClient>();
 
         await client.ConnectAsync().ConfigureAwait(false);
         if (!client.IsConnected)
@@ -50,14 +47,14 @@ public static class IdeBridgeRunner
             return 1;
         }
 
-        Result<Session> sessionResult = await client.GetSessionAsync(sessionId).ConfigureAwait(false);
+        var sessionResult = await client.GetSessionAsync(sessionId).ConfigureAwait(false);
         if (sessionResult.IsFailure)
         {
             Console.Error.WriteLine($"ide: session '{sessionId}' not found: {sessionResult.Error}");
             return 1;
         }
 
-        Result bind = await client.StartAgentAsync(sessionId, sessionResult.Value.Agent).ConfigureAwait(false);
+        var bind = await client.StartAgentAsync(sessionId, sessionResult.Value.Agent).ConfigureAwait(false);
         if (bind.IsFailure)
         {
             Console.Error.WriteLine($"ide: failed to bind agent to session '{sessionId}': {bind.Error}");

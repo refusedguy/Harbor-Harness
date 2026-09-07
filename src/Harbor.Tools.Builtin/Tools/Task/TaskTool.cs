@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Sub-agent delegation surface. Validates the requested sub-agent (name,
 ///     registry membership, IsSubAgent flag) and then EXECUTES it through
@@ -93,7 +94,7 @@ public sealed class TaskTool : ITool
 
         // ROP-A Z1 п.6: validation composes into one railway; each failure keeps its own
         // message at its source; the available-agents hint is built only on failure paths.
-        Result<AgentDefinition> validated = AgentName.TryCreate(agentName)
+        var validated = AgentName.TryCreate(agentName)
             .MapError(e => $"Invalid agent name: {e}")
             .Bind(name => _agents.GetAgent(name).MapError(_ =>
                 $"Unknown sub-agent: '{agentName}'. Available sub-agents: " +
@@ -123,7 +124,7 @@ public sealed class TaskTool : ITool
 
         var result = await _subAgents.RunAsync(
             validated.Value,
-            new SubAgentRunRequest(prompt, ParentSessionId: context.SessionId),
+            new SubAgentRunRequest(prompt, context.SessionId),
             cancellationToken);
 
         return result.Match(
@@ -151,6 +152,6 @@ public sealed class TaskTool : ITool
             "No sub-agent runner wired: agent={Agent} promptLength={Length}",
             agentName, prompt.Length);
         return ToolResult.Error(
-            $"Sub-agent execution is unavailable in this configuration (no runner wired). Do the work yourself with the available tools instead.");
+            "Sub-agent execution is unavailable in this configuration (no runner wired). Do the work yourself with the available tools instead.");
     }
 }

@@ -1,13 +1,12 @@
 using System.Text;
-
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
-/// Copy-on-select transport (killer features §P6.4): OSC 52 escape sequences
-/// write to the system clipboard through the terminal itself — no native
-/// interop, works over SSH. Static formatters only; callers write the
-/// returned string to their backend. Sequences are capped so a runaway
-/// selection can't flood the stream.
+///     Copy-on-select transport (killer features §P6.4): OSC 52 escape sequences
+///     write to the system clipboard through the terminal itself — no native
+///     interop, works over SSH. Static formatters only; callers write the
+///     returned string to their backend. Sequences are capped so a runaway
+///     selection can't flood the stream.
 /// </summary>
 public static class Osc52Clipboard
 {
@@ -17,11 +16,14 @@ public static class Osc52Clipboard
     /// <summary>System clipboard ("c"); primary selection would be "p".</summary>
     public const string SystemClipboardSelector = "c";
 
+    /// <summary>Clear-clipboard sequence — empty base64 payload.</summary>
+    public const string ClearSequence = "\u001B]52;c;\u0007";
+
     /// <summary>
-    /// Encodes <paramref name="text" /> as an OSC 52 copy sequence
-    /// («ESC ] 52 ; c ; &lt;base64&gt; BEL»). Text longer than
-    /// <see cref="MaxPayloadChars" /> base64 chars is truncated on a char
-    /// boundary before encoding; empty text yields the clear sequence.
+    ///     Encodes <paramref name="text" /> as an OSC 52 copy sequence
+    ///     («ESC ] 52 ; c ; &lt;base64&gt; BEL»). Text longer than
+    ///     <see cref="MaxPayloadChars" /> base64 chars is truncated on a char
+    ///     boundary before encoding; empty text yields the clear sequence.
     /// </summary>
     public static string Encode(string text)
     {
@@ -47,7 +49,7 @@ public static class Osc52Clipboard
         string payload = Base64Of(text);
         if (payload.Length > MaxPayloadChars)
         {
-            int charBudget = (MaxPayloadChars / 4) * 3; // whole base64 quads → whole UTF-16 units
+            int charBudget = MaxPayloadChars / 4 * 3; // whole base64 quads → whole UTF-16 units
             if (char.IsLowSurrogate(text[charBudget]))
             {
                 charBudget--; // never split a surrogate pair
@@ -58,9 +60,6 @@ public static class Osc52Clipboard
 
         return $"\u001B]52;{selector};{payload}\u0007";
     }
-
-    /// <summary>Clear-clipboard sequence — empty base64 payload.</summary>
-    public const string ClearSequence = "\u001B]52;c;\u0007";
 
     public static string Clear() => ClearSequence;
 

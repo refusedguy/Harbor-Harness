@@ -1,12 +1,8 @@
-using System.Threading.Channels;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Ipc;
-using Harbor.Ipc.Client;
-using Harbor.Ipc.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
+using System.Threading.Channels;
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
@@ -16,7 +12,7 @@ namespace Harbor.Ipc.Tests;
 ///     <c>Task.Delay</c>.
 /// </summary>
 [NotInParallel]
-    public class IpcTimingTests
+public class IpcTimingTests
 {
     /// <summary>
     ///     Server starts, client connects, and a <see cref="TaskCompletionSource{TResult}" />
@@ -86,7 +82,7 @@ namespace Harbor.Ipc.Tests;
         });
 
         await server.SubscriptionReady;
-        await eventBus.PublishAsync(new AgentStartEvent("timing-session", Array.Empty<AgentMessage>(), null));
+        await eventBus.PublishAsync(new AgentStartEvent("timing-session", Array.Empty<AgentMessage>()));
 
         var received = await receivedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Assert.That(received).IsNotNull();
@@ -162,8 +158,8 @@ namespace Harbor.Ipc.Tests;
         }
 
         results.Writer.Complete();
-        var count = 0;
-        await foreach (var _ in results.Reader.ReadAllAsync())
+        int count = 0;
+        await foreach (bool _ in results.Reader.ReadAllAsync())
             count++;
 
         await Assert.That(count).IsEqualTo(5);
@@ -191,7 +187,7 @@ namespace Harbor.Ipc.Tests;
         await client.ConnectAsync();
 
         var disposeTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var timer = new System.Threading.Timer(
+        using var timer = new Timer(
             _ => disposeTcs.TrySetResult(false),
             null,
             TimeSpan.FromSeconds(3),
@@ -208,7 +204,7 @@ namespace Harbor.Ipc.Tests;
             },
             TaskScheduler.Default);
 
-        var completed = await disposeTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        bool completed = await disposeTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Assert.That(completed).IsTrue();
 
         await server.StopAsync();

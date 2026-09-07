@@ -1,6 +1,4 @@
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -38,10 +36,7 @@ public abstract partial class ProviderBrowserViewModelBase : StoreSubscriberView
     ///     declared selectors to project state slices into view-model properties.
     /// </summary>
     /// <param name="state">The current UI state snapshot.</param>
-    protected override void OnStoreChanged(UiState state)
-    {
-        ApplySelectors(state);
-    }
+    protected override void OnStoreChanged(UiState state) => ApplySelectors(state);
 
     /// <summary>Refresh the provider list from <c>IProviderRegistry</c>. Implemented by the platform VM.</summary>
     protected abstract Task RefreshAsync(CancellationToken cancellationToken);

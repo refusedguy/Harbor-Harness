@@ -1,15 +1,13 @@
-using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// The virtualized chat feed (widgets §3.3): renders only the blocks that
-/// intersect the viewport (lazygit viewport-only), follows the tail while the
-/// user is pinned to it and unpins on any upward scroll. Storage, heights and
-/// virtual geometry live in <see cref="TimelineLayoutCache"/>.
+///     The virtualized chat feed (widgets §3.3): renders only the blocks that
+///     intersect the viewport (lazygit viewport-only), follows the tail while the
+///     user is pinned to it and unpins on any upward scroll. Storage, heights and
+///     virtual geometry live in <see cref="TimelineLayoutCache" />.
 /// </summary>
 public sealed class VirtualizedChatTimeline
 {
@@ -20,62 +18,38 @@ public sealed class VirtualizedChatTimeline
     private readonly Dictionary<IChatBlock, long> _entranceStarts = new();
     private readonly Rect[] _fxDamage = new Rect[MaxFxDamage];
     private readonly GlowRegion[] _glowRegions = new GlowRegion[MaxFxDamage];
-    private int _fxDamageCount;
-    private int _glowCount;
     private bool _broadDamage;
-    private long _lastScrollY = -1;
-    private int _lastWidth = -1;
+
+    /// <summary>
+    ///     Running sum of resident block budgets — O(1) append bookkeeping
+    ///     instead of a per-append O(n) rescan; kept exact on append/replace/evict.
+    /// </summary>
+    private long _budgetUsed;
     private bool _dirtyGeometry = true;
     private bool _entranceFx;
-    private bool _smoothScroll;
+    private int _fxDamageCount;
+    private int _glowCount;
+
+    private bool _hasPaintedFrame;
+    private long _lastScrollY = -1;
+    private int _lastWidth = -1;
     private bool _scrollAnimating;
-    private double _visualScrollY;
     private double _scrollFrom;
     private long _scrollStartTick;
     private long _scrollTarget;
+    private bool _smoothScroll;
+    private double _visualScrollY;
 
     /// <summary>Byte budget for resident history; oldest blocks evict first.</summary>
     public long BudgetBytes { get; set; } = TimelineRing.DefaultBudgetBytes;
 
-    /// <summary>Running sum of resident block budgets — O(1) append bookkeeping
-    /// instead of a per-append O(n) rescan; kept exact on append/replace/evict.</summary>
-    private long _budgetUsed;
-
     /// <summary>
-    /// Enables HDS v1 entrance motion for blocks appended while the feed is
-    /// already visible: slide-up (<see cref="PanelFx.SlideMs" />) plus fade
-    /// (<see cref="PanelFx.FadeMs" />). Blocks present at the first frame
-    /// render settled, so initial screens stay pixel-stable. Off by default;
-    /// hosts opt in via <see cref="EnableEntranceFx" />.
-    /// </summary>
-    public void EnableEntranceFx() => _entranceFx = true;
-
-    /// <summary>
-    /// Turns entrance motion back off — newly appended blocks render settled.
-    /// Symmetric opt-out for hosts/tests that need phase-stable frames.
-    /// </summary>
-    public void DisableEntranceFx()
-    {
-        _entranceFx = false;
-        _entranceStarts.Clear();
-    }
-
-    /// <summary>
-    /// Enables smooth scrolling (HDS v1): user-initiated scroll deltas ease
-    /// toward their target over the micro fade (ease-out, 150 ms) instead of
-    /// jumping. Follow-tail motion and <see cref="ScrollToEnd" /> stay exact
-    /// snaps — only viewport-relative movement animates. Off by default;
-    /// hosts opt in via this method.
-    /// </summary>
-    public void EnableSmoothScroll() => _smoothScroll = true;
-
-    /// <summary>
-    /// Post-render glow feed (renderer-moat T3): when enabled, pending
-    /// approval gates publish <see cref="GlowRegion"/>s every frame —
-    /// INCLUDING pulse troughs (intensity 0) — so the host's effect pipeline
-    /// can repaint the gate at zero strength and the glow never sticks to the
-    /// terminal. Off by default; hosts that arm a <see cref="PostFxPipeline"/>
-    /// opt in (byte-identical frames when off — golden contract).
+    ///     Post-render glow feed (renderer-moat T3): when enabled, pending
+    ///     approval gates publish <see cref="GlowRegion" />s every frame —
+    ///     INCLUDING pulse troughs (intensity 0) — so the host's effect pipeline
+    ///     can repaint the gate at zero strength and the glow never sticks to the
+    ///     terminal. Off by default; hosts that arm a <see cref="PostFxPipeline" />
+    ///     opt in (byte-identical frames when off — golden contract).
     /// </summary>
     public bool EnablePostFx { get; set; }
 
@@ -92,7 +66,36 @@ public sealed class VirtualizedChatTimeline
     /// <summary>Frame tick handed to block painters.</summary>
     public long CurrentTick { get; set; }
 
-    private bool _hasPaintedFrame;
+    /// <summary>Scroll offset the next paint should use (animated value while easing).</summary>
+    public long EffectiveScrollY => _scrollAnimating ? (long)Math.Round(_visualScrollY) : ScrollY;
+
+    /// <summary>
+    ///     Enables HDS v1 entrance motion for blocks appended while the feed is
+    ///     already visible: slide-up (<see cref="PanelFx.SlideMs" />) plus fade
+    ///     (<see cref="PanelFx.FadeMs" />). Blocks present at the first frame
+    ///     render settled, so initial screens stay pixel-stable. Off by default;
+    ///     hosts opt in via <see cref="EnableEntranceFx" />.
+    /// </summary>
+    public void EnableEntranceFx() => _entranceFx = true;
+
+    /// <summary>
+    ///     Turns entrance motion back off — newly appended blocks render settled.
+    ///     Symmetric opt-out for hosts/tests that need phase-stable frames.
+    /// </summary>
+    public void DisableEntranceFx()
+    {
+        _entranceFx = false;
+        _entranceStarts.Clear();
+    }
+
+    /// <summary>
+    ///     Enables smooth scrolling (HDS v1): user-initiated scroll deltas ease
+    ///     toward their target over the micro fade (ease-out, 150 ms) instead of
+    ///     jumping. Follow-tail motion and <see cref="ScrollToEnd" /> stay exact
+    ///     snaps — only viewport-relative movement animates. Off by default;
+    ///     hosts opt in via this method.
+    /// </summary>
+    public void EnableSmoothScroll() => _smoothScroll = true;
 
     public IChatBlock BlockAt(int index) => _cache.BlockAt(index);
 
@@ -110,10 +113,12 @@ public sealed class VirtualizedChatTimeline
         MarkLastDirty();
     }
 
-    /// <summary>Amortized eviction: triggered only when the running total
-    /// crosses the budget, then evicts down to the 75 % low-water mark in one
-    /// pass — streaming pays the pass once per ~¼ budget of new bytes instead
-    /// of rescanning and evicting on every append (O(n²) during token storms).</summary>
+    /// <summary>
+    ///     Amortized eviction: triggered only when the running total
+    ///     crosses the budget, then evicts down to the 75 % low-water mark in one
+    ///     pass — streaming pays the pass once per ~¼ budget of new bytes instead
+    ///     of rescanning and evicting on every append (O(n²) during token storms).
+    /// </summary>
     private void EvictOverBudget()
     {
         long budget = BudgetBytes;
@@ -152,8 +157,8 @@ public sealed class VirtualizedChatTimeline
     }
 
     /// <summary>
-    /// Replaces a specific block instance in place (the stream slot may sit
-    /// below newer tool cards). No-op when the block is gone.
+    ///     Replaces a specific block instance in place (the stream slot may sit
+    ///     below newer tool cards). No-op when the block is gone.
     /// </summary>
     public void Replace(IChatBlock existing, IChatBlock replacement)
     {
@@ -173,9 +178,11 @@ public sealed class VirtualizedChatTimeline
         }
     }
 
-    /// <summary>Streaming tail grew — last block's cached height is stale.
-    /// Height changes can reflow every row below the block, so the next
-    /// frame's damage is treated as viewport-wide (partial-scan contract).</summary>
+    /// <summary>
+    ///     Streaming tail grew — last block's cached height is stale.
+    ///     Height changes can reflow every row below the block, so the next
+    ///     frame's damage is treated as viewport-wide (partial-scan contract).
+    /// </summary>
     public void MarkLastDirty()
     {
         _cache.MarkHeightsDirty(Math.Max(0, _cache.Count - 1));
@@ -250,30 +257,30 @@ public sealed class VirtualizedChatTimeline
     public static UiMsg ResetToTailMsg() => new UiMsg.ScrollResetToTail();
 
     /// <summary>
-    /// Maps a mouse-wheel tick to the store scroll message. Positive
-    /// <paramref name="delta"/> = wheel up (the <c>IPointerTarget</c> contract) →
-    /// <c>ScrollUpLine</c>; negative → <c>ScrollDownLine</c>; zero → a
-    /// <c>ChatAction.None</c> no-op. Line (not page) granularity: the reducer
-    /// treats both identically (both clamp via <c>SetScroll</c>), and a full page
-    /// per wheel tick is too coarse — hosts that want page steps dispatch
-    /// <see cref="PageUpMsg"/> / <see cref="PageDownMsg"/> (possibly several line
-    /// messages per tick for acceleration).
+    ///     Maps a mouse-wheel tick to the store scroll message. Positive
+    ///     <paramref name="delta" /> = wheel up (the <c>IPointerTarget</c> contract) →
+    ///     <c>ScrollUpLine</c>; negative → <c>ScrollDownLine</c>; zero → a
+    ///     <c>ChatAction.None</c> no-op. Line (not page) granularity: the reducer
+    ///     treats both identically (both clamp via <c>SetScroll</c>), and a full page
+    ///     per wheel tick is too coarse — hosts that want page steps dispatch
+    ///     <see cref="PageUpMsg" /> / <see cref="PageDownMsg" /> (possibly several line
+    ///     messages per tick for acceleration).
     /// </summary>
     public static UiMsg WheelMsg(int delta) =>
         delta > 0 ? LineUpMsg() : delta < 0 ? LineDownMsg() : new UiMsg.KeyInput(ChatAction.None, UiKey.Unknown);
 
     /// <summary>
-    /// Mirrors a store snapshot into <see cref="ScrollY"/> / <see cref="FollowTail"/>
-    /// and runs layout. Viewport height precedence: explicit
-    /// <paramref name="viewportH"/> when positive, else
-    /// <c>state.ViewportLines</c>. <c>state.TotalLines</c> is informational only —
-    /// the authoritative total is the cache's <see cref="TotalHeight"/>, reported
-    /// back to the store via <see cref="MeasureMsgs"/> (geometry flows
-    /// timeline → store, never the reverse). Store offset maps to timeline space
-    /// as <c>ScrollY = max - offset</c> (same convention as
-    /// <c>CellForgeViewport.FirstVisibleRow</c>); a zero offset re-pins the tail.
-    /// Post-layout the view is re-clamped to the freshly measured range without
-    /// re-pinning, so a growing streaming tail cannot yank an unpinned view.
+    ///     Mirrors a store snapshot into <see cref="ScrollY" /> / <see cref="FollowTail" />
+    ///     and runs layout. Viewport height precedence: explicit
+    ///     <paramref name="viewportH" /> when positive, else
+    ///     <c>state.ViewportLines</c>. <c>state.TotalLines</c> is informational only —
+    ///     the authoritative total is the cache's <see cref="TotalHeight" />, reported
+    ///     back to the store via <see cref="MeasureMsgs" /> (geometry flows
+    ///     timeline → store, never the reverse). Store offset maps to timeline space
+    ///     as <c>ScrollY = max - offset</c> (same convention as
+    ///     <c>CellForgeViewport.FirstVisibleRow</c>); a zero offset re-pins the tail.
+    ///     Post-layout the view is re-clamped to the freshly measured range without
+    ///     re-pinning, so a growing streaming tail cannot yank an unpinned view.
     /// </summary>
     public LayoutOutcome ApplyStoreState(UiState state, int width, int viewportH)
     {
@@ -298,21 +305,21 @@ public sealed class VirtualizedChatTimeline
             // of truth; clamping (never re-pinning) keeps a growing
             // streaming tail from yanking an unpinned view.
             long max = _cache.MaxScrollFor(viewH);
-            SnapScroll(Math.Clamp(max - (long)state.ScrollOffset, 0, max));
+            SnapScroll(Math.Clamp(max - state.ScrollOffset, 0, max));
         }
 
         return outcome;
     }
 
     /// <summary>
-    /// Builds the geometry messages the host dispatches after layout so the store
-    /// tracks the measured viewport (resize path, CF-C-003): <c>Viewport</c> with
-    /// the visible height, <c>HistoryMeasured</c> with the settled total
-    /// (clamped to <c>int.MaxValue</c> — <c>UiState</c> totals are <c>int</c>),
-    /// then <c>ScrollClamp</c> with the measured maximum. Order matters: the
-    /// reducer's <c>Viewport</c>/<c>HistoryMeasured</c> arms do not clamp, so the
-    /// host must always dispatch the trailing <c>ScrollClamp</c> (a shrunken
-    /// viewport otherwise leaves a stale out-of-range offset).
+    ///     Builds the geometry messages the host dispatches after layout so the store
+    ///     tracks the measured viewport (resize path, CF-C-003): <c>Viewport</c> with
+    ///     the visible height, <c>HistoryMeasured</c> with the settled total
+    ///     (clamped to <c>int.MaxValue</c> — <c>UiState</c> totals are <c>int</c>),
+    ///     then <c>ScrollClamp</c> with the measured maximum. Order matters: the
+    ///     reducer's <c>Viewport</c>/<c>HistoryMeasured</c> arms do not clamp, so the
+    ///     host must always dispatch the trailing <c>ScrollClamp</c> (a shrunken
+    ///     viewport otherwise leaves a stale out-of-range offset).
     /// </summary>
     public UiMsg[] MeasureMsgs(int viewportH)
     {
@@ -342,10 +349,10 @@ public sealed class VirtualizedChatTimeline
     }
 
     /// <summary>
-    /// Starts (or retargets) the eased scroll toward the current
-    /// <see cref="ScrollY" /> from <paramref name="fromVisual" /> — the
-    /// on-screen offset captured before the target moved — so consecutive
-    /// wheel events glide instead of restarting or jumping.
+    ///     Starts (or retargets) the eased scroll toward the current
+    ///     <see cref="ScrollY" /> from <paramref name="fromVisual" /> — the
+    ///     on-screen offset captured before the target moved — so consecutive
+    ///     wheel events glide instead of restarting or jumping.
     /// </summary>
     private void BeginScrollAnimation(long fromVisual)
     {
@@ -361,13 +368,10 @@ public sealed class VirtualizedChatTimeline
         _scrollAnimating = true;
     }
 
-    /// <summary>Scroll offset the next paint should use (animated value while easing).</summary>
-    public long EffectiveScrollY => _scrollAnimating ? (long)Math.Round(_visualScrollY) : ScrollY;
-
     /// <summary>
-    /// Registers an entrance start for eligible blocks appended after the
-    /// first painted frame. Pre-first-frame appends (initial populate) and
-    /// stream continuations render settled — no motion on cold screens.
+    ///     Registers an entrance start for eligible blocks appended after the
+    ///     first painted frame. Pre-first-frame appends (initial populate) and
+    ///     stream continuations render settled — no motion on cold screens.
     /// </summary>
     private void MarkEntrance(IChatBlock block)
     {
@@ -383,9 +387,11 @@ public sealed class VirtualizedChatTimeline
         }
     }
 
-    /// <summary>Runs layout for this frame; resolves follow-tail and anchors.
-    /// Any scroll shift, rewrap or full rebuild flags viewport-wide damage —
-    /// partial-scan hints must never miss content that moved.</summary>
+    /// <summary>
+    ///     Runs layout for this frame; resolves follow-tail and anchors.
+    ///     Any scroll shift, rewrap or full rebuild flags viewport-wide damage —
+    ///     partial-scan hints must never miss content that moved.
+    /// </summary>
     public LayoutOutcome PrepareFrame(int width, int viewportH)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(width);
@@ -425,7 +431,7 @@ public sealed class VirtualizedChatTimeline
         if (_scrollAnimating)
         {
             double t = Math.Clamp((CurrentTick - _scrollStartTick) / (double)PanelFx.FadeFrames, 0.0, 1.0);
-            _visualScrollY = _scrollFrom + ((_scrollTarget - _scrollFrom) * PanelFx.EaseOut(t));
+            _visualScrollY = _scrollFrom + (_scrollTarget - _scrollFrom) * PanelFx.EaseOut(t);
             if (t >= 1.0)
             {
                 _scrollAnimating = false;
@@ -444,10 +450,10 @@ public sealed class VirtualizedChatTimeline
     }
 
     /// <summary>
-    /// Paints only the visible range of blocks into <paramref name="rect"/>.
-    /// Cells outside the rect are never touched. With entrance FX enabled,
-    /// freshly appended blocks slide up (<see cref="PanelFx.SlideMaxRows" />)
-    /// and fade in over the HDS motion durations.
+    ///     Paints only the visible range of blocks into <paramref name="rect" />.
+    ///     Cells outside the rect are never touched. With entrance FX enabled,
+    ///     freshly appended blocks slide up (<see cref="PanelFx.SlideMaxRows" />)
+    ///     and fade in over the HDS motion durations.
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect rect)
     {
@@ -466,7 +472,7 @@ public sealed class VirtualizedChatTimeline
         // of bug as the composer's SetText("") no-op erase).
         buffer.Fill(rect, Cell.Blank);
 
-        var (first, last) = _cache.VisibleRange(EffectiveScrollY, rect.Height);
+        (int first, int last) = _cache.VisibleRange(EffectiveScrollY, rect.Height);
         for (int i = first; i <= last; i++)
         {
             long blockTop = _cache.BlockTop(i);
@@ -523,7 +529,7 @@ public sealed class VirtualizedChatTimeline
             // from the faded blend to the final ones exactly once.
             var paintedRect = new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH));
             bool fading = animating && alpha < 1.0;
-            bool fx = fading || (entrance && !animating);
+            bool fx = fading || entrance && !animating;
             if (!fx && block is ApprovalGateView { IsPending: true } gate && gate.PulseBirthTick >= 0)
             {
                 double pulse = PanelFx.WarnPulse(gate.PulseBirthTick, CurrentTick);
@@ -562,12 +568,12 @@ public sealed class VirtualizedChatTimeline
     }
 
     /// <summary>
-    /// Hands the frame's damage to the host and resets the ledger. Returns
-    /// true when damage is viewport-wide (appends, scroll, rewrap, streaming
-    /// reflow) — the host must then run a plain full scan. When false, the
-    /// <paramref name="fxOut"/> span receives the narrow per-widget rects that
-    /// may have changed (empty = the feed was quiet this frame); everything
-    /// outside those rects is known-identical.
+    ///     Hands the frame's damage to the host and resets the ledger. Returns
+    ///     true when damage is viewport-wide (appends, scroll, rewrap, streaming
+    ///     reflow) — the host must then run a plain full scan. When false, the
+    ///     <paramref name="fxOut" /> span receives the narrow per-widget rects that
+    ///     may have changed (empty = the feed was quiet this frame); everything
+    ///     outside those rects is known-identical.
     /// </summary>
     public bool ConsumeFrameDamage(Span<Rect> fxOut, out int fxCount)
     {
@@ -587,10 +593,10 @@ public sealed class VirtualizedChatTimeline
     }
 
     /// <summary>
-    /// Hands the frame's glow sources to the host and resets the ledger
-    /// (renderer-moat T3): regions for pending approval gates this frame —
-    /// empty when the feed is quiet, the post-fx feed is disabled, or the
-    /// ledger overflowed (overflow only drops narrow rects, never damage).
+    ///     Hands the frame's glow sources to the host and resets the ledger
+    ///     (renderer-moat T3): regions for pending approval gates this frame —
+    ///     empty when the feed is quiet, the post-fx feed is disabled, or the
+    ///     ledger overflowed (overflow only drops narrow rects, never damage).
     /// </summary>
     public int ConsumeGlowRegions(Span<GlowRegion> regions)
     {
@@ -608,7 +614,7 @@ public sealed class VirtualizedChatTimeline
 }
 
 /// <summary>Layout-tree leaf hosting the chat feed (vertical split over the composer).</summary>
-public sealed class ChatTimelinePanel : Rendering.Panel
+public sealed class ChatTimelinePanel : Panel
 {
     public ChatTimelinePanel(string id, int minWidth, int minHeight, int priority = 10)
         : base(id, new Size(minWidth, minHeight), priority)
@@ -624,30 +630,21 @@ public sealed class ChatTimelinePanel : Rendering.Panel
     }
 }
 
-/// <summary>Live streaming thinking block: accumulates reasoning text and
-/// re-renders it with dim+italic styling on every layout pass.</summary>
+/// <summary>
+///     Live streaming thinking block: accumulates reasoning text and
+///     re-renders it with dim+italic styling on every layout pass.
+/// </summary>
 public sealed class StreamingThinkingBlock : IChatBlock
 {
     private readonly StringBuilder _text = new();
-    private int _width = -1;
     private string[] _lines = [];
+    private int _width = -1;
 
     public string Kind => "thinking";
 
     public bool IsStreamContinuation => true;
 
-    public int BudgetBytes => 48 + (_text.Length * 2);
-
-    public void Append(string delta)
-    {
-        if (string.IsNullOrEmpty(delta))
-        {
-            return;
-        }
-
-        _text.Append(delta);
-        _width = -1;
-    }
+    public int BudgetBytes => 48 + _text.Length * 2;
 
     public BlockMeasure Measure(int width)
     {
@@ -670,6 +667,17 @@ public sealed class StreamingThinkingBlock : IChatBlock
 
     public string RawText() => _text.ToString();
 
+    public void Append(string delta)
+    {
+        if (string.IsNullOrEmpty(delta))
+        {
+            return;
+        }
+
+        _text.Append(delta);
+        _width = -1;
+    }
+
     private void EnsureWrapped(int width)
     {
         if (_width != width || _lines.Length == 0 && _text.Length > 0)
@@ -677,24 +685,29 @@ public sealed class StreamingThinkingBlock : IChatBlock
             _width = width;
             var list = new List<string>(Math.Max(1, _lines.Length));
             TextWrap.WrapDocument(_text.ToString(), Math.Max(1, width), list);
-            _lines = [.. list];
+            _lines = [..list];
         }
     }
 }
 
-/// <summary>Finalized thinking block: renders committed reasoning text with
-/// dim+italic styling, wrapped to the available width.</summary>
+/// <summary>
+///     Finalized thinking block: renders committed reasoning text with
+///     dim+italic styling, wrapped to the available width.
+/// </summary>
 public sealed class ThinkingBlock : IChatBlock
 {
     private readonly WrappedText _text;
 
-    public ThinkingBlock(string text) => _text = new WrappedText(text ?? string.Empty);
+    public ThinkingBlock(string text)
+    {
+        _text = new WrappedText(text ?? string.Empty);
+    }
 
     public string Kind => "thinking";
 
     public bool IsStreamContinuation => false;
 
-    public int BudgetBytes => 48 + (_text.SourceLength * 2);
+    public int BudgetBytes => 48 + _text.SourceLength * 2;
 
     public BlockMeasure Measure(int width) =>
         BlockMeasure.Exact(Math.Max(1, _text.GetLines(Math.Max(1, width)).Length));

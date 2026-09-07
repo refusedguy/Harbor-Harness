@@ -1,4 +1,5 @@
 namespace Harbor.Desktop.Animations;
+
 /// <summary>
 ///     Standard animation durations shared by every desktop app. Mirror of
 ///     <see cref="AnimationTokens" /> durations

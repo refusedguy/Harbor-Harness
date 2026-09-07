@@ -1,5 +1,4 @@
-using TUnit.Assertions;
-
+using System.Text.Json;
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -17,7 +16,7 @@ public sealed class SubmitScenarioTests : CellForgePtyScenarioBase
     public async Task Submit_UserBlock_MockResponseStreams_AndCommits()
     {
         Server.SetResponse("test-model", "Привет из mock!");
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
@@ -43,11 +42,13 @@ public sealed class SubmitScenarioTests : CellForgePtyScenarioBase
         await Assert.That(settled.Any(x => x.Contains("привет", StringComparison.Ordinal))).IsTrue();
     }
 
-    /// <summary>Last user-message content of a chat-completions body. JSON-aware:
-    /// non-ASCII text is \uXXXX-escaped on the wire, so raw Contains() cannot match.</summary>
+    /// <summary>
+    ///     Last user-message content of a chat-completions body. JSON-aware:
+    ///     non-ASCII text is \uXXXX-escaped on the wire, so raw Contains() cannot match.
+    /// </summary>
     private static string LastUserContent(string rawBody)
     {
-        using var doc = System.Text.Json.JsonDocument.Parse(rawBody);
+        using var doc = JsonDocument.Parse(rawBody);
         foreach (var msg in doc.RootElement.GetProperty("messages").EnumerateArray().Reverse())
         {
             if (msg.GetProperty("role").GetString() == "user")

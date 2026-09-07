@@ -1,10 +1,16 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Threading.Tasks;
 namespace Harbor.App.Cli.Commands;
 
 public sealed class DaemonCommand : ICommand
 {
+
+    private const string UsageText =
+        "harbor daemon — manage the background harbor daemon.\n\n" +
+        "Usage:\n" +
+        "  harbor daemon start   Start the daemon (spawns this executable with --headless)\n" +
+        "  harbor daemon stop    Stop the running daemon\n" +
+        "  harbor daemon status  Check daemon status\n";
     private static readonly string HarborDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".harbor");
     private static readonly string PidFile = Path.Combine(HarborDir, "daemon.pid");
@@ -68,7 +74,7 @@ public sealed class DaemonCommand : ICommand
             WorkingDirectory = Environment.CurrentDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = true,
+            CreateNoWindow = true
         };
         psi.ArgumentList.Add("--headless");
         // The daemon exists to serve remote clients over IPC.
@@ -115,13 +121,16 @@ public sealed class DaemonCommand : ICommand
             }
             catch (OperationCanceledException)
             {
-                exitedDuringStartup = false;   // still alive after the grace period
+                exitedDuringStartup = false; // still alive after the grace period
             }
 
             if (exitedDuringStartup)
             {
                 int exitCode = process.ExitCode;
-                try { File.Delete(PidFile); } catch { /* best-effort cleanup */ }
+                try { File.Delete(PidFile); }
+                catch
+                { /* best-effort cleanup */
+                }
                 _error.WriteLine($"Daemon exited during startup (exit code {exitCode}). See ~/.harbor/logs for details.");
                 return 1;
             }
@@ -170,7 +179,10 @@ public sealed class DaemonCommand : ICommand
         }
         finally
         {
-            try { File.Delete(PidFile); } catch { /* best-effort cleanup */ }
+            try { File.Delete(PidFile); }
+            catch
+            { /* best-effort cleanup */
+            }
         }
 
         _output.WriteLine($"Daemon (PID {pid}) stopped.");
@@ -200,7 +212,10 @@ public sealed class DaemonCommand : ICommand
         else
         {
             _output.WriteLine($"Daemon is not running (PID {pid} not found).");
-            try { File.Delete(PidFile); } catch { /* best-effort cleanup */ }
+            try { File.Delete(PidFile); }
+            catch
+            { /* best-effort cleanup */
+            }
         }
 
         return 0;
@@ -230,13 +245,6 @@ public sealed class DaemonCommand : ICommand
             return false;
         }
     }
-
-    private const string UsageText =
-        "harbor daemon — manage the background harbor daemon.\n\n" +
-        "Usage:\n" +
-        "  harbor daemon start   Start the daemon (spawns this executable with --headless)\n" +
-        "  harbor daemon stop    Stop the running daemon\n" +
-        "  harbor daemon status  Check daemon status\n";
 
     private void PrintUsage() => _output.Write(UsageText);
 }

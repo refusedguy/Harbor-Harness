@@ -1,6 +1,5 @@
+using System.Diagnostics;
 using System.Text;
-using TUnit.Assertions;
-
 namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
@@ -16,7 +15,7 @@ public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
     [Timeout(30_000)]
     public async Task Shrink_EmitsEraseInDisplay_AndRepaintsWithinBounds()
     {
-        await StartAppAsync(100, 30).ConfigureAwait(false);
+        await StartAppAsync().ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
         await Task.Delay(400).ConfigureAwait(false);
@@ -26,11 +25,11 @@ public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
 
         // Erase-in-display mode 2 must appear AFTER the resize point.
         bool erased = false;
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         while (sw.Elapsed < TimeSpan.FromSeconds(5))
         {
             if (Encoding.UTF8.GetString(Session.RawOutputFrom(marker))
-                    .Contains("\x1b[2J", StringComparison.Ordinal))
+                .Contains("\x1b[2J", StringComparison.Ordinal))
             {
                 erased = true;
                 break;

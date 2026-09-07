@@ -1,4 +1,5 @@
 namespace Harbor.Providers.OpenAiCompatible.Compat;
+
 /// <summary>
 ///     Strategy (GOF) for provider-specific request quirks.
 /// </summary>
@@ -60,7 +61,7 @@ public sealed class DeepSeekReasonerCompatFlag : IProviderCompatFlag
     }
 
     /// <inheritdoc />
-    public void Write(Utf8JsonWriter writer, LlmRequest request) { }
+    public void Write(Utf8JsonWriter writer, LlmRequest request) {}
 }
 
 /// <summary>

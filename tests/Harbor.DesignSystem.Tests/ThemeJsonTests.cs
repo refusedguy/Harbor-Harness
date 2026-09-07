@@ -1,11 +1,10 @@
 using Harbor.Ui.Framework.Projection;
-
 namespace Harbor.DesignSystem.Tests;
 
 /// <summary>
-/// Canonical theme-JSON codec: hex parsing, full/partial catalogs merged over
-/// a fallback, fatal validation (malformed JSON, bad hex) without throwing,
-/// and non-fatal lint (unknown properties, WCAG contrast).
+///     Canonical theme-JSON codec: hex parsing, full/partial catalogs merged over
+///     a fallback, fatal validation (malformed JSON, bad hex) without throwing,
+///     and non-fatal lint (unknown properties, WCAG contrast).
 /// </summary>
 public class ThemeJsonTests
 {
@@ -13,13 +12,13 @@ public class ThemeJsonTests
     public async Task Parse_FullCatalog_ProducesNamedTheme()
     {
         string json = """
-            {
-              "name": "sunset",
-              "accent": "#ff8800",
-              "text": "#ffffff",
-              "background": "#10080a"
-            }
-            """;
+                      {
+                        "name": "sunset",
+                        "accent": "#ff8800",
+                        "text": "#ffffff",
+                        "background": "#10080a"
+                      }
+                      """;
 
         var result = ThemeJson.Parse(json, HarborTheme.HarborDark);
 
@@ -86,12 +85,12 @@ public class ThemeJsonTests
     public async Task Parse_JsonComments_Accepted()
     {
         string json = """
-            {
-              // my favorite accent
-              "name": "commented",
-              "accent": "#123456", // inline note
-            }
-            """;
+                      {
+                        // my favorite accent
+                        "name": "commented",
+                        "accent": "#123456", // inline note
+                      }
+                      """;
 
         var result = ThemeJson.Parse(json, HarborTheme.HarborDark);
 
@@ -160,8 +159,5 @@ public class ThemeJsonTests
     }
 
     [Test]
-    public async Task Hex_FormatsUppercaseWithHash()
-    {
-        await Assert.That(ThemeJson.Hex(new RgbColor(0x39, 0xBA, 0xE6))).IsEqualTo("#39BAE6");
-    }
+    public async Task Hex_FormatsUppercaseWithHash() => await Assert.That(ThemeJson.Hex(new RgbColor(0x39, 0xBA, 0xE6))).IsEqualTo("#39BAE6");
 }

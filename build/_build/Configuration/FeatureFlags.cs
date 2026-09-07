@@ -9,12 +9,9 @@ public sealed class FeatureFlags
     public bool WithAllTools { get; init; }
     public bool Minimal { get; init; }
 
-    public FeatureFlags Resolved() => this;
-
     public bool IsAotCompatible => !WithPlugins && !WithScripting && !WithSpectreTui;
 
-    public override string ToString()
-    {
-        return $"plugins={WithPlugins}, scripting={WithScripting}, spectre={WithSpectreTui}, providers={WithAllProviders}, tools={WithAllTools}, minimal={Minimal}";
-    }
+    public FeatureFlags Resolved() => this;
+
+    public override string ToString() => $"plugins={WithPlugins}, scripting={WithScripting}, spectre={WithSpectreTui}, providers={WithAllProviders}, tools={WithAllTools}, minimal={Minimal}";
 }

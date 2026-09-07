@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
@@ -13,9 +12,9 @@ namespace Harbor.App.Cli.Commands;
 /// </summary>
 public sealed partial class PluginsCommand : ICommand
 {
-    private readonly TextWriter _output;
     private readonly TextWriter _error;
     private readonly string _globalRoot;
+    private readonly TextWriter _output;
     private readonly string _projectRoot;
 
     public PluginsCommand(TextWriter output, TextWriter error, string? globalRoot = null, string? projectRoot = null)
@@ -53,7 +52,7 @@ public sealed partial class PluginsCommand : ICommand
         if (!Directory.Exists(root))
             return "(none)";
 
-        var files = Directory.EnumerateFiles(root, "*.cs").OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToArray();
+        string[] files = Directory.EnumerateFiles(root, "*.cs").OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToArray();
         if (files.Length == 0)
             return "(none)";
 
@@ -125,9 +124,9 @@ public sealed partial class PluginsCommand : ICommand
         {
             string candidate = ConfinementSafeResolve(root, fileName);
             if (fileName.Length == 0 || !candidate.StartsWith(
-                    Path.GetFullPath(root),
-                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
-                || !File.Exists(candidate))
+                                         Path.GetFullPath(root),
+                                         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                                     || !File.Exists(candidate))
             {
                 continue;
             }

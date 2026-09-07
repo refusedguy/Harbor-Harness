@@ -3,7 +3,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Tools;
 using MessagePack;
 using MessagePack.Formatters;
-
+using System.Text.Json;
 namespace Harbor.Ipc.Protocol;
 
 /// <summary>
@@ -130,7 +130,7 @@ public sealed class SessionMetadataMessagePackFormatter : IMessagePackFormatter<
         writer.WriteInt32(value.TokensCacheWrite);
         writer.WriteInt32(value.MessageCount);
 
-        if (value.TimeCompacting is { } tc)
+        if (value.TimeCompacting is {} tc)
         {
             writer.Write(true);
             options.Resolver.GetFormatterWithVerify<TimeSpan>().Serialize(ref writer, tc, options);
@@ -191,7 +191,11 @@ public sealed class ProviderIdMessagePackFormatter : IMessagePackFormatter<Provi
 {
     public void Serialize(ref MessagePackWriter writer, ProviderId? value, MessagePackSerializerOptions options)
     {
-        if (value is null) { writer.WriteNil(); return; }
+        if (value is null)
+        {
+            writer.WriteNil();
+            return;
+        }
         options.Resolver.GetFormatterWithVerify<string>().Serialize(ref writer, value.Value, options);
     }
 
@@ -199,7 +203,7 @@ public sealed class ProviderIdMessagePackFormatter : IMessagePackFormatter<Provi
     {
         if (reader.TryReadNil()) return null;
         string raw = options.Resolver.GetFormatterWithVerify<string>().Deserialize(ref reader, options);
-        return Harbor.Abstractions.Models.Identifiers.ProviderId.Create(raw);
+        return ProviderId.Create(raw);
     }
 }
 
@@ -208,7 +212,11 @@ public sealed class ToolDescriptorMessagePackFormatter : IMessagePackFormatter<T
 {
     public void Serialize(ref MessagePackWriter writer, ToolDescriptor? value, MessagePackSerializerOptions options)
     {
-        if (value is null) { writer.WriteNil(); return; }
+        if (value is null)
+        {
+            writer.WriteNil();
+            return;
+        }
 
         writer.WriteArrayHeader(7);
         options.Resolver.GetFormatterWithVerify<string>().Serialize(ref writer, value.Name.Value, options);
@@ -248,7 +256,7 @@ public sealed class ToolDescriptorMessagePackFormatter : IMessagePackFormatter<T
             string? promptSnippet = options.Resolver.GetFormatterWithVerify<string?>().Deserialize(ref reader, options);
 
             int guidelineCount = reader.ReadArrayHeader();
-            var guidelines = new string[guidelineCount];
+            string[] guidelines = new string[guidelineCount];
             for (int i = 0; i < guidelineCount; i++)
             {
                 guidelines[i] = options.Resolver.GetFormatterWithVerify<string>().Deserialize(ref reader, options);
@@ -258,7 +266,7 @@ public sealed class ToolDescriptorMessagePackFormatter : IMessagePackFormatter<T
                 ToolName.Create(name),
                 displayName,
                 description,
-                System.Text.Json.JsonDocument.Parse(schemaJson),
+                JsonDocument.Parse(schemaJson),
                 executionMode,
                 promptSnippet,
                 guidelines);

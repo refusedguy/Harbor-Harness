@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Harbor.Ui.Framework.Services;
 
 /// <summary>
@@ -11,20 +8,20 @@ namespace Harbor.Ui.Framework.Services;
 public interface IOverlayStack
 {
     /// <summary>Currently visible overlay id, or null if none.</summary>
-    string? Current { get; }
+    public string? Current { get; }
 
     /// <summary>All overlay ids in stack order (bottom to top).</summary>
-    IReadOnlyList<string> Stack { get; }
+    public IReadOnlyList<string> Stack { get; }
 
     /// <summary>Push a new overlay. No-op if it's already on top.</summary>
-    void Push(string id);
+    public void Push(string id);
 
     /// <summary>Pop the top overlay and return its id, or null if stack is empty.</summary>
-    string? PopTop();
+    public string? PopTop();
 
     /// <summary>Event fired when the stack changes (push or pop).</summary>
-    event Action<string?, IReadOnlyList<string>>? Changed;
-    event Action<string?>? Popped;
+    public event Action<string?, IReadOnlyList<string>>? Changed;
+    public event Action<string?>? Popped;
 }
 
 /// <summary>
@@ -54,7 +51,7 @@ public sealed class OverlayStackService : IOverlayStack
     public string? PopTop()
     {
         if (_stack.Count == 0) return null;
-        var popped = _stack.Pop();
+        string popped = _stack.Pop();
         Changed?.Invoke(Current, Stack);
         Popped?.Invoke(popped);
         return popped;

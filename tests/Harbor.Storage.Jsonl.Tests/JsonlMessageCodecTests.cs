@@ -1,7 +1,8 @@
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
+using System.Text.Json;
 namespace Harbor.Storage.Jsonl.Tests;
+
 /// <summary>
 ///     Unit tests for <see cref="JsonlMessageCodec.DeserializeMessage" /> —
 ///     the malformed-line diagnostics contract (ROP-B П.10): every missing or
@@ -10,15 +11,15 @@ namespace Harbor.Storage.Jsonl.Tests;
 /// </summary>
 public class JsonlMessageCodecTests
 {
+
+    private const string ValidUserLine = """
+                                         {"id":"m1","createdAt":"2026-01-01T00:00:00Z","role":"user","payload":{"content":"hi","agent":"code","model":"p/m"}}
+                                         """;
     private static Result<AgentMessage> Decode(string json)
     {
         using var doc = JsonDocument.Parse(json);
         return JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
     }
-
-    private const string ValidUserLine = """
-        {"id":"m1","createdAt":"2026-01-01T00:00:00Z","role":"user","payload":{"content":"hi","agent":"code","model":"p/m"}}
-        """;
 
     [Test]
     public async Task Deserialize_ValidUserLine_ReturnsUserMessage()
@@ -81,9 +82,9 @@ public class JsonlMessageCodecTests
     public async Task Deserialize_AssistantInvalidStopReason_FailsWithDiagnostic()
     {
         var result = Decode("""
-            {"id":"a1","createdAt":"2026-01-01T00:00:00Z","role":"assistant",
-             "payload":{"parts":[],"stopReason":"not-a-reason","model":"p/m"}}
-            """);
+                            {"id":"a1","createdAt":"2026-01-01T00:00:00Z","role":"assistant",
+                             "payload":{"parts":[],"stopReason":"not-a-reason","model":"p/m"}}
+                            """);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("invalid stopReason");
@@ -93,9 +94,9 @@ public class JsonlMessageCodecTests
     public async Task Deserialize_AssistantMissingModel_Fails()
     {
         var result = Decode("""
-            {"id":"a1","createdAt":"2026-01-01T00:00:00Z","role":"assistant",
-             "payload":{"parts":[],"stopReason":"stop"}}
-            """);
+                            {"id":"a1","createdAt":"2026-01-01T00:00:00Z","role":"assistant",
+                             "payload":{"parts":[],"stopReason":"stop"}}
+                            """);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).IsEqualTo("assistant message a1: missing 'model'");

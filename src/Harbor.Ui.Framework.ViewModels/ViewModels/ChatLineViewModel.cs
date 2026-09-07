@@ -1,7 +1,7 @@
-using Harbor.Ui.Framework.Converters;
-using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.Converters;
 namespace Harbor.Ui.Framework.ViewModels;
+
 /// <summary>
 ///     One chat line projected for the UI. Role + text + brush key + optional
 ///     timestamp, all driven by primitive properties so the same record can

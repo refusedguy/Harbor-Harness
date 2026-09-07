@@ -1,5 +1,5 @@
-using CommunityToolkit.Mvvm.ComponentModel;
 namespace Harbor.Desktop.Abstractions.ViewModels;
+
 /// <summary>One editor tab — file path, name, extension, content, dirty flag.</summary>
 public partial class EditorTabViewModel : ObservableObject
 {

@@ -1,17 +1,16 @@
-using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Copy-on-select (killer features §P6.4): a left press anchors a rectangular
-/// selection, drag extends it, release extracts the covered text — the host
-/// hands it to <see cref="Osc52Clipboard"/>. Extraction skips wide-tail cells
-/// (<see cref="Cell.WSkip"/>), trims per-row trailing whitespace and joins
-/// rows with <c>'\n'</c>; a press that never became a drag selects nothing.
-/// <see cref="Paint" /> marks the live region with <see cref="StyleAttr.Reverse" />
-/// each frame — the next full repaint clears it (transient by design).
+///     Copy-on-select (killer features §P6.4): a left press anchors a rectangular
+///     selection, drag extends it, release extracts the covered text — the host
+///     hands it to <see cref="Osc52Clipboard" />. Extraction skips wide-tail cells
+///     (<see cref="Cell.WSkip" />), trims per-row trailing whitespace and joins
+///     rows with <c>'\n'</c>; a press that never became a drag selects nothing.
+///     <see cref="Paint" /> marks the live region with <see cref="StyleAttr.Reverse" />
+///     each frame — the next full repaint clears it (transient by design).
 /// </summary>
 public sealed class SelectionEngine
 {
@@ -44,14 +43,14 @@ public sealed class SelectionEngine
     }
 
     /// <summary>
-    /// Release finalizes: returns the selected text, or null when the press
-    /// never became a drag or the region holds no visible text. Resets state.
-    /// Coordinates and the cell getter are clamped to the live buffer by the caller.
+    ///     Release finalizes: returns the selected text, or null when the press
+    ///     never became a drag or the region holds no visible text. Resets state.
+    ///     Coordinates and the cell getter are clamped to the live buffer by the caller.
     /// </summary>
     public string? OnRelease(int x, int y, int cols, int rows, Func<int, int, Cell> cellAt)
     {
         ArgumentNullException.ThrowIfNull(cellAt);
-        if (_anchor is not { } anchor)
+        if (_anchor is not {} anchor)
         {
             return null;
         }
@@ -107,7 +106,7 @@ public sealed class SelectionEngine
     /// <summary>Normalized selection rectangle in [0..cols)×[0..rows), or null while inactive.</summary>
     public Rect? NormalizedRect(int cols, int rows)
     {
-        if (_anchor is not { } anchor || _extent is not { } extent)
+        if (_anchor is not {} anchor || _extent is not {} extent)
         {
             return null;
         }
@@ -126,7 +125,7 @@ public sealed class SelectionEngine
     /// <summary>Paints the Reverse attribute over the live selection region.</summary>
     public void Paint(ScreenBuffer buffer)
     {
-        if (NormalizedRect(buffer.Cols, buffer.Rows) is not { } rect)
+        if (NormalizedRect(buffer.Cols, buffer.Rows) is not {} rect)
         {
             return;
         }

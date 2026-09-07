@@ -1,11 +1,9 @@
-using System.Security.Cryptography;
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
 using Avalonia.Styling;
-
+using System.Security.Cryptography;
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
 /// <summary>
@@ -15,13 +13,11 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///     (+ <c>.sha256</c>). Any pixel-level diff from the baseline changes the
 ///     PNG bytes → changes the hash → the test FAILS. "File exists" is never
 ///     an assertion: a missing or empty fixture is an error, not a pass.
-///
 ///     Regeneration contract: run with <c>HARBOR_UPDATE_GOLDENS=1</c> to
 ///     overwrite baselines; CI never regenerates.
-///
 ///     Determinism contract: the frame is captured only after TWO consecutive
 ///     render passes produce identical PNG hashes (animations settled). If the
-///     frame never settles within the iteration budget the capture throws — 
+///     frame never settles within the iteration budget the capture throws —
 ///     a nondeterministic frame can never pass a golden compare.
 /// </summary>
 internal static class GoldenFrame
@@ -52,7 +48,7 @@ internal static class GoldenFrame
             AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
 
             var bitmap = window.CaptureRenderedFrame()
-                ?? throw new InvalidOperationException("CaptureRenderedFrame returned null — headless Skia pipeline did not produce a frame.");
+                         ?? throw new InvalidOperationException("CaptureRenderedFrame returned null — headless Skia pipeline did not produce a frame.");
             byte[] png;
             using (var ms = new MemoryStream())
             {
@@ -82,7 +78,6 @@ internal static class GoldenFrame
     ///     between tests (dark↔light flips), which would otherwise change every
     ///     resolved brush. Mirrors <c>ThemeService.ApplyDark</c>: HDS palette
     ///     slot replaced with CatppuccinMocha, variant forced to Dark.
-    ///
     ///     MUST run on the UI thread in the SAME synchronous delegate as
     ///     control construction and capture — the dispatcher cannot pump
     ///     mid-delegate, so nothing can interleave between pin and pixels.
@@ -90,17 +85,17 @@ internal static class GoldenFrame
     public static void PinDarkTheme()
     {
         var app = global::Avalonia.Application.Current
-            ?? throw new InvalidOperationException("Application.Current not initialized.");
+                  ?? throw new InvalidOperationException("Application.Current not initialized.");
         var merged = app.Resources.MergedDictionaries;
         if (merged.Count > 1)
         {
             merged[1] = new ResourceInclude(new Uri("avares://Harbor.App.Avalonia/", UriKind.Absolute))
             {
-                Source = new Uri("avares://Harbor.App.Avalonia/Themes/Hds/CatppuccinMocha.axaml", UriKind.Absolute),
+                Source = new Uri("avares://Harbor.App.Avalonia/Themes/Hds/CatppuccinMocha.axaml", UriKind.Absolute)
             };
         }
 
-        app.RequestedThemeVariant = global::Avalonia.Styling.ThemeVariant.Dark;
+        app.RequestedThemeVariant = ThemeVariant.Dark;
     }
 
     /// <summary>
@@ -115,10 +110,10 @@ internal static class GoldenFrame
             Height = height,
             CanResize = false,
             ShowInTaskbar = false,
-            Background = global::Avalonia.Application.Current?.TryFindResource("BgAppBrush", out var brush) == true && brush is IBrush b
+            Background = global::Avalonia.Application.Current?.TryFindResource("BgAppBrush", out object? brush) == true && brush is IBrush b
                 ? b
-                : global::Avalonia.Media.Brushes.Black,
-            Content = content,
+                : Brushes.Black,
+            Content = content
         };
         return window;
     }

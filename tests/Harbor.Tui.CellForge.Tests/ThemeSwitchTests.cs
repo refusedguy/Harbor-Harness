@@ -1,16 +1,11 @@
 using Harbor.DesignSystem;
-using Harbor.Tui.CellForge.Rendering;
-using Harbor.Tui.CellForge.Widgets;
-using Harbor.Ui.Framework.Projection;
-using TUnit.Core;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Theme switching contract: TerminalColorPalette.Apply swaps tokens atomically
-/// and ChatPalette re-projects its styles; re-applying the same instance is a
-/// no-op. Tests restore HarborDark and run serialized — the palette is global
-/// static state shared with every other painter in this assembly.
+///     Theme switching contract: TerminalColorPalette.Apply swaps tokens atomically
+///     and ChatPalette re-projects its styles; re-applying the same instance is a
+///     no-op. Tests restore HarborDark and run serialized — the palette is global
+///     static state shared with every other painter in this assembly.
 /// </summary>
 [NotInParallel]
 public class ThemeSwitchTests
@@ -21,7 +16,7 @@ public class ThemeSwitchTests
     [Test]
     public async Task Apply_ChangesTokenReads()
     {
-        RgbColor before = TerminalColorPalette.Accent;
+        var before = TerminalColorPalette.Accent;
         TerminalColorPalette.Apply(HarborTheme.HarborLight);
 
         await Assert.That(TerminalColorPalette.Accent).IsNotEqualTo(before);

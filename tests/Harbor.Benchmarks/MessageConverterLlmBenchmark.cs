@@ -1,27 +1,32 @@
-using System.Text.Json;
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Sessions;
-
+using System.Text.Json;
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks <see cref="MessageConverter.ToLlmMessages"/> — the Adapter (GOF) that
-///     converts domain <see cref="AgentMessage"/>s to provider-agnostic <see cref="LlmMessage"/>s.
-///     Called every turn in <c>AgentLoop.cs:235</c> to build the <see cref="LlmRequest.Messages"/>
+///     Benchmarks <see cref="MessageConverter.ToLlmMessages" /> — the Adapter (GOF) that
+///     converts domain <see cref="AgentMessage" />s to provider-agnostic <see cref="LlmMessage" />s.
+///     Called every turn in <c>AgentLoop.cs:235</c> to build the <see cref="LlmRequest.Messages" />
 ///     payload before each <c>ILlmClient.StreamAsync</c> call.
 /// </summary>
 /// <remarks>
-///     Distinct from <see cref="MessageConverterBenchmark"/> which benchmarks the JSONL
+///     Distinct from <see cref="MessageConverterBenchmark" /> which benchmarks the JSONL
 ///     persistence codec (<c>JsonlMessageCodec</c> via <c>JsonlSessionStore</c>).
 ///     This benchmark isolates the in-memory domain-to-LLM adapter:
 ///     <list type="bullet">
-///         <item><see cref="UserMessage"/> → <see cref="LlmUserMessage"/> (single <see cref="LlmTextBlock"/>)</item>
-///         <item><see cref="AssistantMessage"/> → <see cref="LlmAssistantMessage"/> via <c>ConvertParts</c> (Text/Thinking/ToolCall)</item>
-///         <item><see cref="ToolResultMessage"/> → N × <see cref="LlmToolResultMessage"/> (one per <see cref="ToolResultEntry"/>)</item>
+///         <item><see cref="UserMessage" /> → <see cref="LlmUserMessage" /> (single <see cref="LlmTextBlock" />)</item>
+///         <item>
+///             <see cref="AssistantMessage" /> → <see cref="LlmAssistantMessage" /> via <c>ConvertParts</c>
+///             (Text/Thinking/ToolCall)
+///         </item>
+///         <item>
+///             <see cref="ToolResultMessage" /> → N × <see cref="LlmToolResultMessage" /> (one per
+///             <see cref="ToolResultEntry" />)
+///         </item>
 ///     </list>
-///     The <c>ConvertParts</c> fan-out (per-part type switch + <see cref="LlmContentBlock"/> allocation)
+///     The <c>ConvertParts</c> fan-out (per-part type switch + <see cref="LlmContentBlock" /> allocation)
 ///     is included in the assistant-message cost; the <c>StopReason</c> → wire-string lowering
 ///     is also on the hot path.
 /// </remarks>
@@ -36,7 +41,7 @@ public class MessageConverterLlmBenchmark
     private IReadOnlyList<AgentMessage> _messages = null!;
 
     /// <summary>
-    ///     Number of domain <see cref="AgentMessage"/>s fed to <see cref="MessageConverter.ToLlmMessages"/>.
+    ///     Number of domain <see cref="AgentMessage" />s fed to <see cref="MessageConverter.ToLlmMessages" />.
     ///     1  ≈ single-turn prompt, 10 ≈ short session, 100 ≈ long session approaching compaction.
     /// </summary>
     [Params(1, 10, 100)]
@@ -50,7 +55,7 @@ public class MessageConverterLlmBenchmark
     }
 
     /// <summary>
-    ///     Adapter cost for <see cref="MessageConverter.ToLlmMessages"/> at varying history lengths.
+    ///     Adapter cost for <see cref="MessageConverter.ToLlmMessages" /> at varying history lengths.
     ///     Measures capacity pre-pass + per-message switch + <c>ConvertParts</c> fan-out.
     /// </summary>
     [Benchmark(Description = "ToLlmMessages (N AgentMessages → LlmMessages)")]

@@ -1,6 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using System.Threading.Channels;
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -14,7 +11,11 @@ using Harbor.Application.Agents;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Threading.Channels;
 namespace Harbor.Benchmarks;
+
 /// <summary>
 ///     Benchmarks the per-turn fixed overhead of <see cref="AgentLoop" /> — the orchestration
 ///     cost of one agent-loop iteration (LLM call → optional tool calls → tool execution → next
@@ -214,7 +215,7 @@ internal sealed class BenchProviderRegistry : IProviderRegistry
     public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
         => _client.GetModelsAsync(cancellationToken);
 
-    public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
+    public void Register(ProviderId providerId, Func<ILlmClient> factory) {}
 
     public Result Unregister(ProviderId providerId) => Result.Success();
 }
@@ -311,7 +312,7 @@ internal sealed class BenchCompactionService : ICompactionService
 /// </summary>
 internal sealed class BenchTokenEstimator : ITokenTracker
 {
-    public void RecordTurnUsage(Usage usage) { }
+    public void RecordTurnUsage(Usage usage) {}
     public int Estimate(string text) => 0;
     public int EstimateMessage(AgentMessage message) => 0;
     public int EstimateTokens(IReadOnlyList<AgentMessage> messages) => 0;
@@ -335,7 +336,7 @@ internal sealed class BenchEventBus : IEventBus
 
     private sealed class NoopDisposable : IDisposable
     {
-        public void Dispose() { }
+        public void Dispose() {}
     }
 }
 

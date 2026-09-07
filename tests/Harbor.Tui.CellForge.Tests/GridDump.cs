@@ -1,15 +1,13 @@
 using System.Globalization;
 using System.Text;
-using Harbor.Tui.CellForge.Rendering;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Grid-dump serialization for golden tests: a ScreenBuffer becomes a
-/// three-layer text map — cosmetic row art, an exact per-cell
-/// <c>col,row: rune style</c> listing of every non-default cell, and the raw
-/// escaped ANSI captured by the recording backend. An SVG projection is
-/// available for human PR review only (never asserted).
+///     Grid-dump serialization for golden tests: a ScreenBuffer becomes a
+///     three-layer text map — cosmetic row art, an exact per-cell
+///     <c>col,row: rune style</c> listing of every non-default cell, and the raw
+///     escaped ANSI captured by the recording backend. An SVG projection is
+///     available for human PR review only (never asserted).
 /// </summary>
 internal static class GridDump
 {
@@ -39,7 +37,7 @@ internal static class GridDump
     private static string ArtChar(int rune) => rune switch
     {
         >= 0x20 and <= 0x7E or >= 0xA0 and <= 0xFFFD when !char.IsSurrogate((char)rune) => ((char)rune).ToString(),
-        _ => "?",
+        _ => "?"
     };
 
     /// <summary>Exact map: one <c>x,y: rune style width</c> line per non-blank cell.</summary>
@@ -72,7 +70,7 @@ internal static class GridDump
     {
         Cell.WSkip => "tail",
         Cell.Wide => "w2",
-        _ => "w1",
+        _ => "w1"
     };
 
     /// <summary>Deterministic style code: <c>fg/bg/attrs</c>, e.g. <c>i8/d/B</c>.</summary>
@@ -89,11 +87,11 @@ internal static class GridDump
     private static string AttrLetters(StyleAttr attrs)
     {
         var sb = new StringBuilder();
-        foreach (var (flag, letter) in new[]
+        foreach ((var flag, char letter) in new[]
                  {
                      (StyleAttr.Bold, 'B'), (StyleAttr.Dim, 'D'), (StyleAttr.Italic, 'I'),
                      (StyleAttr.Underline, 'U'), (StyleAttr.Blink, 'L'), (StyleAttr.Reverse, 'R'),
-                     (StyleAttr.Hidden, 'H'), (StyleAttr.Strike, 'S'),
+                     (StyleAttr.Hidden, 'H'), (StyleAttr.Strike, 'S')
                  })
         {
             if ((attrs & flag) != 0)
@@ -130,8 +128,8 @@ internal static class GridDump
         .Replace("\n", "\\n");
 
     /// <summary>
-    /// Human-viewable projection (PR review aid only — never asserted):
-    /// monospace grid with palette-index hues and bold weight mapping.
+    ///     Human-viewable projection (PR review aid only — never asserted):
+    ///     monospace grid with palette-index hues and bold weight mapping.
     /// </summary>
     public static string ToSvg(ScreenBuffer buffer)
     {

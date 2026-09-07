@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\Harbor.Providers.Shared\SsePump.cs" LinkBase="Shared" />
+    <Compile Include="..\Harbor.Providers.Shared\SsePump.cs" LinkBase="Shared"/>
   </ItemGroup>
 
   <ItemGroup>

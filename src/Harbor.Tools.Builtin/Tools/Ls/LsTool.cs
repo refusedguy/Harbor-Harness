@@ -1,8 +1,9 @@
-using System.Text;
 using Microsoft.Extensions.Logging;
+using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Lists directory contents (type, size, mtime). Caps output; prunes heavy dirs when recursive.
 /// </summary>

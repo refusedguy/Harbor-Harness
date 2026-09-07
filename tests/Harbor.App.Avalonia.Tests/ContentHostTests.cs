@@ -1,7 +1,5 @@
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using Harbor.Ui.Framework.Navigation;
-
+using System.Collections.ObjectModel;
 namespace Harbor.App.Avalonia.Tests;
 
 /// <summary>
@@ -21,76 +19,6 @@ namespace Harbor.App.Avalonia.Tests;
 /// </remarks>
 public class ContentHostTests
 {
-    /// <summary>
-    ///     Minimal <see cref="IContentHost" /> implementation that mirrors the
-    ///     Avalonia route set (7 routes) without pulling in Avalonia view-models.
-    /// </summary>
-    private sealed class FakeContentHost : IContentHost
-    {
-        public FakeContentHost()
-        {
-            Chat = new object();
-            Sessions = new object();
-            CodeEditor = new object();
-            Diff = new object();
-            TokenUsage = new object();
-            Settings = new object();
-            Board = new object();
-
-            _viewsByRoute = new Dictionary<string, object>
-            {
-                ["chat"]       = Chat,
-                ["sessions"]   = Sessions,
-                ["code"]       = CodeEditor,
-                ["diff"]       = Diff,
-                ["tokenUsage"] = TokenUsage,
-                ["settings"]   = Settings,
-                ["board"]      = Board,
-            };
-
-            ActiveView = Chat;
-        }
-
-        public object? ActiveView { get; private set; }
-
-        public IReadOnlyList<string> AvailableRoutes { get; }
-            = new ReadOnlyCollection<string>(new[]
-            {
-                "chat",
-                "sessions",
-                "code",
-                "diff",
-                "tokenUsage",
-                "settings",
-                "board",
-            });
-
-        public object Chat { get; }
-        public object Sessions { get; }
-        public object CodeEditor { get; }
-        public object Diff { get; }
-        public object TokenUsage { get; }
-        public object Settings { get; }
-        public object Board { get; }
-
-        private readonly Dictionary<string, object> _viewsByRoute;
-
-        public bool TryNavigate(string route)
-        {
-            if (string.IsNullOrEmpty(route) || !_viewsByRoute.TryGetValue(route, out var target))
-            {
-                return false;
-            }
-
-            ActiveView = target;
-            return true;
-        }
-
-        public void NavigateTo(string route)
-        {
-            TryNavigate(route);
-        }
-    }
 
     // ── TryNavigate ────────────────────────────────────────────────
 
@@ -98,7 +26,7 @@ public class ContentHostTests
     public async Task TryNavigate_KnownRoute_ReturnsTrue_And_ChangesActiveView()
     {
         var host = new FakeContentHost();
-        var initial = host.ActiveView;
+        object? initial = host.ActiveView;
         await Assert.That(host.TryNavigate("sessions")).IsTrue();
         await Assert.That(host.ActiveView).IsEqualTo(host.Sessions);
         await Assert.That(host.ActiveView).IsNotEqualTo(initial);
@@ -132,7 +60,7 @@ public class ContentHostTests
     public async Task TryNavigate_UnknownRoute_ReturnsFalse_And_LeavesActiveViewUnchanged()
     {
         var host = new FakeContentHost();
-        var before = host.ActiveView;
+        object? before = host.ActiveView;
 
         await Assert.That(host.TryNavigate("nonexistent")).IsFalse();
         await Assert.That(host.ActiveView).IsEqualTo(before);
@@ -142,7 +70,7 @@ public class ContentHostTests
     public async Task TryNavigate_NullRoute_ReturnsFalse_And_LeavesActiveViewUnchanged()
     {
         var host = new FakeContentHost();
-        var before = host.ActiveView;
+        object? before = host.ActiveView;
 
         await Assert.That(host.TryNavigate(null!)).IsFalse();
         await Assert.That(host.ActiveView).IsEqualTo(before);
@@ -154,7 +82,7 @@ public class ContentHostTests
     public async Task NavigateTo_KnownRoute_DoesNotThrow_And_ChangesActiveView()
     {
         var host = new FakeContentHost();
-        var initial = host.ActiveView;
+        object? initial = host.ActiveView;
 
         host.NavigateTo("code");
 
@@ -166,7 +94,7 @@ public class ContentHostTests
     public async Task NavigateTo_UnknownRoute_DoesNotThrow_And_LeavesActiveViewUnchanged()
     {
         var host = new FakeContentHost();
-        var before = host.ActiveView;
+        object? before = host.ActiveView;
 
         host.NavigateTo("bogus");
 
@@ -218,5 +146,73 @@ public class ContentHostTests
 
         await Assert.That(host.TryNavigate("code")).IsTrue();
         await Assert.That(host.ActiveView).IsEqualTo(host.CodeEditor);
+    }
+
+    /// <summary>
+    ///     Minimal <see cref="IContentHost" /> implementation that mirrors the
+    ///     Avalonia route set (7 routes) without pulling in Avalonia view-models.
+    /// </summary>
+    private sealed class FakeContentHost : IContentHost
+    {
+
+        private readonly Dictionary<string, object> _viewsByRoute;
+        public FakeContentHost()
+        {
+            Chat = new object();
+            Sessions = new object();
+            CodeEditor = new object();
+            Diff = new object();
+            TokenUsage = new object();
+            Settings = new object();
+            Board = new object();
+
+            _viewsByRoute = new Dictionary<string, object>
+            {
+                ["chat"] = Chat,
+                ["sessions"] = Sessions,
+                ["code"] = CodeEditor,
+                ["diff"] = Diff,
+                ["tokenUsage"] = TokenUsage,
+                ["settings"] = Settings,
+                ["board"] = Board
+            };
+
+            ActiveView = Chat;
+        }
+
+        public object Chat { get; }
+        public object Sessions { get; }
+        public object CodeEditor { get; }
+        public object Diff { get; }
+        public object TokenUsage { get; }
+        public object Settings { get; }
+        public object Board { get; }
+
+        public object? ActiveView { get; private set; }
+
+        public IReadOnlyList<string> AvailableRoutes { get; }
+            = new ReadOnlyCollection<string>(new[]
+            {
+                "chat",
+                "sessions",
+                "code",
+                "diff",
+                "tokenUsage",
+                "settings",
+                "board"
+            });
+
+        public bool TryNavigate(string route)
+        {
+            if (string.IsNullOrEmpty(route) || !_viewsByRoute.TryGetValue(route, out object? target))
+            {
+                return false;
+            }
+
+            ActiveView = target;
+            return true;
+        }
+
+        public void NavigateTo(string route) => TryNavigate(route);
     }
 }

@@ -9,9 +9,7 @@ using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Tests.Fakes;
 using Harbor.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
-using TUnit.Assertions.Extensions;
 
 namespace Harbor.Application.Tests;
 
@@ -50,7 +48,7 @@ public class PipelineBehaviorTests
         var request = NewRequest();
         var (next, calls) = MockNext(Task.FromResult(Result.Failure("boom")));
 
-        Result result = await behavior.HandleAsync(request, next, CancellationToken.None);
+        var result = await behavior.HandleAsync(request, next, CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(calls()).IsEqualTo(1);
@@ -60,6 +58,7 @@ public class PipelineBehaviorTests
     public async Task LoggingBehavior_CancellationByNext_SurfacesOperationCanceled()
     {
         var behavior = new LoggingBehavior(NullLogger.Instance);
+
         static Task<Result> Cancelled(PromptRequest request, CancellationToken ct) =>
             Task.FromException<Result>(new OperationCanceledException());
 
@@ -75,7 +74,7 @@ public class PipelineBehaviorTests
         var request = new PromptRequest(NewRequest().Session, definition);
         var (next, calls) = MockNext();
 
-        Result result = await behavior.HandleAsync(request, next, CancellationToken.None);
+        var result = await behavior.HandleAsync(request, next, CancellationToken.None);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("permission");
@@ -88,7 +87,7 @@ public class PipelineBehaviorTests
         var behavior = new PermissionCheckBehavior(NullLogger.Instance);
         var (next, calls) = MockNext();
 
-        Result result = await behavior.HandleAsync(NewRequest(), next, CancellationToken.None);
+        var result = await behavior.HandleAsync(NewRequest(), next, CancellationToken.None);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(calls()).IsEqualTo(1);
@@ -102,7 +101,7 @@ public class PipelineBehaviorTests
         var outer = new RecordingBehavior(order, "outer");
         var pipeline = new AgentPipeline([outer, inner]);
 
-        Result result = await pipeline.HandleAsync(NewRequest(), (_, _) =>
+        var result = await pipeline.HandleAsync(NewRequest(), (_, _) =>
         {
             order.Add("terminal");
             return Task.FromResult(Result.Success());
@@ -120,7 +119,7 @@ public class PipelineBehaviorTests
         var blocker = new ShortCircuitBehavior();
         var pipeline = new AgentPipeline([inner, blocker]);
 
-        Result result = await pipeline.HandleAsync(NewRequest(), (_, _) =>
+        var result = await pipeline.HandleAsync(NewRequest(), (_, _) =>
         {
             order.Add("terminal");
             return Task.FromResult(Result.Success());
@@ -169,8 +168,8 @@ public class TurnBehaviorTests
         var behavior = new CompactionBehavior(
             compaction, new FakeTokenTracker(shouldCompact: false), bus, NullMetrics.Instance, NullLogger.Instance);
 
-        CompactionOutcome outcome = await behavior.BeforeTurnAsync(
-            session, session.Messages, TestModel, truncationFallback: false, CancellationToken.None);
+        var outcome = await behavior.BeforeTurnAsync(
+            session, session.Messages, TestModel, false, CancellationToken.None);
 
         await Assert.That(compaction.Calls).IsEqualTo(0);
         await Assert.That(bus.Events).IsEmpty();
@@ -192,17 +191,17 @@ public class TurnBehaviorTests
             IsSummary: true);
         var summary = new CompactionResult(
             "summary",
-            PrunedMessageCount: 2,
-            TokensSaved: 100,
-            Duration: TimeSpan.FromMilliseconds(1),
-            SummaryMessage: summaryMessage);
+            2,
+            100,
+            TimeSpan.FromMilliseconds(1),
+            summaryMessage);
         var compaction = new ScriptedCompactionService(Result.Success(summary));
         var bus = new FakeEventBus();
         var behavior = new CompactionBehavior(
             compaction, new FakeTokenTracker(shouldCompact: true), bus, NullMetrics.Instance, NullLogger.Instance);
 
-        CompactionOutcome outcome = await behavior.BeforeTurnAsync(
-            session, session.Messages, TestModel, truncationFallback: false, CancellationToken.None);
+        var outcome = await behavior.BeforeTurnAsync(
+            session, session.Messages, TestModel, false, CancellationToken.None);
 
         await Assert.That(compaction.Calls).IsEqualTo(1);
         await Assert.That(session.Messages.OfType<AssistantMessage>().Any(m => m.IsSummary)).IsTrue();
@@ -222,8 +221,8 @@ public class TurnBehaviorTests
         var behavior = new CompactionBehavior(
             compaction, new FakeTokenTracker(shouldCompact: true), bus, NullMetrics.Instance, NullLogger.Instance);
 
-        CompactionOutcome outcome = await behavior.BeforeTurnAsync(
-            session, session.Messages, TestModel, truncationFallback: false, CancellationToken.None);
+        var outcome = await behavior.BeforeTurnAsync(
+            session, session.Messages, TestModel, false, CancellationToken.None);
 
         await Assert.That(bus.Events.OfType<CompactionFailedEvent>()).HasCount(1);
         await Assert.That(outcome.TruncationFallback).IsTrue();
@@ -238,8 +237,8 @@ public class TurnBehaviorTests
         var behavior = new CompactionBehavior(
             compaction, new FakeTokenTracker(shouldCompact: true), bus, NullMetrics.Instance, NullLogger.Instance);
 
-        CompactionOutcome outcome = await behavior.BeforeTurnAsync(
-            session, session.Messages, TestModel, truncationFallback: true, CancellationToken.None);
+        var outcome = await behavior.BeforeTurnAsync(
+            session, session.Messages, TestModel, true, CancellationToken.None);
 
         await Assert.That(compaction.Calls).IsEqualTo(0);
         await Assert.That(bus.Events).IsEmpty();
@@ -257,8 +256,8 @@ public class TurnBehaviorTests
 
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
-        CompactionOutcome outcome = await behavior.BeforeTurnAsync(
-            session, session.Messages, TestModel, truncationFallback: false, cts.Token);
+        var outcome = await behavior.BeforeTurnAsync(
+            session, session.Messages, TestModel, false, cts.Token);
 
         // F17: an Esc during compaction is NOT a summarizer failure — no fallback,
         // no destructive truncation of the session.

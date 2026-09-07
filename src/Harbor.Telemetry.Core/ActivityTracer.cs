@@ -1,6 +1,5 @@
-using System.Diagnostics;
 using Harbor.Diagnostics;
-
+using System.Diagnostics;
 namespace Harbor.Telemetry;
 
 /// <summary>
@@ -11,25 +10,21 @@ public sealed class ActivityTracer : ITracer
 {
     public static readonly ActivityTracer Instance = new();
 
-    public ActivityTracer()
-    {
-    }
-
     public ITelemetrySpan? StartSpan(string name, params KeyValuePair<string, object?>[] tags)
     {
-        Activity? activity = HarborTelemetrySources.Tracing.StartActivity(name);
+        var activity = HarborTelemetrySources.Tracing.StartActivity(name);
         if (activity is null)
         {
             return null;
         }
 
-        CorrelationContext correlation = Correlation.Current;
-        if (correlation.SessionId is { } sessionId)
+        var correlation = Correlation.Current;
+        if (correlation.SessionId is {} sessionId)
         {
             activity.SetTag(TelemetryTagNames.SessionId, sessionId);
         }
 
-        if (correlation.AgentName is { } agentName)
+        if (correlation.AgentName is {} agentName)
         {
             activity.SetTag(TelemetryTagNames.Agent, agentName);
         }

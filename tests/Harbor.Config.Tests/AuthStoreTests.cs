@@ -1,6 +1,7 @@
 using Harbor.Application.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Config.Tests;
+
 /// <summary>
 ///     Tests for AuthStore — manages per-provider API keys in HarborConfig
 ///     with env-var fallback.

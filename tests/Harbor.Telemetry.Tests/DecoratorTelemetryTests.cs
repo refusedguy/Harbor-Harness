@@ -1,7 +1,3 @@
-using System.Diagnostics;
-using System.Diagnostics.Metrics;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -11,9 +7,10 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
 using Harbor.Diagnostics;
-using Harbor.Telemetry;
-using TUnit.Assertions;
-
+using Harbor.TestKit;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using System.Text.Json;
 namespace Harbor.Telemetry.Tests;
 
 /// <summary>
@@ -24,18 +21,18 @@ namespace Harbor.Telemetry.Tests;
 [NotInParallel]
 public class DecoratorTelemetryTests : IDisposable
 {
-    private readonly List<Activity> _stoppedSpans = [];
-    private readonly List<(string Instrument, double Value, string? Status)> _metrics = [];
     private readonly ActivityListener _activityListener;
     private readonly MeterListener _meterListener;
+    private readonly List<(string Instrument, double Value, string? Status)> _metrics = [];
+    private readonly List<Activity> _stoppedSpans = [];
 
     public DecoratorTelemetryTests()
     {
         _activityListener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == HarborTelemetrySources.SourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
-            ActivityStopped = activity => _stoppedSpans.Add(activity),
+            Sample = (ref _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity => _stoppedSpans.Add(activity)
         };
         ActivitySource.AddActivityListener(_activityListener);
 
@@ -50,7 +47,7 @@ public class DecoratorTelemetryTests : IDisposable
         _meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
         {
             string? status = null;
-            foreach (KeyValuePair<string, object?> tag in tags)
+            foreach (var tag in tags)
             {
                 if (tag.Key is TelemetryTagNames.ToolStatus or TelemetryTagNames.LlmTokenType or "turn.status")
                 {
@@ -79,13 +76,13 @@ public class DecoratorTelemetryTests : IDisposable
             new MeterMetrics(),
             new ActivityTracer());
 
-        Result<ITool> resolved = registry.GetTool(ToolName.Create("read"));
+        var resolved = registry.GetTool(ToolName.Create("read"));
         await Assert.That(resolved.IsSuccess).IsTrue();
-        ToolResult result = await resolved.Value.ExecuteAsync(Args(), DefaultContext());
+        var result = await resolved.Value.ExecuteAsync(Args(), DefaultContext());
 
         await Assert.That(result.IsError).IsFalse();
 
-        Activity? span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "tool.execute");
+        var span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "tool.execute");
         await Assert.That(span).IsNotNull();
         await Assert.That(span!.GetTagItem(TelemetryTagNames.ToolName)).IsEqualTo("read");
         await Assert.That(span.GetTagItem(TelemetryTagNames.ToolStatus)).IsEqualTo("ok");
@@ -102,11 +99,11 @@ public class DecoratorTelemetryTests : IDisposable
             new MeterMetrics(),
             new ActivityTracer());
 
-        Result<ITool> resolved = registry.GetTool(ToolName.Create("write"));
-        ToolResult result = await resolved.Value.ExecuteAsync(Args(), DefaultContext());
+        var resolved = registry.GetTool(ToolName.Create("write"));
+        var result = await resolved.Value.ExecuteAsync(Args(), DefaultContext());
 
         await Assert.That(result.IsError).IsTrue();
-        Activity? span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "tool.execute");
+        var span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "tool.execute");
         await Assert.That(span!.GetTagItem(TelemetryTagNames.ToolStatus)).IsEqualTo("error");
         await Assert.That(span.Status).IsEqualTo(ActivityStatusCode.Error);
         await Assert.That(_metrics.Any(m => m.Instrument == TelemetryTagNames.ToolCalls && m.Status == "error")).IsTrue();
@@ -120,12 +117,12 @@ public class DecoratorTelemetryTests : IDisposable
             new MeterMetrics(),
             new ActivityTracer());
 
-        Result<ITool> resolved = registry.GetTool(ToolName.Create("bash"));
+        var resolved = registry.GetTool(ToolName.Create("bash"));
 
         await Assert.That(async () => await resolved.Value.ExecuteAsync(Args(), DefaultContext()))
             .Throws<InvalidOperationException>();
 
-        Activity? span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "tool.execute");
+        var span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "tool.execute");
         await Assert.That(span!.GetTagItem(TelemetryTagNames.ToolStatus)).IsEqualTo("exception");
         await Assert.That(span.Status).IsEqualTo(ActivityStatusCode.Error);
     }
@@ -137,27 +134,24 @@ public class DecoratorTelemetryTests : IDisposable
     {
         var client = new InstrumentedLlmClient(
             ProviderId.Create("test"),
-            new Harbor.TestKit.ScriptedLlmClient(
-            [
-                new LlmEvent[]
-                {
-                    new TextDeltaEvent("t1", "hello"),
-                    new StepFinishEvent(0, "stop", new Usage(10, 5)),
-                    new StepFinishEvent(1, "stop", new Usage(0, 0)),
-                }
-            ]),
+            new ScriptedLlmClient(new LlmEvent[]
+            {
+                new TextDeltaEvent("t1", "hello"),
+                new StepFinishEvent(0, "stop", new Usage(10, 5)),
+                new StepFinishEvent(1, "stop", new Usage(0, 0))
+            }),
             new MeterMetrics(),
             new ActivityTracer());
 
         List<LlmEvent> seen = [];
-        await foreach (LlmEvent evt in client.StreamAsync(Request(), CancellationToken.None))
+        await foreach (var evt in client.StreamAsync(Request(), CancellationToken.None))
         {
             seen.Add(evt);
         }
 
         await Assert.That(seen.Count).IsEqualTo(3);
 
-        Activity? span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "llm.stream");
+        var span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "llm.stream");
         await Assert.That(span).IsNotNull();
         await Assert.That(span!.GetTagItem(TelemetryTagNames.Model)).IsEqualTo("test-model");
         await Assert.That(span.GetTagItem(TelemetryTagNames.StreamStatus)).IsEqualTo("ok");
@@ -178,18 +172,18 @@ public class DecoratorTelemetryTests : IDisposable
     {
         var client = new InstrumentedLlmClient(
             ProviderId.Create("test"),
-            new Harbor.TestKit.ThrowingLlmClient(),
+            new ThrowingLlmClient(),
             new MeterMetrics(),
             new ActivityTracer());
 
         await Assert.That(async () =>
         {
-            await foreach (LlmEvent _ in client.StreamAsync(Request(), CancellationToken.None))
+            await foreach (var _ in client.StreamAsync(Request(), CancellationToken.None))
             {
             }
         }).Throws<InvalidOperationException>();
 
-        Activity? span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "llm.stream");
+        var span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "llm.stream");
         await Assert.That(span!.GetTagItem(TelemetryTagNames.StreamStatus)).IsEqualTo("exception");
         await Assert.That(span.Status).IsEqualTo(ActivityStatusCode.Error);
     }
@@ -199,7 +193,7 @@ public class DecoratorTelemetryTests : IDisposable
     [Test]
     public async Task AgentProxy_SuccessTurn_SetsCorrelationAndMetrics()
     {
-        Session session = NewSession();
+        var session = NewSession();
         CorrelationContext? seenInside = null;
         var agent = new TracingAgentProxy(
             new StubAgent(_ => Result.Success(), ctx => seenInside = ctx),
@@ -214,7 +208,7 @@ public class DecoratorTelemetryTests : IDisposable
         await Assert.That(seenInside!.SessionId).IsEqualTo(session.Id);
         await Assert.That(seenInside.AgentName).IsEqualTo("code");
 
-        Activity? span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "agent.turn");
+        var span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "agent.turn");
         await Assert.That(span).IsNotNull();
         await Assert.That(span!.GetTagItem(TelemetryTagNames.Agent)).IsEqualTo("code");
         await Assert.That(_metrics.Any(m => m.Instrument == TelemetryTagNames.TurnCount && m.Status == "ok")).IsTrue();
@@ -224,7 +218,7 @@ public class DecoratorTelemetryTests : IDisposable
     public async Task AgentProxy_FailedTurn_MarksSpanError()
     {
         var agent = new TracingAgentProxy(
-            new StubAgent(_ => Result.Failure("boom"), _ => { }),
+            new StubAgent(_ => Result.Failure("boom"), _ => {}),
             new MeterMetrics(),
             new ActivityTracer());
         agent.Initialize(NewSession(), Definition());
@@ -232,7 +226,7 @@ public class DecoratorTelemetryTests : IDisposable
         var result = await agent.PromptAsync("hi");
 
         await Assert.That(result.IsFailure).IsTrue();
-        Activity? span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "agent.turn");
+        var span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "agent.turn");
         await Assert.That(span!.Status).IsEqualTo(ActivityStatusCode.Error);
     }
 
@@ -242,11 +236,11 @@ public class DecoratorTelemetryTests : IDisposable
     public async Task ProviderRegistry_GetClient_ReturnsInstrumentedClient()
     {
         var registry = new InstrumentedProviderRegistry(
-            new SingleProviderRegistry(new Harbor.TestKit.ScriptedLlmClient([]), ProviderId.Create("test")),
+            new SingleProviderRegistry(new ScriptedLlmClient(), ProviderId.Create("test")),
             new MeterMetrics(),
             new ActivityTracer());
 
-        Result<ILlmClient> resolved = registry.GetClient(ProviderId.Create("test"));
+        var resolved = registry.GetClient(ProviderId.Create("test"));
 
         await Assert.That(resolved.GetValueOrDefault()).IsTypeOf<InstrumentedLlmClient>();
     }
@@ -341,7 +335,7 @@ public class DecoratorTelemetryTests : IDisposable
             {
                 Outcome.Error => ToolResult.Error("stub error"),
                 Outcome.Throw => throw new InvalidOperationException("stub threw"),
-                _ => ToolResult.Success("stub ok"),
+                _ => ToolResult.Success("stub ok")
             });
     }
 

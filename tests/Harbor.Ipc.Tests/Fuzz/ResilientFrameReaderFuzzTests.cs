@@ -1,16 +1,17 @@
-using System.Diagnostics;
 using Harbor.Ipc.Protocol;
-
+using System.Diagnostics;
 namespace Harbor.Ipc.Tests.Fuzz;
 
 /// <summary>
 ///     Fuzz / robustness tests for the IPC framing read loop, asserting the
-///     <b>policy</b> of <c>ResilientFrameReader</b> (committed static-D3 shape today,
-///     instance-D2 shape once integration lands — see ResilientFrameReaderProbe):
-///     malformed and zero-length frames are classified (not thrown), truncated frames
-///     surface as stream-end, oversized declared lengths are rejected without
-///     allocating the declared size, and the stream stays consumable for whatever
-///     follows.
+///     <b>policy</b> of
+///     <c>
+///         ResilientFrameReader</b> (committed static-D3 shape today,
+///         instance-D2 shape once integration lands — see ResilientFrameReaderProbe):
+///         malformed and zero-length frames are classified (not thrown), truncated frames
+///         surface as stream-end, oversized declared lengths are rejected without
+///         allocating the declared size, and the stream stays consumable for whatever
+///         follows.
 /// </summary>
 /// <remarks>
 ///     These tests drive the reader directly over a <see cref="MemoryStream" /> — no
@@ -165,7 +166,7 @@ public class ResilientFrameReaderFuzzTests
 
         var request = new SendPromptRequest("hello after garbage");
         var ms = new MemoryStream();
-        ResilientFrameReaderProbe.AppendHeader(ms, 0);          // keep-alive no-op frame
+        ResilientFrameReaderProbe.AppendHeader(ms, 0); // keep-alive no-op frame
         ResilientFrameReaderProbe.AppendFrame(ms, ResilientFrameReaderProbe.SerializeRequest(request));
         ms.Position = 0;
 
@@ -174,7 +175,7 @@ public class ResilientFrameReaderFuzzTests
         await Assert.That(first.Outcome).IsEqualTo(ResilientFrameReaderProbe.EmptyFrame);
         await Assert.That(first.RequestId).IsNull();
         await Assert.That(first.ErrorText).IsNull();
-        await Assert.That(ms.Position).IsEqualTo(4L);           // nothing past the header consumed
+        await Assert.That(ms.Position).IsEqualTo(4L); // nothing past the header consumed
 
         var second = await ResilientFrameReaderProbe.ReadAsync(reader, ms);
 

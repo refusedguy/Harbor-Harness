@@ -1,8 +1,7 @@
-using System.Collections.Immutable;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
+using System.Collections.Immutable;
 namespace Harbor.E2E.Framework;
 
 /// <summary>
@@ -19,9 +18,11 @@ namespace Harbor.E2E.Framework;
 ///         verify, then call <see cref="AssertStateRenderedAsync" /> which:
 ///         <list type="number">
 ///             <item>Extracts the expected visible text from the snapshot.</item>
-///             <item>Drives the <see cref="IE2eDriver" /> to produce that state
+///             <item>
+///                 Drives the <see cref="IE2eDriver" /> to produce that state
 ///                 (via mock LLM responses for TUI, or direct VM mutation for
-///                 Avalonia).</item>
+///                 Avalonia).
+///             </item>
 ///             <item>Polls the driver's screen until the expected text appears.</item>
 ///         </list>
 ///     </para>
@@ -80,7 +81,7 @@ public sealed class StateTestRunner
         IE2eDriver driver,
         params (UiState state, string? expectedText)[] steps)
     {
-        foreach (var (state, expectedText) in steps)
+        foreach ((var state, string? expectedText) in steps)
         {
             bool ok = await AssertStateRenderedAsync(driver, state, expectedText).ConfigureAwait(false);
             if (!ok)
@@ -154,7 +155,7 @@ public sealed class StateTestRunner
             Status = "running",
             IsAgentRunning = true,
             ViewportLines = 20,
-            TotalLines = 5,
+            TotalLines = 5
         };
     }
 
@@ -174,7 +175,7 @@ public sealed class StateTestRunner
             Status = "running",
             IsAgentRunning = true,
             ViewportLines = 20,
-            TotalLines = 3,
+            TotalLines = 3
         };
     }
 
@@ -193,7 +194,7 @@ public sealed class StateTestRunner
             Status = "running",
             IsAgentRunning = true,
             ViewportLines = 20,
-            TotalLines = 2,
+            TotalLines = 2
         };
     }
 
@@ -212,7 +213,7 @@ public sealed class StateTestRunner
             Status = "running",
             IsAgentRunning = true,
             ViewportLines = 20,
-            TotalLines = 2,
+            TotalLines = 2
         };
     }
 
@@ -231,7 +232,7 @@ public sealed class StateTestRunner
             Status = "error",
             IsAgentRunning = false,
             ViewportLines = 20,
-            TotalLines = 2,
+            TotalLines = 2
         };
     }
 
@@ -249,7 +250,7 @@ public sealed class StateTestRunner
             Status = "compacting",
             IsAgentRunning = true,
             ViewportLines = 20,
-            TotalLines = 10,
+            TotalLines = 10
         };
     }
 
@@ -269,7 +270,7 @@ public sealed class StateTestRunner
             IsAgentRunning = true,
             WasRunning = false,
             ViewportLines = 20,
-            TotalLines = 1,
+            TotalLines = 1
         };
     }
 
@@ -288,7 +289,7 @@ public sealed class StateTestRunner
             IsAgentRunning = false,
             WasRunning = true,
             ViewportLines = 20,
-            TotalLines = 1,
+            TotalLines = 1
         };
     }
 
@@ -311,7 +312,7 @@ public sealed class StateTestRunner
                 .Add(panelId, TuiPanelState.Focused),
             RegisteredPanelIds = ImmutableArray.Create(panelId),
             ViewportLines = 20,
-            TotalLines = 1,
+            TotalLines = 1
         };
     }
 
@@ -330,7 +331,7 @@ public sealed class StateTestRunner
             IsAgentRunning = false,
             ScrollOffset = scrollOffset,
             ViewportLines = viewportLines,
-            TotalLines = totalLines,
+            TotalLines = totalLines
         };
     }
 
@@ -350,7 +351,7 @@ public sealed class StateTestRunner
             IsAgentRunning = false,
             Input = new InputModel(currentText, history, historyIndex),
             ViewportLines = 20,
-            TotalLines = 1,
+            TotalLines = 1
         };
     }
 
@@ -369,7 +370,7 @@ public sealed class StateTestRunner
             IsAgentRunning = false,
             Input = new InputModel(partialCommand, ImmutableArray<string>.Empty, -1),
             ViewportLines = 20,
-            TotalLines = 1,
+            TotalLines = 1
         };
     }
 
@@ -387,7 +388,7 @@ public sealed class StateTestRunner
             Status = "idle",
             IsAgentRunning = false,
             ViewportLines = 20,
-            TotalLines = 1,
+            TotalLines = 1
         };
     }
 
@@ -405,7 +406,7 @@ public sealed class StateTestRunner
             Status = "idle",
             IsAgentRunning = false,
             ViewportLines = 20,
-            TotalLines = 1,
+            TotalLines = 1
         };
     }
 }

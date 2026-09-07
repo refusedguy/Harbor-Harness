@@ -17,22 +17,22 @@ Infrastructure — concrete `ITool` implementations. References `Harbor.Abstract
 
 ### Tools
 
-| Tool      | Class           | Description                                                                |
-|-----------|-----------------|----------------------------------------------------------------------------|
-| `read`    | `ReadTool`      | Read a file's contents (with line numbers, optional offset/limit).         |
-| `write`   | `WriteTool`     | Write/overwrite a file (creates parent dirs).                              |
-| `edit`    | `EditTool`      | String-replace within a file (atomic, with old/new preview).               |
-| `bash`    | `BashTool`      | Run a shell command (with timeout, working dir, env vars, output cap).     |
-| `glob`    | `GlobTool`      | Find files matching a glob pattern (uses `FileSystemGlobbing`).            |
-| `grep`    | `GrepTool`      | Search file contents (regex, file-type filter, multiline mode).            |
-| `ls`      | `LsTool`        | List directory contents (with file sizes, dates, ignored entries).         |
-| `task`    | `TaskTool`      | Delegate to a sub-agent (`code`, `plan`, or `explore`) — see note below.   |
-| `webfetch`| `WebFetchTool`  | Fetch a URL and return its content as markdown.                            |
-| `patch`   | `PatchTool`     | Apply a unified diff to files.                                             |
-| `notebook`| `NotebookTool`  | Scratchpad notes persisted across turns within a session.                  |
-| `ripgrep` | `RipGrepTool`   | Fast content search delegating to the `rg` binary when available.          |
-| `tree`    | `TreeTool`      | Render a directory tree.                                                   |
-| `mcp`     | `McpToolTool`   | List/call tools exposed by configured MCP servers.                         |
+| Tool       | Class          | Description                                                              |
+|------------|----------------|--------------------------------------------------------------------------|
+| `read`     | `ReadTool`     | Read a file's contents (with line numbers, optional offset/limit).       |
+| `write`    | `WriteTool`    | Write/overwrite a file (creates parent dirs).                            |
+| `edit`     | `EditTool`     | String-replace within a file (atomic, with old/new preview).             |
+| `bash`     | `BashTool`     | Run a shell command (with timeout, working dir, env vars, output cap).   |
+| `glob`     | `GlobTool`     | Find files matching a glob pattern (uses `FileSystemGlobbing`).          |
+| `grep`     | `GrepTool`     | Search file contents (regex, file-type filter, multiline mode).          |
+| `ls`       | `LsTool`       | List directory contents (with file sizes, dates, ignored entries).       |
+| `task`     | `TaskTool`     | Delegate to a sub-agent (`code`, `plan`, or `explore`) — see note below. |
+| `webfetch` | `WebFetchTool` | Fetch a URL and return its content as markdown.                          |
+| `patch`    | `PatchTool`    | Apply a unified diff to files.                                           |
+| `notebook` | `NotebookTool` | Scratchpad notes persisted across turns within a session.                |
+| `ripgrep`  | `RipGrepTool`  | Fast content search delegating to the `rg` binary when available.        |
+| `tree`     | `TreeTool`     | Render a directory tree.                                                 |
+| `mcp`      | `McpToolTool`  | List/call tools exposed by configured MCP servers.                       |
 
 Each tool class implements `ITool`:
 
@@ -72,24 +72,16 @@ Agent definitions live in `Harbor.Abstractions` (`src/Harbor.Abstractions/Agents
 - `explore` — read-only exploration (no write/edit/bash)
 
 **Note:** `TaskTool` currently validates the requested sub-agent (name, registry membership,
-`IsSubAgent` flag) but does **not run it yet** — sub-agent execution is not implemented in
-this build and calls return an explicit error instead of fabricating success
-(`src/Harbor.Tools.Builtin/Tools/Task/TaskTool.cs:11-15`). Its `PromptGuidelines` tell the
-model never to call it.
+`IsSubAgent` flag) but does **not run it yet** — sub-agent execution is not implemented in this build and calls return an explicit error instead of fabricating success (`src/Harbor.Tools.Builtin/Tools/Task/TaskTool.cs:11-15`). Its `PromptGuidelines` tell the model never to call it.
 
 ## Usage
 
 Registration happens via DI in `Harbor.Hosting` (`CreateToolRegistry`,
-`src/Harbor.Hosting/Modules/ToolsCatalog.cs:74-108`), not via a registration facade here.
-Ten tools are always registered; `task`, `webfetch`, `ripgrep`, and `mcp` join when the
-host selects `HarborToolSetKind.Full14` (14 tools total). `tools.freeze()` runs after
-registration, and the CLI's `DisabledTools` config list can keep specific tools out at
-startup (`apps/Harbor.App.Cli/Configuration/CliConfig.cs:67-70`).
+`src/Harbor.Hosting/Modules/ToolsCatalog.cs:74-108`), not via a registration facade here. Ten tools are always registered; `task`, `webfetch`, `ripgrep`, and `mcp` join when the host selects `HarborToolSetKind.Full14` (14 tools total). `tools.freeze()` runs after registration, and the CLI's `DisabledTools` config list can keep specific tools out at startup (`apps/Harbor.App.Cli/Configuration/CliConfig.cs:67-70`).
 
 ## Permission model
 
-Each tool call goes through the permission ruleset before invocation. Defaults are defined
-in `PermissionRuleset.Default`
+Each tool call goes through the permission ruleset before invocation. Defaults are defined in `PermissionRuleset.Default`
 (`src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs:95-123`):
 
 - `read`, `glob`, `grep`, `ls`, `tree`, `ripgrep`, `notebook`: allow always
@@ -101,8 +93,7 @@ in `PermissionRuleset.Default`
 ## Known limitations
 
 - `bash` captures stdout+stderr into a capped buffer — output above `MaxOutputChars = 100_000`
-  chars is truncated rather than streamed
-  (`src/Harbor.Tools.Builtin/Tools/Bash/BashTool.cs:107`).
+  chars is truncated rather than streamed (`src/Harbor.Tools.Builtin/Tools/Bash/BashTool.cs:107`).
 - `task` validates but does not execute sub-agents (`Tools/Task/TaskTool.cs`).
 
 ## See also

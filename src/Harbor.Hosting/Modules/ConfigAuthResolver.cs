@@ -1,7 +1,4 @@
 using CSharpFunctionalExtensions;
-using Harbor.Application.Configuration;
-using Harbor.Providers.OpenAiCompatible;
-
 namespace Harbor.Hosting;
 
 /// <summary>Adapter that resolves API key via AuthStore.</summary>

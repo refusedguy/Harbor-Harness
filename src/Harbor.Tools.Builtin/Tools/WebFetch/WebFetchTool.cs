@@ -1,12 +1,13 @@
+using Microsoft.Extensions.Logging;
 using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Fetches a URL and returns its content as markdown (HTML stripped, code kept, links
 ///     inlined). Uses a shared <see cref="HttpClient" />, follows redirects manually with
@@ -59,7 +60,7 @@ public sealed class WebFetchTool : ITool
     ///     <see cref="HttpClient" />. This is the constructor used by DI.
     /// </summary>
     /// <param name="logger">Logger for diagnostics.</param>
-    public WebFetchTool(ILogger<WebFetchTool> logger) : this(logger, () => SharedClient, allowedHosts: null)
+    public WebFetchTool(ILogger<WebFetchTool> logger) : this(logger, () => SharedClient, null)
     {
     }
 
@@ -180,7 +181,7 @@ public sealed class WebFetchTool : ITool
     {
         string url = args.GetProperty("url").GetString()!;
         string? selector = JsonArgs.GetString(args, "selector");
-        int maxChars = JsonArgs.GetInt(args, "maxChars") is { } chars
+        int maxChars = JsonArgs.GetInt(args, "maxChars") is {} chars
             ? Math.Clamp(chars, 1, HardMaxChars)
             : DefaultMaxChars;
 
@@ -199,8 +200,8 @@ public sealed class WebFetchTool : ITool
             return ToolResult.Error(fetched.Error);
         }
 
-        HttpResponseMessage response = fetched.Value.Response;
-        Uri finalUri = fetched.Value.FinalUri;
+        var response = fetched.Value.Response;
+        var finalUri = fetched.Value.FinalUri;
         int hops = fetched.Value.Hops;
 
         using (response)
@@ -298,16 +299,6 @@ public sealed class WebFetchTool : ITool
         };
     }
 
-    /// <summary>Successful terminal state of a redirect-aware fetch (ROP-A Z1 п.1).</summary>
-    /// <param name="FinalUri">The URI the response ultimately came from.</param>
-    /// <param name="Response">The final (non-redirect) response.</param>
-    /// <param name="Hops">Number of HTTP requests issued (1 = no redirects).</param>
-    /// <remarks>
-    ///     Replaces the former nullable-quadruple <c>FetchOutcome</c>: an
-    ///     invalid "error AND response present" state is now unrepresentable.
-    /// </remarks>
-    private sealed record FetchOk(Uri FinalUri, HttpResponseMessage Response, int Hops);
-
     /// <summary>
     ///     GET a URL following up to <see cref="MaxRedirectHops" /> redirects
     ///     manually. Every hop — original URL included — is validated via
@@ -320,7 +311,7 @@ public sealed class WebFetchTool : ITool
         string url,
         CancellationToken ct)
     {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? current)
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var current)
             || current.Scheme != "http" && current.Scheme != "https")
         {
             return Result.Failure<FetchOk>($"'url' must be an absolute http(s) URL: {url}");
@@ -374,10 +365,10 @@ public sealed class WebFetchTool : ITool
             }
 
             bool isRedirect = resp.StatusCode
-                is HttpStatusCode.MovedPermanently   // 301
-                or HttpStatusCode.Found              // 302
-                or HttpStatusCode.SeeOther           // 303
-                or HttpStatusCode.TemporaryRedirect  // 307
+                is HttpStatusCode.MovedPermanently // 301
+                or HttpStatusCode.Found // 302
+                or HttpStatusCode.SeeOther // 303
+                or HttpStatusCode.TemporaryRedirect // 307
                 or HttpStatusCode.PermanentRedirect; // 308
 
             if (!isRedirect)
@@ -385,7 +376,7 @@ public sealed class WebFetchTool : ITool
                 return Result.Success(new FetchOk(current, resp, hop + 1));
             }
 
-            Uri? location = resp.Headers.Location;
+            var location = resp.Headers.Location;
             if (location is null)
             {
                 // 3xx without Location — no hop to follow; hand the response
@@ -393,7 +384,7 @@ public sealed class WebFetchTool : ITool
                 return Result.Success(new FetchOk(current, resp, hop + 1));
             }
 
-            Uri next = location.IsAbsoluteUri ? location : new Uri(current, location);
+            var next = location.IsAbsoluteUri ? location : new Uri(current, location);
             resp.Dispose();
 
             if (next.Scheme != "http" && next.Scheme != "https")
@@ -464,7 +455,7 @@ public sealed class WebFetchTool : ITool
             return $"Blocked URL '{uri}' (fail-closed): host '{host}' resolved to no addresses.";
         }
 
-        foreach (IPAddress address in addresses)
+        foreach (var address in addresses)
         {
             if (!IsNonPublicAddress(address))
             {
@@ -492,27 +483,27 @@ public sealed class WebFetchTool : ITool
     {
         // Normalize IPv6-mapped IPv4 (::ffff:a.b.c.d) down to plain IPv4 so
         // the same v4 rules apply.
-        IPAddress normalized = address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
+        var normalized = address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
 
         if (normalized.AddressFamily == AddressFamily.InterNetwork)
         {
             byte[] b = normalized.GetAddressBytes();
-            return b[0] == 0                             // 0.0.0.0/8 "this network"
-                || b[0] == 127                           // loopback 127.0.0.0/8
-                || b[0] == 10                            // RFC1918 10.0.0.0/8
-                || (b[0] == 172 && (b[1] & 0xF0) == 16)  // RFC1918 172.16.0.0/12
-                || (b[0] == 192 && b[1] == 168)          // RFC1918 192.168.0.0/16
-                || (b[0] == 169 && b[1] == 254)          // link-local 169.254.0.0/16 (cloud metadata!)
-                || normalized.Equals(IPAddress.Broadcast); // 255.255.255.255
+            return b[0] == 0 // 0.0.0.0/8 "this network"
+                   || b[0] == 127 // loopback 127.0.0.0/8
+                   || b[0] == 10 // RFC1918 10.0.0.0/8
+                   || b[0] == 172 && (b[1] & 0xF0) == 16 // RFC1918 172.16.0.0/12
+                   || b[0] == 192 && b[1] == 168 // RFC1918 192.168.0.0/16
+                   || b[0] == 169 && b[1] == 254 // link-local 169.254.0.0/16 (cloud metadata!)
+                   || normalized.Equals(IPAddress.Broadcast); // 255.255.255.255
         }
 
         byte[] v6 = normalized.GetAddressBytes();
         return v6.Length == 16
-            && (IPAddress.IPv6Any.Equals(normalized)     // :: unspecified
-                || IPAddress.IPv6Loopback.Equals(normalized) // ::1
-                || normalized.IsIPv6LinkLocal            // fe80::/10
-                || (v6[0] & 0xFE) == 0xFC                // unique-local fc00::/7
-                || normalized.IsIPv6Multicast);          // ff00::/8 — never fetchable
+               && (IPAddress.IPv6Any.Equals(normalized) // :: unspecified
+                   || IPAddress.IPv6Loopback.Equals(normalized) // ::1
+                   || normalized.IsIPv6LinkLocal // fe80::/10
+                   || (v6[0] & 0xFE) == 0xFC // unique-local fc00::/7
+                   || normalized.IsIPv6Multicast); // ff00::/8 — never fetchable
     }
 
     private static async Task<byte[]> ReadCappedAsync(
@@ -714,4 +705,14 @@ public sealed class WebFetchTool : ITool
 
     private static string StripTags(string s)
         => Regex.Replace(s, @"<[^>]+>", string.Empty);
+
+    /// <summary>Successful terminal state of a redirect-aware fetch (ROP-A Z1 п.1).</summary>
+    /// <param name="FinalUri">The URI the response ultimately came from.</param>
+    /// <param name="Response">The final (non-redirect) response.</param>
+    /// <param name="Hops">Number of HTTP requests issued (1 = no redirects).</param>
+    /// <remarks>
+    ///     Replaces the former nullable-quadruple <c>FetchOutcome</c>: an
+    ///     invalid "error AND response present" state is now unrepresentable.
+    /// </remarks>
+    private sealed record FetchOk(Uri FinalUri, HttpResponseMessage Response, int Hops);
 }

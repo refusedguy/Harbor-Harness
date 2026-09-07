@@ -1,14 +1,6 @@
-using Harbor.Application.Agents;
-using Harbor.Application.Onboarding;
-using Harbor.Application.Resilience;
-using Harbor.Application.Sessions;
-using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tools;
+using Harbor.Application.Providers;
 using Harbor.Diagnostics;
 using Harbor.Telemetry;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Hosting;
 
 internal static class CoreModule
@@ -28,11 +20,11 @@ internal static class CoreModule
         services.AddSingleton<OnboardingWizard>();
         // PROD-UI-0 З.2: cheap "test connection" probe shared by the CLI
         // wizard, the desktop onboarding VM and future model pickers.
-        services.AddSingleton<Harbor.Abstractions.Providers.IProviderHealthCheck>(sp =>
-            new Harbor.Application.Providers.ProviderHealthCheck(
-                sp.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(),
-                sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
-                    .CreateLogger<Harbor.Application.Providers.ProviderHealthCheck>()));
+        services.AddSingleton<IProviderHealthCheck>(sp =>
+            new ProviderHealthCheck(
+                sp.GetRequiredService<IProviderRegistry>(),
+                sp.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger<ProviderHealthCheck>()));
         services.AddSingleton<ITokenTracker, TokenTracker>();
         services.AddSingleton<ISystemPromptBuilder>(sp => new SystemPromptBuilder(sp.GetRequiredService<ILogger<SystemPromptBuilder>>()));
         services.AddSingleton<ISkillProvider, SkillProvider>();

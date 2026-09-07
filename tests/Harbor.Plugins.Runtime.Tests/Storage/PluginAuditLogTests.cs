@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
@@ -9,7 +8,7 @@ using Harbor.Plugins.Registration;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Text.Json;
 namespace Harbor.Plugins.Runtime.Tests.Storage;
 
 /// <summary>
@@ -20,10 +19,10 @@ namespace Harbor.Plugins.Runtime.Tests.Storage;
 /// </summary>
 public sealed class PluginAuditLogTests : IDisposable
 {
-    private readonly string _root;
     private readonly string _harborDir;
-    private readonly string _pluginsDir;
     private readonly string _logPath;
+    private readonly string _pluginsDir;
+    private readonly string _root;
 
     public PluginAuditLogTests()
     {
@@ -36,7 +35,7 @@ public sealed class PluginAuditLogTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); }
+        try { Directory.Delete(_root, true); }
         catch (IOException)
         { /* best-effort cleanup */
         }
@@ -48,7 +47,7 @@ public sealed class PluginAuditLogTests : IDisposable
     private static async Task<IReadOnlyList<JsonElement>> ReadLinesAsync(string path)
     {
         var lines = new List<JsonElement>();
-        foreach (var line in await File.ReadAllLinesAsync(path))
+        foreach (string line in await File.ReadAllLinesAsync(path))
         {
             if (line.Length == 0)
                 continue;
@@ -154,15 +153,15 @@ public sealed class PluginAuditLogTests : IDisposable
             capabilities: policy.GetGrantedCapabilities(loaded!),
             audit: audit);
         var ctx = new ToolContext(
-            SessionId: "session-1",
-            MessageId: "msg-1",
-            CallId: "call-1",
-            Agent: "code",
-            Abort: CancellationToken.None,
-            Messages: Array.Empty<AgentMessage>(),
-            ReportProgress: (_, _) => Task.CompletedTask,
-            Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-            Services: null!);
+            "session-1",
+            "msg-1",
+            "call-1",
+            "code",
+            CancellationToken.None,
+            Array.Empty<AgentMessage>(),
+            (_, _) => Task.CompletedTask,
+            (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
+            null!);
         var result = await tool.ExecuteAsync(
             JsonDocument.Parse("""{"url":"https://www.google.com/search?q=hello"}""").RootElement.Clone(),
             ctx);

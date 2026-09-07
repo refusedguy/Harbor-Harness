@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 namespace Harbor.Abstractions.Sessions;
+
 /// <summary>
 ///     Compaction service — summarizes session when context window is exceeded.
 /// </summary>

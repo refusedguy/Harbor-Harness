@@ -1,14 +1,11 @@
-using System.Diagnostics;
-using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Harbor.App.Avalonia.ViewModels;
-using Harbor.App.Avalonia.Views;
-
+using Harbor.Desktop.Abstractions.Configuration;
+using System.Text.Json;
 // The test project namespace Harbor.E2E.App.Avalonia shadows the production
 // Harbor.App.Avalonia namespace, so we alias the production App class.
-using HarborApp = global::Harbor.App.Avalonia.App;
 
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
@@ -51,9 +48,25 @@ public abstract class ComponentTestBase
 
     private static readonly Dictionary<string, HeadlessAvaloniaDriver> _drivers = new();
     private static HeadlessAvaloniaDriver? _current;
-    private static string _currentShotDir = ScreenshotDir;
-    private static string _currentTempHome = string.Empty;
     private static int _screenshotIndex;
+
+    /// <summary>The CURRENT class's driver (set by GetDriverAsync in [Before]).</summary>
+    protected static HeadlessAvaloniaDriver Driver
+        => _current ?? throw new InvalidOperationException("GetDriverAsync(key) did not run.");
+
+    /// <summary>The current class's screenshot directory.</summary>
+    protected static string CurrentShotDir { get; private set; } = ScreenshotDir;
+
+    /// <summary>The current class's isolated temp HOME (config.json lives here).</summary>
+    protected static string TempHome { get; private set; } = string.Empty;
+
+    /// <summary>The main Avalonia window from the driver.</summary>
+    protected static Window MainWindow => Driver.MainWindow;
+
+    /// <summary>Get the bound MainViewModel from the main window's DataContext.</summary>
+    internal static MainViewModel Vm => UI(() =>
+        Driver.MainWindow.DataContext as MainViewModel
+        ?? throw new InvalidOperationException("MainViewModel not bound."));
 
     /// <summary>
     ///     A11 (sprint 5): PER-CLASS driver isolation. Every derived class gets
@@ -69,14 +82,14 @@ public abstract class ComponentTestBase
         if (_drivers.TryGetValue(ownerKey, out var existing))
         {
             _current = existing;
-            _currentShotDir = Path.Combine(ScreenshotRoot, ownerKey);
+            CurrentShotDir = Path.Combine(ScreenshotRoot, ownerKey);
             return existing;
         }
 
         string shotDir = Path.Combine(ScreenshotRoot, ownerKey);
         if (Directory.Exists(shotDir))
         {
-            Directory.Delete(shotDir, recursive: true);
+            Directory.Delete(shotDir, true);
         }
         Directory.CreateDirectory(shotDir);
 
@@ -85,62 +98,44 @@ public abstract class ComponentTestBase
             $"harbor-avalonia-ct-{ownerKey.ToLowerInvariant()}");
         if (Directory.Exists(tempHome))
         {
-            Directory.Delete(tempHome, recursive: true);
+            Directory.Delete(tempHome, true);
         }
         Directory.CreateDirectory(tempHome);
-        var harborDir = Path.Combine(tempHome, ".harbor");
+        string harborDir = Path.Combine(tempHome, ".harbor");
         Directory.CreateDirectory(harborDir);
         await File.WriteAllTextAsync(
-            Path.Combine(harborDir, "config.json"),
-            JsonSerializer.Serialize(new
-            {
-                configVersion = "1",
-                onboardingCompleted = true,
-                storageBackend = "memory",
-                logLevel = "warning",
-                defaultProvider = "ollama",
-                defaultModel = "qwen2.5-coder:7b",
-                defaultAgent = "code",
-            }, new JsonSerializerOptions { WriteIndented = true }))
+                Path.Combine(harborDir, "config.json"),
+                JsonSerializer.Serialize(new
+                {
+                    configVersion = "1",
+                    onboardingCompleted = true,
+                    storageBackend = "memory",
+                    logLevel = "warning",
+                    defaultProvider = "ollama",
+                    defaultModel = "qwen2.5-coder:7b",
+                    defaultAgent = "code"
+                }, new JsonSerializerOptions { WriteIndented = true }))
             .ConfigureAwait(false);
 
         // A11: pin the process-wide harbor home BEFORE host build so this
         // class's stores read/write ITS config, not the first class's.
-        Harbor.Desktop.Abstractions.Configuration.CommonConfig
+        CommonConfig
             .OverrideHarborHomeForTests(harborDir);
 
         var driver = new HeadlessAvaloniaDriver(shotDir, tempHome);
         await driver.InitializeAsync().ConfigureAwait(false);
         _drivers[ownerKey] = driver;
         _current = driver;
-        _currentShotDir = shotDir;
-        _currentTempHome = tempHome;
+        CurrentShotDir = shotDir;
+        TempHome = tempHome;
         return driver;
     }
-
-    /// <summary>The CURRENT class's driver (set by GetDriverAsync in [Before]).</summary>
-    protected static HeadlessAvaloniaDriver Driver
-        => _current ?? throw new InvalidOperationException("GetDriverAsync(key) did not run.");
-
-    /// <summary>The current class's screenshot directory.</summary>
-    protected static string CurrentShotDir => _currentShotDir;
-
-    /// <summary>The current class's isolated temp HOME (config.json lives here).</summary>
-    protected static string TempHome => _currentTempHome;
-
-    /// <summary>The main Avalonia window from the driver.</summary>
-    protected static Window MainWindow => Driver.MainWindow;
 
     /// <summary>Run an arbitrary delegate on the UI thread.</summary>
     protected static void UI(Action action) => Driver.OnUIThread(action);
 
     /// <summary>Run an arbitrary delegate on the UI thread and return its result.</summary>
     protected static T UI<T>(Func<T> fn) => Driver.OnUIThread(fn);
-
-    /// <summary>Get the bound MainViewModel from the main window's DataContext.</summary>
-    internal static MainViewModel Vm => UI(() =>
-        (Driver.MainWindow.DataContext as MainViewModel)
-        ?? throw new InvalidOperationException("MainViewModel not bound."));
 
     /// <summary>
     ///     Capture a screenshot with a sequential <c>ct-</c> prefix name.
@@ -150,28 +145,28 @@ public abstract class ComponentTestBase
     /// <returns>Absolute path to the saved PNG.</returns>
     protected static async Task<string> CaptureAsync(string logicalName)
     {
-        var idx = Interlocked.Increment(ref _screenshotIndex);
-        var fileName = $"ct-{idx:00}-{logicalName}";
-        var path = await Driver.ScreenshotAsync(fileName).ConfigureAwait(false);
+        int idx = Interlocked.Increment(ref _screenshotIndex);
+        string fileName = $"ct-{idx:00}-{logicalName}";
+        string path = await Driver.ScreenshotAsync(fileName).ConfigureAwait(false);
         return path;
     }
 
     /// <summary>
     ///     Capture a screenshot of the standalone OnboardingWindow (which is
-    ///     a separate Avalonia <see cref="Window"/>, not a child of MainWindow).
+    ///     a separate Avalonia <see cref="Window" />, not a child of MainWindow).
     /// </summary>
     /// <param name="window">The onboarding window to capture.</param>
     /// <param name="logicalName">Logical name (no extension, no prefix).</param>
     /// <returns>Absolute path to the saved PNG.</returns>
     protected static async Task<string> CaptureOnboardingWindowAsync(Window window, string logicalName)
     {
-        var idx = Interlocked.Increment(ref _screenshotIndex);
-        var fileName = $"ct-{idx:00}-{logicalName}.png";
-        var path = Path.Combine(_currentShotDir, fileName);
+        int idx = Interlocked.Increment(ref _screenshotIndex);
+        string fileName = $"ct-{idx:00}-{logicalName}.png";
+        string path = Path.Combine(CurrentShotDir, fileName);
         Dispatcher.UIThread.InvokeAsync(() =>
         {
             window.UpdateLayout();
-            AvaloniaHeadlessPlatform.ForceRenderTimerTick(1);
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             var bitmap = window.CaptureRenderedFrame();
             if (bitmap is not null)
             {

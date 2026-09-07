@@ -1,5 +1,3 @@
-using System;
-
 namespace Harbor.Abstractions.Contracts;
 
 /// <summary>
@@ -9,9 +7,18 @@ namespace Harbor.Abstractions.Contracts;
 ///     this attribute and emits a dispatch table replacing the manual
 ///     <c>switch</c> expression in the host class.
 /// </summary>
-[AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Field)]
 public sealed class MoodFrameAttribute : Attribute
 {
+
+    /// <summary>
+    ///     Initializes a new instance of <see cref="MoodFrameAttribute" />.
+    /// </summary>
+    /// <param name="frameBank">The name of the frame-bank static field.</param>
+    public MoodFrameAttribute(string frameBank)
+    {
+        FrameBank = frameBank;
+    }
     /// <summary>
     ///     Gets or sets the name of the static field holding the frame bank
     ///     for this mood value. Required.
@@ -30,13 +37,4 @@ public sealed class MoodFrameAttribute : Attribute
     ///     row for this mood. Optional.
     /// </summary>
     public string? PanelPaws { get; set; }
-
-    /// <summary>
-    ///     Initializes a new instance of <see cref="MoodFrameAttribute" />.
-    /// </summary>
-    /// <param name="frameBank">The name of the frame-bank static field.</param>
-    public MoodFrameAttribute(string frameBank)
-    {
-        FrameBank = frameBank;
-    }
 }

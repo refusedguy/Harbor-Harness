@@ -1,6 +1,7 @@
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 namespace Harbor.Terminal.Abstractions.Views;
+
 /// <summary>
 ///     Builtin diff preview view — renders <see cref="DiffPreviewViewModel" /> state: the
 ///     currently selected <see cref="DiffEntry" /> with a "Diff N of M" header and navigation
@@ -30,7 +31,7 @@ public sealed class DiffPreviewView : TuiViewBase<DiffPreviewViewModel>
     /// <inheritdoc />
     public override Task RenderAsync(ITuiRenderContext context, CancellationToken ct = default)
     {
-        var vm = this.ViewModel;
+        var vm = ViewModel;
         if (vm is null || vm.Diffs.Count == 0)
         {
             return Task.CompletedTask;

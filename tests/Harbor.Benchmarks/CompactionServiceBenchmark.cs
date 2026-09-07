@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Text.Json;
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -8,7 +6,10 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 namespace Harbor.Benchmarks;
+
 /// <summary>
 ///     Benchmarks <see cref="CompactionService" /> — invoked at the start of every agent turn to
 ///     decide whether the session history must be summarized/pruned before the next LLM call.
@@ -180,7 +181,7 @@ internal sealed class StubProviderRegistry : IProviderRegistry
     public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
         => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(Array.Empty<ModelInfo>()));
 
-    public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
+    public void Register(ProviderId providerId, Func<ILlmClient> factory) {}
 
     public Result Unregister(ProviderId providerId) => Result.Success();
 }

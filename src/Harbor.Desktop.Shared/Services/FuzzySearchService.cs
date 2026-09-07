@@ -1,4 +1,5 @@
 namespace Harbor.Desktop.Shared.Services;
+
 /// <summary>
 ///     Lightweight fuzzy-search service for the command palette. Uses a
 ///     simplified subsequence-match score (à la Sublime Text / VS Code

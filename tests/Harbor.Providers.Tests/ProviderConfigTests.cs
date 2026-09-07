@@ -1,9 +1,10 @@
-using System.Net;
-using System.Text;
 using Harbor.Abstractions.Models;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
+using System.Text;
 namespace Harbor.Providers.Tests;
+
 /// <summary>
 ///     Tests for ProviderConfig.LoadFromFile — JSON parsing and validation.
 /// </summary>

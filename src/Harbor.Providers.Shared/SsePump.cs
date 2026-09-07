@@ -4,14 +4,8 @@
 // travels as a linked file instead of a shared assembly. One source of truth,
 // four identical internal copies — no cross-provider coupling.
 
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Threading.Channels;
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Providers;
 using Microsoft.Extensions.Logging;
-
+using System.Threading.Channels;
 namespace Harbor.Providers.Internal;
 
 /// <summary>

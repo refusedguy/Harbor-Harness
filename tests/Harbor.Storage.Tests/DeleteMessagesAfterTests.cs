@@ -1,6 +1,5 @@
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Memory;
-
 namespace Harbor.Storage.Tests;
 
 /// <summary>
@@ -36,14 +35,14 @@ public class DeleteMessagesAfterTests
     private static async Task<List<AgentMessage>> ReadIdsAsync(MemorySessionStore store, string sessionId)
     {
         var read = await store.GetMessagesAsync(sessionId);
-        return [.. read.Value];
+        return [..read.Value];
     }
 
     [Test]
     public async Task Deletes_Tail_Keeps_Anchor_AndPrefix()
     {
         var store = Create();
-        var (sessionId, ids) = await SeedAsync(store, 5);
+        (string sessionId, var ids) = await SeedAsync(store, 5);
 
         var result = await store.DeleteMessagesAfterAsync(sessionId, ids[1]);
 
@@ -60,7 +59,7 @@ public class DeleteMessagesAfterTests
     public async Task Anchor_Is_Last_Message_Deletes_Nothing()
     {
         var store = Create();
-        var (sessionId, ids) = await SeedAsync(store, 3);
+        (string sessionId, var ids) = await SeedAsync(store, 3);
 
         var result = await store.DeleteMessagesAfterAsync(sessionId, ids[^1]);
 
@@ -74,7 +73,7 @@ public class DeleteMessagesAfterTests
     public async Task Unknown_Message_Id_Fails()
     {
         var store = Create();
-        var (sessionId, _) = await SeedAsync(store, 2);
+        (string sessionId, _) = await SeedAsync(store, 2);
 
         var result = await store.DeleteMessagesAfterAsync(sessionId, "no-such-message");
 
@@ -96,7 +95,7 @@ public class DeleteMessagesAfterTests
     public async Task Truncate_Then_Append_Works_Afterwards()
     {
         var store = Create();
-        var (sessionId, ids) = await SeedAsync(store, 4);
+        (string sessionId, var ids) = await SeedAsync(store, 4);
         await store.DeleteMessagesAfterAsync(sessionId, ids[0]);
 
         var fresh = new UserMessage(

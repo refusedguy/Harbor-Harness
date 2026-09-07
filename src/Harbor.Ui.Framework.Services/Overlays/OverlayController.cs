@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using Harbor.Ui.Framework.Services;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ui.Framework.Overlays;
 
 /// <summary>
@@ -12,8 +8,8 @@ namespace Harbor.Ui.Framework.Overlays;
 /// </summary>
 public sealed class OverlayController : IDisposable
 {
-    private readonly IOverlayStack _stack;
     private readonly Dictionary<string, Action<bool>> _setters = new();
+    private readonly IOverlayStack _stack;
     private bool _disposed;
 
     public OverlayController(IOverlayStack? stack = null)
@@ -25,6 +21,13 @@ public sealed class OverlayController : IDisposable
     }
 
     public bool HasOverlay { get; private set; }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _stack.Popped -= OnPopped;
+        _disposed = true;
+    }
 
     public void Register(string id, Action<bool> setter)
     {
@@ -49,7 +52,7 @@ public sealed class OverlayController : IDisposable
 
     public bool CloseTop()
     {
-        var top = _stack.Current;
+        string? top = _stack.Current;
         if (top is null) return false;
         Close(top);
         _stack.PopTop();
@@ -60,12 +63,5 @@ public sealed class OverlayController : IDisposable
     {
         if (id is not null)
             Close(id);
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _stack.Popped -= OnPopped;
-        _disposed = true;
     }
 }

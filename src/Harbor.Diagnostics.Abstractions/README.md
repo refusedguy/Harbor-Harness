@@ -8,11 +8,11 @@ Harbor's **innermost telemetry contracts** — `ITracer`, `IMetrics`, and `Corre
 
 ## What's in it
 
-| File | Purpose |
-|------|---------|
-| `TelemetryContracts.cs` | `ITracer`, `IMetrics`, `ITelemetrySpan` interfaces |
-| `Correlation.cs` | `CorrelationContext` record and ambient `Correlation.Current` / `Push` scope |
-| `NullTelemetry.cs` | `NullTracer` and `NullMetrics` no-op implementations |
+| File                    | Purpose                                                                      |
+|-------------------------|------------------------------------------------------------------------------|
+| `TelemetryContracts.cs` | `ITracer`, `IMetrics`, `ITelemetrySpan` interfaces                           |
+| `Correlation.cs`        | `CorrelationContext` record and ambient `Correlation.Current` / `Push` scope |
+| `NullTelemetry.cs`      | `NullTracer` and `NullMetrics` no-op implementations                         |
 
 ## Public API summary
 

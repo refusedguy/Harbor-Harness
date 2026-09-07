@@ -3,6 +3,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
 namespace Harbor.Benchmarks;
+
 /// <summary>
 ///     Benchmarks <see cref="HeuristicTokenEstimator" /> on text payloads of
 ///     varying sizes. The estimator counts CJK chars (×0.5 tokens) and

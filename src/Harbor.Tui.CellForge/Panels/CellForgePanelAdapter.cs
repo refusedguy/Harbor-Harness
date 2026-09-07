@@ -1,7 +1,5 @@
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Tui.CellForge.Panels;
 
 /// <summary>
@@ -68,7 +66,7 @@ public static class CellForgePanelAdapter
         string s => SplitLines(s),
         IReadOnlyList<string> rows => rows,
         IEnumerable<string> lines => lines.Select(l => l ?? string.Empty).ToArray(),
-        _ => SplitLines(widget.ToString() ?? string.Empty),
+        _ => SplitLines(widget.ToString() ?? string.Empty)
     };
 
     private static IReadOnlyList<string> SplitLines(string text) =>

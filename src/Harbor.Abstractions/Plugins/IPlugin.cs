@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Abstractions.Plugins;
+
 /// <summary>
 ///     Base contract for Harbor plugins. Implements Plugin pattern.
 ///     Plugins can be:

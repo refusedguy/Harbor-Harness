@@ -14,8 +14,10 @@ public sealed class SessionForkRunner
     private readonly ISessionStore _store;
 
     /// <summary>Construct over any backend — branching is store-generic by design.</summary>
-    public SessionForkRunner(ISessionStore store) =>
+    public SessionForkRunner(ISessionStore store)
+    {
         _store = store ?? throw new ArgumentNullException(nameof(store));
+    }
 
     /// <summary>
     ///     Fork <paramref name="sessionId" /> at <paramref name="messageId" />.
@@ -31,7 +33,7 @@ public sealed class SessionForkRunner
         if (string.IsNullOrWhiteSpace(messageId))
             return Result.Failure<ForkOutcome>("Message id must not be empty.");
 
-        Result<SessionFork> forked = await new SessionForkService()
+        var forked = await new SessionForkService()
             .ForkAsync(_store, sessionId, messageId, ct: ct).ConfigureAwait(false);
         return forked.Match(
             outcome => Result.Success(new ForkOutcome(outcome.Session.Id, outcome.Copied)),

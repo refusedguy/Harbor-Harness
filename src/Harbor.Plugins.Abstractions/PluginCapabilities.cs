@@ -1,3 +1,4 @@
+using System.Text;
 namespace Harbor.Plugins.Abstractions;
 
 /// <summary>
@@ -24,7 +25,7 @@ public enum PluginCapability
     SubAgents,
 
     /// <summary>Read environment variables (Environment.GetEnvironmentVariable).</summary>
-    ReadEnv,
+    ReadEnv
 }
 
 /// <summary>
@@ -42,8 +43,11 @@ public static class PluginCapabilities
         PluginCapability.RunProcesses,
         PluginCapability.HttpRequests,
         PluginCapability.SubAgents,
-        PluginCapability.ReadEnv,
+        PluginCapability.ReadEnv
     ];
+
+    private static readonly IReadOnlySet<PluginCapability> FrozenEmpty =
+        new HashSet<PluginCapability>();
 
     /// <summary>
     ///     Parse a comma/space-separated capability list. Returns failure on any unknown
@@ -55,7 +59,7 @@ public static class PluginCapabilities
             return Result.Success<IReadOnlySet<PluginCapability>>(FrozenEmpty);
 
         var result = new HashSet<PluginCapability>();
-        foreach (var raw in csv.Split([',', ' ', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (string raw in csv.Split([',', ' ', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             if (!TryParseSingle(raw, out var capability))
                 return Result.Failure<IReadOnlySet<PluginCapability>>($"Unknown plugin capability '{raw}'.");
@@ -71,7 +75,7 @@ public static class PluginCapabilities
     /// </summary>
     public static string ToManifestString(IReadOnlySet<PluginCapability> capabilities)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         foreach (var cap in capabilities)
         {
             if (sb.Length > 0)
@@ -91,7 +95,7 @@ public static class PluginCapabilities
         PluginCapability.HttpRequests => "http_requests",
         PluginCapability.SubAgents => "sub_agents",
         PluginCapability.ReadEnv => "read_env",
-        _ => throw new ArgumentOutOfRangeException(nameof(capability), capability, null),
+        _ => throw new ArgumentOutOfRangeException(nameof(capability), capability, null)
     };
 
     private static bool TryParseSingle(string name, out PluginCapability capability)
@@ -104,11 +108,8 @@ public static class PluginCapabilities
             "http_requests" => PluginCapability.HttpRequests,
             "sub_agents" => PluginCapability.SubAgents,
             "read_env" => PluginCapability.ReadEnv,
-            _ => PluginCapability.ReadFiles,
+            _ => PluginCapability.ReadFiles
         };
         return name is "read_files" or "write_files" or "run_processes" or "http_requests" or "sub_agents" or "read_env";
     }
-
-    private static readonly IReadOnlySet<PluginCapability> FrozenEmpty =
-        new HashSet<PluginCapability>();
 }

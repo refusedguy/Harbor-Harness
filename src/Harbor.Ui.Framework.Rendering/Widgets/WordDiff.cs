@@ -1,5 +1,4 @@
-using Harbor.Ui.Framework.Rendering;
-
+using System.Text;
 namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>Segment kind inside an intraline (word-level) diff.</summary>
@@ -7,16 +6,16 @@ public enum WordSegKind : byte
 {
     Equal,
     Deleted,
-    Added,
+    Added
 }
 
 /// <summary>One contiguous run of words sharing a diff kind.</summary>
 public readonly record struct WordSeg(WordSegKind Kind, string Text);
 
 /// <summary>
-/// Per-row projections of an intraline (word-level) diff. Shared tokens keep
-/// their SOURCE ORDER in each projection, so both rows read naturally while
-/// anchoring on exactly the same matched words.
+///     Per-row projections of an intraline (word-level) diff. Shared tokens keep
+///     their SOURCE ORDER in each projection, so both rows read naturally while
+///     anchoring on exactly the same matched words.
 /// </summary>
 /// <param name="Removed">Old-line view: Equal runs plus Deleted runs.</param>
 /// <param name="Inserted">New-line view: Equal runs plus Added runs.</param>
@@ -25,21 +24,21 @@ public sealed record WordDiffSides(
     IReadOnlyList<WordSeg> Inserted);
 
 /// <summary>
-/// Whitespace-token intraline diff between a removed and an added diff row
-/// (git --word-diff equivalent). An LCS finds matched word pairs; each row is
-/// then projected independently around those matches. Pure functions; no
-/// allocation beyond result records.
+///     Whitespace-token intraline diff between a removed and an added diff row
+///     (git --word-diff equivalent). An LCS finds matched word pairs; each row is
+///     then projected independently around those matches. Pure functions; no
+///     allocation beyond result records.
 /// </summary>
 public static class WordDiff
 {
     /// <summary>Either side may be empty (pure add or pure delete line).</summary>
     public static WordDiffSides Segment(string oldLine, string newLine)
     {
-        var oldTok = Tokenize(oldLine ?? string.Empty);
-        var newTok = Tokenize(newLine ?? string.Empty);
+        string[] oldTok = Tokenize(oldLine ?? string.Empty);
+        string[] newTok = Tokenize(newLine ?? string.Empty);
 
         // Matched pair indices collected from the classic backtrack.
-        var (matchOld, matchNew) = Matches(oldTok, newTok);
+        (int[] matchOld, int[] matchNew) = Matches(oldTok, newTok);
         return new WordDiffSides(
             Project(oldTok, matchOld, WordSegKind.Deleted),
             Project(newTok, matchNew, WordSegKind.Added));
@@ -60,9 +59,9 @@ public static class WordDiff
             }
         }
 
-        var oldMatch = new int[a.Length];
+        int[] oldMatch = new int[a.Length];
         Array.Fill(oldMatch, -1);
-        var newMatch = new int[b.Length];
+        int[] newMatch = new int[b.Length];
         Array.Fill(newMatch, -1);
 
         int x = a.Length;
@@ -95,8 +94,8 @@ public static class WordDiff
     private static List<WordSeg> Project(string[] tokens, int[] match, WordSegKind gapKind)
     {
         var runs = new List<WordSeg>(tokens.Length);
-        var buffer = new System.Text.StringBuilder();
-        WordSegKind current = WordSegKind.Equal;
+        var buffer = new StringBuilder();
+        var current = WordSegKind.Equal;
 
         void Flush()
         {
@@ -109,7 +108,7 @@ public static class WordDiff
 
         for (int t = 0; t < tokens.Length; t++)
         {
-            WordSegKind kind = match[t] >= 0 ? WordSegKind.Equal : gapKind;
+            var kind = match[t] >= 0 ? WordSegKind.Equal : gapKind;
             if (kind != current && buffer.Length > 0)
             {
                 Flush();
@@ -129,9 +128,9 @@ public static class WordDiff
     }
 
     /// <summary>
-    /// Pair a Delete row with its following Add row (widgets §3.10): both
-    /// sides share the same matched anchors; callers pick the side matching
-    /// their row kind.
+    ///     Pair a Delete row with its following Add row (widgets §3.10): both
+    ///     sides share the same matched anchors; callers pick the side matching
+    ///     their row kind.
     /// </summary>
     public static WordDiffSides? TryPair(DiffLine delete, DiffLine add) =>
         delete.Kind == DiffLineKind.Delete && add.Kind == DiffLineKind.Add

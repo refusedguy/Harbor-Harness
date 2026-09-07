@@ -1,10 +1,10 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
+using System.Collections.ObjectModel;
 namespace Harbor.Ui.Framework.ViewModels;
+
 /// <summary>
 ///     Token-usage chart view-model. Records a snapshot per turn (input/output tokens
 ///     + cost) and exposes them as bar-chart rows for the <c>TokenUsageView</c>.

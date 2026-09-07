@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 namespace Harbor.Ipc.Protocol;
+
 /// <summary>
 ///     Broadcasts <see cref="HarborEvent" />s to all connected client streams.
 /// </summary>
@@ -10,7 +11,7 @@ namespace Harbor.Ipc.Protocol;
 ///         <see cref="HarborEvent" /> (using a projection identical to
 ///         <c>InProcessHarborClient.ProjectEvent</c>). Each projected event
 ///         is serialized once into an <see cref="EventEnvelope" />, stamped
-///         with a monotonic <see cref="EventEnvelope.Sequence"/>, appended to
+///         with a monotonic <see cref="EventEnvelope.Sequence" />, appended to
 ///         the replay ring, and fanned out into each registered client's
 ///         outbound queue.
 ///     </para>
@@ -30,8 +31,8 @@ namespace Harbor.Ipc.Protocol;
 ///     </para>
 ///     <para>
 ///         <b>Replay (A1):</b> the ring retains the last
-///         <see cref="MaxReplayEnvelopes"/> envelopes. A reconnecting client
-///         sends its <see cref="SubscribeToEventsRequest.LastSequence"/>; gaps
+///         <see cref="MaxReplayEnvelopes" /> envelopes. A reconnecting client
+///         sends its <see cref="SubscribeToEventsRequest.LastSequence" />; gaps
 ///         that fit the ring are replayed into its outbound queue BEFORE live
 ///         delivery starts (single queue ⇒ order preserved); larger gaps get
 ///         <c>ResyncRequired</c> so the client rebuilds from a fresh snapshot.
@@ -49,31 +50,19 @@ public sealed class EventBroadcaster : IAsyncDisposable
     /// <summary>Reconnect replay window (A1 MAX_GAP): envelopes retained server-side.</summary>
     public const int MaxReplayEnvelopes = 1000;
 
-    private readonly Lock _clientsLock = new();
+    // B4: per-client write budget — one slow/stuck client must never hold a
+    // wire slot longer than this.
+    private static readonly TimeSpan ClientWriteTimeout = TimeSpan.FromMilliseconds(250);
     private readonly List<ClientRegistration> _clients = new();
-    private readonly IEventBus _eventBus;
-    private readonly ILogger<EventBroadcaster> _logger;
-    private readonly SessionLeaseRegistry? _leases;
 
-    // Session whose run is currently streaming (A3): events without their
-    // own SessionId resolve against ITS lease owner dynamically — so a lease
-    // release immediately falls back to broadcast. The singleton agent is
-    // single-flight, so between an AgentStarted and the next one all streamed
-    // events belong to that session.
-    private string? _activeSessionId;
+    private readonly Lock _clientsLock = new();
+    private readonly IEventBus _eventBus;
+    private readonly SessionLeaseRegistry? _leases;
+    private readonly ILogger<EventBroadcaster> _logger;
 
     // Replay ring: fixed-capacity, overwrite-in-place (same shape as the
     // event bus scrollback). Envelopes are immutable; readers copy under lock.
     private readonly EventEnvelope[] _ring = new EventEnvelope[MaxReplayEnvelopes];
-    private int _ringHead;
-    private int _ringCount;
-
-    // B4: per-client write budget — one slow/stuck client must never hold a
-    // wire slot longer than this.
-    private static readonly TimeSpan ClientWriteTimeout = TimeSpan.FromMilliseconds(250);
-
-    private ulong _sequence;
-    private int _disposed;
 
     // Turn tracking is SESSION-SCOPED (multi-agent sprint): two parallel agent
     // runs each advance their own turn index, so a shared mutable counter would
@@ -81,7 +70,19 @@ public sealed class EventBroadcaster : IAsyncDisposable
     // session id carried on AgentStart/TurnStart/TurnEnd events; legacy emitters
     // that send no session id resolve against the active run's session.
     private readonly ConcurrentDictionary<string, int> _turnsBySession = new();
+
+    // Session whose run is currently streaming (A3): events without their
+    // own SessionId resolve against ITS lease owner dynamically — so a lease
+    // release immediately falls back to broadcast. The singleton agent is
+    // single-flight, so between an AgentStarted and the next one all streamed
+    // events belong to that session.
+    private string? _activeSessionId;
+    private int _disposed;
     private IDisposable? _eventBusSubscription;
+    private int _ringCount;
+    private int _ringHead;
+
+    private ulong _sequence;
     private TaskCompletionSource<bool>? _subscriptionReady;
 
     /// <summary>
@@ -99,6 +100,20 @@ public sealed class EventBroadcaster : IAsyncDisposable
         _eventBus = eventBus;
         _logger = logger;
         _leases = leases;
+    }
+
+    /// <summary>Completes when the first client registers for event streaming.</summary>
+    public Task SubscriptionReady
+    {
+        get
+        {
+            if (_subscriptionReady is null)
+            {
+                Interlocked.CompareExchange(ref _subscriptionReady,
+                    new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously), null);
+            }
+            return _subscriptionReady.Task;
+        }
     }
 
     /// <inheritdoc />
@@ -123,24 +138,10 @@ public sealed class EventBroadcaster : IAsyncDisposable
     /// <summary>Subscribe to the event bus and begin broadcasting.</summary>
     public void Start() => _eventBusSubscription = _eventBus.Subscribe(OnEventAsync);
 
-    /// <summary>Completes when the first client registers for event streaming.</summary>
-    public Task SubscriptionReady
-    {
-        get
-        {
-            if (_subscriptionReady is null)
-            {
-                Interlocked.CompareExchange(ref _subscriptionReady,
-                    new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously), null);
-            }
-            return _subscriptionReady.Task;
-        }
-    }
-
     /// <summary>
     ///     Register a client stream for event delivery, optionally replaying
     ///     everything after <paramref name="lastSequence" /> (the client's
-    ///     last processed <see cref="EventEnvelope.Sequence"/>).
+    ///     last processed <see cref="EventEnvelope.Sequence" />).
     /// </summary>
     /// <param name="clientStream">The client's reply stream.</param>
     /// <param name="writeLock">
@@ -494,6 +495,9 @@ public sealed class EventBroadcaster : IAsyncDisposable
                 FullMode = BoundedChannelFullMode.Wait
             });
 
+        private CancellationTokenSource? _writerCts;
+        private Task? _writerTask;
+
         public ClientRegistration(Stream stream, SemaphoreSlim writeLock, string clientId)
         {
             Stream = stream;
@@ -513,9 +517,6 @@ public sealed class EventBroadcaster : IAsyncDisposable
         /// <summary>True when the envelope is broadcast or addressed to THIS client.</summary>
         public bool IsTargetOf(EventEnvelope envelope)
             => envelope.TargetClientId is null || envelope.TargetClientId == ClientId;
-
-        private CancellationTokenSource? _writerCts;
-        private Task? _writerTask;
 
         /// <summary>Queue one envelope; false when the client must be evicted.</summary>
         public bool TryDeliver(EventEnvelope envelope) => _outbound.Writer.TryWrite(envelope);

@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Text;
-
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>Discriminator for the minimal-redraw outcome of a buffer edit.</summary>
@@ -16,13 +15,13 @@ public enum EditOutcomeKind : byte
     TextOnly = 2,
 
     /// <summary>Text and caret changed — repaint the affected range plus caret.</summary>
-    TextAndCursor = 3,
+    TextAndCursor = 3
 }
 
 /// <summary>
-/// Redraw hint produced by every <see cref="PromptBuffer"/> operation
-/// (grok EditOutcome pattern): the view decides between full-line repaint and
-/// cursor-only patching without comparing snapshots.
+///     Redraw hint produced by every <see cref="PromptBuffer" /> operation
+///     (grok EditOutcome pattern): the view decides between full-line repaint and
+///     cursor-only patching without comparing snapshots.
 /// </summary>
 public readonly record struct EditOutcome(EditOutcomeKind Kind, int TextStart, int TextEnd)
 {
@@ -35,26 +34,31 @@ public readonly record struct EditOutcome(EditOutcomeKind Kind, int TextStart, i
 }
 
 /// <summary>
-/// Single-line-first prompt editor model: one growable char array + UTF-16
-/// caret that never sits inside a surrogate pair. Shift+Enter inserts a
-/// literal newline so the buffer can hold multiple logical lines; horizontal
-/// overflow is handled by <see cref="PromptViewport.ScrollIntoView"/>, not by
-/// soft wrapping (WrapCache joins in CE-2 when the grid lands).
-///
-/// Allocation budget: movement/cursor ops are zero-alloc; text edits grow the
-/// backing array geometrically; <see cref="SnapshotText"/> allocates on demand.
+///     Single-line-first prompt editor model: one growable char array + UTF-16
+///     caret that never sits inside a surrogate pair. Shift+Enter inserts a
+///     literal newline so the buffer can hold multiple logical lines; horizontal
+///     overflow is handled by <see cref="PromptViewport.ScrollIntoView" />, not by
+///     soft wrapping (WrapCache joins in CE-2 when the grid lands).
+///     Allocation budget: movement/cursor ops are zero-alloc; text edits grow the
+///     backing array geometrically; <see cref="SnapshotText" /> allocates on demand.
 /// </summary>
 public sealed class PromptBuffer
 {
     private const int InitialCapacity = 256;
 
-    private char[] _buf = new char[InitialCapacity];
-    private int _length;
-    private int _cursor;
+    // ── Undo/redo ──────────────────────────────────────────────────────────
 
-    public int Length => _length;
-    public int Cursor => _cursor;
-    public bool IsEmpty => _length == 0;
+    /// <summary>Upper bound on remembered edit steps (bounded memory for long drafts).</summary>
+    public const int MaxUndoSteps = 128;
+    private readonly List<UndoPoint> _redo = [];
+
+    private readonly List<UndoPoint> _undo = [];
+
+    private char[] _buf = new char[InitialCapacity];
+
+    public int Length { get; private set; }
+    public int Cursor { get; private set; }
+    public bool IsEmpty => Length == 0;
 
     /// <summary>Number of logical lines (1 + count of embedded newlines).</summary>
     public int LineCount
@@ -62,7 +66,7 @@ public sealed class PromptBuffer
         get
         {
             int lines = 1;
-            for (int i = 0; i < _length; i++)
+            for (int i = 0; i < Length; i++)
             {
                 if (_buf[i] == '\n')
                 {
@@ -74,37 +78,37 @@ public sealed class PromptBuffer
         }
     }
 
-    /// <summary>Copies current content into a string (submit path).</summary>
-    public string SnapshotText() => new(_buf, 0, _length);
-
     /// <summary>
-    /// Live view over current content — zero-alloc read for the every-frame
-    /// composer paint. Valid until the next edit (edits may grow/reorder the
-    /// backing array); painters consume the span within the frame.
-    /// </summary>
-    public ReadOnlySpan<char> AsSpan() => _buf.AsSpan(0, _length);
-
-    /// <summary>
-    /// Text of the last completed readline kill (Ctrl+U/W/K, Alt+D).
-    /// Backspace/DeleteForward are not kills; a no-op kill never clobbers the
-    /// previous entry. Single-slot kill ring backing the composer's Ctrl+Y yank.
+    ///     Text of the last completed readline kill (Ctrl+U/W/K, Alt+D).
+    ///     Backspace/DeleteForward are not kills; a no-op kill never clobbers the
+    ///     previous entry. Single-slot kill ring backing the composer's Ctrl+Y yank.
     /// </summary>
     public string? LastKill { get; private set; }
+
+    /// <summary>Copies current content into a string (submit path).</summary>
+    public string SnapshotText() => new(_buf, 0, Length);
+
+    /// <summary>
+    ///     Live view over current content — zero-alloc read for the every-frame
+    ///     composer paint. Valid until the next edit (edits may grow/reorder the
+    ///     backing array); painters consume the span within the frame.
+    /// </summary>
+    public ReadOnlySpan<char> AsSpan() => _buf.AsSpan(0, Length);
 
     /// <summary>Takes the content and resets the buffer (Enter-submit).</summary>
     public string TakeText()
     {
-        var text = SnapshotText();
-        _length = 0;
-        _cursor = 0;
+        string text = SnapshotText();
+        Length = 0;
+        Cursor = 0;
         PurgeHistory();
         return text;
     }
 
     public void Clear()
     {
-        _length = 0;
-        _cursor = 0;
+        Length = 0;
+        Cursor = 0;
         PurgeHistory();
     }
 
@@ -114,22 +118,22 @@ public sealed class PromptBuffer
     {
         Checkpoint();
         int size = rune.Utf16SequenceLength;
-        EnsureCapacity(_length + size);
-        Array.Copy(_buf, _cursor, _buf, _cursor + size, _length - _cursor);
+        EnsureCapacity(Length + size);
+        Array.Copy(_buf, Cursor, _buf, Cursor + size, Length - Cursor);
         if (size == 1)
         {
-            _buf[_cursor++] = (char)rune.Value;
+            _buf[Cursor++] = (char)rune.Value;
         }
         else
         {
             Span<char> tmp = stackalloc char[2];
             _ = rune.EncodeToUtf16(tmp);
-            tmp.CopyTo(_buf.AsSpan(_cursor));
-            _cursor += 2;
+            tmp.CopyTo(_buf.AsSpan(Cursor));
+            Cursor += 2;
         }
 
-        _length += size;
-        return EditOutcome.Text(_cursor - size, _cursor, movedCursor: true);
+        Length += size;
+        return EditOutcome.Text(Cursor - size, Cursor, true);
     }
 
     public EditOutcome InsertText(string text)
@@ -140,72 +144,72 @@ public sealed class PromptBuffer
         }
 
         Checkpoint();
-        EnsureCapacity(_length + text.Length);
-        Array.Copy(_buf, _cursor, _buf, _cursor + text.Length, _length - _cursor);
-        text.CopyTo(0, _buf, _cursor, text.Length);
-        _cursor += text.Length;
-        _length += text.Length;
-        return EditOutcome.Text(_cursor - text.Length, _cursor, movedCursor: true);
+        EnsureCapacity(Length + text.Length);
+        Array.Copy(_buf, Cursor, _buf, Cursor + text.Length, Length - Cursor);
+        text.CopyTo(0, _buf, Cursor, text.Length);
+        Cursor += text.Length;
+        Length += text.Length;
+        return EditOutcome.Text(Cursor - text.Length, Cursor, true);
     }
 
     public EditOutcome Backspace()
     {
-        if (_cursor == 0)
+        if (Cursor == 0)
         {
             return EditOutcome.Unchanged;
         }
 
         Checkpoint();
-        int start = PrevRuneBoundary(_cursor);
-        int removed = _cursor - start;
-        Array.Copy(_buf, _cursor, _buf, start, _length - _cursor);
-        _length -= removed;
-        _cursor = start;
-        return EditOutcome.Text(start, start, movedCursor: true);
+        int start = PrevRuneBoundary(Cursor);
+        int removed = Cursor - start;
+        Array.Copy(_buf, Cursor, _buf, start, Length - Cursor);
+        Length -= removed;
+        Cursor = start;
+        return EditOutcome.Text(start, start, true);
     }
 
     public EditOutcome DeleteForward()
     {
-        if (_cursor >= _length)
+        if (Cursor >= Length)
         {
             return EditOutcome.Unchanged;
         }
 
         Checkpoint();
-        int end = NextRuneBoundary(_cursor);
-        int removed = end - _cursor;
-        Array.Copy(_buf, end, _buf, _cursor, _length - end);
-        _length -= removed;
-        return EditOutcome.Text(_cursor, _cursor, movedCursor: false);
+        int end = NextRuneBoundary(Cursor);
+        int removed = end - Cursor;
+        Array.Copy(_buf, end, _buf, Cursor, Length - end);
+        Length -= removed;
+        return EditOutcome.Text(Cursor, Cursor, false);
     }
 
     /// <summary>Ctrl+U: remove everything before the caret on the current line.</summary>
     public EditOutcome DeleteToLineStart()
     {
-        int lineStart = LineStartOf(_cursor);
-        if (_cursor == lineStart)
+        int lineStart = LineStartOf(Cursor);
+        if (Cursor == lineStart)
         {
             return EditOutcome.Unchanged;
         }
 
         Checkpoint();
-        int removed = _cursor - lineStart;
+        int removed = Cursor - lineStart;
         LastKill = new string(_buf, lineStart, removed);
-        Array.Copy(_buf, _cursor, _buf, lineStart, _length - _cursor);
-        _length -= removed;
-        _cursor = lineStart;
-        return EditOutcome.Text(lineStart, lineStart, movedCursor: true);
+        Array.Copy(_buf, Cursor, _buf, lineStart, Length - Cursor);
+        Length -= removed;
+        Cursor = lineStart;
+        return EditOutcome.Text(lineStart, lineStart, true);
     }
 
     /// <summary>Ctrl+W: remove the word before the caret (whitespace-delimited).</summary>
     public EditOutcome DeleteWordBackward()
     {
-        if (_cursor == 0)
+        if (Cursor == 0)
         {
             return EditOutcome.Unchanged;
         }
 
-        int i = _cursor;
+        int i = Cursor;
         while (i > 0 && char.IsWhiteSpace(_buf[i - 1]))
         {
             i--;
@@ -216,35 +220,35 @@ public sealed class PromptBuffer
             i--;
         }
 
-        if (i == _cursor)
+        if (i == Cursor)
         {
             return EditOutcome.Unchanged;
         }
 
         Checkpoint();
-        int removed = _cursor - i;
+        int removed = Cursor - i;
         LastKill = new string(_buf, i, removed);
-        Array.Copy(_buf, _cursor, _buf, i, _length - _cursor);
-        _length -= removed;
-        _cursor = i;
-        return EditOutcome.Text(i, i, movedCursor: true);
+        Array.Copy(_buf, Cursor, _buf, i, Length - Cursor);
+        Length -= removed;
+        Cursor = i;
+        return EditOutcome.Text(i, i, true);
     }
 
     /// <summary>Ctrl+K: remove everything from the caret to the end of the current line.</summary>
     public EditOutcome DeleteToLineEnd()
     {
-        int lineEnd = LineEndOf(_cursor);
-        if (_cursor == lineEnd)
+        int lineEnd = LineEndOf(Cursor);
+        if (Cursor == lineEnd)
         {
             return EditOutcome.Unchanged;
         }
 
         Checkpoint();
-        int removed = lineEnd - _cursor;
-        LastKill = new string(_buf, _cursor, removed);
-        Array.Copy(_buf, lineEnd, _buf, _cursor, _length - lineEnd);
-        _length -= removed;
-        return EditOutcome.Text(_cursor, _cursor, movedCursor: false);
+        int removed = lineEnd - Cursor;
+        LastKill = new string(_buf, Cursor, removed);
+        Array.Copy(_buf, lineEnd, _buf, Cursor, Length - lineEnd);
+        Length -= removed;
+        return EditOutcome.Text(Cursor, Cursor, false);
     }
 
     /// <summary>
@@ -255,39 +259,39 @@ public sealed class PromptBuffer
     /// </summary>
     public EditOutcome DeleteWordForward()
     {
-        if (_cursor >= _length)
+        if (Cursor >= Length)
         {
             return EditOutcome.Unchanged;
         }
 
         Checkpoint();
-        int i = _cursor;
-        while (i < _length && char.IsWhiteSpace(_buf[i]))
+        int i = Cursor;
+        while (i < Length && char.IsWhiteSpace(_buf[i]))
         {
             i++;
         }
 
-        while (i < _length && !char.IsWhiteSpace(_buf[i]))
+        while (i < Length && !char.IsWhiteSpace(_buf[i]))
         {
             i++;
         }
 
-        int removed = i - _cursor;
-        LastKill = new string(_buf, _cursor, removed);
-        Array.Copy(_buf, i, _buf, _cursor, _length - i);
-        _length -= removed;
-        return EditOutcome.Text(_cursor, _cursor, movedCursor: false);
+        int removed = i - Cursor;
+        LastKill = new string(_buf, Cursor, removed);
+        Array.Copy(_buf, i, _buf, Cursor, Length - i);
+        Length -= removed;
+        return EditOutcome.Text(Cursor, Cursor, false);
     }
 
     /// <summary>Absolute caret seek clamped to [0, Length] — markdown helpers anchor here.</summary>
     public EditOutcome MoveTo(int offset)
     {
-        if (_cursor == offset)
+        if (Cursor == offset)
         {
             return EditOutcome.Unchanged;
         }
 
-        _cursor = Math.Clamp(offset, 0, _length);
+        Cursor = Math.Clamp(offset, 0, Length);
         return EditOutcome.Cursor();
     }
 
@@ -298,32 +302,22 @@ public sealed class PromptBuffer
     /// </summary>
     internal EditOutcome RemoveRange(int start, int count)
     {
-        if (count <= 0 || start < 0 || start >= _length)
+        if (count <= 0 || start < 0 || start >= Length)
         {
             return EditOutcome.Unchanged;
         }
 
         Checkpoint();
-        count = Math.Min(count, _length - start);
-        Array.Copy(_buf, start + count, _buf, start, _length - start - count);
-        _length -= count;
-        if (_cursor > start)
+        count = Math.Min(count, Length - start);
+        Array.Copy(_buf, start + count, _buf, start, Length - start - count);
+        Length -= count;
+        if (Cursor > start)
         {
-            _cursor = Math.Max(start, _cursor - count);
+            Cursor = Math.Max(start, Cursor - count);
         }
 
-        return EditOutcome.Text(start, start, movedCursor: true);
+        return EditOutcome.Text(start, start, true);
     }
-
-    // ── Undo/redo ──────────────────────────────────────────────────────────
-
-    /// <summary>Upper bound on remembered edit steps (bounded memory for long drafts).</summary>
-    public const int MaxUndoSteps = 128;
-
-    private readonly List<UndoPoint> _undo = [];
-    private readonly List<UndoPoint> _redo = [];
-
-    private readonly record struct UndoPoint(string Text, int Cursor);
 
     /// <summary>Steps back one effective text change; no-op when no checkpoints exist.</summary>
     public EditOutcome Undo()
@@ -337,7 +331,7 @@ public sealed class PromptBuffer
         var target = _undo[^1];
         _undo.RemoveAt(_undo.Count - 1);
         Restore(target);
-        return EditOutcome.Text(0, _length, movedCursor: true);
+        return EditOutcome.Text(0, Length, true);
     }
 
     /// <summary>Re-applies the most recent undone change; no-op when the redo stack is empty.</summary>
@@ -352,7 +346,7 @@ public sealed class PromptBuffer
         var target = _redo[^1];
         _redo.RemoveAt(_redo.Count - 1);
         Restore(target);
-        return EditOutcome.Text(0, _length, movedCursor: true);
+        return EditOutcome.Text(0, Length, true);
     }
 
     /// <summary>
@@ -373,15 +367,15 @@ public sealed class PromptBuffer
             stack.RemoveAt(0);
         }
 
-        stack.Add(new UndoPoint(SnapshotText(), _cursor));
+        stack.Add(new UndoPoint(SnapshotText(), Cursor));
     }
 
     private void Restore(UndoPoint point)
     {
         EnsureCapacity(point.Text.Length);
         point.Text.AsSpan().CopyTo(_buf);
-        _length = point.Text.Length;
-        _cursor = Math.Clamp(point.Cursor, 0, _length);
+        Length = point.Text.Length;
+        Cursor = Math.Clamp(point.Cursor, 0, Length);
     }
 
     private void PurgeHistory()
@@ -392,35 +386,51 @@ public sealed class PromptBuffer
 
     public EditOutcome MoveLeft()
     {
-        if (_cursor == 0)
+        if (Cursor == 0)
         {
             return EditOutcome.Unchanged;
         }
 
-        _cursor = PrevRuneBoundary(_cursor);
+        Cursor = PrevRuneBoundary(Cursor);
         return EditOutcome.Cursor();
     }
 
     public EditOutcome MoveRight()
     {
-        if (_cursor >= _length)
+        if (Cursor >= Length)
         {
             return EditOutcome.Unchanged;
         }
 
-        _cursor = NextRuneBoundary(_cursor);
+        Cursor = NextRuneBoundary(Cursor);
         return EditOutcome.Cursor();
     }
 
-    public EditOutcome MoveToLineStart() { _cursor = LineStartOf(_cursor); return EditOutcome.Cursor(); }
-    public EditOutcome MoveToLineEnd() { _cursor = LineEndOf(_cursor); return EditOutcome.Cursor(); }
-    public EditOutcome MoveToStart() { _cursor = 0; return EditOutcome.Cursor(); }
-    public EditOutcome MoveToEnd() { _cursor = _length; return EditOutcome.Cursor(); }
+    public EditOutcome MoveToLineStart()
+    {
+        Cursor = LineStartOf(Cursor);
+        return EditOutcome.Cursor();
+    }
+    public EditOutcome MoveToLineEnd()
+    {
+        Cursor = LineEndOf(Cursor);
+        return EditOutcome.Cursor();
+    }
+    public EditOutcome MoveToStart()
+    {
+        Cursor = 0;
+        return EditOutcome.Cursor();
+    }
+    public EditOutcome MoveToEnd()
+    {
+        Cursor = Length;
+        return EditOutcome.Cursor();
+    }
 
     /// <summary>Alt+B / Ctrl+Left: jump to the start of the word before the caret.</summary>
     public EditOutcome MoveWordLeft()
     {
-        int i = _cursor;
+        int i = Cursor;
         while (i > 0 && char.IsWhiteSpace(_buf[i - 1]))
         {
             i--;
@@ -431,80 +441,80 @@ public sealed class PromptBuffer
             i--;
         }
 
-        if (i == _cursor)
+        if (i == Cursor)
         {
             return EditOutcome.Unchanged;
         }
 
-        _cursor = i;
+        Cursor = i;
         return EditOutcome.Cursor();
     }
 
     /// <summary>Alt+F / Ctrl+Right: jump past the whitespace run and the word after the caret.</summary>
     public EditOutcome MoveWordRight()
     {
-        int i = _cursor;
-        while (i < _length && char.IsWhiteSpace(_buf[i]))
+        int i = Cursor;
+        while (i < Length && char.IsWhiteSpace(_buf[i]))
         {
             i++;
         }
 
-        while (i < _length && !char.IsWhiteSpace(_buf[i]))
+        while (i < Length && !char.IsWhiteSpace(_buf[i]))
         {
             i++;
         }
 
-        if (i == _cursor)
+        if (i == Cursor)
         {
             return EditOutcome.Unchanged;
         }
 
-        _cursor = i;
+        Cursor = i;
         return EditOutcome.Cursor();
     }
 
     /// <summary>Up arrow: previous logical line at the same display column.</summary>
     public EditOutcome MoveUp()
     {
-        int lineStart = LineStartOf(_cursor);
+        int lineStart = LineStartOf(Cursor);
         if (lineStart == 0)
         {
-            _cursor = 0;
+            Cursor = 0;
             return EditOutcome.Cursor();
         }
 
-        int columnCells = DisplayCells(_buf.AsSpan(lineStart, _cursor - lineStart));
+        int columnCells = DisplayCells(_buf.AsSpan(lineStart, Cursor - lineStart));
         int prevStart = LineStartOf(lineStart - 1);
         int prevEnd = lineStart - 1; // index of '\n'
-        _cursor = ClampToCells(prevStart, prevEnd, prevStart, columnCells);
+        Cursor = ClampToCells(prevStart, prevEnd, prevStart, columnCells);
         return EditOutcome.Cursor();
     }
 
     /// <summary>Down arrow: next logical line at the same display column.</summary>
     public EditOutcome MoveDown()
     {
-        int lineEnd = LineEndOf(_cursor);
-        if (lineEnd >= _length)
+        int lineEnd = LineEndOf(Cursor);
+        if (lineEnd >= Length)
         {
-            _cursor = _length;
+            Cursor = Length;
             return EditOutcome.Cursor();
         }
 
-        int lineStart = LineStartOf(_cursor);
-        int columnCells = DisplayCells(_buf.AsSpan(lineStart, _cursor - lineStart));
+        int lineStart = LineStartOf(Cursor);
+        int columnCells = DisplayCells(_buf.AsSpan(lineStart, Cursor - lineStart));
         int nextStart = lineEnd + 1;
         int nextEnd = LineEndOf(nextStart);
-        _cursor = ClampToCells(nextStart, nextEnd, nextStart, columnCells);
+        Cursor = ClampToCells(nextStart, nextEnd, nextStart, columnCells);
         return EditOutcome.Cursor();
     }
 
     // ── Geometry helpers ───────────────────────────────────────────────────
 
-    /// <summary>Zero-based index of the logical line containing char offset <paramref name="offset"/>.</summary>
+    /// <summary>Zero-based index of the logical line containing char offset <paramref name="offset" />.</summary>
     public int LineIndexOf(int offset)
     {
         int line = 0;
-        for (int i = 0; i < offset && i < _length; i++)
+        for (int i = 0; i < offset && i < Length; i++)
         {
             if (_buf[i] == '\n')
             {
@@ -517,7 +527,7 @@ public sealed class PromptBuffer
 
     public int LineStartOf(int offset)
     {
-        int i = Math.Min(offset, _length) - 1;
+        int i = Math.Min(offset, Length) - 1;
         while (i >= 0 && _buf[i] != '\n')
         {
             i--;
@@ -529,7 +539,7 @@ public sealed class PromptBuffer
     public int LineEndOf(int offset)
     {
         int i = Math.Max(offset, 0);
-        while (i < _length && _buf[i] != '\n')
+        while (i < Length && _buf[i] != '\n')
         {
             i++;
         }
@@ -559,8 +569,10 @@ public sealed class PromptBuffer
         return cells;
     }
 
-    /// <summary>Offset of the rune boundary at or after <paramref name="start"/>
-    /// where accumulated display cells reach <paramref name="cells"/>.</summary>
+    /// <summary>
+    ///     Offset of the rune boundary at or after <paramref name="start" />
+    ///     where accumulated display cells reach <paramref name="cells" />.
+    /// </summary>
     internal int ClampToCells(int start, int end, int fallback, int cells)
     {
         int cur = start;
@@ -602,12 +614,12 @@ public sealed class PromptBuffer
     private int NextRuneBoundary(int index)
     {
         int i = index + 1;
-        if (i < _length && char.IsHighSurrogate(_buf[index]) && char.IsLowSurrogate(_buf[index + 1]))
+        if (i < Length && char.IsHighSurrogate(_buf[index]) && char.IsLowSurrogate(_buf[index + 1]))
         {
             i++;
         }
 
-        return Math.Min(i, _length);
+        return Math.Min(i, Length);
     }
 
     private void EnsureCapacity(int needed)
@@ -625,4 +637,6 @@ public sealed class PromptBuffer
 
         Array.Resize(ref _buf, target);
     }
+
+    private readonly record struct UndoPoint(string Text, int Cursor);
 }

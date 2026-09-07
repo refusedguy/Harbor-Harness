@@ -1,4 +1,5 @@
 namespace Harbor.Ui.Framework.Services;
+
 /// <summary>
 ///     Modal dialog primitives — confirm, prompt, alert. Platform apps
 ///     implement this with their own native dialog primitives (Avalonia

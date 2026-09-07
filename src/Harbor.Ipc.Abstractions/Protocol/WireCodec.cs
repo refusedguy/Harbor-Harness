@@ -4,6 +4,7 @@ using System.IO.Pipelines;
 using MessagePack;
 using MessagePack.Formatters;
 namespace Harbor.Ipc.Protocol;
+
 /// <summary>
 ///     Length-prefixed MessagePack framing for a bidirectional pipe/socket
 ///     stream. Used by both <c>MessagePackRpcServer</c> and
@@ -101,7 +102,7 @@ public static class WireCodec
         HarborResponse response,
         CancellationToken ct = default)
     {
-        using PooledFrameBuffer frame = PooledFrameBuffer.Rent();
+        using var frame = PooledFrameBuffer.Rent();
         frame.Begin();
         MessagePackSerializer.Serialize(frame, response, WireOptions, ct);
         await WriteFrameBufferAsync(stream, frame, ct).ConfigureAwait(false);
@@ -116,7 +117,7 @@ public static class WireCodec
         HarborRequest request,
         CancellationToken ct = default)
     {
-        using PooledFrameBuffer frame = PooledFrameBuffer.Rent();
+        using var frame = PooledFrameBuffer.Rent();
         frame.Begin();
         MessagePackSerializer.Serialize(frame, request, WireOptions, ct);
         await WriteFrameBufferAsync(stream, frame, ct).ConfigureAwait(false);
@@ -184,8 +185,8 @@ public static class WireCodec
     {
         while (true)
         {
-            ReadResult result = await reader.ReadAsync(ct).ConfigureAwait(false);
-            ReadOnlySequence<byte> buffer = result.Buffer;
+            var result = await reader.ReadAsync(ct).ConfigureAwait(false);
+            var buffer = result.Buffer;
 
             if (buffer.Length < HeaderLength)
             {
@@ -272,7 +273,7 @@ public static class WireCodec
         Stream stream,
         CancellationToken ct = default)
     {
-        PipeReader reader = PipeReader.Create(stream, new StreamPipeReaderOptions(leaveOpen: true));
+        var reader = PipeReader.Create(stream, new StreamPipeReaderOptions(leaveOpen: true));
         try
         {
             return await ReadFramedAsync<HarborRequest>(reader, ct).ConfigureAwait(false);
@@ -299,7 +300,7 @@ public static class WireCodec
         Stream stream,
         CancellationToken ct = default)
     {
-        PipeReader reader = PipeReader.Create(stream, new StreamPipeReaderOptions(leaveOpen: true));
+        var reader = PipeReader.Create(stream, new StreamPipeReaderOptions(leaveOpen: true));
         try
         {
             return await ReadFramedAsync<HarborResponse>(reader, ct).ConfigureAwait(false);
@@ -319,7 +320,7 @@ public static class WireCodec
     private static async Task<T?> ReadFramedAsync<T>(PipeReader reader, CancellationToken ct)
         where T : class
     {
-        ReadOnlySequence<byte>? payload = await ReadFrameAsync(reader, ct).ConfigureAwait(false);
+        var payload = await ReadFrameAsync(reader, ct).ConfigureAwait(false);
         if (payload is null)
         {
             return null;
@@ -350,18 +351,18 @@ public static class WireCodec
     /// </summary>
     private static uint ReadHeaderLength(in ReadOnlySequence<byte> buffer)
     {
-        ReadOnlySequence<byte> header = buffer.Slice(0, HeaderLength);
+        var header = buffer.Slice(0, HeaderLength);
         if (header.IsSingleSegment)
         {
             return BinaryPrimitives.ReadUInt32BigEndian(header.FirstSpan);
         }
 
         uint value = 0;
-        foreach (ReadOnlyMemory<byte> segment in header)
+        foreach (var segment in header)
         {
             foreach (byte b in segment.Span)
             {
-                value = (value << 8) | b;
+                value = value << 8 | b;
             }
         }
 
@@ -440,25 +441,56 @@ internal sealed class PooledFrameBuffer : IBufferWriter<byte>, IDisposable
     [ThreadStatic]
     private static PooledFrameBuffer? t_cached;
 
+    private byte[] _buffer;
+    private int _count;
+    private bool _returned;
+
+    private PooledFrameBuffer()
+    {
+        _buffer = ArrayPool<byte>.Shared.Rent(InitialCapacity);
+    }
+
+    /// <summary>Payload bytes serialized so far.</summary>
+    public int PayloadLength => _count - WireCodec.HeaderLength;
+
+    /// <summary>The whole frame (header + payload) as one contiguous memory.</summary>
+    public Memory<byte> FrameMemory => _buffer.AsMemory(0, _count);
+
+    /// <inheritdoc />
+    public Memory<byte> GetMemory(int sizeHint = 0) => EnsureCapacity(sizeHint).AsMemory(_count);
+
+    /// <inheritdoc />
+    public Span<byte> GetSpan(int sizeHint = 0) => EnsureCapacity(sizeHint).AsSpan(_count);
+
+    /// <inheritdoc />
+    public void Advance(int count) => _count += count;
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_returned)
+        {
+            return;
+        }
+
+        _returned = true;
+        _count = 0;
+        RecycleCached(this);
+    }
+
     private static PooledFrameBuffer? RentCached()
     {
-        PooledFrameBuffer? cached = t_cached;
+        var cached = t_cached;
         t_cached = null;
         return cached;
     }
 
     private static void RecycleCached(PooledFrameBuffer instance) => t_cached ??= instance;
 
-    private byte[] _buffer;
-    private int _count;
-    private bool _returned;
-
-    private PooledFrameBuffer() => _buffer = ArrayPool<byte>.Shared.Rent(InitialCapacity);
-
     /// <summary>Rents a frame buffer (recycled instance when available).</summary>
     public static PooledFrameBuffer Rent()
     {
-        PooledFrameBuffer? cached = RentCached();
+        var cached = RentCached();
         if (cached is not null)
         {
             cached._returned = false;
@@ -474,36 +506,8 @@ internal sealed class PooledFrameBuffer : IBufferWriter<byte>, IDisposable
     /// </summary>
     public void Begin() => _count = WireCodec.HeaderLength;
 
-    /// <summary>Payload bytes serialized so far.</summary>
-    public int PayloadLength => _count - WireCodec.HeaderLength;
-
-    /// <summary>The whole frame (header + payload) as one contiguous memory.</summary>
-    public Memory<byte> FrameMemory => _buffer.AsMemory(0, _count);
-
     /// <summary>Writes the payload length into the reserved header.</summary>
     public void Finish() => BinaryPrimitives.WriteUInt32BigEndian(_buffer, (uint)PayloadLength);
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        if (_returned)
-        {
-            return;
-        }
-
-        _returned = true;
-        _count = 0;
-        RecycleCached(this);
-    }
-
-    /// <inheritdoc />
-    public Memory<byte> GetMemory(int sizeHint = 0) => EnsureCapacity(sizeHint).AsMemory(_count);
-
-    /// <inheritdoc />
-    public Span<byte> GetSpan(int sizeHint = 0) => EnsureCapacity(sizeHint).AsSpan(_count);
-
-    /// <inheritdoc />
-    public void Advance(int count) => _count += count;
 
     private byte[] EnsureCapacity(int sizeHint)
     {

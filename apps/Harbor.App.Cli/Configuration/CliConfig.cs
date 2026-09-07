@@ -11,9 +11,10 @@
 // CommonConfig.StorageBackend for the storage selection — CliConfig no longer
 // carries a duplicate DefaultStorage field.
 
-using System.Collections.Immutable;
 using Harbor.Desktop.Abstractions.Configuration;
+using System.Collections.Immutable;
 namespace Harbor.App.Cli.Configuration;
+
 /// <summary>
 ///     Per-app configuration for the Harbor CLI. Stored at
 ///     <c>~/.harbor/cli.json</c>. Non-overlapping with desktop app configs

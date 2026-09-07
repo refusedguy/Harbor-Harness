@@ -1,7 +1,3 @@
-using System.Text;
-using System.Threading.Channels;
-using System.Linq;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -12,17 +8,18 @@ using Harbor.Application.Configuration;
 using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
-using Harbor.Ui.Framework.Projection;
-using Harbor.Ui.Framework.State;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
+using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering.Widgets;
-using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
+using System.Text;
+using System.Threading.Channels;
 namespace Harbor.App.Cli.Repl;
 
 /// <summary>
@@ -30,8 +27,8 @@ namespace Harbor.App.Cli.Repl;
 ///     рядом с legacy AnsiTuiRenderer. Владеет полным жизненным циклом экрана
 ///     (raw-режим, alt-screen, bracketed paste), кадровым циклом и submit-
 ///     пайплайном композера — тем же, что обслуживал старый рендер
-///     (<see cref="SlashCommandDispatcher"/> для <c>/команд</c>,
-///     <see cref="IAgentRunner.PromptAsync"/> для промптов).
+///     (<see cref="SlashCommandDispatcher" /> для <c>/команд</c>,
+///     <see cref="IAgentRunner.PromptAsync" /> для промптов).
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -42,7 +39,7 @@ namespace Harbor.App.Cli.Repl;
 ///     </para>
 ///     <para>
 ///         <b>Ctrl+C:</b> во время хода агента — прерывание через существующий
-///         механизм <see cref="IAgentRunner.AbortSource"/>; в idle — двукратное
+///         механизм <see cref="IAgentRunner.AbortSource" />; в idle — двукратное
 ///         нажатие выходит из REPL (первое печатает подсказку).
 ///     </para>
 /// </remarks>
@@ -67,23 +64,153 @@ internal sealed class CellForgeReplRunner(
     /// <summary>Wheel tick ≈ three rows (xterm convention).</summary>
     private const int WheelScrollLines = 3;
 
+    /// <summary>
+    ///     Stream-retry budget mirrored from AgentLoop's C7 policy —
+    ///     kept in sync for the countdown's «n/3» display only.
+    /// </summary>
+    private const int MaxStreamRetries = 3;
+    private readonly ComposerController _composer = screen.Composer.Composer;
+
+    /// <summary>
+    ///     Real bus events marshalled onto the frame-loop thread: the
+    ///     bridge (and thus the whole timeline) is touched from THIS thread only.
+    /// </summary>
+    private readonly Channel<AgentEvent> _events = Channel.CreateUnbounded<AgentEvent>(
+        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+    private readonly Rect[] _fxDamageScratch = new Rect[VirtualizedChatTimeline.MaxFxDamage];
+
+    /// <summary>
+    ///     Post-render glow slots (renderer-moat T3): preallocated effect
+    ///     instances + the frame's glow-region scratch — the pipeline itself lives
+    ///     on the <see cref="ScreenSession" /> and is refreshed per frame.
+    /// </summary>
+    private readonly GlowEffect[] _glowEffects = new GlowEffect[VirtualizedChatTimeline.MaxFxDamage];
+    private readonly GlowRegion[] _glowScratch = new GlowRegion[VirtualizedChatTimeline.MaxFxDamage];
+
+    /// <summary>
+    ///     Inline-image protocol for this session (osc-sprint §1337):
+    ///     detected once at startup — kitty → APC, iTerm2/WezTerm/Konsole/mintty
+    ///     → OSC 1337, everything else keeps the text description card.
+    /// </summary>
+    private readonly InlineImageKind _inlineImage = InlineImageProbe.Detect();
+    private readonly LeaderKeyRouter _leader = new();
+    private readonly CommandPaletteView _palette = new();
+    private readonly QuickSwitchSlots _quickSwitch = new();
+    private readonly SelectionEngine _selection = new();
+
+    private readonly StatusViewModel _status = screen.Status.Vm;
+    private readonly VirtualizedChatTimeline _timeline = screen.Timeline.Timeline;
+
+    /// <summary>
+    ///     Token-usage source (null when the host has no tracker —
+    ///     feed no-ops, the status bar just stays without token segments).
+    /// </summary>
+    private readonly ITokenTracker? _tokens = services.GetService<ITokenTracker>();
+    private readonly VimComposerMode _vim = new();
+
     private readonly Channel<object?> _wake = Channel.CreateUnbounded<object?>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
-    /// <summary>Real bus events marshalled onto the frame-loop thread: the
-    /// bridge (and thus the whole timeline) is touched from THIS thread only.</summary>
-    private readonly Channel<AgentEvent> _events = Channel.CreateUnbounded<AgentEvent>(
-        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+    /// <summary>
+    ///     Partial-scan damage ledger (renderer-moat sprint): frames
+    ///     triggered by user input or event-driven state changes repaint via the
+    ///     plain full scan; only quiet animation frames (spinner, gate pulse,
+    ///     entrance fades) narrow the diff to hinted rects.
+    /// </summary>
+    private bool _broadDamageNextFrame = true;
 
-    private readonly StatusViewModel _status = screen.Status.Vm;
-    private readonly ComposerController _composer = screen.Composer.Composer;
-    private readonly VirtualizedChatTimeline _timeline = screen.Timeline.Timeline;
-    private readonly CommandPaletteView _palette = new();
-    private readonly LeaderKeyRouter _leader = new();
-    private readonly VimComposerMode _vim = new();
-    private readonly QuickSwitchSlots _quickSwitch = new();
-    private readonly SelectionEngine _selection = new();
+    // -1, NOT long.MinValue: TickCount64 is non-negative uptime ms, so
+    // `now − long.MinValue` overflows to a NEGATIVE value and the first idle
+    // Ctrl+C would satisfy the quit-window check immediately (CE-5 PTY-suite
+    // finding: paste scenario exited on the FIRST press with no hint).
+    private long _lastIdleAbortMs = -1;
+
+    /// <summary>Leader chord hand-off for async slash commands (same pattern).</summary>
+    private string? _leaderSlash;
+
+    /// <summary>
+    ///     Desktop-notification transport (osc-sprint §777): Osc99 once
+    ///     the startup probe answer arrives; otherwise the 777 family via env
+    ///     detection, resolved lazily at first fire. None suppresses entirely.
+    /// </summary>
+    private DesktopNotifyKind _notify;
+
+    private Timer? _notifyTimer;
+
+    /// <summary>
+    ///     Palette commit hand-off: OnCommit is sync (inside HandleKey),
+    ///     execution happens on the frame loop in <see cref="HandleKeyAsync" />.
+    /// </summary>
+    private CommandItem? _paletteCommitted;
+
+    /// <summary>
+    ///     Long-turn notify hand-off: the 30 s timer thread stages the
+    ///     sequence, the frame loop writes it — the backend stays single-threaded
+    ///     (same discipline as <see cref="_themeReloadLine" />).
+    /// </summary>
+    private volatile string? _pendingNotifySequence;
+
+    /// <summary>
+    ///     Cross-thread «prompt submitted, completion event not yet seen» latch
+    ///     so an stdin EOF cannot race the freshly spawned run into a premature exit.
+    /// </summary>
+    private volatile bool _promptInFlight;
+
+    /// <summary>
+    ///     Leader digit hand-off: the quick-switch chord resolves into a
+    ///     session switch on the frame loop (async work can't run inside Bind actions).
+    /// </summary>
+    private char? _quickSwitchChord;
+    private bool _quitRequested;
+
+    /// <summary>
+    ///     Retry-countdown clock (sprint UI-V2 P6.3): the agent loop owns
+    ///     the actual retry; the UI mirrors only the expected backoff window —
+    ///     attempt counter, wall-clock start of the latest transient error, and
+    ///     the exponential window it should burn down over.
+    /// </summary>
+    private int _retryAttempt;
+    private long _retryErrorMs = -1;
+    private int _retryTotalSec;
+
+    /// <summary>
+    ///     Width the sidebar spring policy was last applied for (P1.6
+    ///     spring resize): 0 until the first frame so cold start snaps instead
+    ///     of replaying the static geometry as motion.
+    /// </summary>
+    private int _sidebarPolicyCols;
+
+    /// <summary>
+    ///     False until the first policy application — cold start snaps
+    ///     (static solve already matches the targets), only real width changes
+    ///     afterwards are animated.
+    /// </summary>
+    private bool _sidebarPolicyWasApplied;
     private SlashCommandDispatcher? _slashDispatcher;
+    private int? _slashExitCode;
+
+    /// <summary>
+    ///     True when a custom theme file exists — it owns the palette and
+    ///     the OSC 11 auto-detect must not override it (file wins, P3.2 > P3.3).
+    /// </summary>
+    private bool _themeFileApplied;
+
+    /// <summary>
+    ///     Theme live-reload hand-off: the watcher's poll timer thread
+    ///     writes the line, the frame loop drains and appends it — the bridge is
+    ///     touched from the frame thread only.
+    /// </summary>
+    private volatile string? _themeReloadLine;
+    private ThemeFileWatcher? _themeWatcher;
+
+    private int _timelineViewportH;
+
+    /// <summary>
+    ///     Render-thread pull latch: <see cref="RunPromptAsync" /> flags it
+    ///     after a turn, the frame loop drains it before painting so all status /
+    ///     sidebar mutation stays on one thread.
+    /// </summary>
+    private volatile bool _usageDirty;
 
     private SlashCommandDispatcher GetDispatcher()
     {
@@ -91,102 +218,6 @@ internal sealed class CellForgeReplRunner(
             services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
         return _slashDispatcher;
     }
-    private ThemeFileWatcher? _themeWatcher;
-
-    /// <summary>Token-usage source (null when the host has no tracker —
-    /// feed no-ops, the status bar just stays without token segments).</summary>
-    private readonly ITokenTracker? _tokens = services.GetService<ITokenTracker>();
-
-    /// <summary>Render-thread pull latch: <see cref="RunPromptAsync"/> flags it
-    /// after a turn, the frame loop drains it before painting so all status /
-    /// sidebar mutation stays on one thread.</summary>
-    private volatile bool _usageDirty;
-
-    /// <summary>Palette commit hand-off: OnCommit is sync (inside HandleKey),
-    /// execution happens on the frame loop in <see cref="HandleKeyAsync" />.</summary>
-    private CommandItem? _paletteCommitted;
-
-    /// <summary>Leader chord hand-off for async slash commands (same pattern).</summary>
-    private string? _leaderSlash;
-
-    /// <summary>Leader digit hand-off: the quick-switch chord resolves into a
-    /// session switch on the frame loop (async work can't run inside Bind actions).</summary>
-    private char? _quickSwitchChord;
-
-    /// <summary>Theme live-reload hand-off: the watcher's poll timer thread
-    /// writes the line, the frame loop drains and appends it — the bridge is
-    /// touched from the frame thread only.</summary>
-    private volatile string? _themeReloadLine;
-
-    /// <summary>Inline-image protocol for this session (osc-sprint §1337):
-    /// detected once at startup — kitty → APC, iTerm2/WezTerm/Konsole/mintty
-    /// → OSC 1337, everything else keeps the text description card.</summary>
-    private readonly InlineImageKind _inlineImage = InlineImageProbe.Detect();
-
-    /// <summary>Desktop-notification transport (osc-sprint §777): Osc99 once
-    /// the startup probe answer arrives; otherwise the 777 family via env
-    /// detection, resolved lazily at first fire. None suppresses entirely.</summary>
-    private DesktopNotifyKind _notify;
-
-    /// <summary>Long-turn notify hand-off: the 30 s timer thread stages the
-    /// sequence, the frame loop writes it — the backend stays single-threaded
-    /// (same discipline as <see cref="_themeReloadLine" />).</summary>
-    private volatile string? _pendingNotifySequence;
-
-    private Timer? _notifyTimer;
-
-    /// <summary>True when a custom theme file exists — it owns the palette and
-    /// the OSC 11 auto-detect must not override it (file wins, P3.2 > P3.3).</summary>
-    private bool _themeFileApplied;
-
-    private int _timelineViewportH;
-
-    /// <summary>Partial-scan damage ledger (renderer-moat sprint): frames
-    /// triggered by user input or event-driven state changes repaint via the
-    /// plain full scan; only quiet animation frames (spinner, gate pulse,
-    /// entrance fades) narrow the diff to hinted rects.</summary>
-    private bool _broadDamageNextFrame = true;
-    private readonly Rect[] _fxDamageScratch = new Rect[VirtualizedChatTimeline.MaxFxDamage];
-
-    /// <summary>Post-render glow slots (renderer-moat T3): preallocated effect
-    /// instances + the frame's glow-region scratch — the pipeline itself lives
-    /// on the <see cref="ScreenSession"/> and is refreshed per frame.</summary>
-    private readonly GlowEffect[] _glowEffects = new GlowEffect[VirtualizedChatTimeline.MaxFxDamage];
-    private readonly GlowRegion[] _glowScratch = new GlowRegion[VirtualizedChatTimeline.MaxFxDamage];
-
-    /// <summary>Width the sidebar spring policy was last applied for (P1.6
-    /// spring resize): 0 until the first frame so cold start snaps instead
-    /// of replaying the static geometry as motion.</summary>
-    private int _sidebarPolicyCols;
-
-    /// <summary>False until the first policy application — cold start snaps
-    /// (static solve already matches the targets), only real width changes
-    /// afterwards are animated.</summary>
-    private bool _sidebarPolicyWasApplied;
-
-    /// <summary>Retry-countdown clock (sprint UI-V2 P6.3): the agent loop owns
-    /// the actual retry; the UI mirrors only the expected backoff window —
-    /// attempt counter, wall-clock start of the latest transient error, and
-    /// the exponential window it should burn down over.</summary>
-    private int _retryAttempt;
-    private long _retryErrorMs = -1;
-    private int _retryTotalSec;
-
-    /// <summary>Stream-retry budget mirrored from AgentLoop's C7 policy —
-    /// kept in sync for the countdown's «n/3» display only.</summary>
-    private const int MaxStreamRetries = 3;
-
-    // -1, NOT long.MinValue: TickCount64 is non-negative uptime ms, so
-    // `now − long.MinValue` overflows to a NEGATIVE value and the first idle
-    // Ctrl+C would satisfy the quit-window check immediately (CE-5 PTY-suite
-    // finding: paste scenario exited on the FIRST press with no hint).
-    private long _lastIdleAbortMs = -1;
-    private bool _quitRequested;
-    private int? _slashExitCode;
-
-    /// <summary>Cross-thread «prompt submitted, completion event not yet seen» latch
-    /// so an stdin EOF cannot race the freshly spawned run into a premature exit.</summary>
-    private volatile bool _promptInFlight;
 
     /// <summary>
     ///     Runs the REPL until quit. Returns the exit code
@@ -288,10 +319,10 @@ internal sealed class CellForgeReplRunner(
         bool inputClosed = false;
         while (!_quitRequested && !ct.IsCancellationRequested)
         {
-            Task<bool> inputWait = inputClosed
+            var inputWait = inputClosed
                 ? Task.FromResult(false)
                 : inputReader.WaitToReadAsync(ct).AsTask();
-            Task<bool> wakeWait = _wake.Reader.WaitToReadAsync(CancellationToken.None).AsTask();
+            var wakeWait = _wake.Reader.WaitToReadAsync(CancellationToken.None).AsTask();
             var completed = await Task.WhenAny(inputWait, wakeWait).ConfigureAwait(false);
 
             if (!inputClosed && completed == inputWait && inputWait.Result)
@@ -327,7 +358,7 @@ internal sealed class CellForgeReplRunner(
 
             bridge.Tick(Environment.TickCount64);
             UpdateRetryCountdown();
-            if (_themeReloadLine is { } themeLine)
+            if (_themeReloadLine is {} themeLine)
             {
                 _themeReloadLine = null;
                 bridge.AppendSystemLine(themeLine);
@@ -336,7 +367,7 @@ internal sealed class CellForgeReplRunner(
 
             // Long-turn notification (osc-sprint §777): staged by the timer
             // thread, written here where backend ownership lives.
-            if (_pendingNotifySequence is { } notifySeq)
+            if (_pendingNotifySequence is {} notifySeq)
             {
                 _pendingNotifySequence = null;
                 await backend.WriteAsync(Utf8(notifySeq), ct).ConfigureAwait(false);
@@ -362,12 +393,12 @@ internal sealed class CellForgeReplRunner(
     }
 
     /// <summary>
-    /// Spring-driven sidebar resize policy (P1.6, Bubble Tea harmonica):
-    /// re-pins the 42-column sidebar with spring physics on every width
-    /// change, and on a crossing of the auto-show threshold glides the
-    /// show/hide transition over frames — min-width spring to/from 0 plus
-    /// the timeline/sidebar ratio — instead of the solver's binary collapse.
-    /// Idempotent per width: settled springs make repeat calls no-ops.
+    ///     Spring-driven sidebar resize policy (P1.6, Bubble Tea harmonica):
+    ///     re-pins the 42-column sidebar with spring physics on every width
+    ///     change, and on a crossing of the auto-show threshold glides the
+    ///     show/hide transition over frames — min-width spring to/from 0 plus
+    ///     the timeline/sidebar ratio — instead of the solver's binary collapse.
+    ///     Idempotent per width: settled springs make repeat calls no-ops.
     /// </summary>
     private void ApplySidebarResizePolicy(int cols)
     {
@@ -385,10 +416,12 @@ internal sealed class CellForgeReplRunner(
         _sidebarPolicyWasApplied = true;
     }
 
-    /// <summary>Drives the springs toward the policy targets for
-    /// <paramref name="cols" />. Cold start skips this: the static solve
-    /// already produces the target geometry (collapse below the threshold,
-    /// clamp-pinned 42 columns above), so springs would only replay it.</summary>
+    /// <summary>
+    ///     Drives the springs toward the policy targets for
+    ///     <paramref name="cols" />. Cold start skips this: the static solve
+    ///     already produces the target geometry (collapse below the threshold,
+    ///     clamp-pinned 42 columns above), so springs would only replay it.
+    /// </summary>
     private void AnimateSidebarPolicy(int cols)
     {
         bool shown = cols >= SideBarLayout.AutoShowMinWidth;
@@ -440,7 +473,7 @@ internal sealed class CellForgeReplRunner(
         long tokensIn = 0;
         long tokensOut = 0;
         decimal costUsd = 0m;
-        if (_tokens?.GetStats() is { } stats)
+        if (_tokens?.GetStats() is {} stats)
         {
             tokensIn = stats.TotalInputTokens;
             tokensOut = stats.TotalOutputTokens;
@@ -465,7 +498,7 @@ internal sealed class CellForgeReplRunner(
             _wake.Writer.TryWrite(null);
         }
 
-        Rect tlRect = screen.Timeline.Rect;
+        var tlRect = screen.Timeline.Rect;
         _timelineViewportH = Math.Max(0, tlRect.Height);
         _ = _timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, _timelineViewportH);
 
@@ -498,11 +531,11 @@ internal sealed class CellForgeReplRunner(
     }
 
     /// <summary>
-    /// Post-render glow (renderer-moat T3): translates the timeline's gate
-    /// glow ledger into the session's effect pipeline — warning accents on
-    /// pending approval gates bloom toward a hot tone after the diff selects
-    /// them and before SGR encoding. Zero pending gates → empty pipeline →
-    /// frames byte-identical to the plain path.
+    ///     Post-render glow (renderer-moat T3): translates the timeline's gate
+    ///     glow ledger into the session's effect pipeline — warning accents on
+    ///     pending approval gates bloom toward a hot tone after the diff selects
+    ///     them and before SGR encoding. Zero pending gates → empty pipeline →
+    ///     frames byte-identical to the plain path.
     /// </summary>
     private void ArmGateGlow()
     {
@@ -520,10 +553,10 @@ internal sealed class CellForgeReplRunner(
     }
 
     /// <summary>
-    /// Translates the frame's change sources into diff hints. Conservative by
-    /// construction: narrow hints only while the frame was NOT triggered by
-    /// input/events, and only for regions with clock-driven animation. Any
-    /// doubt falls back to the full scan (empty hints — the engine's default).
+    ///     Translates the frame's change sources into diff hints. Conservative by
+    ///     construction: narrow hints only while the frame was NOT triggered by
+    ///     input/events, and only for regions with clock-driven animation. Any
+    ///     doubt falls back to the full scan (empty hints — the engine's default).
     /// </summary>
     private void ApplyFrameDamageHints(int cols)
     {
@@ -554,7 +587,7 @@ internal sealed class CellForgeReplRunner(
 
         // Panel-mode mascot (mascot-brand T2): 3 animated rows beside the
         // composer — same rationale as the status row hint.
-        Rect mascotRect = screen.Mascot?.Rect ?? default;
+        var mascotRect = screen.Mascot?.Rect ?? default;
         if (mascotRect.Height > 0)
         {
             screenSession.Damage(mascotRect);
@@ -575,9 +608,11 @@ internal sealed class CellForgeReplRunner(
         }
     }
 
-    /// <summary>Copy-on-select release (killer features §P6.4): extracts the
-    /// selected text from the back buffer and ships it via OSC 52 — terminals
-    /// that support the sequence copy it, everything else ignores silently.</summary>
+    /// <summary>
+    ///     Copy-on-select release (killer features §P6.4): extracts the
+    ///     selected text from the back buffer and ships it via OSC 52 — terminals
+    ///     that support the sequence copy it, everything else ignores silently.
+    /// </summary>
     private async Task FinishSelectionAsync(int releaseX, int releaseY, CancellationToken ct)
     {
         int cols = Math.Max(1, screenSession.CurrentCols);
@@ -597,10 +632,10 @@ internal sealed class CellForgeReplRunner(
     }
 
     /// <summary>
-    /// Inline-image emission (osc-sprint §1337): routes the attachment bytes
-    /// through the session's detected protocol — kitty APC for PNG, OSC 1337
-    /// for the iTerm2 family. Unsupported protocol/format/oversize → no
-    /// emission; the timeline keeps the text description card as fallback.
+    ///     Inline-image emission (osc-sprint §1337): routes the attachment bytes
+    ///     through the session's detected protocol — kitty APC for PNG, OSC 1337
+    ///     for the iTerm2 family. Unsupported protocol/format/oversize → no
+    ///     emission; the timeline keeps the text description card as fallback.
     /// </summary>
     private async Task EmitInlineImageAsync(ChatScreenBridge.InlineImage image, CancellationToken ct)
     {
@@ -610,7 +645,7 @@ internal sealed class CellForgeReplRunner(
             InlineImageKind.KittyApc when image.MimeType.EndsWith("png", StringComparison.OrdinalIgnoreCase)
                 => Graphics.KittyPngInline(image.Data),
             InlineImageKind.Osc1337 => Osc1337Image.Encode(name, image.Data),
-            _ => null,
+            _ => null
         };
         if (bytes is null)
         {
@@ -622,9 +657,11 @@ internal sealed class CellForgeReplRunner(
         _wake.Writer.TryWrite(null);
     }
 
-    /// <summary>OSC 11 auto-theme (sprint UI-V2 P3.3): bright terminal
-    /// background → HarborLight, dark → HarborDark. Runs before any custom
-    /// theme file applies, so an explicit theme always wins.</summary>
+    /// <summary>
+    ///     OSC 11 auto-theme (sprint UI-V2 P3.3): bright terminal
+    ///     background → HarborLight, dark → HarborDark. Runs before any custom
+    ///     theme file applies, so an explicit theme always wins.
+    /// </summary>
     private void ApplyAutoTheme(CapabilityEvent report)
     {
         if (_themeFileApplied)
@@ -695,7 +732,7 @@ internal sealed class CellForgeReplRunner(
                 // (osc-sprint): escape sequences and control bytes stripped, a
                 // sanitized preview lands in the timeline. No new permissions —
                 // after sanitization the paste is trusted input.
-                PasteSanitizeResult sanitized = PasteSanitizer.Sanitize(evt.Paste.Text);
+                var sanitized = PasteSanitizer.Sanitize(evt.Paste.Text);
                 if (sanitized.Modified)
                 {
                     bridge.AppendSystemLine(
@@ -771,7 +808,7 @@ internal sealed class CellForgeReplRunner(
         // Command palette: ctrl+p toggles; a visible palette claims keys first
         // so Enter/Esc/letters never leak into the approval gate or composer.
         if (key.Key == KeyCode.Char && key.Modifiers == KeyModifiers.Ctrl
-            && char.ToLowerInvariant((char)key.Character.Value) == 'p')
+                                    && char.ToLowerInvariant((char)key.Character.Value) == 'p')
         {
             if (_palette.Visible)
             {
@@ -788,7 +825,7 @@ internal sealed class CellForgeReplRunner(
 
         if (_palette.Visible && _palette.HandleKey(key))
         {
-            if (_paletteCommitted is { } committed)
+            if (_paletteCommitted is {} committed)
             {
                 _paletteCommitted = null;
                 await ExecutePaletteCommandAsync(committed, ct).ConfigureAwait(false);
@@ -815,13 +852,13 @@ internal sealed class CellForgeReplRunner(
         // switch digits hand off to the frame loop for async execution.
         if (_leader.HandleKey(key, Environment.TickCount64))
         {
-            if (_leaderSlash is { } leaderSlash)
+            if (_leaderSlash is {} leaderSlash)
             {
                 _leaderSlash = null;
                 await ExecutePaletteCommandAsync(new CommandItem(leaderSlash, leaderSlash), ct).ConfigureAwait(false);
             }
 
-            if (_quickSwitchChord is { } chord)
+            if (_quickSwitchChord is {} chord)
             {
                 _quickSwitchChord = null;
                 await SwitchToSlotAsync(chord, ct).ConfigureAwait(false);
@@ -863,8 +900,10 @@ internal sealed class CellForgeReplRunner(
         }
     }
 
-    /// <summary>First idle Ctrl+C hints, second one within the window quits.
-    /// While the agent runs, Ctrl+C aborts the current turn instead.</summary>
+    /// <summary>
+    ///     First idle Ctrl+C hints, second one within the window quits.
+    ///     While the agent runs, Ctrl+C aborts the current turn instead.
+    /// </summary>
     private void HandleAbortGesture()
     {
         if (agent.State.IsRunning)
@@ -902,7 +941,7 @@ internal sealed class CellForgeReplRunner(
             new CommandItem("providers", "Providers", "list configured providers", "/providers"),
             new CommandItem("plugins", "Plugins", "reload CS-source plugins", "/plugins"),
             new CommandItem("vim", "Toggle vim mode", "normal/insert editing layer", "<leader>v"),
-            new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2"),
+            new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2")
         ]);
     }
 
@@ -912,14 +951,14 @@ internal sealed class CellForgeReplRunner(
         _palette.OnCommit = item => _paletteCommitted = item;
         var commands = GetDispatcher().GetRegisteredCommands();
         var items = commands.Select(cmd => new CommandItem(
-            Id: cmd.Name,
-            Title: cmd.Name,
-            Detail: cmd.Description,
-            Shortcut: cmd.Usage,
-            Group: cmd.Name is "help" or "exit" or "quit" ? "General"
-                : cmd.Name is "setup" or "auth" ? "Config"
-                : cmd.Name is "model" or "agent" or "tui" or "renderer" or "storage" ? "Runtime"
-                : "Other"
+            cmd.Name,
+            cmd.Name,
+            cmd.Description,
+            cmd.Usage,
+            cmd.Name is "help" or "exit" or "quit" ? "General"
+            : cmd.Name is "setup" or "auth" ? "Config"
+            : cmd.Name is "model" or "agent" or "tui" or "renderer" or "storage" ? "Runtime"
+            : "Other"
         )).ToArray();
         _palette.Show(items);
     }
@@ -953,14 +992,32 @@ internal sealed class CellForgeReplRunner(
             : "vim: off");
     }
 
-    /// <summary>Leader-chord bindings: scroll anchors, palette, vim, slash
-    /// shortcuts, and quick-switch digits 1..9 (recent sessions, sprint UI-V2 P2.2).</summary>
+    /// <summary>
+    ///     Leader-chord bindings: scroll anchors, palette, vim, slash
+    ///     shortcuts, and quick-switch digits 1..9 (recent sessions, sprint UI-V2 P2.2).
+    /// </summary>
     private void BindLeaderKeys()
     {
-        _leader.Bind('g', () => { _timeline.ScrollToTop(); _wake.Writer.TryWrite(null); });
-        _leader.Bind('e', () => { _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH)); _wake.Writer.TryWrite(null); });
-        _leader.Bind('p', () => { OpenCommandPalette(); _wake.Writer.TryWrite(null); });
-        _leader.Bind('v', () => { ToggleVimMode(); _wake.Writer.TryWrite(null); });
+        _leader.Bind('g', () =>
+        {
+            _timeline.ScrollToTop();
+            _wake.Writer.TryWrite(null);
+        });
+        _leader.Bind('e', () =>
+        {
+            _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH));
+            _wake.Writer.TryWrite(null);
+        });
+        _leader.Bind('p', () =>
+        {
+            OpenCommandPalette();
+            _wake.Writer.TryWrite(null);
+        });
+        _leader.Bind('v', () =>
+        {
+            ToggleVimMode();
+            _wake.Writer.TryWrite(null);
+        });
         _leader.Bind('h', () => _leaderSlash = "help");
         _leader.Bind('s', () => _leaderSlash = "sessions");
         _leader.Bind('m', () => _leaderSlash = "model");
@@ -978,7 +1035,7 @@ internal sealed class CellForgeReplRunner(
     /// </summary>
     private async Task SwitchToSlotAsync(char chord, CancellationToken ct)
     {
-        if (_quickSwitch.Resolve(chord) is not { } sessionId)
+        if (_quickSwitch.Resolve(chord) is not {} sessionId)
         {
             bridge.AppendSystemLine($"⇄ slot {chord}: пусто");
             return;
@@ -1021,12 +1078,12 @@ internal sealed class CellForgeReplRunner(
         agent.Initialize(loaded.Value, definition.Value);
         sessionModel = loaded.Value;
         _quickSwitch.Push(loaded.Value.Id);
-        if (screen.Sidebar is { } sidebar)
+        if (screen.Sidebar is {} sidebar)
         {
             sidebar.State = sidebar.State with
             {
                 SessionTitle = loaded.Value.Title,
-                SessionId = loaded.Value.Id,
+                SessionId = loaded.Value.Id
             };
         }
 
@@ -1048,8 +1105,12 @@ internal sealed class CellForgeReplRunner(
         {
             await dispatcher.HandleCoreAsync(
                 slash, services,
-                writer: line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
-                reader: prompt =>
+                line =>
+                {
+                    bridge.AppendSystemLine(line);
+                    _wake.Writer.TryWrite(null);
+                },
+                prompt =>
                 {
                     bridge.AppendSystemLine($"{prompt} — интерактивный ввод недоступен в consoleex, используйте legacy TUI (/exit)");
                     _wake.Writer.TryWrite(null);
@@ -1084,8 +1145,12 @@ internal sealed class CellForgeReplRunner(
             var dispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
             var outcome = await dispatcher.HandleCoreAsync(
                 text, services,
-                writer: line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
-                reader: prompt =>
+                line =>
+                {
+                    bridge.AppendSystemLine(line);
+                    _wake.Writer.TryWrite(null);
+                },
+                prompt =>
                 {
                     bridge.AppendSystemLine($"{prompt} — интерактивный ввод недоступен в consoleex, используйте legacy TUI (/exit)");
                     _wake.Writer.TryWrite(null);
@@ -1120,10 +1185,10 @@ internal sealed class CellForgeReplRunner(
     }
 
     /// <summary>
-    /// Long-turn desktop notification (osc-sprint §777): a run still active
-    /// after 30 s fires one notification through the terminal — kitty OSC 99
-    /// when the probe answered, OSC 777 for the urxvt family, nothing when
-    /// the terminal gave no signal (suppression is the conservative default).
+    ///     Long-turn desktop notification (osc-sprint §777): a run still active
+    ///     after 30 s fires one notification through the terminal — kitty OSC 99
+    ///     when the probe answered, OSC 777 for the urxvt family, nothing when
+    ///     the terminal gave no signal (suppression is the conservative default).
     /// </summary>
     private void ArmLongTurnNotify()
     {
@@ -1154,8 +1219,10 @@ internal sealed class CellForgeReplRunner(
         _wake.Writer.TryWrite(null);
     }
 
-    /// <summary>Fire-and-forget WITH full observation: every failure lands in
-    /// the timeline, cancellation is expected, the wake always fires.</summary>
+    /// <summary>
+    ///     Fire-and-forget WITH full observation: every failure lands in
+    ///     the timeline, cancellation is expected, the wake always fires.
+    /// </summary>
     private async Task RunPromptAsync(string text, CancellationToken ct)
     {
         try
@@ -1196,31 +1263,35 @@ internal sealed class CellForgeReplRunner(
         }
     }
 
-    /// <summary>Token/cost footer + sidebar mirror (sprint UI-V2 P6.2/P4):
-    /// pulls cumulative usage from the tracker on the render thread. Cost is
-    /// preserved when a richer source already reported it.</summary>
+    /// <summary>
+    ///     Token/cost footer + sidebar mirror (sprint UI-V2 P6.2/P4):
+    ///     pulls cumulative usage from the tracker on the render thread. Cost is
+    ///     preserved when a richer source already reported it.
+    /// </summary>
     private void RefreshUsage()
     {
         _broadDamageNextFrame = true; // status + sidebar both re-render
-        if (_tokens?.GetStats() is not { } stats)
+        if (_tokens?.GetStats() is not {} stats)
         {
             return;
         }
 
         _status.SetUsage(stats.TotalInputTokens, stats.TotalOutputTokens);
-        if (screen.Sidebar is { } sidebar)
+        if (screen.Sidebar is {} sidebar)
         {
             sidebar.State = sidebar.State with
             {
                 TokensIn = stats.TotalInputTokens,
-                TokensOut = stats.TotalOutputTokens,
+                TokensOut = stats.TotalOutputTokens
             };
         }
     }
 
-    /// <summary>Retry countdown feed (sprint UI-V2 P6.3): a transient provider
-    /// error while the agent runs starts the UI-side backoff clock. The agent
-    /// loop retries on its own policy; the status bar only mirrors the window.</summary>
+    /// <summary>
+    ///     Retry countdown feed (sprint UI-V2 P6.3): a transient provider
+    ///     error while the agent runs starts the UI-side backoff clock. The agent
+    ///     loop retries on its own policy; the status bar only mirrors the window.
+    /// </summary>
     private void ObserveRetrySignal(AgentEvent evt)
     {
         if (evt is MessageUpdateEvent { LlmEvent: ErrorEvent { Kind: var kind } }
@@ -1234,8 +1305,10 @@ internal sealed class CellForgeReplRunner(
         }
     }
 
-    /// <summary>Recomputes the countdown from wall clock each frame; expires
-    /// silently at zero (no timer — frames already fire on the 80 ms heartbeat).</summary>
+    /// <summary>
+    ///     Recomputes the countdown from wall clock each frame; expires
+    ///     silently at zero (no timer — frames already fire on the 80 ms heartbeat).
+    /// </summary>
     private void UpdateRetryCountdown()
     {
         if (_retryErrorMs < 0)
@@ -1263,8 +1336,10 @@ internal sealed class CellForgeReplRunner(
         _status.Retry = null;
     }
 
-    /// <summary>True when the failure text represents a cancelled/aborted run
-    /// (AgentLoop's "…cancelled." family) — rendered as the friendly abort line.</summary>
+    /// <summary>
+    ///     True when the failure text represents a cancelled/aborted run
+    ///     (AgentLoop's "…cancelled." family) — rendered as the friendly abort line.
+    /// </summary>
     private static bool IsCancellation(string error) =>
         error.Contains("cancel", StringComparison.OrdinalIgnoreCase) ||
         error.Contains("canceled", StringComparison.OrdinalIgnoreCase);
@@ -1279,20 +1354,20 @@ internal sealed class CellForgeReplRunner(
 
         // Sidebar context (sprint UI-V2 P4): session identity + model before
         // the first frame paints; tokens arrive via RefreshUsage per turn.
-        if (screen.Sidebar is { } sidebar)
+        if (screen.Sidebar is {} sidebar)
         {
             sidebar.State = sidebar.State with
             {
                 SessionTitle = sessionModel.Title,
                 SessionId = sessionModel.Id,
-                Model = model,
+                Model = model
             };
         }
 
         // Quick-switch slots (sprint UI-V2 P2.2): the store lists most-recent-
         // first, so slot 1 gets the hottest session. Best-effort — hosts
         // without a session store (smoke tests) just skip slot seeding.
-        if (services.GetService<ISessionStore>() is { } store
+        if (services.GetService<ISessionStore>() is {} store
             && await store.ListAsync(ct: CancellationToken.None).ConfigureAwait(false) is { IsSuccess: true } listed)
         {
             var recent = listed.Value;
@@ -1333,12 +1408,12 @@ internal sealed class CellForgeReplRunner(
 
         _themeWatcher = new ThemeFileWatcher(
             path,
-            onApplied: theme =>
+            theme =>
             {
                 _themeReloadLine = $"theme: live-reload → {theme.Name}";
                 _wake.Writer.TryWrite(null);
             },
-            onError: error =>
+            error =>
             {
                 _themeReloadLine = "! theme: " + error;
                 _wake.Writer.TryWrite(null);

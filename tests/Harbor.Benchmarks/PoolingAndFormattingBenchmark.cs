@@ -1,7 +1,6 @@
-using System.Text;
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Extensions;
-
+using System.Text;
 namespace Harbor.Benchmarks;
 
 // ---------------------------------------------------------------------------
@@ -9,8 +8,8 @@ namespace Harbor.Benchmarks;
 // ---------------------------------------------------------------------------
 
 /// <summary>
-///     Benchmarks <see cref="StringBuilderPool"/> hot paths against raw
-///     <see cref="StringBuilder"/> allocations. Validates that pooling is a
+///     Benchmarks <see cref="StringBuilderPool" /> hot paths against raw
+///     <see cref="StringBuilder" /> allocations. Validates that pooling is a
 ///     win for the system-prompt / streaming-coalescer / tool-output paths
 ///     where builders of 1 KiB–16 KiB are rented on every turn.
 ///     See <c>src/Harbor.Extensions/PLAN.md</c> P2.
@@ -19,8 +18,8 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class StringBuilderPoolBenchmark
 {
-    private string _payload1KB = null!;
     private string _payload16KB = null!;
+    private string _payload1KB = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -107,8 +106,8 @@ public class StringBuilderPoolBenchmark
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class BodyLinesBenchmark
 {
-    private string _10Lines = null!;
     private string _100Lines = null!;
+    private string _10Lines = null!;
 
     [GlobalSetup]
     public void Setup()

@@ -1,16 +1,15 @@
-using System.Diagnostics;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
-
+using System.Diagnostics;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CE-3 final budgets (sprint goal: frame &lt; 16 ms with the feed, 0
-/// steady-state allocations). Allocation numbers are hard assertions
-/// (thread-scoped counter, immune to parallel traffic); frame times are
-/// reported and guarded by a generous ceiling to catch pathological
-/// regressions without flaking on slow CI.
+///     CE-3 final budgets (sprint goal: frame &lt; 16 ms with the feed, 0
+///     steady-state allocations). Allocation numbers are hard assertions
+///     (thread-scoped counter, immune to parallel traffic); frame times are
+///     reported and guarded by a generous ceiling to catch pathological
+///     regressions without flaking on slow CI.
 /// </summary>
 public class PerfBudgetTests
 {
@@ -55,7 +54,7 @@ public class PerfBudgetTests
     public async Task StreamingPushRender_SteadyTail_IsAllocationFree_AfterFreeze()
     {
         // Frozen document + empty tail: repeated renders must not allocate.
-        var renderer = new Harbor.Ui.Framework.Rendering.Markdown.StreamingMarkdownRenderer();
+        var renderer = new StreamingMarkdownRenderer();
         renderer.Push("# heading\n\nparagraph **with** inline `styles`.\n");
         renderer.Complete();
         _ = renderer.RenderTail(60);
@@ -98,7 +97,7 @@ public class PerfBudgetTests
             Span<StatusSeg> wspan = workspace;
             int wkept = StatusBarLayout.Fit(wspan[..wn], 79);
             StatusBarWidget.Paint(buffer, panelRect, wspan[..wkept]);
-            _ = SpinnerStrip.Frame(w, SpinnerRhythm.Working);
+            _ = SpinnerStrip.Frame(w);
         }
 
         GC.WaitForPendingFinalizers();
@@ -111,7 +110,7 @@ public class PerfBudgetTests
             Span<StatusSeg> span = workspace;
             int kept = StatusBarLayout.Fit(span[..n], 79);
             StatusBarWidget.Paint(buffer, panelRect, span[..kept]);
-            _ = SpinnerStrip.Frame(f, SpinnerRhythm.Working);
+            _ = SpinnerStrip.Frame(f);
         }
 
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -121,7 +120,7 @@ public class PerfBudgetTests
     [Test]
     public async Task FrameTime_WithFeed_UnderBudget()
     {
-        var session = new ScreenSession(new AnsiWriter(new RecordingBackend(), syncUpdates: true), 100, 30);
+        var session = new ScreenSession(new AnsiWriter(new RecordingBackend(), true), 100, 30);
         var screen = ChatScreen.Build(new ComposerController(), new StatusViewModel { Model = "m" });
         var tl = screen.Timeline.Timeline;
 

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Diagnostics;
+
 /// <summary>
 ///     <see cref="ILoggerProvider" /> that bridges every <c>ILogger</c> created by
 ///     the host's <c>ILoggerFactory</c> into the shared <see cref="IDiagnosticsPanel" />
@@ -112,7 +113,7 @@ public sealed class DiagnosticsPanelLogger : ILogger
     private sealed class NullScope : IDisposable
     {
         public static readonly NullScope Instance = new();
-        public void Dispose() { }
+        public void Dispose() {}
     }
 }
 

@@ -1,11 +1,10 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CE-3 goldens for the styled markdown block painted into the cell grid
-/// (headings, inline bold/italic/code, bullets, fences).
+///     CE-3 goldens for the styled markdown block painted into the cell grid
+///     (headings, inline bold/italic/code, bullets, fences).
 /// </summary>
 public class GoldenMarkdownBlockTests
 {
@@ -13,26 +12,26 @@ public class GoldenMarkdownBlockTests
     public async Task MarkdownBlock_Grid_Golden()
     {
         var backend = new RecordingBackend();
-        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var writer = new AnsiWriter(backend, true);
         var engine = new DiffEngine(64, 10);
         var back = new ScreenBuffer(64, 10);
 
         const string doc = """
-            # Release notes
+                           # Release notes
 
-            The renderer is **fast** and *safe*: `zero` allocs.
-            - item one
-            - item two
+                           The renderer is **fast** and *safe*: `zero` allocs.
+                           - item one
+                           - item two
 
-            ```
-            literal fence body
-            ```
-            """;
+                           ```
+                           literal fence body
+                           ```
+                           """;
 
         var block = new AssistantMarkdownBlock(doc);
         var measure = block.Measure(64);
         back.Fill(new Rect(0, 0, 64, measure.MinLines), Cell.Blank);
-        block.Paint(new BlockPaintContext(back, new Rect(0, 0, 64, measure.MinLines), tick: 0));
+        block.Paint(new BlockPaintContext(back, new Rect(0, 0, 64, measure.MinLines), 0));
 
         writer.BeginFrame();
         engine.Flush(back, writer);

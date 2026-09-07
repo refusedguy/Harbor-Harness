@@ -1,14 +1,13 @@
 using Harbor.App.Cli.Commands;
-
 namespace Harbor.App.Cli.Tests;
 
 public class SkillsCommandTests : IDisposable
 {
     private readonly string _base;
-    private readonly string _homeRoot;
-    private readonly string _projectRoot;
-    private readonly StringWriter _out = new();
     private readonly StringWriter _err = new();
+    private readonly string _homeRoot;
+    private readonly StringWriter _out = new();
+    private readonly string _projectRoot;
 
     public SkillsCommandTests()
     {
@@ -21,12 +20,12 @@ public class SkillsCommandTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_base, recursive: true); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        try { Directory.Delete(_base, true); }
+        catch (IOException) {}
+        catch (UnauthorizedAccessException) {}
     }
 
-    private SkillsCommand CreateCommand() => new(_out, _err, globalRoot: _homeRoot, projectRoot: _projectRoot);
+    private SkillsCommand CreateCommand() => new(_out, _err, _homeRoot, _projectRoot);
 
     [Test]
     public async Task List_EmptyScopes_ReportsNone()

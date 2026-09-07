@@ -1,6 +1,4 @@
-using Harbor.DesignSystem;
 using Harbor.Ui.Framework.Projection;
-
 namespace Harbor.DesignSystem.Tests;
 
 /// <summary>Static palette state — serialized (shared key) to avoid cross-test theme races.</summary>

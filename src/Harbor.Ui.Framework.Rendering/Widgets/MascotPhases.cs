@@ -1,11 +1,11 @@
 namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>
-/// Fine-grained agent phase behind the coarse <see cref="StatusBarMode" />:
-/// the mode says «running», the phase says «thinking vs tool-call», and the
-/// end-of-run events say «errored vs succeeded». The host sets it alongside
-/// the mode; presentation layers (mascot) map it to visuals. Zero state cost —
-/// a byte-sized enum on the status view model.
+///     Fine-grained agent phase behind the coarse <see cref="StatusBarMode" />:
+///     the mode says «running», the phase says «thinking vs tool-call», and the
+///     end-of-run events say «errored vs succeeded». The host sets it alongside
+///     the mode; presentation layers (mascot) map it to visuals. Zero state cost —
+///     a byte-sized enum on the status view model.
 /// </summary>
 public enum AgentPhase : byte
 {
@@ -22,14 +22,14 @@ public enum AgentPhase : byte
     Errored,
 
     /// <summary>The last run finished clean — presentation may react briefly.</summary>
-    Succeeded,
+    Succeeded
 }
 
 /// <summary>
-/// One-shot event reaction for the mascot (sprint mascot-brand T3): a short
-/// overlay sequence the mascot plays when a notable event lands — error blink,
-/// success bounce, approval wiggle. Not a mood: it overrides the current mood
-/// frames for a few ticks, then the mood resumes.
+///     One-shot event reaction for the mascot (sprint mascot-brand T3): a short
+///     overlay sequence the mascot plays when a notable event lands — error blink,
+///     success bounce, approval wiggle. Not a mood: it overrides the current mood
+///     frames for a few ticks, then the mood resumes.
 /// </summary>
 public enum MascotReaction : byte
 {
@@ -43,5 +43,5 @@ public enum MascotReaction : byte
     SuccessBounce,
 
     /// <summary>An approval gate opened — wide-eyes wiggle sequence.</summary>
-    ApprovalWiggle,
+    ApprovalWiggle
 }

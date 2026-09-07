@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Contracts;
-
 namespace Harbor.Tui.AnsiPlain.EscapeCodes;
 
 /// <summary>Cursor movement direction for CSI sequences.</summary>

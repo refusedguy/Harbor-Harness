@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 namespace Harbor.Ipc.Protocol;
+
 /// <summary>
 ///     Adapter that exposes the RPC client's event channel as an
 ///     <see cref="IAsyncEnumerable{HarborEvent}" /> for

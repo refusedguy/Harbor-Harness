@@ -1,9 +1,6 @@
-using System.Globalization;
-using System.Collections.Immutable;
-using System.Linq;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-
+using System.Collections.Immutable;
+using System.Globalization;
 namespace Harbor.Ui.Framework.Projection;
 
 public static class StatusProjector
@@ -13,10 +10,10 @@ public static class StatusProjector
         var segments = ImmutableArray.CreateBuilder<UiStatusSegment>();
 
         segments.Add(new UiStatusSegment(
-            Text: $"{state.Provider}/{state.Model}",
-            Align: Alignment.Left,
-            Importance: 1,
-            Style: UiSpanStyle.Default));
+            $"{state.Provider}/{state.Model}",
+            Alignment.Left,
+            1,
+            UiSpanStyle.Default));
 
         string glyph = state.Status switch
         {
@@ -25,49 +22,49 @@ public static class StatusProjector
             "error" => "✗",
             _ => "○"
         };
-        UiSpanStyle statusStyle = state.Status switch
+        var statusStyle = state.Status switch
         {
             "running" => UiSpanStyle.Accent,
             "error" => UiSpanStyle.Danger,
             _ => UiSpanStyle.Default
         };
         segments.Add(new UiStatusSegment(
-            Text: $"{glyph} {state.Status}",
-            Align: Alignment.Center,
-            Importance: 2,
-            Style: statusStyle));
+            $"{glyph} {state.Status}",
+            Alignment.Center,
+            2,
+            statusStyle));
 
         if (!string.IsNullOrEmpty(state.AgentName))
         {
             segments.Add(new UiStatusSegment(
-                Text: $"agent {state.AgentName}",
-                Align: Alignment.Right,
-                Importance: 3,
-                Style: UiSpanStyle.Default));
+                $"agent {state.AgentName}",
+                Alignment.Right,
+                3,
+                UiSpanStyle.Default));
         }
 
         if (state.Cost.TokensIn > 0 || state.Cost.TokensOut > 0)
         {
             segments.Add(new UiStatusSegment(
-                Text: $"{state.Cost.TokensIn}↑ {state.Cost.TokensOut}↓",
-                Align: Alignment.Right,
-                Importance: 2,
-                Style: UiSpanStyle.Dim));
+                $"{state.Cost.TokensIn}↑ {state.Cost.TokensOut}↓",
+                Alignment.Right,
+                2,
+                UiSpanStyle.Dim));
         }
 
         segments.Add(new UiStatusSegment(
-            Text: state.Cost.CostUsd.ToString("F4", CultureInfo.InvariantCulture),
-            Align: Alignment.Right,
-            Importance: 1,
-            Style: UiSpanStyle.Dim));
+            state.Cost.CostUsd.ToString("F4", CultureInfo.InvariantCulture),
+            Alignment.Right,
+            1,
+            UiSpanStyle.Dim));
 
         int maxScroll = Math.Max(0, state.TotalLines - Math.Max(1, state.ViewportLines));
         string scrollText = maxScroll == 0 ? "live" : $"scroll {state.ScrollOffset * 100 / maxScroll}%";
         segments.Add(new UiStatusSegment(
-            Text: scrollText,
-            Align: Alignment.Right,
-            Importance: 0,
-            Style: UiSpanStyle.Dim));
+            scrollText,
+            Alignment.Right,
+            0,
+            UiSpanStyle.Dim));
 
         return new UiStatusBarModel(Segments: segments.ToImmutable());
     }

@@ -1,14 +1,9 @@
-using System.Collections.ObjectModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Harbor.App.Avalonia.Views;
 using Harbor.App.Avalonia.Views.Controls;
-using Harbor.Ui.Framework.Services;
-using Harbor.Ui.Framework.ViewModels;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
+using System.Collections.ObjectModel;
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
 /// <summary>
@@ -16,11 +11,9 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///     components rendered in a headless Skia compositor, captured as PNG and
 ///     compared against SHA-256 golden baselines under
 ///     <c>tests/fixtures/golden/&lt;TestName&gt;.golden.png</c>.
-///
 ///     ANY pixel-level difference from the baseline fails the test — this is
 ///     a hash compare, not an existence check. Regenerate baselines with
 ///     <c>HARBOR_UPDATE_GOLDENS=1</c> when a visual change is intended.
-///
 ///     The goldens are skipped on CI (shared runners render with a different
 ///     Skia/font stack, so the sha never matches the dev-captured baseline —
 ///     ToolCallCardView_GoldenFrame proved it on the first ci.yml run). Set
@@ -30,7 +23,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 [NotInParallel]
 public sealed class GoldenFrameTests : ComponentTestBase
 {
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupAsync() => await GetDriverAsync("Golden").ConfigureAwait(false);
 
     [Test]
@@ -49,14 +42,14 @@ public sealed class GoldenFrameTests : ComponentTestBase
             ArgsPreview = "{\"path\": \"src/App.cs\"}",
             ResultPreview = "Applied 1 hunk — +12 −3",
             Status = ToolCallStatus.Success,
-            Duration = TimeSpan.FromMilliseconds(340),
+            Duration = TimeSpan.FromMilliseconds(340)
         };
 
         // Everything runs in ONE synchronous UI-thread delegate: pin theme →
         // construct → capture → close. The Avalonia dispatcher cannot pump
         // mid-delegate, so no orphaned continuation from another host can
         // flip the theme between pin and pixels.
-        var (png, sha) = UI(() =>
+        (byte[] png, string sha) = UI(() =>
         {
             GoldenFrame.PinDarkTheme();
             var card = new ToolCallCardView { DataContext = vm };
@@ -82,13 +75,13 @@ public sealed class GoldenFrameTests : ComponentTestBase
 
         // IsStreaming=false keeps the blink cursor hidden entirely — the
         // 530 ms blink timer can never flip the frame between runs.
-        var (png, sha) = UI(() =>
+        (byte[] png, string sha) = UI(() =>
         {
             GoldenFrame.PinDarkTheme();
             var text = new TypewriterStreamingText
             {
                 Text = "Streaming code response…",
-                IsStreaming = false,
+                IsStreaming = false
             };
             var host = new StackPanel { Margin = new Thickness(12) };
             host.Children.Add(text);
@@ -113,7 +106,7 @@ public sealed class GoldenFrameTests : ComponentTestBase
         // Values are set WITHOUT going through OnValuesChanged (no animation
         // timer started) and the pulse phase stays at 0 — the endpoint dot
         // renders at its deterministic base radius.
-        var (png, sha) = UI(() =>
+        (byte[] png, string sha) = UI(() =>
         {
             GoldenFrame.PinDarkTheme();
             var sparkline = new Sparkline
@@ -121,7 +114,7 @@ public sealed class GoldenFrameTests : ComponentTestBase
                 Values = [4, 9, 2, 7, 5, 11, 3, 8],
                 StrokeBrush = new SolidColorBrush(Color.FromRgb(0xA6, 0xE3, 0xA1)), // Mocha green
                 Width = 160,
-                Height = 40,
+                Height = 40
             };
             var host = new StackPanel { Margin = new Thickness(12) };
             host.Children.Add(sparkline);
@@ -148,7 +141,7 @@ public sealed class GoldenFrameTests : ComponentTestBase
         vm.Toasts.Add(new ToastNotification("Success: file saved.", ToastKind.Success));
         vm.Toasts.Add(new ToastNotification("Error: provider returned 503.", ToastKind.Error));
 
-        var (png, sha) = UI(() =>
+        (byte[] png, string sha) = UI(() =>
         {
             GoldenFrame.PinDarkTheme();
             var window = GoldenFrame.CreateHostWindow(
@@ -163,9 +156,11 @@ public sealed class GoldenFrameTests : ComponentTestBase
     }
 }
 
-/// <summary>Minimal toast host for the golden frame — same shape the
-/// production MainViewModel exposes (Toasts collection only).</summary>
-file sealed class GoldenToastHostViewModel
+/// <summary>
+///     Minimal toast host for the golden frame — same shape the
+///     production MainViewModel exposes (Toasts collection only).
+/// </summary>
+sealed file class GoldenToastHostViewModel
 {
     public ObservableCollection<ToastNotification> Toasts { get; } = new();
 }
@@ -180,13 +175,14 @@ internal sealed class SkipGoldenOnCiAttribute : SkipAttribute
 {
     public SkipGoldenOnCiAttribute()
         : base("pixel-golden baselines are machine-pinned — skipped on shared CI runners (HARBOR_GOLDENS_STRICT=1 to enforce)")
-    { }
+    {
+    }
 
     /// <inheritdoc />
     public override Task<bool> ShouldSkip(TestRegisteredContext context)
         => Task.FromResult(
-            (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI"))
-             && Environment.GetEnvironmentVariable("CI") != "0"
-             && Environment.GetEnvironmentVariable("CI") != "false")
+            !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI"))
+            && Environment.GetEnvironmentVariable("CI") != "0"
+            && Environment.GetEnvironmentVariable("CI") != "false"
             && Environment.GetEnvironmentVariable("HARBOR_GOLDENS_STRICT") != "1");
 }

@@ -1,10 +1,11 @@
 using Harbor.Tui.CellForge.Capabilities;
-
 namespace Harbor.Tui.CellForge.Tests;
 
-/// <summary>Inline-image capability detection matrix (osc-sprint §1337):
-/// env-driven, override-wins, multiplexer-guarded — mirrors the
-/// CapabilityProber detection discipline.</summary>
+/// <summary>
+///     Inline-image capability detection matrix (osc-sprint §1337):
+///     env-driven, override-wins, multiplexer-guarded — mirrors the
+///     CapabilityProber detection discipline.
+/// </summary>
 public class InlineImageProbeTests
 {
     private static Func<string, string?> Env(params (string Key, string? Value)[] vars) =>

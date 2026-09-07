@@ -1,17 +1,17 @@
 using System.Runtime.InteropServices;
-
+using System.Text;
 #pragma warning disable S108, S2486 // Best-effort console interop — empty catch intentionally ignored (no console / redirected handle).
 
 namespace Harbor.Tui.CellForge.Input;
 
 /// <summary>
-/// Windows VT-input controller — Win32 bring-up (design §5.2 / §6).
-/// Mirrors <see cref="UnixTermiosModeController"/> for Windows:
-/// disables <c>LINE_INPUT | ECHO_INPUT | PROCESSED_INPUT</c> and enables
-/// <c>VIRTUAL_TERMINAL_INPUT</c> on the input handle, enables
-/// <c>VIRTUAL_TERMINAL_PROCESSING</c> on the output handle.
-/// Crash-safe and idempotent: <see cref="Restore"/> after a failed
-/// <see cref="Enter"/> is a no-op.
+///     Windows VT-input controller — Win32 bring-up (design §5.2 / §6).
+///     Mirrors <see cref="UnixTermiosModeController" /> for Windows:
+///     disables <c>LINE_INPUT | ECHO_INPUT | PROCESSED_INPUT</c> and enables
+///     <c>VIRTUAL_TERMINAL_INPUT</c> on the input handle, enables
+///     <c>VIRTUAL_TERMINAL_PROCESSING</c> on the output handle.
+///     Crash-safe and idempotent: <see cref="Restore" /> after a failed
+///     <see cref="Enter" /> is a no-op.
 /// </summary>
 public sealed class WindowsVtModeController : ITerminalModeController
 {
@@ -41,8 +41,8 @@ public sealed class WindowsVtModeController : ITerminalModeController
     private uint _originalInputCp;
     private uint _originalOutputCp;
     private bool _hasOriginalCp;
-    private System.Text.Encoding? _originalInputEncoding;
-    private System.Text.Encoding? _originalOutputEncoding;
+    private Encoding? _originalInputEncoding;
+    private Encoding? _originalOutputEncoding;
 
     public void Enter()
     {
@@ -91,10 +91,14 @@ public sealed class WindowsVtModeController : ITerminalModeController
         // must survive end-to-end, so we force CP 65001 + UTF8 on entry and restore on exit.
         if (!_hasOriginalCp)
         {
-            try { _originalInputCp = GetConsoleCP(); } catch { _originalInputCp = 0; }
-            try { _originalOutputCp = GetConsoleOutputCP(); } catch { _originalOutputCp = 0; }
-            try { _originalInputEncoding = Console.InputEncoding; } catch { }
-            try { _originalOutputEncoding = Console.OutputEncoding; } catch { }
+            try { _originalInputCp = GetConsoleCP(); }
+            catch { _originalInputCp = 0; }
+            try { _originalOutputCp = GetConsoleOutputCP(); }
+            catch { _originalOutputCp = 0; }
+            try { _originalInputEncoding = Console.InputEncoding; }
+            catch {}
+            try { _originalOutputEncoding = Console.OutputEncoding; }
+            catch {}
             _hasOriginalCp = true;
         }
 
@@ -153,10 +157,14 @@ public sealed class WindowsVtModeController : ITerminalModeController
     private void TrySetUtf8CodePagesAndEncodings()
     {
         const uint CpUtf8 = 65001;
-        try { _ = SetConsoleCP(CpUtf8); } catch { }
-        try { _ = SetConsoleOutputCP(CpUtf8); } catch { }
-        try { Console.InputEncoding = System.Text.Encoding.UTF8; } catch { }
-        try { Console.OutputEncoding = System.Text.Encoding.UTF8; } catch { }
+        try { _ = SetConsoleCP(CpUtf8); }
+        catch {}
+        try { _ = SetConsoleOutputCP(CpUtf8); }
+        catch {}
+        try { Console.InputEncoding = Encoding.UTF8; }
+        catch {}
+        try { Console.OutputEncoding = Encoding.UTF8; }
+        catch {}
     }
 
     private void RestoreCodePagesAndEncodings()
@@ -165,45 +173,49 @@ public sealed class WindowsVtModeController : ITerminalModeController
         {
             if (_originalInputCp != 0)
             {
-                try { _ = SetConsoleCP(_originalInputCp); } catch { }
+                try { _ = SetConsoleCP(_originalInputCp); }
+                catch {}
             }
             if (_originalOutputCp != 0)
             {
-                try { _ = SetConsoleOutputCP(_originalOutputCp); } catch { }
+                try { _ = SetConsoleOutputCP(_originalOutputCp); }
+                catch {}
             }
         }
 
         if (_originalInputEncoding is not null)
         {
-            try { Console.InputEncoding = _originalInputEncoding; } catch { }
+            try { Console.InputEncoding = _originalInputEncoding; }
+            catch {}
         }
 
         if (_originalOutputEncoding is not null)
         {
-            try { Console.OutputEncoding = _originalOutputEncoding; } catch { }
+            try { Console.OutputEncoding = _originalOutputEncoding; }
+            catch {}
         }
     }
 
     [DllImport("kernel32", SetLastError = true)]
-    private static extern IntPtr GetStdHandle(int nStdHandle);
+    private extern static IntPtr GetStdHandle(int nStdHandle);
 
     [DllImport("kernel32", SetLastError = true)]
-    private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+    private extern static bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
 
     [DllImport("kernel32", SetLastError = true)]
-    private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+    private extern static bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
 
     [DllImport("kernel32", SetLastError = true)]
-    private static extern uint GetConsoleCP();
+    private extern static uint GetConsoleCP();
 
     [DllImport("kernel32", SetLastError = true)]
-    private static extern uint GetConsoleOutputCP();
+    private extern static uint GetConsoleOutputCP();
 
     [DllImport("kernel32", SetLastError = true)]
-    private static extern bool SetConsoleCP(uint wCodePageID);
+    private extern static bool SetConsoleCP(uint wCodePageID);
 
     [DllImport("kernel32", SetLastError = true)]
-    private static extern bool SetConsoleOutputCP(uint wCodePageID);
+    private extern static bool SetConsoleOutputCP(uint wCodePageID);
 
 #pragma warning restore S108, S2486
 }

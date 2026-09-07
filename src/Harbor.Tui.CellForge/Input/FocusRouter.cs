@@ -4,9 +4,9 @@ namespace Harbor.Tui.CellForge.Input;
 // shared vocabulary); FocusRouter keeps consuming it via GlobalUsings.
 
 /// <summary>
-/// Flat Tab-order focus traversal (lazygit style): Tab/Shift+Tab wrap around,
-/// Alt+1..9-style direct jumps by index, mouse clicks route through
-/// <see cref="FocusById"/>.
+///     Flat Tab-order focus traversal (lazygit style): Tab/Shift+Tab wrap around,
+///     Alt+1..9-style direct jumps by index, mouse clicks route through
+///     <see cref="FocusById" />.
 /// </summary>
 public sealed class FocusRouter
 {

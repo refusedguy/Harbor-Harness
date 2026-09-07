@@ -1,10 +1,4 @@
-using System.IO;
-using System.Linq;
-using System.Text.Json;
 using Harbor.Tools.Mcp;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Tools.Builtin.Tests;
 
 public class McpServersConfigLoaderTests
@@ -24,17 +18,17 @@ public class McpServersConfigLoaderTests
     public async Task LoadFromJson_ParsesSingleServer()
     {
         var loader = new McpServersConfigLoader(ProjectRoot());
-        var json = """
-        {
-          "mcpServers": {
-            "python-hello": {
-              "command": "python3",
-              "args": ["main.py"],
-              "cwd": "/tmp/x"
-            }
-          }
-        }
-        """;
+        string json = """
+                      {
+                        "mcpServers": {
+                          "python-hello": {
+                            "command": "python3",
+                            "args": ["main.py"],
+                            "cwd": "/tmp/x"
+                          }
+                        }
+                      }
+                      """;
         var entries = loader.LoadFromJson(json);
         await Assert.That(entries.Count).IsEqualTo(1);
         var info = Find(entries, "python-hello")!;
@@ -47,14 +41,14 @@ public class McpServersConfigLoaderTests
     public async Task LoadFromJson_DisabledServer_Skipped()
     {
         var loader = new McpServersConfigLoader(ProjectRoot());
-        var json = """
-        {
-          "mcpServers": {
-            "on": { "command": "true" },
-            "off": { "command": "true", "disabled": true }
-          }
-        }
-        """;
+        string json = """
+                      {
+                        "mcpServers": {
+                          "on": { "command": "true" },
+                          "off": { "command": "true", "disabled": true }
+                        }
+                      }
+                      """;
         var entries = loader.LoadFromJson(json);
         await Assert.That(entries.Any(e => e.Name == "on")).IsTrue();
         await Assert.That(entries.Any(e => e.Name == "off")).IsFalse();
@@ -68,21 +62,21 @@ public class McpServersConfigLoaderTests
         try
         {
             File.WriteAllText(userFile, """
-            {
-              "mcpServers": {
-                "shared": { "command": "user-cmd" },
-                "only-user": { "command": "u" }
-              }
-            }
-            """);
+                                        {
+                                          "mcpServers": {
+                                            "shared": { "command": "user-cmd" },
+                                            "only-user": { "command": "u" }
+                                          }
+                                        }
+                                        """);
             File.WriteAllText(projectFile, """
-            {
-              "mcpServers": {
-                "shared": { "command": "project-cmd" },
-                "only-proj": { "command": "p" }
-              }
-            }
-            """);
+                                           {
+                                             "mcpServers": {
+                                               "shared": { "command": "project-cmd" },
+                                               "only-proj": { "command": "p" }
+                                             }
+                                           }
+                                           """);
 
             var loader = new McpServersConfigLoader(ProjectRoot());
             var entries = loader.Load(userFile, projectFile);
@@ -105,18 +99,18 @@ public class McpServersConfigLoaderTests
         const string harborHome = "/home/harbor/.harbor";
         const string projectRoot = "/repo/app";
         var loader = new McpServersConfigLoader(projectRoot, home, harborHome);
-        var json = """
-        {
-          "mcpServers": {
-            "svc": {
-              "command": "svc",
-              "cwd": "${projectRoot}/plugins",
-              "args": ["${home}/bin", "--root", "${harborHome}"],
-              "env": { "TOKEN": "${projectRoot}/token" }
-            }
-          }
-        }
-        """;
+        string json = """
+                      {
+                        "mcpServers": {
+                          "svc": {
+                            "command": "svc",
+                            "cwd": "${projectRoot}/plugins",
+                            "args": ["${home}/bin", "--root", "${harborHome}"],
+                            "env": { "TOKEN": "${projectRoot}/token" }
+                          }
+                        }
+                      }
+                      """;
         var info = Find(loader.LoadFromJson(json), "svc")!;
         await Assert.That(info.WorkingDirectory).IsEqualTo("/repo/app/plugins");
         await Assert.That(info.Args[0]).IsEqualTo("/home/harbor/bin");
@@ -128,7 +122,7 @@ public class McpServersConfigLoaderTests
     public async Task Expand_UnknownMacro_LeftVerbatim()
     {
         var loader = new McpServersConfigLoader("/repo", "/home", "/home/.harbor");
-        var expanded = loader.Expand("${projectRoot}/x/${unknown}");
+        string expanded = loader.Expand("${projectRoot}/x/${unknown}");
         await Assert.That(expanded).IsEqualTo("/repo/x/${unknown}");
     }
 

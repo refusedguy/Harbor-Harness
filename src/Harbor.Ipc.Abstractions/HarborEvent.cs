@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 namespace Harbor.Ipc;
+
 /// <summary>
 ///     Discriminated union of streaming events delivered to
 ///     <see cref="IHarborClient.SubscribeToEventsAsync" />.

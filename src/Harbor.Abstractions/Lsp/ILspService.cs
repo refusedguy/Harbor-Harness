@@ -31,7 +31,7 @@ public enum LspSeverity
     Information = 3,
 
     /// <summary>LSP 4 — Hint.</summary>
-    Hint = 4,
+    Hint = 4
 }
 
 /// <summary>A file location returned by definition/references lookups.</summary>
@@ -65,30 +65,30 @@ public sealed class LspDiagnosticsChangedEventArgs(string filePath) : EventArgs
 public interface ILspService : IAsyncDisposable
 {
     /// <summary>Raised when diagnostics were re-published for a file.</summary>
-    event EventHandler<LspDiagnosticsChangedEventArgs>? DiagnosticsChanged;
+    public event EventHandler<LspDiagnosticsChangedEventArgs>? DiagnosticsChanged;
 
     /// <summary>True when a builtin language server covers this file's extension.</summary>
-    bool SupportsFile(string filePath);
+    public bool SupportsFile(string filePath);
 
     /// <summary>
     ///     Open a file: lazily spawn the language server for its language,
     ///     run the initialize handshake, and send <c>textDocument/didOpen</c>.
     ///     Safe to call for unsupported files (no-op) and repeatedly.
     /// </summary>
-    ValueTask OpenFileAsync(string filePath, string text, CancellationToken ct = default);
+    public ValueTask OpenFileAsync(string filePath, string text, CancellationToken ct = default);
 
     /// <summary>Push a full-text change for an open file (<c>didChange</c>, full sync).</summary>
-    ValueTask NotifyChangeAsync(string filePath, string newText, CancellationToken ct = default);
+    public ValueTask NotifyChangeAsync(string filePath, string newText, CancellationToken ct = default);
 
     /// <summary>Close a file (<c>didClose</c>) and clear its diagnostics cache.</summary>
-    ValueTask CloseFileAsync(string filePath);
+    public ValueTask CloseFileAsync(string filePath);
 
     /// <summary>Diagnostics currently published for the file (empty when none).</summary>
-    ValueTask<IReadOnlyList<LspDiagnostic>> GetDiagnosticsAsync(string filePath, CancellationToken ct = default);
+    public ValueTask<IReadOnlyList<LspDiagnostic>> GetDiagnosticsAsync(string filePath, CancellationToken ct = default);
 
     /// <summary>Resolve the definition at the position (null when none).</summary>
-    ValueTask<LspLocation?> FindDefinitionAsync(string filePath, int line, int column, CancellationToken ct = default);
+    public ValueTask<LspLocation?> FindDefinitionAsync(string filePath, int line, int column, CancellationToken ct = default);
 
     /// <summary>Resolve references to the symbol at the position.</summary>
-    ValueTask<IReadOnlyList<LspLocation>> FindReferencesAsync(string filePath, int line, int column, CancellationToken ct = default);
+    public ValueTask<IReadOnlyList<LspLocation>> FindReferencesAsync(string filePath, int line, int column, CancellationToken ct = default);
 }

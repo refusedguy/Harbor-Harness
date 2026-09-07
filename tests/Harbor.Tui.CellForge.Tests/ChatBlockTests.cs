@@ -1,6 +1,4 @@
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-
 namespace Harbor.Tui.CellForge.Tests;
 
 public class ChatBlockTests
@@ -20,10 +18,10 @@ public class ChatBlockTests
     {
         var buffer = new ScreenBuffer(14, 4);
         var block = new UserBlock("hello world again");
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 14, 4), tick: 0));
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 14, 4), 0));
 
         string art = GridDump.Art(buffer);
-        var rows = art.Split('\n');
+        string[] rows = art.Split('\n');
         await Assert.That(rows[0].TrimEnd()).IsEqualTo("› hello world");
         await Assert.That(rows[1].TrimEnd()).IsEqualTo("  again"); // continuation aligns under body
         // Prefix must not repeat on continuation rows.
@@ -58,9 +56,9 @@ public class ChatBlockTests
     {
         var block = new ToolCallBlock(new ToolCallInfo("t1", "read", "src/a.cs"))
         {
-            MaxBodyLines = 2,
+            MaxBodyLines = 2
         };
-        block.Complete(new ToolResultBody("l1\nl2\nl3\n", isError: false, TimeSpan.FromMilliseconds(850)));
+        block.Complete(new ToolResultBody("l1\nl2\nl3\n", false, TimeSpan.FromMilliseconds(850)));
 
         var m = block.Measure(60);
         await Assert.That(m.MinLines).IsEqualTo(1 /*header*/ + 2 /*body*/ + 1 /*continuation*/);
@@ -79,8 +77,8 @@ public class ChatBlockTests
     public async Task ToolCallBlock_Error_UsesErrorStyleAndFirstResultWins()
     {
         var block = new ToolCallBlock(new ToolCallInfo("t2", "edit", ""));
-        block.Complete(new ToolResultBody("boom", isError: true, TimeSpan.FromMilliseconds(5)));
-        block.Complete(new ToolResultBody("second", isError: false, TimeSpan.FromMilliseconds(9)));
+        block.Complete(new ToolResultBody("boom", true, TimeSpan.FromMilliseconds(5)));
+        block.Complete(new ToolResultBody("second", false, TimeSpan.FromMilliseconds(9)));
 
         await Assert.That(block.Status).IsEqualTo(ToolCallStatus.Error);
         await Assert.That(block.Body!.Output).IsEqualTo("boom");
@@ -93,9 +91,9 @@ public class ChatBlockTests
     [Test]
     public async Task ToolCallBlock_DiffBody_ReplacesPlainText()
     {
-        var diff = "--- a/f.cs\n+++ b/f.cs\n@@ -1,1 +1,2 @@\n-old\n+new\n ctx";
+        string diff = "--- a/f.cs\n+++ b/f.cs\n@@ -1,1 +1,2 @@\n-old\n+new\n ctx";
         var block = new ToolCallBlock(new ToolCallInfo("t3", "patch", "f.cs"));
-        block.Complete(new ToolResultBody("", isError: false, TimeSpan.Zero, diffText: diff));
+        block.Complete(new ToolResultBody("", false, TimeSpan.Zero, diff));
 
         int expected = 1 + 6; // header + 6 diff lines
         await Assert.That(block.Measure(50).MinLines).IsEqualTo(expected);

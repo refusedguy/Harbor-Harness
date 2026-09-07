@@ -16,6 +16,7 @@
 // constructs one after both stores have been eagerly loaded.
 
 namespace Harbor.Desktop.Abstractions.Configuration;
+
 /// <summary>
 ///     Immutable pair of the shared <see cref="CommonConfig" /> snapshot and
 ///     an app-specific <typeparamref name="TAppConfig" /> snapshot. Resolved

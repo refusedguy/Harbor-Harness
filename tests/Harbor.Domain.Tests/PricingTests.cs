@@ -1,6 +1,4 @@
 using Harbor.Abstractions.Models;
-using TUnit.Assertions;
-
 namespace Harbor.Domain.Tests;
 
 /// <summary>
@@ -45,14 +43,14 @@ public class PricingTests
     [Test]
     public async Task CalculateCost_CacheComponents_UseTheirRates()
     {
-        var pricing = new Pricing(3m, 15m, CacheReadPerMillion: 0.30m, CacheWritePerMillion: 3.75m);
+        var pricing = new Pricing(3m, 15m, 0.30m, 3.75m);
 
         decimal cost = pricing.CalculateCost(new Usage(
-            InputTokens: 100_000,
-            OutputTokens: 200_000,
-            ReasoningTokens: null,
-            CacheReadTokens: 1_000_000,
-            CacheWriteTokens: 400_000));
+            100_000,
+            200_000,
+            null,
+            1_000_000,
+            400_000));
 
         // in $0.30 + out $3.00 + read $0.30 + write $1.50 = $5.10.
         await Assert.That(cost).IsEqualTo(5.10m);
@@ -64,11 +62,11 @@ public class PricingTests
         var pricing = new Pricing(3m, 15m); // cache rates default to null
 
         decimal cost = pricing.CalculateCost(new Usage(
-            InputTokens: 1_000_000,
-            OutputTokens: 0,
-            ReasoningTokens: null,
-            CacheReadTokens: 999_999,
-            CacheWriteTokens: 999_999));
+            1_000_000,
+            0,
+            null,
+            999_999,
+            999_999));
 
         await Assert.That(cost).IsEqualTo(3m);
     }

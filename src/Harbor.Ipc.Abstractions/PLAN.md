@@ -18,7 +18,5 @@
 
 - Add TLS transport variant — see the transport section in `Harbor.Ipc.Client/README.md`.
 - Add WebSocket transport (`WebSocketPipeTransport`) for browser-based clients.
-- Migrate from typed MessagePack to a hand-rolled formatter for the
-  domain types — would let us drop the MessagePack runtime dependency on
-  the IPC client and ship a smaller client binary.
+- Migrate from typed MessagePack to a hand-rolled formatter for the domain types — would let us drop the MessagePack runtime dependency on the IPC client and ship a smaller client binary.
 - Add per-method throttling / rate-limiting to the server's `RequestDispatcher`.

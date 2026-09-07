@@ -1,14 +1,13 @@
-using System.Diagnostics;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Demo;
+using Harbor.App.Cli.Hosting;
 using Harbor.Application.Configuration;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-
+using System.Diagnostics;
+using System.Globalization;
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
@@ -33,9 +32,9 @@ namespace Harbor.App.Cli.Commands;
 public sealed class DemoCommand : ICommand
 {
     private static readonly HashSet<string> SupportedTuis = new(StringComparer.OrdinalIgnoreCase) { "ansi", "plain" };
+    private readonly TextWriter _error;
 
     private readonly TextWriter _output;
-    private readonly TextWriter _error;
 
     public DemoCommand(TextWriter output, TextWriter error)
     {
@@ -49,7 +48,7 @@ public sealed class DemoCommand : ICommand
     /// <inheritdoc />
     public async Task<int> ExecuteAsync(string[] args, CancellationToken ct = default)
     {
-        DemoOptions? options = DemoOptions.Parse(args, _error);
+        var options = DemoOptions.Parse(args, _error);
         if (options is null)
         {
             PrintUsage();
@@ -76,8 +75,10 @@ public sealed class DemoCommand : ICommand
         finally
         {
             await server.DisposeAsync().ConfigureAwait(false);
-            try { Directory.Delete(demoHome, recursive: true); }
-            catch { /* best-effort cleanup of the throw-away HOME */ }
+            try { Directory.Delete(demoHome, true); }
+            catch
+            { /* best-effort cleanup of the throw-away HOME */
+            }
         }
     }
 
@@ -101,40 +102,40 @@ public sealed class DemoCommand : ICommand
         Directory.CreateDirectory(Path.Combine(harborDir, "providers"));
 
         string providerConfig = $$"""
-            {
-              "id": "demo",
-              "displayName": "Harbor Demo (mock)",
-              "description": "In-process mock LLM for harbor demo — no API keys.",
-              "baseUrl": "{{mockBaseUri}}",
-              "apiType": "openai-compatible",
-              "authType": "bearer",
-              "authEnvVar": "DEMO_API_KEY",
-              "models": [
-                {
-                  "id": "{{DemoLlmServer.ModelId}}",
-                  "providerId": "demo",
-                  "displayName": "Harbor Demo Model",
-                  "contextWindow": 128000,
-                  "maxOutputTokens": 4096,
-                  "supportsReasoning": false,
-                  "supportsVision": false,
-                  "supportsToolUse": true,
-                  "pricing": { "inputPerMillion": 0, "outputPerMillion": 0 },
-                  "promptTemplate": "openai"
-                }
-              ]
-            }
-            """;
+                                  {
+                                    "id": "demo",
+                                    "displayName": "Harbor Demo (mock)",
+                                    "description": "In-process mock LLM for harbor demo — no API keys.",
+                                    "baseUrl": "{{mockBaseUri}}",
+                                    "apiType": "openai-compatible",
+                                    "authType": "bearer",
+                                    "authEnvVar": "DEMO_API_KEY",
+                                    "models": [
+                                      {
+                                        "id": "{{DemoLlmServer.ModelId}}",
+                                        "providerId": "demo",
+                                        "displayName": "Harbor Demo Model",
+                                        "contextWindow": 128000,
+                                        "maxOutputTokens": 4096,
+                                        "supportsReasoning": false,
+                                        "supportsVision": false,
+                                        "supportsToolUse": true,
+                                        "pricing": { "inputPerMillion": 0, "outputPerMillion": 0 },
+                                        "promptTemplate": "openai"
+                                      }
+                                    ]
+                                  }
+                                  """;
         File.WriteAllText(Path.Combine(harborDir, "providers", "demo.json"), providerConfig);
 
         File.WriteAllText(Path.Combine(harborDir, "config.json"), """
-            {
-              "provider": "demo",
-              "model": "demo/harbor-1",
-              "agent": "code",
-              "onboarded": true
-            }
-            """);
+                                                                  {
+                                                                    "provider": "demo",
+                                                                    "model": "demo/harbor-1",
+                                                                    "agent": "code",
+                                                                    "onboarded": true
+                                                                  }
+                                                                  """);
         return home;
     }
 
@@ -145,8 +146,8 @@ public sealed class DemoCommand : ICommand
     /// </summary>
     private async Task<int> RunScenesAsync(DemoOptions options, CancellationToken ct)
     {
-        using IHost host = Hosting.HostBuilder.Build();
-        IServiceProvider sp = host.Services;
+        using var host = HostBuilder.Build();
+        var sp = host.Services;
 
         var renderer = sp.GetRequiredService<ITuiRenderer>();
         var eventBus = sp.GetRequiredService<IEventBus>();
@@ -158,7 +159,7 @@ public sealed class DemoCommand : ICommand
         await renderer.InitializeAsync().ConfigureAwait(false);
         eventBus.Subscribe(async (evt, c) => await renderer.RenderAsync(evt, c).ConfigureAwait(false));
 
-        HarborConfig config = (await configStore.LoadAsync().ConfigureAwait(false)).Value;
+        var config = (await configStore.LoadAsync().ConfigureAwait(false)).Value;
         var defaultAgent = agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
                            ?? agentRegistry.GetAllAgents()[0];
         string[] modelParts = config.EffectiveModel.Split('/', 2);
@@ -173,13 +174,13 @@ public sealed class DemoCommand : ICommand
 
         agent.Initialize(sessionResult.Value, defaultAgent);
 
-        foreach (DemoScene scene in DemoScenes.Select(options.Scene))
+        foreach (var scene in DemoScenes.Select(options.Scene))
         {
             await renderer.WriteLineAsync($"\n━━━ harbor demo · scene: {scene.Id} ━━━ provider: demo (mock) · tui: {options.Tui}").ConfigureAwait(false);
             await renderer.WriteLineAsync("> " + scene.Prompt).ConfigureAwait(false);
 
             var stopwatch = Stopwatch.StartNew();
-            Result promptResult = await agent.PromptAsync(scene.Prompt).ConfigureAwait(false);
+            var promptResult = await agent.PromptAsync(scene.Prompt).ConfigureAwait(false);
             stopwatch.Stop();
             if (promptResult.IsFailure)
             {
@@ -187,7 +188,7 @@ public sealed class DemoCommand : ICommand
                 return 1;
             }
 
-            await renderer.WriteLineAsync(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"✔ scene complete in {stopwatch.Elapsed.TotalSeconds:0.0}s")).ConfigureAwait(false);
+            await renderer.WriteLineAsync(string.Create(CultureInfo.InvariantCulture, $"✔ scene complete in {stopwatch.Elapsed.TotalSeconds:0.0}s")).ConfigureAwait(false);
         }
 
         await renderer.WriteLineAsync("\nharbor demo finished — no API keys were used. Record GIFs: vhs demo/hero.tape").ConfigureAwait(false);
@@ -235,17 +236,17 @@ public sealed class DemoCommand : ICommand
 
                     case "--chunk-delay":
                     case var _ when arg.StartsWith("--chunk-delay=", StringComparison.OrdinalIgnoreCase):
+                    {
+                        string raw = inline ?? (i + 1 < args.Length ? args[i + 1] : string.Empty);
+                        if (!int.TryParse(raw, out chunkDelayMs) || chunkDelayMs < 0)
                         {
-                            string raw = inline ?? (i + 1 < args.Length ? args[i + 1] : string.Empty);
-                            if (!int.TryParse(raw, out chunkDelayMs) || chunkDelayMs < 0)
-                            {
-                                error.WriteLine("harbor demo: --chunk-delay must be a non-negative integer (ms)");
-                                return null;
-                            }
-
-                            i += inline is null ? 2 : 1;
-                            break;
+                            error.WriteLine("harbor demo: --chunk-delay must be a non-negative integer (ms)");
+                            return null;
                         }
+
+                        i += inline is null ? 2 : 1;
+                        break;
+                    }
 
                     default:
                         error.WriteLine("harbor demo: unknown argument '" + arg + "'");
@@ -286,33 +287,13 @@ public sealed class DemoCommand : ICommand
             "approval",
             "Run `echo hello from Harbor` in the shell");
 
-        /// <summary>Scenes for the given selector, in play order.</summary>
-        public static IEnumerable<DemoScene> Select(string scene) =>
-            scene switch
-            {
-                "hero" => new[] { Hero },
-                "markdown" => new[] { Markdown },
-                "approval" => new[] { Approval },
-                _ => new[] { Hero, Markdown, Approval }
-            };
-
-        /// <summary>Mock replies for the given selector, in the exact order the agent will request them.</summary>
-        public static DemoReply[] Replies(string scene) =>
-            scene switch
-            {
-                "hero" => HeroReplies,
-                "markdown" => MarkdownReplies,
-                "approval" => ApprovalReplies,
-                _ => [.. HeroReplies, .. MarkdownReplies, .. ApprovalReplies]
-            };
-
         private static readonly DemoReply[] HeroReplies =
         [
             DemoReply.FromText(
                 "Harbor is a modular .NET 10 AI coding agent harness. Every concern — providers, storage, TUI " +
                 "rendering, tool execution, permissions — lives behind an interface and swaps through DI. It ships " +
                 "4 native LLM clients plus 13 JSON-config providers, 18 builtin tools, JSONL-first session storage, " +
-                "and a plugin host that compiles C# sources at startup — all performance-first and NativeAOT-ready."),
+                "and a plugin host that compiles C# sources at startup — all performance-first and NativeAOT-ready.")
         ];
 
         private static readonly DemoReply[] MarkdownReplies =
@@ -330,7 +311,7 @@ public sealed class DemoCommand : ICommand
                 "```\n\n" +
                 "1. **Stream** tokens as they arrive — renderers subscribe to typed events only\n" +
                 "2. **Check** permissions (allow / ask / deny per tool + glob)\n" +
-                "3. **Repeat** until the model stops calling tools, then publish AgentEnd"),
+                "3. **Repeat** until the model stops calling tools, then publish AgentEnd")
         ];
 
         private static readonly DemoReply[] ApprovalReplies =
@@ -340,7 +321,27 @@ public sealed class DemoCommand : ICommand
             // turn 2 — summarize after the tool result
             DemoReply.FromText(
                 "Approved and executed. The approval gate asked once, the demo policy allowed it, and the shell " +
-                "printed: hello from Harbor"),
+                "printed: hello from Harbor")
         ];
+
+        /// <summary>Scenes for the given selector, in play order.</summary>
+        public static IEnumerable<DemoScene> Select(string scene) =>
+            scene switch
+            {
+                "hero" => new[] { Hero },
+                "markdown" => new[] { Markdown },
+                "approval" => new[] { Approval },
+                _ => new[] { Hero, Markdown, Approval }
+            };
+
+        /// <summary>Mock replies for the given selector, in the exact order the agent will request them.</summary>
+        public static DemoReply[] Replies(string scene) =>
+            scene switch
+            {
+                "hero" => HeroReplies,
+                "markdown" => MarkdownReplies,
+                "approval" => ApprovalReplies,
+                _ => [..HeroReplies, ..MarkdownReplies, ..ApprovalReplies]
+            };
     }
 }

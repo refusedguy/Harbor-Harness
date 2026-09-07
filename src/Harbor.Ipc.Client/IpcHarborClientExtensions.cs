@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Ipc.Client;
+
 /// <summary>
 ///     DI extensions for registering <see cref="IpcHarborClient" /> as the
 ///     active <see cref="IHarborClient" />.

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Diagnostics;
+
 /// <summary>
 ///     In-memory sink for log entries that should be surfaced inside an interactive
 ///     TUI as a diagnostics panel (F12). Backed by a fixed-capacity ring buffer so

@@ -1,12 +1,10 @@
-using System.Text;
-using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Widgets;
-
+using System.Text;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Leader-key chords (ctrl+x pattern): arming, chord resolution inside the
-/// timeout window, unknown-chord disarm, and pass-through while unarmed.
+///     Leader-key chords (ctrl+x pattern): arming, chord resolution inside the
+///     timeout window, unknown-chord disarm, and pass-through while unarmed.
 /// </summary>
 public class LeaderKeyRouterTests
 {
@@ -18,7 +16,7 @@ public class LeaderKeyRouterTests
     {
         var router = new LeaderKeyRouter();
 
-        await Assert.That(router.HandleKey(Plain('g'), nowMs: 0)).IsFalse();
+        await Assert.That(router.HandleKey(Plain('g'), 0)).IsFalse();
         await Assert.That(router.IsPending).IsFalse();
     }
 
@@ -27,7 +25,7 @@ public class LeaderKeyRouterTests
     {
         var router = new LeaderKeyRouter();
 
-        await Assert.That(router.HandleKey(Leader(), nowMs: 0)).IsTrue();
+        await Assert.That(router.HandleKey(Leader(), 0)).IsTrue();
         await Assert.That(router.IsPending).IsTrue();
     }
 
@@ -38,8 +36,8 @@ public class LeaderKeyRouterTests
         int fired = 0;
         router.Bind('g', () => fired++);
 
-        _ = router.HandleKey(Leader(), nowMs: 0);
-        _ = router.HandleKey(Plain('G'), nowMs: 500); // case-insensitive
+        _ = router.HandleKey(Leader(), 0);
+        _ = router.HandleKey(Plain('G'), 500); // case-insensitive
 
         await Assert.That(fired).IsEqualTo(1);
         await Assert.That(router.IsPending).IsFalse();
@@ -52,8 +50,8 @@ public class LeaderKeyRouterTests
         int fired = 0;
         router.Bind('g', () => fired++);
 
-        _ = router.HandleKey(Leader(), nowMs: 0);
-        _ = router.HandleKey(Plain('g'), nowMs: LeaderKeyRouter.TimeoutMs + 1);
+        _ = router.HandleKey(Leader(), 0);
+        _ = router.HandleKey(Plain('g'), LeaderKeyRouter.TimeoutMs + 1);
 
         await Assert.That(fired).IsEqualTo(0);
         await Assert.That(router.IsPending).IsFalse();
@@ -66,9 +64,9 @@ public class LeaderKeyRouterTests
         int fired = 0;
         router.Bind('g', () => fired++);
 
-        _ = router.HandleKey(Leader(), nowMs: 0);
-        _ = router.HandleKey(Plain('z'), nowMs: 100);
-        _ = router.HandleKey(Plain('g'), nowMs: 200); // router disarmed — passes through
+        _ = router.HandleKey(Leader(), 0);
+        _ = router.HandleKey(Plain('z'), 100);
+        _ = router.HandleKey(Plain('g'), 200); // router disarmed — passes through
 
         await Assert.That(fired).IsEqualTo(0);
     }
@@ -78,8 +76,8 @@ public class LeaderKeyRouterTests
     {
         var router = new LeaderKeyRouter();
 
-        _ = router.HandleKey(Leader(), nowMs: 0);
-        await Assert.That(router.HandleKey(KeyEvent.Simple(KeyCode.Enter), nowMs: 100)).IsTrue();
+        _ = router.HandleKey(Leader(), 0);
+        await Assert.That(router.HandleKey(KeyEvent.Simple(KeyCode.Enter), 100)).IsTrue();
         await Assert.That(router.IsPending).IsFalse();
     }
 
@@ -91,8 +89,8 @@ public class LeaderKeyRouterTests
         router.Bind('g', () => first++);
         router.Bind('g', () => second++);
 
-        _ = router.HandleKey(Leader(), nowMs: 0);
-        _ = router.HandleKey(Plain('g'), nowMs: 100);
+        _ = router.HandleKey(Leader(), 0);
+        _ = router.HandleKey(Plain('g'), 100);
 
         await Assert.That(first).IsEqualTo(0);
         await Assert.That(second).IsEqualTo(1);

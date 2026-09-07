@@ -1,7 +1,6 @@
+using CSharpFunctionalExtensions;
 using System.Buffers.Text;
 using System.Security.Cryptography;
-using CSharpFunctionalExtensions;
-
 namespace Harbor.Ipc.Protocol;
 
 /// <summary>

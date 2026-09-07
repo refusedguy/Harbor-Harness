@@ -1,10 +1,10 @@
-using System.Linq;
-using System.Reflection;
 using Harbor.Plugins.Abstractions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
+using System.Reflection;
 namespace Harbor.Plugins.Compilation;
+
 /// <summary>
 ///     <see cref="IPluginCompiler" /> that compiles CS source via
 ///     <see cref="CSharpCompilation" /> in-memory. The compiled assembly bytes are loaded
@@ -25,8 +25,35 @@ namespace Harbor.Plugins.Compilation;
 /// </remarks>
 public sealed class RoslynPluginCompiler : IPluginCompiler
 {
-    private readonly PluginAssemblyReferences _references;
+
+    /// <summary>
+    ///     Namespaces injected as <c>global using</c> directives into every
+    ///     compiled plugin. Plugin authors typically copy sources from the
+    ///     shipped samples, whose DLL projects rely on
+    ///     <c>&lt;ImplicitUsings&gt;enable&lt;/ImplicitUsings&gt;</c>; a raw
+    ///     Roslyn compilation has no SDK-level implicit usings, so without this
+    ///     prelude those copies fail with CS0246 for even basic BCL types
+    ///     (<c>Version</c>, <c>Task</c>, <c>Directory</c>). Duplicates of an
+    ///     explicit using in the source are legal C# and produce no diagnostics.
+    /// </summary>
+    private static readonly string[] ImplicitUsingNamespaces =
+    {
+        // The .NET SDK implicit-usings set.
+        "System",
+        "System.Collections.Generic",
+        "System.IO",
+        "System.Linq",
+        "System.Net.Http",
+        "System.Threading",
+        "System.Threading.Tasks",
+        // Harbor contract namespaces referenced by every plugin shape.
+        "Harbor.Abstractions.Models",
+        "Harbor.Abstractions.Plugins",
+        "Harbor.Abstractions.Tools",
+        "Microsoft.Extensions.Logging"
+    };
     private readonly Func<PluginScript, Assembly>? _assemblyLoader;
+    private readonly PluginAssemblyReferences _references;
 
     /// <summary>
     ///     Construct a new Roslyn compiler.
@@ -84,47 +111,20 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
             ? CollectiblePluginLoadContext.ForScript(script)
             : null;
         var asm = _assemblyLoader?.Invoke(script)
-            ?? sandbox!.LoadFromImage(assemblyBytes);
+                  ?? sandbox!.LoadFromImage(assemblyBytes);
         var compiled = new CompiledPluginAssembly(
             asm,
             script.Hash,
             script.Path,
             assemblyBytes,
-            FromCache: false,
+            false,
             script.DeclaredCapabilities);
         return Task.FromResult(CompilationResult.Fresh(compiled));
     }
 
-    /// <summary>
-    ///     Namespaces injected as <c>global using</c> directives into every
-    ///     compiled plugin. Plugin authors typically copy sources from the
-    ///     shipped samples, whose DLL projects rely on
-    ///     <c>&lt;ImplicitUsings&gt;enable&lt;/ImplicitUsings&gt;</c>; a raw
-    ///     Roslyn compilation has no SDK-level implicit usings, so without this
-    ///     prelude those copies fail with CS0246 for even basic BCL types
-    ///     (<c>Version</c>, <c>Task</c>, <c>Directory</c>). Duplicates of an
-    ///     explicit using in the source are legal C# and produce no diagnostics.
-    /// </summary>
-    private static readonly string[] ImplicitUsingNamespaces =
-    {
-        // The .NET SDK implicit-usings set.
-        "System",
-        "System.Collections.Generic",
-        "System.IO",
-        "System.Linq",
-        "System.Net.Http",
-        "System.Threading",
-        "System.Threading.Tasks",
-        // Harbor contract namespaces referenced by every plugin shape.
-        "Harbor.Abstractions.Models",
-        "Harbor.Abstractions.Plugins",
-        "Harbor.Abstractions.Tools",
-        "Microsoft.Extensions.Logging",
-    };
-
     private static SyntaxTree BuildImplicitUsingsSyntaxTree()
     {
-        var prelude = string.Join(
+        string prelude = string.Join(
             Environment.NewLine,
             ImplicitUsingNamespaces.Select(ns => $"global using {ns};"));
         return CSharpSyntaxTree.ParseText(prelude, path: "<harbor-plugin-implicit-usings>");

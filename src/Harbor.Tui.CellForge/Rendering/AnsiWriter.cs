@@ -1,26 +1,34 @@
 using System.Buffers;
 using System.Text;
-
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
-/// Frame assembler (celldiff §3): every frame is accumulated in one reusable
-/// byte buffer and leaves through a single backend write inside the
-/// synchronized-update wrapper <c>CSI ?2026 h … l</c> (only when the DECRQM
-/// probe confirmed support).
-///
-/// Built-in minimizations:
-/// <list type="bullet">
-///   <item><description>SGR automaton — only the delta between the current
-///     and target style is emitted; palette colors come from precomputed
-///     interned sequences; ≥3 changed groups collapse into
-///     <c>SGR 0</c> + reapply.</description></item>
-///   <item><description>Cursor elision — absolute addressing is skipped when
-///     the tracked pen position already matches.</description></item>
-/// </list>
+///     Frame assembler (celldiff §3): every frame is accumulated in one reusable
+///     byte buffer and leaves through a single backend write inside the
+///     synchronized-update wrapper <c>CSI ?2026 h … l</c> (only when the DECRQM
+///     probe confirmed support).
+///     Built-in minimizations:
+///     <list type="bullet">
+///         <item>
+///             <description>
+///                 SGR automaton — only the delta between the current
+///                 and target style is emitted; palette colors come from precomputed
+///                 interned sequences; ≥3 changed groups collapse into
+///                 <c>SGR 0</c> + reapply.
+///             </description>
+///         </item>
+///         <item>
+///             <description>
+///                 Cursor elision — absolute addressing is skipped when
+///                 the tracked pen position already matches.
+///             </description>
+///         </item>
+///     </list>
 /// </summary>
 public sealed class AnsiWriter
 {
+
+    private const byte Esc = 0x1B;
     // Attribute on/off code pairs (§3.2). Bold and dim share the off code 22,
     // which is why turning one of them off may re-emit the other's on code.
     private static readonly (StyleAttr Flag, int On, int Off)[] AttrTable =
@@ -32,34 +40,30 @@ public sealed class AnsiWriter
         (StyleAttr.Blink, 5, 25),
         (StyleAttr.Reverse, 7, 27),
         (StyleAttr.Hidden, 8, 28),
-        (StyleAttr.Strike, 9, 29),
+        (StyleAttr.Strike, 9, 29)
     ];
 
     // Interned palette sequences (btop-style interning): \x1b[38;5;Nm / \x1b[48;5;Nm ×256.
     private static readonly byte[][] PaletteFg = BuildPalette(38);
     private static readonly byte[][] PaletteBg = BuildPalette(48);
 
-    private const byte Esc = 0x1B;
-
     private readonly ITerminalBackend _backend;
+    private readonly int[] _sgrParamValues = new int[16];
     private readonly bool _syncUpdates;
+    private StyleAttr _attrs;
+    private PackedColor _bg;
     private byte[] _buf = new byte[16 * 1024];
-    private int _len;
 
     // SGR automaton state — invalidated at BeginFrame (styles are not carried
     // across frames because non-frame writers may touch the terminal too).
     private PackedColor _fg;
-    private PackedColor _bg;
-    private StyleAttr _attrs;
-    private bool _styleKnown;
+    private int _len;
 
     // Tracked pen position for elision (-1 = unknown).
-    private int _posX = -1;
-    private int _posY = -1;
 
     // Pending-SGR accumulation: consecutive numeric params merge into one CSI.
     private int _sgrParams;
-    private readonly int[] _sgrParamValues = new int[16];
+    private bool _styleKnown;
 
     public AnsiWriter(ITerminalBackend backend, bool syncUpdates = false)
     {
@@ -68,10 +72,10 @@ public sealed class AnsiWriter
     }
 
     /// <summary>Current tracked pen column (-1 when unknown).</summary>
-    public int TrackedX => _posX;
+    public int TrackedX { get; private set; } = -1;
 
     /// <summary>Current tracked pen row (-1 when unknown).</summary>
-    public int TrackedY => _posY;
+    public int TrackedY { get; private set; } = -1;
 
     /// <summary>Starts a new frame: buffer reuse + state invalidation + sync-on.</summary>
     public void BeginFrame()
@@ -79,16 +83,18 @@ public sealed class AnsiWriter
         FlushPendingSgr();
         _len = 0;
         _styleKnown = false;
-        _posX = -1;
-        _posY = -1;
+        TrackedX = -1;
+        TrackedY = -1;
         if (_syncUpdates)
         {
             AppendAscii("\x1B[?2026h");
         }
     }
 
-    /// <summary>Flushes the frame atomically: sync-off + one backend write.
-    /// A frame that carried no content at all is dropped entirely.</summary>
+    /// <summary>
+    ///     Flushes the frame atomically: sync-off + one backend write.
+    ///     A frame that carried no content at all is dropped entirely.
+    /// </summary>
     public async ValueTask EndFrameAsync(CancellationToken cancellationToken = default)
     {
         int wrapperBytes = _syncUpdates ? 8 : 0;
@@ -108,9 +114,9 @@ public sealed class AnsiWriter
     }
 
     /// <summary>
-    /// Synchronous twin of <see cref="EndFrameAsync"/> for sync render
-    /// contexts (backends implementing <see cref="ITerminalBackend.Write"/>):
-    /// identical empty-frame and sync-update semantics, no async machinery.
+    ///     Synchronous twin of <see cref="EndFrameAsync" /> for sync render
+    ///     contexts (backends implementing <see cref="ITerminalBackend.Write" />):
+    ///     identical empty-frame and sync-update semantics, no async machinery.
     /// </summary>
     public void EndFrame()
     {
@@ -134,7 +140,7 @@ public sealed class AnsiWriter
     public void MoveTo(int x, int y)
     {
         FlushPendingSgr();
-        if (_posX == x && _posY == y)
+        if (TrackedX == x && TrackedY == y)
         {
             return;
         }
@@ -145,8 +151,8 @@ public sealed class AnsiWriter
         _buf[_len++] = (byte)';';
         AppendDigits(x + 1);
         _buf[_len++] = (byte)'H';
-        _posX = x;
-        _posY = y;
+        TrackedX = x;
+        TrackedY = y;
     }
 
     /// <summary>Emits the SGR delta between the current and the target style.</summary>
@@ -176,12 +182,12 @@ public sealed class AnsiWriter
             AppendAttrs(target.Attrs);
             if (!target.Fg.IsDefault)
             {
-                AppendColor(target.Fg, isForeground: true);
+                AppendColor(target.Fg, true);
             }
 
             if (!target.Bg.IsDefault)
             {
-                AppendColor(target.Bg, isForeground: false);
+                AppendColor(target.Bg, false);
             }
         }
         else
@@ -193,7 +199,7 @@ public sealed class AnsiWriter
                 var turnedOn = target.Attrs & ~_attrs;
                 if (turnedOff != StyleAttr.None)
                 {
-                    QueueAttrOff(turnedOff, keep: target.Attrs);
+                    QueueAttrOff(turnedOff, target.Attrs);
                 }
 
                 if (turnedOn != StyleAttr.None)
@@ -206,12 +212,12 @@ public sealed class AnsiWriter
 
             if (fgChanged)
             {
-                AppendColor(target.Fg, isForeground: true);
+                AppendColor(target.Fg, true);
             }
 
             if (bgChanged)
             {
-                AppendColor(target.Bg, isForeground: false);
+                AppendColor(target.Bg, false);
             }
         }
 
@@ -233,14 +239,11 @@ public sealed class AnsiWriter
     }
 
     /// <summary>Writes one rune at the pen position; the pen advances by display width.</summary>
-    public void PutRune(Rune rune)
-    {
-        PutRuneWidth(rune, UnicodeWidth.Width(rune));
-    }
+    public void PutRune(Rune rune) => PutRuneWidth(rune, UnicodeWidth.Width(rune));
 
     /// <summary>
-    /// Writes one rune with an explicit advance (cell-diff passes the grid
-    /// width so wide runes advance exactly 2 columns).
+    ///     Writes one rune with an explicit advance (cell-diff passes the grid
+    ///     width so wide runes advance exactly 2 columns).
     /// </summary>
     public void PutRuneWidth(Rune rune, int advance)
     {
@@ -300,13 +303,13 @@ public sealed class AnsiWriter
             AppendAscii("A\r");
         }
 
-        _posY = _posY >= 0 ? Math.Max(0, _posY - lines) : -1;
-        _posX = 0;
+        TrackedY = TrackedY >= 0 ? Math.Max(0, TrackedY - lines) : -1;
+        TrackedX = 0;
     }
 
     /// <summary>
-    /// Erase-in-display ED 0 — from cursor to end of screen. Emits SGR 0 first
-    /// so background-color-erase terminals fill with the default bg.
+    ///     Erase-in-display ED 0 — from cursor to end of screen. Emits SGR 0 first
+    ///     so background-color-erase terminals fill with the default bg.
     /// </summary>
     public void EraseFromCursorDown()
     {
@@ -339,7 +342,7 @@ public sealed class AnsiWriter
     {
         EnsureCapacity(1);
         _buf[_len++] = (byte)'\r';
-        _posX = 0;
+        TrackedX = 0;
     }
 
     /// <summary>Newline (CR+LF) — pen moves to column 0 of the next row.</summary>
@@ -348,10 +351,10 @@ public sealed class AnsiWriter
         EnsureCapacity(2);
         _buf[_len++] = (byte)'\r';
         _buf[_len++] = (byte)'\n';
-        _posX = 0;
-        if (_posY >= 0)
+        TrackedX = 0;
+        if (TrackedY >= 0)
         {
-            _posY++;
+            TrackedY++;
         }
     }
 
@@ -362,8 +365,8 @@ public sealed class AnsiWriter
     /// <summary>Marks the tracked position unknown (after external cursor motion).</summary>
     public void InvalidateCursorPosition()
     {
-        _posX = -1;
-        _posY = -1;
+        TrackedX = -1;
+        TrackedY = -1;
     }
 
     /// <summary>Flushes whatever is buffered right now (outside frame pairing).</summary>
@@ -379,10 +382,10 @@ public sealed class AnsiWriter
     }
 
     /// <summary>
-    /// Synchronous flush twin of <see cref="FlushAsync"/> for sync render
-    /// contexts (CellForgeTuiRenderer adapter — renderer-unification sprint).
-    /// Purely additive: routes through <see cref="ITerminalBackend.Write"/> so
-    /// the SGR automaton and its buffer management remain untouched.
+    ///     Synchronous flush twin of <see cref="FlushAsync" /> for sync render
+    ///     contexts (CellForgeTuiRenderer adapter — renderer-unification sprint).
+    ///     Purely additive: routes through <see cref="ITerminalBackend.Write" /> so
+    ///     the SGR automaton and its buffer management remain untouched.
     /// </summary>
     public void FlushSync()
     {
@@ -399,9 +402,9 @@ public sealed class AnsiWriter
 
     private void AdvancePen(int cells)
     {
-        if (_posX >= 0)
+        if (TrackedX >= 0)
         {
-            _posX += cells;
+            TrackedX += cells;
         }
     }
 
@@ -413,7 +416,7 @@ public sealed class AnsiWriter
 
     private void QueueAttrs(StyleAttr set)
     {
-        foreach (var (flag, on, _) in AttrTable)
+        foreach ((var flag, int on, int _) in AttrTable)
         {
             if ((set & flag) != 0)
             {
@@ -426,7 +429,7 @@ public sealed class AnsiWriter
     {
         bool reapplyBold = false;
         bool reapplyDim = false;
-        foreach (var (flag, _, off) in AttrTable)
+        foreach ((var flag, int _, int off) in AttrTable)
         {
             if ((set & flag) == 0)
             {
@@ -498,7 +501,7 @@ public sealed class AnsiWriter
 
         if (!color.IsRgb)
         {
-            var interned = (isForeground ? PaletteFg : PaletteBg)[color.Index];
+            byte[] interned = (isForeground ? PaletteFg : PaletteBg)[color.Index];
             FlushPendingSgr();
             EnsureCapacity(interned.Length);
             interned.CopyTo(_buf, _len);
@@ -506,7 +509,7 @@ public sealed class AnsiWriter
             return;
         }
 
-        var (r, g, b) = color.RgbChannels;
+        (byte r, byte g, byte b) = color.RgbChannels;
         FlushPendingSgr();
         EnsureCapacity(20);
         _buf[_len++] = Esc;
@@ -530,7 +533,7 @@ public sealed class AnsiWriter
     private void AppendAscii(string s)
     {
         EnsureCapacity(s.Length);
-        foreach (var c in s)
+        foreach (char c in s)
         {
             _buf[_len++] = (byte)c;
         }

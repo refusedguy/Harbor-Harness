@@ -1,13 +1,7 @@
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Text.Json;
 using Harbor.Tools.Mcp;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
+using System.Diagnostics;
+using System.Text.Json;
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
@@ -29,8 +23,8 @@ public class McpProcessClientStartInfoTests
         try
         {
             string script = "printf 'cwd=%s\\n' \"$PWD\" > \"" + outFile +
-                             "\"; printf 'env=%s\\n' \"$MYVAR\" >> \"" + outFile +
-                             "\"; printf 'arg=%s\\n' \"$1\" >> \"" + outFile + "\"";
+                            "\"; printf 'env=%s\\n' \"$MYVAR\" >> \"" + outFile +
+                            "\"; printf 'arg=%s\\n' \"$1\" >> \"" + outFile + "\"";
 
             var registry = NewRegistry();
             var result = registry.Register("probe", new McpServerStartInfo
@@ -46,7 +40,7 @@ public class McpProcessClientStartInfoTests
             // so the call returns after the side-effect (writing outFile) has happened.
             await registry.InvokeAsync("probe", "initialize", JsonDocument.Parse("{}").RootElement);
 
-            var lines = await File.ReadAllLinesAsync(outFile);
+            string[] lines = await File.ReadAllLinesAsync(outFile);
             var map = lines.Select(l => l.Split('=', 2)).ToDictionary(p => p[0], p => p.Length > 1 ? p[1] : "");
 
             await Assert.That(map["cwd"]).IsEqualTo(workDir);
@@ -75,16 +69,16 @@ public class McpProcessClientStartInfoTests
         try
         {
             File.WriteAllText(cfg, """
-            {
-              "mcpServers": {
-                "srv": {
-                  "command": "true",
-                  "cwd": "/tmp",
-                  "env": { "FOO": "bar" }
-                }
-              }
-            }
-            """);
+                                   {
+                                     "mcpServers": {
+                                       "srv": {
+                                         "command": "true",
+                                         "cwd": "/tmp",
+                                         "env": { "FOO": "bar" }
+                                       }
+                                     }
+                                   }
+                                   """);
             var registry = NewRegistry();
             var result = registry.RegisterFromConfig(cfg);
             await Assert.That(result.IsSuccess).IsTrue();
@@ -178,7 +172,7 @@ public class McpProcessClientStartInfoTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            var candidate = Path.Combine(dir.FullName, relative);
+            string candidate = Path.Combine(dir.FullName, relative);
             if (Directory.Exists(candidate))
                 return candidate;
             dir = dir.Parent;
