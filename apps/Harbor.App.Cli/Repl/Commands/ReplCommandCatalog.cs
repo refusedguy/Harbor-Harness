@@ -28,7 +28,7 @@ internal sealed class ReplCommandCatalog
         return _byId.TryGetValue(id, out command);
     }
 
-    public IReadOnlyCollection<IReplCommand> All => _byId.Values.Distinct().ToArray();
+    public IReadOnlyCollection<IReplCommand> GetAll() => _byId.Values.Distinct().ToArray();
 
     /// <summary>All palette/slash commands: one registration point (OCP).</summary>
     public static ReplCommandCatalog CreateDefault()

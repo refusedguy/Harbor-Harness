@@ -50,7 +50,7 @@ public sealed class CellForgeTodoListPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        return PanelRows.Clip(
+        return PanelText.Clip(
             PanelRows.TodoRows(PanelExtractors.ExtractTodos(ctx.State)),
             ctx.Width,
             ctx.Height);
@@ -87,7 +87,7 @@ public sealed class CellForgeDiffPreviewPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        return PanelRows.Clip(
+        return PanelText.Clip(
             PanelRows.DiffRows(PanelExtractors.ExtractRecentChanges(ctx.State, 8), ctx.Width),
             ctx.Width,
             ctx.Height);
@@ -124,7 +124,7 @@ public sealed class CellForgeDiagnosticsPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        return PanelRows.Clip(
+        return PanelText.Clip(
             PanelRows.DiagnosticsRows(PanelExtractors.CollectDiagnostics(ctx.State), ctx.Height),
             ctx.Width,
             ctx.Height);
@@ -159,7 +159,7 @@ public sealed class CellForgeTokenBreakdownPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        return PanelRows.Clip(
+        return PanelText.Clip(
             PanelRows.TokenRows(ctx.State.Cost.TokensIn, ctx.State.Cost.TokensOut, ctx.State.Cost.CostUsd, ctx.Width),
             ctx.Width,
             ctx.Height);
