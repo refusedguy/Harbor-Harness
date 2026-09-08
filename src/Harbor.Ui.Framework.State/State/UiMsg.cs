@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.Panels;
 namespace Harbor.Ui.Framework.State;
 // TODO(principles)[SRP, AOT]: split into AppMsg (generic: KeyInput, Scroll,
@@ -135,4 +136,13 @@ public abstract record UiMsg
         ImmutableArray<string> Ids,
         ImmutableDictionary<string, TuiPanelState> States,
         ImmutableDictionary<string, int> Sizes) : UiMsg;
+
+    /// <summary>
+    ///     Host-side session list sync (CellForge REPL): recent sessions with the
+    ///     active mark, so the session-sidebar panel renders from the store
+    ///     instead of staying empty. Dispatched on startup/switch/new/fork.
+    /// </summary>
+    public sealed record SyncSessions(
+        ImmutableArray<SessionInfo> Sessions,
+        SessionId? ActiveSessionId) : UiMsg;
 }

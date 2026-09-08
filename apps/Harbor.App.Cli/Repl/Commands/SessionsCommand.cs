@@ -79,19 +79,52 @@ internal sealed class SessionsCommand : IReplCommand
             return;
         }
 
-        var sessionItems = result.Value
-            .Select(s => new CommandItem(
+        var sessionItems = new List<CommandItem>();
+        foreach (var s in result.Value)
+        {
+            int msgCount = 0;
+            var msgs = await store.GetMessagesAsync(s.Id, ct).ConfigureAwait(false);
+            if (msgs.IsSuccess)
+            {
+                msgCount = msgs.Value.Count;
+            }
+
+            sessionItems.Add(new CommandItem(
                 s.Id,
                 s.Title,
-                $"{s.ProviderId}/{s.Model} · {s.Id[..Math.Min(8, s.Id.Length)]}",
+                $"{s.ProviderId}/{s.Model} · {msgCount} msgs · {s.Id[..Math.Min(8, s.Id.Length)]}",
                 string.Empty,
-                "Sessions"))
-            .ToList();
+                DateBucket(s.UpdatedAt)));
+        }
 
         host.Palette.PushFrame(new PaletteFrame(
             "Switch Session", "sessions / switch", sessionItems,
             OnCommitAsync: (sessionItem, frameCt) => SwitchAsync(host, sessionItem, frameCt)));
         host.WakeUp();
+    }
+
+    // Numbered prefixes keep ascending-group sort chronological (the palette
+    // sorts empty-query results by group, then title).
+    private static string DateBucket(DateTimeOffset ts)
+    {
+        var local = ts.ToLocalTime().Date;
+        var today = DateTime.Today;
+        if (local == today)
+        {
+            return "1 · Today";
+        }
+
+        if (local == today.AddDays(-1))
+        {
+            return "2 · Yesterday";
+        }
+
+        if (local >= today.AddDays(-7))
+        {
+            return "3 · Previous 7 days";
+        }
+
+        return "4 · Older";
     }
 
     private static async Task SwitchAsync(IReplHost host, CommandItem sessionItem, CancellationToken ct)

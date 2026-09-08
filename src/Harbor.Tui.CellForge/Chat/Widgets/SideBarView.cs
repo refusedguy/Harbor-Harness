@@ -208,26 +208,6 @@ public static class SideBarView
                 }
             }
         }
-        else if (state.Sessions is { Count: > 0 })
-        {
-            y = Section(buffer, rect, labelX, y, "SESSIONS", headingStyle);
-            int sessionRows = Math.Min(state.Sessions.Count, Math.Max(0, rect.Bottom - 2 - y));
-            for (int i = 0; i < sessionRows; i++)
-            {
-                var session = state.Sessions[i];
-                bool isActive = session.SessionId == state.ActiveSessionId;
-                string marker = isActive ? "▸" : " ";
-                string display = marker + " " + session.Title;
-                var rowStyle = isActive ? valueStyle : labelStyle;
-                y = ValueLine(buffer, rect, labelX, y, innerW, display.AsSpan(), rowStyle);
-            }
-
-            if (state.ActiveSessionId is null)
-            {
-                y = ValueLine(buffer, rect, labelX, y, innerW, "(no active session)".AsSpan(), labelStyle);
-            }
-        }
-
         // ── Plugin slots ───────────────────────────────────────────────────
         if (extraSlots is not null)
         {

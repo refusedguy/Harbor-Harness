@@ -75,7 +75,7 @@ internal sealed class NewSessionCommand : IReplCommand
             };
         }
 
-        await host.RefreshSidebarSessionsAsync(ct).ConfigureAwait(false);
+        await host.SyncSessionsToStoreAsync(ct).ConfigureAwait(false);
         host.Bridge.AppendSystemLine($"✓ Started fresh session: {newSession.Value.Id[..Math.Min(8, newSession.Value.Id.Length)]}");
         host.WakeUp();
     }

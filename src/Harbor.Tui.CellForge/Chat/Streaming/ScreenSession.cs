@@ -157,6 +157,7 @@ public sealed class ScreenSession
         _back.Resize(cols, rows);
         _engine.Front.Resize(cols, rows);
         _back.InvalidateAll();
+        _engine.Front.InvalidateAll();
         _engine.ClearHints();
 
         if (horizontalShrink)

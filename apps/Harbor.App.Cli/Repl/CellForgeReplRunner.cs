@@ -1,4 +1,5 @@
 using System.Text;
+using System.Collections.Immutable;
 using System.Threading.Channels;
 using System.Linq;
 using CSharpFunctionalExtensions;
@@ -126,7 +127,7 @@ internal sealed class CellForgeReplRunner(
     Task IReplHost.SwitchToSessionAsync(string sessionId, CancellationToken ct) => SwitchToSessionAsync(sessionId, ct);
     Task IReplHost.ExecutePaletteItemAsync(CommandItem item, CancellationToken ct) => ExecutePaletteItemAsync(item, ct);
     Task IReplHost.ExecuteInfoAsync(string text, CancellationToken ct) => ExecuteInfoCommandAsync(text, ct);
-    Task IReplHost.RefreshSidebarSessionsAsync(CancellationToken ct) => RefreshSidebarSessionsAsync(ct);
+    Task IReplHost.SyncSessionsToStoreAsync(CancellationToken ct) => SyncSessionsToStoreAsync(ct);
 
     private readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
     private ThemeFileWatcher? _themeWatcher;
@@ -362,6 +363,10 @@ internal sealed class CellForgeReplRunner(
                 _selection.Clear();
                 _replStore.Dispatch(agentEvt);
                 await bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
+                if (agentEvt is AgentEndEvent)
+                {
+                    await MaybeAutoTitleAsync(ct).ConfigureAwait(false);
+                }
             }
 
             // Inline images (osc-sprint §1337): attachments drained on the
@@ -1021,9 +1026,161 @@ internal sealed class CellForgeReplRunner(
             : "vim: off");
     }
 
+    /// <summary>Sessions already checked for auto-titling (one check per session lifetime).</summary>
+    private readonly HashSet<string> _autoTitledSessions = new();
+
+    /// <summary>
+    ///     Auto-title (opencode-style): sessions born with the default
+    ///     <c>Session yyyy-MM-dd HH:mm</c> stamp get the first user prompt as
+    ///     an instant heuristic title, then a background micro-request asks
+    ///     the model for a real 2-5 word title. The loop is never blocked and
+    ///     never hijacked — the title call bypasses the agent entirely.
+    /// </summary>
+    private async Task MaybeAutoTitleAsync(CancellationToken ct)
+    {
+        if (!IsDefaultTitle(sessionModel.Title) || !_autoTitledSessions.Add(sessionModel.Id))
+        {
+            return;
+        }
+
+        if (services.GetService<ISessionStore>() is not { } store)
+        {
+            return;
+        }
+
+        var messages = await store.GetMessagesAsync(sessionModel.Id, ct).ConfigureAwait(false);
+        if (messages.IsFailure)
+        {
+            _autoTitledSessions.Remove(sessionModel.Id);
+            return;
+        }
+
+        string? first = null;
+        foreach (var m in messages.Value)
+        {
+            if (m is UserMessage u && !string.IsNullOrWhiteSpace(u.Content))
+            {
+                first = u.Content;
+                break;
+            }
+        }
+
+        if (string.IsNullOrEmpty(first))
+        {
+            _autoTitledSessions.Remove(sessionModel.Id);
+            return;
+        }
+
+        await ApplySessionTitleAsync(store, sessionModel, HeuristicTitle(first), ct).ConfigureAwait(false);
+
+        // AI upgrade on the pool: full observation inside, the frame loop never waits.
+        Session captured = sessionModel;
+        string prompt = first;
+        _ = Task.Run(() => UpgradeTitleWithAiAsync(captured, prompt));
+    }
+
+    /// <summary>First line of the first prompt, 48 chars max.</summary>
+    private static string HeuristicTitle(string firstUserMessage)
+    {
+        string title = firstUserMessage.Split('\n')[0].Trim();
+        return title.Length > 48 ? title[..47] + "…" : title;
+    }
+
+    /// <summary>Background title summarization: one micro-request, timeout 30 s.</summary>
+    private async Task UpgradeTitleWithAiAsync(Session session, string firstUserMessage)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        try
+        {
+            if (services.GetService<ISessionStore>() is not { } store)
+            {
+                return;
+            }
+
+            var clientResult = services.GetRequiredService<IProviderRegistry>().GetClient(ProviderId.Create(session.ProviderId));
+            if (clientResult.IsFailure)
+            {
+                return;
+            }
+
+            string excerpt = firstUserMessage.Length > 500 ? firstUserMessage[..500] : firstUserMessage;
+            var request = new LlmRequest(
+                Model: session.Model,
+                Messages: [LlmUserMessage.Text(
+                    "Generate a short chat title (2-5 words) for a conversation that started " +
+                    "with this user message. Reply with the title only — no quotes, no punctuation " +
+                    "around it, same language as the message:\n" + excerpt)],
+                SystemPrompt: "You name chat sessions. Reply with a 2-5 word title only.",
+                Tools: []);
+            var sb = new StringBuilder();
+            await foreach (var evt in clientResult.Value.StreamAsync(request, timeout.Token).ConfigureAwait(false))
+            {
+                if (evt is TextDeltaEvent td)
+                {
+                    sb.Append(td.Delta);
+                }
+            }
+
+            string? title = SanitizeAiTitle(sb.ToString());
+            if (title is null)
+            {
+                return;
+            }
+
+            await ApplySessionTitleAsync(store, session, title, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Heuristic title already applied — AI upgrade is best-effort.
+            logger.LogDebug(ex, "AI title upgrade failed");
+        }
+    }
+
+    /// <summary>Sanitize a model-produced title; null when unusable.</summary>
+    private static string? SanitizeAiTitle(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        string title = raw.Split('\n')[0].Trim().Trim('"', '\'', '«', '»', '.', '!', ':');
+        if (title.Length == 0 || IsDefaultTitle(title))
+        {
+            return null;
+        }
+
+        return title.Length > 48 ? title[..47] + "…" : title;
+    }
+
+    /// <summary>Persist a title; refresh the live session + sidebar when current.</summary>
+    private async Task ApplySessionTitleAsync(ISessionStore store, Session session, string title, CancellationToken ct)
+    {
+        var updated = session with { Title = title };
+        var saved = await store.UpdateAsync(updated, ct).ConfigureAwait(false);
+        if (saved.IsFailure)
+        {
+            return;
+        }
+
+        if (session.Id == sessionModel.Id)
+        {
+            sessionModel = updated;
+            if (screen.Sidebar is { } sidebar)
+            {
+                sidebar.State = sidebar.State with { SessionTitle = title };
+            }
+
+            _wake.Writer.TryWrite(null);
+        }
+    }
+
+    /// <summary>Default stamp from <c>Session.Create</c> (<c>Session yyyy-MM-dd HH:mm</c>).</summary>
+    private static bool IsDefaultTitle(string title) =>
+        title.Length == 24 && title.StartsWith("Session 2", StringComparison.Ordinal);
+
     /// <summary>Leader-chord bindings: scroll anchors, palette, vim, slash
-    /// shortcuts, and quick-switch digits 1..9 (recent sessions, sprint UI-V2 P2.2).</summary>
-    private void BindLeaderKeys()
+    /// shortcuts, and quick-switch digits 1..9 (recent sessions, sprint UI-V2 P2.2).</summary>    private void BindLeaderKeys()
     {
         _leader.Bind('g', () => { _timeline.ScrollToTop(); _wake.Writer.TryWrite(null); });
         _leader.Bind('e', () => { _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH)); _wake.Writer.TryWrite(null); });
@@ -1109,23 +1266,19 @@ internal sealed class CellForgeReplRunner(
             };
         }
 
-        await RefreshSidebarSessionsAsync(ct).ConfigureAwait(false);
+        await SyncSessionsToStoreAsync(ct).ConfigureAwait(false);
         bridge.AppendSystemLine($"⇄ сессия → {loaded.Value.Title} ({loaded.Value.Id[..Math.Min(8, loaded.Value.Id.Length)]})");
         _wake.Writer.TryWrite(null);
     }
 
     /// <summary>
-    ///     Sidebar session list (sprint UI-V2 P4): recent sessions from the
-    ///     store with the active one marked. Best-effort — hosts without a
-    ///     session store keep whatever the sidebar already shows.
+    ///     Session list sync (sprint UI-V2 P4): recent sessions from the store
+    ///     go into the TEA store so the session-sidebar panel renders live.
+    ///     The always-visible sidebar stays clean (session/model/agent/tokens
+    ///     only). Best-effort — hosts without a session store skip silently.
     /// </summary>
-    internal async Task RefreshSidebarSessionsAsync(CancellationToken ct)
+    internal async Task SyncSessionsToStoreAsync(CancellationToken ct)
     {
-        if (screen.Sidebar is not { } sidebar)
-        {
-            return;
-        }
-
         if (services.GetService<ISessionStore>() is not { } store)
         {
             return;
@@ -1137,14 +1290,11 @@ internal sealed class CellForgeReplRunner(
             return;
         }
 
-        sidebar.State = sidebar.State with
-        {
-            Sessions = listed.Value
+        _ = _replStore.Dispatch(new UiMsg.SyncSessions(
+            listed.Value
                 .Select(s => new SessionInfo(SessionId.Create(s.Id), s.Title, s.CreatedAt, s.UpdatedAt, "active"))
-                .ToArray(),
-            ActiveSessionId = SessionId.Create(sessionModel.Id),
-        };
-        _wake.Writer.TryWrite(null);
+                .ToImmutableArray(),
+            SessionId.Create(sessionModel.Id)));
     }
 
     private async Task SwitchToSlotAsync(char chord, CancellationToken ct)
@@ -1500,7 +1650,7 @@ internal sealed class CellForgeReplRunner(
             };
         }
 
-        await RefreshSidebarSessionsAsync(CancellationToken.None).ConfigureAwait(false);
+        await SyncSessionsToStoreAsync(CancellationToken.None).ConfigureAwait(false);
 
         // Quick-switch slots (sprint UI-V2 P2.2): the store lists most-recent-
         // first, so slot 1 gets the hottest session. Best-effort — hosts

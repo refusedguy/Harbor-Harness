@@ -302,6 +302,14 @@ public static class UiReducer
                 PanelSizes = sp.Sizes
             }
         }, new TuiEffect.None()),
+        UiMsg.SyncSessions ss => (state with
+        {
+            Chat = state.Chat with
+            {
+                Sessions = ss.Sessions,
+                ActiveSessionId = ss.ActiveSessionId
+            }
+        }, new TuiEffect.None()),
         _ => (state, new TuiEffect.None())
     };
 
