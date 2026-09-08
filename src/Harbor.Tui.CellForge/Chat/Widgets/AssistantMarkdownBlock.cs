@@ -32,10 +32,10 @@ public sealed class AssistantMarkdownBlock : IChatBlock
     public BlockMeasure Measure(int width)
     {
         EnsureRendered(width);
-        return BlockMeasure.Exact(_lines.Count + (_model is null ? 0 : 1));
+        return BlockMeasure.Exact(_lines.Count + (_model is null ? 0 : 1) + 1);
     }
 
-    public int CheapEstimate(int width) => (_model is null ? 0 : 1) + BlockMath.EstimateLines(_source, Math.Max(1, width));
+    public int CheapEstimate(int width) => (_model is null ? 0 : 1) + 1 + BlockMath.EstimateLines(_source, Math.Max(1, width));
 
     public void Paint(in BlockPaintContext ctx)
     {
@@ -44,16 +44,22 @@ public sealed class AssistantMarkdownBlock : IChatBlock
         int rows = ctx.Rect.Height;
         int skip = ctx.SkipRows;
         int headerRows = _model is null ? 0 : 1;
-        for (int i = 0; i < rows && (skip + i) < _lines.Count + headerRows; i++)
+        int totalRows = _lines.Count + headerRows + 1;
+        for (int i = 0; i < rows && (skip + i) < totalRows; i++)
         {
             int lineIdx = skip + i;
             if (headerRows == 1 && lineIdx == 0)
             {
-                buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, _model!, ChatPalette.Dim);
+                buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, "● " + _model!, ChatPalette.Dim);
                 continue;
             }
 
             int contentIdx = lineIdx - headerRows;
+            if (contentIdx >= _lines.Count)
+            {
+                continue; // trailing gap row: breathing room between bubbles
+            }
+
             if (_code is not null && _code.TryGetValue(contentIdx, out var codeSpans))
             {
                 PaintCodeSpans(buffer, ctx.Rect.X, ctx.Rect.Y + i, codeSpans);

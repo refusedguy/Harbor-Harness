@@ -83,9 +83,9 @@ public sealed class UserBlock : IChatBlock
     public int BudgetBytes => 64 + (_text.SourceLength * 2);
 
     public BlockMeasure Measure(int width) =>
-        BlockMeasure.Exact(1 + Math.Max(1, _text.GetLines(BodyWidth(width)).Length));
+        BlockMeasure.Exact(2 + Math.Max(1, _text.GetLines(BodyWidth(width)).Length));
 
-    public int CheapEstimate(int width) => 1 + BlockMath.EstimateLines(_text.Source, Math.Max(1, BodyWidth(width)));
+    public int CheapEstimate(int width) => 2 + BlockMath.EstimateLines(_text.Source, Math.Max(1, BodyWidth(width)));
 
     public void Paint(in BlockPaintContext ctx)
     {
@@ -106,14 +106,20 @@ public sealed class UserBlock : IChatBlock
 
         var headerStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         var barStyle = new CellStyle(ChatPalette.Accent);
-        var bodyStyle = new CellStyle(ChatPalette.UserText.Fg, ChatPalette.Panel, ChatPalette.UserText.Attrs);
-        var bgCell = Cell.From(new Rune(' '), new CellStyle(bg: ChatPalette.Panel));
+        var bodyStyle = new CellStyle(ChatPalette.UserText.Fg, ChatPalette.Surface, ChatPalette.UserText.Attrs);
+        var bgCell = Cell.From(new Rune(' '), new CellStyle(bg: ChatPalette.Surface));
 
         var lines = _text.GetLines(bodyWidth);
-        for (int i = 0; i < rows && (skip + i) < lines.Length + 1; i++)
+        int totalRows = lines.Length + 2;
+        for (int i = 0; i < rows && (skip + i) < totalRows; i++)
         {
             int row = skip + i;
             int paintY = y + i;
+            if (row == totalRows - 1)
+            {
+                continue; // trailing gap row: breathing room between bubbles
+            }
+
             buffer.Fill(new Rect(ctx.Rect.X, paintY, ctx.Rect.Width, 1), in bgCell);
             if (row == 0)
             {

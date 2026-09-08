@@ -1639,6 +1639,8 @@ internal sealed class CellForgeReplRunner(
 
         // Sidebar context (sprint UI-V2 P4): session identity + model before
         // the first frame paints; tokens arrive via RefreshUsage per turn.
+        // StatusViewModel.Model seeds assistant bubble headers (bridge reads it).
+        _status.Model = model;
         if (screen.Sidebar is { } sidebar)
         {
             sidebar.State = sidebar.State with
