@@ -125,6 +125,8 @@ public sealed class JsonThemeLoader : IThemeService
 
         void OnError(string error)
         {
+            // TODO(principles)[ROP]: surface through IThemeService.Watch instead of
+            // swallowing — callers (CellForgeReplRunner) need the error line.
             // Theme file watcher errors are non-fatal; live-reload resumes on next write.
         }
     }

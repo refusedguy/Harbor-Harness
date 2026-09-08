@@ -1,9 +1,4 @@
-using System.Collections.Generic;
-using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
-using Harbor.Ui.Framework.ViewModels;
-
-namespace Harbor.Tui.CellForge.Widgets;
+namespace Harbor.Ui.Framework.State;
 
 /// <summary>
 /// Quick-switch slots (Kilo pattern): nine fixed slots for recent sessions,
@@ -82,30 +77,6 @@ public sealed class QuickSwitchSlots
     /// </summary>
     public string? Resolve(char chord) =>
         chord is >= '1' and <= '9' ? _slots[chord - '1'] : null;
-
-    /// <summary>
-    ///     Resolves the bound session ids to <see cref="SessionRowViewModel" />
-    ///     rows from the provided session list. Empty slots are skipped; the
-    ///     returned list preserves slot order (1 → 9).
-    /// </summary>
-    public List<SessionRowViewModel> ResolveRows(IReadOnlyList<SessionRowViewModel> all)
-    {
-        var result = new List<SessionRowViewModel>(Count);
-        for (int i = 0; i < Count; i++)
-        {
-            var id = _slots[i];
-            if (string.IsNullOrEmpty(id)) continue;
-            for (int j = 0; j < all.Count; j++)
-            {
-                if (all[j].Id == id)
-                {
-                    result.Add(all[j]);
-                    break;
-                }
-            }
-        }
-        return result;
-    }
 
     /// <summary>
     ///     Rebuilds slot bindings from the store's session list. Slot 0 is pinned
