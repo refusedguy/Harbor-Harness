@@ -1131,7 +1131,7 @@ internal sealed class CellForgeReplRunner(
             return;
         }
 
-        var listed = await store.ListAsync(ct).ConfigureAwait(false);
+        var listed = await store.ListAsync(ct: ct).ConfigureAwait(false);
         if (listed.IsFailure)
         {
             return;
