@@ -45,7 +45,7 @@ public abstract record UiMsg
     ///     so hosts that bypass the onboarding seed push them explicitly —
     ///     e.g. the CellForge REPL on startup and after model/agent switches.
     /// </summary>
-    public sealed record ConfigureRuntime(string Model, string Provider, string Agent) : UiMsg;
+    public sealed record ConfigureRuntime(string Model, string Provider, string AgentName) : UiMsg;
 
     /// <summary>
     ///     Host-side transcript line (slash handler errors, session-switch notes).

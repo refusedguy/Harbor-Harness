@@ -246,7 +246,7 @@ public static class UiReducer
         UiMsg.AgentStarted => (state with { Status = "running", IsAgentRunning = true }, new TuiEffect.None()),
         UiMsg.AgentEnded ae => (OnAgentEnded(state, ae), new TuiEffect.None()),
         UiMsg.StatusChanged sc => (state with { Status = sc.Status }, new TuiEffect.None()),
-        UiMsg.ConfigureRuntime cr => (state with { Model = cr.Model, Provider = cr.Provider, AgentName = cr.Agent }, new TuiEffect.None()),
+        UiMsg.ConfigureRuntime cr => (state with { Model = cr.Model, Provider = cr.Provider, AgentName = cr.AgentName }, new TuiEffect.None()),
         UiMsg.AppendLine al => (state.AddLine(al.Role, al.Text, al.ToolCallId), new TuiEffect.None()),
         UiMsg.InputText it => (state.SetInput(state.Input.SetText(it.Text)), new TuiEffect.None()),
         UiMsg.Quit => (state with { ShouldQuit = true }, new TuiEffect.None()),
