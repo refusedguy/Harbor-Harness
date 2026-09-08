@@ -1,4 +1,8 @@
 using System.Globalization;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Ui.Framework.Diagnostics;
+using Harbor.Ui.Framework.State;
+using Microsoft.Extensions.Logging;
 
 namespace Harbor.Ui.Framework.Projection;
 
@@ -149,6 +153,142 @@ public static class PanelRows
         }
 
         return rows;
+    /// <summary>Session sidebar rows: active session highlighted, loading footer.</summary>
+    public static List<string> SessionRows(IReadOnlyList<SessionInfo> sessions, SessionId? activeSessionId, bool isLoading, int width, int height)
+    {
+        ArgumentNullException.ThrowIfNull(sessions);
+        var rows = new List<string>(sessions.Count + 4);
+        rows.Add("Sessions");
+        rows.Add(PanelText.Separator);
+        if (sessions.Count == 0)
+        {
+            rows.Add("(no sessions)");
+            rows.Add("Start a new session to see it here.");
+        }
+        else
+        {
+            int maxVisible = Math.Max(2, height - 4);
+            int end = Math.Min(sessions.Count, maxVisible);
+            for (int i = 0; i < end; i++)
+            {
+                var session = sessions[i];
+                bool isActive = activeSessionId is not null && activeSessionId.Equals(session.SessionId);
+                string marker = isActive ? "▸" : " ";
+                rows.Add($"{marker} {PanelText.Truncate(session.Title, Math.Max(1, width - 3))}");
+            }
+
+            if (sessions.Count > maxVisible)
+            {
+                rows.Add($"  ↓ {sessions.Count - maxVisible} more below");
+            }
+        }
+
+        rows.Add(PanelText.Separator);
+        rows.Add(isLoading ? "loading…" : $"{sessions.Count} session(s)");
+        return rows;
+    }
+
+    /// <summary>Log panel rows: level tags, timestamps, truncated bodies.</summary>
+    public static List<string> LogRows(IReadOnlyList<DiagnosticEntry> entries, int width, int height)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        var rows = new List<string>(16);
+        rows.Add("Logs (F12 to hide · live ILogger output · file at ~/.harbor/logs/)");
+        rows.Add(PanelText.Separator);
+        if (entries.Count == 0)
+        {
+            rows.Add("No log entries yet.");
+            rows.Add("Logs from every ILogger will appear here in arrival order.");
+            return rows;
+        }
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            var entry = entries[i];
+            string levelTag = entry.Level switch
+            {
+                LogLevel.Trace => "TRAC",
+                LogLevel.Debug => "DBUG",
+                LogLevel.Information => "INFO",
+                LogLevel.Warning => "WARN",
+                LogLevel.Error => "ERRO",
+                LogLevel.Critical => "CRIT",
+                _ => "????",
+            };
+            string time = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
+            string category = ShortenCategory(entry.Category);
+            int budget = width - time.Length - levelTag.Length - category.Length - 7;
+            string body = PanelText.SingleLine(entry.Message);
+            if (budget <= 0)
+            {
+                body = string.Empty;
+            }
+            else if (body.Length > budget)
+            {
+                body = budget == 1 ? "…" : body[..(budget - 1)] + "…";
+            }
+
+            rows.Add($"{time} {levelTag} {category} {body}".TrimEnd());
+        }
+
+        rows.Add(PanelText.Separator);
+        rows.Add("F12 toggle · Ctrl+L clear console (does not clear this buffer)");
+        return rows;
+    }
+
+    /// <summary>One file-tree entry for row building (navigation state stays in the panel).</summary>
+    public sealed record FileTreeRow(string Name, bool IsDirectory, bool IsHidden);
+
+    /// <summary>File-tree rows: cursor window with over/underflow markers.</summary>
+    public static List<string> FileTreeRows(string displayDir, IReadOnlyList<FileTreeRow> entries, int cursor, int width, int height)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        var rows = new List<string>(entries.Count + 6);
+        rows.Add("File Tree");
+        rows.Add(PanelText.ShortenTail(displayDir, Math.Max(0, width - 2)));
+        rows.Add(PanelText.Separator);
+        if (entries.Count == 0)
+        {
+            rows.Add("(empty directory)");
+            return rows;
+        }
+
+        int maxVisible = Math.Max(2, height - 4);
+        int start = Math.Max(0, cursor - maxVisible + 1);
+        int end = Math.Min(entries.Count, start + maxVisible);
+        if (start > 0)
+        {
+            rows.Add("  ↑ more above");
+        }
+
+        int nameBudget = Math.Max(1, width - 6);
+        for (int i = start; i < end; i++)
+        {
+            var entry = entries[i];
+            string marker = i == cursor ? ">" : " ";
+            string icon = entry.IsDirectory ? "▸" : entry.IsHidden ? "·" : " ";
+            rows.Add($"{marker} {icon} {PanelText.Truncate(entry.Name, nameBudget)}");
+        }
+
+        if (end < entries.Count)
+        {
+            rows.Add("  ↓ more below");
+        }
+
+        rows.Add(PanelText.Separator);
+        rows.Add("j/k move · Enter open · h parent · r refresh");
+        return rows;
+    }
+
+    private static string ShortenCategory(string category)
+    {
+        if (string.IsNullOrEmpty(category))
+        {
+            return "-";
+        }
+
+        int lastDot = category.LastIndexOf('.');
+        return lastDot >= 0 && lastDot < category.Length - 1 ? category[(lastDot + 1)..] : category;
     }
 }
 

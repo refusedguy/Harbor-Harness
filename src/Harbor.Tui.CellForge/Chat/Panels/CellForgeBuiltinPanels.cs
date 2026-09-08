@@ -1,9 +1,7 @@
-using System.Globalization;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tui.CellForge.Panels;
 
@@ -284,12 +282,12 @@ public sealed class CellForgeLogsPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        var rows = new List<string>(16);
-        rows.Add("Logs (F12 to hide · live ILogger output · file at ~/.harbor/logs/)");
-        rows.Add(PanelText.Separator);
         var panel = ctx.Services?.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel;
         if (panel is null)
         {
+            var rows = new List<string>(16);
+            rows.Add("Logs (F12 to hide · live ILogger output · file at ~/.harbor/logs/)");
+            rows.Add(PanelText.Separator);
             rows.Add("Diagnostics panel not registered.");
             rows.Add("HostBuilder registers IDiagnosticsPanel for interactive TUIs.");
             return PanelText.Clip(rows, ctx.Width, ctx.Height);
@@ -297,46 +295,10 @@ public sealed class CellForgeLogsPanel : IPanelProvider
 
         int maxVisible = Math.Max(2, ctx.Height - 4);
         int requested = Math.Min(maxVisible, 50);
-        var entries = panel.GetRecent(requested);
-        if (entries.Count == 0)
-        {
-            rows.Add("No log entries yet.");
-            rows.Add("Logs from every ILogger will appear here in arrival order.");
-            return PanelText.Clip(rows, ctx.Width, ctx.Height);
-        }
-
-        for (int i = 0; i < entries.Count; i++)
-        {
-            var entry = entries[i];
-            string levelTag = entry.Level switch
-            {
-                LogLevel.Trace => "TRAC",
-                LogLevel.Debug => "DBUG",
-                LogLevel.Information => "INFO",
-                LogLevel.Warning => "WARN",
-                LogLevel.Error => "ERRO",
-                LogLevel.Critical => "CRIT",
-                _ => "????",
-            };
-            string time = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
-            string category = ShortenCategory(entry.Category);
-            int budget = ctx.Width - time.Length - levelTag.Length - category.Length - 7;
-            string body = PanelText.SingleLine(entry.Message);
-            if (budget <= 0)
-            {
-                body = string.Empty;
-            }
-            else if (body.Length > budget)
-            {
-                body = budget == 1 ? "…" : body[..(budget - 1)] + "…";
-            }
-
-            rows.Add($"{time} {levelTag} {category} {body}".TrimEnd());
-        }
-
-        rows.Add(PanelText.Separator);
-        rows.Add("F12 toggle · Ctrl+L clear console (does not clear this buffer)");
-        return PanelText.Clip(rows, ctx.Width, ctx.Height);
+        return PanelText.Clip(
+            PanelRows.LogRows(panel.GetRecent(requested), ctx.Width, ctx.Height),
+            ctx.Width,
+            ctx.Height);
     }
 
     /// <inheritdoc />
@@ -353,17 +315,6 @@ public sealed class CellForgeLogsPanel : IPanelProvider
         }
 
         return false;
-    }
-
-    private static string ShortenCategory(string category)
-    {
-        if (string.IsNullOrEmpty(category))
-        {
-            return "-";
-        }
-
-        int lastDot = category.LastIndexOf('.');
-        return lastDot >= 0 && lastDot < category.Length - 1 ? category[(lastDot + 1)..] : category;
     }
 }
 
@@ -418,40 +369,12 @@ public sealed class CellForgeFileTreePanel : IPanelProvider
             displayDir = _displayDir;
         }
 
-        var rows = new List<string>(snapshot.Count + 6);
-        rows.Add("File Tree");
-        rows.Add(PanelText.ShortenTail(displayDir, Math.Max(0, ctx.Width - 2)));
-        rows.Add(PanelText.Separator);
-        if (snapshot.Count == 0)
-        {
-            rows.Add("(empty directory)");
-            return PanelText.Clip(rows, ctx.Width, ctx.Height);
-        }
-
-        int maxVisible = Math.Max(2, ctx.Height - 4);
-        int start = Math.Max(0, cursor - maxVisible + 1);
-        int end = Math.Min(snapshot.Count, start + maxVisible);
-        if (start > 0)
-        {
-            rows.Add("  ↑ more above");
-        }
-
-        int nameBudget = Math.Max(1, ctx.Width - 6);
-        for (int i = start; i < end; i++)
-        {
-            var entry = snapshot[i];
-            string marker = i == cursor ? ">" : " ";
-            string icon = entry.IsDirectory ? "▸" : entry.IsHidden ? "·" : " ";
-            rows.Add($"{marker} {icon} {PanelText.Truncate(entry.Name, nameBudget)}");
-        }
-
-        if (end < snapshot.Count)
-        {
-            rows.Add("  ↓ more below");
-        }
-
-        rows.Add(PanelText.Separator);
-        rows.Add("j/k move · Enter open · h parent · r refresh");
+        var rows = PanelRows.FileTreeRows(
+            displayDir,
+            snapshot.Select(e => new PanelRows.FileTreeRow(e.Name, e.IsDirectory, e.IsHidden)).ToList(),
+            cursor,
+            ctx.Width,
+            ctx.Height);
         return PanelText.Clip(rows, ctx.Width, ctx.Height);
     }
 
@@ -646,36 +569,10 @@ public sealed class CellForgeSessionSidebarPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        var rows = new List<string>(ctx.State.Sessions.Length + 4);
-        rows.Add("Sessions");
-        rows.Add(PanelText.Separator);
-        if (ctx.State.Sessions.Length == 0)
-        {
-            rows.Add("(no sessions)");
-            rows.Add("Start a new session to see it here.");
-        }
-        else
-        {
-            int maxVisible = Math.Max(2, ctx.Height - 4);
-            int end = Math.Min(ctx.State.Sessions.Length, maxVisible);
-            for (int i = 0; i < end; i++)
-            {
-                var session = ctx.State.Sessions[i];
-                bool isActive = session.SessionId == ctx.State.ActiveSessionId;
-                string marker = isActive ? "▸" : " ";
-                string line = $"{marker} {PanelText.Truncate(session.Title, Math.Max(1, ctx.Width - 3))}";
-                rows.Add(line);
-            }
-
-            if (ctx.State.Sessions.Length > maxVisible)
-            {
-                rows.Add($"  ↓ {ctx.State.Sessions.Length - maxVisible} more below");
-            }
-        }
-
-        rows.Add(PanelText.Separator);
-        rows.Add(ctx.State.IsLoading ? "loading…" : $"{ctx.State.Sessions.Length} session(s)");
-        return PanelText.Clip(rows, ctx.Width, ctx.Height);
+        return PanelText.Clip(
+            PanelRows.SessionRows(ctx.State.Sessions, ctx.State.ActiveSessionId, ctx.State.IsLoading, ctx.Width, ctx.Height),
+            ctx.Width,
+            ctx.Height);
     }
 
     /// <inheritdoc />
