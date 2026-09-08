@@ -2,7 +2,6 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Cli.Repl.Commands;
 
@@ -26,7 +25,7 @@ internal sealed class NewSessionCommand : IReplCommand
             return;
         }
 
-        var store = host.Services.GetService<ISessionStore>();
+        var store = host.SessionStore;
         if (store is null)
         {
             host.Bridge.AppendSystemLine("⇄ сессия недоступна: хост без хранилища сессий");
@@ -34,7 +33,7 @@ internal sealed class NewSessionCommand : IReplCommand
             return;
         }
 
-        var configResult = await host.Services.GetRequiredService<IConfigStore>()
+        var configResult = await host.ConfigStore
             .LoadAsync(ct).ConfigureAwait(false);
         string provider = configResult.IsSuccess ? configResult.Value.Provider : "kilocode";
         string model = configResult.IsSuccess ? configResult.Value.Model : "tencent/hy3:free";
@@ -47,7 +46,7 @@ internal sealed class NewSessionCommand : IReplCommand
             return;
         }
 
-        var agentDef = host.Services.GetRequiredService<IAgentRegistry>()
+        var agentDef = host.AgentRegistry
             .GetAgent(AgentName.Create(host.SessionModel.Agent));
         if (agentDef.IsFailure)
         {

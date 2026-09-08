@@ -1,6 +1,5 @@
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Cli.Repl.Commands;
 
@@ -17,7 +16,7 @@ internal sealed class TuiCommand : IReplCommand
     {
         ArgumentNullException.ThrowIfNull(ctx);
         var host = ctx.Host;
-        var configStore = host.Services.GetRequiredService<IConfigStore>();
+        var configStore = host.ConfigStore;
         var configResult = await configStore.LoadAsync(ct).ConfigureAwait(false);
         if (configResult.IsFailure)
         {

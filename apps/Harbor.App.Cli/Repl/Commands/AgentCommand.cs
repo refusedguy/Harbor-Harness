@@ -3,7 +3,6 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Cli.Repl.Commands;
 
@@ -27,7 +26,7 @@ internal sealed class AgentCommand : IReplCommand
             return Task.CompletedTask;
         }
 
-        var registry = host.Services.GetRequiredService<IAgentRegistry>();
+        var registry = host.AgentRegistry;
         var items = registry.GetAllAgents()
             .Select(a => new CommandItem(
                 a.Name.Value,
@@ -46,7 +45,7 @@ internal sealed class AgentCommand : IReplCommand
 
     private static async Task ApplyAgentAsync(IReplHost host, IAgentRegistry registry, CommandItem item, CancellationToken ct)
     {
-        var configStore = host.Services.GetRequiredService<IConfigStore>();
+        var configStore = host.ConfigStore;
         var result = await configStore.UpdateAsync(c =>
         {
             c.Agent = item.Id;

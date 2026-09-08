@@ -103,7 +103,6 @@ internal sealed class CellForgeReplRunner(
     }
 
     // ── IReplHost (Command pattern seam; transitional, see IReplHost.cs) ──
-    IServiceProvider IReplHost.Services => services;
     IAgent IReplHost.Agent => agent;
 
     Session IReplHost.SessionModel
@@ -128,6 +127,14 @@ internal sealed class CellForgeReplRunner(
     Task IReplHost.ExecutePaletteItemAsync(CommandItem item, CancellationToken ct) => ExecutePaletteItemAsync(item, ct);
     Task IReplHost.ExecuteInfoAsync(string text, CancellationToken ct) => ExecuteInfoCommandAsync(text, ct);
     Task IReplHost.SyncSessionsToStoreAsync(CancellationToken ct) => SyncSessionsToStoreAsync(ct);
+    Task<int> IReplHost.ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
+        => ResolveContextWindowAsync(providerId, modelId, ct);
+    IConfigStore IReplHost.ConfigStore => services.GetRequiredService<IConfigStore>();
+    IProviderRegistry IReplHost.ProviderRegistry => services.GetRequiredService<IProviderRegistry>();
+    IAgentRegistry IReplHost.AgentRegistry => services.GetRequiredService<IAgentRegistry>();
+    AuthStore IReplHost.AuthStore => services.GetRequiredService<AuthStore>();
+    ISessionStore? IReplHost.SessionStore => services.GetService<ISessionStore>();
+    IRendererPipeline? IReplHost.RendererPipeline => services.GetService<IRendererPipeline>();
     Task<int> IReplHost.ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
         => ResolveContextWindowAsync(providerId, modelId, ct);
 

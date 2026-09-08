@@ -1,5 +1,9 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
+using Harbor.Application.Configuration;
+using Harbor.Hosting.Rendering;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
@@ -12,7 +16,6 @@ namespace Harbor.App.Cli.Repl.Commands;
 // only needed by NewSession; next step is a dedicated INewSessionHost.
 internal interface IReplHost
 {
-    IServiceProvider Services { get; }
     IAgent Agent { get; }
     Session SessionModel { get; set; }
     ChatScreenBridge Bridge { get; }
@@ -23,6 +26,15 @@ internal interface IReplHost
     SelectionEngine Selection { get; }
     VirtualizedChatTimeline Timeline { get; }
     ComposerController Composer { get; }
+
+    // Typed dependencies (DIP: commands never touch IServiceProvider —
+    // the host is composed at the root, lookup happens once here).
+    IConfigStore ConfigStore { get; }
+    IProviderRegistry ProviderRegistry { get; }
+    IAgentRegistry AgentRegistry { get; }
+    AuthStore AuthStore { get; }
+    ISessionStore? SessionStore { get; }
+    IRendererPipeline? RendererPipeline { get; }
 
     void WakeUp();
     void OpenSlashPalette();

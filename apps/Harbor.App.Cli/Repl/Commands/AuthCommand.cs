@@ -1,7 +1,6 @@
 using System.Text;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Cli.Repl.Commands;
 
@@ -54,7 +53,7 @@ internal sealed class AuthCommand : IReplCommand
 
     private static async Task ListKeysAsync(IReplHost host, CancellationToken ct)
     {
-        var authStore = host.Services.GetRequiredService<AuthStore>();
+        var authStore = host.AuthStore;
         var keysResult = await authStore.ListApiKeysAsync(ct).ConfigureAwait(false);
         if (keysResult.IsSuccess)
         {
@@ -76,7 +75,7 @@ internal sealed class AuthCommand : IReplCommand
 
     private static async Task ShowResetListAsync(IReplHost host, CancellationToken ct)
     {
-        var authStore = host.Services.GetRequiredService<AuthStore>();
+        var authStore = host.AuthStore;
         var keysResult = await authStore.ListApiKeysAsync(ct).ConfigureAwait(false);
         if (keysResult.IsFailure)
         {
@@ -120,7 +119,7 @@ internal sealed class AuthCommand : IReplCommand
 
     private static Task ShowKeyInput(IReplHost host, CommandItem providerItem)
     {
-        var authStore = host.Services.GetRequiredService<AuthStore>();
+        var authStore = host.AuthStore;
         host.Palette.PushFrame(new PaletteFrame(
             $"auth / set / {providerItem.Id}", $"auth / set / {providerItem.Id}",
             [],

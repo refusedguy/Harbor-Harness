@@ -1,7 +1,6 @@
 using System.Text;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Cli.Repl.Commands;
 
@@ -56,7 +55,7 @@ internal sealed class ConfigCommand : IReplCommand
 
     private static async Task ViewConfigAsync(IReplHost host, CancellationToken ct)
     {
-        var configStore = host.Services.GetRequiredService<IConfigStore>();
+        var configStore = host.ConfigStore;
         var configResult = await configStore.LoadAsync(ct).ConfigureAwait(false);
         if (configResult.IsSuccess)
         {
@@ -133,7 +132,7 @@ internal sealed class ConfigCommand : IReplCommand
             return;
         }
 
-        var configStore = host.Services.GetRequiredService<IConfigStore>();
+        var configStore = host.ConfigStore;
         var updateResult = await configStore.UpdateAsync(c =>
         {
             switch (keyId)

@@ -1,7 +1,6 @@
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Commands;
 using Harbor.Tui.CellForge.Widgets;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Cli.Repl.Commands;
 
@@ -18,7 +17,7 @@ internal sealed class SessionTreeCommand : IReplCommand
     {
         ArgumentNullException.ThrowIfNull(ctx);
         var host = ctx.Host;
-        var store = host.Services.GetService<ISessionStore>();
+        var store = host.SessionStore;
         if (store is null)
         {
             host.Bridge.AppendSystemLine("⇄ переключение недоступно: хост без хранилища сессий");

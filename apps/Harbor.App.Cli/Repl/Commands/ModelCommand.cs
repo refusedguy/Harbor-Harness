@@ -4,7 +4,6 @@ using Harbor.Abstractions.Providers;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Cli.Repl.Commands;
 
@@ -28,7 +27,7 @@ internal sealed class ModelCommand : IReplCommand
             return;
         }
 
-        var providers = host.Services.GetRequiredService<IProviderRegistry>();
+        var providers = host.ProviderRegistry;
         var allModels = await providers.GetAllModelsAsync(ct).ConfigureAwait(false);
         if (allModels.IsFailure)
         {
@@ -63,7 +62,7 @@ internal sealed class ModelCommand : IReplCommand
         string modelId = item.Id;
         string canonicalModel = $"{providerId}/{modelId}";
 
-        var configStore = host.Services.GetRequiredService<IConfigStore>();
+        var configStore = host.ConfigStore;
         var result = await configStore.UpdateAsync(c =>
         {
             c.Provider = providerId;
@@ -86,7 +85,7 @@ internal sealed class ModelCommand : IReplCommand
 
             host.Selection.Clear();
 
-            var agentDef = host.Services.GetRequiredService<IAgentRegistry>()
+            var agentDef = host.AgentRegistry
                 .GetAgent(AgentName.Create(host.SessionModel.Agent));
             if (agentDef.IsSuccess)
             {

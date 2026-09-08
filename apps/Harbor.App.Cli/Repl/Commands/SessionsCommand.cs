@@ -1,6 +1,5 @@
 using Harbor.Abstractions.Sessions;
 using Harbor.Tui.CellForge.Widgets;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Cli.Repl.Commands;
 
@@ -17,7 +16,7 @@ internal sealed class SessionsCommand : IReplCommand
     {
         ArgumentNullException.ThrowIfNull(ctx);
         var host = ctx.Host;
-        if (host.Services.GetService<ISessionStore>() is null)
+        if (host.SessionStore is null)
         {
             host.Bridge.AppendSystemLine("⇄ переключение недоступно: хост без хранилища сессий");
             host.WakeUp();
@@ -61,7 +60,7 @@ internal sealed class SessionsCommand : IReplCommand
 
     private static async Task ShowSwitchListAsync(IReplHost host, CancellationToken ct)
     {
-        var store = host.Services.GetService<ISessionStore>();
+        var store = host.SessionStore;
         if (store is null)
         {
             host.Bridge.AppendSystemLine("⇄ переключение недоступно: хост без хранилища сессий");

@@ -1,6 +1,5 @@
 using Harbor.Hosting.Rendering;
 using Harbor.Tui.CellForge.Widgets;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Cli.Repl.Commands;
 
@@ -17,7 +16,7 @@ internal sealed class RendererCommand : IReplCommand
     {
         ArgumentNullException.ThrowIfNull(ctx);
         var host = ctx.Host;
-        var pipeline = host.Services.GetService<IRendererPipeline>();
+        var pipeline = host.RendererPipeline;
         if (pipeline is null)
         {
             host.Bridge.AppendSystemLine("⇄ renderer swap недоступен: хост без IRendererPipeline");

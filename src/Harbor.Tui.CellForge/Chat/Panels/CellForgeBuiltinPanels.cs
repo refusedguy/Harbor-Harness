@@ -2,6 +2,7 @@ using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Tui.CellForge.Panels;
 
@@ -209,7 +210,7 @@ public sealed class CellForgeHelpPanel : IPanelProvider
         rows.Add("  Esc        quit");
         rows.Add(string.Empty);
         rows.Add("Panels");
-        var registry = ctx.Services?.GetService(typeof(IPanelRegistry)) as IPanelRegistry;
+        var registry = ctx.Services?.GetService<IPanelRegistry>();
         if (registry is null || registry.All.Count == 0)
         {
             rows.Add("  (no panels)");
@@ -245,7 +246,7 @@ public sealed class CellForgeHelpPanel : IPanelProvider
     {
         if (key.Code == UiKeyCode.Char && key.Character == '?')
         {
-            if (ctx.Services?.GetService(typeof(UiStore)) is UiStore store)
+            if (ctx.Services?.GetService<UiStore>() is UiStore store)
             {
                 _ = store.Dispatch(new UiMsg.TogglePanel(Id));
             }
@@ -282,7 +283,7 @@ public sealed class CellForgeLogsPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        var panel = ctx.Services?.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel;
+        var panel = ctx.Services?.GetService<IDiagnosticsPanel>();
         if (panel is null)
         {
             var rows = new List<string>(16);
@@ -306,7 +307,7 @@ public sealed class CellForgeLogsPanel : IPanelProvider
     {
         if (key.Code == UiKeyCode.F12)
         {
-            if (ctx.Services?.GetService(typeof(UiStore)) is UiStore store)
+            if (ctx.Services?.GetService<UiStore>() is UiStore store)
             {
                 _ = store.Dispatch(new UiMsg.TogglePanel(Id));
             }
@@ -402,7 +403,7 @@ public sealed class CellForgeFileTreePanel : IPanelProvider
                         _cursor = 0;
                     }
                 }
-                else if (ctx.Services?.GetService(typeof(UiStore)) is UiStore store)
+                else if (ctx.Services?.GetService<UiStore>() is UiStore store)
                 {
                     _ = store.Dispatch(new UiMsg.KeyInput(ChatAction.Submit, UiKey.ForChar('\r')));
                 }
