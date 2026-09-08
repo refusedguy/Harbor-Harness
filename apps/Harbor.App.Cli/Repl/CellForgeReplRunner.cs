@@ -487,14 +487,20 @@ internal sealed class CellForgeReplRunner(
 
         screen.Status.ProjectedState = new UiState
         {
-            Status = statusText,
-            Model = _status.Model,
-            Provider = sessionModel.ProviderId,
-            AgentName = sessionModel.Agent,
-            Cost = new CostSnapshot(tokensIn, tokensOut, costUsd),
-            ScrollOffset = 0,
-            ViewportLines = rows,
-            TotalLines = Math.Max(rows, screen.Timeline.Timeline.Count)
+            Chat = new ChatDomainState
+            {
+                Status = statusText,
+                Model = _status.Model,
+                Provider = sessionModel.ProviderId,
+                AgentName = sessionModel.Agent,
+                Cost = new CostSnapshot(tokensIn, tokensOut, costUsd)
+            },
+            Ui = new TerminalUiState
+            {
+                ScrollOffset = 0,
+                ViewportLines = rows,
+                TotalLines = Math.Max(rows, screen.Timeline.Timeline.Count)
+            }
         };
 
         // Spring resize (P1.6): while a layout spring is in flight the rects
