@@ -228,6 +228,12 @@ internal sealed class CellForgeReplRunner(
 
     /// <summary>Cross-thread «prompt submitted, completion event not yet seen» latch
     /// so an stdin EOF cannot race the freshly spawned run into a premature exit.</summary>
+    /// <summary>Prompts typed while the agent runs (claude-style queue):
+    /// drained in order when the loop goes idle; cleared on abort/switch.</summary>
+    private readonly Queue<string> _pendingPrompts = new();
+
+    private volatile bool _promptInFlight;
+
     private volatile bool _promptInFlight;
 
     /// <summary>
@@ -1414,16 +1420,27 @@ internal sealed class CellForgeReplRunner(
 
     private async Task SubmitAsync(CancellationToken ct)
     {
-        if (agent.State.IsRunning || _promptInFlight)
-        {
-            bridge.AppendSystemLine("⚠ Agent is busy — wait for completion or press Esc / Ctrl+C to abort.");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
         string text = _composer.Buffer.TakeText().Trim();
         if (text.Length == 0)
         {
+            return;
+        }
+
+        // Queued prompts (claude-style): typing while busy appends to the
+        // queue instead of refusing — drained in order when the loop idles.
+        // Slash commands still resolve immediately (UI ops, no model turn).
+        if (agent.State.IsRunning || _promptInFlight)
+        {
+            if (!text.StartsWith('/'))
+            {
+                _pendingPrompts.Enqueue(text);
+                bridge.AppendSystemLine($"⏳ queued ({_pendingPrompts.Count}) — will send when idle");
+                _wake.Writer.TryWrite(null);
+                return;
+            }
+
+            bridge.AppendSystemLine("⚠ Agent is busy — wait for completion or press Esc / Ctrl+C to abort.");
+            _wake.Writer.TryWrite(null);
             return;
         }
 
@@ -1467,6 +1484,12 @@ internal sealed class CellForgeReplRunner(
         }
 
         // Fresh abort token per prompt (no-op guard while a run is active).
+        StartPromptRun(text, ct);
+    }
+
+    /// <summary>Begin a model turn for already-extracted text (submit + queue drain share it).</summary>
+    private void StartPromptRun(string text, CancellationToken ct)
+    {
         agent.ResetAbortSource();
         ResetRetryCountdown();
         screen.Timeline.Timeline.Append(new UserBlock(text));
@@ -1551,7 +1574,24 @@ internal sealed class CellForgeReplRunner(
             }
 
             _usageDirty = true;
+            DrainPromptQueue(ct);
             _wake.Writer.TryWrite(null);
+        }
+    }
+
+    /// <summary>Queue drain: the next queued prompt starts when the loop is
+    /// truly idle (no run in flight, agent settled).</summary>
+    private void DrainPromptQueue(CancellationToken ct)
+    {
+        if (agent.State.IsRunning || _promptInFlight)
+        {
+            return;
+        }
+
+        if (_pendingPrompts.TryDequeue(out string? next))
+        {
+            bridge.AppendSystemLine($"⏵ sending queued prompt ({_pendingPrompts.Count} left)");
+            StartPromptRun(next, ct);
         }
     }
 
