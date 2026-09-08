@@ -20,6 +20,13 @@ internal sealed class AgentCommand : IReplCommand
     {
         ArgumentNullException.ThrowIfNull(ctx);
         var host = ctx.Host;
+        if (host.Agent.State.IsRunning)
+        {
+            host.Bridge.AppendSystemLine("⚠ Agent is busy — wait for completion or press Esc / Ctrl+C to abort.");
+            host.WakeUp();
+            return Task.CompletedTask;
+        }
+
         var registry = host.Services.GetRequiredService<IAgentRegistry>();
         var items = registry.GetAllAgents()
             .Select(a => new CommandItem(
@@ -55,6 +62,10 @@ internal sealed class AgentCommand : IReplCommand
             {
                 host.Agent.Initialize(host.SessionModel, agentDef.Value);
                 _ = host.Store.Dispatch(new UiMsg.ConfigureRuntime(host.SessionModel.Model, host.SessionModel.ProviderId, item.Id));
+                if (host.Screen.Sidebar is { } sidebar)
+                {
+                    sidebar.State = sidebar.State with { Agent = item.Id };
+                }
             }
         }
         else

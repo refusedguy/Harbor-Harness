@@ -35,7 +35,9 @@ public sealed record SideBarState(
     int LspWarnings = 0,
     IReadOnlyList<McpServerStatus>? McpServers = null,
     SessionId? ActiveSessionId = null,
-    IReadOnlyList<SessionInfo>? Sessions = null)
+    IReadOnlyList<SessionInfo>? Sessions = null,
+    string? Agent = null,
+    int MessageCount = 0)
 {
     /// <summary>Static «nothing to show» snapshot.</summary>
     public static readonly SideBarState Empty = new();
@@ -101,10 +103,23 @@ public static class SideBarView
         y = Section(buffer, rect, labelX, y, "SESSION", headingStyle);
         y = ValueLine(buffer, rect, labelX, y, innerW, (state.SessionTitle ?? "(no session)").AsSpan(), valueStyle);
         y = ValueLine(buffer, rect, labelX, y, innerW, ShortId(state.SessionId), labelStyle);
+        if (state.MessageCount > 0)
+        {
+            Span<char> msgBuf = stackalloc char[16];
+            int msgLen = FormatWithSuffix(state.MessageCount, " msgs", msgBuf);
+            y = ValueLine(buffer, rect, labelX, y, innerW, msgBuf[..msgLen], labelStyle);
+        }
 
         // ── Model ──────────────────────────────────────────────────────────
         y = Section(buffer, rect, labelX, y, "MODEL", headingStyle);
         y = ValueLine(buffer, rect, labelX, y, innerW, (state.Model ?? "—").AsSpan(), valueStyle);
+
+        // ── Agent ──────────────────────────────────────────────────────────
+        if (!string.IsNullOrEmpty(state.Agent))
+        {
+            y = Section(buffer, rect, labelX, y, "AGENT", headingStyle);
+            y = ValueLine(buffer, rect, labelX, y, innerW, state.Agent.AsSpan(), valueStyle);
+        }
 
         // ── Tokens ─────────────────────────────────────────────────────────
         y = Section(buffer, rect, labelX, y, "TOKENS", headingStyle);

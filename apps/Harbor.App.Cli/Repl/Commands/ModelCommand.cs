@@ -21,6 +21,13 @@ internal sealed class ModelCommand : IReplCommand
     {
         ArgumentNullException.ThrowIfNull(ctx);
         var host = ctx.Host;
+        if (host.Agent.State.IsRunning)
+        {
+            host.Bridge.AppendSystemLine("⚠ Agent is busy — wait for completion or press Esc / Ctrl+C to abort.");
+            host.WakeUp();
+            return;
+        }
+
         var providers = host.Services.GetRequiredService<IProviderRegistry>();
         var allModels = await providers.GetAllModelsAsync(ct).ConfigureAwait(false);
         if (allModels.IsFailure)

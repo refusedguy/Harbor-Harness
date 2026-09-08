@@ -213,7 +213,8 @@ public sealed class ChatScreenBridge : IDisposable
 
     // ── Stream lifecycle ───────────────────────────────────────────────────
 
-    internal void ReplayHistory(IReadOnlyList<AgentMessage> messages)
+    /// <summary>Replays persisted history into the timeline (session switch).</summary>
+    public void ReplayHistory(IReadOnlyList<AgentMessage> messages)
     {
         bool lastBlockIsMatchingUser = false;
         if (_panel.Timeline.Count > 0 && messages.Count > 0 && messages[^1] is UserMessage lastUm)

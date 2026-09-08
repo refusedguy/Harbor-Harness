@@ -69,8 +69,13 @@ internal sealed class NewSessionCommand : IReplCommand
             {
                 SessionId = newSession.Value.Id,
                 SessionTitle = newSession.Value.Title,
+                Model = $"{provider}/{model}",
+                Agent = newSession.Value.Agent,
+                MessageCount = 0,
             };
         }
+
+        await host.RefreshSidebarSessionsAsync(ct).ConfigureAwait(false);
         host.Bridge.AppendSystemLine($"✓ Started fresh session: {newSession.Value.Id[..Math.Min(8, newSession.Value.Id.Length)]}");
         host.WakeUp();
     }

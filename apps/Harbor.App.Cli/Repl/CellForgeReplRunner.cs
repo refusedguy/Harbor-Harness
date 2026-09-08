@@ -126,6 +126,7 @@ internal sealed class CellForgeReplRunner(
     Task IReplHost.SwitchToSessionAsync(string sessionId, CancellationToken ct) => SwitchToSessionAsync(sessionId, ct);
     Task IReplHost.ExecutePaletteItemAsync(CommandItem item, CancellationToken ct) => ExecutePaletteItemAsync(item, ct);
     Task IReplHost.ExecuteInfoAsync(string text, CancellationToken ct) => ExecuteInfoCommandAsync(text, ct);
+    Task IReplHost.RefreshSidebarSessionsAsync(CancellationToken ct) => RefreshSidebarSessionsAsync(ct);
 
     private readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
     private ThemeFileWatcher? _themeWatcher;
@@ -659,6 +660,7 @@ internal sealed class CellForgeReplRunner(
 
         await backend.WriteAsync(Utf8(Osc52Clipboard.Encode(text)), ct).ConfigureAwait(false);
         bridge.AppendSystemLine($"⧉ скопировано {text.Length} симв.");
+        _selection.Clear();
         _wake.Writer.TryWrite(null);
     }
 
@@ -1081,16 +1083,67 @@ internal sealed class CellForgeReplRunner(
         agent.Initialize(loaded.Value, definition.Value);
         sessionModel = loaded.Value;
         _quickSwitch.Push(loaded.Value.Id);
+
+        // Full context swap: drop old blocks/selection/tracking, then replay
+        // the target session's persisted history so the switch lands on a
+        // live transcript instead of an empty feed.
+        bridge.ResetMessageTracking();
+        _timeline.Clear();
+        _selection.Clear();
+        _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH));
+        var history = await store.GetMessagesAsync(loaded.Value.Id, ct).ConfigureAwait(false);
+        if (history.IsSuccess && history.Value.Count > 0)
+        {
+            bridge.ReplayHistory(history.Value);
+        }
+
         if (screen.Sidebar is { } sidebar)
         {
             sidebar.State = sidebar.State with
             {
                 SessionTitle = loaded.Value.Title,
                 SessionId = loaded.Value.Id,
+                Model = $"{loaded.Value.ProviderId}/{loaded.Value.Model}",
+                Agent = loaded.Value.Agent,
+                MessageCount = screen.Timeline.Timeline.Count,
             };
         }
 
+        await RefreshSidebarSessionsAsync(ct).ConfigureAwait(false);
         bridge.AppendSystemLine($"⇄ сессия → {loaded.Value.Title} ({loaded.Value.Id[..Math.Min(8, loaded.Value.Id.Length)]})");
+        _wake.Writer.TryWrite(null);
+    }
+
+    /// <summary>
+    ///     Sidebar session list (sprint UI-V2 P4): recent sessions from the
+    ///     store with the active one marked. Best-effort — hosts without a
+    ///     session store keep whatever the sidebar already shows.
+    /// </summary>
+    internal async Task RefreshSidebarSessionsAsync(CancellationToken ct)
+    {
+        if (screen.Sidebar is not { } sidebar)
+        {
+            return;
+        }
+
+        if (services.GetService<ISessionStore>() is not { } store)
+        {
+            return;
+        }
+
+        var listed = await store.ListAsync(ct).ConfigureAwait(false);
+        if (listed.IsFailure)
+        {
+            return;
+        }
+
+        sidebar.State = sidebar.State with
+        {
+            Sessions = listed.Value
+                .Select(s => new SessionInfo(SessionId.Create(s.Id), s.Title, s.CreatedAt, s.UpdatedAt, "active"))
+                .ToArray(),
+            ActiveSessionId = SessionId.Create(sessionModel.Id),
+        };
         _wake.Writer.TryWrite(null);
     }
 
@@ -1369,6 +1422,7 @@ internal sealed class CellForgeReplRunner(
             {
                 TokensIn = stats.TotalInputTokens,
                 TokensOut = stats.TotalOutputTokens,
+                MessageCount = screen.Timeline.Timeline.Count,
             };
         }
     }
@@ -1441,8 +1495,12 @@ internal sealed class CellForgeReplRunner(
                 SessionTitle = sessionModel.Title,
                 SessionId = sessionModel.Id,
                 Model = model,
+                Agent = sessionModel.Agent,
+                MessageCount = 0,
             };
         }
+
+        await RefreshSidebarSessionsAsync(CancellationToken.None).ConfigureAwait(false);
 
         // Quick-switch slots (sprint UI-V2 P2.2): the store lists most-recent-
         // first, so slot 1 gets the hottest session. Best-effort — hosts
