@@ -47,6 +47,7 @@ internal sealed class ReplCommandCatalog
         catalog.Register(new TuiCommand());
         catalog.Register(new StorageCommand());
         catalog.Register(new NewSessionCommand());
+        catalog.Register(new InfoCommand());
         return catalog;
     }
 }

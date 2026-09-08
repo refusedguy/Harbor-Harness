@@ -119,6 +119,7 @@ internal sealed class CellForgeReplRunner(
     void IReplHost.ScrollTimelineToEnd() => _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH));
     Task IReplHost.SwitchToSessionAsync(string sessionId, CancellationToken ct) => SwitchToSessionAsync(sessionId, ct);
     Task IReplHost.ExecutePaletteItemAsync(CommandItem item, CancellationToken ct) => ExecutePaletteItemAsync(item, ct);
+    Task IReplHost.ExecuteInfoAsync(string text, CancellationToken ct) => ExecuteInfoCommandAsync(text, ct);
 
     private readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
     private ThemeFileWatcher? _themeWatcher;
@@ -928,20 +929,18 @@ internal sealed class CellForgeReplRunner(
 
     // ── Command palette ────────────────────────────────────────────────────
 
-    /// <summary>Suggested, arg-less slash commands that are safe to run from the palette.</summary>
+    /// <summary>Suggested commands, generated from the catalog so the palette
+    /// never drifts from the registered set. Exit stays explicit (dispatcher).</summary>
     private void OpenCommandPalette()
     {
+        var items = _catalog.All
+            .Select(c => new CommandItem(c.Id, c.Title, c.Description, string.Empty, c.Group))
+            .ToList();
+        items.Add(new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2", "General"));
         _palette.PushFrame(new PaletteFrame(
             "Commands",
             "",
-            [
-                new CommandItem("help", "Help", "slash commands reference", "/help"),
-                new CommandItem("sessions", "Sessions", "list stored sessions", "/sessions"),
-                new CommandItem("providers", "Providers", "list configured providers", "/providers"),
-                new CommandItem("plugins", "Plugins", "reload CS-source plugins", "/plugins"),
-                new CommandItem("vim", "Toggle vim mode", "normal/insert editing layer", "<leader>v"),
-                new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2"),
-            ],
+            items,
             OnCommitAsync: (item, frameCt) => ExecutePaletteItemAsync(item, frameCt)));
     }
 
@@ -1193,47 +1192,37 @@ internal sealed class CellForgeReplRunner(
             string cmd = parts.Length > 0 ? parts[0].ToLowerInvariant() : string.Empty;
 
             // Same catalog as palette commits — one resolution point.
+            // The full slash line travels in RawInput (info commands need args).
             if (_catalog.TryResolve(cmd, out var slashCmd) && slashCmd is not null)
             {
-                await slashCmd.ExecuteAsync(new ReplCommandContext(this, cmd), ct).ConfigureAwait(false);
+                await slashCmd.ExecuteAsync(new ReplCommandContext(this, cmd, text), ct).ConfigureAwait(false);
                 return;
             }
 
-            switch (cmd)
-            {
-                case "providers":
-                case "plugins":
-                case "permissions":
-                    await ExecuteInfoCommandAsync(text, ct).ConfigureAwait(false);
-                    return;
-
-                default:
+            // Uncatalogued slash text falls through to the legacy dispatcher.
+            var submitDispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
+            var outcome = await submitDispatcher.HandleCoreAsync(
+                text, services,
+                writer: line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
+                reader: prompt =>
                 {
-                    var submitDispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
-                    var outcome = await submitDispatcher.HandleCoreAsync(
-                        text, services,
-                        writer: line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
-                        reader: prompt =>
-                        {
-                            bridge.AppendSystemLine($"{prompt} — интерактивный ввод недоступен в consoleex, используйте legacy TUI (/exit)");
-                            _wake.Writer.TryWrite(null);
-                            return Task.FromResult(string.Empty);
-                        },
-                        agent, services.GetRequiredService<IAgentRegistry>(),
-                        services.GetRequiredService<IConfigStore>(),
-                        services.GetRequiredService<AuthStore>(),
-                        services.GetRequiredService<IProviderRegistry>(),
-                        sessionModel).ConfigureAwait(false);
+                    bridge.AppendSystemLine($"{prompt} — интерактивный ввод недоступен в consoleex, используйте legacy TUI (/exit)");
+                    _wake.Writer.TryWrite(null);
+                    return Task.FromResult(string.Empty);
+                },
+                agent, services.GetRequiredService<IAgentRegistry>(),
+                services.GetRequiredService<IConfigStore>(),
+                services.GetRequiredService<AuthStore>(),
+                services.GetRequiredService<IProviderRegistry>(),
+                sessionModel).ConfigureAwait(false);
 
-                    if (outcome.ShouldQuit)
-                    {
-                        _slashExitCode = outcome.ExitCode;
-                        _quitRequested = true;
-                    }
-
-                    return;
-                }
+            if (outcome.ShouldQuit)
+            {
+                _slashExitCode = outcome.ExitCode;
+                _quitRequested = true;
             }
+
+            return;
         }
 
         // Fresh abort token per prompt (no-op guard while a run is active).
@@ -1440,6 +1429,9 @@ internal sealed class CellForgeReplRunner(
     ///     poll timer (parse failures keep the last applied theme). Path:
     ///     <c>HARBOR_THEME_FILE</c>, else <c>~/.harbor/theme.json</c> when present.
     /// </summary>
+    // TODO(principles)[DIP]: route through IThemeService once it is registered
+    // in DI and Watch surfaces errors/names — today Watch swallows errors and
+    // ThemeJsonApplied carries string.Empty, so direct wiring keeps behavior.
     private void ArmThemeWatcher()
     {
         string path = Environment.GetEnvironmentVariable("HARBOR_THEME_FILE")

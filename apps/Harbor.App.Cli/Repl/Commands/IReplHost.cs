@@ -29,4 +29,5 @@ internal interface IReplHost
 
     Task SwitchToSessionAsync(string sessionId, CancellationToken ct);
     Task ExecutePaletteItemAsync(CommandItem item, CancellationToken ct);
+    Task ExecuteInfoAsync(string text, CancellationToken ct);
 }
