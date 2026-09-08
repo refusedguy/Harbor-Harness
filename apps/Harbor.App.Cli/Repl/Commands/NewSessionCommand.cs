@@ -72,6 +72,7 @@ internal sealed class NewSessionCommand : IReplCommand
                 Model = $"{provider}/{model}",
                 Agent = newSession.Value.Agent,
                 MessageCount = 0,
+                ContextWindow = await host.ResolveContextWindowAsync(provider, model, ct).ConfigureAwait(false),
             };
         }
 

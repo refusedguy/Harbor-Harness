@@ -37,7 +37,8 @@ public sealed record SideBarState(
     SessionId? ActiveSessionId = null,
     IReadOnlyList<SessionInfo>? Sessions = null,
     string? Agent = null,
-    int MessageCount = 0)
+    int MessageCount = 0,
+    int ContextWindow = 0)
 {
     /// <summary>Static «nothing to show» snapshot.</summary>
     public static readonly SideBarState Empty = new();
@@ -132,6 +133,23 @@ public static class SideBarView
             Span<char> costBuf = stackalloc char[16];
             int costLen = FormatCostUsd(state.CostUsd, costBuf);
             y = ValueLine(buffer, rect, labelX, y, innerW, costBuf[..costLen], tokenStyle);
+        }
+
+        if (state.ContextWindow > 0)
+        {
+            long used = state.TokensIn + state.TokensOut;
+            int pct = (int)Math.Min(100, used * 100L / Math.Max(1, (long)state.ContextWindow));
+            Span<char> ctxBuf = stackalloc char[16];
+            int ctxLen = 0;
+            "ctx ".AsSpan().CopyTo(ctxBuf);
+            ctxLen += 4;
+            ctxLen += AppendDigits(pct, ctxBuf[ctxLen..]);
+            if (ctxLen < ctxBuf.Length)
+            {
+                ctxBuf[ctxLen++] = '%';
+            }
+
+            y = ValueLine(buffer, rect, labelX, y, innerW, ctxBuf[..ctxLen], tokenStyle);
         }
 
         // ── Modified files ─────────────────────────────────────────────────

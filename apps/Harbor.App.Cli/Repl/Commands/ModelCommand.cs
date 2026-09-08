@@ -75,7 +75,15 @@ internal sealed class ModelCommand : IReplCommand
         {
             host.Bridge.AppendSystemLine($"✓ Model switched to {canonicalModel}");
             host.Status.Model = modelId;
-            if (host.Screen.Sidebar is { } sb) sb.State = sb.State with { Model = canonicalModel };
+            if (host.Screen.Sidebar is { } sb)
+            {
+                sb.State = sb.State with
+                {
+                    Model = canonicalModel,
+                    ContextWindow = await host.ResolveContextWindowAsync(providerId, modelId, ct).ConfigureAwait(false),
+                };
+            }
+
             host.Selection.Clear();
 
             var agentDef = host.Services.GetRequiredService<IAgentRegistry>()

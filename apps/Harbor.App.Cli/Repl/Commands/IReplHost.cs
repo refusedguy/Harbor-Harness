@@ -33,4 +33,5 @@ internal interface IReplHost
     Task ExecutePaletteItemAsync(CommandItem item, CancellationToken ct);
     Task ExecuteInfoAsync(string text, CancellationToken ct);
     Task SyncSessionsToStoreAsync(CancellationToken ct);
+    Task<int> ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct);
 }

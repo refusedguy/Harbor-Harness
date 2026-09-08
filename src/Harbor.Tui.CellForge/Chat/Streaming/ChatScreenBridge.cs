@@ -44,6 +44,12 @@ public sealed class ChatScreenBridge : IDisposable
     private readonly StringBuilder _thinkingIncoming = new();
     private long _nowMs;
 
+    // Per-message meta for the assistant header (crush-style footer info):
+    // stream start tick + accumulated step usage, reset on every start.
+    private long _msgStartTick;
+    private int _msgTokensIn;
+    private int _msgTokensOut;
+
     private readonly HashSet<string> _displayedMessageIds = new();
 
     /// <summary>AgentErrorEvent seen since the last AgentStart — decides
@@ -151,6 +157,10 @@ public sealed class ChatScreenBridge : IDisposable
                         break;
                     case ToolCallStartEvent callStart:
                         EnsureCard(callStart.Id, callStart.ToolName, argsSummary: null);
+                        break;
+                    case StepFinishEvent sf when sf.Usage is not null:
+                        _msgTokensIn += sf.Usage.InputTokens;
+                        _msgTokensOut += sf.Usage.OutputTokens;
                         break;
                 }
 
@@ -280,7 +290,7 @@ public sealed class ChatScreenBridge : IDisposable
                             // текст коммитится перед изображением.
                             if (text.Length > 0)
                             {
-                                _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString(), _status.Model));
+                                _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString(), ModelHeader()));
                                 text.Clear();
                             }
 
@@ -291,7 +301,7 @@ public sealed class ChatScreenBridge : IDisposable
 
                 if (text.Length > 0)
                 {
-                    _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString(), _status.Model));
+                    _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString(), ModelHeader()));
                 }
 
                 break;
@@ -303,8 +313,23 @@ public sealed class ChatScreenBridge : IDisposable
         _incoming.Clear();
         _streamSource.Clear();
         _pending.Clear();
-        _stream = new StreamingMarkdownBlock();
-        _panel.Timeline.Append(_stream);
+        _msgStartTick = _nowMs;
+        _msgTokensIn = 0;
+        _msgTokensOut = 0;
+        var fresh = new StreamingMarkdownBlock();
+        if (_stream is null)
+        {
+            _stream = fresh;
+            _panel.Timeline.Append(_stream);
+        }
+        else
+        {
+            // Re-attempt without MessageEnd (retry path): swap the live slot
+            // instead of appending — the superseded partial never duplicates.
+            _panel.Timeline.Replace(_stream, fresh);
+            _stream = fresh;
+        }
+
         _status.Phase = AgentPhase.Thinking;
         _status.Mode = StatusBarMode.Running;
     }
@@ -319,6 +344,11 @@ public sealed class ChatScreenBridge : IDisposable
         }
 
         _incoming.Append(delta);
+        if (!ContainsNewline(_incoming))
+        {
+            return; // hot path: partial-line deltas allocate nothing
+        }
+
         var rest = _incoming.ToString();
         _incoming.Clear();
 
@@ -345,8 +375,31 @@ public sealed class ChatScreenBridge : IDisposable
     private void StartThinkingStream()
     {
         _thinkingIncoming.Clear();
-        _thinkStream = new StreamingThinkingBlock();
-        _panel.Timeline.Append(_thinkStream);
+        var fresh = new StreamingThinkingBlock();
+        if (_thinkStream is null)
+        {
+            _thinkStream = fresh;
+            _panel.Timeline.Append(_thinkStream);
+        }
+        else
+        {
+            // Same retry swap as StartStream: one live thinking slot, no dupes.
+            _panel.Timeline.Replace(_thinkStream, fresh);
+            _thinkStream = fresh;
+        }
+    }
+
+    private static bool ContainsNewline(StringBuilder sb)
+    {
+        foreach (var chunk in sb.GetChunks())
+        {
+            if (chunk.Span.Contains('\n'))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void IncomingThinking(string delta)
@@ -357,6 +410,11 @@ public sealed class ChatScreenBridge : IDisposable
         }
 
         _thinkingIncoming.Append(delta);
+        if (!ContainsNewline(_thinkingIncoming))
+        {
+            return; // hot path: partial-line deltas allocate nothing
+        }
+
         var rest = _thinkingIncoming.ToString();
         _thinkingIncoming.Clear();
 
@@ -416,7 +474,7 @@ public sealed class ChatScreenBridge : IDisposable
         _stream.Complete();
         if (_streamSource.Length > 0)
         {
-            _panel.Timeline.Replace(_stream, new AssistantMarkdownBlock(_streamSource.ToString(), _status.Model));
+            _panel.Timeline.Replace(_stream, new AssistantMarkdownBlock(_streamSource.ToString(), BuildAssistantHeader()));
         }
 
         if (_thinkStream is not null)
@@ -426,6 +484,48 @@ public sealed class ChatScreenBridge : IDisposable
 
         _stream = null;
         _pending.Clear();
+    }
+
+    /// <summary>Assistant header meta (crush-style): model · duration · tokens.</summary>
+    private string? BuildAssistantHeader()
+    {
+        string model = _status.Model;
+        long durMs = _msgStartTick > 0 ? Math.Max(0, _nowMs - _msgStartTick) : 0;
+        bool hasMeta = durMs > 0 || _msgTokensIn > 0 || _msgTokensOut > 0;
+        if (string.IsNullOrEmpty(model) && !hasMeta)
+        {
+            return null;
+        }
+
+        var sb = new StringBuilder("● ");
+        sb.Append(string.IsNullOrEmpty(model) ? "assistant" : model);
+        if (durMs > 0)
+        {
+            sb.Append(" · ");
+            sb.Append(FormatDuration(durMs));
+        }
+
+        if (_msgTokensIn > 0 || _msgTokensOut > 0)
+        {
+            sb.Append(" · ");
+            sb.Append(SideBarView.FormatTokens(_msgTokensIn));
+            sb.Append('↑');
+            sb.Append(' ');
+            sb.Append(SideBarView.FormatTokens(_msgTokensOut));
+            sb.Append('↓');
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>Model-only header for replayed blocks (no duration/usage known).</summary>
+    private string? ModelHeader() =>
+        string.IsNullOrWhiteSpace(_status.Model) ? null : "● " + _status.Model;
+
+    private static string FormatDuration(long ms)
+    {
+        long s = ms / 1000;
+        return s < 60 ? $"{s}s" : $"{s / 60}m{s % 60:00}s";
     }
 
     /// <summary>Bypasses pacing: everything buffered becomes visible at once.</summary>

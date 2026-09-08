@@ -128,6 +128,8 @@ internal sealed class CellForgeReplRunner(
     Task IReplHost.ExecutePaletteItemAsync(CommandItem item, CancellationToken ct) => ExecutePaletteItemAsync(item, ct);
     Task IReplHost.ExecuteInfoAsync(string text, CancellationToken ct) => ExecuteInfoCommandAsync(text, ct);
     Task IReplHost.SyncSessionsToStoreAsync(CancellationToken ct) => SyncSessionsToStoreAsync(ct);
+    Task<int> IReplHost.ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
+        => ResolveContextWindowAsync(providerId, modelId, ct);
 
     private readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
     private ThemeFileWatcher? _themeWatcher;
@@ -177,11 +179,47 @@ internal sealed class CellForgeReplRunner(
 
     private int _timelineViewportH;
 
+    /// <summary>Memoized status snapshot (projector fast-path on quiet frames).</summary>
+    private UiState? _lastStatusSnapshot;
+
     /// <summary>Last viewport geometry pushed to the TEA store (changed-only).</summary>
     private int _lastStoreViewport = -1;
 
     /// <summary>Last total-lines count pushed to the TEA store (changed-only).</summary>
     private int _lastStoreTotal = -1;
+
+    /// <summary>Model context window for the ctx% readout (0 = unknown).</summary>
+    private int _contextWindow;
+
+    /// <summary>
+    ///     Resolve the model's context window from the cached provider catalog
+    ///     (no network — cache only). Unknown model/provider yields 0.
+    /// </summary>
+    internal async Task<int> ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
+    {
+        var pid = ProviderId.TryCreate(providerId);
+        if (pid.IsFailure)
+        {
+            return 0;
+        }
+
+        var models = await services.GetRequiredService<IProviderRegistry>()
+            .GetModelsCachedAsync(pid.Value, ct).ConfigureAwait(false);
+        if (models.IsFailure)
+        {
+            return 0;
+        }
+
+        foreach (var m in models.Value)
+        {
+            if (string.Equals(m.Id, modelId, StringComparison.OrdinalIgnoreCase))
+            {
+                return Math.Max(0, m.ContextWindow);
+            }
+        }
+
+        return 0;
+    }
 
     /// <summary>Partial-scan damage ledger (renderer-moat sprint): frames
     /// triggered by user input or event-driven state changes repaint via the
@@ -505,24 +543,42 @@ internal sealed class CellForgeReplRunner(
         // Read-switching step 4a: chrome identity (status/model/provider/agent)
         // comes from the TEA store (seeded + dual-written); Cost stays on
         // ITokenTracker and geometry stays measured (unified under goldens).
+        // Memoized: identical inputs reuse the instance so the projector's
+        // reference-equality fast path skips re-projection on quiet frames.
         var storeChat = _replStore.State.Chat;
-        screen.Status.ProjectedState = new UiState
+        int frameTotal = Math.Max(rows, screen.Timeline.Timeline.Count);
+        if (_lastStatusSnapshot is not { } prev
+            || prev.Chat.Status != storeChat.Status
+            || prev.Chat.Model != storeChat.Model
+            || prev.Chat.Provider != storeChat.Provider
+            || prev.Chat.AgentName != storeChat.AgentName
+            || prev.Cost.TokensIn != tokensIn
+            || prev.Cost.TokensOut != tokensOut
+            || prev.Cost.CostUsd != costUsd
+            || prev.ViewportLines != rows
+            || prev.TotalLines != frameTotal)
         {
-            Chat = new ChatDomainState
+            prev = new UiState
             {
-                Status = storeChat.Status,
-                Model = storeChat.Model,
-                Provider = storeChat.Provider,
-                AgentName = storeChat.AgentName,
-                Cost = new CostSnapshot(tokensIn, tokensOut, costUsd)
-            },
-            Ui = new TerminalUiState
-            {
-                ScrollOffset = 0,
-                ViewportLines = rows,
-                TotalLines = Math.Max(rows, screen.Timeline.Timeline.Count)
-            }
-        };
+                Chat = new ChatDomainState
+                {
+                    Status = storeChat.Status,
+                    Model = storeChat.Model,
+                    Provider = storeChat.Provider,
+                    AgentName = storeChat.AgentName,
+                    Cost = new CostSnapshot(tokensIn, tokensOut, costUsd)
+                },
+                Ui = new TerminalUiState
+                {
+                    ScrollOffset = 0,
+                    ViewportLines = rows,
+                    TotalLines = frameTotal
+                }
+            };
+            _lastStatusSnapshot = prev;
+        }
+
+        screen.Status.ProjectedState = prev;
 
         // Spring resize (P1.6): while a layout spring is in flight the rects
         // move every frame — self-wake keeps frames flowing until it settles.
@@ -1270,6 +1326,8 @@ internal sealed class CellForgeReplRunner(
                 Model = $"{loaded.Value.ProviderId}/{loaded.Value.Model}",
                 Agent = loaded.Value.Agent,
                 MessageCount = screen.Timeline.Timeline.Count,
+                ContextWindow = _contextWindow = await ResolveContextWindowAsync(
+                    loaded.Value.ProviderId, loaded.Value.Model, ct).ConfigureAwait(false),
             };
         }
 
@@ -1690,6 +1748,8 @@ internal sealed class CellForgeReplRunner(
                 Model = model,
                 Agent = sessionModel.Agent,
                 MessageCount = 0,
+                ContextWindow = _contextWindow = await ResolveContextWindowAsync(
+                    sessionModel.ProviderId, sessionModel.Model, CancellationToken.None).ConfigureAwait(false),
             };
         }
 
