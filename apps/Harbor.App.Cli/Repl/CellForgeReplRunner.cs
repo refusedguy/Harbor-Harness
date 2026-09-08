@@ -9,6 +9,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Commands;
+using Harbor.App.Cli.Repl.Commands;
 using Harbor.Application.Configuration;
 using Harbor.DesignSystem;
 using Harbor.Hosting.Rendering;
@@ -59,6 +60,7 @@ internal sealed class CellForgeReplRunner(
     ITerminalModeController modeController,
     ITerminalBackend backend,
     ILogger<CellForgeReplRunner> logger)
+    : IReplHost
 {
     private const string SeqEnterAltScreen = "\x1B[?1049h\x1B[?25l\x1B[?2004h\x1B[?1000h\x1B[?1002h\x1B[?1006h";
     private const string SeqLeaveAltScreen = "\x1B[?2004l\x1B[?25h\x1B[?1049l\x1B[?1006l\x1B[?1002l\x1B[?1000l";
@@ -93,6 +95,32 @@ internal sealed class CellForgeReplRunner(
             services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
         return _slashDispatcher;
     }
+
+    // ── IReplHost (Command pattern seam; transitional, see IReplHost.cs) ──
+    IServiceProvider IReplHost.Services => services;
+    IAgent IReplHost.Agent => agent;
+
+    Session IReplHost.SessionModel
+    {
+        get => sessionModel;
+        set => sessionModel = value;
+    }
+
+    ChatScreenBridge IReplHost.Bridge => bridge;
+    CommandPaletteView IReplHost.Palette => _palette;
+    StatusViewModel IReplHost.Status => _status;
+    ChatScreen IReplHost.Screen => screen;
+    SelectionEngine IReplHost.Selection => _selection;
+    VirtualizedChatTimeline IReplHost.Timeline => _timeline;
+    ComposerController IReplHost.Composer => _composer;
+    void IReplHost.WakeUp() => _wake.Writer.TryWrite(null);
+    void IReplHost.OpenSlashPalette() => OpenSlashPalette();
+    void IReplHost.ToggleVimMode() => ToggleVimMode();
+    void IReplHost.ScrollTimelineToEnd() => _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH));
+    Task IReplHost.SwitchToSessionAsync(string sessionId, CancellationToken ct) => SwitchToSessionAsync(sessionId, ct);
+    Task IReplHost.ExecutePaletteItemAsync(CommandItem item, CancellationToken ct) => ExecutePaletteItemAsync(item, ct);
+
+    private readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
     private ThemeFileWatcher? _themeWatcher;
 
     /// <summary>Token-usage source (null when the host has no tracker —
@@ -104,24 +132,8 @@ internal sealed class CellForgeReplRunner(
     /// sidebar mutation stays on one thread.</summary>
     private volatile bool _usageDirty;
 
-    /// <summary>Palette commit hand-off: OnCommit is sync (inside HandleKey),
-    /// execution happens on the frame loop in <see cref="HandleKeyAsync" />.</summary>
-    private CommandItem? _paletteCommitted;
-
-    /// <summary>Optional async action for palette commits (used by slash commands
-    /// that need custom handling instead of the default ExecutePaletteCommandAsync).</summary>
-    private Func<CommandItem, Task>? _paletteAction;
-
-    /// <summary>Stack of parent async actions restored when a drill-down frame is popped.</summary>
-    private readonly Stack<Func<CommandItem, Task>?> _paletteActionStack = new();
-
-    /// <summary>Async action for the current input frame (string = submitted value).</summary>
-    private Func<string, Task>? _paletteInputAction;
-
-    /// <summary>Stack of parent input actions restored when a drill-down frame is popped.</summary>
-    private readonly Stack<Func<string, Task>?> _paletteInputActionStack = new();
-
-    /// <summary>Leader chord hand-off for async slash commands (same pattern).</summary>
+    /// <summary>Leader chord hand-off for async slash commands: the chord resolves
+    /// into catalog execution on the frame loop (async work can't run inside Bind actions).</summary>
     private string? _leaderSlash;
 
     /// <summary>Leader digit hand-off: the quick-switch chord resolves into a
@@ -243,12 +255,6 @@ internal sealed class CellForgeReplRunner(
 
         var inputTask = inputSource.RunAsync(ct);
         BindLeaderKeys();
-
-        _palette.FramePopped += (_, _) =>
-        {
-            _paletteAction = _paletteActionStack.Count > 0 ? _paletteActionStack.Pop() : null;
-            _paletteInputAction = _paletteInputActionStack.Count > 0 ? _paletteInputActionStack.Pop() : null;
-        };
 
         // Renderer-moat T3: approval-gate warn pulses bloom through the
         // post-render effect pipeline (diff → transform → SGR encode).
@@ -758,7 +764,7 @@ internal sealed class CellForgeReplRunner(
                          && TryHandleSidebarModelClick(evt.Mouse.Column, evt.Mouse.Row))
                 {
                     _selection.Clear();
-                    await OpenModelPaletteAsync(ct).ConfigureAwait(false);
+                    await new ModelCommand().ExecuteAsync(new ReplCommandContext(this, "model"), ct).ConfigureAwait(false);
                 }
                 else
                 {
@@ -814,27 +820,15 @@ internal sealed class CellForgeReplRunner(
 
         if (_palette.Visible && _palette.HandleKey(key))
         {
-            if (_paletteCommitted is { } committed)
+            // Frame-carried continuations: no host-side stacks. Esc/Hide drops
+            // a frame together with its continuation — nothing leaks.
+            if (_palette.TakePendingCommit() is { } commit)
             {
-                _paletteCommitted = null;
-                if (_paletteAction is not null)
-                {
-                    var palAction = _paletteAction;
-                    _paletteAction = null;
-                    await palAction(committed).ConfigureAwait(false);
-                }
-                else
-                {
-                    await ExecutePaletteCommandAsync(committed, ct).ConfigureAwait(false);
-                }
+                await commit.Handler(commit.Item, ct).ConfigureAwait(false);
             }
-            else if (!string.IsNullOrEmpty(_palette.LastInputValue) && _paletteInputAction is not null)
+            else if (_palette.TakePendingInput() is { } input)
             {
-                var input = _palette.LastInputValue;
-                _palette.LastInputValue = string.Empty;
-                var inputAction = _paletteInputAction;
-                _paletteInputAction = null;
-                await inputAction(input).ConfigureAwait(false);
+                await input.Handler(input.Value, ct).ConfigureAwait(false);
             }
 
             _wake.Writer.TryWrite(null);
@@ -861,7 +855,7 @@ internal sealed class CellForgeReplRunner(
             if (_leaderSlash is { } leaderSlash)
             {
                 _leaderSlash = null;
-                await ExecutePaletteCommandAsync(new CommandItem(leaderSlash, leaderSlash), ct).ConfigureAwait(false);
+                await ExecutePaletteItemAsync(new CommandItem(leaderSlash, leaderSlash), ct).ConfigureAwait(false);
             }
 
             if (_quickSwitchChord is { } chord)
@@ -937,30 +931,23 @@ internal sealed class CellForgeReplRunner(
     /// <summary>Suggested, arg-less slash commands that are safe to run from the palette.</summary>
     private void OpenCommandPalette()
     {
-        _paletteAction = null;
-        _paletteInputAction = null;
-        _paletteActionStack.Clear();
-        _paletteInputActionStack.Clear();
-        _palette.OnCommit = item => _paletteCommitted = item;
-        _palette.Show(
-        [
-            new CommandItem("help", "Help", "slash commands reference", "/help"),
-            new CommandItem("sessions", "Sessions", "list stored sessions", "/sessions"),
-            new CommandItem("providers", "Providers", "list configured providers", "/providers"),
-            new CommandItem("plugins", "Plugins", "reload CS-source plugins", "/plugins"),
-            new CommandItem("vim", "Toggle vim mode", "normal/insert editing layer", "<leader>v"),
-            new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2"),
-        ]);
+        _palette.PushFrame(new PaletteFrame(
+            "Commands",
+            "",
+            [
+                new CommandItem("help", "Help", "slash commands reference", "/help"),
+                new CommandItem("sessions", "Sessions", "list stored sessions", "/sessions"),
+                new CommandItem("providers", "Providers", "list configured providers", "/providers"),
+                new CommandItem("plugins", "Plugins", "reload CS-source plugins", "/plugins"),
+                new CommandItem("vim", "Toggle vim mode", "normal/insert editing layer", "<leader>v"),
+                new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2"),
+            ],
+            OnCommitAsync: (item, frameCt) => ExecutePaletteItemAsync(item, frameCt)));
     }
 
     /// <summary>Opens the palette pre-populated with every registered slash command.</summary>
     private void OpenSlashPalette()
     {
-        _paletteAction = null;
-        _paletteInputAction = null;
-        _paletteActionStack.Clear();
-        _paletteInputActionStack.Clear();
-        _palette.OnCommit = item => _paletteCommitted = item;
         var commands = GetDispatcher().GetRegisteredCommands();
         var items = commands.Select(cmd => new CommandItem(
             Id: cmd.Name,
@@ -972,19 +959,11 @@ internal sealed class CellForgeReplRunner(
                 : cmd.Name is "model" or "agent" or "tui" or "renderer" or "storage" ? "Runtime"
                 : "Other"
         )).ToArray();
-        _palette.Show(items);
-    }
-
-    /// <summary>Routes palette/leader ids that are NOT slash commands.</summary>
-    private bool TryRunLocalCommand(string id)
-    {
-        if (id == "vim")
-        {
-            ToggleVimMode();
-            return true;
-        }
-
-        return false;
+        _palette.PushFrame(new PaletteFrame(
+            "Commands",
+            "slash",
+            items,
+            OnCommitAsync: (item, frameCt) => ExecutePaletteItemAsync(item, frameCt)));
     }
 
     private void ToggleVimMode()
@@ -1090,689 +1069,6 @@ internal sealed class CellForgeReplRunner(
         await SwitchToSessionAsync(sessionId, ct).ConfigureAwait(false);
     }
 
-    private async Task OpenModelPaletteAsync(CancellationToken ct)
-    {
-        var providers = services.GetRequiredService<IProviderRegistry>();
-        var allModels = await providers.GetAllModelsAsync(ct).ConfigureAwait(false);
-        if (allModels.IsFailure)
-        {
-            bridge.AppendSystemLine($"! {allModels.Error}");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        var items = new List<CommandItem>();
-        foreach (var group in allModels.Value.GroupBy(m => m.ProviderId))
-        {
-            foreach (var m in group)
-            {
-                items.Add(new CommandItem(
-                    m.Id,
-                    m.Id,
-                    m.DisplayName,
-                    string.Empty,
-                    group.Key));
-            }
-        }
-
-        _paletteActionStack.Push(_paletteAction);
-        _paletteAction = async item =>
-        {
-            string providerId = !string.IsNullOrEmpty(item.Group) ? item.Group : sessionModel.ProviderId;
-            string modelId = item.Id;
-            string canonicalModel = $"{providerId}/{modelId}";
-
-            var configStore = services.GetRequiredService<IConfigStore>();
-            var result = await configStore.UpdateAsync(c =>
-            {
-                c.Provider = providerId;
-                c.Model = canonicalModel;
-                return c;
-            }, ct).ConfigureAwait(false);
-
-            if (result.IsSuccess)
-            {
-                bridge.AppendSystemLine($"✓ Model switched to {canonicalModel}");
-                _status.Model = modelId;
-                if (screen.Sidebar is { } sb) sb.State = sb.State with { Model = canonicalModel };
-                _selection.Clear();
-
-                var agentDef = services.GetRequiredService<IAgentRegistry>()
-                    .GetAgent(AgentName.Create(sessionModel.Agent));
-                if (agentDef.IsSuccess)
-                {
-                    sessionModel = sessionModel with { ProviderId = providerId, Model = modelId };
-                    agent.Initialize(sessionModel, agentDef.Value.WithModel(modelId, providerId));
-                }
-            }
-            else
-            {
-                bridge.AppendSystemLine($"✗ Failed: {result.Error}");
-            }
-            _palette.Hide();
-            _wake.Writer.TryWrite(null);
-        };
-
-        _palette.OnCommit = item => _paletteCommitted = item;
-        _palette.PushFrame(new PaletteFrame("Select Model", "model", items, _palette.OnCommit));
-        _wake.Writer.TryWrite(null);
-    }
-
-    private async Task OpenAgentPaletteAsync(CancellationToken ct)
-    {
-        var registry = services.GetRequiredService<IAgentRegistry>();
-        var items = registry.GetAllAgents()
-            .Select(a => new CommandItem(
-                a.Name.Value,
-                a.Name.Value,
-                a.Description,
-                string.Empty,
-                "Agents"))
-            .ToList();
-
-        _paletteActionStack.Push(_paletteAction);
-        _paletteAction = async item =>
-        {
-            var configStore = services.GetRequiredService<IConfigStore>();
-            var result = await configStore.UpdateAsync(c =>
-            {
-                c.Agent = item.Id;
-                return c;
-            }, ct).ConfigureAwait(false);
-
-            if (result.IsSuccess)
-            {
-                bridge.AppendSystemLine($"✓ Switched to agent: {item.Id}");
-                _selection.Clear();
-                var agentDef = registry.GetAgent(AgentName.Create(item.Id));
-                if (agentDef.IsSuccess)
-                    agent.Initialize(sessionModel, agentDef.Value);
-            }
-            else
-            {
-                bridge.AppendSystemLine($"✗ Failed: {result.Error}");
-            }
-            _palette.Hide();
-            _wake.Writer.TryWrite(null);
-        };
-
-        _palette.OnCommit = item => _paletteCommitted = item;
-        _palette.PushFrame(new PaletteFrame("Select Agent", "agent", items, _palette.OnCommit));
-        _wake.Writer.TryWrite(null);
-    }
-
-    private async Task OpenTreePaletteAsync(CancellationToken ct)
-    {
-        var store = services.GetService<ISessionStore>();
-        if (store is null)
-        {
-            bridge.AppendSystemLine("⇄ переключение недоступно: хост без хранилища сессий");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        var result = await store.ListAsync().ConfigureAwait(false);
-        if (result.IsFailure)
-        {
-            bridge.AppendSystemLine($"! {result.Error}");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        var lines = SessionTreeRunner.RenderForest(result.Value, sessionModel.Id);
-        var sessionsById = result.Value.ToDictionary(s => s.Id);
-
-        var treeItems = new List<CommandItem>();
-        for (int i = 0; i < lines.Count; i++)
-        {
-            string line = lines[i];
-            string sid = string.Empty;
-            foreach (var s in result.Value)
-            {
-                if (line.Contains(s.Id, StringComparison.Ordinal))
-                {
-                    sid = s.Id;
-                    break;
-                }
-            }
-
-            if (!string.IsNullOrEmpty(sid))
-            {
-                treeItems.Add(new CommandItem(sid, line, $"Select to inspect / switch / fork", string.Empty, "Session Tree"));
-            }
-            else
-            {
-                treeItems.Add(new CommandItem($"info_{i}", line, string.Empty, string.Empty, "Session Tree"));
-            }
-        }
-
-        _paletteActionStack.Push(_paletteAction);
-        _paletteAction = async selectedSessionItem =>
-        {
-            if (selectedSessionItem.Id.StartsWith("info_") || !sessionsById.TryGetValue(selectedSessionItem.Id, out var targetSession))
-            {
-                return;
-            }
-
-            var nodeActions = new List<CommandItem>
-            {
-                new("switch", "Switch to this session", $"Activate session {targetSession.Id[..Math.Min(8, targetSession.Id.Length)]}", string.Empty, "Actions"),
-                new("fork", "Fork new branch from this session", "Create a branch copying history", string.Empty, "Actions")
-            };
-
-            _paletteActionStack.Push(_paletteAction);
-            _paletteAction = async actionItem =>
-            {
-                if (actionItem.Id == "switch")
-                {
-                    await SwitchToSessionAsync(targetSession.Id, ct).ConfigureAwait(false);
-                }
-                else if (actionItem.Id == "fork")
-                {
-                    var messages = await store.GetMessagesAsync(targetSession.Id, ct).ConfigureAwait(false);
-                    if (messages.IsSuccess && messages.Value.Count > 0)
-                    {
-                        var lastMsgId = messages.Value[^1].Id;
-                        var forkRunner = new SessionForkRunner(store);
-                        var forked = await forkRunner.ForkAsync(targetSession.Id, lastMsgId, ct).ConfigureAwait(false);
-                        if (forked.IsSuccess)
-                        {
-                            await SwitchToSessionAsync(forked.Value.ForkId, ct).ConfigureAwait(false);
-                            bridge.AppendSystemLine($"✓ Forked branch {forked.Value.ForkId[..Math.Min(8, forked.Value.ForkId.Length)]} ({forked.Value.Copied} messages copied)");
-                        }
-                    }
-                    else
-                    {
-                        bridge.AppendSystemLine("⚠ Cannot fork an empty session.");
-                    }
-                }
-                _palette.Hide();
-                _wake.Writer.TryWrite(null);
-            };
-
-            _palette.OnCommit = item => _paletteCommitted = item;
-            _palette.PushFrame(new PaletteFrame($"Session {targetSession.Id[..Math.Min(8, targetSession.Id.Length)]}", $"tree / {targetSession.Id[..Math.Min(8, targetSession.Id.Length)]}", nodeActions, _palette.OnCommit));
-        };
-
-        _palette.OnCommit = item => _paletteCommitted = item;
-        _palette.PushFrame(new PaletteFrame("Session Tree", "sessions / tree", treeItems, _palette.OnCommit));
-        _wake.Writer.TryWrite(null);
-    }
-
-    private async Task OpenSessionsPaletteAsync(CancellationToken ct)
-    {
-        var store = services.GetService<ISessionStore>();
-        if (store is null)
-        {
-            bridge.AppendSystemLine("⇄ переключение недоступно: хост без хранилища сессий");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        _paletteActionStack.Push(_paletteAction);
-        _paletteAction = async item =>
-        {
-            if (item.Id == "switch")
-            {
-                var result = await store.ListAsync().ConfigureAwait(false);
-                if (result.IsFailure)
-                {
-                    bridge.AppendSystemLine($"! {result.Error}");
-                    _palette.Hide();
-                    _wake.Writer.TryWrite(null);
-                    return;
-                }
-
-                var sessionItems = result.Value
-                    .Select(s => new CommandItem(
-                        s.Id,
-                        s.Title,
-                        $"{s.ProviderId}/{s.Model} · {s.Id[..Math.Min(8, s.Id.Length)]}",
-                        string.Empty,
-                        "Sessions"))
-                    .ToList();
-
-                _paletteActionStack.Push(_paletteAction);
-                _paletteAction = async sessionItem =>
-                {
-                    await SwitchToSessionAsync(sessionItem.Id, ct).ConfigureAwait(false);
-                    _palette.Hide();
-                    _wake.Writer.TryWrite(null);
-                };
-
-                _palette.OnCommit = item => _paletteCommitted = item;
-                _palette.PushFrame(new PaletteFrame("Switch Session", "sessions / switch", sessionItems, _palette.OnCommit));
-            }
-            else if (item.Id == "tree")
-            {
-                await OpenTreePaletteAsync(ct).ConfigureAwait(false);
-            }
-            else if (item.Id == "new")
-            {
-                await StartNewSessionAsync(ct).ConfigureAwait(false);
-                _palette.Hide();
-            }
-
-            _wake.Writer.TryWrite(null);
-        };
-
-        _palette.OnCommit = item => _paletteCommitted = item;
-        _palette.PushFrame(new PaletteFrame("Sessions", "sessions", new List<CommandItem>
-        {
-            new("switch", "Switch Session", "Browse and switch to recent chat session", string.Empty, "Actions"),
-            new("tree", "Branch Tree", "Show session fork / lineage tree", string.Empty, "Actions"),
-            new("new", "New Session", "Start a fresh chat session", string.Empty, "Actions")
-        }, _palette.OnCommit));
-        _wake.Writer.TryWrite(null);
-    }
-
-    private async Task OpenAuthPaletteAsync(CancellationToken ct)
-    {
-        var authStore = services.GetRequiredService<AuthStore>();
-
-        _paletteActionStack.Push(_paletteAction);
-        _paletteAction = async item =>
-        {
-            if (item.Id == "list")
-            {
-                var keysResult = await authStore.ListApiKeysAsync(ct).ConfigureAwait(false);
-                if (keysResult.IsSuccess)
-                {
-                    var sb = new StringBuilder();
-                    sb.AppendLine("Configured API keys:");
-                    foreach (var kv in keysResult.Value)
-                    {
-                        sb.AppendLine($"  {kv.Key}: {(kv.Value ? "set" : "missing")}");
-                    }
-                    bridge.AppendSystemLine(sb.ToString());
-                }
-                else
-                {
-                    bridge.AppendSystemLine($"! {keysResult.Error}");
-                }
-                _palette.Hide();
-            }
-            else if (item.Id == "reset")
-            {
-                var keysResult = await authStore.ListApiKeysAsync(ct).ConfigureAwait(false);
-                if (keysResult.IsFailure)
-                {
-                    bridge.AppendSystemLine($"! {keysResult.Error}");
-                    _palette.Hide();
-                    _wake.Writer.TryWrite(null);
-                    return;
-                }
-
-                var providerItems = keysResult.Value.Keys
-                    .Select(k => new CommandItem(k, k, string.Empty, string.Empty, "Providers"))
-                    .ToList();
-
-                _paletteActionStack.Push(_paletteAction);
-                _paletteAction = async providerItem =>
-                {
-                    var result = await authStore.RemoveApiKeyAsync(providerItem.Id, ct).ConfigureAwait(false);
-                    if (result.IsSuccess)
-                    {
-                        bridge.AppendSystemLine($"✓ API key removed for {providerItem.Id}");
-                    }
-                    else
-                    {
-                        bridge.AppendSystemLine($"✗ Failed: {result.Error}");
-                    }
-                    _palette.Hide();
-                    _wake.Writer.TryWrite(null);
-                };
-
-                _palette.OnCommit = item => _paletteCommitted = item;
-                _palette.PushFrame(new PaletteFrame("Remove API Key", "auth / reset", providerItems, _palette.OnCommit));
-            }
-            else if (item.Id == "set")
-            {
-                var providerItems = ProviderPresets.All
-                    .Select(p => new CommandItem(p.Id, p.DisplayName, p.Description, string.Empty, "Providers"))
-                    .ToList();
-
-                _paletteActionStack.Push(_paletteAction);
-                _paletteAction = async providerItem =>
-                {
-                    _paletteActionStack.Push(_paletteAction);
-                    _paletteInputActionStack.Push(_paletteInputAction);
-                    _paletteInputAction = async key =>
-                    {
-                        var result = await authStore.SetApiKeyAsync(providerItem.Id, key, ct).ConfigureAwait(false);
-                        if (result.IsSuccess)
-                        {
-                            bridge.AppendSystemLine($"✓ API key saved for {providerItem.Id}");
-                        }
-                        else
-                        {
-                            bridge.AppendSystemLine($"✗ Failed: {result.Error}");
-                        }
-                        _palette.Hide();
-                        _wake.Writer.TryWrite(null);
-                    };
-
-                    _palette.OnCommit = item => _paletteCommitted = item;
-                    _palette.PushFrame(new PaletteFrame($"auth / set / {providerItem.Id}", $"auth / set / {providerItem.Id}", [], _palette.OnCommit,
-                        IsInput: true, InputPlaceholder: "paste API key..."));
-                };
-
-                _palette.OnCommit = item => _paletteCommitted = item;
-                _palette.PushFrame(new PaletteFrame("Set API Key", "auth / set", providerItems, _palette.OnCommit));
-            }
-
-            _wake.Writer.TryWrite(null);
-        };
-
-        _palette.OnCommit = item => _paletteCommitted = item;
-        _palette.PushFrame(new PaletteFrame("Auth", "auth", new List<CommandItem>
-        {
-            new("list", "List Configured Keys", "Show configured providers", string.Empty, "Actions"),
-            new("set", "Set API Key", "Configure API key for a provider", string.Empty, "Actions"),
-            new("reset", "Remove API Key", "Clear stored key for a provider", string.Empty, "Actions")
-        }, _palette.OnCommit));
-        _wake.Writer.TryWrite(null);
-    }
-
-    private async Task OpenConfigPaletteAsync(CancellationToken ct)
-    {
-        var configStore = services.GetRequiredService<IConfigStore>();
-        var configResult = await configStore.LoadAsync(ct).ConfigureAwait(false);
-
-        _paletteActionStack.Push(_paletteAction);
-        _paletteAction = async item =>
-        {
-            if (item.Id == "view")
-            {
-                if (configResult.IsSuccess)
-                {
-                    var c = configResult.Value;
-                    var sb = new StringBuilder();
-                    sb.AppendLine("Current configuration:");
-                    sb.AppendLine($"  model: {c.Model}");
-                    sb.AppendLine($"  provider: {c.Provider}");
-                    sb.AppendLine($"  agent: {c.Agent}");
-                    sb.AppendLine($"  tui: {c.Tui}");
-                    sb.AppendLine($"  storage: {c.Storage}");
-                    sb.AppendLine($"  maxSteps: {c.MaxSteps}");
-                    sb.AppendLine($"  costLimit: {c.CostLimit}");
-                    bridge.AppendSystemLine(sb.ToString());
-                }
-                else
-                {
-                    bridge.AppendSystemLine($"! {configResult.Error}");
-                }
-                _palette.Hide();
-            }
-            else if (item.Id == "path")
-            {
-                string path = JsonConfigStore.GetDefaultPath();
-                bridge.AppendSystemLine($"Config path: {path}");
-                _palette.Hide();
-            }
-            else if (item.Id == "set")
-            {
-                var keyItems = new List<CommandItem>
-                {
-                    new("model", "Model", "LLM model id", string.Empty, "Keys"),
-                    new("provider", "Provider", "LLM provider id", string.Empty, "Keys"),
-                    new("agent", "Agent", "Agent name", string.Empty, "Keys"),
-                    new("tui", "Tui", "TUI renderer", string.Empty, "Keys"),
-                    new("storage", "Storage", "Storage backend", string.Empty, "Keys"),
-                    new("maxsteps", "MaxSteps", "Max steps per turn", string.Empty, "Keys"),
-                    new("costlimit", "CostLimit", "Cost limit per session", string.Empty, "Keys")
-                };
-
-                _paletteActionStack.Push(_paletteAction);
-                _paletteAction = async keyItem =>
-                {
-                    _paletteActionStack.Push(_paletteAction);
-                    _paletteInputActionStack.Push(_paletteInputAction);
-                    _paletteInputAction = async value =>
-                    {
-                        var updateResult = await configStore.UpdateAsync(c =>
-                        {
-                            switch (keyItem.Id)
-                            {
-                                case "model": c.Model = value; break;
-                                case "provider": c.Provider = value; break;
-                                case "agent": c.Agent = value; break;
-                                case "tui": c.Tui = value; break;
-                                case "storage": c.Storage = value; break;
-                                case "maxsteps": c.MaxSteps = int.Parse(value); break;
-                                case "costlimit": c.CostLimit = decimal.Parse(value); break;
-                            }
-                            return c;
-                        }, ct).ConfigureAwait(false);
-
-                        if (updateResult.IsSuccess)
-                        {
-                            bridge.AppendSystemLine($"✓ Set {keyItem.Id} = {value}");
-                        }
-                        else
-                        {
-                            bridge.AppendSystemLine($"✗ Failed: {updateResult.Error}");
-                        }
-                        _palette.Hide();
-                        _wake.Writer.TryWrite(null);
-                    };
-
-                    _palette.OnCommit = item => _paletteCommitted = item;
-                    _palette.PushFrame(new PaletteFrame($"config / set / {keyItem.Id}", $"config / set / {keyItem.Id}", [], _palette.OnCommit,
-                         IsInput: true, InputPlaceholder: "new value..."));
-                };
-
-                _palette.OnCommit = item => _paletteCommitted = item;
-                _palette.PushFrame(new PaletteFrame("Set Option", "config / set", keyItems, _palette.OnCommit));
-            }
-
-            _wake.Writer.TryWrite(null);
-        };
-
-        _palette.OnCommit = item => _paletteCommitted = item;
-        _palette.PushFrame(new PaletteFrame("Config", "config", new List<CommandItem>
-        {
-            new("view", "View Configuration", "Show current runtime configuration", string.Empty, "Actions"),
-            new("set", "Set Option", "Change a configuration parameter", string.Empty, "Actions"),
-            new("path", "Config Path", "Show filesystem location of config.json", string.Empty, "Actions")
-        }, _palette.OnCommit));
-        _wake.Writer.TryWrite(null);
-    }
-
-    private async Task OpenRendererPaletteAsync(CancellationToken ct)
-    {
-        var pipeline = services.GetService<IRendererPipeline>();
-        if (pipeline is null)
-        {
-            bridge.AppendSystemLine("⇄ renderer swap недоступен: хост без IRendererPipeline");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        var items = pipeline.AvailableBackends
-            .Select(id => new CommandItem(
-                id,
-                id,
-                id == pipeline.CurrentBackendId ? "Currently active" : string.Empty,
-                string.Empty,
-                "Renderer"))
-            .ToList();
-
-        _paletteActionStack.Push(_paletteAction);
-        _paletteAction = async item =>
-        {
-            bool swapped = await pipeline.SwapRendererAsync(item.Id, ct).ConfigureAwait(false);
-            if (swapped)
-            {
-                bridge.AppendSystemLine($"✓ Renderer swapped to {item.Id}");
-            }
-            else
-            {
-                bridge.AppendSystemLine($"✗ Failed to swap renderer to {item.Id}");
-            }
-            _palette.Hide();
-            _wake.Writer.TryWrite(null);
-        };
-
-        _palette.OnCommit = item => _paletteCommitted = item;
-        _palette.PushFrame(new PaletteFrame("Select Renderer", "renderer", items, _palette.OnCommit));
-        _wake.Writer.TryWrite(null);
-    }
-
-    private async Task OpenTuiPaletteAsync(CancellationToken ct)
-    {
-        var configStore = services.GetRequiredService<IConfigStore>();
-        var configResult = await configStore.LoadAsync(ct).ConfigureAwait(false);
-        if (configResult.IsFailure)
-        {
-            bridge.AppendSystemLine($"! {configResult.Error}");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        var current = configResult.Value.Tui;
-        var backends = new[] { "cellforge", "plain", "ansi", "spectre", "fullscreen" };
-        var items = backends
-            .Select(id => new CommandItem(
-                id,
-                id,
-                id == current ? "Currently active" : string.Empty,
-                string.Empty,
-                "TUI"))
-            .ToList();
-
-        _paletteActionStack.Push(_paletteAction);
-        _paletteAction = async item =>
-        {
-            var result = await configStore.UpdateAsync(c =>
-            {
-                c.Tui = item.Id;
-                return c;
-            }, ct).ConfigureAwait(false);
-
-            if (result.IsSuccess)
-            {
-                bridge.AppendSystemLine($"✓ TUI set to {item.Id} (applies on restart or via /renderer)");
-            }
-            else
-            {
-                bridge.AppendSystemLine($"✗ Failed: {result.Error}");
-            }
-            _palette.Hide();
-            _wake.Writer.TryWrite(null);
-        };
-
-        _palette.OnCommit = item => _paletteCommitted = item;
-        _palette.PushFrame(new PaletteFrame("Select TUI", "tui", items, _palette.OnCommit));
-        _wake.Writer.TryWrite(null);
-    }
-
-    private async Task OpenStoragePaletteAsync(CancellationToken ct)
-    {
-        var configStore = services.GetRequiredService<IConfigStore>();
-        var configResult = await configStore.LoadAsync(ct).ConfigureAwait(false);
-        if (configResult.IsFailure)
-        {
-            bridge.AppendSystemLine($"! {configResult.Error}");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        var current = configResult.Value.Storage;
-        var backends = new[] { "jsonl", "sqlite", "memory" };
-        var items = backends
-            .Select(id => new CommandItem(
-                id,
-                id,
-                id == current ? "Currently active" : string.Empty,
-                string.Empty,
-                "Storage"))
-            .ToList();
-
-        _paletteActionStack.Push(_paletteAction);
-        _paletteAction = async item =>
-        {
-            var result = await configStore.UpdateAsync(c =>
-            {
-                c.Storage = item.Id;
-                return c;
-            }, ct).ConfigureAwait(false);
-
-            if (result.IsSuccess)
-            {
-                bridge.AppendSystemLine($"✓ Storage set to {item.Id}");
-            }
-            else
-            {
-                bridge.AppendSystemLine($"✗ Failed: {result.Error}");
-            }
-            _palette.Hide();
-            _wake.Writer.TryWrite(null);
-        };
-
-        _palette.OnCommit = item => _paletteCommitted = item;
-        _palette.PushFrame(new PaletteFrame("Select Storage", "storage", items, _palette.OnCommit));
-        _wake.Writer.TryWrite(null);
-    }
-
-    private async Task StartNewSessionAsync(CancellationToken ct)
-    {
-        if (agent.State.IsRunning)
-        {
-            bridge.AppendSystemLine("⚠ Cannot create session while running");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        var store = services.GetService<ISessionStore>();
-        if (store is null)
-        {
-            bridge.AppendSystemLine("⇄ сессия недоступна: хост без хранилища сессий");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        var configResult = await services.GetRequiredService<IConfigStore>()
-            .LoadAsync(ct).ConfigureAwait(false);
-        string provider = configResult.IsSuccess ? configResult.Value.Provider : "kilocode";
-        string model = configResult.IsSuccess ? configResult.Value.Model : "tencent/hy3:free";
-
-        var newSession = await store.CreateAsync(Environment.CurrentDirectory, sessionModel.Agent, provider, model, ct).ConfigureAwait(false);
-        if (newSession.IsFailure)
-        {
-            bridge.AppendSystemLine($"! {newSession.Error}");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        var agentDef = services.GetRequiredService<IAgentRegistry>()
-            .GetAgent(AgentName.Create(sessionModel.Agent));
-        if (agentDef.IsFailure)
-        {
-            bridge.AppendSystemLine($"! {agentDef.Error}");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        agent.Initialize(newSession.Value, agentDef.Value);
-        sessionModel = newSession.Value;
-        bridge.ResetMessageTracking();
-        _timeline.Clear();
-        _selection.Clear();
-        _composer.Buffer.Clear();
-        _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH));
-        if (screen.Sidebar is { } sb)
-        {
-            sb.State = sb.State with
-            {
-                SessionId = newSession.Value.Id,
-                SessionTitle = newSession.Value.Title,
-            };
-        }
-        bridge.AppendSystemLine($"✓ Started fresh session: {newSession.Value.Id[..Math.Min(8, newSession.Value.Id.Length)]}");
-        _wake.Writer.TryWrite(null);
-    }
-
     private async Task ExecuteInfoCommandAsync(string text, CancellationToken ct)
     {
         var captured = new List<string>();
@@ -1836,73 +1132,15 @@ internal sealed class CellForgeReplRunner(
         return sb.ToString();
     }
 
-    private async Task ExecutePaletteCommandAsync(CommandItem item, CancellationToken ct)
+    private async Task ExecutePaletteItemAsync(CommandItem item, CancellationToken ct)
     {
-        if (TryRunLocalCommand(item.Id))
+        // GoF Command: single catalog lookup; uncatalogued ids fall through
+        // to the slash-dispatcher fallback below. New command = new file +
+        // Register, no switch edits (OCP).
+        if (_catalog.TryResolve(item.Id, out var cmd) && cmd is not null)
         {
-            _wake.Writer.TryWrite(null);
+            await cmd.ExecuteAsync(new ReplCommandContext(this, item.Id), ct).ConfigureAwait(false);
             return;
-        }
-
-        switch (item.Id)
-        {
-            case "model":
-            case "m":
-                await OpenModelPaletteAsync(ct).ConfigureAwait(false);
-                return;
-
-            case "agent":
-            case "a":
-            case "mode":
-                await OpenAgentPaletteAsync(ct).ConfigureAwait(false);
-                return;
-
-            case "sessions":
-                await OpenSessionsPaletteAsync(ct).ConfigureAwait(false);
-                return;
-
-            case "tree":
-                await OpenTreePaletteAsync(ct).ConfigureAwait(false);
-                return;
-
-            case "auth":
-            case "key":
-                await OpenAuthPaletteAsync(ct).ConfigureAwait(false);
-                return;
-
-            case "config":
-            case "cfg":
-                await OpenConfigPaletteAsync(ct).ConfigureAwait(false);
-                return;
-
-            case "renderer":
-                await OpenRendererPaletteAsync(ct).ConfigureAwait(false);
-                return;
-
-            case "tui":
-                await OpenTuiPaletteAsync(ct).ConfigureAwait(false);
-                return;
-
-            case "storage":
-                await OpenStoragePaletteAsync(ct).ConfigureAwait(false);
-                return;
-
-            case "new":
-            case "new-session":
-                await StartNewSessionAsync(ct).ConfigureAwait(false);
-                return;
-
-            case "help":
-            case "h":
-                OpenSlashPalette();
-                _wake.Writer.TryWrite(null);
-                return;
-
-            case "setup":
-                bridge.AppendSystemLine("⚠ Setup wizard requires a direct console. Use '/config', '/model', '/auth' or run 'harbor setup' from terminal.");
-                _palette.Hide();
-                _wake.Writer.TryWrite(null);
-                return;
         }
 
         string slash = '/' + item.Id;
@@ -1954,57 +1192,15 @@ internal sealed class CellForgeReplRunner(
             string[] parts = text[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
             string cmd = parts.Length > 0 ? parts[0].ToLowerInvariant() : string.Empty;
 
+            // Same catalog as palette commits — one resolution point.
+            if (_catalog.TryResolve(cmd, out var slashCmd) && slashCmd is not null)
+            {
+                await slashCmd.ExecuteAsync(new ReplCommandContext(this, cmd), ct).ConfigureAwait(false);
+                return;
+            }
+
             switch (cmd)
             {
-                case "help":
-                case "h":
-                    OpenSlashPalette();
-                    return;
-
-                case "model":
-                case "m":
-                    await OpenModelPaletteAsync(ct).ConfigureAwait(false);
-                    return;
-
-                case "agent":
-                case "a":
-                case "mode":
-                    await OpenAgentPaletteAsync(ct).ConfigureAwait(false);
-                    return;
-
-                case "sessions":
-                    await OpenSessionsPaletteAsync(ct).ConfigureAwait(false);
-                    return;
-
-                case "tree":
-                    await OpenTreePaletteAsync(ct).ConfigureAwait(false);
-                    return;
-
-                case "new":
-                case "new-session":
-                    await StartNewSessionAsync(ct).ConfigureAwait(false);
-                    return;
-
-                case "auth":
-                    await OpenAuthPaletteAsync(ct).ConfigureAwait(false);
-                    return;
-
-                case "config":
-                    await OpenConfigPaletteAsync(ct).ConfigureAwait(false);
-                    return;
-
-                case "renderer":
-                    await OpenRendererPaletteAsync(ct).ConfigureAwait(false);
-                    return;
-
-                case "tui":
-                    await OpenTuiPaletteAsync(ct).ConfigureAwait(false);
-                    return;
-
-                case "storage":
-                    await OpenStoragePaletteAsync(ct).ConfigureAwait(false);
-                    return;
-
                 case "providers":
                 case "plugins":
                 case "permissions":
@@ -2013,8 +1209,8 @@ internal sealed class CellForgeReplRunner(
 
                 default:
                 {
-                    var dispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
-                    var outcome = await dispatcher.HandleCoreAsync(
+                    var submitDispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
+                    var outcome = await submitDispatcher.HandleCoreAsync(
                         text, services,
                         writer: line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
                         reader: prompt =>
