@@ -3,7 +3,6 @@ using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tui.CellForge.Panels;
@@ -51,45 +50,10 @@ public sealed class CellForgeTodoListPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        var todos = PanelExtractors.ExtractTodos(ctx.State);
-        var rows = new List<string>(todos.Count + 4);
-        rows.Add($"Todo List ({todos.Count} items)");
-        rows.Add(CellPanelText.Separator);
-        if (todos.Count == 0)
-        {
-            rows.Add("No todos yet.");
-            rows.Add("Ask the agent to use the todo tool.");
-        }
-        else
-        {
-            int done = 0;
-            int active = 0;
-            int pending = 0;
-            for (int i = 0; i < todos.Count; i++)
-            {
-                string marker = todos[i].Marker;
-                switch (marker)
-                {
-                    case "[x]":
-                    case "[X]":
-                        done++;
-                        break;
-                    case "[~]":
-                        active++;
-                        break;
-                    case "[ ]":
-                        pending++;
-                        break;
-                }
-
-                rows.Add($"{marker} {todos[i].Content}");
-            }
-
-            rows.Add(CellPanelText.Separator);
-            rows.Add($"Done {done} · active {active} · pending {pending}");
-        }
-
-        return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+        return PanelRows.Clip(
+            PanelRows.TodoRows(PanelExtractors.ExtractTodos(ctx.State)),
+            ctx.Width,
+            ctx.Height);
     }
 
     /// <inheritdoc />
@@ -123,47 +87,10 @@ public sealed class CellForgeDiffPreviewPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        var changes = PanelExtractors.ExtractRecentChanges(ctx.State, 8);
-        var rows = new List<string>(changes.Count * 5 + 4);
-        rows.Add($"Diff Preview ({changes.Count} recent change(s))");
-        rows.Add(CellPanelText.Separator);
-        if (changes.Count == 0)
-        {
-            rows.Add("No file edits yet.");
-            rows.Add("Edits made by the agent will appear here.");
-        }
-        else
-        {
-            for (int i = 0; i < changes.Count; i++)
-            {
-                var change = changes[i];
-                string icon = change.ToolName switch
-                {
-                    "edit" => "✎",
-                    "write" => "✚",
-                    "read" => "▸",
-                    "patch" => "⌥",
-                    _ => "·",
-                };
-                string ok = change.IsError ? "✗" : "✓";
-                string path = CellPanelText.ShortenTail(change.FilePath, Math.Max(4, ctx.Width - 12));
-                rows.Add($"{icon} {ok} {path}");
-                if (!string.IsNullOrEmpty(change.DiffBody))
-                {
-                    string body = change.DiffBody;
-                    int start = 0;
-                    for (int shown = 0; shown < 4 && start < body.Length; shown++)
-                    {
-                        int nl = body.IndexOf('\n', start);
-                        string line = nl < 0 ? body[start..] : body[start..nl];
-                        start = nl < 0 ? body.Length : nl + 1;
-                        rows.Add("  " + line.TrimEnd('\r'));
-                    }
-                }
-            }
-        }
-
-        return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+        return PanelRows.Clip(
+            PanelRows.DiffRows(PanelExtractors.ExtractRecentChanges(ctx.State, 8), ctx.Width),
+            ctx.Width,
+            ctx.Height);
     }
 
     /// <inheritdoc />
@@ -197,31 +124,10 @@ public sealed class CellForgeDiagnosticsPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        var diagnostics = PanelExtractors.CollectDiagnostics(ctx.State);
-        var rows = new List<string>(diagnostics.Count + 4);
-        rows.Add($"Diagnostics ({diagnostics.Count} issue(s))");
-        rows.Add(CellPanelText.Separator);
-        if (diagnostics.Count == 0)
-        {
-            rows.Add("No diagnostics detected.");
-            rows.Add("Errors emitted by the `bash` tool will show up here.");
-        }
-        else
-        {
-            int maxVisible = Math.Max(2, ctx.Height - 4);
-            int end = Math.Min(diagnostics.Count, maxVisible);
-            for (int i = 0; i < end; i++)
-            {
-                var diagnostic = diagnostics[i];
-                string icon = diagnostic.Severity == PanelDiagnosticSeverity.Warning ? "▲" : "✗";
-                rows.Add($"{icon} {diagnostic.Message}");
-            }
-
-            rows.Add(CellPanelText.Separator);
-            rows.Add("read-only · cursor navigation lands in a follow-up");
-        }
-
-        return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+        return PanelRows.Clip(
+            PanelRows.DiagnosticsRows(PanelExtractors.CollectDiagnostics(ctx.State), ctx.Height),
+            ctx.Width,
+            ctx.Height);
     }
 
     /// <inheritdoc />
@@ -253,52 +159,14 @@ public sealed class CellForgeTokenBreakdownPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        long input = ctx.State.Cost.TokensIn;
-        long output = ctx.State.Cost.TokensOut;
-        decimal cost = ctx.State.Cost.CostUsd;
-        long scale = Math.Max(input, Math.Max(output, 1));
-        int barWidth = Math.Max(0, ctx.Width - 24);
-        var rows = new List<string>(7);
-        rows.Add("Token Breakdown");
-        rows.Add(CellPanelText.Separator);
-        rows.Add($"in    {Format(input).PadLeft(12)}  {Bar(input, barWidth, scale)}".TrimEnd());
-        rows.Add($"out   {Format(output).PadLeft(12)}  {Bar(output, barWidth, scale)}".TrimEnd());
-        rows.Add(CellPanelText.Separator);
-        rows.Add($"total {Format(input + output).PadLeft(12)}  ${cost.ToString("F4", CultureInfo.InvariantCulture)}");
-        rows.Add("(cumulative session totals)");
-        return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+        return PanelRows.Clip(
+            PanelRows.TokenRows(ctx.State.Cost.TokensIn, ctx.State.Cost.TokensOut, ctx.State.Cost.CostUsd, ctx.Width),
+            ctx.Width,
+            ctx.Height);
     }
 
     /// <inheritdoc />
     public bool OnKey(UiKey key, PanelContext ctx) => false;
-
-    private static string Format(long n) =>
-        n >= 1_000_000
-            ? (n / 1_000_000.0).ToString("F2", CultureInfo.InvariantCulture) + "M"
-            : n >= 1_000
-                ? (n / 1_000.0).ToString("F1", CultureInfo.InvariantCulture) + "K"
-                : n.ToString(CultureInfo.InvariantCulture);
-
-    private static string Bar(long value, int width, long scale)
-    {
-        if (width <= 0)
-        {
-            return string.Empty;
-        }
-
-        int filled = (int)((double)value / scale * width);
-        if (filled > width)
-        {
-            filled = width;
-        }
-
-        if (filled < 0)
-        {
-            filled = 0;
-        }
-
-        return new string('█', filled) + new string('░', width - filled);
-    }
 }
 
 // ── help (Right/48, '?' toggles) ───────────────────────────────────────────
@@ -329,7 +197,7 @@ public sealed class CellForgeHelpPanel : IPanelProvider
         ArgumentNullException.ThrowIfNull(ctx);
         var rows = new List<string>(32);
         rows.Add("Harbor — keymap & panels");
-        rows.Add(CellPanelText.Separator);
+        rows.Add(PanelText.Separator);
         rows.Add("Hotkeys");
         rows.Add("  Alt+1..9   toggle Nth panel");
         rows.Add("  Ctrl+Tab   cycle panel focus");
@@ -371,7 +239,7 @@ public sealed class CellForgeHelpPanel : IPanelProvider
 
         rows.Add(string.Empty);
         rows.Add("Press ? to close this panel.");
-        return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+        return PanelText.Clip(rows, ctx.Width, ctx.Height);
     }
 
     /// <inheritdoc />
@@ -418,13 +286,13 @@ public sealed class CellForgeLogsPanel : IPanelProvider
         ArgumentNullException.ThrowIfNull(ctx);
         var rows = new List<string>(16);
         rows.Add("Logs (F12 to hide · live ILogger output · file at ~/.harbor/logs/)");
-        rows.Add(CellPanelText.Separator);
+        rows.Add(PanelText.Separator);
         var panel = ctx.Services?.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel;
         if (panel is null)
         {
             rows.Add("Diagnostics panel not registered.");
             rows.Add("HostBuilder registers IDiagnosticsPanel for interactive TUIs.");
-            return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+            return PanelText.Clip(rows, ctx.Width, ctx.Height);
         }
 
         int maxVisible = Math.Max(2, ctx.Height - 4);
@@ -434,7 +302,7 @@ public sealed class CellForgeLogsPanel : IPanelProvider
         {
             rows.Add("No log entries yet.");
             rows.Add("Logs from every ILogger will appear here in arrival order.");
-            return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+            return PanelText.Clip(rows, ctx.Width, ctx.Height);
         }
 
         for (int i = 0; i < entries.Count; i++)
@@ -453,7 +321,7 @@ public sealed class CellForgeLogsPanel : IPanelProvider
             string time = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
             string category = ShortenCategory(entry.Category);
             int budget = ctx.Width - time.Length - levelTag.Length - category.Length - 7;
-            string body = CellPanelText.SingleLine(entry.Message);
+            string body = PanelText.SingleLine(entry.Message);
             if (budget <= 0)
             {
                 body = string.Empty;
@@ -466,9 +334,9 @@ public sealed class CellForgeLogsPanel : IPanelProvider
             rows.Add($"{time} {levelTag} {category} {body}".TrimEnd());
         }
 
-        rows.Add(CellPanelText.Separator);
+        rows.Add(PanelText.Separator);
         rows.Add("F12 toggle · Ctrl+L clear console (does not clear this buffer)");
-        return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+        return PanelText.Clip(rows, ctx.Width, ctx.Height);
     }
 
     /// <inheritdoc />
@@ -552,12 +420,12 @@ public sealed class CellForgeFileTreePanel : IPanelProvider
 
         var rows = new List<string>(snapshot.Count + 6);
         rows.Add("File Tree");
-        rows.Add(CellPanelText.ShortenTail(displayDir, Math.Max(0, ctx.Width - 2)));
-        rows.Add(CellPanelText.Separator);
+        rows.Add(PanelText.ShortenTail(displayDir, Math.Max(0, ctx.Width - 2)));
+        rows.Add(PanelText.Separator);
         if (snapshot.Count == 0)
         {
             rows.Add("(empty directory)");
-            return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+            return PanelText.Clip(rows, ctx.Width, ctx.Height);
         }
 
         int maxVisible = Math.Max(2, ctx.Height - 4);
@@ -574,7 +442,7 @@ public sealed class CellForgeFileTreePanel : IPanelProvider
             var entry = snapshot[i];
             string marker = i == cursor ? ">" : " ";
             string icon = entry.IsDirectory ? "▸" : entry.IsHidden ? "·" : " ";
-            rows.Add($"{marker} {icon} {CellPanelText.Truncate(entry.Name, nameBudget)}");
+            rows.Add($"{marker} {icon} {PanelText.Truncate(entry.Name, nameBudget)}");
         }
 
         if (end < snapshot.Count)
@@ -582,9 +450,9 @@ public sealed class CellForgeFileTreePanel : IPanelProvider
             rows.Add("  ↓ more below");
         }
 
-        rows.Add(CellPanelText.Separator);
+        rows.Add(PanelText.Separator);
         rows.Add("j/k move · Enter open · h parent · r refresh");
-        return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+        return PanelText.Clip(rows, ctx.Width, ctx.Height);
     }
 
     /// <inheritdoc />
@@ -780,7 +648,7 @@ public sealed class CellForgeSessionSidebarPanel : IPanelProvider
         ArgumentNullException.ThrowIfNull(ctx);
         var rows = new List<string>(ctx.State.Sessions.Length + 4);
         rows.Add("Sessions");
-        rows.Add(CellPanelText.Separator);
+        rows.Add(PanelText.Separator);
         if (ctx.State.Sessions.Length == 0)
         {
             rows.Add("(no sessions)");
@@ -795,7 +663,7 @@ public sealed class CellForgeSessionSidebarPanel : IPanelProvider
                 var session = ctx.State.Sessions[i];
                 bool isActive = session.SessionId == ctx.State.ActiveSessionId;
                 string marker = isActive ? "▸" : " ";
-                string line = $"{marker} {CellPanelText.Truncate(session.Title, Math.Max(1, ctx.Width - 3))}";
+                string line = $"{marker} {PanelText.Truncate(session.Title, Math.Max(1, ctx.Width - 3))}";
                 rows.Add(line);
             }
 
@@ -805,91 +673,11 @@ public sealed class CellForgeSessionSidebarPanel : IPanelProvider
             }
         }
 
-        rows.Add(CellPanelText.Separator);
+        rows.Add(PanelText.Separator);
         rows.Add(ctx.State.IsLoading ? "loading…" : $"{ctx.State.Sessions.Length} session(s)");
-        return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+        return PanelText.Clip(rows, ctx.Width, ctx.Height);
     }
 
     /// <inheritdoc />
     public bool OnKey(UiKey key, PanelContext ctx) => false;
-}
-
-// ── shared row helpers ─────────────────────────────────────────────────────
-
-/// <summary>
-///     Shared plain-text row helpers for the cell-native panels: geometry clipping
-///     (the adapter flattens rows as-is, so every provider clips to
-///     <c>Width</c> × <c>Height</c> itself) plus truncation utilities.
-/// </summary>
-internal static class CellPanelText
-{
-    /// <summary>Plain separator stamped between panel sections.</summary>
-    internal const string Separator = "────────────────────────";
-
-    /// <summary>
-    ///     Clip rows to the available geometry: at most <paramref name="height"/>
-    ///     rows, each at most <paramref name="width"/> columns (hard-truncated with
-    ///     <c>…</c>). Returns an empty list for non-positive geometry instead of
-    ///     throwing, so tiny viewports degrade gracefully.
-    /// </summary>
-    internal static IReadOnlyList<string> Clip(List<string> rows, int width, int height)
-    {
-        if (rows.Count == 0 || width <= 0 || height <= 0)
-        {
-            return Array.Empty<string>();
-        }
-
-        int take = Math.Min(rows.Count, height);
-        var clipped = new List<string>(take);
-        for (int i = 0; i < take; i++)
-        {
-            string line = rows[i];
-            clipped.Add(line.Length <= width ? line : Truncate(line, width));
-        }
-
-        return clipped;
-    }
-
-    /// <summary>Hard-truncate <paramref name="text"/> to <paramref name="max"/> columns.</summary>
-    internal static string Truncate(string text, int max)
-    {
-        if (string.IsNullOrEmpty(text) || max <= 0)
-        {
-            return string.Empty;
-        }
-
-        if (text.Length <= max)
-        {
-            return text;
-        }
-
-        return max == 1 ? "…" : text[..(max - 1)] + "…";
-    }
-
-    /// <summary>Keep the tail of a path visible (filename first), prefix with <c>…</c>.</summary>
-    internal static string ShortenTail(string path, int max)
-    {
-        if (string.IsNullOrEmpty(path) || max <= 0)
-        {
-            return max <= 0 ? string.Empty : path;
-        }
-
-        if (path.Length <= max)
-        {
-            return path;
-        }
-
-        return max == 1 ? "…" : "…" + path[^(max - 1)..];
-    }
-
-    /// <summary>Collapse a multi-line log message onto one display row.</summary>
-    internal static string SingleLine(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return string.Empty;
-        }
-
-        return text.Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
-    }
 }
