@@ -37,6 +37,7 @@ public sealed class AgentLoop : IAgentLoop
     private readonly ITokenTracker _tokenTracker;
     private readonly IToolDispatcher _toolDispatcher;
     private readonly IToolRegistry _tools;
+    private readonly IBackgroundTaskRegistry? _backgroundTasks;
     private readonly AgentPipeline _pipeline;
     private readonly CompactionBehavior _compactionBehavior;
     private readonly SteeringDrainBehavior _steering;
@@ -65,7 +66,8 @@ public sealed class AgentLoop : IAgentLoop
         IMetrics? metrics = null,
         ITracer? tracer = null,
         IToolDispatcher? toolDispatcher = null,
-        IMcpRegistry? mcpRegistry = null)
+        IMcpRegistry? mcpRegistry = null,
+        IBackgroundTaskRegistry? backgroundTasks = null)
     {
         _providers = providers;
         _tools = tools;
@@ -103,6 +105,9 @@ public sealed class AgentLoop : IAgentLoop
         // ROP-D Z3: MCP server instructions flow into the system prompt when a
         // registry is composed in; tests without one keep the section absent.
         _mcpRegistry = mcpRegistry;
+        // Background-task ping: detached runs drain into the session when the
+        // loop is composed with a registry; tests without one skip silently.
+        _backgroundTasks = backgroundTasks;
     }
 
     /// <summary>
@@ -147,6 +152,10 @@ public sealed class AgentLoop : IAgentLoop
             var (client, model) = resolved.Value;
 
             await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, SnapshotMessages(session.Messages), model), ct).ConfigureAwait(false);
+
+            // Previous-run background completions land before the first turn
+            // so a new run picks up reports that finished while idle.
+            await DrainBackgroundAsync(session, ct).ConfigureAwait(false);
 
             int turn = 0;
             // Set when LLM-based compaction fails; the CURRENT and every
@@ -289,6 +298,10 @@ public sealed class AgentLoop : IAgentLoop
                 // B3: tool results are pure appends — extend the running estimate.
                 _tokenTracker.RecordAppendedMessage(toolResults);
 
+                // Background-task ping ("boss, I'm done"): finished detached
+                // runs append as tool results so the NEXT turn picks them up.
+                await DrainBackgroundAsync(session, ct).ConfigureAwait(false);
+
                 // Ф2/B2: mid-run steering injection INSIDE the turn. Drained
                 // right AFTER the tool results are persisted (never between
                 // the assistant tool_calls and their results — providers
@@ -347,6 +360,41 @@ public sealed class AgentLoop : IAgentLoop
             await _eventBus.PublishAsync(new AgentErrorEvent(ex.Message, ex.ToString()), CancellationToken.None).ConfigureAwait(false);
             return Result.Failure(ex.Message);
         }
+    }
+
+    /// <summary>
+    ///     Background-task ping: drain finished detached runs for this session
+    ///     into a tool-result message. No-op when unwired or nothing finished.
+    /// </summary>
+    private async Task DrainBackgroundAsync(ISessionContext session, CancellationToken ct)
+    {
+        var registry = _backgroundTasks;
+        if (registry is null)
+        {
+            return;
+        }
+
+        var done = registry.DrainCompleted(session.Session.Id);
+        if (done.Count == 0)
+        {
+            return;
+        }
+
+        var entries = new List<ToolResultEntry>(done.Count);
+        for (int i = 0; i < done.Count; i++)
+        {
+            var completion = done[i];
+            string output = completion.Result.Match(
+                run => $"[background sub-agent '{completion.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s)]\n\n{run.FinalOutput}",
+                err => $"[background sub-agent '{completion.AgentName}' failed: {err}]");
+            entries.Add(new ToolResultEntry(completion.Id, "task", output, completion.Result.IsFailure));
+            _logger.LogInformation("Background task drained: id={Id} agent={Agent}", completion.Id, completion.AgentName);
+        }
+
+        var message = new ToolResultMessage(
+            Guid.NewGuid().ToString("N"), session.Session.Id, DateTimeOffset.UtcNow, entries);
+        await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
+        _tokenTracker.RecordAppendedMessage(message);
     }
 
     /// <summary>
