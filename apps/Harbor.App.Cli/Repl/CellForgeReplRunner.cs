@@ -175,6 +175,12 @@ internal sealed class CellForgeReplRunner(
 
     private int _timelineViewportH;
 
+    /// <summary>Last viewport geometry pushed to the TEA store (changed-only).</summary>
+    private int _lastStoreViewport = -1;
+
+    /// <summary>Last total-lines count pushed to the TEA store (changed-only).</summary>
+    private int _lastStoreTotal = -1;
+
     /// <summary>Partial-scan damage ledger (renderer-moat sprint): frames
     /// triggered by user input or event-driven state changes repaint via the
     /// plain full scan; only quiet animation frames (spinner, gate pulse,
@@ -474,7 +480,6 @@ internal sealed class CellForgeReplRunner(
         // CF-D-002: feed projected state from the view-model snapshot so
         // StatusPanel renders through StatusProjector (glyphs, scroll segment,
         // token/cost formatting) instead of the legacy BuildSegments path.
-        string statusText = _status.Mode.ToString().ToLowerInvariant();
         screen.Status.ProjectedRetry = _status.Retry;
         long tokensIn = 0;
         long tokensOut = 0;
@@ -485,14 +490,18 @@ internal sealed class CellForgeReplRunner(
             tokensOut = stats.TotalOutputTokens;
         }
 
+        // Read-switching step 4a: chrome identity (status/model/provider/agent)
+        // comes from the TEA store (seeded + dual-written); Cost stays on
+        // ITokenTracker and geometry stays measured (unified under goldens).
+        var storeChat = _replStore.State.Chat;
         screen.Status.ProjectedState = new UiState
         {
             Chat = new ChatDomainState
             {
-                Status = statusText,
-                Model = _status.Model,
-                Provider = sessionModel.ProviderId,
-                AgentName = sessionModel.Agent,
+                Status = storeChat.Status,
+                Model = storeChat.Model,
+                Provider = storeChat.Provider,
+                AgentName = storeChat.AgentName,
                 Cost = new CostSnapshot(tokensIn, tokensOut, costUsd)
             },
             Ui = new TerminalUiState
@@ -512,6 +521,18 @@ internal sealed class CellForgeReplRunner(
 
         Rect tlRect = screen.Timeline.Rect;
         _timelineViewportH = Math.Max(0, tlRect.Height);
+        int frameTotal = Math.Max(rows, screen.Timeline.Timeline.Count);
+
+        // Epic C accumulation: viewport geometry flows into the TEA store
+        // (changed-only, no per-frame alloc). Nothing reads it yet — the
+        // timeline keeps local scroll until the golden-backed flip.
+        if (frameTotal != _lastStoreTotal || rows != _lastStoreViewport)
+        {
+            _lastStoreTotal = frameTotal;
+            _lastStoreViewport = rows;
+            _ = _replStore.Dispatch(new UiMsg.Viewport(rows));
+            _ = _replStore.Dispatch(new UiMsg.HistoryMeasured(frameTotal));
+        }
         _ = _timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, _timelineViewportH);
 
         screenSession.BeginFrame();
