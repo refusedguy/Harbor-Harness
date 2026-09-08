@@ -3,6 +3,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Cli.Repl.Commands;
@@ -76,6 +77,7 @@ internal sealed class ModelCommand : IReplCommand
             {
                 host.SessionModel = host.SessionModel with { ProviderId = providerId, Model = modelId };
                 host.Agent.Initialize(host.SessionModel, agentDef.Value.WithModel(modelId, providerId));
+                _ = host.Store.Dispatch(new UiMsg.ConfigureRuntime(modelId, providerId, host.SessionModel.Agent));
             }
         }
         else

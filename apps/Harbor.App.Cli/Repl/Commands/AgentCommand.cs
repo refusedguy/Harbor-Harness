@@ -2,6 +2,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Cli.Repl.Commands;
@@ -51,7 +52,10 @@ internal sealed class AgentCommand : IReplCommand
             host.Selection.Clear();
             var agentDef = registry.GetAgent(AgentName.Create(item.Id));
             if (agentDef.IsSuccess)
+            {
                 host.Agent.Initialize(host.SessionModel, agentDef.Value);
+                _ = host.Store.Dispatch(new UiMsg.ConfigureRuntime(host.SessionModel.Model, host.SessionModel.ProviderId, item.Id));
+            }
         }
         else
         {

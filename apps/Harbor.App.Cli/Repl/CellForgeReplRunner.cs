@@ -79,6 +79,11 @@ internal sealed class CellForgeReplRunner(
     private readonly Channel<AgentEvent> _events = Channel.CreateUnbounded<AgentEvent>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
+    /// <summary>TEA accumulator (epic C): every agent event is dual-written here
+    /// alongside the bridge. Nothing paints from it yet (status does in step 3) —
+    /// it only accumulates Lines/Cost/Status so projection has real state later.</summary>
+    private readonly UiStore _replStore = new();
+
     private readonly StatusViewModel _status = screen.Status.Vm;
     private readonly ComposerController _composer = screen.Composer.Composer;
     private readonly VirtualizedChatTimeline _timeline = screen.Timeline.Timeline;
@@ -107,6 +112,7 @@ internal sealed class CellForgeReplRunner(
     }
 
     ChatScreenBridge IReplHost.Bridge => bridge;
+    UiStore IReplHost.Store => _replStore;
     CommandPaletteView IReplHost.Palette => _palette;
     StatusViewModel IReplHost.Status => _status;
     ChatScreen IReplHost.Screen => screen;
@@ -252,6 +258,7 @@ internal sealed class CellForgeReplRunner(
         await backend.WriteAsync(Utf8(TerminalQueries.Osc99NotifyProbe), ct).ConfigureAwait(false);
 
         await PrintWelcomeAsync().ConfigureAwait(false);
+        _replStore.Dispatch(new UiMsg.ConfigureRuntime(sessionModel.Model, sessionModel.ProviderId, sessionModel.Agent));
         ArmThemeWatcher();
 
         var inputTask = inputSource.RunAsync(ct);
@@ -340,10 +347,13 @@ internal sealed class CellForgeReplRunner(
             }
 
             // Agent events replay onto the render thread in arrival order.
+            // Dual-write (epic C step 1): bridge paints today, the TEA store
+            // accumulates for projection tomorrow. Behavior unchanged.
             while (_events.Reader.TryRead(out var agentEvt))
             {
                 ObserveRetrySignal(agentEvt);
                 _selection.Clear();
+                _replStore.Dispatch(agentEvt);
                 await bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
             }
 
@@ -765,7 +775,7 @@ internal sealed class CellForgeReplRunner(
                          && TryHandleSidebarModelClick(evt.Mouse.Column, evt.Mouse.Row))
                 {
                     _selection.Clear();
-                    await new ModelCommand().ExecuteAsync(new ReplCommandContext(this, "model"), ct).ConfigureAwait(false);
+                    await new Repl.Commands.ModelCommand().ExecuteAsync(new ReplCommandContext(this, "model"), ct).ConfigureAwait(false);
                 }
                 else
                 {
@@ -933,7 +943,7 @@ internal sealed class CellForgeReplRunner(
     /// never drifts from the registered set. Exit stays explicit (dispatcher).</summary>
     private void OpenCommandPalette()
     {
-        var items = _catalog.All
+        var items = _catalog.GetAll()
             .Select(c => new CommandItem(c.Id, c.Title, c.Description, string.Empty, c.Group))
             .ToList();
         items.Add(new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2", "General"));

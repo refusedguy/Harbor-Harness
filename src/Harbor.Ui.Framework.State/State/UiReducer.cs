@@ -246,6 +246,7 @@ public static class UiReducer
         UiMsg.AgentStarted => (state with { Status = "running", IsAgentRunning = true }, new TuiEffect.None()),
         UiMsg.AgentEnded ae => (OnAgentEnded(state, ae), new TuiEffect.None()),
         UiMsg.StatusChanged sc => (state with { Status = sc.Status }, new TuiEffect.None()),
+        UiMsg.ConfigureRuntime cr => (state with { Model = cr.Model, Provider = cr.Provider, AgentName = cr.Agent }, new TuiEffect.None()),
         UiMsg.AppendLine al => (state.AddLine(al.Role, al.Text, al.ToolCallId), new TuiEffect.None()),
         UiMsg.InputText it => (state.SetInput(state.Input.SetText(it.Text)), new TuiEffect.None()),
         UiMsg.Quit => (state with { ShouldQuit = true }, new TuiEffect.None()),
@@ -450,11 +451,43 @@ public static class UiReducer
             case ChatAction.Clear:
                 return (state.ClearTranscript(), new TuiEffect.None());
 
+            // Panel actions (epic C step 2): resolved actions land on the
+            // existing panel transitions — previously fell into default noop.
+            case ChatAction.TogglePanelSlot:
+                return (TogglePanelSlot(state, k), new TuiEffect.None());
+            case ChatAction.CyclePanelFocus:
+                return (CycleFocus(state), new TuiEffect.None());
+            case ChatAction.ClosePanel:
+                return (FocusPanel(state, null), new TuiEffect.None());
+            case ChatAction.ResizePanelGrow:
+                return (ResizeFocusedPanel(state, +1), new TuiEffect.None());
+            case ChatAction.ResizePanelShrink:
+                return (ResizeFocusedPanel(state, -1), new TuiEffect.None());
+            case ChatAction.HelpPanel:
+                return (TogglePanel(state, "help"), new TuiEffect.None());
+            case ChatAction.ToggleLogsPanel:
+                return (TogglePanel(state, "logs"), new TuiEffect.None());
+
             case ChatAction.None:
             default:
                 return (state, new TuiEffect.None());
         }
     }
+
+    /// <summary>Alt+1..9: slot index from the pressed character.</summary>
+    private static UiState TogglePanelSlot(UiState state, UiMsg.KeyInput k)
+    {
+        if (k.Pressed.Character is not { } c || c is < '1' or > '9')
+            return state;
+        int idx = c - '1';
+        if (idx < 0 || idx >= state.RegisteredPanelIds.Length)
+            return state;
+        return TogglePanel(state, state.RegisteredPanelIds[idx]);
+    }
+
+    /// <summary>Grow/shrink the focused panel; noop when chat owns focus.</summary>
+    private static UiState ResizeFocusedPanel(UiState state, int delta) =>
+        state.FocusedPanelId is { } id ? ResizePanel(state, id, delta) : state;
 
     /// <summary>
     ///     Classify a submitted (already consumed) input line into the effect that

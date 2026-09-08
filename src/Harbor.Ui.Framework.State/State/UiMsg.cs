@@ -40,6 +40,14 @@ public abstract record UiMsg
     public sealed record StatusChanged(string Status) : UiMsg;
 
     /// <summary>
+    ///     Runtime identity for the status chrome (model / provider / agent).
+    ///     The store never learns these from <see cref="AgentEvent" /> traffic,
+    ///     so hosts that bypass the onboarding seed push them explicitly —
+    ///     e.g. the CellForge REPL on startup and after model/agent switches.
+    /// </summary>
+    public sealed record ConfigureRuntime(string Model, string Provider, string Agent) : UiMsg;
+
+    /// <summary>
     ///     Host-side transcript line (slash handler errors, session-switch notes).
     ///     The TEA replacement for ad-hoc <c>Transition(s => s.AddLine(...))</c> folds.
     /// </summary>
