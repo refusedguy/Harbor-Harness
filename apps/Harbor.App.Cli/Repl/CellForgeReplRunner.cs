@@ -1180,7 +1180,8 @@ internal sealed class CellForgeReplRunner(
         title.Length == 24 && title.StartsWith("Session 2", StringComparison.Ordinal);
 
     /// <summary>Leader-chord bindings: scroll anchors, palette, vim, slash
-    /// shortcuts, and quick-switch digits 1..9 (recent sessions, sprint UI-V2 P2.2).</summary>    private void BindLeaderKeys()
+    /// shortcuts, and quick-switch digits 1..9 (recent sessions, sprint UI-V2 P2.2).</summary>
+    private void BindLeaderKeys()
     {
         _leader.Bind('g', () => { _timeline.ScrollToTop(); _wake.Writer.TryWrite(null); });
         _leader.Bind('e', () => { _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH)); _wake.Writer.TryWrite(null); });
