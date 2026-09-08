@@ -2,6 +2,10 @@ using Harbor.Tui.CellForge.Input;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
+// TODO(principles)[TEA, DIP]: chord semantics belong to the framework — this router
+// must only translate to UiMsg.KeyInput and dispatch to UiStore; UiReducer +
+// ChatKeyMap own the meaning so every renderer shares one experience (epic C).
+
 /// <summary>
 /// Leader-key chord router (ctrl+x pattern): the leader press arms the router,
 /// the next key inside the timeout window resolves the chord and fires its

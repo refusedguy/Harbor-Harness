@@ -3,6 +3,11 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Panels;
 namespace Harbor.Ui.Framework.State;
+// TODO(principles)[SRP, AOT]: split into AppMsg (generic: KeyInput, Scroll,
+// TogglePanel, InputText) + ChatMsg (AgentStarted/AgentEnded/AppendLine) with a
+// typed AppState{Ui, Chat} composition — NO ImmutableDictionary<string,object?>
+// extensions (boxing, IL2xxx). Next PR after this branch merges.
+
 /// <summary>
 ///     The single message type for the interactive UI (TEA/MVU "Msg"). Every input
 ///     — agent events, key presses, and view-measured geometry — flows through this

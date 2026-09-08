@@ -16,7 +16,9 @@ public sealed record PaletteFrame(
     Action<CommandItem>? OnCommit = null,
     bool IsInput = false,
     string InputPlaceholder = "",
-    Action<string>? OnInputSubmit = null);
+    Action<string>? OnInputSubmit = null,
+    Func<CommandItem, CancellationToken, Task>? OnCommitAsync = null,
+    Func<string, CancellationToken, Task>? OnInputSubmitAsync = null);
 
 /// <summary>
 /// Command palette overlay (ctrl+p pattern): fuzzy-filtered command list
@@ -60,6 +62,27 @@ public sealed class CommandPaletteView
     /// <summary>Last submitted input value (consumed by the host after an input frame submit).</summary>
     public string LastInputValue { get; set; } = string.Empty;
 
+    // Async continuations: the frame carries its own handler, so hosts need
+    // no parallel stacks. Esc/Hide drops the pending continuation with the frame.
+    private (CommandItem Item, Func<CommandItem, CancellationToken, Task> Handler)? _pendingCommit;
+    private (string Value, Func<string, CancellationToken, Task> Handler)? _pendingInput;
+
+    /// <summary>Take the staged commit continuation (cleared on read).</summary>
+    public (CommandItem Item, Func<CommandItem, CancellationToken, Task> Handler)? TakePendingCommit()
+    {
+        var p = _pendingCommit;
+        _pendingCommit = null;
+        return p;
+    }
+
+    /// <summary>Take the staged input continuation (cleared on read).</summary>
+    public (string Value, Func<string, CancellationToken, Task> Handler)? TakePendingInput()
+    {
+        var p = _pendingInput;
+        _pendingInput = null;
+        return p;
+    }
+
     /// <summary>Raised after a drill-down frame is popped (Escape / Backspace on empty).</summary>
     public event EventHandler? FramePopped;
 
@@ -79,6 +102,8 @@ public sealed class CommandPaletteView
     public void Hide()
     {
         _frames.Clear();
+        _pendingCommit = null;
+        _pendingInput = null;
         Visible = false;
         _results = [];
         _flatView = new();
@@ -92,6 +117,8 @@ public sealed class CommandPaletteView
     {
         ArgumentNullException.ThrowIfNull(frame);
         _frames.Push(frame);
+        _pendingCommit = null;
+        _pendingInput = null;
         _commands = frame.Items;
         _query = string.Empty;
         _selected = 0;
@@ -106,6 +133,8 @@ public sealed class CommandPaletteView
         if (_frames.Count > 1)
         {
             _frames.Pop();
+            _pendingCommit = null;
+            _pendingInput = null;
             var prev = _frames.Peek();
             _commands = prev.Items;
             _query = string.Empty;
@@ -138,12 +167,19 @@ public sealed class CommandPaletteView
                 return true;
 
             case KeyCode.Enter:
-                if (_frames.Count > 0 && _frames.Peek().IsInput)
+                if (_frames.Count > 0 && _frames.Peek() is { IsInput: true } inputFrame)
                 {
                     var val = _query.Trim();
-                    Hide();
-                    _frames.Peek().OnInputSubmit?.Invoke(val);
                     LastInputValue = val;
+                    if (inputFrame.OnInputSubmitAsync is { } submitAsync)
+                    {
+                        _pendingInput = (val, submitAsync);
+                        return true;
+                    }
+
+                    var submit = inputFrame.OnInputSubmit;
+                    Hide();
+                    submit?.Invoke(val);
                     return true;
                 }
 
@@ -151,6 +187,13 @@ public sealed class CommandPaletteView
                 {
                     int resultIndex = Math.Min(_selected, _selectableIndices.Count - 1);
                     var chosen = _results[resultIndex];
+
+                    if (_frames.Count > 0 && _frames.Peek().OnCommitAsync is { } commitAsync)
+                    {
+                        _pendingCommit = (chosen, commitAsync);
+                        return true;
+                    }
+
                     int frameDepthBefore = _frames.Count;
 
                     if (_frames.Count > 0 && _frames.Peek().OnCommit is { } frameCommit)

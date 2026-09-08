@@ -195,6 +195,7 @@ public sealed class VirtualizedChatTimeline
         _visualScrollY = 0;
         _scrollAnimating = false;
         _lastScrollY = -1;
+        _lastViewportH = -1;
     }
 
     public void ScrollUp(int lines) => ScrollBy(-lines);

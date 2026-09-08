@@ -5,6 +5,10 @@ using Harbor.Abstractions.Models;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
+// TODO(principles)[TEA, SRP]: Enter/Shift+Enter/newline decisions belong to UiReducer
+// (UiMsg.KeyInput → AppState); the composer must become a pure executor of store
+// state, otherwise key behavior diverges per renderer (epic C).
+
 /// <summary>What the composer did with the key.</summary>
 public enum ComposerAction : byte
 {
