@@ -12,11 +12,16 @@ namespace Harbor.Tui.CellForge.Widgets;
 public sealed class AssistantMarkdownBlock : IChatBlock
 {
     private readonly string _source;
+    private readonly string? _model;
     private List<MdLine> _lines = [];
     private Dictionary<int, List<CodeSpan>>? _code;
     private int _width = -1;
 
-    public AssistantMarkdownBlock(string source) => _source = source ?? string.Empty;
+    public AssistantMarkdownBlock(string source, string? model = null)
+    {
+        _source = source ?? string.Empty;
+        _model = string.IsNullOrWhiteSpace(model) ? null : model;
+    }
 
     public string Kind => "assistant";
 
@@ -27,10 +32,10 @@ public sealed class AssistantMarkdownBlock : IChatBlock
     public BlockMeasure Measure(int width)
     {
         EnsureRendered(width);
-        return BlockMeasure.Exact(_lines.Count);
+        return BlockMeasure.Exact(_lines.Count + (_model is null ? 0 : 1));
     }
 
-    public int CheapEstimate(int width) => BlockMath.EstimateLines(_source, Math.Max(1, width));
+    public int CheapEstimate(int width) => (_model is null ? 0 : 1) + BlockMath.EstimateLines(_source, Math.Max(1, width));
 
     public void Paint(in BlockPaintContext ctx)
     {
@@ -38,16 +43,24 @@ public sealed class AssistantMarkdownBlock : IChatBlock
         var buffer = ctx.Buffer;
         int rows = ctx.Rect.Height;
         int skip = ctx.SkipRows;
-        for (int i = 0; i < rows && (skip + i) < _lines.Count; i++)
+        int headerRows = _model is null ? 0 : 1;
+        for (int i = 0; i < rows && (skip + i) < _lines.Count + headerRows; i++)
         {
             int lineIdx = skip + i;
-            if (_code is not null && _code.TryGetValue(lineIdx, out var codeSpans))
+            if (headerRows == 1 && lineIdx == 0)
+            {
+                buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, _model!, ChatPalette.Dim);
+                continue;
+            }
+
+            int contentIdx = lineIdx - headerRows;
+            if (_code is not null && _code.TryGetValue(contentIdx, out var codeSpans))
             {
                 PaintCodeSpans(buffer, ctx.Rect.X, ctx.Rect.Y + i, codeSpans);
             }
             else
             {
-                PaintLine(buffer, ctx.Rect.X, ctx.Rect.Y + i, _lines[lineIdx]);
+                PaintLine(buffer, ctx.Rect.X, ctx.Rect.Y + i, _lines[contentIdx]);
             }
         }
     }

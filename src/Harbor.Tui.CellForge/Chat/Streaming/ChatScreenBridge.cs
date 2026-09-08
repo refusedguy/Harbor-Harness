@@ -280,7 +280,7 @@ public sealed class ChatScreenBridge : IDisposable
                             // текст коммитится перед изображением.
                             if (text.Length > 0)
                             {
-                                _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString()));
+                                _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString(), _status.Model));
                                 text.Clear();
                             }
 
@@ -291,7 +291,7 @@ public sealed class ChatScreenBridge : IDisposable
 
                 if (text.Length > 0)
                 {
-                    _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString()));
+                    _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString(), _status.Model));
                 }
 
                 break;
@@ -416,7 +416,7 @@ public sealed class ChatScreenBridge : IDisposable
         _stream.Complete();
         if (_streamSource.Length > 0)
         {
-            _panel.Timeline.Replace(_stream, new AssistantMarkdownBlock(_streamSource.ToString()));
+            _panel.Timeline.Replace(_stream, new AssistantMarkdownBlock(_streamSource.ToString(), _status.Model));
         }
 
         if (_thinkStream is not null)
