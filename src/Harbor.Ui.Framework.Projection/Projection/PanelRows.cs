@@ -153,6 +153,8 @@ public static class PanelRows
         }
 
         return rows;
+    }
+
     /// <summary>Session sidebar rows: active session highlighted, loading footer.</summary>
     public static List<string> SessionRows(IReadOnlyList<SessionInfo> sessions, SessionId? activeSessionId, bool isLoading, int width, int height)
     {
