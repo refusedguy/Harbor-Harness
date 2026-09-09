@@ -275,6 +275,9 @@ public abstract class CellForgePtyScenarioBase
         ["HARBOR_SKIP_ONBOARDING"] = "1",
         ["HARBOR_TUI"] = "consoleex",
         ["HARBOR_MASCOT"] = "off", // ambient cat blinks per tick — byte-exact goldens need it out of the frame
+        // Background AI title upgrade races wire-order assertions by design
+        // (submit flows assert requests[^1]); auto-title has no PTY coverage.
+        ["HARBOR_NO_AUTOTITLE"] = "1",
         ["TERM"] = "xterm-256color",
         ["LANG"] = "C.UTF-8",
         ["LC_ALL"] = "C.UTF-8",

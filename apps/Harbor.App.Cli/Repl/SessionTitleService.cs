@@ -23,6 +23,14 @@ internal sealed class SessionTitleService(IReplHost host, ILogger logger)
 
     public async Task MaybeAutoTitleAsync(CancellationToken ct)
     {
+        // Deterministic harness escape hatch (PTY E2E): the background AI
+        // upgrade races request-order assertions by design, so suites that
+        // assert on the mock wire set HARBOR_NO_AUTOTITLE=1.
+        if (Environment.GetEnvironmentVariable("HARBOR_NO_AUTOTITLE") == "1")
+        {
+            return;
+        }
+
         if (!IsDefaultTitle(host.SessionModel.Title) || !_autoTitledSessions.Add(host.SessionModel.Id))
         {
             return;
