@@ -6,6 +6,11 @@ namespace Harbor.Evals;
 /// <summary>Drives one Harbor CLI run: single prompt, stdout capture, timeout kill.</summary>
 internal static class ProcessDriver
 {
+    public static string[] PassthroughNames() =>
+        Environment.GetEnvironmentVariables().Keys.OfType<string>()
+            .Where(k => k.EndsWith("_API_KEY", StringComparison.Ordinal))
+            .OrderBy(k => k).ToArray();
+
     public sealed record DriveResult(
         int ExitCode,
         string Stdout,
@@ -26,7 +31,7 @@ internal static class ProcessDriver
         if (!Path.IsPathRooted(cliDll))
             cliDll = Path.GetFullPath(Path.Combine(profile.RepoRoot, cliDll));
 
-        var psi = new ProcessStartInfo(profile.Harbor.Dotnet, $"\"{cliDll}\" ask")
+        var psi = new ProcessStartInfo(profile.Harbor.Dotnet)
         {
             WorkingDirectory = workdir,
             RedirectStandardInput = true,
@@ -36,6 +41,10 @@ internal static class ProcessDriver
             StandardOutputEncoding = Encoding.UTF8,
             UseShellExecute = false,
         };
+        // Prompt travels as an argv element (harbor ask <prompt>), never stdin.
+        psi.ArgumentList.Add(cliDll);
+        psi.ArgumentList.Add("ask");
+        psi.ArgumentList.Add(prompt);
         foreach (var (k, v) in profile.Harbor.Env)
             psi.Environment[k] = Environment.ExpandEnvironmentVariables(v);
         // API keys flow from the runner's own env (CI secrets) into the child.
@@ -54,7 +63,6 @@ internal static class ProcessDriver
             if (!proc.Start())
                 return new DriveResult(-1, string.Empty, "start failed", "harness_error", started, DateTimeOffset.UtcNow);
 
-            await proc.StandardInput.WriteAsync(prompt).ConfigureAwait(false);
             proc.StandardInput.Close();
 
             var stdoutTask = ReadAllAsync(proc.StandardOutput, stdout, ct);

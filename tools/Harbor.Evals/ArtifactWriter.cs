@@ -107,7 +107,7 @@ internal static class ArtifactWriter
                 provider = profile.Provider,
                 model = profile.Model,
                 // Config fingerprint only: env NAMES, never values (no secrets in artifacts).
-                env_names = profile.Harbor.Env.Keys.OrderBy(k => k).ToArray(),
+                env_names = profile.Harbor.Env.Keys.Concat(ProcessDriver.PassthroughNames()).OrderBy(k => k).ToArray(),
                 started_utc = drive.StartedUtc,
                 ended_utc = drive.EndedUtc,
                 duration_s = (drive.EndedUtc - drive.StartedUtc).TotalSeconds,
