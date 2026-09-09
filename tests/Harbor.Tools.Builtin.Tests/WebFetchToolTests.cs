@@ -29,22 +29,17 @@ public class WebFetchToolTests
     }
 
     [Test]
-    public async Task ValidateArguments_MissingUrl_ReturnsFailure()
+    [Arguments("{}", false, null)]
+    [Arguments("""{"url":"file:///etc/passwd"}""", false, "http")]
+    [Arguments("""{"url":"https://example.com/"}""", true, null)]
+    public async Task ValidateArguments_Theory(string json, bool expectSuccess, string? expectedErrorSubstring = null)
     {
         var tool = NewTool(_ => NewResponse(HttpStatusCode.OK, "<p>hi</p>", "text/html"));
-        var args = JsonDocument.Parse("{}").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-    }
-
-    [Test]
-    public async Task ValidateArguments_NonHttpUrl_ReturnsFailure()
-    {
-        var tool = NewTool(_ => NewResponse(HttpStatusCode.OK, "<p>hi</p>", "text/html"));
-        var args = JsonDocument.Parse("""{"url":"file:///etc/passwd"}""").RootElement;
-        var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("http");
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
+        if (expectedErrorSubstring is not null)
+            await Assert.That(result.Error).Contains(expectedErrorSubstring);
     }
 
     [Test]

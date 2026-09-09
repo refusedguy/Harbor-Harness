@@ -4,6 +4,7 @@ using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -175,36 +176,6 @@ public class StreamBlockTests
         block.Complete();
         block.AppendDelta("b");
         await Assert.That(block.SyncedText).IsEqualTo("a");
-    }
-}
-
-/// <summary>Minimal synchronous IEventBus stub for bridge tests.</summary>
-internal sealed class FakeEventBus : IEventBus
-{
-    private Func<AgentEvent, CancellationToken, ValueTask>? _handler;
-
-    public async Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
-    {
-        if (_handler is not null)
-        {
-            await _handler(@event, ct);
-        }
-    }
-
-    public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> handler)
-    {
-        _handler = handler;
-        return new Disposer(() => _handler = null);
-    }
-
-    public IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, ValueTask> handler) where TEvent : AgentEvent =>
-        Subscribe((e, ct) => e is TEvent typed ? handler(typed, ct) : ValueTask.CompletedTask);
-
-    public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents) => [];
-
-    private sealed class Disposer(Action dispose) : IDisposable
-    {
-        public void Dispose() => dispose();
     }
 }
 

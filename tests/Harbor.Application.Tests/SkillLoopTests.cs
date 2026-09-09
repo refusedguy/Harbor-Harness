@@ -1,4 +1,6 @@
 using Harbor.Abstractions.Agents;
+using Harbor.TestKit;
+using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
@@ -12,7 +14,6 @@ using Harbor.Application.Sessions;
 using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
 namespace Harbor.Application.Tests;
 
@@ -57,42 +58,16 @@ public class SkillLoopTests : IDisposable
             }
         ]);
         var skill = new SkillTool(null, NullLogger<SkillTool>.Instance, projectSkills, null);
-        var loop = CreateLoop(client, new FakeToolRegistry(skill));
+        var loop = TestLoops.Create(client, new FakeToolRegistry(skill));
         var session = new TestSessionContext(
             Session.Create(_root, "code", "test", "test-model"), []);
 
-        var result = await loop.RunAsync(session, AllowAllAgent());
+        var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
         await Assert.That(result.IsSuccess).IsTrue();
         var toolResults = session.Messages.OfType<ToolResultMessage>().ToArray();
         await Assert.That(toolResults.Length).IsEqualTo(1);
         await Assert.That(string.Concat(toolResults[0].Results.Select(r => r.Output)))
             .Contains("house review checklist");
-    }
-
-    private static AgentDefinition AllowAllAgent() => new(
-        AgentName.Create("code"),
-        "Code",
-        "Skill loop harness agent",
-        "test-model",
-        "test",
-        new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }));
-
-    private static AgentLoop CreateLoop(ScriptedLlmClient client, FakeToolRegistry tools)
-    {
-        var agent = AllowAllAgent();
-        var agents = new FakeAgentRegistry(agent);
-        return new AgentLoop(
-            new FakeProviderRegistry(client),
-            tools,
-            agents,
-            new StubSystemPromptBuilder(),
-            new FakeCompactionService(),
-            new FakeTokenTracker(),
-            new RetryPolicy(),
-            new FakeEventBus(),
-            new PermissionService(agents, NullLogger<PermissionService>.Instance),
-            new MessageConverter(),
-            NullLogger<AgentLoop>.Instance);
     }
 }

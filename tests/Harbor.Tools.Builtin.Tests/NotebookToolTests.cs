@@ -25,32 +25,18 @@ public class NotebookToolTests
     }
 
     [Test]
-    public async Task ValidateArguments_MissingAction_ReturnsFailure()
+    [Arguments("{}", false, null)]
+    [Arguments("""{"action":"frobnicate","key":"k"}""", false, "frobnicate")]
+    [Arguments("""{"action":"set","key":"k"}""", false, "content")]
+    [Arguments("""{"action":"set","key":"k","content":"v"}""", true, null)]
+    public async Task ValidateArguments_Theory(string json, bool expectSuccess, string? expectedErrorSubstring = null)
     {
         var tool = NewTool();
-        var args = JsonDocument.Parse("{}").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-    }
-
-    [Test]
-    public async Task ValidateArguments_UnknownAction_ReturnsFailure()
-    {
-        var tool = NewTool();
-        var args = JsonDocument.Parse("""{"action":"frobnicate","key":"k"}""").RootElement;
-        var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("frobnicate");
-    }
-
-    [Test]
-    public async Task ValidateArguments_SetRequiresContent()
-    {
-        var tool = NewTool();
-        var args = JsonDocument.Parse("""{"action":"set","key":"k"}""").RootElement;
-        var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("content");
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
+        if (expectedErrorSubstring is not null)
+            await Assert.That(result.Error).Contains(expectedErrorSubstring);
     }
 
     [Test]

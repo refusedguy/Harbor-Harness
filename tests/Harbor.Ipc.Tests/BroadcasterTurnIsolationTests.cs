@@ -15,7 +15,7 @@ namespace Harbor.Ipc.Tests;
 ///     TurnEnd must carry its OWN latest turn index — the shared counter the old
 ///     code kept leaked run A's turn into run B's events.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
 public class BroadcasterTurnIsolationTests
 {
     private static readonly AssistantMessage TurnAssistant =

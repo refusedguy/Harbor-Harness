@@ -21,7 +21,7 @@ namespace Harbor.Telemetry.Tests;
 ///     <see cref="ActivityListener" /> / <see cref="MeterListener" /> — no OTEL.
 ///     Covers: span started/ended/exception/attributes and metric emissions.
 /// </summary>
-[NotInParallel]
+[NotInParallel("telemetry")]
 public class DecoratorTelemetryTests : IDisposable
 {
     private readonly List<Activity> _stoppedSpans = [];

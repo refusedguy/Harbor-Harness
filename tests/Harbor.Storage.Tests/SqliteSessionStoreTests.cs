@@ -7,6 +7,7 @@ namespace Harbor.Storage.Tests;
 ///     Tests for SqliteSessionStore — uses a temp file per test and deletes it in finally.
 ///     Verifies CRUD, message ordering, and cascading delete of messages.
 /// </summary>
+[ParallelLimiter<SqliteStoreLimit>]
 public class SqliteSessionStoreTests
 {
     private static string NewTempDbPath() =>

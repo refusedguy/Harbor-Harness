@@ -16,7 +16,7 @@ namespace Harbor.App.Avalonia.Tests;
 ///     StyledProperty (which would silently break all bindings) or
 ///     removing a default (which would change the initial render).
 /// </remarks>
-[NotInParallel]
+[NotInParallel("avalonia-headless")]
 public class ComponentTests
 {
     // ── StatusBadge ─────────────────────────────────────────────────

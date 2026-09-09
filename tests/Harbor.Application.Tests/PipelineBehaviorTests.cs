@@ -5,12 +5,13 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
-using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Tests.Fakes;
+using Harbor.Application.Agents.Pipeline;
+using Harbor.TestKit;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using TUnit.Assertions.Extensions;
 
 namespace Harbor.Application.Tests;
@@ -22,7 +23,7 @@ namespace Harbor.Application.Tests;
 public class PipelineBehaviorTests
 {
     private static PromptRequest NewRequest() => new(
-        new TestSessionContext(Session.Create("/tmp/harbor-pipeline-tests", "code", "test", "test-model")),
+        TestSessionContext.Create("/tmp/harbor-pipeline-tests"),
         new AgentDefinition(
             AgentName.Create("code"),
             "Code",

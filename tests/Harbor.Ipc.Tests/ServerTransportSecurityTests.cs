@@ -12,7 +12,7 @@ namespace Harbor.Ipc.Tests;
 ///     file must be reclaimed, the socket file must be owner-only (0600),
 ///     and repeated accept failures must back off instead of spinning hot.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
 public class ServerTransportSecurityTests
 {
     [Test]

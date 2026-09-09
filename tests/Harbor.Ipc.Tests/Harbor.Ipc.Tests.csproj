@@ -23,9 +23,11 @@
     <ProjectReference Include="..\..\src\Harbor.Ipc.Client\Harbor.Ipc.Client.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="..\..\tests\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
     <PackageReference Include="Microsoft.Extensions.Logging"/>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
   </ItemGroup>

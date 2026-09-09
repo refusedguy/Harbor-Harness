@@ -10,7 +10,7 @@ using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 using TUnit.Core;
 
@@ -18,44 +18,6 @@ namespace Harbor.App.Avalonia.Tests;
 
 public class AvaloniaWorkspaceCommandsTests
 {
-    private sealed class FakeSessionStore : ISessionStore
-    {
-        public IReadOnlyList<Session> Sessions { get; set; } = new List<Session>();
-
-        public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<Session>>(Sessions));
-
-        public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
-            => Task.FromResult(Result.Failure<Session>("not implemented"));
-
-        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
-            => Task.FromResult(Result.Failure<Session>("not found"));
-
-        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
-            => Task.FromResult(Result.Success());
-
-        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
-            => Task.FromResult(Result.Success());
-
-        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<AgentMessage>>(new List<AgentMessage>()));
-
-        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
-            => Task.FromResult(Result.Success());
-
-        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
-            => Task.FromResult(Result.Failure<int>("DeleteMessagesAfter is not supported by this test fake."));
-
-        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
-            => Task.FromResult(Result.Success());
-
-        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
-            => Task.FromResult(Result.Success<SessionMetadata>(SessionMetadata.Empty));
-
-        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
-            => Task.FromResult(Result.Success());
-    }
-
     private sealed class FakeSessionManager : ISessionManager
     {
         public Session? Active { get; set; }
@@ -222,8 +184,6 @@ public class AvaloniaWorkspaceCommandsTests
 
         commands.NewSession();
 
-        await Task.Delay(50);
-
         await Assert.That(sessionManager.NewSessionCalled).IsTrue();
     }
 
@@ -244,8 +204,6 @@ public class AvaloniaWorkspaceCommandsTests
             DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, SessionMetadata.Empty);
 
         commands.BranchSession();
-
-        await Task.Delay(50);
 
         await Assert.That(sessionManager.BranchCalled).IsTrue();
     }
@@ -301,8 +259,12 @@ public class AvaloniaWorkspaceCommandsTests
 
         commands.StopAgent();
 
-        await Task.Delay(50);
+        bool aborted = await WaitForConditionAsync(
+            () => agentRunner.AbortSource.IsCancellationRequested,
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
 
+        await Assert.That(aborted).IsTrue();
         await Assert.That(agentRunner.AbortSource.IsCancellationRequested).IsTrue();
         await Assert.That(toasts.LastMessage).Contains("Abort requested");
     }
@@ -321,5 +283,21 @@ public class AvaloniaWorkspaceCommandsTests
 
         await Assert.That(chat.Lines).IsEmpty();
         await Assert.That(chat.ToolCalls).IsEmpty();
+    }
+
+    private static async Task<bool> WaitForConditionAsync(Func<bool> condition, TimeSpan timeout, TimeSpan pollInterval)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (condition())
+            {
+                return true;
+            }
+
+            await Task.Delay(pollInterval).ConfigureAwait(false);
+        }
+
+        return condition();
     }
 }

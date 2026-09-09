@@ -11,7 +11,6 @@ using Harbor.Tui.SpectreTui;
 using Harbor.Tui.Termina;
 using Harbor.Tui.TerminalGui;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Tui.E2E.Tests;

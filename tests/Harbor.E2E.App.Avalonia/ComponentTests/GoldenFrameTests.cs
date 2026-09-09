@@ -27,7 +27,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///     <c>HARBOR_GOLDENS_STRICT=1</c> on a pinned reference machine to
 ///     enforce them there.
 /// </summary>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class GoldenFrameTests : ComponentTestBase
 {
     [Before(HookType.Test)]

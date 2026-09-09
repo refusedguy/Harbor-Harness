@@ -38,23 +38,17 @@ public class SkillToolTests : IDisposable
     }
 
     [Test]
-    public async Task ValidateArguments_MissingName_ReturnsFailure()
+    [Arguments("""{"scope":"any"}""", false, "name")]
+    [Arguments("""{"name":"x","scope":"everywhere"}""", false, "scope")]
+    [Arguments("""{"name":"x","scope":"project"}""", true, null)]
+    public async Task ValidateArguments_Theory(string json, bool expectSuccess, string? expectedErrorSubstring = null)
     {
         var tool = NewTool();
-        var args = JsonDocument.Parse("""{"scope":"any"}""").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("name");
-    }
-
-    [Test]
-    public async Task ValidateArguments_UnknownScope_ReturnsFailure()
-    {
-        var tool = NewTool();
-        var args = JsonDocument.Parse("""{"name":"x","scope":"everywhere"}""").RootElement;
-        var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("scope");
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
+        if (expectedErrorSubstring is not null)
+            await Assert.That(result.Error).Contains(expectedErrorSubstring);
     }
 
     [Test]

@@ -43,6 +43,10 @@
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.PtyTests"/>
   </ItemGroup>
 
-  <!-- TUnit is auto-included via tests/Directory.Build.props (IsTestProject=true). -->
+  <ItemGroup>
+    <!-- TUnit is auto-included via tests/Directory.Build.props (IsTestProject=true).
+         Microsoft.NET.Test.Sdk is the test host adapter. -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+  </ItemGroup>
 
 </Project>
