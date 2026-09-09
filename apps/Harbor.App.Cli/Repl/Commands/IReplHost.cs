@@ -41,6 +41,9 @@ internal interface IReplHost
     void ToggleVimMode();
     void ScrollTimelineToEnd();
 
+    /// <summary>Slash <c>/exit</c> path: quit the loop with an exit code.</summary>
+    void RequestQuit(int exitCode);
+
     Task SwitchToSessionAsync(string sessionId, CancellationToken ct);
     Task ExecutePaletteItemAsync(CommandItem item, CancellationToken ct);
     Task ExecuteInfoAsync(string text, CancellationToken ct);

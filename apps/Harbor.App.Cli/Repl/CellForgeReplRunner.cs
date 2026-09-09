@@ -91,7 +91,6 @@ internal sealed class CellForgeReplRunner(
     private readonly CommandPaletteView _palette = new();
     private readonly LeaderKeyRouter _leader = new();
     private readonly VimComposerMode _vim = new();
-    private readonly QuickSwitchSlots _quickSwitch = new();
     private readonly SelectionEngine _selection = new();
     private SlashCommandDispatcher? _slashDispatcher;
 
@@ -123,10 +122,15 @@ internal sealed class CellForgeReplRunner(
     void IReplHost.OpenSlashPalette() => OpenSlashPalette();
     void IReplHost.ToggleVimMode() => ToggleVimMode();
     void IReplHost.ScrollTimelineToEnd() => _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH));
-    Task IReplHost.SwitchToSessionAsync(string sessionId, CancellationToken ct) => SwitchToSessionAsync(sessionId, ct);
+    void IReplHost.RequestQuit(int exitCode)
+    {
+        _slashExitCode = exitCode;
+        _quitRequested = true;
+    }
+    Task IReplHost.SwitchToSessionAsync(string sessionId, CancellationToken ct) => Sessions.SwitchToSessionAsync(sessionId, ct);
     Task IReplHost.ExecutePaletteItemAsync(CommandItem item, CancellationToken ct) => ExecutePaletteItemAsync(item, ct);
     Task IReplHost.ExecuteInfoAsync(string text, CancellationToken ct) => ExecuteInfoCommandAsync(text, ct);
-    Task IReplHost.SyncSessionsToStoreAsync(CancellationToken ct) => SyncSessionsToStoreAsync(ct);
+    Task IReplHost.SyncSessionsToStoreAsync(CancellationToken ct) => Sessions.SyncSessionsToStoreAsync(ct);
     Task<int> IReplHost.ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
         => ResolveContextWindowAsync(providerId, modelId, ct);
     IConfigStore IReplHost.ConfigStore => services.GetRequiredService<IConfigStore>();
@@ -137,16 +141,24 @@ internal sealed class CellForgeReplRunner(
     IRendererPipeline? IReplHost.RendererPipeline => services.GetService<IRendererPipeline>();
 
     private readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
+
+    // ── Extracted collaborators (SRP: the runner owns the frame loop + input
+    // dispatch; sessions/titles/prompts live in focused classes behind IReplHost).
+    // Lazy: they take `this` as host, unavailable in field initializers.
+    private LegacySlashRunner? _legacySlash;
+    private LegacySlashRunner LegacySlash => _legacySlash ??= LegacySlashRunner.FromServices(services);
+    private PromptPipeline? _pipeline;
+    private PromptPipeline Pipeline => _pipeline ??= new PromptPipeline(
+        this, _catalog, logger, _tokens, new Lazy<LegacySlashRunner>(() => LegacySlash));
+    private SessionSwitchManager? _sessions;
+    private SessionSwitchManager Sessions => _sessions ??= new SessionSwitchManager(this, Pipeline.ClearQueue);
+    private SessionTitleService? _titles;
+    private SessionTitleService Titles => _titles ??= new SessionTitleService(this, logger);
     private ThemeFileWatcher? _themeWatcher;
 
     /// <summary>Token-usage source (null when the host has no tracker —
     /// feed no-ops, the status bar just stays without token segments).</summary>
     private readonly ITokenTracker? _tokens = services.GetService<ITokenTracker>();
-
-    /// <summary>Render-thread pull latch: <see cref="RunPromptAsync"/> flags it
-    /// after a turn, the frame loop drains it before painting so all status /
-    /// sidebar mutation stays on one thread.</summary>
-    private volatile bool _usageDirty;
 
     /// <summary>Leader chord hand-off for async slash commands: the chord resolves
     /// into catalog execution on the frame loop (async work can't run inside Bind actions).</summary>
@@ -166,18 +178,6 @@ internal sealed class CellForgeReplRunner(
     /// → OSC 1337, everything else keeps the text description card.</summary>
     private readonly InlineImageKind _inlineImage = InlineImageProbe.Detect();
 
-    /// <summary>Desktop-notification transport (osc-sprint §777): Osc99 once
-    /// the startup probe answer arrives; otherwise the 777 family via env
-    /// detection, resolved lazily at first fire. None suppresses entirely.</summary>
-    private DesktopNotifyKind _notify;
-
-    /// <summary>Long-turn notify hand-off: the 30 s timer thread stages the
-    /// sequence, the frame loop writes it — the backend stays single-threaded
-    /// (same discipline as <see cref="_themeReloadLine" />).</summary>
-    private volatile string? _pendingNotifySequence;
-
-    private Timer? _notifyTimer;
-
     /// <summary>True when a custom theme file exists — it owns the palette and
     /// the OSC 11 auto-detect must not override it (file wins, P3.2 > P3.3).</summary>
     private bool _themeFileApplied;
@@ -192,9 +192,6 @@ internal sealed class CellForgeReplRunner(
 
     /// <summary>Last total-lines count pushed to the TEA store (changed-only).</summary>
     private int _lastStoreTotal = -1;
-
-    /// <summary>Model context window for the ctx% readout (0 = unknown).</summary>
-    private int _contextWindow;
 
     /// <summary>
     ///     Resolve the model's context window from the cached provider catalog
@@ -254,18 +251,6 @@ internal sealed class CellForgeReplRunner(
     /// afterwards are animated.</summary>
     private bool _sidebarPolicyWasApplied;
 
-    /// <summary>Retry-countdown clock (sprint UI-V2 P6.3): the agent loop owns
-    /// the actual retry; the UI mirrors only the expected backoff window —
-    /// attempt counter, wall-clock start of the latest transient error, and
-    /// the exponential window it should burn down over.</summary>
-    private int _retryAttempt;
-    private long _retryErrorMs = -1;
-    private int _retryTotalSec;
-
-    /// <summary>Stream-retry budget mirrored from AgentLoop's C7 policy —
-    /// kept in sync for the countdown's «n/3» display only.</summary>
-    private const int MaxStreamRetries = 3;
-
     // -1, NOT long.MinValue: TickCount64 is non-negative uptime ms, so
     // `now − long.MinValue` overflows to a NEGATIVE value and the first idle
     // Ctrl+C would satisfy the quit-window check immediately (CE-5 PTY-suite
@@ -273,14 +258,6 @@ internal sealed class CellForgeReplRunner(
     private long _lastIdleAbortMs = -1;
     private bool _quitRequested;
     private int? _slashExitCode;
-
-    /// <summary>Cross-thread «prompt submitted, completion event not yet seen» latch
-    /// so an stdin EOF cannot race the freshly spawned run into a premature exit.</summary>
-    private volatile bool _promptInFlight;
-
-    /// <summary>Prompts typed while the agent runs (claude-style queue):
-    /// drained in order when the loop goes idle; cleared on abort/switch.</summary>
-    private readonly Queue<string> _pendingPrompts = new();
 
     /// <summary>
     ///     Runs the REPL until quit. Returns the exit code
@@ -347,7 +324,7 @@ internal sealed class CellForgeReplRunner(
         }
         finally
         {
-            _notifyTimer?.Dispose();
+            _pipeline?.Dispose();
             _themeWatcher?.Dispose();
             try
             {
@@ -411,13 +388,13 @@ internal sealed class CellForgeReplRunner(
             // accumulates for projection tomorrow. Behavior unchanged.
             while (_events.Reader.TryRead(out var agentEvt))
             {
-                ObserveRetrySignal(agentEvt);
+                Pipeline.ObserveEvent(agentEvt);
                 _selection.Clear();
                 _replStore.Dispatch(agentEvt);
                 await bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
                 if (agentEvt is AgentEndEvent)
                 {
-                    await MaybeAutoTitleAsync(ct).ConfigureAwait(false);
+                    await Titles.MaybeAutoTitleAsync(ct).ConfigureAwait(false);
                 }
             }
 
@@ -429,7 +406,7 @@ internal sealed class CellForgeReplRunner(
             }
 
             bridge.Tick(Environment.TickCount64);
-            UpdateRetryCountdown();
+            Pipeline.UpdateRetryCountdown();
             if (_themeReloadLine is { } themeLine)
             {
                 _themeReloadLine = null;
@@ -439,24 +416,22 @@ internal sealed class CellForgeReplRunner(
 
             // Long-turn notification (osc-sprint §777): staged by the timer
             // thread, written here where backend ownership lives.
-            if (_pendingNotifySequence is { } notifySeq)
+            if (Pipeline.TakeNotifySequence() is { } notifySeq)
             {
-                _pendingNotifySequence = null;
                 await backend.WriteAsync(Utf8(notifySeq), ct).ConfigureAwait(false);
                 bridge.AppendSystemLine("⏱ ход идёт дольше 30 с — уведомление отправлено");
                 _broadDamageNextFrame = true;
             }
 
-            if (_usageDirty)
+            if (Pipeline.RefreshUsageIfDirty())
             {
-                _usageDirty = false;
-                RefreshUsage();
+                _broadDamageNextFrame = true; // status + sidebar both re-render
             }
 
             await RenderFrameAsync(ct).ConfigureAwait(false);
             ArmSpinner(spinnerTimer);
 
-            if (inputClosed && !_promptInFlight && !agent.State.IsRunning)
+            if (inputClosed && !Pipeline.IsBusy)
             {
                 logger.LogInformation("stdin EOF and agent idle — CellForge REPL exiting");
                 break;
@@ -828,7 +803,7 @@ internal sealed class CellForgeReplRunner(
                 break;
 
             case InputEventKind.Capability when evt.Capability.Kind == CapabilityEventKind.Osc99NotifyReport:
-                _notify = DesktopNotifyKind.Osc99;
+                Pipeline.NotifyHint = DesktopNotifyKind.Osc99;
                 break;
 
             case InputEventKind.Paste:
@@ -976,7 +951,7 @@ internal sealed class CellForgeReplRunner(
             if (_quickSwitchChord is { } chord)
             {
                 _quickSwitchChord = null;
-                await SwitchToSlotAsync(chord, ct).ConfigureAwait(false);
+                await Sessions.SwitchToSlotAsync(chord, ct).ConfigureAwait(false);
             }
 
             _wake.Writer.TryWrite(null);
@@ -995,7 +970,7 @@ internal sealed class CellForgeReplRunner(
         switch (action)
         {
             case ComposerAction.Submitted:
-                await SubmitAsync(ct).ConfigureAwait(false);
+                await Pipeline.SubmitAsync(ct).ConfigureAwait(false);
                 break;
 
             case ComposerAction.Aborted:
@@ -1022,6 +997,7 @@ internal sealed class CellForgeReplRunner(
         if (agent.State.IsRunning)
         {
             agent.AbortSource.Cancel();
+            Pipeline.ClearQueue(); // abort drops queued prompts — never sent after a kill
             bridge.AppendSystemLine("^C — прерываю текущий ход…");
             _wake.Writer.TryWrite(null);
             return;
@@ -1097,158 +1073,6 @@ internal sealed class CellForgeReplRunner(
     }
 
     /// <summary>Sessions already checked for auto-titling (one check per session lifetime).</summary>
-    private readonly HashSet<string> _autoTitledSessions = new();
-
-    /// <summary>
-    ///     Auto-title (opencode-style): sessions born with the default
-    ///     <c>Session yyyy-MM-dd HH:mm</c> stamp get the first user prompt as
-    ///     an instant heuristic title, then a background micro-request asks
-    ///     the model for a real 2-5 word title. The loop is never blocked and
-    ///     never hijacked — the title call bypasses the agent entirely.
-    /// </summary>
-    private async Task MaybeAutoTitleAsync(CancellationToken ct)
-    {
-        if (!IsDefaultTitle(sessionModel.Title) || !_autoTitledSessions.Add(sessionModel.Id))
-        {
-            return;
-        }
-
-        if (services.GetService<ISessionStore>() is not { } store)
-        {
-            return;
-        }
-
-        var messages = await store.GetMessagesAsync(sessionModel.Id, ct).ConfigureAwait(false);
-        if (messages.IsFailure)
-        {
-            _autoTitledSessions.Remove(sessionModel.Id);
-            return;
-        }
-
-        string? first = null;
-        foreach (var m in messages.Value)
-        {
-            if (m is UserMessage u && !string.IsNullOrWhiteSpace(u.Content))
-            {
-                first = u.Content;
-                break;
-            }
-        }
-
-        if (string.IsNullOrEmpty(first))
-        {
-            _autoTitledSessions.Remove(sessionModel.Id);
-            return;
-        }
-
-        await ApplySessionTitleAsync(store, sessionModel, HeuristicTitle(first), ct).ConfigureAwait(false);
-
-        // AI upgrade on the pool: full observation inside, the frame loop never waits.
-        Session captured = sessionModel;
-        string prompt = first;
-        _ = Task.Run(() => UpgradeTitleWithAiAsync(captured, prompt));
-    }
-
-    /// <summary>First line of the first prompt, 48 chars max.</summary>
-    private static string HeuristicTitle(string firstUserMessage)
-    {
-        string title = firstUserMessage.Split('\n')[0].Trim();
-        return title.Length > 48 ? title[..47] + "…" : title;
-    }
-
-    /// <summary>Background title summarization: one micro-request, timeout 30 s.</summary>
-    private async Task UpgradeTitleWithAiAsync(Session session, string firstUserMessage)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        try
-        {
-            if (services.GetService<ISessionStore>() is not { } store)
-            {
-                return;
-            }
-
-            var clientResult = services.GetRequiredService<IProviderRegistry>().GetClient(ProviderId.Create(session.ProviderId));
-            if (clientResult.IsFailure)
-            {
-                return;
-            }
-
-            string excerpt = firstUserMessage.Length > 500 ? firstUserMessage[..500] : firstUserMessage;
-            var request = new LlmRequest(
-                Model: session.Model,
-                Messages: [LlmUserMessage.Text(
-                    "Generate a short chat title (2-5 words) for a conversation that started " +
-                    "with this user message. Reply with the title only — no quotes, no punctuation " +
-                    "around it, same language as the message:\n" + excerpt)],
-                SystemPrompt: "You name chat sessions. Reply with a 2-5 word title only.",
-                Tools: []);
-            var sb = new StringBuilder();
-            await foreach (var evt in clientResult.Value.StreamAsync(request, timeout.Token).ConfigureAwait(false))
-            {
-                if (evt is TextDeltaEvent td)
-                {
-                    sb.Append(td.Delta);
-                }
-            }
-
-            string? title = SanitizeAiTitle(sb.ToString());
-            if (title is null)
-            {
-                return;
-            }
-
-            await ApplySessionTitleAsync(store, session, title, CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            // Heuristic title already applied — AI upgrade is best-effort.
-            logger.LogDebug(ex, "AI title upgrade failed");
-        }
-    }
-
-    /// <summary>Sanitize a model-produced title; null when unusable.</summary>
-    private static string? SanitizeAiTitle(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return null;
-        }
-
-        string title = raw.Split('\n')[0].Trim().Trim('"', '\'', '«', '»', '.', '!', ':');
-        if (title.Length == 0 || IsDefaultTitle(title))
-        {
-            return null;
-        }
-
-        return title.Length > 48 ? title[..47] + "…" : title;
-    }
-
-    /// <summary>Persist a title; refresh the live session + sidebar when current.</summary>
-    private async Task ApplySessionTitleAsync(ISessionStore store, Session session, string title, CancellationToken ct)
-    {
-        var updated = session with { Title = title };
-        var saved = await store.UpdateAsync(updated, ct).ConfigureAwait(false);
-        if (saved.IsFailure)
-        {
-            return;
-        }
-
-        if (session.Id == sessionModel.Id)
-        {
-            sessionModel = updated;
-            if (screen.Sidebar is { } sidebar)
-            {
-                sidebar.State = sidebar.State with { SessionTitle = title };
-            }
-
-            _wake.Writer.TryWrite(null);
-        }
-    }
-
-    /// <summary>Default stamp from <c>Session.Create</c> (<c>Session yyyy-MM-dd HH:mm</c>).</summary>
-    private static bool IsDefaultTitle(string title) =>
-        title.Length == 24 && title.StartsWith("Session 2", StringComparison.Ordinal);
-
     /// <summary>Leader-chord bindings: scroll anchors, palette, vim, slash
     /// shortcuts, and quick-switch digits 1..9 (recent sessions, sprint UI-V2 P2.2).</summary>
     private void BindLeaderKeys()
@@ -1272,138 +1096,22 @@ internal sealed class CellForgeReplRunner(
     ///     P2.2): loads the bound session from the store and rebinds the idle
     ///     agent to it. The timeline shows only new traffic from the switch on.
     /// </summary>
-    private async Task SwitchToSessionAsync(string sessionId, CancellationToken ct)
-    {
-        if (sessionId == sessionModel.Id)
-        {
-            bridge.AppendSystemLine("⇄ уже в этой сессии");
-            return;
-        }
-
-        if (agent.State.IsRunning)
-        {
-            bridge.AppendSystemLine("⇄ агент занят — сессия не переключена");
-            return;
-        }
-
-        var store = services.GetService<ISessionStore>();
-        if (store is null)
-        {
-            bridge.AppendSystemLine("⇄ переключение недоступно: хост без хранилища сессий");
-            return;
-        }
-
-        var loaded = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
-        if (loaded.IsFailure)
-        {
-            bridge.AppendSystemLine("! " + loaded.Error);
-            return;
-        }
-
-        var definition = services.GetRequiredService<IAgentRegistry>()
-            .GetAgent(AgentName.Create(loaded.Value.Agent));
-        if (definition.IsFailure)
-        {
-            bridge.AppendSystemLine("! " + definition.Error);
-            return;
-        }
-
-        agent.Initialize(loaded.Value, definition.Value);
-        sessionModel = loaded.Value;
-        _quickSwitch.Push(loaded.Value.Id);
-
-        // Full context swap: drop old blocks/selection/tracking, then replay
-        // the target session's persisted history so the switch lands on a
-        // live transcript instead of an empty feed.
-        bridge.ResetMessageTracking();
-        _timeline.Clear();
-        _selection.Clear();
-        _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH));
-        var history = await store.GetMessagesAsync(loaded.Value.Id, ct).ConfigureAwait(false);
-        if (history.IsSuccess && history.Value.Count > 0)
-        {
-            bridge.ReplayHistory(history.Value);
-        }
-
-        if (screen.Sidebar is { } sidebar)
-        {
-            int window = await ResolveContextWindowAsync(
-                loaded.Value.ProviderId, loaded.Value.Model, ct).ConfigureAwait(false);
-            _contextWindow = window;
-            sidebar.State = sidebar.State with
-            {
-                SessionTitle = loaded.Value.Title,
-                SessionId = loaded.Value.Id,
-                Model = $"{loaded.Value.ProviderId}/{loaded.Value.Model}",
-                Agent = loaded.Value.Agent,
-                MessageCount = screen.Timeline.Timeline.Count,
-                ContextWindow = window,
-            };
-        }
-
-        await SyncSessionsToStoreAsync(ct).ConfigureAwait(false);
-        bridge.AppendSystemLine($"⇄ сессия → {loaded.Value.Title} ({loaded.Value.Id[..Math.Min(8, loaded.Value.Id.Length)]})");
-        _wake.Writer.TryWrite(null);
-    }
-
-    /// <summary>
-    ///     Session list sync (sprint UI-V2 P4): recent sessions from the store
-    ///     go into the TEA store so the session-sidebar panel renders live.
-    ///     The always-visible sidebar stays clean (session/model/agent/tokens
-    ///     only). Best-effort — hosts without a session store skip silently.
-    /// </summary>
-    internal async Task SyncSessionsToStoreAsync(CancellationToken ct)
-    {
-        if (services.GetService<ISessionStore>() is not { } store)
-        {
-            return;
-        }
-
-        var listed = await store.ListAsync(ct: ct).ConfigureAwait(false);
-        if (listed.IsFailure)
-        {
-            return;
-        }
-
-        _ = _replStore.Dispatch(new UiMsg.SyncSessions(
-            listed.Value
-                .Select(s => new SessionInfo(SessionId.Create(s.Id), s.Title, s.CreatedAt, s.UpdatedAt, "active"))
-                .ToImmutableArray(),
-            SessionId.Create(sessionModel.Id)));
-    }
-
-    private async Task SwitchToSlotAsync(char chord, CancellationToken ct)
-    {
-        if (_quickSwitch.Resolve(chord) is not { } sessionId)
-        {
-            bridge.AppendSystemLine($"⇄ slot {chord}: пусто");
-            return;
-        }
-
-        await SwitchToSessionAsync(sessionId, ct).ConfigureAwait(false);
-    }
-
     private async Task ExecuteInfoCommandAsync(string text, CancellationToken ct)
     {
         var captured = new List<string>();
         var writer = new Action<string>(s => captured.Add(s));
 
-        var dispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
         try
         {
-            var outcome = await dispatcher.HandleCoreAsync(
-                text, services,
-                writer: writer,
-                reader: prompt =>
+            var outcome = await LegacySlash.RunAsync(
+                text,
+                writer,
+                prompt =>
                 {
                     captured.Add($"{prompt} — interactive input unavailable in consoleex");
                     return Task.FromResult(string.Empty);
                 },
-                agent, services.GetRequiredService<IAgentRegistry>(),
-                services.GetRequiredService<IConfigStore>(),
-                services.GetRequiredService<AuthStore>(),
-                services.GetRequiredService<IProviderRegistry>(),
-                sessionModel).ConfigureAwait(false);
+                agent, sessionModel).ConfigureAwait(false);
 
             if (outcome.ShouldQuit)
             {
@@ -1458,23 +1166,18 @@ internal sealed class CellForgeReplRunner(
         }
 
         string slash = '/' + item.Id;
-        var dispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
         try
         {
-            await dispatcher.HandleCoreAsync(
-                slash, services,
-                writer: line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
-                reader: prompt =>
+            await LegacySlash.RunAsync(
+                slash,
+                line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
+                prompt =>
                 {
                     bridge.AppendSystemLine($"{prompt} — интерактивный ввод недоступен в consoleex, используйте legacy TUI (/exit)");
                     _wake.Writer.TryWrite(null);
                     return Task.FromResult(string.Empty);
                 },
-                agent, services.GetRequiredService<IAgentRegistry>(),
-                services.GetRequiredService<IConfigStore>(),
-                services.GetRequiredService<AuthStore>(),
-                services.GetRequiredService<IProviderRegistry>(),
-                sessionModel).ConfigureAwait(false);
+                agent, sessionModel).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -1483,259 +1186,6 @@ internal sealed class CellForgeReplRunner(
             _wake.Writer.TryWrite(null);
         }
     }
-
-    // ── Submit pipeline (same commands as the legacy REPL) ────────────────
-
-    private async Task SubmitAsync(CancellationToken ct)
-    {
-        string text = _composer.Buffer.TakeText().Trim();
-        if (text.Length == 0)
-        {
-            return;
-        }
-
-        // Queued prompts (claude-style): typing while busy appends to the
-        // queue instead of refusing — drained in order when the loop idles.
-        // Slash commands still resolve immediately (UI ops, no model turn).
-        if (agent.State.IsRunning || _promptInFlight)
-        {
-            if (!text.StartsWith('/'))
-            {
-                _pendingPrompts.Enqueue(text);
-                bridge.AppendSystemLine($"⏳ queued ({_pendingPrompts.Count}) — will send when idle");
-                _wake.Writer.TryWrite(null);
-                return;
-            }
-
-            bridge.AppendSystemLine("⚠ Agent is busy — wait for completion or press Esc / Ctrl+C to abort.");
-            _wake.Writer.TryWrite(null);
-            return;
-        }
-
-        if (text.StartsWith('/'))
-        {
-            string[] parts = text[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            string cmd = parts.Length > 0 ? parts[0].ToLowerInvariant() : string.Empty;
-
-            // Same catalog as palette commits — one resolution point.
-            // The full slash line travels in RawInput (info commands need args).
-            if (_catalog.TryResolve(cmd, out var slashCmd) && slashCmd is not null)
-            {
-                await slashCmd.ExecuteAsync(new ReplCommandContext(this, cmd, text), ct).ConfigureAwait(false);
-                return;
-            }
-
-            // Uncatalogued slash text falls through to the legacy dispatcher.
-            var submitDispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
-            var outcome = await submitDispatcher.HandleCoreAsync(
-                text, services,
-                writer: line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
-                reader: prompt =>
-                {
-                    bridge.AppendSystemLine($"{prompt} — интерактивный ввод недоступен в consoleex, используйте legacy TUI (/exit)");
-                    _wake.Writer.TryWrite(null);
-                    return Task.FromResult(string.Empty);
-                },
-                agent, services.GetRequiredService<IAgentRegistry>(),
-                services.GetRequiredService<IConfigStore>(),
-                services.GetRequiredService<AuthStore>(),
-                services.GetRequiredService<IProviderRegistry>(),
-                sessionModel).ConfigureAwait(false);
-
-            if (outcome.ShouldQuit)
-            {
-                _slashExitCode = outcome.ExitCode;
-                _quitRequested = true;
-            }
-
-            return;
-        }
-
-        // Fresh abort token per prompt (no-op guard while a run is active).
-        StartPromptRun(text, ct);
-    }
-
-    /// <summary>Begin a model turn for already-extracted text (submit + queue drain share it).</summary>
-    private void StartPromptRun(string text, CancellationToken ct)
-    {
-        agent.ResetAbortSource();
-        ResetRetryCountdown();
-        screen.Timeline.Timeline.Append(new UserBlock(text));
-        _status.Mode = StatusBarMode.Running;
-        _wake.Writer.TryWrite(null);
-
-        _promptInFlight = true;
-        ArmLongTurnNotify();
-        _ = RunPromptAsync(text, ct);
-    }
-
-    /// <summary>
-    /// Long-turn desktop notification (osc-sprint §777): a run still active
-    /// after 30 s fires one notification through the terminal — kitty OSC 99
-    /// when the probe answered, OSC 777 for the urxvt family, nothing when
-    /// the terminal gave no signal (suppression is the conservative default).
-    /// </summary>
-    private void ArmLongTurnNotify()
-    {
-        _notifyTimer ??= new Timer(OnLongTurnNotifyFire, null, Timeout.Infinite, Timeout.Infinite);
-        _notifyTimer.Change(TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
-    }
-
-    private void DisarmLongTurnNotify() => _notifyTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-
-    private void OnLongTurnNotifyFire(object? state)
-    {
-        DisarmLongTurnNotify();
-        if (!agent.State.IsRunning)
-        {
-            return; // turn finished inside the window — nothing to notify about
-        }
-
-        var kind = _notify is DesktopNotifyKind.Osc99 ? _notify : NotifyProbe.Detect();
-        _notify = kind;
-        if (kind is DesktopNotifyKind.None)
-        {
-            return;
-        }
-
-        _pendingNotifySequence = kind == DesktopNotifyKind.Osc99
-            ? Osc99Notify.Encode("Harbor", "ход всё ещё выполняется (дольше 30 с)")
-            : Osc777Notify.Encode("Harbor", "ход всё ещё выполняется (дольше 30 с)");
-        _wake.Writer.TryWrite(null);
-    }
-
-    /// <summary>Fire-and-forget WITH full observation: every failure lands in
-    /// the timeline, cancellation is expected, the wake always fires.</summary>
-    private async Task RunPromptAsync(string text, CancellationToken ct)
-    {
-        try
-        {
-            var result = await agent.PromptAsync(text, ct).ConfigureAwait(false);
-            if (result.IsFailure)
-            {
-                // Abort path surfaces as Result failure "The operation was canceled"
-                // rather than OCE — normalize to the same user-facing line.
-                if (result.Error.Contains("canceled", StringComparison.OrdinalIgnoreCase)
-                    || result.Error.Contains("cancelled", StringComparison.OrdinalIgnoreCase))
-                    bridge.AppendSystemLine("ход прерван");
-                else
-                    bridge.AppendSystemLine("! " + result.Error);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            bridge.AppendSystemLine("ход прерван");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Prompt failed in CellForge REPL");
-            bridge.AppendSystemLine("! " + ex.Message);
-        }
-        finally
-        {
-            DisarmLongTurnNotify();
-            _promptInFlight = false;
-            if (!agent.State.IsRunning)
-            {
-                _status.Mode = StatusBarMode.Idle;
-                ResetRetryCountdown();
-            }
-
-            _usageDirty = true;
-            DrainPromptQueue(ct);
-            _wake.Writer.TryWrite(null);
-        }
-    }
-
-    /// <summary>Queue drain: the next queued prompt starts when the loop is
-    /// truly idle (no run in flight, agent settled).</summary>
-    private void DrainPromptQueue(CancellationToken ct)
-    {
-        if (agent.State.IsRunning || _promptInFlight)
-        {
-            return;
-        }
-
-        if (_pendingPrompts.TryDequeue(out string? next))
-        {
-            bridge.AppendSystemLine($"⏵ sending queued prompt ({_pendingPrompts.Count} left)");
-            StartPromptRun(next, ct);
-        }
-    }
-
-    /// <summary>Token/cost footer + sidebar mirror (sprint UI-V2 P6.2/P4):
-    /// pulls cumulative usage from the tracker on the render thread. Cost is
-    /// preserved when a richer source already reported it.</summary>
-    private void RefreshUsage()
-    {
-        _broadDamageNextFrame = true; // status + sidebar both re-render
-        if (_tokens?.GetStats() is not { } stats)
-        {
-            return;
-        }
-
-        _status.SetUsage(stats.TotalInputTokens, stats.TotalOutputTokens);
-        if (screen.Sidebar is { } sidebar)
-        {
-            sidebar.State = sidebar.State with
-            {
-                TokensIn = stats.TotalInputTokens,
-                TokensOut = stats.TotalOutputTokens,
-                MessageCount = screen.Timeline.Timeline.Count,
-            };
-        }
-    }
-
-    /// <summary>Retry countdown feed (sprint UI-V2 P6.3): a transient provider
-    /// error while the agent runs starts the UI-side backoff clock. The agent
-    /// loop retries on its own policy; the status bar only mirrors the window.</summary>
-    private void ObserveRetrySignal(AgentEvent evt)
-    {
-        if (evt is MessageUpdateEvent { LlmEvent: ErrorEvent { Kind: var kind } }
-            && ProviderErrors.IsTransient(kind)
-            && agent.State.IsRunning)
-        {
-            _retryAttempt++;
-            _retryErrorMs = Environment.TickCount64;
-            _retryTotalSec = RetryCountdown.BackoffSeconds(Math.Min(_retryAttempt, MaxStreamRetries));
-            _status.Retry = RetryCountdown.Line(_retryAttempt, MaxStreamRetries, _retryTotalSec);
-        }
-    }
-
-    /// <summary>Recomputes the countdown from wall clock each frame; expires
-    /// silently at zero (no timer — frames already fire on the 80 ms heartbeat).</summary>
-    private void UpdateRetryCountdown()
-    {
-        if (_retryErrorMs < 0)
-        {
-            return;
-        }
-
-        int remaining = _retryTotalSec - (int)((Environment.TickCount64 - _retryErrorMs) / 1000);
-        if (remaining > 0)
-        {
-            _status.Retry = RetryCountdown.Line(_retryAttempt, MaxStreamRetries, remaining);
-        }
-        else
-        {
-            _retryErrorMs = -1;
-            _status.Retry = null;
-        }
-    }
-
-    /// <summary>Clears the retry window — new prompt or finished turn.</summary>
-    private void ResetRetryCountdown()
-    {
-        _retryAttempt = 0;
-        _retryErrorMs = -1;
-        _status.Retry = null;
-    }
-
-    /// <summary>True when the failure text represents a cancelled/aborted run
-    /// (AgentLoop's "…cancelled." family) — rendered as the friendly abort line.</summary>
-    private static bool IsCancellation(string error) =>
-        error.Contains("cancel", StringComparison.OrdinalIgnoreCase) ||
-        error.Contains("canceled", StringComparison.OrdinalIgnoreCase);
 
     private async Task PrintWelcomeAsync()
     {
@@ -1746,41 +1196,10 @@ internal sealed class CellForgeReplRunner(
         bridge.AppendSystemLine($"model: {model} | ввод — текст, /help — команды, Ctrl+C×2 — выход");
 
         // Sidebar context (sprint UI-V2 P4): session identity + model before
-        // the first frame paints; tokens arrive via RefreshUsage per turn.
+        // the first frame paints; tokens arrive via the pipeline feed per turn.
         // StatusViewModel.Model seeds assistant bubble headers (bridge reads it).
         _status.Model = model;
-        if (screen.Sidebar is { } sidebar)
-        {
-            int window = await ResolveContextWindowAsync(
-                sessionModel.ProviderId, sessionModel.Model, CancellationToken.None).ConfigureAwait(false);
-            _contextWindow = window;
-            sidebar.State = sidebar.State with
-            {
-                SessionTitle = sessionModel.Title,
-                SessionId = sessionModel.Id,
-                Model = model,
-                Agent = sessionModel.Agent,
-                MessageCount = 0,
-                ContextWindow = window,
-            };
-        }
-
-        await SyncSessionsToStoreAsync(CancellationToken.None).ConfigureAwait(false);
-
-        // Quick-switch slots (sprint UI-V2 P2.2): the store lists most-recent-
-        // first, so slot 1 gets the hottest session. Best-effort — hosts
-        // without a session store (smoke tests) just skip slot seeding.
-        if (services.GetService<ISessionStore>() is { } store
-            && await store.ListAsync(ct: CancellationToken.None).ConfigureAwait(false) is { IsSuccess: true } listed)
-        {
-            var recent = listed.Value;
-            for (int i = 0; i < recent.Count && i < QuickSwitchSlots.Count; i++)
-            {
-                _quickSwitch.Assign(i + 1, recent[i].Id);
-            }
-        }
-
-        _wake.Writer.TryWrite(null);
+        await Sessions.SeedWelcomeChromeAsync(model).ConfigureAwait(false);
     }
 
     /// <summary>
