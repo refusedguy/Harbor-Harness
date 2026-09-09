@@ -147,7 +147,8 @@ public class VirtualizedChatTimelineTests
         _ = tl.PrepareFrame(40, 6);
 
         await Assert.That(tl.Count).IsEqualTo(1);
-        await Assert.That(tl.TotalHeight).IsEqualTo(1);
+        // v2 assistant block: dim model header + content line.
+        await Assert.That(tl.TotalHeight).IsEqualTo(2);
         await Assert.That(tl.BlockAt(0).Kind).IsEqualTo("assistant");
     }
 }

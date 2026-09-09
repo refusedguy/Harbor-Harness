@@ -9,10 +9,10 @@ public class ChatBlockTests
     public async Task UserBlock_Measure_WrapsBodyUnderPrefix()
     {
         var block = new UserBlock("hello brave new world");
-        // prefix "› " takes 2 columns; body wraps at width-2.
+        // v2 bubble: header row + gap row cost 2; body wraps at width-2 (gutter).
         await Assert.That(block.Measure(12).IsExact).IsTrue();
-        await Assert.That(block.Measure(12).MinLines).IsEqualTo(3);
-        await Assert.That(block.Measure(80).MinLines).IsEqualTo(1);
+        await Assert.That(block.Measure(12).MinLines).IsEqualTo(5);
+        await Assert.That(block.Measure(80).MinLines).IsEqualTo(3);
     }
 
     [Test]
@@ -24,11 +24,10 @@ public class ChatBlockTests
 
         string art = GridDump.Art(buffer);
         var rows = art.Split('\n');
-        await Assert.That(rows[0].TrimEnd()).IsEqualTo("› hello world");
-        await Assert.That(rows[1].TrimEnd()).IsEqualTo("  again"); // continuation aligns under body
-        // Prefix must not repeat on continuation rows.
-        await Assert.That(rows[1].StartsWith('›')).IsFalse();
-        await Assert.That(string.IsNullOrWhiteSpace(rows[2])).IsTrue();
+        await Assert.That(rows[0].TrimEnd()).IsEqualTo(" YOU"); // v2 accent header (col 1)
+        await Assert.That(rows[1].TrimEnd()).IsEqualTo("│ hello world");
+        await Assert.That(rows[2].TrimEnd()).IsEqualTo("│ again"); // bar repeats, text aligns
+        await Assert.That(string.IsNullOrWhiteSpace(rows[3])).IsTrue(); // trailing gap row
     }
 
     [Test]
@@ -106,7 +105,8 @@ public class ChatBlockTests
     {
         var block = new AssistantMarkdownBlock("# Title\ntext line");
         await Assert.That(block.Kind).IsEqualTo("assistant");
-        await Assert.That(block.Measure(20).MinLines).IsEqualTo(2);
+        // v2: dim model header row + trailing gap row around the content.
+        await Assert.That(block.Measure(20).MinLines).IsEqualTo(3);
         await Assert.That(block.RawText()).Contains("# Title");
     }
 
