@@ -38,6 +38,11 @@ internal static class ProcessDriver
         };
         foreach (var (k, v) in profile.Harbor.Env)
             psi.Environment[k] = Environment.ExpandEnvironmentVariables(v);
+        // API keys flow from the runner's own env (CI secrets) into the child.
+        // Never from files, never into artifacts (see ArtifactWriter env_names).
+        foreach (System.Collections.DictionaryEntry e in Environment.GetEnvironmentVariables())
+            if (e.Key is string k && e.Value is string v && k.EndsWith("_API_KEY", StringComparison.Ordinal))
+                psi.Environment[k] = v;
 
         var stdout = new StringBuilder();
         var stderr = new StringBuilder();

@@ -529,11 +529,12 @@ Harbor benchmarks live in `docs/BENCHMARKS.md`. Key numbers:
 | Cold start (Debug JIT) | **38 ms** |
 | RSS idle | **28 MB** |
 | Binary size | **5 MB** |
-| `ProviderRegistry.GetClient` (frozen) | **0.18 µs** |
-| `ToolRegistry.ResolveTools` (4 tools) | **0.42 µs** |
-| `PermissionRuleset.Evaluate` | **0.27 µs** |
+| `ProviderRegistry.GetClient` (frozen) | **0.14 µs** |
+| `ToolRegistry.ResolveTools` (4 tools, no permission) | **0.085 µs** |
+| `ToolRegistry.ResolveTools` (4 tools, with permission) | **2.3 µs** |
+| `PermissionRuleset.Evaluate` | **0.35 µs** |
 
-Historical spot-checks from `docs/BENCHMARKS.md`; re-measure before quoting on hot-path PRs.
+2026-09-09 PR run (AMD EPYC); full table in `docs/BENCHMARKS.md`. Historical spot-checks there; re-measure before quoting on hot-path PRs.
 
 ### Adding a benchmark
 
@@ -551,6 +552,20 @@ Historical spot-checks from `docs/BENCHMARKS.md`; re-measure before quoting on h
 - Warm up 3 iterations, measure 10 iterations.
 - Report mean ± std dev, plus allocation count.
 - Compare against the previous version when refactoring hot paths.
+
+### Evals (task-solving quality, contour B)
+
+Unit/integration suites prove Harbor honors contracts; evals prove it solves
+tasks. Runner: `tools/Harbor.Evals` (external, no runtime changes), fixtures
+in `evals/tasks/`, protocol in `docs/EVALS.md`. Live runs need a model key
+(`KILO_API_KEY`); CI runs them via the `evals` workflow (manual dispatch +
+weekly schedule — live signal, never a merge gate).
+
+```bash
+dotnet build apps/Harbor.App.Cli -c Release
+export KILO_API_KEY=klo_...
+dotnet run --project tools/Harbor.Evals -c Release -- --tasks evals/tasks --profile evals/profiles/local.json
+```
 
 ## Code principles — quick reference
 

@@ -9,6 +9,7 @@ internal static class Program
         string profilePath = Arg(args, "--profile") ?? "evals/profiles/local.json";
         string batchId = Arg(args, "--batch") ?? DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss");
         int attempts = int.TryParse(Arg(args, "--attempts"), out int n) ? Math.Max(1, n) : 1;
+        var only = (Arg(args, "--only") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         string repoRoot = FindRepoRoot();
         var profile = EvalProfile.Load(Path.GetFullPath(profilePath), repoRoot);
@@ -22,6 +23,9 @@ internal static class Program
         var summaries = new List<SummaryBuilder.AttemptSummary>();
         foreach (string taskDir in Directory.GetDirectories(Path.GetFullPath(tasksDir)).OrderBy(Path.GetFileName))
         {
+            if (only.Length > 0 && !only.Contains(Path.GetFileName(taskDir), StringComparer.OrdinalIgnoreCase))
+                continue;
+
             EvalTask task;
             try
             {
