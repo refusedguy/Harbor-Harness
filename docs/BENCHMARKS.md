@@ -1,6 +1,8 @@
 # Benchmarks — Harbor
 
-> **Latest rerun: 2026-08-22** (i5-8250U, 4C/8T, .NET 10.0.10, Release). Full data: `/tmp/benchmark-report.md`.
+> **Latest rerun: 2026-09-09** (AMD EPYC 9V74, .NET 10.0.12, Release, BenchmarkDotNet 0.15.8 — PR `benchmark` job).
+> Registry/permission hot paths below are from that run; older rows stay from 2026-08-22 (i5-8250U, .NET 10.0.10).
+> Suite: `tests/Harbor.Benchmarks` — 24 benchmark classes / 72+ cases, `[MemoryDiagnoser]`, Release, 0 warnings.
 > Suite: `tests/Harbor.Benchmarks` — 24 benchmark classes / 72+ cases, `[MemoryDiagnoser]`, Release, 0 warnings.
 > Run: `dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter "*<Category>*" --buildTimeout 600 --keepFiles`
 
@@ -34,10 +36,14 @@
 | DefaultUiProjector 5000 lines | 20.8 ms | ~MB |
 | Terminal ANSI vs plain blit | 364 / 330 µs | 12 / 10 KB |
 | PatchTool apply 5000 hunks | 10.1 ms | 9.3 MB |
-| PermissionRuleset.Evaluate | 0.11–0.29 µs | 0 |
-| ToolRegistry.ResolveTools frozen @4 | 0.094 µs | 344 B |
-| ToolRegistry.GetTool | 0.8–1.6 µs | 80 B |
-| ProviderRegistry.GetClient frozen | 0.77 µs | 80 B |
+| PermissionRuleset.Evaluate (default Allow) | 0.35 µs | 0 |
+| PermissionRuleset.Evaluate (Deny bash rm -rf /) | 0.17 µs | 488 B |
+| ToolRegistry.ResolveTools frozen @4 (no permission) | 0.085 µs | 344 B |
+| ToolRegistry.ResolveTools frozen @4 (with permission) | 2.3 µs | 88 B |
+| ToolRegistry.ResolveTools frozen @8 / @16 (no permission) | 0.16 / 0.31 µs | 664 B / 1304 B |
+| ToolRegistry.GetTool (frozen) | 0.10–0.20 µs | 80–160 B |
+| ProviderRegistry.GetClient frozen | 0.14 µs | 288 B |
+| ProviderRegistry.GetAllModelsAsync frozen @1 / @5 / @20 providers | 9.2 / 12.9 / 24.6 µs | 1112 B / 2776 B / 9016 B |
 | Identifiers: HashSet<SessionId> vs string | 2.1 vs 2.7 µs | 2.3 vs 7.3 KB |
 | SystemPromptBuilder (16 tools, large) | 3.8 µs | 12.1 KB |
 | StateDiff Record.Equals identical | 0.59 ns | 0 |
@@ -198,14 +204,27 @@ Located in `tests/Harbor.Benchmarks/`. Run with:
 dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
 ```
 
-> **Note:** BenchmarkDotNet results below are **from previous runs** on the pre-split codebase. Re-run on the current split codebase to refresh — the numbers should be within ±10% since the splits are pure refactorings.
+> **Note:** registry/permission rows refreshed 2026-09-09 on AMD EPYC 9V74 (.NET 10.0.12, BDN 0.15.8, `Job-NTRUNJ` means).
+> Remaining rows are 2026-08-22 (i5-8250U). Splits since are pure refactorings — expect ±10%.
+>
+> Instability watch: `Evaluate (custom ruleset, Allow at end-of-scan)` @64 rules measured 1.3–4.1 µs
+> with ±7 µs error (median/mean diverge) — shared-runner noise or a pathological case; @4 rules is a
+> stable 25 ns, @16 rules ~0.4 µs. Re-measure isolated before optimizing.
 
 | Benchmark | Mean | StdDev | Allocations |
 |---|---:|---:|---:|
-| `ProviderRegistry.GetClient` (frozen) | 0.18 µs | 0.02 µs | 0 B |
-| `ToolRegistry.ResolveTools` (4 tools) | 0.42 µs | 0.05 µs | 0 B |
+| `ProviderRegistry.GetClient` (frozen) | 0.14 µs | 0.01 µs | 288 B |
+| `ProviderRegistry.GetAllModelsAsync` (frozen, 1 / 5 / 20 providers) | 9.2 / 12.9 / 24.6 µs | 0.8 / 1.8 / 6.7 µs | 1112 B / 2776 B / 9016 B |
+| `ToolRegistry.ResolveTools` (4 tools, frozen, no permission) | 0.085 µs | 0.001 µs | 344 B |
+| `ToolRegistry.ResolveTools` (4 tools, frozen, with permission) | 2.3 µs | 0.02 µs | 88 B |
+| `ToolRegistry.ResolveTools` (8 / 16 tools, frozen, no permission) | 0.16 / 0.31 µs | 0.001 / 0.003 µs | 664 B / 1304 B |
+| `ToolRegistry.ResolveTools` (8 / 16 tools, frozen, with permission) | 4.1 / 8.3 µs | 0.003 / 0.03 µs | 120 B / 184 B |
+| `ToolRegistry.ResolveTools` (4 tools, unfrozen) | 0.23 µs | 0.001 µs | 600 B |
+| `ToolRegistry.GetTool` (frozen) | 0.10–0.20 µs | 0.001–0.005 µs | 80–160 B |
 | `ToolRegistry.ResolveTools` (14 tools) | 1.10 µs | 0.08 µs | 0 B |
-| `PermissionRuleset.Evaluate` | 0.27 µs | 0.03 µs | 0 B |
+| `PermissionRuleset.Evaluate` (default Allow) | 0.35 µs | 0.002 µs | 0 B |
+| `PermissionRuleset.Evaluate` (Deny bash rm -rf /) | 0.17 µs | 0.001 µs | 488 B |
+| `PermissionRuleset.Evaluate` (custom, Allow at end-of-scan, 4 rules) | 0.025 µs | 0.001 µs | 0 B |
 | `EventBus.PublishAsync` (1 subscriber) | 0.35 µs | 0.04 µs | 0 B |
 | `EventBus.PublishAsync` (10 subscribers) | 2.80 µs | 0.20 µs | 0 B |
 | `UiStore.Dispatch` (lock-free CAS) | 0.15 µs | 0.02 µs | 0 B |

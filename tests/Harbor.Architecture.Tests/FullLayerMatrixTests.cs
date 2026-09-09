@@ -76,6 +76,7 @@ public class FullLayerMatrixTests
         "Harbor.Desktop.Animations",
         "Harbor.Tui.Notifications",
         "Harbor.Tui.AnsiPlain",
+        "Harbor.Tui.CellForge.Engine",
         "Harbor.Tui.CellForge",
         // Application
         "Harbor.Application",
@@ -184,8 +185,10 @@ public class FullLayerMatrixTests
         // token catalog (DesignSystem) and motion tokens (Desktop.Animations)
         // back ChatPalette/PanelFx (ChatPalette + the cell-style primitives
         // physically live in the DesignSystem package assembly now).
+        // KeyEventMapper (Input/) translates raw keys to the State UiKey
+        // vocabulary so every renderer shares one key meaning — hence State.
         ["Harbor.Ui.Framework.Rendering"] = new(Layer.Presentation,
-            ["Harbor.Ui.Framework.Projection", "Harbor.DesignSystem", "Harbor.Desktop.Animations"]),
+            ["Harbor.Ui.Framework.Projection", "Harbor.Ui.Framework.State", "Harbor.DesignSystem", "Harbor.Desktop.Animations"]),
         // HDS v1 token catalog — standalone leaf: ZERO Harbor references. The
         // design-system package ships RgbColor (under the historical Projection
         // namespace) plus the cell-style primitives and ChatPalette, so
@@ -212,6 +215,17 @@ public class FullLayerMatrixTests
         // styling flows through IEscapeCodeStrategy (Ansi / Null impls).
         ["Harbor.Tui.AnsiPlain"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
+        // CellForge engine (issue #33 split): input/parsing/capabilities/cell
+        // primitives. No Chat vocabulary: wheel ticks surface as UiMsg via
+        // the shared KeyEventMapper contract (State), cell styles via
+        // DesignSystem tokens, shared blocks via Ui.Framework.Rendering.
+        ["Harbor.Tui.CellForge.Engine"] = new(Layer.Presentation,
+            [
+                "Harbor.Abstractions",
+                "Harbor.Ui.Framework.State",
+                "Harbor.Ui.Framework.Rendering",
+                "Harbor.DesignSystem",
+            ]),
         // CellForge owns its own input+render stack; reuses Presentation-state
         // streaming buffers (StreamingSync/ChunkedBuffer) and the shared
         // renderer-agnostic layer. Terminal.Abstractions supplies the
@@ -227,6 +241,7 @@ public class FullLayerMatrixTests
         ["Harbor.Tui.CellForge"] = new(Layer.Presentation,
             [
                 "Harbor.Abstractions", "Harbor.Terminal.Abstractions",
+                "Harbor.Tui.CellForge.Engine",
                 "Harbor.Ui.Framework.State",
                 "Harbor.Ui.Framework.Projection",
                 "Harbor.Ui.Framework.Rendering",

@@ -187,6 +187,12 @@ internal sealed class SlashCommandDispatcher
             return Task.FromResult(Result.Success());
         });
 
+        Register("new", ["new-session"], null, (ctx, _) =>
+        {
+            ctx.Writer("Use /new in the interactive TUI to start a fresh session.");
+            return Task.FromResult(Result.Success());
+        });
+
         Register("setup", [], null, async (ctx, _) =>
         {
             var result = await ctx.Services.GetRequiredService<OnboardingWizard>()

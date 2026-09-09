@@ -16,8 +16,9 @@ public class PaletteCatalogTests
 {
     private static readonly string[] ExpectedSlashTitles =
     [
-        "/help", "/clear", "/quit", "/sessions", "/branch",
-        "/providers", "/tokens", "/theme", "/editor", "/diff",
+        "/agent", "/branch", "/clear", "/config", "/diff",
+        "/editor", "/help", "/model", "/new", "/providers",
+        "/quit", "/sessions", "/setup", "/theme", "/tokens",
     ];
 
     private static readonly (string Title, string Id)[] ExpectedBuiltin =
@@ -61,7 +62,7 @@ public class PaletteCatalogTests
     {
         var slash = CommandPaletteCatalog.SlashCatalog;
 
-        await Assert.That(slash.Count).IsEqualTo(10);
+        await Assert.That(slash.Count).IsEqualTo(15);
         foreach (string title in ExpectedSlashTitles)
         {
             await Assert.That(slash.Any(i => i.Title == title)).IsTrue();
@@ -241,7 +242,7 @@ public class PaletteCatalogTests
         palette.ShowDefaultCatalog();
 
         await Assert.That(palette.Visible).IsTrue();
-        await Assert.That(palette.Results.Count).IsEqualTo(20);
+        await Assert.That(palette.Results.Count).IsEqualTo(25);
         await Assert.That(palette.SelectedIndex).IsEqualTo(0);
 
         _ = palette.HandleKey(KeyEvent.Simple(KeyCode.Down));
@@ -268,7 +269,7 @@ public class PaletteCatalogTests
         palette.Paint(buffer, new Rect(2, 1, 56, 20));
         string art = GridDump.Art(buffer);
 
-        await Assert.That(art).Contains("/help");
+        await Assert.That(art).Contains("/agent");
         await Assert.That(art).Contains("New Session");
         await Assert.That(art).Contains("esc close");
     }

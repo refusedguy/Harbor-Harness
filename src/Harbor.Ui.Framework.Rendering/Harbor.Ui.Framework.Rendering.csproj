@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
     <ProjectReference Include="..\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
     <ProjectReference Include="..\Harbor.Desktop.Animations\Harbor.Desktop.Animations.csproj"/>
   </ItemGroup>
@@ -21,6 +22,7 @@
          (ScreenBuffer row-hash internals, BlockMath, StreamingMarkdownRenderer
          .RenderRange) across the assembly boundary by design. -->
     <InternalsVisibleTo Include="Harbor.Tui.CellForge"/>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.Engine"/>
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
   </ItemGroup>
 

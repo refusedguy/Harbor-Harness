@@ -214,15 +214,54 @@ public sealed class ModelCommand : ISlashCommand
             return Result.Success();
         }
 
-        // Set model
-        string model = string.Join(' ', args);
+        string rawInput = string.Join(' ', args).Trim();
+        var registeredProviders = _providers.GetRegisteredProviderIds();
+
+        string resolvedProviderId;
+        string modelId;
+
+        int firstSlash = rawInput.IndexOf('/');
+        if (firstSlash > 0)
+        {
+            string candidateProvider = rawInput[..firstSlash];
+            if (registeredProviders.Any(p => p.Value.Equals(candidateProvider, StringComparison.OrdinalIgnoreCase)))
+            {
+                resolvedProviderId = candidateProvider;
+                modelId = rawInput[(firstSlash + 1)..];
+            }
+            else
+            {
+                // Unregistered prefix: it is either a bare model id containing
+                // a slash (e.g. tencent/hy3:free under kilocode) or an explicit
+                // provider/model pair. The cached catalog disambiguates without
+                // network; otherwise trust the slash (PROD-UI-0 З.3 tests pin it).
+                var loadResult = await _configStore.LoadAsync(ct).ConfigureAwait(false);
+                string effective = loadResult.IsSuccess ? loadResult.Value.EffectiveProvider : IdentityConfig.FallbackProvider;
+                if (await IsKnownModelAsync(effective, rawInput, ct).ConfigureAwait(false))
+                {
+                    resolvedProviderId = effective;
+                    modelId = rawInput;
+                }
+                else
+                {
+                    resolvedProviderId = candidateProvider;
+                    modelId = rawInput[(firstSlash + 1)..];
+                }
+            }
+        }
+        else
+        {
+            var loadResult = await _configStore.LoadAsync(ct).ConfigureAwait(false);
+            resolvedProviderId = loadResult.IsSuccess ? loadResult.Value.EffectiveProvider : IdentityConfig.FallbackProvider;
+            modelId = rawInput;
+        }
+
+        string canonicalModel = $"{resolvedProviderId}/{modelId}";
+
         var updateResult = await _configStore.UpdateAsync(c =>
         {
-            c.Model = model;
-            if (model.Contains('/'))
-            {
-                c.Provider = model.Split('/')[0];
-            }
+            c.Provider = resolvedProviderId;
+            c.Model = canonicalModel;
             return c;
         }, ct).ConfigureAwait(false);
 
@@ -232,9 +271,8 @@ public sealed class ModelCommand : ISlashCommand
             return updateResult;
         }
 
-        _writer($"✓ Switched to model: {model}");
-
-        var rebindResult = await RebindActiveSessionAsync(model).ConfigureAwait(false);
+        _writer($"✓ Switched to model: {canonicalModel}");
+        var rebindResult = await RebindActiveSessionAsync(canonicalModel).ConfigureAwait(false);
         return rebindResult;
     }
 
@@ -244,6 +282,30 @@ public sealed class ModelCommand : ISlashCommand
     ///     without agent/session context (e.g. non-REPL usage) the config is
     ///     still updated and takes effect on the next REPL start.
     /// </summary>
+    private async Task<bool> IsKnownModelAsync(string providerId, string modelId, CancellationToken ct)
+    {
+        var pid = ProviderId.TryCreate(providerId);
+        if (pid.IsFailure)
+        {
+            return false;
+        }
+
+        var cached = await _providers.GetModelsCachedAsync(pid.Value, ct).ConfigureAwait(false);
+        if (cached.IsFailure)
+        {
+            return false;
+        }
+
+        foreach (var m in cached.Value)
+        {
+            if (string.Equals(m.Id, modelId, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
     private async Task<Result> RebindActiveSessionAsync(string model)
     {
         if (_agent is null || _session is null)
@@ -252,15 +314,17 @@ public sealed class ModelCommand : ISlashCommand
             return Result.Success();
         }
 
-        // Split "provider/model" the same way config resolution does; a bare
-        // model id keeps the currently-configured provider.
-        string[] parts = model.Split('/', 2);
+        // Canonical models are always well-formed "provider/model" by
+        // construction (see above): split unconditionally. The registry gate
+        // used to live here and broke rebinds for unregistered prefixes.
         string providerId;
         string modelId;
-        if (parts.Length > 1)
+
+        int firstSlash = model.IndexOf('/');
+        if (firstSlash > 0)
         {
-            providerId = parts[0];
-            modelId = parts[1];
+            providerId = model[..firstSlash];
+            modelId = model[(firstSlash + 1)..];
         }
         else
         {

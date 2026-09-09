@@ -5,6 +5,11 @@ using Harbor.Ui.Framework.Panels;
 
 namespace Harbor.Ui.Framework.State;
 
+// TODO(principles)[SRP, AOT]: split into TerminalUiState (Lines/Input/Scroll/Focus/
+// Panels, generic) + ChatDomainState (Cost/Model/Provider/AgentName/IsAgentRunning)
+// composed as AppState{Ui, Chat} — NO ImmutableDictionary<string,object?> extensions
+// (boxing, IL2xxx). Next PR after this branch merges.
+
 /// <summary>
 ///     Unified immutable UI state for the hybrid MVU+MVVM architecture.
 /// </summary>

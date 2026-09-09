@@ -342,6 +342,12 @@ public sealed class JsonlSessionStore : ISessionStore
         }
     }
 
+    /// <summary>True when the line is a session header (<c>"type":"session"</c>).</summary>
+    private static bool IsSessionHeaderLine(ReadOnlySpan<byte> line)
+    {
+        return line.IndexOf("\"type\":\"session\""u8) >= 0;
+    }
+
     /// <summary>True when the line is a <c>"message"</c> entry with any id.</summary>
     private static bool IsAnyMessageEntry(string line)
     {
@@ -703,6 +709,11 @@ public sealed class JsonlSessionStore : ISessionStore
                 }
 
                 if (line.IsEmpty || line.IndexOfAnyExcept((byte)' ', (byte)'\t') < 0)
+                {
+                    continue;
+                }
+
+                if (IsSessionHeaderLine(line))
                 {
                     continue;
                 }
