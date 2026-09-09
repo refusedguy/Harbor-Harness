@@ -76,6 +76,7 @@ public class FullLayerMatrixTests
         "Harbor.Desktop.Animations",
         "Harbor.Tui.Notifications",
         "Harbor.Tui.AnsiPlain",
+        "Harbor.Tui.CellForge.Engine",
         "Harbor.Tui.CellForge",
         // Application
         "Harbor.Application",
@@ -214,6 +215,17 @@ public class FullLayerMatrixTests
         // styling flows through IEscapeCodeStrategy (Ansi / Null impls).
         ["Harbor.Tui.AnsiPlain"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
+        // CellForge engine (issue #33 split): input/parsing/capabilities/cell
+        // primitives. No Chat vocabulary: wheel ticks surface as UiMsg via
+        // the shared KeyEventMapper contract (State), cell styles via
+        // DesignSystem tokens, shared blocks via Ui.Framework.Rendering.
+        ["Harbor.Tui.CellForge.Engine"] = new(Layer.Presentation,
+            [
+                "Harbor.Abstractions",
+                "Harbor.Ui.Framework.State",
+                "Harbor.Ui.Framework.Rendering",
+                "Harbor.DesignSystem",
+            ]),
         // CellForge owns its own input+render stack; reuses Presentation-state
         // streaming buffers (StreamingSync/ChunkedBuffer) and the shared
         // renderer-agnostic layer. Terminal.Abstractions supplies the
@@ -229,6 +241,7 @@ public class FullLayerMatrixTests
         ["Harbor.Tui.CellForge"] = new(Layer.Presentation,
             [
                 "Harbor.Abstractions", "Harbor.Terminal.Abstractions",
+                "Harbor.Tui.CellForge.Engine",
                 "Harbor.Ui.Framework.State",
                 "Harbor.Ui.Framework.Projection",
                 "Harbor.Ui.Framework.Rendering",

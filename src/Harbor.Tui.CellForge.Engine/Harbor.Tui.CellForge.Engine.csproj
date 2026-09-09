@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Tui.CellForge.Engine</PackageId>
+    <Description>Harbor TUI engine — terminal input layer (kitty keyboard, SGR mouse, bracketed paste), byte state-machine parser, cell rendering primitives. BCL-only, AOT-compatible. Namespaces stay Harbor.Tui.CellForge.* (issue #33 split).</Description>
+    <PackageTags>harbor;tui;terminal;input;kitty-keyboard;sgr-mouse;bracketed-paste</PackageTags>
+    <!-- CellForge must stay trim/AOT-clean: analyzers enforce zero IL2xxx warnings at build time. -->
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- CF-A-001: прямые референсы вместо транзитивных. -->
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
+    <!-- MouseRouter переводит wheel-тиicks в UiMsg.KeyInput (KeyEventMapper-контракт). -->
+    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+    <ProjectReference Include="..\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge"/>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
+  </ItemGroup>
+
+</Project>

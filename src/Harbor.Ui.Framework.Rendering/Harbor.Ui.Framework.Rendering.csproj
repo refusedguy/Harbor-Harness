@@ -22,6 +22,7 @@
          (ScreenBuffer row-hash internals, BlockMath, StreamingMarkdownRenderer
          .RenderRange) across the assembly boundary by design. -->
     <InternalsVisibleTo Include="Harbor.Tui.CellForge"/>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.Engine"/>
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
   </ItemGroup>
 
