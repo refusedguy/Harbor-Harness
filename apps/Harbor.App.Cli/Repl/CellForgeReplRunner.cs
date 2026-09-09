@@ -135,8 +135,6 @@ internal sealed class CellForgeReplRunner(
     AuthStore IReplHost.AuthStore => services.GetRequiredService<AuthStore>();
     ISessionStore? IReplHost.SessionStore => services.GetService<ISessionStore>();
     IRendererPipeline? IReplHost.RendererPipeline => services.GetService<IRendererPipeline>();
-    Task<int> IReplHost.ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
-        => ResolveContextWindowAsync(providerId, modelId, ct);
 
     private readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
     private ThemeFileWatcher? _themeWatcher;
@@ -204,14 +202,19 @@ internal sealed class CellForgeReplRunner(
     /// </summary>
     internal async Task<int> ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
     {
+        // Best-effort: hosts without a provider registry (smoke tests) get 0.
+        if (services.GetService<IProviderRegistry>() is not { } registry)
+        {
+            return 0;
+        }
+
         var pid = ProviderId.TryCreate(providerId);
         if (pid.IsFailure)
         {
             return 0;
         }
 
-        var models = await services.GetRequiredService<IProviderRegistry>()
-            .GetModelsCachedAsync(pid.Value, ct).ConfigureAwait(false);
+        var models = await registry.GetModelsCachedAsync(pid.Value, ct).ConfigureAwait(false);
         if (models.IsFailure)
         {
             return 0;
@@ -273,13 +276,11 @@ internal sealed class CellForgeReplRunner(
 
     /// <summary>Cross-thread «prompt submitted, completion event not yet seen» latch
     /// so an stdin EOF cannot race the freshly spawned run into a premature exit.</summary>
+    private volatile bool _promptInFlight;
+
     /// <summary>Prompts typed while the agent runs (claude-style queue):
     /// drained in order when the loop goes idle; cleared on abort/switch.</summary>
     private readonly Queue<string> _pendingPrompts = new();
-
-    private volatile bool _promptInFlight;
-
-    private volatile bool _promptInFlight;
 
     /// <summary>
     ///     Runs the REPL until quit. Returns the exit code
@@ -596,11 +597,11 @@ internal sealed class CellForgeReplRunner(
 
         Rect tlRect = screen.Timeline.Rect;
         _timelineViewportH = Math.Max(0, tlRect.Height);
-        int frameTotal = Math.Max(rows, screen.Timeline.Timeline.Count);
 
         // Epic C accumulation: viewport geometry flows into the TEA store
         // (changed-only, no per-frame alloc). Nothing reads it yet — the
         // timeline keeps local scroll until the golden-backed flip.
+        // frameTotal is computed above for the status snapshot; reuse it here.
         if (frameTotal != _lastStoreTotal || rows != _lastStoreViewport)
         {
             _lastStoreTotal = frameTotal;
@@ -1326,6 +1327,9 @@ internal sealed class CellForgeReplRunner(
 
         if (screen.Sidebar is { } sidebar)
         {
+            int window = await ResolveContextWindowAsync(
+                loaded.Value.ProviderId, loaded.Value.Model, ct).ConfigureAwait(false);
+            _contextWindow = window;
             sidebar.State = sidebar.State with
             {
                 SessionTitle = loaded.Value.Title,
@@ -1333,8 +1337,7 @@ internal sealed class CellForgeReplRunner(
                 Model = $"{loaded.Value.ProviderId}/{loaded.Value.Model}",
                 Agent = loaded.Value.Agent,
                 MessageCount = screen.Timeline.Timeline.Count,
-                ContextWindow = _contextWindow = await ResolveContextWindowAsync(
-                    loaded.Value.ProviderId, loaded.Value.Model, ct).ConfigureAwait(false),
+                ContextWindow = window,
             };
         }
 
@@ -1748,6 +1751,9 @@ internal sealed class CellForgeReplRunner(
         _status.Model = model;
         if (screen.Sidebar is { } sidebar)
         {
+            int window = await ResolveContextWindowAsync(
+                sessionModel.ProviderId, sessionModel.Model, CancellationToken.None).ConfigureAwait(false);
+            _contextWindow = window;
             sidebar.State = sidebar.State with
             {
                 SessionTitle = sessionModel.Title,
@@ -1755,8 +1761,7 @@ internal sealed class CellForgeReplRunner(
                 Model = model,
                 Agent = sessionModel.Agent,
                 MessageCount = 0,
-                ContextWindow = _contextWindow = await ResolveContextWindowAsync(
-                    sessionModel.ProviderId, sessionModel.Model, CancellationToken.None).ConfigureAwait(false),
+                ContextWindow = window,
             };
         }
 
