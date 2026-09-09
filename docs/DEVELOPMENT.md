@@ -904,6 +904,45 @@ Check if `GetScrollback_ReturnsRecentEvents` is hanging — it's skipped by defa
 5. Commit with conventional commits: `feat: add X`, `fix: Y`, `docs: Z`.
 6. Open a PR.
 
+### Architecture matrix changes
+
+Changing `tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs` (or any
+arch rule) is a product decision, not plumbing — state in the PR:
+
+```text
+Edge added/removed:
+Why necessary:
+Why the old boundary cannot hold:
+Alternative considered:
+Sensitive-capability access expanded: yes/no
+Permanent rule or migration exception (removal condition + tracking issue):
+```
+
+Matrix + code ship in the same commit. A green CI on changed rules proves
+consistency with the new rules, not that the change was wise.
+
+### Flaky-test / Retry policy
+
+`[Retry(n)]` or quarantining a test is allowed only when ALL hold:
+
+- the flake is registered (tracking issue linked in a comment);
+- there is a cause or working hypothesis written down;
+- first-pass results stay visible (no silent green);
+- first-pass success / retry counts are watched;
+- the state is not permanent (fix or proper quarantine follows).
+
+Concurrency-test flake = suspected product race first: disprove the race
+before blaming the runner. Same for goldens: a blessed snapshot needs the
+expected visual change explained with before/after; snapshots alone never
+gate a state-management migration (add semantic tests: dedup, clean session
+switch, subscription disposal, reconnect contract, approval/cancellation race).
+
+### Test-infrastructure changes
+
+Changes to CI, permission policy, evaluation criteria, or critical tests
+must be separately visible and approved — never buried inside a feature
+diff. «Updated snapshots» must not silently mean «fixed the bug».
+
 ## License
 
 MIT — see [LICENSE](../LICENSE).
