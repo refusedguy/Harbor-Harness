@@ -92,13 +92,12 @@ internal sealed class CellForgeReplRunner(
     private readonly LeaderKeyRouter _leader = new();
     private readonly VimComposerMode _vim = new();
     private readonly SelectionEngine _selection = new();
-    private SlashCommandDispatcher? _slashDispatcher;
+    private SlashCommandDispatcher? _dispatcher;
 
     private SlashCommandDispatcher GetDispatcher()
     {
-        _slashDispatcher ??= new SlashCommandDispatcher(
-            services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
-        return _slashDispatcher;
+        _dispatcher ??= LegacySlash.Dispatcher;
+        return _dispatcher;
     }
 
     // ── IReplHost (Command pattern seam; transitional, see IReplHost.cs) ──

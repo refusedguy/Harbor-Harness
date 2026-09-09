@@ -20,23 +20,25 @@ namespace Harbor.App.Cli.Repl;
 /// </summary>
 internal sealed class LegacySlashRunner
 {
-    private readonly ILogger<SlashCommandDispatcher> _logger;
+    private readonly SlashCommandDispatcher _dispatcher;
     private readonly IServiceProvider _services;
     private readonly IAgentRegistry _agents;
     private readonly IConfigStore _config;
     private readonly AuthStore _auth;
     private readonly IProviderRegistry _providers;
-    private SlashCommandDispatcher? _dispatcher;
+
+    /// <summary>Shared dispatcher (also serves the palette command list).</summary>
+    public SlashCommandDispatcher Dispatcher => _dispatcher;
 
     public LegacySlashRunner(
-        ILogger<SlashCommandDispatcher> logger,
+        SlashCommandDispatcher dispatcher,
         IServiceProvider services,
         IAgentRegistry agents,
         IConfigStore config,
         AuthStore auth,
         IProviderRegistry providers)
     {
-        _logger = logger;
+        _dispatcher = dispatcher;
         _services = services;
         _agents = agents;
         _config = config;
@@ -46,7 +48,7 @@ internal sealed class LegacySlashRunner
 
     /// <summary>Composition-root factory: single resolution point.</summary>
     public static LegacySlashRunner FromServices(IServiceProvider services) => new(
-        services.GetRequiredService<ILogger<SlashCommandDispatcher>>(),
+        new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>()),
         services,
         services.GetRequiredService<IAgentRegistry>(),
         services.GetRequiredService<IConfigStore>(),
@@ -60,7 +62,6 @@ internal sealed class LegacySlashRunner
         IAgent agent,
         Session session)
     {
-        _dispatcher ??= new SlashCommandDispatcher(_logger);
         return _dispatcher.HandleCoreAsync(
             text, _services, writer, reader,
             agent, _agents, _config, _auth, _providers, session);
