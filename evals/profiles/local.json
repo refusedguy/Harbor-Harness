@@ -1,12 +1,12 @@
 {
-  "model": "kilocode/tencent/hy3:free",
+  "model": "kilocode/kilo-auto/free",
   "provider": "kilocode",
   "harbor": {
     "dotnet": "dotnet",
     "cliDll": "apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll",
     "env": {
       "HARBOR_TUI": "plain",
-      "HARBOR_MODEL": "kilocode/tencent/hy3:free",
+      "HARBOR_MODEL": "kilocode/kilo-auto/free",
       "DOTNET_NOLOGO": "1"
     }
   }
