@@ -919,7 +919,8 @@ Permanent rule or migration exception (removal condition + tracking issue):
 ```
 
 Matrix + code ship in the same commit. A green CI on changed rules proves
-consistency with the new rules, not that the change was wise.
+consistency with the new rules, not that the change was wise. Temporary
+exceptions require a linked issue and a verifiable removal condition.
 
 ### Flaky-test / Retry policy
 
@@ -936,6 +937,11 @@ before blaming the runner. Same for goldens: a blessed snapshot needs the
 expected visual change explained with before/after; snapshots alone never
 gate a state-management migration (add semantic tests: dedup, clean session
 switch, subscription disposal, reconnect contract, approval/cancellation race).
+
+Unbounded retries, retry-until-green, and permanent retries without review
+are forbidden. Live-service errors are tracked separately from deterministic
+tests but never deleted from reporting. Retry on side-effecting tests only
+with guaranteed state reset or proven attempt independence.
 
 ### Test-infrastructure changes
 
