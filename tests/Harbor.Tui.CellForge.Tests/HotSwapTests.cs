@@ -243,6 +243,22 @@ public class HotSwapTests
             .ToArray();
 
         await Task.WhenAll(producerTasks);
+        // Deterministic drain: the background consumer is only guaranteed
+        // slices on an idle machine (loaded CI can starve it outright —
+        // taken==0 with 1000 offers published). Whatever it missed, take
+        // here; pair coherence is checked on both paths.
+        while (chain.TryTake() is { } rest)
+        {
+            if (rest.Back.Cols != rest.Front.Cols || rest.Back.Rows != rest.Front.Rows)
+            {
+                throw new InvalidOperationException("torn pair adopted");
+            }
+
+            Interlocked.Increment(ref taken);
+            chain.Return(rest.Back);
+            chain.Return(rest.Front);
+        }
+
         drained.Set();
         await consumer;
 
