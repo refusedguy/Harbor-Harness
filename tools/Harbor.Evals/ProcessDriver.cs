@@ -88,9 +88,10 @@ internal static class ProcessDriver
             await proc.WaitForExitAsync(ct).ConfigureAwait(false);
             await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
             var ended = DateTimeOffset.UtcNow;
-            string outcome = proc.ExitCode == 0 && stdout.ToString().Contains("[agent_end]", StringComparison.Ordinal)
-                ? "completed"
-                : "crashed";
+            // Exit code is the completion signal (plain renderer does not
+            // guarantee machine markers on stdout); agent_end, when present,
+            // is supplementary evidence recorded by the event parser.
+            string outcome = proc.ExitCode == 0 ? "completed" : "crashed";
             return new DriveResult(proc.ExitCode, stdout.ToString(), stderr.ToString(), outcome, started, ended);
         }
         catch (Exception ex)

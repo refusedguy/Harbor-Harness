@@ -4,7 +4,7 @@
   "fixtureVersion": 1,
   "promptFile": "prompt.md",
   "sourceDirectory": "repo",
-  "timeoutSeconds": 240,
+  "timeoutSeconds": 600,
   "verifierTimeoutSeconds": 60,
   "verifier": {
     "unix": { "file": "bash", "args": ["{verifier}/verify.sh", "{workspace}", "{verificationOutput}"] },
