@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
@@ -69,6 +68,7 @@ public sealed class ChatScreenBridge : IDisposable
         _bus = bus ?? throw new ArgumentNullException(nameof(bus));
         _panel = panel ?? throw new ArgumentNullException(nameof(panel));
         _status = status ?? throw new ArgumentNullException(nameof(status));
+        _gates = new ApprovalGateRouter(panel, status);
         // Auto-subscribe suits fire-and-forget hosts (CE-3 tests). A driven
         // host (CellForge REPL frame loop) passes false and pumps events via
         // <see cref="AcceptAsync"/> so all timeline mutation stays on the
@@ -96,7 +96,7 @@ public sealed class ChatScreenBridge : IDisposable
     public void Tick(long nowMs)
     {
         _nowMs = nowMs;
-        DrainGateQueue();
+        _gates.DrainQueued();
         if (_stream is null || _pending.Count == 0)
         {
             return;
@@ -556,22 +556,6 @@ public sealed class ChatScreenBridge : IDisposable
 
     /// <summary>Render-thread drain of gates requested off-thread; every queued
     /// gate lands on the timeline and joins the pending queue in arrival order.</summary>
-    private void DrainGateQueue()
-    {
-        bool appended = false;
-        while (_gateQueue.TryDequeue(out var gate))
-        {
-            _panel.Timeline.Append(gate);
-            EnqueuePendingGate(gate);
-            appended = true;
-        }
-
-        if (appended)
-        {
-            _panel.Timeline.MarkLastDirty();
-        }
-    }
-
     // ── Tool cards ─────────────────────────────────────────────────────────
 
     private ToolCard EnsureCard(string id, string toolName, string? argsSummary)
@@ -681,144 +665,22 @@ public sealed class ChatScreenBridge : IDisposable
     /// <summary>Bound on simultaneously pending gates; overflow auto-denies the
     /// oldest so its host-side await always wakes and no unreachable
     /// <c>IsPending</c> block survives.</summary>
-    private const int MaxPendingGates = 8;
+    private readonly ApprovalGateRouter _gates;
 
-    /// <summary>Undecided <see cref="ApprovalGateView" />s in arrival order —
-    /// the front one owns key/click routing (hotfix: a single slot turned every
-    /// earlier gate into a zombie the user could never answer).</summary>
-    private readonly Queue<ApprovalGateView> _pendingGates = new();
+    /// <summary>Approval gates live in <see cref="ApprovalGateRouter"/> —
+    /// the bridge keeps the public surface (tests + permission asker).</summary>
+    public ApprovalGateView RequestApprovalGate(string toolName, string detail) =>
+        _gates.RequestApprovalGate(toolName, detail);
 
-    /// <summary>Gates posted off the render thread (tool-execution context), drained by <see cref="Tick" />.</summary>
-    private readonly ConcurrentQueue<ApprovalGateView> _gateQueue = new();
+    public ApprovalGateView BeginApprovalGate(string toolName, string detail) =>
+        _gates.BeginApprovalGate(toolName, detail);
 
-    /// <summary>
-    /// Thread-safe approval request for the agent-loop side of the seam:
-    /// creates a gate the caller can await via <c>DecisionRecorded</c>, and
-    /// enqueues it so the frame loop appends it onto the timeline on its next
-    /// tick — all list mutation stays on the render thread.
-    /// </summary>
-    public ApprovalGateView RequestApprovalGate(string toolName, string detail)
-    {
-        var gate = new ApprovalGateView(toolName, detail);
-        _gateQueue.Enqueue(gate);
-        _status.SignalMascot(MascotReaction.ApprovalWiggle);
-        return gate;
-    }
+    public bool TryRouteApprovalKey(in KeyEvent key) => _gates.TryRouteApprovalKey(key);
 
-    /// <summary>
-    /// Appends a permission gate to the timeline and arms it at the tail of
-    /// the pending queue. Every queued gate stays interactable in arrival
-    /// order — the front one is answered first; deciding it exposes the next.
-    /// </summary>
-    public ApprovalGateView BeginApprovalGate(string toolName, string detail)
-    {
-        var gate = new ApprovalGateView(toolName, detail);
-        _panel.Timeline.Append(gate);
-        EnqueuePendingGate(gate);
-        _panel.Timeline.MarkLastDirty();
-        _status.SignalMascot(MascotReaction.ApprovalWiggle);
-        return gate;
-    }
-
-    /// <summary>Appends to the pending queue, auto-denying the oldest gate on
-    /// overflow (the bound keeps both the queue and host-side waiters finite).</summary>
-    private void EnqueuePendingGate(ApprovalGateView gate)
-    {
-        _pendingGates.Enqueue(gate);
-        while (_pendingGates.Count > MaxPendingGates)
-        {
-            _ = _pendingGates.Dequeue().TryDecide(ApprovalChoice.Deny);
-        }
-    }
-
-    /// <summary>Drops gates resolved off the routing path (e.g. host called
-    /// <see cref="Widgets.ApprovalGateView.TryDecide" /> directly).</summary>
-    private void PruneResolvedGates()
-    {
-        while (_pendingGates.Count > 0 && !_pendingGates.Peek().IsPending)
-        {
-            _ = _pendingGates.Dequeue();
-        }
-    }
-
-    /// <summary>
-    /// Routes one key event to the OLDEST pending gate BEFORE composer input.
-    /// Consumed keys always wake the frame pipeline (decision stamps repaint).
-    /// Returns false while no gate is armed or the key is not one of y/n/a/
-    /// Enter/Escape — callers fall through to normal routing.
-    /// </summary>
-    public bool TryRouteApprovalKey(in KeyEvent key)
-    {
-        PruneResolvedGates();
-        if (_pendingGates.Count == 0)
-        {
-            return false;
-        }
-
-        var gate = _pendingGates.Peek();
-        if (!gate.HandleKey(key))
-        {
-            return false;
-        }
-
-        if (!gate.IsPending)
-        {
-            _ = _pendingGates.Dequeue();
-        }
-
-        _panel.Timeline.MarkLastDirty();
-        return true;
-    }
-
-    /// <summary>
-    /// Routes a left-button press/click to the OLDEST pending gate's hint-row
-    /// buttons (see <see cref="Widgets.ApprovalGateView.TryHitDecision" />).
-    /// Returns false when no gate is armed or the click lands outside its
-    /// decision zones — callers keep normal scroll/routing behavior.
-    /// </summary>
-    public bool TryRouteApprovalClick(in Input.MouseEvent mouse)
-    {
-        PruneResolvedGates();
-        if (_pendingGates.Count == 0)
-        {
-            return false;
-        }
-
-        var gate = _pendingGates.Peek();
-        if (mouse.Type is not (Input.MouseEventType.Press or Input.MouseEventType.Click)
-            || mouse.Button != Input.MouseButton.Left)
-        {
-            return false;
-        }
-
-        if (gate.TryHitDecision(mouse.Column, mouse.Row) is not { } choice
-            || !gate.TryDecide(choice))
-        {
-            return false;
-        }
-
-        if (!gate.IsPending)
-        {
-            _ = _pendingGates.Dequeue();
-        }
-
-        _panel.Timeline.MarkLastDirty();
-        return true;
-    }
+    public bool TryRouteApprovalClick(in Input.MouseEvent mouse) => _gates.TryRouteApprovalClick(mouse);
 
     public void Dispose() => Subscription.Dispose();
 
-    public void RouteDiffNavigation(DiffPreviewViewModel diffVm, ChatAction action)
-    {
-        if (diffVm is null) return;
-        switch (action)
-        {
-            case ChatAction.ScrollDownLine:
-                diffVm.NextDiffCommand.Execute(null);
-                break;
-            case ChatAction.ScrollUpLine:
-                diffVm.PreviousDiffCommand.Execute(null);
-                break;
-        }
-    }
+    public void RouteDiffNavigation(DiffPreviewViewModel diffVm, ChatAction action) =>
+        _gates.RouteDiffNavigation(diffVm, action);
 }
