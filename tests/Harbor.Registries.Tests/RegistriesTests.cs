@@ -111,7 +111,9 @@ public class PermissionRulesetTests
         {
             new PermissionRule("*", "*", PermissionAction.Allow)
         });
-        await Assert.That(ruleset.Evaluate("bash", "rm -rf /")).IsEqualTo(PermissionAction.Allow);
+        // NOTE: destructive bash (rm -rf /) is unconditionally denied by the
+        // A2 guard regardless of Allow rules — assert on a benign command.
+        await Assert.That(ruleset.Evaluate("bash", "ls -la")).IsEqualTo(PermissionAction.Allow);
     }
 
     [Test]
@@ -169,7 +171,7 @@ public class ToolRegistryTests
 {
     private sealed class StubTool : ITool
     {
-        public ToolName Name => ToolName.Create("stub-tool");
+        public ToolName Name => ToolName.Create("stub_tool");
         public string DisplayName => "Stub Tool";
         public string Description => "A stub tool for testing.";
         public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
@@ -239,7 +241,7 @@ public class ToolRegistryTests
 
         var permission = new PermissionRuleset(new[]
         {
-            new PermissionRule("stub-tool", "*", PermissionAction.Deny)
+            new PermissionRule("stub_tool", "*", PermissionAction.Deny)
         });
 
         var result = registry.ResolveTools("code", permission);
