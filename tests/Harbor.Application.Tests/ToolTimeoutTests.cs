@@ -1,7 +1,5 @@
 using System.Text.Json;
 using Harbor.TestKit;
-using FakeTokenTracker = Harbor.TestKit.FakeTokenTracker;
-using FakeCompactionService = Harbor.TestKit.FakeCompactionService;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -11,7 +9,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Tests.Fakes;
-using TestSessionContext = Harbor.TestKit.TestSessionContext;
+using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using CSharpFunctionalExtensions;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;

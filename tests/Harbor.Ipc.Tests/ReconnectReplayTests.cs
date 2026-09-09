@@ -6,7 +6,6 @@ using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Harbor.E2E.Framework;
 
 namespace Harbor.Ipc.Tests;
 
@@ -17,7 +16,6 @@ namespace Harbor.Ipc.Tests;
 ///     gap larger than the ring yields ResyncRequired instead.
 /// </summary>
 [NotInParallel("ipc")]
-[ParallelLimiter<MockServerLimit>]
 public class ReconnectReplayTests
 {
     private static async Task<(HarborIpcServer Server, IEventBus Bus, IServiceProvider Sp, string Pipe)> StartServer()

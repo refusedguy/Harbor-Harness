@@ -1,14 +1,12 @@
-using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
-using FakeTokenTracker = Harbor.TestKit.FakeTokenTracker;
-using FakeCompactionService = Harbor.TestKit.FakeCompactionService;
-using TestSessionContext = Harbor.TestKit.TestSessionContext;
+using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
+using Harbor.Application.Tests.Fakes;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
@@ -17,7 +15,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
-
 /// <summary>
 ///     A1: every main-loop <see cref="LlmRequest" /> carries
 ///     <see cref="CacheStrategy.Ephemeral" /> while the system prompt is
@@ -43,27 +40,10 @@ public class AgentLoopCacheStrategyTests
                 new StepFinishEvent(1, "stop", new Usage(1, 1))
             }
         ]);
-        var agent = TestAgents.AllowAll();
-        var agents = new FakeAgentRegistry(agent);
-        var loop = new AgentLoop(
-            new FakeProviderRegistry(client),
-            new FakeToolRegistry(),
-            agents,
-            new StubSystemPromptBuilder(),
-            new FakeCompactionService(),
-            new FakeTokenTracker(),
-            new RetryPolicy(),
-            new FakeEventBus(),
-            new PermissionService(
-                new FakeAgentRegistry(agent),
-                NullLogger<PermissionService>.Instance),
-            new MessageConverter(),
-            NullLogger<AgentLoop>.Instance);
+        var loop = TestLoops.Create(client);
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-cache-strategy-tests", "code", "test", "test-model"));
-
-        var result = await loop.RunAsync(session, agent);
-
+        var result = await loop.RunAsync(session, TestAgents.AllowAll());
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(client.Requests.Count).IsEqualTo(2);
         await Assert.That(client.Requests[0].CacheStrategy).IsEqualTo(CacheStrategy.Ephemeral);

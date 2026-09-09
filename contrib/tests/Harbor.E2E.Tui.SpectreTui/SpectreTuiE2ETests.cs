@@ -33,27 +33,19 @@ namespace Harbor.E2E.Tui.SpectreTui;
 ///         <b>NotInParallel:</b> the driver mutates <c>$HOME</c>
 ///         (process-wide env var) and shares the PTY wrapper subprocess; tests
 ///         must run serially within the class. TUnit's
-///         <c>[NotInParallel]</c> attribute enforces this.
+///         <c>[NotInParallel("tui-e2e")]</c> attribute enforces this.
 ///     </para>
 /// </remarks>
 [Category("E2E")]
-[NotInParallel("pty")]
-[ParallelLimiter<MockServerLimit>]
+[NotInParallel("tui-e2e")]
 public class SpectreTuiE2ETests : TuiE2eTestBase
 {
     protected override string TuiName => "spectre-tui";
-
-    /// <summary>
-    ///     The renderer boots, takes over the screen, and shows the Harbor
-    ///     welcome banner. We assert that "Harbor" appears in the ANSI-stripped
-    ///     screen buffer within 15s of process start.
-    /// </summary>
     [Test]
     [Category("E2E")]
     public async Task Start_ShowsWelcomeBanner()
     {
-        await using var driver = await StartTuiAsync();
-
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         bool saw = await WaitForBootAsync(driver).ConfigureAwait(false);
         await Assert.That(saw).IsTrue();
 
@@ -73,7 +65,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task SlashHelp_ShowsCommandList()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/help\r").ConfigureAwait(false);
@@ -84,7 +76,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         bool sawHelp = await driver.WaitForTextAsync("Commands:", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawHelp).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -95,7 +88,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task CtrlC_AbortsTui()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.C, ConsoleModifiers.Control).ConfigureAwait(false);
@@ -116,7 +109,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task F12_TogglesLogsPanel()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.F12).ConfigureAwait(false);
@@ -125,7 +118,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
 
         // Toggle back off (cleanup) and exit cleanly.
         await driver.SendKeyAsync(ConsoleKey.F12).ConfigureAwait(false);
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -137,7 +131,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task QuestionMark_TogglesHelpPanel()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("?").ConfigureAwait(false);
@@ -146,7 +140,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
 
         // Toggle back off (cleanup) and exit cleanly.
         await driver.SendInputAsync("?").ConfigureAwait(false);
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -160,7 +155,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task TypedText_IsEchoedToScreen()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         // A distinctive sentinel string unlikely to appear in chrome text.
@@ -172,7 +167,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         // Don't submit the prompt — just exit. /exit works even with pending
         // input text because the renderer dispatches slash commands on Enter
         // and ignores the rest of the input box contents.
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -183,10 +179,11 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task Screenshot_CapturesCoreStates()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         string screenshotDir = "/mnt/projects/Harbor-Harness/docs/screenshots/tui/spectre-tui";
         Directory.CreateDirectory(screenshotDir);
 
-        await using var driver = await StartTuiAsync(screenshotDir);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
 
         try
         {
@@ -243,10 +240,11 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task Streaming_ShowsResponse()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         // Configure the mock LLM to return a known response.
         Server.SetResponse("test-model", "Hello from the mock LLM!");
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         // Submit a prompt to trigger the agent loop.
@@ -266,7 +264,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         }
         await Assert.That(sawResponse).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -277,10 +276,11 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task ToolCall_RendersToolCard()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         // Configure the mock to return a tool call for the "read" tool.
         Server.SetToolCallResponse("test-model", "read", new { path = "/test.txt" });
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("read the file\r").ConfigureAwait(false);
@@ -291,7 +291,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         bool sawTool = await driver.WaitForTextAsync("→ read", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawTool).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -302,10 +303,11 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task ErrorState_ShowsError()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         // Configure the mock to return an HTTP 500 error.
         Server.SetErrorResponse("test-model", "mock LLM error: rate limit exceeded");
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("trigger an error\r").ConfigureAwait(false);
@@ -314,7 +316,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         bool sawError = await driver.WaitForTextAsync("rate limit", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawError).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -326,6 +329,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task Compaction_ShowsCompactionStatus()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         // Override the mock provider config with a tiny context window so
         // compaction triggers on the first turn (system prompt alone exceeds 50 tokens).
         string providersDir = Path.Combine(TempHome, ".harbor", "providers");
@@ -348,7 +352,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
 
         Server.SetResponse("test-model", string.Concat(Enumerable.Repeat("word ", 500)));
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
@@ -357,7 +361,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         bool sawStatus = await driver.WaitForTextAsync("COMPACT", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawStatus).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -368,9 +373,10 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task AgentRunning_ShowsRunningBanner()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         Server.SetResponse("test-model", "Agent is responding.");
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         // Submit a prompt to trigger the agent loop.
@@ -380,7 +386,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         bool sawRunning = await driver.WaitForTextAsync("running", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawRunning).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -395,7 +402,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task Alt1_TogglesPanel()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.D1, ConsoleModifiers.Alt).ConfigureAwait(false);
@@ -405,7 +412,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         bool sawPanel = await driver.WaitForTextAsync("keymap", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawPanel).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -416,7 +424,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task CtrlTab_CyclesPanelFocus()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         // Ctrl+Tab cycles focus between *visible* panels (UiReducer.CycleFocus).
@@ -431,7 +439,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         bool sawCycle = await driver.WaitForTextAsync("keymap", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawCycle).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -442,11 +451,12 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task ScrollUp_ScrollsHistory()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         // Generate enough chat history to exceed the viewport height so that
         // PageUp actually changes the visible content.
         Server.SetResponse("test-model", string.Concat(Enumerable.Repeat("Scroll line. ", 40)));
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         // Send multiple prompts to fill the screen beyond the viewport.
@@ -475,7 +485,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
 
         await Assert.That(afterScroll).IsNotEqualTo(beforeScroll);
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -486,10 +497,11 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task AltUp_NavigatesInputHistory()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         // Configure a mock response so we can poll for the round-trip completion.
         Server.SetResponse("test-model", "Mock reply for history.");
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         // Submit a command to populate history.
@@ -503,7 +515,8 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         bool sawHistory = await driver.WaitForTextAsync("first prompt", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawHistory).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -514,7 +527,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task Tab_AutocompleteSlashCommand()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         // Type a partial slash command.
@@ -524,6 +537,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         bool sawAutocomplete = await driver.WaitForTextAsync("/help", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawAutocomplete).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 }

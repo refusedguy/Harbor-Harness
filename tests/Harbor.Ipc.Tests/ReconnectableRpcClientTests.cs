@@ -5,7 +5,6 @@ using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Harbor.E2E.Framework;
 
 namespace Harbor.Ipc.Tests;
 
@@ -16,7 +15,6 @@ namespace Harbor.Ipc.Tests;
 ///     duplicates, and only loads a snapshot on first subscribe / resync.
 /// </summary>
 [NotInParallel("ipc")]
-[ParallelLimiter<MockServerLimit>]
 public class ReconnectableRpcClientTests
 {
     [Test]

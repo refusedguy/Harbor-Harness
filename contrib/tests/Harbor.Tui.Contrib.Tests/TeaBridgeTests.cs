@@ -1,16 +1,16 @@
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
-using Harbor.TestKit;
 using Harbor.Tui.RazorConsole;
 using Harbor.Tui.Termina;
 using Harbor.Tui.Termina.Views;
 using Harbor.Tui.TerminalGui;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using StatusBarView = Harbor.Tui.TerminalGui.Views.StatusBarView;
 namespace Harbor.Tui.Tests;
 /// <summary>
@@ -28,7 +28,10 @@ public class TeaBridgeTests
             "claude-3-5-sonnet",
             "anthropic");
         var state = AgentState.Idle("s1", definition);
-        return new FakeAgent(state);
+        var mock = new Mock<IAgent>();
+        mock.SetupGet(a => a.State).Returns(state);
+        mock.SetupGet(a => a.AbortSource).Returns(new CancellationTokenSource());
+        return mock.Object;
     }
 
     // ── Termina ─────────────────────────────────────────────────────────

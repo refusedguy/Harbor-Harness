@@ -6,23 +6,19 @@ namespace Harbor.E2E.Tui.RazorConsole;
 ///     (<c>HARBOR_TUI=razor</c>).
 /// </summary>
 [Category("E2E")]
-[NotInParallel("pty")]
-[ParallelLimiter<MockServerLimit>]
+[NotInParallel("tui-e2e")]
 public class RazorConsoleE2ETests : TuiE2eTestBase
 {
     protected override string TuiName => "razor";
-
-    /// <summary>The renderer boots and shows the welcome banner.</summary>
     [Test]
     [Category("E2E")]
     public async Task Start_ShowsWelcomeBanner()
     {
-        await using var driver = await StartTuiAsync();
-
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         bool saw = await WaitForBootAsync(driver).ConfigureAwait(false);
         await Assert.That(saw).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
         await Assert.That(exit).IsEqualTo(0);
     }
@@ -32,14 +28,15 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task SlashHelp_IsDispatched()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/help\r").ConfigureAwait(false);
         bool saw = await driver.WaitForTextAsync("/help", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(saw).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>Ctrl-C aborts the running TUI.</summary>
@@ -47,7 +44,7 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task CtrlC_AbortsTui()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.C, ConsoleModifiers.Control).ConfigureAwait(false);
@@ -63,9 +60,10 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task Screenshot_CapturesCoreStates()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         string screenshotDir = "/mnt/projects/Harbor-Harness/docs/screenshots/tui/razor";
         Directory.CreateDirectory(screenshotDir);
-        await using var driver = await StartTuiAsync(screenshotDir);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
 
         try
         {
@@ -107,9 +105,10 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task Streaming_ShowsResponse()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         Server.SetResponse("test-model", "Hello from the mock LLM!");
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello world\r").ConfigureAwait(false);
@@ -117,7 +116,8 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
         bool sawResponse = await driver.WaitForTextAsync("Hello from the mock LLM!", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawResponse).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -128,9 +128,10 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task ToolCall_RendersToolCard()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         Server.SetToolCallResponse("test-model", "read", new { path = "/test.txt" });
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("read the file\r").ConfigureAwait(false);
@@ -138,7 +139,8 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
         bool sawTool = await driver.WaitForTextAsync("read", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawTool).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -149,9 +151,10 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task ErrorState_ShowsError()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         Server.SetErrorResponse("test-model", "mock LLM error: rate limit exceeded");
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("trigger an error\r").ConfigureAwait(false);
@@ -159,7 +162,8 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
         bool sawError = await driver.WaitForTextAsync("rate limit", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawError).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -170,9 +174,10 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task Compaction_ShowsCompactionStatus()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         Server.SetResponse("test-model", string.Concat(Enumerable.Repeat("word ", 500)));
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
@@ -180,7 +185,8 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
         bool sawStatus = await driver.WaitForTextAsync("running", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawStatus).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -191,9 +197,10 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task AgentRunning_ShowsRunningBanner()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         Server.SetResponse("test-model", "Agent is responding.");
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
@@ -201,7 +208,8 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
         bool sawRunning = await driver.WaitForTextAsync("running", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawRunning).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -216,7 +224,7 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task F12_TogglesLogsPanel()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.F12).ConfigureAwait(false);
@@ -224,7 +232,8 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
         await Assert.That(sawLogs).IsTrue();
 
         await driver.SendKeyAsync(ConsoleKey.F12).ConfigureAwait(false);
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -235,14 +244,15 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task Alt1_TogglesPanel()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.D1, ConsoleModifiers.Alt).ConfigureAwait(false);
         bool sawPanel = await driver.WaitForTextAsync("panel", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawPanel).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -253,7 +263,7 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task CtrlTab_CyclesPanelFocus()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.Tab, ConsoleModifiers.Control).ConfigureAwait(false);
@@ -263,7 +273,8 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
         bool sawCycle = await driver.WaitForTextAsync("test-model", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawCycle).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -274,10 +285,11 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task ScrollUp_ScrollsHistory()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         // Configure a mock response so we can poll for the round-trip completion.
         Server.SetResponse("test-model", "Mock reply for scroll.");
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
@@ -289,7 +301,8 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
         bool sawScroll = await driver.WaitForTextAsync("test-model", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawScroll).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -300,10 +313,11 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task AltUp_NavigatesInputHistory()
     {
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         // Configure a mock response so we can poll for the round-trip completion.
         Server.SetResponse("test-model", "Mock reply for history.");
 
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("first prompt\r").ConfigureAwait(false);
@@ -315,7 +329,8 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
         bool sawHistory = await driver.WaitForTextAsync("first prompt", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawHistory).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -326,7 +341,7 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
     [Category("E2E")]
     public async Task Tab_AutocompleteSlashCommand()
     {
-        await using var driver = await StartTuiAsync();
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/hel").ConfigureAwait(false);
@@ -334,6 +349,7 @@ public class RazorConsoleE2ETests : TuiE2eTestBase
         bool sawAutocomplete = await driver.WaitForTextAsync("/help", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawAutocomplete).IsTrue();
 
-        await ExitTuiAsync(driver);
+        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
     }
 }

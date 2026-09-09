@@ -19,6 +19,8 @@
     <ProjectReference Include="..\..\apps\Harbor.App.Cli\Harbor.App.Cli.csproj"/>
   </ItemGroup>
 
-  <!-- TUnit is auto-included via tests/Directory.Build.props (IsTestProject=true). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+  </ItemGroup>
 
 </Project>

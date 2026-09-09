@@ -6,7 +6,6 @@ using Harbor.Ipc.Client;
 using Harbor.Ipc.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Harbor.E2E.Framework;
 
 namespace Harbor.Ipc.Tests;
 
@@ -17,7 +16,6 @@ namespace Harbor.Ipc.Tests;
 ///     <c>Task.Delay</c>.
 /// </summary>
 [NotInParallel("ipc")]
-[ParallelLimiter<MockServerLimit>]
     public class IpcTimingTests
 {
     /// <summary>

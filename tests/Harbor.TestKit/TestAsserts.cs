@@ -1,90 +1,177 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Tools;
-using TUnit.Assertions;
 
 namespace Harbor.TestKit;
 
+/// <summary>
+///     Diagnostic assertion helpers for <see cref="Result"/>, <see cref="Result{T}"/>
+///     and <see cref="ToolResult"/> in TUnit tests. Each helper verifies the expected
+///     outcome and, on mismatch, fails with a detailed "because" message describing
+///     what was expected, what was actually observed, and — when supplied — the
+///     <paramref name="context"/> label, so failures read clearly at the call site.
+/// </summary>
 public static class TestAsserts
 {
+    /// <summary>
+    ///     Asserts that <paramref name="result"/> succeeded.
+    /// </summary>
+    /// <typeparam name="T">The success value type of the result.</typeparam>
+    /// <param name="result">The result to assert on.</param>
+    /// <param name="context">Optional context label surfaced in the failure message.</param>
     public static async Task Succeeded<T>(this Result<T> result, string? context = null)
     {
         if (result.IsSuccess) return;
-        var ctx = context != null ? $" ({context})" : "";
-        await Assert.That(false).IsTrue().Because($"Expected success{ctx}. Error: {result.Error}");
+
+        var reason = Describe(
+            "result to succeed",
+            $"result failed with error: {result.Error}",
+            context);
+        await Assert.That(false).IsTrue().Because(reason);
     }
 
+    /// <summary>
+    ///     Asserts that <paramref name="result"/> failed, optionally requiring the error
+    ///     message to contain <paramref name="expectedSubstring"/>.
+    /// </summary>
+    /// <typeparam name="T">The success value type of the result.</typeparam>
+    /// <param name="result">The result to assert on.</param>
+    /// <param name="expectedSubstring">
+    ///     When non-null, the failure error message must contain this substring (ordinal).
+    /// </param>
+    /// <param name="context">Optional context label surfaced in the failure message.</param>
     public static async Task Failed<T>(this Result<T> result, string? expectedSubstring = null, string? context = null)
     {
-        if (result.IsFailure)
+        if (result.IsFailure &&
+            (expectedSubstring is null || result.Error.Contains(expectedSubstring, StringComparison.Ordinal)))
+            return;
+
+        string expected, actual;
+        if (result.IsSuccess)
         {
-            if (expectedSubstring == null || result.Error.Contains(expectedSubstring))
-                return;
+            expected = "result to fail";
+            actual = $"result succeeded with value: {result.Value}";
         }
-        var ctx = context != null ? $" ({context})" : "";
-        var expected = expectedSubstring != null ? $" containing '{expectedSubstring}'" : "";
-        var actual = result.IsSuccess ? "success" : result.Error;
-        await Assert.That(false).IsTrue().Because($"Expected failure{expected}{ctx}. Actual: {actual}");
+        else
+        {
+            expected = $"failure with error containing \"{expectedSubstring}\"";
+            actual = $"error was: {result.Error}";
+        }
+
+        var reason = Describe(expected, actual, context);
+        await Assert.That(false).IsTrue().Because(reason);
     }
 
+    /// <summary>
+    ///     Asserts that <paramref name="result"/> failed, optionally requiring the error
+    ///     message to contain <paramref name="expectedSubstring"/>.
+    /// </summary>
+    /// <param name="result">The result to assert on.</param>
+    /// <param name="expectedSubstring">
+    ///     When non-null, the failure error message must contain this substring (ordinal).
+    /// </param>
+    /// <param name="context">Optional context label surfaced in the failure message.</param>
+    public static async Task Failed(this Result result, string? expectedSubstring = null, string? context = null)
+    {
+        if (result.IsFailure &&
+            (expectedSubstring is null || result.Error.Contains(expectedSubstring, StringComparison.Ordinal)))
+            return;
+
+        string expected, actual;
+        if (result.IsSuccess)
+        {
+            expected = "result to fail";
+            actual = "result succeeded";
+        }
+        else
+        {
+            expected = $"failure with error containing \"{expectedSubstring}\"";
+            actual = $"error was: {result.Error}";
+        }
+
+        var reason = Describe(expected, actual, context);
+        await Assert.That(false).IsTrue().Because(reason);
+    }
+
+    /// <summary>
+    ///     Asserts that <paramref name="result"/> represents a successful tool execution
+    ///     (i.e. <see cref="ToolResult.IsError"/> is <see langword="false"/>).
+    /// </summary>
+    /// <param name="result">The tool result to assert on.</param>
+    /// <param name="context">Optional context label surfaced in the failure message.</param>
     public static async Task Succeeded(this ToolResult result, string? context = null)
     {
         if (!result.IsError) return;
-        var ctx = context != null ? $" ({context})" : "";
-        await Assert.That(false).IsTrue().Because($"Expected tool success{ctx}. Output: {result.Output}");
+
+        var reason = Describe(
+            "tool result to succeed (IsError = false)",
+            $"tool result was an error: {result.Output}",
+            context);
+        await Assert.That(false).IsTrue().Because(reason);
     }
 
+    /// <summary>
+    ///     Asserts that <paramref name="result"/> represents a failed tool execution
+    ///     (i.e. <see cref="ToolResult.IsError"/> is <see langword="true"/>), optionally
+    ///     requiring the output to contain <paramref name="expectedSubstring"/>.
+    /// </summary>
+    /// <param name="result">The tool result to assert on.</param>
+    /// <param name="expectedSubstring">
+    ///     When non-null, the tool output must contain this substring (ordinal).
+    /// </param>
+    /// <param name="context">Optional context label surfaced in the failure message.</param>
     public static async Task Failed(this ToolResult result, string? expectedSubstring = null, string? context = null)
     {
-        if (result.IsError)
+        if (result.IsError &&
+            (expectedSubstring is null || result.Output.Contains(expectedSubstring, StringComparison.Ordinal)))
+            return;
+
+        string expected, actual;
+        if (!result.IsError)
         {
-            if (expectedSubstring == null || result.Output.Contains(expectedSubstring))
-                return;
+            expected = "tool result to fail (IsError = true)";
+            actual = $"tool output was: {result.Output}";
         }
-        var ctx = context != null ? $" ({context})" : "";
-        var expected = expectedSubstring != null ? $" containing '{expectedSubstring}'" : "";
-        var actual = result.IsError ? result.Output : "success";
-        await Assert.That(false).IsTrue().Because($"Expected tool error{expected}{ctx}. Actual: {actual}");
+        else
+        {
+            expected = $"tool error output containing \"{expectedSubstring}\"";
+            actual = $"tool output was: {result.Output}";
+        }
+
+        var reason = Describe(expected, actual, context);
+        await Assert.That(false).IsTrue().Because(reason);
     }
 
+    /// <summary>
+    ///     Asserts that <paramref name="result"/>'s <see cref="ToolResult.Output"/>
+    ///     contains <paramref name="expected"/> (ordinal, case-sensitive).
+    /// </summary>
+    /// <param name="result">The tool result to assert on.</param>
+    /// <param name="expected">The substring expected to appear in the tool output.</param>
+    /// <param name="context">Optional context label surfaced in the failure message.</param>
     public static async Task HasOutput(this ToolResult result, string expected, string? context = null)
     {
-        if (result.Output.Contains(expected)) return;
-        var ctx = context != null ? $" ({context})" : "";
-        await Assert.That(false).IsTrue().Because($"Expected tool output to contain '{expected}'{ctx}. Actual: {result.Output}");
+        if (result.Output.Contains(expected, StringComparison.Ordinal)) return;
+
+        var reason = Describe(
+            $"output to contain \"{expected}\"",
+            $"output was: {result.Output}",
+            context);
+        await Assert.That(false).IsTrue().Because(reason);
     }
 
-    public static async Task Throws<TEx>(this Func<Task> action, string? expectedMessageSubstring = null, string? context = null)
-        where TEx : Exception
+    /// <summary>
+    ///     Formats a "because" reason describing the expected outcome, the actual
+    ///     observation, and an optional context label.
+    /// </summary>
+    /// <param name="expected">A description of what was expected.</param>
+    /// <param name="actual">A description of what was actually observed.</param>
+    /// <param name="context">Optional context label; omitted from the message when blank.</param>
+    /// <returns>A single reason string passed to <c>Assert.That(false).IsTrue().Because(...)</c>.</returns>
+    private static string Describe(string expected, string actual, string? context)
     {
-        try
-        {
-            await action();
-            var ctx = context != null ? $" ({context})" : "";
-            await Assert.That(false).IsTrue().Because($"Expected {typeof(TEx).Name} to be thrown{ctx}.");
-        }
-        catch (TEx ex) when (expectedMessageSubstring != null)
-        {
-            if (ex.Message.Contains(expectedMessageSubstring)) return;
-            var ctx = context != null ? $" ({context})" : "";
-            await Assert.That(false).IsTrue().Because($"Expected {typeof(TEx).Name} with message containing '{expectedMessageSubstring}'{ctx}. Got: {ex.Message}");
-        }
-    }
+        if (string.IsNullOrWhiteSpace(context))
+            return $"Expected: {expected}. Actual: {actual}.";
 
-    public static async Task Throws<TEx>(this Action action, string? expectedMessageSubstring = null, string? context = null)
-        where TEx : Exception
-    {
-        try
-        {
-            action();
-            var ctx = context != null ? $" ({context})" : "";
-            await Assert.That(false).IsTrue().Because($"Expected {typeof(TEx).Name} to be thrown{ctx}.");
-        }
-        catch (TEx ex) when (expectedMessageSubstring != null)
-        {
-            if (ex.Message.Contains(expectedMessageSubstring)) return;
-            var ctx = context != null ? $" ({context})" : "";
-            await Assert.That(false).IsTrue().Because($"Expected {typeof(TEx).Name} with message containing '{expectedMessageSubstring}'{ctx}. Got: {ex.Message}");
-        }
+        return $"Expected: {expected}. Actual: {actual}. Context: {context}.";
     }
 }

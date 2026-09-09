@@ -1,6 +1,5 @@
 using Harbor.Ipc.Protocol;
 using MessagePack;
-using Harbor.E2E.Framework;
 
 namespace Harbor.Ipc.Tests;
 
@@ -12,7 +11,6 @@ namespace Harbor.Ipc.Tests;
 ///     — long before they reach a non-.NET client.
 /// </summary>
 [NotInParallel("ipc")]
-[ParallelLimiter<MockServerLimit>]
     public class ProtocolSerializationTests
 {
     /// <summary>

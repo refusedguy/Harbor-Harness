@@ -5,7 +5,6 @@ using Harbor.Ipc.InProcess;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TUnit.Core;
-using Harbor.E2E.Framework;
 
 namespace Harbor.Ipc.Tests;
 
@@ -16,7 +15,6 @@ namespace Harbor.Ipc.Tests;
 ///     without serialization.
 /// </summary>
 [NotInParallel("ipc")]
-[ParallelLimiter<MockServerLimit>]
     public class InProcessClientTests
 {
     /// <summary>

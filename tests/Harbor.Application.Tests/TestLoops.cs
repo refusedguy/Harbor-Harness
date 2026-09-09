@@ -11,9 +11,10 @@ using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Harbor.TestKit;
+namespace Harbor.Application.Tests.Fakes;
 
 public static class TestLoops
 {

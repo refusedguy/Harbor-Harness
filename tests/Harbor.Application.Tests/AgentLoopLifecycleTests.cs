@@ -1,15 +1,12 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
-using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
+using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
-using FakeToolRegistry = Harbor.TestKit.FakeToolRegistry;
-using FakeEventBus = Harbor.TestKit.FakeEventBus;
-using FakeTokenTracker = Harbor.TestKit.FakeTokenTracker;
-using FakeCompactionService = Harbor.TestKit.FakeCompactionService;
+using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;

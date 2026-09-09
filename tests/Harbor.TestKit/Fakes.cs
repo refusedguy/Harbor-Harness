@@ -5,9 +5,9 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
+using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Abstractions.Providers;
 
 namespace Harbor.TestKit;
 
@@ -117,7 +117,7 @@ public sealed class CountingTool : ITool
     }
 }
 
-/// <summary>In-memory provider registry returning the same client for any id.</summary>
+/// <summary>In-memory provider registry over the given client.</summary>
 public sealed class FakeProviderRegistry(ILlmClient client) : IProviderRegistry
 {
     public IReadOnlyList<ProviderId> GetRegisteredProviderIds() => [client.ProviderId];
@@ -136,6 +136,8 @@ public sealed class FakeProviderRegistry(ILlmClient client) : IProviderRegistry
 
     public Result Unregister(ProviderId providerId) => Result.Failure("FakeProviderRegistry does not support unregister.");
 }
+
+
 
 /// <summary>In-memory session store with optional pre-seeded session and gate support for concurrency tests.</summary>
 public sealed class FakeSessionStore(Session? session = null) : ISessionStore
@@ -232,6 +234,7 @@ public sealed class FakeSessionStore(Session? session = null) : ISessionStore
     }
 }
 
+
 /// <summary>Event bus that records all published events and forwards to subscribers — merged canonical for bridge & assertion tests.</summary>
 public sealed class FakeEventBus : IEventBus
 {
@@ -271,32 +274,9 @@ public sealed class FakeEventBus : IEventBus
     }
 }
 
-/// <summary>Stub system prompt builder returning a constant string.</summary>
+/// <summary>Stub system prompt builder returning a fixed string.</summary>
 public sealed class StubSystemPromptBuilder : ISystemPromptBuilder
 {
     public Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default)
         => Task.FromResult("stub-system-prompt");
-}
-
-/// <summary>Token tracker with configurable compaction behavior.</summary>
-public sealed class FakeTokenTracker(bool shouldCompact = false) : ITokenTracker
-{
-    public void RecordTurnUsage(Usage usage) { }
-    public int Estimate(string text) => 0;
-    public int EstimateMessage(AgentMessage message) => 0;
-    public int EstimateTokens(IReadOnlyList<AgentMessage> messages) => 0;
-    public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model) => shouldCompact;
-    public TokenStats GetStats() => new(0, 0, null, null, null);
-}
-
-/// <summary>Compaction service that never compacts and records call count.</summary>
-public sealed class FakeCompactionService : ICompactionService
-{
-    public int Calls { get; private set; }
-    public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model) => false;
-    public Task<Result<CompactionResult>> CompactAsync(string sessionId, IReadOnlyList<AgentMessage> messages, ModelInfo model, CancellationToken ct = default)
-    {
-        Calls++;
-        return Task.FromResult(Result.Failure<CompactionResult>("simulated compaction failure"));
-    }
 }

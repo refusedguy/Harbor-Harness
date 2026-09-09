@@ -6,7 +6,6 @@ using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Harbor.E2E.Framework;
 
 namespace Harbor.Ipc.Tests;
 
@@ -17,7 +16,6 @@ namespace Harbor.Ipc.Tests;
 ///     code kept leaked run A's turn into run B's events.
 /// </summary>
 [NotInParallel("ipc")]
-[ParallelLimiter<MockServerLimit>]
 public class BroadcasterTurnIsolationTests
 {
     private static readonly AssistantMessage TurnAssistant =
