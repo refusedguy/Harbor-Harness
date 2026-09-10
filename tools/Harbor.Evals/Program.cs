@@ -68,7 +68,10 @@ internal static class Program
         EvalProfile profile, EvalTask task, string batchId, int attempt, string attemptRoot, CancellationToken ct)
     {
         Console.WriteLine($"== {task.Id} attempt {attempt}");
-        var prep = WorkspacePreparer.Prepare(attemptRoot, task);
+        var prep = WorkspacePreparer.Prepare(attemptRoot, task, profile.Provider, profile.Model);
+        // Isolated HOME per attempt (never the user's real ~/.harbor).
+        profile.Harbor.Env["HOME"] = prep.HomeDir;
+        profile.Harbor.Env["USERPROFILE"] = prep.HomeDir;
 
         var drive = await ProcessDriver.RunAsync(profile, task.Prompt, prep.WorkspaceDir, task.TimeoutSeconds, ct);
         var events = EventParser.Parse(drive.Stdout);

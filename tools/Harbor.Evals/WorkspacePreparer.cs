@@ -5,9 +5,9 @@ namespace Harbor.Evals;
 /// <summary>Per-attempt workspace: copy fixture, manifest, optional git init.</summary>
 internal static class WorkspacePreparer
 {
-    public sealed record PreparedWorkspace(string Root, string WorkspaceDir, string VerifierDir, FileManifest Initial);
+    public sealed record PreparedWorkspace(string Root, string WorkspaceDir, string VerifierDir, string HomeDir, FileManifest Initial);
 
-    public static PreparedWorkspace Prepare(string attemptRoot, EvalTask task)
+    public static PreparedWorkspace Prepare(string attemptRoot, EvalTask task, string provider, string model)
     {
         string ws = Path.Combine(attemptRoot, "workspace");
         string verifier = Path.Combine(attemptRoot, "verifier");
@@ -16,8 +16,33 @@ internal static class WorkspacePreparer
 
         CopyDir(Path.Combine(task.TaskDir, task.SourceDirectory), ws);
         CopyDir(Path.Combine(task.TaskDir, "verifier"), verifier);
+        string home = WriteIsolatedHome(attemptRoot, provider, model);
         var manifest = FileManifest.Capture(ws);
-        return new PreparedWorkspace(attemptRoot, ws, verifier, manifest);
+        return new PreparedWorkspace(attemptRoot, ws, verifier, home, manifest);
+    }
+
+    /// <summary>Isolated $HOME with a permissive config: evals must never touch
+    /// the user's real ~/.harbor, and headless runs have no approver — Ask
+    /// would hang forever. No secrets here (keys flow via env).</summary>
+    private static string WriteIsolatedHome(string attemptRoot, string provider, string model)
+    {
+        string home = Path.Combine(attemptRoot, "home");
+        Directory.CreateDirectory(Path.Combine(home, ".harbor"));
+        string Allow(string tool) =>
+            $$"""{"Permission":"{{tool}}","Pattern":"*","Action":0}""";
+        string config = $$"""
+            {
+              "provider": "{{provider}}",
+              "model": "{{model}}",
+              "agent": "code",
+              "onboarded": true,
+              "permissions": {
+                "code": [{{Allow("bash")}},{{Allow("write")}},{{Allow("edit")}},{{Allow("read")}},{{Allow("glob")}},{{Allow("grep")}},{{Allow("patch")}},{{Allow("tree")}},{{Allow("lsp")}}]
+              }
+            }
+            """;
+        File.WriteAllText(Path.Combine(home, ".harbor", "config.json"), config);
+        return home;
     }
 
     private static void CopyDir(string from, string to)
