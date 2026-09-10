@@ -1,0 +1,5 @@
+{
+  "readOnly": false,
+  "mustRemainUnchanged": [],
+  "mustNotCreate": ["*.bak", "__pycache__/**"]
+}

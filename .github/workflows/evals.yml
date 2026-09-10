@@ -1,0 +1,72 @@
+# Harbor evals — live task-solving signal (NOT a merge gate).
+#
+# Model output is nondeterministic and the free tier is rate-limited, so this
+# workflow never blocks PRs: run it manually before a merge (like a tag) or
+# let the weekly schedule collect baselines. Deterministic scripted-provider
+# E2E stays the engineering gate; see docs/EVALS.md.
+name: evals
+
+on:
+  workflow_dispatch:
+    inputs:
+      attempts:
+        description: "Attempts per task"
+        required: false
+        default: "1"
+      tasks:
+        description: "Task dirs under evals/tasks (comma-separated, empty = all)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 3 * * 1" # weekly baseline, Monday 03:00 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+  NUGET_CERT_REVOCATION_MODE: offline
+  MSBuildEnableWorkloadResolver: false
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      - name: Build CLI (Release)
+        run: dotnet build apps/Harbor.App.Cli -c Release --nologo -v q
+
+      - name: Run evals v0
+        env:
+          KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
+        run: |
+          args=(--tasks evals/tasks --profile evals/profiles/local.json --attempts "${{ inputs.attempts || '1' }}")
+          if [ -n "${{ inputs.tasks }}" ]; then args+=(--only "${{ inputs.tasks }}"); fi
+          dotnet run --project tools/Harbor.Evals -c Release --no-build -- "${args[@]}"
+
+      - name: Upload results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: evals-results-${{ github.sha }}
+          path: evals/results/
+          if-no-files-found: warn
+          retention-days: 30

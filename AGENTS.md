@@ -111,7 +111,7 @@ Two solution files exist: `Harbor.slnx` (main) and `Harbor.Samples.slnx` (sample
 | `vllm` (local) | (none) |
 
 > **Common gotcha**: Kilocode's env var is `KILO_API_KEY` (not `KILOCODE_API_KEY`).
-> The free model is `kilocode/tencent/hy3:free` — no credit card required.
+> The free model is `kilocode/kilo-auto/free` — no credit card required.
 
 ## Key concepts
 
@@ -421,14 +421,14 @@ CS plugins are compiled in-memory via Roslyn at startup. Cached by source SHA-25
 ## E2E testing
 
 End-to-end tests verify the full agent pipeline against a real provider. Harbor's
-**E2E-verified** provider is **Kilocode** with the free `tencent/hy3:free` model —
+**E2E-verified** provider is **Kilocode** with the free `kilo-auto/free` model —
 no credit card required, $0 cost per call.
 
 ### Running the E2E smoke test
 
 ```bash
 export KILO_API_KEY=klo_xxxxxxxxxxxxxxxxxxxxxx
-export HARBOR_MODEL=kilocode/tencent/hy3:free
+export HARBOR_MODEL=kilocode/kilo-auto/free
 export HARBOR_TUI=plain   # easy to capture stdout
 
 dotnet run --project apps/Harbor.App.Cli -- ask "Print hello world in 3 languages"
@@ -447,7 +447,7 @@ Hello! Here are three ways to print "Hello, World!":
 [message_end] id=01HN1234567890abcdefghijklm
 [turn_end] turn=1
 [agent_end] new_messages=1
-status: kilocode/tencent/hy3:free | agent: code | $0.0000 | 142↑ 87↓ | idle
+status: kilocode/kilo-auto/free | agent: code | $0.0000 | 142↑ 87↓ | idle
 ```
 
 **What each line means** (so you can debug regressions):
@@ -490,7 +490,7 @@ Here are the first 10 lines of README.md:
 [message_end] id=m2
 [turn_end] turn=2
 [agent_end] new_messages=3
-status: kilocode/tencent/hy3:free | agent: code | $0.0000 | 312↑ 187↓ | idle
+status: kilocode/kilo-auto/free | agent: code | $0.0000 | 312↑ 187↓ | idle
 ```
 
 Note `new_messages=3` — user message, assistant tool-call message, tool result
@@ -529,11 +529,12 @@ Harbor benchmarks live in `docs/BENCHMARKS.md`. Key numbers:
 | Cold start (Debug JIT) | **38 ms** |
 | RSS idle | **28 MB** |
 | Binary size | **5 MB** |
-| `ProviderRegistry.GetClient` (frozen) | **0.18 µs** |
-| `ToolRegistry.ResolveTools` (4 tools) | **0.42 µs** |
-| `PermissionRuleset.Evaluate` | **0.27 µs** |
+| `ProviderRegistry.GetClient` (frozen) | **0.14 µs** |
+| `ToolRegistry.ResolveTools` (4 tools, no permission) | **0.085 µs** |
+| `ToolRegistry.ResolveTools` (4 tools, with permission) | **2.3 µs** |
+| `PermissionRuleset.Evaluate` | **0.35 µs** |
 
-Historical spot-checks from `docs/BENCHMARKS.md`; re-measure before quoting on hot-path PRs.
+2026-09-09 PR run (AMD EPYC); full table in `docs/BENCHMARKS.md`. Historical spot-checks there; re-measure before quoting on hot-path PRs.
 
 ### Adding a benchmark
 
@@ -551,6 +552,20 @@ Historical spot-checks from `docs/BENCHMARKS.md`; re-measure before quoting on h
 - Warm up 3 iterations, measure 10 iterations.
 - Report mean ± std dev, plus allocation count.
 - Compare against the previous version when refactoring hot paths.
+
+### Evals (task-solving quality, contour B)
+
+Unit/integration suites prove Harbor honors contracts; evals prove it solves
+tasks. Runner: `tools/Harbor.Evals` (external, no runtime changes), fixtures
+in `evals/tasks/`, protocol in `docs/EVALS.md`. Live runs need a model key
+(`KILO_API_KEY`); CI runs them via the `evals` workflow (manual dispatch +
+weekly schedule — live signal, never a merge gate).
+
+```bash
+dotnet build apps/Harbor.App.Cli -c Release
+export KILO_API_KEY=klo_...
+dotnet run --project tools/Harbor.Evals -c Release -- --tasks evals/tasks --profile evals/profiles/local.json
+```
 
 ## Code principles — quick reference
 

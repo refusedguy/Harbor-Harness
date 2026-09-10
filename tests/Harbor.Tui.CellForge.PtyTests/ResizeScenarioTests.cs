@@ -47,7 +47,19 @@ public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-        string[] lines = NormalizedLines();
+        // Repainted grid settles within the new width. The model line is
+        // visible BEFORE relayout too, so widths must be polled — a single
+        // read on a loaded runner sees stale 100-col rows (was: instant fail).
+        string[] lines = [];
+        var widthSw = System.Diagnostics.Stopwatch.StartNew();
+        while (widthSw.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            lines = NormalizedLines();
+            if (lines.All(x => x.Length <= 60))
+                break;
+            await Task.Delay(100).ConfigureAwait(false);
+        }
+
         await Assert.That(lines.All(x => x.Length <= 60)).IsTrue();
         await Assert.That(lines.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).IsTrue();
 
