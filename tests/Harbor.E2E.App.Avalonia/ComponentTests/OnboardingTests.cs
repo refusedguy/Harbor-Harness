@@ -247,7 +247,18 @@ public sealed class OnboardingTests : ComponentTestBase
         {
             UI(() => vm.SkipCommand.Execute(null));
 
-            var isCompleted = UI(() => vm.IsCompleted);
+            // Skip completion propagates asynchronously — poll instead of
+            // reading instantly (was: instant fail on loaded runners).
+            bool isCompleted = false;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.Elapsed < TimeSpan.FromSeconds(2))
+            {
+                isCompleted = UI(() => vm.IsCompleted);
+                if (isCompleted)
+                    break;
+                await Task.Delay(50).ConfigureAwait(false);
+            }
+
             await Assert.That(isCompleted).IsTrue();
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-skip")
