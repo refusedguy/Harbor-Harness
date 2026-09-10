@@ -8,7 +8,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// poll, keeps the previous theme on parse failures, and stays quiet when the
 /// file is untouched. Uses the public Poll() — no wall-clock flakiness.
 /// </summary>
-[NotInParallel] // mutates global theme state
+[NotInParallel("pty")] // mutates global theme state
 public class ThemeFileWatcherTests
 {
     private string _path = null!;

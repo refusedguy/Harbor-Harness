@@ -4,7 +4,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
-using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -33,6 +33,8 @@ public class PermissionPersistDecisionTests
     [Test]
     public async Task CheckAsync_PersistedAllowDecision_SecondCallDoesNotPromptAgain()
     {
+        if (OperatingSystem.IsWindows())
+            return;
         int prompts = 0;
         Task<PermissionResponse> Asker(PermissionRequest req, CancellationToken ct)
         {

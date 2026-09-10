@@ -47,20 +47,23 @@ public static class UiReducer
         MessageEndEvent => OnMessageEnd(state),
         ToolExecutionStartEvent tes => state.AddLine(ChatRole.Tool, FormatToolStart(tes), tes.ToolCallId),
         ToolExecutionEndEvent tee => state.AddLine(ChatRole.ToolResult, FormatToolEnd(tee), tee.ToolCallId),
-        CompactionStartedEvent => state with { Status = "compacting" },
+        CompactionStartedEvent => state with { Chat = state.Chat with { Status = "compacting" } },
         CompactionCompletedEvent cc => OnCompactionCompleted(state, cc),
         AgentErrorEvent err => state
             .AddLine(ChatRole.Error, err.Message)
             .WithStatus("error"),
         AgentEndEvent => state with
         {
-            Status = "idle",
-            IsAgentRunning = false,
-            WasRunning = state.IsAgentRunning,
-            IsStreaming = false,
-            Active = ActiveMessage.Empty,
-            PendingStreamText = ChunkedBuffer.Empty,
-            PendingStreamThink = ChunkedBuffer.Empty
+            Chat = state.Chat with
+            {
+                Status = "idle",
+                IsAgentRunning = false,
+                WasRunning = state.IsAgentRunning,
+                IsStreaming = false,
+                Active = ActiveMessage.Empty,
+                PendingStreamText = ChunkedBuffer.Empty,
+                PendingStreamThink = ChunkedBuffer.Empty
+            }
         },
         _ => state
     };
@@ -74,10 +77,13 @@ public static class UiReducer
         // local `_wasRunning` / `_scroll = 0` mutation in ChatScreen (§FP-005).
         var next = state with
         {
-            Status = "running",
-            IsAgentRunning = true,
-            WasRunning = state.IsAgentRunning,
-            ScrollOffset = 0
+            Chat = state.Chat with
+            {
+                Status = "running",
+                IsAgentRunning = true,
+                WasRunning = state.IsAgentRunning
+            },
+            Ui = state.Ui with { ScrollOffset = 0 }
         };
         if (next.Lines.Length != 0)
             return next;
@@ -94,12 +100,15 @@ public static class UiReducer
     private static UiState OnMessageStart(UiState state) =>
         state with
         {
-            Status = "running",
-            IsAgentRunning = true,
-            IsStreaming = true,
-            Active = ActiveMessage.Empty,
-            PendingStreamText = ChunkedBuffer.Empty,
-            PendingStreamThink = ChunkedBuffer.Empty
+            Chat = state.Chat with
+            {
+                Status = "running",
+                IsAgentRunning = true,
+                IsStreaming = true,
+                Active = ActiveMessage.Empty,
+                PendingStreamText = ChunkedBuffer.Empty,
+                PendingStreamThink = ChunkedBuffer.Empty
+            }
         };
 
     private static UiState OnMessageUpdate(UiState state, MessageUpdateEvent mu) => mu.LlmEvent switch
@@ -123,13 +132,16 @@ public static class UiReducer
 
         ChunkedBuffer pending = state.PendingStreamText.Append(delta);
         if (!StreamingSync.ShouldFlush(state.Active.TextBuffer.Length, pending.Length))
-            return state with { PendingStreamText = pending };
+            return state with { Chat = state.Chat with { PendingStreamText = pending } };
 
         string full = StreamingSync.Concat(state.Active.TextBuffer, pending);
         return state with
         {
-            Active = state.Active with { TextBuffer = full },
-            PendingStreamText = ChunkedBuffer.Empty
+            Chat = state.Chat with
+            {
+                Active = state.Active with { TextBuffer = full },
+                PendingStreamText = ChunkedBuffer.Empty
+            }
         };
     }
 
@@ -141,13 +153,16 @@ public static class UiReducer
 
         ChunkedBuffer pending = state.PendingStreamThink.Append(delta);
         if (!StreamingSync.ShouldFlush(state.Active.ThinkBuffer.Length, pending.Length))
-            return state with { PendingStreamThink = pending };
+            return state with { Chat = state.Chat with { PendingStreamThink = pending } };
 
         string full = StreamingSync.Concat(state.Active.ThinkBuffer, pending);
         return state with
         {
-            Active = state.Active with { ThinkBuffer = full },
-            PendingStreamThink = ChunkedBuffer.Empty
+            Chat = state.Chat with
+            {
+                Active = state.Active with { ThinkBuffer = full },
+                PendingStreamThink = ChunkedBuffer.Empty
+            }
         };
     }
 
@@ -163,13 +178,16 @@ public static class UiReducer
 
         return state with
         {
-            Active = state.Active with
+            Chat = state.Chat with
             {
-                TextBuffer = StreamingSync.Concat(state.Active.TextBuffer, state.PendingStreamText),
-                ThinkBuffer = StreamingSync.Concat(state.Active.ThinkBuffer, state.PendingStreamThink)
-            },
-            PendingStreamText = ChunkedBuffer.Empty,
-            PendingStreamThink = ChunkedBuffer.Empty
+                Active = state.Active with
+                {
+                    TextBuffer = StreamingSync.Concat(state.Active.TextBuffer, state.PendingStreamText),
+                    ThinkBuffer = StreamingSync.Concat(state.Active.ThinkBuffer, state.PendingStreamThink)
+                },
+                PendingStreamText = ChunkedBuffer.Empty,
+                PendingStreamThink = ChunkedBuffer.Empty
+            }
         };
     }
 
@@ -179,10 +197,13 @@ public static class UiReducer
         long nextOut = state.Cost.TokensOut + usage.OutputTokens;
         return state with
         {
-            Cost = new CostSnapshot(
-                nextIn,
-                nextOut,
-                state.Cost.CostUsd + EstimateCost(usage.InputTokens, usage.OutputTokens))
+            Chat = state.Chat with
+            {
+                Cost = new CostSnapshot(
+                    nextIn,
+                    nextOut,
+                    state.Cost.CostUsd + EstimateCost(usage.InputTokens, usage.OutputTokens))
+            }
         };
     }
 
@@ -195,10 +216,13 @@ public static class UiReducer
             next = next.AddLine(ChatRole.Assistant, next.Active.TextBuffer.Trim());
         return next with
         {
-            IsStreaming = false,
-            Active = ActiveMessage.Empty,
-            PendingStreamText = ChunkedBuffer.Empty,
-            PendingStreamThink = ChunkedBuffer.Empty
+            Chat = next.Chat with
+            {
+                IsStreaming = false,
+                Active = ActiveMessage.Empty,
+                PendingStreamText = ChunkedBuffer.Empty,
+                PendingStreamThink = ChunkedBuffer.Empty
+            }
         };
     }
 
@@ -230,7 +254,7 @@ public static class UiReducer
         inputTokens / 1_000_000m * InputPricePerMillion + outputTokens / 1_000_000m * OutputPricePerMillion;
 
     private static UiState WithStatus(this UiState state, string status) =>
-        state with { Status = status };
+        state with { Chat = state.Chat with { Status = status } };
 
     // ── unified update (TEA "update") ──────────────────────────────────────
 
@@ -243,29 +267,48 @@ public static class UiReducer
     public static (UiState State, TuiEffect Effect) Update(UiState state, UiMsg msg) => msg switch
     {
         UiMsg.Agent a => (Reduce(state, a.Event), new TuiEffect.None()),
-        UiMsg.AgentStarted => (state with { Status = "running", IsAgentRunning = true }, new TuiEffect.None()),
+        UiMsg.AgentStarted => (state with { Chat = state.Chat with { Status = "running", IsAgentRunning = true } }, new TuiEffect.None()),
         UiMsg.AgentEnded ae => (OnAgentEnded(state, ae), new TuiEffect.None()),
-        UiMsg.StatusChanged sc => (state with { Status = sc.Status }, new TuiEffect.None()),
+        UiMsg.StatusChanged sc => (state with { Chat = state.Chat with { Status = sc.Status } }, new TuiEffect.None()),
+        UiMsg.ConfigureRuntime cr => (state with { Chat = state.Chat with { Model = cr.Model, Provider = cr.Provider, AgentName = cr.AgentName } }, new TuiEffect.None()),
         UiMsg.AppendLine al => (state.AddLine(al.Role, al.Text, al.ToolCallId), new TuiEffect.None()),
         UiMsg.InputText it => (state.SetInput(state.Input.SetText(it.Text)), new TuiEffect.None()),
-        UiMsg.Quit => (state with { ShouldQuit = true }, new TuiEffect.None()),
+        UiMsg.Quit => (state with { Ui = state.Ui with { ShouldQuit = true } }, new TuiEffect.None()),
         UiMsg.KeyInput k => UpdateKey(state, k),
-        UiMsg.Viewport v => (state with { ViewportLines = v.HistoryHeight }, new TuiEffect.None()),
-        UiMsg.HistoryMeasured t => (state with { TotalLines = t.TotalLines }, new TuiEffect.None()),
+        UiMsg.Viewport v => (state with { Ui = state.Ui with { ViewportLines = v.HistoryHeight } }, new TuiEffect.None()),
+        UiMsg.HistoryMeasured t => (state with { Ui = state.Ui with { TotalLines = t.TotalLines } }, new TuiEffect.None()),
         UiMsg.TogglePanel tp => (TogglePanel(state, tp.Id), new TuiEffect.None()),
         UiMsg.FocusPanel fp => (FocusPanel(state, fp.Id), new TuiEffect.None()),
         UiMsg.CyclePanelFocus => (CycleFocus(state), new TuiEffect.None()),
         UiMsg.ResizePanel rp => (ResizePanel(state, rp.Id, rp.Delta), new TuiEffect.None()),
-        UiMsg.ScrollResetToTail => (state with { ScrollOffset = 0, WasRunning = true }, new TuiEffect.None()),
+        UiMsg.ScrollResetToTail => (state with
+        {
+            Ui = state.Ui with { ScrollOffset = 0 },
+            Chat = state.Chat with { WasRunning = true }
+        }, new TuiEffect.None()),
         UiMsg.ScrollClamp sc => (state with
         {
-            ScrollOffset = Math.Clamp(state.ScrollOffset, 0, Math.Max(0, sc.MaxScroll))
+            Ui = state.Ui with
+            {
+                ScrollOffset = Math.Clamp(state.ScrollOffset, 0, Math.Max(0, sc.MaxScroll))
+            }
         }, new TuiEffect.None()),
         UiMsg.SeedPanels sp => (state with
         {
-            RegisteredPanelIds = sp.Ids,
-            PanelStates = sp.States,
-            PanelSizes = sp.Sizes
+            Ui = state.Ui with
+            {
+                RegisteredPanelIds = sp.Ids,
+                PanelStates = sp.States,
+                PanelSizes = sp.Sizes
+            }
+        }, new TuiEffect.None()),
+        UiMsg.SyncSessions ss => (state with
+        {
+            Chat = state.Chat with
+            {
+                Sessions = ss.Sessions,
+                ActiveSessionId = ss.ActiveSessionId
+            }
         }, new TuiEffect.None()),
         _ => (state, new TuiEffect.None())
     };
@@ -304,7 +347,7 @@ public static class UiReducer
         if (next == TuiPanelState.Hidden && focused == id)
             focused = null;
 
-        return state with { PanelStates = states, FocusedPanelId = focused };
+        return state with { Ui = state.Ui with { PanelStates = states, FocusedPanelId = focused } };
     }
 
     /// <summary>Focus a specific panel (or chat when <paramref name="id" /> is null).</summary>
@@ -316,7 +359,7 @@ public static class UiReducer
             var states = state.PanelStates;
             if (state.FocusedPanelId is { } prev && states.ContainsKey(prev))
                 states = states.SetItem(prev, TuiPanelState.Visible);
-            return state with { PanelStates = states, FocusedPanelId = null };
+            return state with { Ui = state.Ui with { PanelStates = states, FocusedPanelId = null } };
         }
 
         if (!state.PanelStates.ContainsKey(id))
@@ -330,7 +373,7 @@ public static class UiReducer
             next = next.SetItem(id, TuiPanelState.Visible);
         next = next.SetItem(id, TuiPanelState.Focused);
 
-        return state with { PanelStates = next, FocusedPanelId = id };
+        return state with { Ui = state.Ui with { PanelStates = next, FocusedPanelId = id } };
     }
 
     /// <summary>
@@ -360,7 +403,7 @@ public static class UiReducer
             return state;
         int current = state.PanelSizes.TryGetValue(id, out int s) ? s : 0;
         int next = Math.Clamp(current + delta, PanelRegistry.MinSize, PanelRegistry.MaxSize);
-        return state with { PanelSizes = state.PanelSizes.SetItem(id, next) };
+        return state with { Ui = state.Ui with { PanelSizes = state.PanelSizes.SetItem(id, next) } };
     }
 
     private static (UiState State, TuiEffect Effect) UpdateKey(UiState state, UiMsg.KeyInput k)
@@ -450,11 +493,43 @@ public static class UiReducer
             case ChatAction.Clear:
                 return (state.ClearTranscript(), new TuiEffect.None());
 
+            // Panel actions (epic C step 2): resolved actions land on the
+            // existing panel transitions — previously fell into default noop.
+            case ChatAction.TogglePanelSlot:
+                return (TogglePanelSlot(state, k), new TuiEffect.None());
+            case ChatAction.CyclePanelFocus:
+                return (CycleFocus(state), new TuiEffect.None());
+            case ChatAction.ClosePanel:
+                return (FocusPanel(state, null), new TuiEffect.None());
+            case ChatAction.ResizePanelGrow:
+                return (ResizeFocusedPanel(state, +1), new TuiEffect.None());
+            case ChatAction.ResizePanelShrink:
+                return (ResizeFocusedPanel(state, -1), new TuiEffect.None());
+            case ChatAction.HelpPanel:
+                return (TogglePanel(state, "help"), new TuiEffect.None());
+            case ChatAction.ToggleLogsPanel:
+                return (TogglePanel(state, "logs"), new TuiEffect.None());
+
             case ChatAction.None:
             default:
                 return (state, new TuiEffect.None());
         }
     }
+
+    /// <summary>Alt+1..9: slot index from the pressed character.</summary>
+    private static UiState TogglePanelSlot(UiState state, UiMsg.KeyInput k)
+    {
+        if (k.Pressed.Character is not { } c || c is < '1' or > '9')
+            return state;
+        int idx = c - '1';
+        if (idx < 0 || idx >= state.RegisteredPanelIds.Length)
+            return state;
+        return TogglePanel(state, state.RegisteredPanelIds[idx]);
+    }
+
+    /// <summary>Grow/shrink the focused panel; noop when chat owns focus.</summary>
+    private static UiState ResizeFocusedPanel(UiState state, int delta) =>
+        state.FocusedPanelId is { } id ? ResizePanel(state, id, delta) : state;
 
     /// <summary>
     ///     Classify a submitted (already consumed) input line into the effect that

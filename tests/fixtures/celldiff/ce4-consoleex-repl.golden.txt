@@ -1,6 +1,9 @@
 Harbor — modular AI coding agent [consoleex]                                    
 model: kilocode/hy3:free | ввод — текст, /help — команды, Ctrl+C×2 — выход      
-› скажи привет                                                                  
+ YOU                                                                            
+│ скажи привет                                                                  
+                                                                                
+● kilocode/hy3:free                                                             
 Готово: mock-ответ                                                              
                                                                                 
                                                                                 
@@ -18,7 +21,4 @@ model: kilocode/hy3:free | ввод — текст, /help — команды, Ct
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-                                                                                
-                                                                                
-mock/mock-model 12↑ 5↓ $0.0001                                                  
+mock/mock-model ○ idle agent code live                                          

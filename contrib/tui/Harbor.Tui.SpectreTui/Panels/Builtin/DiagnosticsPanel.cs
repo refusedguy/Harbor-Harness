@@ -1,7 +1,8 @@
-using System.Text.RegularExpressions;
 using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 /// <summary>
@@ -29,20 +30,6 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 /// </remarks>
 public sealed class DiagnosticsPanel : IPanelProvider
 {
-    private static readonly Regex[] Patterns =
-    [
-        // C# / MSBuild: "error CS0117: ..." or ": error MSB3026: ..."
-        new(@"error\s+(CS|MSB|CA|NET)\d{4,}\b", RegexOptions.Compiled | RegexOptions.CultureInvariant),
-        // Rust: "error[E0308]: mismatched types"
-        new(@"error\[E\d{4}\]", RegexOptions.Compiled | RegexOptions.CultureInvariant),
-        // Python: "Traceback (most recent call last):" or "File \"x.py\", line N, in <module>"
-        new(@"Traceback \(most recent call last\)|File\s+""[^""]+""\s*,\s*line\s+\d+", RegexOptions.Compiled | RegexOptions.CultureInvariant),
-        // Generic: "Exception: ..." or "...Exception of type ..."
-        new(@"\b(System\.[A-Z]\w*Exception|\w+Exception)\b", RegexOptions.Compiled | RegexOptions.CultureInvariant),
-        // Node / JS: "TypeError: ..." "  at <function> (<file>:<line>:<col>)"
-        new(@"^\s*at\s+\S+\s*\([^)]+:\d+:\d+\)|^\s*(\w+Error):\s", RegexOptions.Compiled | RegexOptions.Multiline)
-    ];
-
     private int _cursor;
 
     /// <inheritdoc />
@@ -60,7 +47,7 @@ public sealed class DiagnosticsPanel : IPanelProvider
     /// <inheritdoc />
     public object? Build(PanelContext ctx)
     {
-        var diagnostics = CollectDiagnostics(ctx.State);
+        var diagnostics = PanelExtractors.CollectDiagnostics(ctx.State);
 
         var p = new Paragraph().Alignment(Justify.Left);
         p.Lines.Add(TextLine.FromMarkup(
@@ -85,8 +72,8 @@ public sealed class DiagnosticsPanel : IPanelProvider
             bool selected = i == _cursor;
             string icon = d.Severity switch
             {
-                DiagnosticSeverity.Error => "[red]✗[/]",
-                DiagnosticSeverity.Warning => "[yellow]▲[/]",
+                PanelDiagnosticSeverity.Error => "[red]✗[/]",
+                PanelDiagnosticSeverity.Warning => "[yellow]▲[/]",
                 _ => "[grey]·[/]"
             };
             string prefix = selected ? "[black on aqua] [/]" : " ";
@@ -119,67 +106,9 @@ public sealed class DiagnosticsPanel : IPanelProvider
         return false;
     }
 
-    private static List<Diagnostic> CollectDiagnostics(UiState state)
-    {
-        var result = new List<Diagnostic>(8);
-        var lines = state.Lines;
-        for (int i = 0; i < lines.Length; i++)
-        {
-            if (lines[i].Role is not (ChatRole.ToolResult or ChatRole.Error))
-                continue;
-
-            string text = lines[i].Text ?? string.Empty;
-            // Strip the reducer's "✓ " / "✗ " prefix.
-            if (text.Length >= 2 && (text[0] == '✓' || text[0] == '✗') && text[1] == ' ')
-                text = text[2..];
-
-            foreach (var pattern in Patterns)
-            {
-                var match = pattern.Match(text);
-                if (!match.Success) continue;
-
-                var severity = lines[i].Role == ChatRole.Error || text.StartsWith("error", StringComparison.OrdinalIgnoreCase)
-                    ? DiagnosticSeverity.Error
-                    : DiagnosticSeverity.Warning;
-
-                // Extract the line containing the match for a tighter message.
-                int lineStart = text.LastIndexOf('\n', match.Index) + 1;
-                int lineEnd = text.IndexOf('\n', match.Index);
-                if (lineEnd < 0) lineEnd = text.Length;
-                string snippet = text[lineStart..lineEnd].Trim();
-
-                string source = ExtractSource(match.Value);
-                result.Add(new Diagnostic(severity, source, snippet));
-                break; // one diagnostic per transcript line
-            }
-        }
-        return result;
-    }
-
-    private static string ExtractSource(string match)
-    {
-        if (match.StartsWith("error CS", StringComparison.OrdinalIgnoreCase))
-            return "csharp";
-        if (match.StartsWith("error MSB", StringComparison.OrdinalIgnoreCase))
-            return "msbuild";
-        if (match.StartsWith("error[E", StringComparison.OrdinalIgnoreCase))
-            return "rust";
-        if (match.StartsWith("Traceback", StringComparison.OrdinalIgnoreCase) || match.Contains("File \""))
-            return "python";
-        if (match.Contains("Error:"))
-            return "node";
-        if (match.Contains("Exception"))
-            return "runtime";
-        return "other";
-    }
-
     private static string Truncate(string text, int max)
     {
         if (max <= 3) return text;
         return text.Length <= max ? text : text[..(max - 1)] + "…";
     }
-
-    private enum DiagnosticSeverity { Error, Warning, Info }
-
-    private sealed record Diagnostic(DiagnosticSeverity Severity, string Source, string Message);
 }

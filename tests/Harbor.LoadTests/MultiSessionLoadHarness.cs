@@ -10,6 +10,7 @@ using Harbor.E2E.Framework;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Storage.Memory;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
 

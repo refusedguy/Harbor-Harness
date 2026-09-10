@@ -1,5 +1,7 @@
 using System.Text;
+using System.Collections.Immutable;
 using System.Threading.Channels;
+using System.Linq;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -7,11 +9,15 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
+using Harbor.App.Cli.Commands;
+using Harbor.App.Cli.Repl.Commands;
 using Harbor.Application.Configuration;
 using Harbor.DesignSystem;
+using Harbor.Hosting.Rendering;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.Projection;
+using Harbor.Ui.Framework.State;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Ui.Framework.Rendering;
@@ -55,9 +61,10 @@ internal sealed class CellForgeReplRunner(
     ITerminalModeController modeController,
     ITerminalBackend backend,
     ILogger<CellForgeReplRunner> logger)
+    : IReplHost
 {
-    private const string SeqEnterAltScreen = "\x1B[?1049h\x1B[?25l\x1B[?2004h";
-    private const string SeqLeaveAltScreen = "\x1B[?2004l\x1B[?25h\x1B[?1049l";
+    private const string SeqEnterAltScreen = "\x1B[?1049h\x1B[?25l\x1B[?2004h\x1B[?1000h\x1B[?1002h\x1B[?1006h";
+    private const string SeqLeaveAltScreen = "\x1B[?2004l\x1B[?25h\x1B[?1049l\x1B[?1006l\x1B[?1002l\x1B[?1000l";
 
     /// <summary>Idle-Ctrl+C window for the «press again to quit» gesture.</summary>
     private const long QuitGestureWindowMs = 2000;
@@ -73,30 +80,87 @@ internal sealed class CellForgeReplRunner(
     private readonly Channel<AgentEvent> _events = Channel.CreateUnbounded<AgentEvent>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
+    /// <summary>TEA accumulator (epic C): every agent event is dual-written here
+    /// alongside the bridge. Nothing paints from it yet (status does in step 3) —
+    /// it only accumulates Lines/Cost/Status so projection has real state later.</summary>
+    private readonly UiStore _replStore = new();
+
     private readonly StatusViewModel _status = screen.Status.Vm;
     private readonly ComposerController _composer = screen.Composer.Composer;
     private readonly VirtualizedChatTimeline _timeline = screen.Timeline.Timeline;
     private readonly CommandPaletteView _palette = new();
     private readonly LeaderKeyRouter _leader = new();
     private readonly VimComposerMode _vim = new();
-    private readonly QuickSwitchSlots _quickSwitch = new();
     private readonly SelectionEngine _selection = new();
+    private SlashCommandDispatcher? _dispatcher;
+
+    private SlashCommandDispatcher GetDispatcher()
+    {
+        _dispatcher ??= LegacySlash.Dispatcher;
+        return _dispatcher;
+    }
+
+    // ── IReplHost (Command pattern seam; transitional, see IReplHost.cs) ──
+    IAgent IReplHost.Agent => agent;
+
+    Session IReplHost.SessionModel
+    {
+        get => sessionModel;
+        set => sessionModel = value;
+    }
+
+    ChatScreenBridge IReplHost.Bridge => bridge;
+    UiStore IReplHost.Store => _replStore;
+    CommandPaletteView IReplHost.Palette => _palette;
+    StatusViewModel IReplHost.Status => _status;
+    ChatScreen IReplHost.Screen => screen;
+    SelectionEngine IReplHost.Selection => _selection;
+    VirtualizedChatTimeline IReplHost.Timeline => _timeline;
+    ComposerController IReplHost.Composer => _composer;
+    void IReplHost.WakeUp() => _wake.Writer.TryWrite(null);
+    void IReplHost.OpenSlashPalette() => OpenSlashPalette();
+    void IReplHost.ToggleVimMode() => ToggleVimMode();
+    void IReplHost.ScrollTimelineToEnd() => _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH));
+    void IReplHost.RequestQuit(int exitCode)
+    {
+        _slashExitCode = exitCode;
+        _quitRequested = true;
+    }
+    Task IReplHost.SwitchToSessionAsync(string sessionId, CancellationToken ct) => Sessions.SwitchToSessionAsync(sessionId, ct);
+    Task IReplHost.ExecutePaletteItemAsync(CommandItem item, CancellationToken ct) => ExecutePaletteItemAsync(item, ct);
+    Task IReplHost.ExecuteInfoAsync(string text, CancellationToken ct) => ExecuteInfoCommandAsync(text, ct);
+    Task IReplHost.SyncSessionsToStoreAsync(CancellationToken ct) => Sessions.SyncSessionsToStoreAsync(ct);
+    Task<int> IReplHost.ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
+        => ResolveContextWindowAsync(providerId, modelId, ct);
+    IConfigStore IReplHost.ConfigStore => services.GetRequiredService<IConfigStore>();
+    IProviderRegistry IReplHost.ProviderRegistry => services.GetRequiredService<IProviderRegistry>();
+    IAgentRegistry IReplHost.AgentRegistry => services.GetRequiredService<IAgentRegistry>();
+    AuthStore IReplHost.AuthStore => services.GetRequiredService<AuthStore>();
+    ISessionStore? IReplHost.SessionStore => services.GetService<ISessionStore>();
+    IRendererPipeline? IReplHost.RendererPipeline => services.GetService<IRendererPipeline>();
+
+    private readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
+
+    // ── Extracted collaborators (SRP: the runner owns the frame loop + input
+    // dispatch; sessions/titles/prompts live in focused classes behind IReplHost).
+    // Lazy: they take `this` as host, unavailable in field initializers.
+    private LegacySlashRunner? _legacySlash;
+    private LegacySlashRunner LegacySlash => _legacySlash ??= LegacySlashRunner.FromServices(services);
+    private PromptPipeline? _pipeline;
+    private PromptPipeline Pipeline => _pipeline ??= new PromptPipeline(
+        this, _catalog, logger, _tokens, new Lazy<LegacySlashRunner>(() => LegacySlash));
+    private SessionSwitchManager? _sessions;
+    private SessionSwitchManager Sessions => _sessions ??= new SessionSwitchManager(this, Pipeline.ClearQueue);
+    private SessionTitleService? _titles;
+    private SessionTitleService Titles => _titles ??= new SessionTitleService(this, logger);
     private ThemeFileWatcher? _themeWatcher;
 
     /// <summary>Token-usage source (null when the host has no tracker —
     /// feed no-ops, the status bar just stays without token segments).</summary>
     private readonly ITokenTracker? _tokens = services.GetService<ITokenTracker>();
 
-    /// <summary>Render-thread pull latch: <see cref="RunPromptAsync"/> flags it
-    /// after a turn, the frame loop drains it before painting so all status /
-    /// sidebar mutation stays on one thread.</summary>
-    private volatile bool _usageDirty;
-
-    /// <summary>Palette commit hand-off: OnCommit is sync (inside HandleKey),
-    /// execution happens on the frame loop in <see cref="HandleKeyAsync" />.</summary>
-    private CommandItem? _paletteCommitted;
-
-    /// <summary>Leader chord hand-off for async slash commands (same pattern).</summary>
+    /// <summary>Leader chord hand-off for async slash commands: the chord resolves
+    /// into catalog execution on the frame loop (async work can't run inside Bind actions).</summary>
     private string? _leaderSlash;
 
     /// <summary>Leader digit hand-off: the quick-switch chord resolves into a
@@ -113,23 +177,55 @@ internal sealed class CellForgeReplRunner(
     /// → OSC 1337, everything else keeps the text description card.</summary>
     private readonly InlineImageKind _inlineImage = InlineImageProbe.Detect();
 
-    /// <summary>Desktop-notification transport (osc-sprint §777): Osc99 once
-    /// the startup probe answer arrives; otherwise the 777 family via env
-    /// detection, resolved lazily at first fire. None suppresses entirely.</summary>
-    private DesktopNotifyKind _notify;
-
-    /// <summary>Long-turn notify hand-off: the 30 s timer thread stages the
-    /// sequence, the frame loop writes it — the backend stays single-threaded
-    /// (same discipline as <see cref="_themeReloadLine" />).</summary>
-    private volatile string? _pendingNotifySequence;
-
-    private Timer? _notifyTimer;
-
     /// <summary>True when a custom theme file exists — it owns the palette and
     /// the OSC 11 auto-detect must not override it (file wins, P3.2 > P3.3).</summary>
     private bool _themeFileApplied;
 
     private int _timelineViewportH;
+
+    /// <summary>Memoized status snapshot (projector fast-path on quiet frames).</summary>
+    private UiState? _lastStatusSnapshot;
+
+    /// <summary>Last viewport geometry pushed to the TEA store (changed-only).</summary>
+    private int _lastStoreViewport = -1;
+
+    /// <summary>Last total-lines count pushed to the TEA store (changed-only).</summary>
+    private int _lastStoreTotal = -1;
+
+    /// <summary>
+    ///     Resolve the model's context window from the cached provider catalog
+    ///     (no network — cache only). Unknown model/provider yields 0.
+    /// </summary>
+    internal async Task<int> ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
+    {
+        // Best-effort: hosts without a provider registry (smoke tests) get 0.
+        if (services.GetService<IProviderRegistry>() is not { } registry)
+        {
+            return 0;
+        }
+
+        var pid = ProviderId.TryCreate(providerId);
+        if (pid.IsFailure)
+        {
+            return 0;
+        }
+
+        var models = await registry.GetModelsCachedAsync(pid.Value, ct).ConfigureAwait(false);
+        if (models.IsFailure)
+        {
+            return 0;
+        }
+
+        foreach (var m in models.Value)
+        {
+            if (string.Equals(m.Id, modelId, StringComparison.OrdinalIgnoreCase))
+            {
+                return Math.Max(0, m.ContextWindow);
+            }
+        }
+
+        return 0;
+    }
 
     /// <summary>Partial-scan damage ledger (renderer-moat sprint): frames
     /// triggered by user input or event-driven state changes repaint via the
@@ -154,18 +250,6 @@ internal sealed class CellForgeReplRunner(
     /// afterwards are animated.</summary>
     private bool _sidebarPolicyWasApplied;
 
-    /// <summary>Retry-countdown clock (sprint UI-V2 P6.3): the agent loop owns
-    /// the actual retry; the UI mirrors only the expected backoff window —
-    /// attempt counter, wall-clock start of the latest transient error, and
-    /// the exponential window it should burn down over.</summary>
-    private int _retryAttempt;
-    private long _retryErrorMs = -1;
-    private int _retryTotalSec;
-
-    /// <summary>Stream-retry budget mirrored from AgentLoop's C7 policy —
-    /// kept in sync for the countdown's «n/3» display only.</summary>
-    private const int MaxStreamRetries = 3;
-
     // -1, NOT long.MinValue: TickCount64 is non-negative uptime ms, so
     // `now − long.MinValue` overflows to a NEGATIVE value and the first idle
     // Ctrl+C would satisfy the quit-window check immediately (CE-5 PTY-suite
@@ -173,10 +257,6 @@ internal sealed class CellForgeReplRunner(
     private long _lastIdleAbortMs = -1;
     private bool _quitRequested;
     private int? _slashExitCode;
-
-    /// <summary>Cross-thread «prompt submitted, completion event not yet seen» latch
-    /// so an stdin EOF cannot race the freshly spawned run into a premature exit.</summary>
-    private volatile bool _promptInFlight;
 
     /// <summary>
     ///     Runs the REPL until quit. Returns the exit code
@@ -214,6 +294,7 @@ internal sealed class CellForgeReplRunner(
         await backend.WriteAsync(Utf8(TerminalQueries.Osc99NotifyProbe), ct).ConfigureAwait(false);
 
         await PrintWelcomeAsync().ConfigureAwait(false);
+        _replStore.Dispatch(new UiMsg.ConfigureRuntime(sessionModel.Model, sessionModel.ProviderId, sessionModel.Agent));
         ArmThemeWatcher();
 
         var inputTask = inputSource.RunAsync(ct);
@@ -242,7 +323,7 @@ internal sealed class CellForgeReplRunner(
         }
         finally
         {
-            _notifyTimer?.Dispose();
+            _pipeline?.Dispose();
             _themeWatcher?.Dispose();
             try
             {
@@ -302,10 +383,18 @@ internal sealed class CellForgeReplRunner(
             }
 
             // Agent events replay onto the render thread in arrival order.
+            // Dual-write (epic C step 1): bridge paints today, the TEA store
+            // accumulates for projection tomorrow. Behavior unchanged.
             while (_events.Reader.TryRead(out var agentEvt))
             {
-                ObserveRetrySignal(agentEvt);
+                Pipeline.ObserveEvent(agentEvt);
+                _selection.Clear();
+                _replStore.Dispatch(agentEvt);
                 await bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
+                if (agentEvt is AgentEndEvent)
+                {
+                    await Titles.MaybeAutoTitleAsync(ct).ConfigureAwait(false);
+                }
             }
 
             // Inline images (osc-sprint §1337): attachments drained on the
@@ -316,7 +405,7 @@ internal sealed class CellForgeReplRunner(
             }
 
             bridge.Tick(Environment.TickCount64);
-            UpdateRetryCountdown();
+            Pipeline.UpdateRetryCountdown();
             if (_themeReloadLine is { } themeLine)
             {
                 _themeReloadLine = null;
@@ -326,24 +415,22 @@ internal sealed class CellForgeReplRunner(
 
             // Long-turn notification (osc-sprint §777): staged by the timer
             // thread, written here where backend ownership lives.
-            if (_pendingNotifySequence is { } notifySeq)
+            if (Pipeline.TakeNotifySequence() is { } notifySeq)
             {
-                _pendingNotifySequence = null;
                 await backend.WriteAsync(Utf8(notifySeq), ct).ConfigureAwait(false);
                 bridge.AppendSystemLine("⏱ ход идёт дольше 30 с — уведомление отправлено");
                 _broadDamageNextFrame = true;
             }
 
-            if (_usageDirty)
+            if (Pipeline.RefreshUsageIfDirty())
             {
-                _usageDirty = false;
-                RefreshUsage();
+                _broadDamageNextFrame = true; // status + sidebar both re-render
             }
 
             await RenderFrameAsync(ct).ConfigureAwait(false);
             ArmSpinner(spinnerTimer);
 
-            if (inputClosed && !_promptInFlight && !agent.State.IsRunning)
+            if (inputClosed && !Pipeline.IsBusy)
             {
                 logger.LogInformation("stdin EOF and agent idle — CellForge REPL exiting");
                 break;
@@ -422,6 +509,59 @@ internal sealed class CellForgeReplRunner(
         ApplySidebarResizePolicy(cols);
         screen.Tree.Solve(cols, rows);
 
+        // CF-D-002: feed projected state from the view-model snapshot so
+        // StatusPanel renders through StatusProjector (glyphs, scroll segment,
+        // token/cost formatting) instead of the legacy BuildSegments path.
+        screen.Status.ProjectedRetry = _status.Retry;
+        long tokensIn = 0;
+        long tokensOut = 0;
+        decimal costUsd = 0m;
+        if (_tokens?.GetStats() is { } stats)
+        {
+            tokensIn = stats.TotalInputTokens;
+            tokensOut = stats.TotalOutputTokens;
+        }
+
+        // Read-switching step 4a: chrome identity (status/model/provider/agent)
+        // comes from the TEA store (seeded + dual-written); Cost stays on
+        // ITokenTracker and geometry stays measured (unified under goldens).
+        // Memoized: identical inputs reuse the instance so the projector's
+        // reference-equality fast path skips re-projection on quiet frames.
+        var storeChat = _replStore.State.Chat;
+        int frameTotal = Math.Max(rows, screen.Timeline.Timeline.Count);
+        if (_lastStatusSnapshot is not { } prev
+            || prev.Chat.Status != storeChat.Status
+            || prev.Chat.Model != storeChat.Model
+            || prev.Chat.Provider != storeChat.Provider
+            || prev.Chat.AgentName != storeChat.AgentName
+            || prev.Cost.TokensIn != tokensIn
+            || prev.Cost.TokensOut != tokensOut
+            || prev.Cost.CostUsd != costUsd
+            || prev.ViewportLines != rows
+            || prev.TotalLines != frameTotal)
+        {
+            prev = new UiState
+            {
+                Chat = new ChatDomainState
+                {
+                    Status = storeChat.Status,
+                    Model = storeChat.Model,
+                    Provider = storeChat.Provider,
+                    AgentName = storeChat.AgentName,
+                    Cost = new CostSnapshot(tokensIn, tokensOut, costUsd)
+                },
+                Ui = new TerminalUiState
+                {
+                    ScrollOffset = 0,
+                    ViewportLines = rows,
+                    TotalLines = frameTotal
+                }
+            };
+            _lastStatusSnapshot = prev;
+        }
+
+        screen.Status.ProjectedState = prev;
+
         // Spring resize (P1.6): while a layout spring is in flight the rects
         // move every frame — self-wake keeps frames flowing until it settles.
         if (screen.Tree.IsAnimating)
@@ -431,6 +571,18 @@ internal sealed class CellForgeReplRunner(
 
         Rect tlRect = screen.Timeline.Rect;
         _timelineViewportH = Math.Max(0, tlRect.Height);
+
+        // Epic C accumulation: viewport geometry flows into the TEA store
+        // (changed-only, no per-frame alloc). Nothing reads it yet — the
+        // timeline keeps local scroll until the golden-backed flip.
+        // frameTotal is computed above for the status snapshot; reuse it here.
+        if (frameTotal != _lastStoreTotal || rows != _lastStoreViewport)
+        {
+            _lastStoreTotal = frameTotal;
+            _lastStoreViewport = rows;
+            _ = _replStore.Dispatch(new UiMsg.Viewport(rows));
+            _ = _replStore.Dispatch(new UiMsg.HistoryMeasured(frameTotal));
+        }
         _ = _timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, _timelineViewportH);
 
         screenSession.BeginFrame();
@@ -557,6 +709,7 @@ internal sealed class CellForgeReplRunner(
 
         await backend.WriteAsync(Utf8(Osc52Clipboard.Encode(text)), ct).ConfigureAwait(false);
         bridge.AppendSystemLine($"⧉ скопировано {text.Length} симв.");
+        _selection.Clear();
         _wake.Writer.TryWrite(null);
     }
 
@@ -609,6 +762,30 @@ internal sealed class CellForgeReplRunner(
 
     // ── Input routing ──────────────────────────────────────────────────────
 
+    /// <summary>
+    ///     Returns <see langword="true" /> when <paramref name="col" /> /
+    ///     <paramref name="row" /> falls inside the sidebar's model section.
+    ///     Used by the mouse handler to open the model picker on click.
+    /// </summary>
+    private bool TryHandleSidebarModelClick(int col, int row)
+    {
+        if (screen.Sidebar is null || screenSession.CurrentCols < SideBarLayout.AutoShowMinWidth)
+        {
+            return false;
+        }
+
+        int sidebarX = screenSession.CurrentCols - SideBarLayout.DefaultWidth;
+        if (col < sidebarX || col >= screenSession.CurrentCols)
+        {
+            return false;
+        }
+
+        // MODEL section is the second section in the sidebar paint order,
+        // typically at visual rows 3-5 inside the sidebar rect (0-indexed).
+        // This is an approximate hit-box — good enough for a click target.
+        return row is >= 3 and <= 6;
+    }
+
     private async Task HandleInputAsync(InputEvent evt, CancellationToken ct)
     {
         // Any user input can mutate composer, palette, scroll or selection —
@@ -625,7 +802,7 @@ internal sealed class CellForgeReplRunner(
                 break;
 
             case InputEventKind.Capability when evt.Capability.Kind == CapabilityEventKind.Osc99NotifyReport:
-                _notify = DesktopNotifyKind.Osc99;
+                Pipeline.NotifyHint = DesktopNotifyKind.Osc99;
                 break;
 
             case InputEventKind.Paste:
@@ -666,12 +843,21 @@ internal sealed class CellForgeReplRunner(
                 // selection (P6.4) — a plain click selects nothing on release.
                 if (bridge.TryRouteApprovalClick(evt.Mouse))
                 {
-                    // claimed by the approval gate
+                    _selection.Clear();
                 }
-                else if (evt.Mouse.Type == MouseEventType.Press
-                         && _selection.OnPress(evt.Mouse.Column, evt.Mouse.Row, evt.Mouse.Button))
+                else if (_selection.OnPress(evt.Mouse.Column, evt.Mouse.Row, evt.Mouse.Button))
                 {
                     _wake.Writer.TryWrite(null);
+                }
+                else if (evt.Mouse.Button == MouseButton.Left
+                         && TryHandleSidebarModelClick(evt.Mouse.Column, evt.Mouse.Row))
+                {
+                    _selection.Clear();
+                    await new Repl.Commands.ModelCommand().ExecuteAsync(new ReplCommandContext(this, "model"), ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    _selection.Clear();
                 }
 
                 break;
@@ -723,12 +909,29 @@ internal sealed class CellForgeReplRunner(
 
         if (_palette.Visible && _palette.HandleKey(key))
         {
-            if (_paletteCommitted is { } committed)
+            // Frame-carried continuations: no host-side stacks. Esc/Hide drops
+            // a frame together with its continuation — nothing leaks.
+            if (_palette.TakePendingCommit() is { } commit)
             {
-                _paletteCommitted = null;
-                await ExecutePaletteCommandAsync(committed, ct).ConfigureAwait(false);
+                await commit.Handler(commit.Item, ct).ConfigureAwait(false);
+            }
+            else if (_palette.TakePendingInput() is { } input)
+            {
+                await input.Handler(input.Value, ct).ConfigureAwait(false);
             }
 
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
+        // Slash shortcut: typing '/' on an empty composer opens the command
+        // palette directly, skipping manual entry.
+        if (key.Key == KeyCode.Char
+            && key.Modifiers is KeyModifiers.None or KeyModifiers.Shift
+            && (char)key.Character.Value == '/'
+            && _composer.Buffer.IsEmpty)
+        {
+            OpenSlashPalette();
             _wake.Writer.TryWrite(null);
             return;
         }
@@ -741,13 +944,13 @@ internal sealed class CellForgeReplRunner(
             if (_leaderSlash is { } leaderSlash)
             {
                 _leaderSlash = null;
-                await ExecutePaletteCommandAsync(new CommandItem(leaderSlash, leaderSlash), ct).ConfigureAwait(false);
+                await ExecutePaletteItemAsync(new CommandItem(leaderSlash, leaderSlash), ct).ConfigureAwait(false);
             }
 
             if (_quickSwitchChord is { } chord)
             {
                 _quickSwitchChord = null;
-                await SwitchToSlotAsync(chord, ct).ConfigureAwait(false);
+                await Sessions.SwitchToSlotAsync(chord, ct).ConfigureAwait(false);
             }
 
             _wake.Writer.TryWrite(null);
@@ -766,7 +969,7 @@ internal sealed class CellForgeReplRunner(
         switch (action)
         {
             case ComposerAction.Submitted:
-                await SubmitAsync(ct).ConfigureAwait(false);
+                await Pipeline.SubmitAsync(ct).ConfigureAwait(false);
                 break;
 
             case ComposerAction.Aborted:
@@ -793,6 +996,7 @@ internal sealed class CellForgeReplRunner(
         if (agent.State.IsRunning)
         {
             agent.AbortSource.Cancel();
+            Pipeline.ClearQueue(); // abort drops queued prompts — never sent after a kill
             bridge.AppendSystemLine("^C — прерываю текущий ход…");
             _wake.Writer.TryWrite(null);
             return;
@@ -814,31 +1018,40 @@ internal sealed class CellForgeReplRunner(
 
     // ── Command palette ────────────────────────────────────────────────────
 
-    /// <summary>Suggested, arg-less slash commands that are safe to run from the palette.</summary>
+    /// <summary>Suggested commands, generated from the catalog so the palette
+    /// never drifts from the registered set. Exit stays explicit (dispatcher).</summary>
     private void OpenCommandPalette()
     {
-        _palette.OnCommit = item => _paletteCommitted = item;
-        _palette.Show(
-        [
-            new CommandItem("help", "Help", "slash commands reference", "/help"),
-            new CommandItem("sessions", "Sessions", "list stored sessions", "/sessions"),
-            new CommandItem("providers", "Providers", "list configured providers", "/providers"),
-            new CommandItem("plugins", "Plugins", "reload CS-source plugins", "/plugins"),
-            new CommandItem("vim", "Toggle vim mode", "normal/insert editing layer", "<leader>v"),
-            new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2"),
-        ]);
+        var items = _catalog.GetAll()
+            .Select(c => new CommandItem(c.Id, c.Title, c.Description, string.Empty, c.Group))
+            .ToList();
+        items.Add(new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2", "General"));
+        _palette.PushFrame(new PaletteFrame(
+            "Commands",
+            "",
+            items,
+            OnCommitAsync: (item, frameCt) => ExecutePaletteItemAsync(item, frameCt)));
     }
 
-    /// <summary>Routes palette/leader ids that are NOT slash commands.</summary>
-    private bool TryRunLocalCommand(string id)
+    /// <summary>Opens the palette pre-populated with every registered slash command.</summary>
+    private void OpenSlashPalette()
     {
-        if (id == "vim")
-        {
-            ToggleVimMode();
-            return true;
-        }
-
-        return false;
+        var commands = GetDispatcher().GetRegisteredCommands();
+        var items = commands.Select(cmd => new CommandItem(
+            Id: cmd.Name,
+            Title: cmd.Name,
+            Detail: cmd.Description,
+            Shortcut: cmd.Usage,
+            Group: cmd.Name is "help" or "exit" or "quit" ? "General"
+                : cmd.Name is "setup" or "auth" ? "Config"
+                : cmd.Name is "model" or "agent" or "tui" or "renderer" or "storage" ? "Runtime"
+                : "Other"
+        )).ToArray();
+        _palette.PushFrame(new PaletteFrame(
+            "Commands",
+            "slash",
+            items,
+            OnCommitAsync: (item, frameCt) => ExecutePaletteItemAsync(item, frameCt)));
     }
 
     private void ToggleVimMode()
@@ -858,6 +1071,7 @@ internal sealed class CellForgeReplRunner(
             : "vim: off");
     }
 
+    /// <summary>Sessions already checked for auto-titling (one check per session lifetime).</summary>
     /// <summary>Leader-chord bindings: scroll anchors, palette, vim, slash
     /// shortcuts, and quick-switch digits 1..9 (recent sessions, sprint UI-V2 P2.2).</summary>
     private void BindLeaderKeys()
@@ -868,6 +1082,8 @@ internal sealed class CellForgeReplRunner(
         _leader.Bind('v', () => { ToggleVimMode(); _wake.Writer.TryWrite(null); });
         _leader.Bind('h', () => _leaderSlash = "help");
         _leader.Bind('s', () => _leaderSlash = "sessions");
+        _leader.Bind('m', () => _leaderSlash = "model");
+        _leader.Bind('a', () => _leaderSlash = "agent");
         foreach (char d in "123456789")
         {
             _leader.Bind(d, () => _quickSwitchChord = d);
@@ -879,90 +1095,88 @@ internal sealed class CellForgeReplRunner(
     ///     P2.2): loads the bound session from the store and rebinds the idle
     ///     agent to it. The timeline shows only new traffic from the switch on.
     /// </summary>
-    private async Task SwitchToSlotAsync(char chord, CancellationToken ct)
+    private async Task ExecuteInfoCommandAsync(string text, CancellationToken ct)
     {
-        if (_quickSwitch.Resolve(chord) is not { } sessionId)
-        {
-            bridge.AppendSystemLine($"⇄ slot {chord}: пусто");
-            return;
-        }
+        var captured = new List<string>();
+        var writer = new Action<string>(s => captured.Add(s));
 
-        if (sessionId == sessionModel.Id)
+        try
         {
-            bridge.AppendSystemLine("⇄ уже в этой сессии");
-            return;
-        }
+            var outcome = await LegacySlash.RunAsync(
+                text,
+                writer,
+                prompt =>
+                {
+                    captured.Add($"{prompt} — interactive input unavailable in consoleex");
+                    return Task.FromResult(string.Empty);
+                },
+                agent, sessionModel).ConfigureAwait(false);
 
-        if (agent.State.IsRunning)
-        {
-            bridge.AppendSystemLine("⇄ агент занят — сессия не переключена");
-            return;
-        }
-
-        var store = services.GetService<ISessionStore>();
-        if (store is null)
-        {
-            bridge.AppendSystemLine("⇄ переключение недоступно: хост без хранилища сессий");
-            return;
-        }
-
-        var loaded = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
-        if (loaded.IsFailure)
-        {
-            bridge.AppendSystemLine("! " + loaded.Error);
-            return;
-        }
-
-        var definition = services.GetRequiredService<IAgentRegistry>()
-            .GetAgent(AgentName.Create(loaded.Value.Agent));
-        if (definition.IsFailure)
-        {
-            bridge.AppendSystemLine("! " + definition.Error);
-            return;
-        }
-
-        agent.Initialize(loaded.Value, definition.Value);
-        sessionModel = loaded.Value;
-        _quickSwitch.Push(loaded.Value.Id);
-        if (screen.Sidebar is { } sidebar)
-        {
-            sidebar.State = sidebar.State with
+            if (outcome.ShouldQuit)
             {
-                SessionTitle = loaded.Value.Title,
-                SessionId = loaded.Value.Id,
-            };
+                _slashExitCode = outcome.ExitCode;
+                _quitRequested = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            captured.Add($"Error: {ex.Message}");
         }
 
-        bridge.AppendSystemLine($"⇄ сессия → {loaded.Value.Title} ({loaded.Value.Id[..Math.Min(8, loaded.Value.Id.Length)]})");
-        _wake.Writer.TryWrite(null);
-    }
-
-    private async Task ExecutePaletteCommandAsync(CommandItem item, CancellationToken ct)
-    {
-        if (TryRunLocalCommand(item.Id))
+        if (captured.Count == 0)
         {
             _wake.Writer.TryWrite(null);
             return;
         }
 
+        string cmd = text[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+        string formatted = FormatInfoBlock(cmd, captured);
+        bridge.AppendSystemLine(formatted);
+        _wake.Writer.TryWrite(null);
+    }
+
+    private static string FormatInfoBlock(string title, IReadOnlyList<string> lines)
+    {
+        var sb = new StringBuilder();
+        sb.Append("┌─ ").Append(title).Append(' ');
+        int pad = Math.Max(0, 56 - title.Length - 4);
+        sb.Append('─', pad);
+        sb.AppendLine("┐");
+        foreach (var line in lines)
+        {
+            sb.Append("│ ").Append(line);
+            int trail = Math.Max(0, 56 - line.Length - 2);
+            if (trail > 0) sb.Append(' ', trail);
+            sb.AppendLine(" │");
+        }
+        sb.Append("└").Append('─', 56).AppendLine("┘");
+        return sb.ToString();
+    }
+
+    private async Task ExecutePaletteItemAsync(CommandItem item, CancellationToken ct)
+    {
+        // GoF Command: single catalog lookup; uncatalogued ids fall through
+        // to the slash-dispatcher fallback below. New command = new file +
+        // Register, no switch edits (OCP).
+        if (_catalog.TryResolve(item.Id, out var cmd) && cmd is not null)
+        {
+            await cmd.ExecuteAsync(new ReplCommandContext(this, item.Id), ct).ConfigureAwait(false);
+            return;
+        }
+
         string slash = '/' + item.Id;
-        var dispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
         try
         {
-            await dispatcher.HandleCoreAsync(
-                slash, services,
-                writer: line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
-                reader: prompt =>
+            await LegacySlash.RunAsync(
+                slash,
+                line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
+                prompt =>
                 {
                     bridge.AppendSystemLine($"{prompt} — интерактивный ввод недоступен в consoleex, используйте legacy TUI (/exit)");
                     _wake.Writer.TryWrite(null);
                     return Task.FromResult(string.Empty);
                 },
-                agent, services.GetRequiredService<IAgentRegistry>(),
-                services.GetRequiredService<IConfigStore>(),
-                services.GetRequiredService<AuthStore>(),
-                services.GetRequiredService<IProviderRegistry>(),
-                sessionModel).ConfigureAwait(false);
+                agent, sessionModel).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -971,200 +1185,6 @@ internal sealed class CellForgeReplRunner(
             _wake.Writer.TryWrite(null);
         }
     }
-
-    // ── Submit pipeline (same commands as the legacy REPL) ────────────────
-
-    private async Task SubmitAsync(CancellationToken ct)
-    {
-        string text = _composer.Buffer.TakeText().Trim();
-        if (text.Length == 0)
-        {
-            return;
-        }
-
-        if (text.StartsWith('/'))
-        {
-            var dispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
-            var outcome = await dispatcher.HandleCoreAsync(
-                text, services,
-                writer: line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
-                reader: prompt =>
-                {
-                    bridge.AppendSystemLine($"{prompt} — интерактивный ввод недоступен в consoleex, используйте legacy TUI (/exit)");
-                    _wake.Writer.TryWrite(null);
-                    return Task.FromResult(string.Empty);
-                },
-                agent, services.GetRequiredService<IAgentRegistry>(),
-                services.GetRequiredService<IConfigStore>(),
-                services.GetRequiredService<AuthStore>(),
-                services.GetRequiredService<IProviderRegistry>(),
-                sessionModel).ConfigureAwait(false);
-
-            if (outcome.ShouldQuit)
-            {
-                _slashExitCode = outcome.ExitCode;
-                _quitRequested = true;
-            }
-
-            return;
-        }
-
-        // Fresh abort token per prompt (no-op guard while a run is active).
-        agent.ResetAbortSource();
-        ResetRetryCountdown();
-        bridge.NotifyLocalUserMessage();
-        screen.Timeline.Timeline.Append(new UserBlock(text));
-        _status.Mode = StatusBarMode.Running;
-        _wake.Writer.TryWrite(null);
-
-        _promptInFlight = true;
-        ArmLongTurnNotify();
-        _ = RunPromptAsync(text, ct);
-    }
-
-    /// <summary>
-    /// Long-turn desktop notification (osc-sprint §777): a run still active
-    /// after 30 s fires one notification through the terminal — kitty OSC 99
-    /// when the probe answered, OSC 777 for the urxvt family, nothing when
-    /// the terminal gave no signal (suppression is the conservative default).
-    /// </summary>
-    private void ArmLongTurnNotify()
-    {
-        _notifyTimer ??= new Timer(OnLongTurnNotifyFire, null, Timeout.Infinite, Timeout.Infinite);
-        _notifyTimer.Change(TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
-    }
-
-    private void DisarmLongTurnNotify() => _notifyTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-
-    private void OnLongTurnNotifyFire(object? state)
-    {
-        DisarmLongTurnNotify();
-        if (!agent.State.IsRunning)
-        {
-            return; // turn finished inside the window — nothing to notify about
-        }
-
-        var kind = _notify is DesktopNotifyKind.Osc99 ? _notify : NotifyProbe.Detect();
-        _notify = kind;
-        if (kind is DesktopNotifyKind.None)
-        {
-            return;
-        }
-
-        _pendingNotifySequence = kind == DesktopNotifyKind.Osc99
-            ? Osc99Notify.Encode("Harbor", "ход всё ещё выполняется (дольше 30 с)")
-            : Osc777Notify.Encode("Harbor", "ход всё ещё выполняется (дольше 30 с)");
-        _wake.Writer.TryWrite(null);
-    }
-
-    /// <summary>Fire-and-forget WITH full observation: every failure lands in
-    /// the timeline, cancellation is expected, the wake always fires.</summary>
-    private async Task RunPromptAsync(string text, CancellationToken ct)
-    {
-        try
-        {
-            var result = await agent.PromptAsync(text, ct).ConfigureAwait(false);
-            if (result.IsFailure)
-            {
-                bridge.AppendSystemLine("! " + result.Error);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            bridge.AppendSystemLine("ход прерван");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Prompt failed in CellForge REPL");
-            bridge.AppendSystemLine("! " + ex.Message);
-        }
-        finally
-        {
-            DisarmLongTurnNotify();
-            _promptInFlight = false;
-            if (!agent.State.IsRunning)
-            {
-                _status.Mode = StatusBarMode.Idle;
-                ResetRetryCountdown();
-            }
-
-            _usageDirty = true;
-            _wake.Writer.TryWrite(null);
-        }
-    }
-
-    /// <summary>Token/cost footer + sidebar mirror (sprint UI-V2 P6.2/P4):
-    /// pulls cumulative usage from the tracker on the render thread. Cost is
-    /// preserved when a richer source already reported it.</summary>
-    private void RefreshUsage()
-    {
-        _broadDamageNextFrame = true; // status + sidebar both re-render
-        if (_tokens?.GetStats() is not { } stats)
-        {
-            return;
-        }
-
-        _status.SetUsage(stats.TotalInputTokens, stats.TotalOutputTokens);
-        if (screen.Sidebar is { } sidebar)
-        {
-            sidebar.State = sidebar.State with
-            {
-                TokensIn = stats.TotalInputTokens,
-                TokensOut = stats.TotalOutputTokens,
-            };
-        }
-    }
-
-    /// <summary>Retry countdown feed (sprint UI-V2 P6.3): a transient provider
-    /// error while the agent runs starts the UI-side backoff clock. The agent
-    /// loop retries on its own policy; the status bar only mirrors the window.</summary>
-    private void ObserveRetrySignal(AgentEvent evt)
-    {
-        if (evt is MessageUpdateEvent { LlmEvent: ErrorEvent { Kind: var kind } }
-            && ProviderErrors.IsTransient(kind)
-            && agent.State.IsRunning)
-        {
-            _retryAttempt++;
-            _retryErrorMs = Environment.TickCount64;
-            _retryTotalSec = RetryCountdown.BackoffSeconds(Math.Min(_retryAttempt, MaxStreamRetries));
-            _status.Retry = RetryCountdown.Line(_retryAttempt, MaxStreamRetries, _retryTotalSec);
-        }
-    }
-
-    /// <summary>Recomputes the countdown from wall clock each frame; expires
-    /// silently at zero (no timer — frames already fire on the 80 ms heartbeat).</summary>
-    private void UpdateRetryCountdown()
-    {
-        if (_retryErrorMs < 0)
-        {
-            return;
-        }
-
-        int remaining = _retryTotalSec - (int)((Environment.TickCount64 - _retryErrorMs) / 1000);
-        if (remaining > 0)
-        {
-            _status.Retry = RetryCountdown.Line(_retryAttempt, MaxStreamRetries, remaining);
-        }
-        else
-        {
-            _retryErrorMs = -1;
-            _status.Retry = null;
-        }
-    }
-
-    /// <summary>Clears the retry window — new prompt or finished turn.</summary>
-    private void ResetRetryCountdown()
-    {
-        _retryAttempt = 0;
-        _retryErrorMs = -1;
-        _status.Retry = null;
-    }
-
-    /// <summary>True when the failure text represents a cancelled/aborted run
-    /// (AgentLoop's "…cancelled." family) — rendered as the friendly abort line.</summary>
-    private static bool IsCancellation(string error) =>
-        error.Contains("cancel", StringComparison.OrdinalIgnoreCase) ||
-        error.Contains("canceled", StringComparison.OrdinalIgnoreCase);
 
     private async Task PrintWelcomeAsync()
     {
@@ -1175,31 +1195,10 @@ internal sealed class CellForgeReplRunner(
         bridge.AppendSystemLine($"model: {model} | ввод — текст, /help — команды, Ctrl+C×2 — выход");
 
         // Sidebar context (sprint UI-V2 P4): session identity + model before
-        // the first frame paints; tokens arrive via RefreshUsage per turn.
-        if (screen.Sidebar is { } sidebar)
-        {
-            sidebar.State = sidebar.State with
-            {
-                SessionTitle = sessionModel.Title,
-                SessionId = sessionModel.Id,
-                Model = model,
-            };
-        }
-
-        // Quick-switch slots (sprint UI-V2 P2.2): the store lists most-recent-
-        // first, so slot 1 gets the hottest session. Best-effort — hosts
-        // without a session store (smoke tests) just skip slot seeding.
-        if (services.GetService<ISessionStore>() is { } store
-            && await store.ListAsync(ct: CancellationToken.None).ConfigureAwait(false) is { IsSuccess: true } listed)
-        {
-            var recent = listed.Value;
-            for (int i = 0; i < recent.Count && i < QuickSwitchSlots.Count; i++)
-            {
-                _quickSwitch.Assign(i + 1, recent[i].Id);
-            }
-        }
-
-        _wake.Writer.TryWrite(null);
+        // the first frame paints; tokens arrive via the pipeline feed per turn.
+        // StatusViewModel.Model seeds assistant bubble headers (bridge reads it).
+        _status.Model = model;
+        await Sessions.SeedWelcomeChromeAsync(model).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1208,6 +1207,9 @@ internal sealed class CellForgeReplRunner(
     ///     poll timer (parse failures keep the last applied theme). Path:
     ///     <c>HARBOR_THEME_FILE</c>, else <c>~/.harbor/theme.json</c> when present.
     /// </summary>
+    // TODO(principles)[DIP]: route through IThemeService once it is registered
+    // in DI and Watch surfaces errors/names — today Watch swallows errors and
+    // ThemeJsonApplied carries string.Empty, so direct wiring keeps behavior.
     private void ArmThemeWatcher()
     {
         string path = Environment.GetEnvironmentVariable("HARBOR_THEME_FILE")

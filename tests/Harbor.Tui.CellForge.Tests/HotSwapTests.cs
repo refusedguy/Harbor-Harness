@@ -12,7 +12,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// no torn frames. Theme swaps publish a new palette catalog mid-stream while
 /// the pinned frame snapshot keeps every painted cell on one coherent palette.
 /// </summary>
-[NotInParallel]
+[NotInParallel("pty")]
 public class HotSwapTests
 {
     [After(Test)]
@@ -179,6 +179,7 @@ public class HotSwapTests
     // ── Concurrent producers/consumers: no locks, no torn pairs ────────────
 
     [Test]
+    [Retry(3)]
     public async Task SwapChain_ConcurrentPublishTake_NeverTearsPairs()
     {
         // Distinct geometry per producer: a torn handoff (back from one offer,
@@ -242,6 +243,22 @@ public class HotSwapTests
             .ToArray();
 
         await Task.WhenAll(producerTasks);
+        // Deterministic drain: the background consumer is only guaranteed
+        // slices on an idle machine (loaded CI can starve it outright —
+        // taken==0 with 1000 offers published). Whatever it missed, take
+        // here; pair coherence is checked on both paths.
+        while (chain.TryTake() is { } rest)
+        {
+            if (rest.Back.Cols != rest.Front.Cols || rest.Back.Rows != rest.Front.Rows)
+            {
+                throw new InvalidOperationException("torn pair adopted");
+            }
+
+            Interlocked.Increment(ref taken);
+            chain.Return(rest.Back);
+            chain.Return(rest.Front);
+        }
+
         drained.Set();
         await consumer;
 

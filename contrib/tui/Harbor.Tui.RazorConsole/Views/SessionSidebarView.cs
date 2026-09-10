@@ -2,6 +2,7 @@ using System.Text;
 using Harbor.Tui.RazorConsole.Rendering;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Tui.RazorConsole.Views;
 /// <summary>
 ///     Session sidebar listing registered panels + a search filter and

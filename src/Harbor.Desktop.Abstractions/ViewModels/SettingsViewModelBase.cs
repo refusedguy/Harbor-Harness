@@ -4,6 +4,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Desktop.Abstractions.Models;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.Logging;
 

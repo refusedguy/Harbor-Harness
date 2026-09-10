@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Tui.RazorConsole.Rendering;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Tui.RazorConsole.Views;
 /// <summary>
 ///     Projects <see cref="InputModel" /> into a Spectre markup string with a

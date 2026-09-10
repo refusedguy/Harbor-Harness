@@ -18,6 +18,7 @@ public class FileClaimRegistryTests : IDisposable
         }
         catch (DirectoryNotFoundException)
         {
+            // Test cleanup is best-effort; the dir may already be gone from a previous run.
         }
     }
 

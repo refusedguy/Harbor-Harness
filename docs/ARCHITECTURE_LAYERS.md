@@ -152,7 +152,7 @@ flowchart TB
     subgraph Infra["Infrastructure (adapters)"]
         Storage["Harbor.Storage.Jsonl / Memory / Sqlite"]
         Providers["Harbor.Providers.OpenAiCompatible / Anthropic / OpenAI / Ollama / Shared"]
-        Tools["Harbor.Tools.Builtin<br/>(14 tools incl. MCP client)"]
+        Tools["Harbor.Tools.Builtin<br/>(18 tools incl. MCP client)"]
     end
 
     subgraph Domain["Domain / Abstractions (hexagon core)"]

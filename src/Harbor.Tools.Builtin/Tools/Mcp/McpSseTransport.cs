@@ -17,7 +17,7 @@ namespace Harbor.Tools.Mcp;
 ///     server twice — the legacy transport has no idempotency guarantee.
 ///     Authentication mirrors <see cref="McpHttpTransport" />: explicit
 ///     <c>Authorization</c> header wins, else the OAuth token provider result
-///     is attached as <c>Bearer</c> (placeholder for the full OAuth2 flow).
+///     is attached as <c>Bearer</c>.
 /// </summary>
 public sealed class McpSseTransport : IMcpRemoteTransport
 {
@@ -26,7 +26,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
 
     private readonly Uri _endpoint;
     private readonly IReadOnlyDictionary<string, string>? _headers;
-    private readonly Func<string?>? _oauthTokenProvider;
+    private readonly Func<CancellationToken, Task<string?>>? _oauthTokenProvider;
     private readonly ILogger? _logger;
     private readonly TimeSpan _requestTimeout;
     private HttpClient? _client;
@@ -35,7 +35,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     public McpSseTransport(
         Uri endpoint,
         IReadOnlyDictionary<string, string>? headers = null,
-        Func<string?>? oauthTokenProvider = null,
+        Func<CancellationToken, Task<string?>>? oauthTokenProvider = null,
         ILogger? logger = null,
         TimeSpan? requestTimeout = null)
     {
@@ -109,9 +109,12 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         CancellationToken cancellationToken)
     {
         // 1. GET the SSE channel and wait for the endpoint announcement.
+        string? oauthToken = _oauthTokenProvider is not null
+            ? await _oauthTokenProvider(cancellationToken).ConfigureAwait(false)
+            : null;
         using HttpRequestMessage sseRequest = new(HttpMethod.Get, _endpoint);
         sseRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
-        ApplyHeaders(sseRequest);
+        ApplyHeaders(sseRequest, oauthToken);
         using HttpResponseMessage sseResponse = await client
             .SendAsync(sseRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
@@ -145,7 +148,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json"),
         };
-        ApplyHeaders(postRequest);
+        ApplyHeaders(postRequest, oauthToken);
         using HttpResponseMessage postResponse = await client
             .SendAsync(postRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
@@ -168,7 +171,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         }
     }
 
-    private void ApplyHeaders(HttpRequestMessage request)
+    private void ApplyHeaders(HttpRequestMessage request, string? oauthToken)
     {
         bool hasAuthorization = false;
         if (_headers is { Count: > 0 })
@@ -182,9 +185,9 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             }
         }
 
-        if (!hasAuthorization && _oauthTokenProvider?.Invoke() is { Length: > 0 } token)
+        if (!hasAuthorization && oauthToken is { Length: > 0 })
         {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
         }
     }
 

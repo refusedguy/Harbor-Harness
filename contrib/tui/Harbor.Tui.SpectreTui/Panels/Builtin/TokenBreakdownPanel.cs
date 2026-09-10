@@ -1,6 +1,7 @@
 using System.Globalization;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 /// <summary>

@@ -36,7 +36,7 @@ internal sealed class SkipUnlessIpcEventStreamEnabledAttribute : SkipAttribute
 ///     </list>
 /// </summary>
 [SkipUnlessIpcEventStreamEnabled]
-[NotInParallel]
+[NotInParallel("ipc")]
 public class EventStreamingTests
 {
     /// <summary>

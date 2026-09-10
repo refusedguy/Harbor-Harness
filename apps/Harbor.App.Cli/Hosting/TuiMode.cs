@@ -36,7 +36,7 @@ internal static class TuiMode
     private static readonly HashSet<string> InteractiveTuis = new(StringComparer.OrdinalIgnoreCase)
     {
         "spectre-tui", "spectre", "fullscreen", "termina", "terminal-gui", "razor",
-        "consoleex",
+        "consoleex", "cellforge",
     };
 
     /// <summary>The canonical CellForge renderer id (<c>HARBOR_TUI=cellforge</c>, <c>tui: "cellforge"</c>).</summary>

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Harbor.Evals</AssemblyName>
+    <Description>External evals v0 runner: drives Harbor CLI on fixture tasks, verifies behavior independently. BCL-only.</Description>
+  </PropertyGroup>
+
+</Project>

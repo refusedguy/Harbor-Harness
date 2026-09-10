@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Harbor.Terminal.Abstractions.Rendering;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Termina.Terminal;
 namespace Harbor.Tui.Termina.Rendering;
 /// <summary>

@@ -3,6 +3,7 @@ namespace Harbor.Hosting.Rendering;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Tui;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 
 /// <summary>

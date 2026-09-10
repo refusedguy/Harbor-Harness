@@ -19,11 +19,12 @@ namespace Harbor.Application.Sessions;
 ///         is normal, not an error.
 ///     </para>
 ///     <para>
-///         Skill format is deliberately minimal until specs define one: each
-///         top-level <c>*.md</c> file is one skill; its description comes from a
-///         front-matter <c>description:</c> line when present, otherwise from
-///         the first non-empty line stripped of Markdown markers. Project-local
-///         skills shadow global ones with the same file name.
+///         Skill format: <c>&lt;name&gt;/SKILL.md</c> in a skills root
+///         (preferred — front-matter <c>name:</c>, else the directory name) or
+///         a legacy flat <c>&lt;name&gt;.md</c> file. The description comes
+///         from a front-matter <c>description:</c> line when present, otherwise
+///         from the first non-empty line stripped of Markdown markers.
+///         Project-local skills shadow global ones with the same name.
 ///     </para>
 ///     <para>
 ///         Per-turn cost is bounded: two directory enumerations plus reading at
@@ -38,6 +39,7 @@ public static class WorkspaceContextSource
     public static readonly string[] ContextFileNames = ["AGENTS.md", "CLAUDE.md"];
 
     private const string ProjectSkillsDir = ".harbor/skills";
+    private const string SkillFileName = "SKILL.md";
     private const int MaxDescriptionLength = 160;
     // Safety valve so a stray huge file cannot swallow the model's context window.
     private const long MaxContextFileBytes = 256 * 1024;
@@ -164,7 +166,15 @@ public static class WorkspaceContextSource
     public static IReadOnlyList<SkillDescriptor> LoadSkills(string workingDirectory, string? globalSkillsDir)
     {
         string projectSkillsDir = Path.Combine(workingDirectory, ProjectSkillsDir);
+        return LoadSkillsFromRoots(projectSkillsDir, globalSkillsDir);
+    }
 
+    /// <summary>
+    ///     Load skills from explicit skills roots (e.g. CLI <c>skill list</c>
+    ///     with injected roots). Project root wins on name collisions.
+    /// </summary>
+    public static IReadOnlyList<SkillDescriptor> LoadSkillsFromRoots(string? projectSkillsDir, string? globalSkillsDir)
+    {
         var skills = new List<SkillDescriptor>();
         var seenNames = new HashSet<string>(StringComparer.Ordinal);
 
@@ -207,6 +217,98 @@ public static class WorkspaceContextSource
 
             skills.Add(new SkillDescriptor(name, ExtractDescription(filePath), filePath));
         }
+
+        CollectSkillDirectories(directory, skills, seenNames);
+    }
+
+    /// <summary>
+    ///     Second discovery shape: <c>&lt;root&gt;/&lt;name&gt;/SKILL.md</c>.
+    ///     The skill name is the front-matter <c>name:</c> when present, else
+    ///     the directory name. Runs after the flat scan in the same root so a
+    ///     flat <c>&lt;name&gt;.md</c> wins ties within one root (documented
+    ///     precedence); project-vs-global shadowing is unchanged.
+    /// </summary>
+    private static void CollectSkillDirectories(string? directory, List<SkillDescriptor> skills, HashSet<string> seenNames)
+    {
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        string[] subdirs;
+        try
+        {
+            subdirs = Directory.GetDirectories(directory);
+        }
+        catch (IOException)
+        {
+            return;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        Array.Sort(subdirs, StringComparer.Ordinal);
+
+        foreach (string subdir in subdirs)
+        {
+            string skillFile = Path.Combine(subdir, SkillFileName);
+            if (!File.Exists(skillFile))
+            {
+                continue;
+            }
+
+            string name = ExtractName(skillFile) ?? Path.GetFileName(subdir);
+            if (string.IsNullOrEmpty(name) || !seenNames.Add(name))
+            {
+                continue;
+            }
+
+            skills.Add(new SkillDescriptor(name, ExtractDescription(skillFile), skillFile));
+        }
+    }
+
+    /// <summary>Front-matter <c>name:</c> from the first 20 lines, else null.</summary>
+    private static string? ExtractName(string filePath)
+    {
+        try
+        {
+            using var reader = new StreamReader(filePath);
+            bool inFrontMatter = false;
+            int linesRead = 0;
+            while (linesRead++ < 20 && reader.ReadLine() is { } line)
+            {
+                if (linesRead == 1 && line.TrimEnd() == "---")
+                {
+                    inFrontMatter = true;
+                    continue;
+                }
+
+                if (!inFrontMatter)
+                {
+                    return null;
+                }
+
+                if (line.TrimEnd() == "---")
+                {
+                    return null;
+                }
+
+                string trimmed = line.TrimStart();
+                if (trimmed.StartsWith("name:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string name = trimmed["name:".Length..].Trim();
+                    return name.Length == 0 ? null : name;
+                }
+            }
+        }
+        catch (IOException)
+        {
+            // Fall through to null below (no front-matter name).
+        }
+
+        return null;
     }
 
     /// <summary>

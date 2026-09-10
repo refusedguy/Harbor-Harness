@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Providers;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;

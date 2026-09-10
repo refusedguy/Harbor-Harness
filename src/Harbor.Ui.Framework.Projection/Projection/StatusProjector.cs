@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Collections.Immutable;
 using System.Linq;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Ui.Framework.Projection;
 

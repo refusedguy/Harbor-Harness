@@ -99,6 +99,11 @@ public class OnboardingViewModelLiveModelsTests
         public void Toggle() { }
         public void ApplyHds(string theme) { }
         public void SetThemeVariant(bool isDark) { }
+        public event EventHandler<string>? ThemeJsonApplied;
+        public CSharpFunctionalExtensions.Result<string> LoadJson(string path) => CSharpFunctionalExtensions.Result.Success<string>(string.Empty);
+        public CSharpFunctionalExtensions.Result ApplyJson(string json) => CSharpFunctionalExtensions.Result.Success();
+        public System.IDisposable Watch(string path) => new NoopDisposable();
+        private sealed class NoopDisposable : System.IDisposable { public void Dispose() { } }
     }
 
     private sealed class StubToastService : IToastService

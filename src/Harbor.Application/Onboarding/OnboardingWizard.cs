@@ -154,7 +154,8 @@ public sealed class OnboardingWizard
     private async Task<Result<ProviderPresets.Preset>> PickProviderAsync(Func<string, Task<string>> reader, Action<string> writer, CancellationToken ct)
     {
         var presets = ProviderPresets.All;
-        while (true)
+        int emptyAttempts = 0;
+        while (!ct.IsCancellationRequested)
         {
             writer("");
             writer("Pick a provider (recommended: kilocode — has FREE models):");
@@ -167,8 +168,15 @@ public sealed class OnboardingWizard
             }
             writer("");
             string input = await reader("Enter number (or 'list' for details): ").ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(input)) continue;
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                emptyAttempts++;
+                if (emptyAttempts >= 3)
+                    return Result.Failure<ProviderPresets.Preset>("Non-interactive input or setup aborted.");
+                continue;
+            }
 
+            emptyAttempts = 0;
             if (input.Equals("list", StringComparison.OrdinalIgnoreCase))
             {
                 foreach (var p in presets)
@@ -182,12 +190,13 @@ public sealed class OnboardingWizard
             if (int.TryParse(input, out int idx) && idx >= 1 && idx <= presets.Count)
                 return Result.Success(presets[idx - 1]);
 
-            // Try as provider ID
             var byId = ProviderPresets.Find(input);
             if (byId is not null) return Result.Success(byId);
 
             writer($"Invalid selection: {input}");
         }
+
+        return Result.Failure<ProviderPresets.Preset>("Setup cancelled.");
     }
 
     /// <summary>Prompt + persist the API key when the preset needs one; pass the provider through otherwise.</summary>

@@ -24,7 +24,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         the app fully boots.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class SessionListTests : ComponentTestBase
 {
     [Before(HookType.Test)]
@@ -67,7 +67,6 @@ public sealed class SessionListTests : ComponentTestBase
             Vm.IsSidebarVisible = true;
             Vm.Sessions.Sessions.Clear();
         });
-        await Task.Delay(200).ConfigureAwait(false);
 
         var sidebarVisible = UI(() => Vm.IsSidebarVisible);
         await Assert.That(sidebarVisible).IsTrue();
@@ -128,7 +127,6 @@ public sealed class SessionListTests : ComponentTestBase
                 DateTimeOffset.UtcNow, 2, "/home/z/myproject"));
             Vm.Sessions.ActiveSession = sessions[1];
         });
-        await Task.Delay(250).ConfigureAwait(false);
 
         var activeId = UI(() => Vm.Sessions.ActiveSession?.Id);
         await Assert.That(activeId).IsEqualTo("s2");
@@ -189,7 +187,6 @@ public sealed class SessionListTests : ComponentTestBase
                 "s1", "Existing session", "code", "qwen2.5-coder:7b", "ollama",
                 DateTimeOffset.UtcNow, 5, "/home/z/myproject"));
         });
-        await Task.Delay(150).ConfigureAwait(false);
 
         UI(() =>
         {
@@ -198,7 +195,6 @@ public sealed class SessionListTests : ComponentTestBase
                 DateTimeOffset.UtcNow, 0, "/home/z/myproject"));
             Vm.Sessions.ActiveSession = Vm.Sessions.Sessions[1];
         });
-        await Task.Delay(250).ConfigureAwait(false);
 
         var hasNew = await Driver.WaitForTextAsync("New session", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -236,29 +232,24 @@ public sealed class SessionListTests : ComponentTestBase
         // pass before the row container exists for text probes.
         await Driver.ShowMainWindowAsync().ConfigureAwait(false);
 
-        // Tick+probe loop: each ShowMainWindowAsync pass forces layout +
-        // render so virtualized ListBox containers realize deterministically;
-        // a plain text poll can starve when no render tick fires.
-        bool hasKeep = false;
-        for (int i = 0; i < 20 && !hasKeep; i++)
-        {
-            await Driver.ShowMainWindowAsync().ConfigureAwait(false);
-            hasKeep = Driver.GetAllVisibleText().Contains("Keep me", StringComparison.Ordinal);
-            if (!hasKeep)
+        // Deterministic settle: each ShowMainWindowAsync forces layout+render;
+        // poll until the row appears instead of a fixed tick+sleep loop.
+        bool hasKeep = await Driver.WaitForConditionAsync(
+            () =>
             {
-                await Task.Delay(100).ConfigureAwait(false);
-            }
-        }
+                // Force a render tick on each poll so virtualized containers realize.
+                Driver.ShowMainWindowAsync().GetAwaiter().GetResult();
+                return Driver.GetAllVisibleText().Contains("Keep me", StringComparison.Ordinal);
+            },
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
         await Assert.That(hasKeep).IsTrue();
 
-        // The "Opened: Delete me" toast lingers ~4s and mentions the deleted
-        // title; wait it out before asserting absence.
-        bool toastGone = false;
-        for (int i = 0; i < 40 && !toastGone; i++)
-        {
-            await Task.Delay(150).ConfigureAwait(false);
-            toastGone = !Driver.GetAllVisibleText().Contains("Delete me", StringComparison.Ordinal);
-        }
+        // The "Opened: Delete me" toast lingers ~4s — poll deterministically until gone.
+        bool toastGone = await Driver.WaitForConditionAsync(
+            () => !Driver.GetAllVisibleText().Contains("Delete me", StringComparison.Ordinal),
+            TimeSpan.FromSeconds(6),
+            TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
         await Assert.That(toastGone).IsTrue();
 
         var path = await CaptureAsync("sessions-deleted").ConfigureAwait(false);
@@ -286,16 +277,14 @@ public sealed class SessionListTests : ComponentTestBase
         // Same virtualization note as SessionList_Deleted: tick after reveal.
         await Driver.ShowMainWindowAsync().ConfigureAwait(false);
 
-        bool hasFeature = false;
-        for (int i = 0; i < 20 && !hasFeature; i++)
-        {
-            await Driver.ShowMainWindowAsync().ConfigureAwait(false);
-            hasFeature = Driver.GetAllVisibleText().Contains("Feature work", StringComparison.Ordinal);
-            if (!hasFeature)
+        bool hasFeature = await Driver.WaitForConditionAsync(
+            () =>
             {
-                await Task.Delay(100).ConfigureAwait(false);
-            }
-        }
+                Driver.ShowMainWindowAsync().GetAwaiter().GetResult();
+                return Driver.GetAllVisibleText().Contains("Feature work", StringComparison.Ordinal);
+            },
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
         await Assert.That(hasFeature).IsTrue();
 
         var path = await CaptureAsync("sessions-git-info").ConfigureAwait(false);

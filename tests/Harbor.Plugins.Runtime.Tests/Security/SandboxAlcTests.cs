@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
@@ -97,12 +98,15 @@ public sealed class SandboxAlcTests
         bool unloaded = false;
         for (int i = 0; i < 10 && !unloaded; i++)
         {
-            GC.Collect();
+            ForceCollect();
             GC.WaitForPendingFinalizers();
-            GC.Collect();
+            ForceCollect();
             unloaded = !alcRef.IsAlive;
         }
 
         await Assert.That(unloaded).IsTrue();
     }
+
+    [SuppressMessage("Performance", "S1215", Justification = "Collectible ALC unload test: must drive finalization to prove no leaks.")]
+    private static void ForceCollect() => GC.Collect();
 }

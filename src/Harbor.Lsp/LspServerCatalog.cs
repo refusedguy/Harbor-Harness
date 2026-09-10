@@ -45,10 +45,47 @@ public sealed record LspServerDefinition(
         "csharp-ls", [],
         [".cs"]);
 
-    /// <summary>The five builtin language servers, in default startup order.</summary>
+    /// <summary>clangd (C/C++).</summary>
+    public static LspServerDefinition Clangd { get; } = new(
+        "clangd", "C/C++",
+        "clangd", [],
+        [".c", ".h", ".cpp", ".hpp", ".cc", ".cxx"]);
+
+    /// <summary>Eclipse JDT language server (Java).</summary>
+    public static LspServerDefinition Java { get; } = new(
+        "java", "Java",
+        "jdtls", [],
+        [".java"]);
+
+    /// <summary>vscode-html-language-server (HTML).</summary>
+    public static LspServerDefinition Html { get; } = new(
+        "html", "HTML",
+        "vscode-html-language-server", ["--stdio"],
+        [".html", ".htm"]);
+
+    /// <summary>vscode-css-language-server (CSS/SCSS/Less).</summary>
+    public static LspServerDefinition Css { get; } = new(
+        "css", "CSS",
+        "vscode-css-language-server", ["--stdio"],
+        [".css", ".scss", ".less"]);
+
+    /// <summary>vscode-json-language-server (JSON).</summary>
+    public static LspServerDefinition Json { get; } = new(
+        "json", "JSON",
+        "vscode-json-language-server", ["--stdio"],
+        [".json", ".jsonc"]);
+
+    /// <summary>lua-language-server (Lua).</summary>
+    public static LspServerDefinition Lua { get; } = new(
+        "lua", "Lua",
+        "lua-language-server", [],
+        [".lua"]);
+
+    /// <summary>The builtin language servers, in default startup order.</summary>
     public static IReadOnlyList<LspServerDefinition> Builtin { get; } =
     [
         TypeScript, Python, Go, Rust, CSharp,
+        Clangd, Java, Html, Css, Json, Lua,
     ];
 
     /// <summary>True when this server handles the file (by extension, case-insensitive).</summary>

@@ -61,12 +61,14 @@ public class RipGrepToolTests
     }
 
     [Test]
-    public async Task ValidateArguments_MissingPattern_ReturnsFailure()
+    [Arguments("{}", false)]
+    [Arguments("""{"pattern":"foo"}""", true)]
+    public async Task ValidateArguments_Theory(string json, bool expectSuccess)
     {
         var tool = new RipGrepTool(NullLogger<RipGrepTool>.Instance);
-        var args = JsonDocument.Parse("{}").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
     }
 
     [Test]
@@ -201,6 +203,7 @@ public class RipGrepToolTests
 /// <summary>
 ///     Skip the test when <c>rg</c> is NOT on PATH. Used by the "WhenRgInstalled" tests.
 /// </summary>
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
 internal sealed class SkipWhenRgMissingAttribute : SkipAttribute
 {
     public SkipWhenRgMissingAttribute() : base(RipGrepToolTests.RgMissingReason) { }
@@ -213,6 +216,7 @@ internal sealed class SkipWhenRgMissingAttribute : SkipAttribute
 /// <summary>
 ///     Skip the test when <c>rg</c> IS on PATH. Used by the "MissingRg" test.
 /// </summary>
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
 internal sealed class SkipWhenRgPresentAttribute : SkipAttribute
 {
     public SkipWhenRgPresentAttribute() : base(RipGrepToolTests.RgPresentReason) { }

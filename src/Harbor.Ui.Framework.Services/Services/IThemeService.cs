@@ -1,4 +1,7 @@
+using CSharpFunctionalExtensions;
+
 namespace Harbor.Ui.Framework.Services;
+
 /// <summary>
 ///     Abstraction for theme switching. Each desktop app implements this
 ///     to manipulate its own theme resource system.
@@ -28,4 +31,16 @@ public interface IThemeService
 
     /// <summary>Set the base chrome variant (dark / light) without changing palette.</summary>
     public void SetThemeVariant(bool isDark);
+
+    /// <summary>Load a theme JSON file from disk.</summary>
+    public Result<string> LoadJson(string path);
+
+    /// <summary>Parse and apply a theme from a JSON string.</summary>
+    public Result ApplyJson(string json);
+
+    /// <summary>Raised after a JSON theme is applied successfully.</summary>
+    public event EventHandler<string>? ThemeJsonApplied;
+
+    /// <summary>Watch a theme JSON file for live reload.</summary>
+    public IDisposable Watch(string path);
 }

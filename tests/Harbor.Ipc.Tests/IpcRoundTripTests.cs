@@ -29,7 +29,7 @@ namespace Harbor.Ipc.Tests;
 ///         parallel without colliding on the same socket file.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("ipc")]
     public class IpcRoundTripTests
 {
     /// <summary>

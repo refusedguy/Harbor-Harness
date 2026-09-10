@@ -8,6 +8,7 @@ using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Abstractions.Tui;
 using Harbor.Hosting.Rendering;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;

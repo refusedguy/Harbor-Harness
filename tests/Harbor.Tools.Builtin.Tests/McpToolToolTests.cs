@@ -27,33 +27,18 @@ public class McpToolToolTests
     }
 
     [Test]
-    public async Task ValidateArguments_MissingServer_ReturnsFailure()
+    [Arguments("""{"method":"tools/list"}""", false, "server")]
+    [Arguments("""{"server":"fs"}""", false, "method")]
+    [Arguments("""{"server":"fs","method":"tools/call","args":"not-an-object"}""", false, "args")]
+    [Arguments("""{"server":"fs","method":"tools/call","args":{}}""", true, null)]
+    public async Task ValidateArguments_Theory(string json, bool expectSuccess, string? expectedErrorSubstring = null)
     {
         var tool = NewTool(new InMemoryMcpRegistry(NullLogger<InMemoryMcpRegistry>.Instance));
-        var args = JsonDocument.Parse("""{"method":"tools/list"}""").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("server");
-    }
-
-    [Test]
-    public async Task ValidateArguments_MissingMethod_ReturnsFailure()
-    {
-        var tool = NewTool(new InMemoryMcpRegistry(NullLogger<InMemoryMcpRegistry>.Instance));
-        var args = JsonDocument.Parse("""{"server":"fs"}""").RootElement;
-        var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("method");
-    }
-
-    [Test]
-    public async Task ValidateArguments_ArgsNotObject_ReturnsFailure()
-    {
-        var tool = NewTool(new InMemoryMcpRegistry(NullLogger<InMemoryMcpRegistry>.Instance));
-        var args = JsonDocument.Parse("""{"server":"fs","method":"tools/call","args":"not-an-object"}""").RootElement;
-        var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("args");
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
+        if (expectedErrorSubstring is not null)
+            await Assert.That(result.Error).Contains(expectedErrorSubstring);
     }
 
     [Test]

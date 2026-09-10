@@ -23,9 +23,13 @@ public sealed class CtrlCGestureScenarioTests : CellForgePtyScenarioBase
 
         // Buffer has text → Ctrl+C clears it (Edited), never the abort gesture.
         SubmitLineText("draft text");
-        await Task.Delay(300).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("draft text", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         SendCtrlC();
-        await Task.Delay(400).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => !l.Any(x => x.Contains("draft text", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // No exit hint, buffer cleared (the draft is gone from the screen).
         string[] lines = NormalizedLines();
@@ -60,9 +64,11 @@ public sealed class CtrlCGestureScenarioTests : CellForgePtyScenarioBase
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // Past the 2000 ms gesture window the press no longer quits.
-        await Task.Delay(2300).ConfigureAwait(false);
+        await Task.Delay(2300).ConfigureAwait(false); // gesture-window timing: must be real delay
         SendCtrlC();
-        await Task.Delay(500).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("^C — ещё раз для выхода", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // Still alive: a FRESH hint, not an exit. (Count plain-substring
         // matches — the rendered line starts with the literal '^' character.)

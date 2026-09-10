@@ -1,5 +1,6 @@
 using System.Text;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Tui.TerminalGui.Views;
 /// <summary>
 ///     Projects <see cref="InputModel" /> into a display string with a

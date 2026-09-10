@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harbor Sprint Report</title>
+<style>
+  :root {
+    --bg: #0a0e14; --panel: #0d1117; --border: #1f2430;
+    --text: #b3b9c5; --dim: #5c6773; --accent: #39bae6;
+    --ok: #7fd962; --warn: #ffb454; --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    font-size: 13px; line-height: 1.6; padding: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 8px; color: var(--accent); }
+  h2 { font-size: 16px; margin: 16px 0 8px; color: var(--accent); }
+  h3 { font-size: 14px; margin: 12px 0 6px; color: var(--text); }
+  .sub { color: var(--dim); font-size: 12px; margin-bottom: 16px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; padding: 12px; margin: 8px 0;
+  }
+  .title {
+    color: var(--dim); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 8px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td {
+    text-align: left; padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--dim); font-weight: normal; }
+  .ok { color: var(--ok); }
+  .err { color: var(--err); }
+  .warn { color: var(--warn); }
+  .accent { color: var(--accent); }
+  code {
+    background: #131820; border: 1px solid var(--border);
+    border-radius: 3px; padding: 2px 6px; font-size: 11px;
+    color: #d2a6ff;
+  }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  .finding {
+    background: rgba(255,107,107,0.05);
+    border-left: 2px solid var(--err);
+    padding: 8px; margin: 6px 0;
+  }
+  .finding.high { border-left-color: var(--err); }
+  .finding.medium { border-left-color: var(--warn); }
+  .finding.low { border-left-color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Harbor Sprint Report</h1>
+    <div class="sub">Generated: $(date '+%d.%m.%Y %H:%M') · Branch: $(git branch --show-current) · HEAD: $(git rev-parse --short HEAD)</div>
+  </div>
+  <div class="card">
+    <div class="title">Sprint Queue</div>
+    <table>
+      <tr><th>Sprint</th><th>State</th><th>Commits</th><th>Last Activity</th></tr>
+      <tr><td><span class="accent">avalonia</span></td><td><span class="accent">queued</span></td><td>null</td><td>2026-09-02T16:00:02+0500</td></tr>
+      <tr><td><span class="accent">null</span></td><td><span class="ok">done</span></td><td>0</td><td>2026-09-01T08:30:00Z</td></tr>
+      <tr><td><span class="accent">codegen-boilerplate</span></td><td><span class="err">failed</span></td><td>0</td><td>2026-09-03T02:37:37+0500</td></tr>
+      <tr><td><span class="accent">demo-gif</span></td><td><span class="ok">done</span></td><td>3</td><td>2026-08-31T23:56:02Z</td></tr>
+      <tr><td><span class="accent">design-system-product</span></td><td><span class="ok">done</span></td><td>3</td><td>2026-08-28T23:40:00+05:00</td></tr>
+      <tr><td><span class="accent">null</span></td><td><span class="accent">queued</span></td><td>null</td><td>null</td></tr>
+      <tr><td><span class="accent">null</span></td><td><span class="accent">queued</span></td><td>null</td><td>null</td></tr>
+      <tr><td><span class="accent">null</span></td><td><span class="accent">queued</span></td><td>null</td><td>null</td></tr>
+      <tr><td><span class="accent">null</span></td><td><span class="accent">queued</span></td><td>null</td><td>null</td></tr>
+      <tr><td><span class="accent">null</span></td><td><span class="accent">queued</span></td><td>null</td><td>null</td></tr>
+      <tr><td><span class="accent">null</span></td><td><span class="accent">queued</span></td><td>null</td><td>null</td></tr>
+      <tr><td><span class="accent">ide-integration</span></td><td><span class="ok">done</span></td><td>51</td><td>2026-08-31T08:52:00+05:00</td></tr>
+      <tr><td><span class="accent">mascot-brand</span></td><td><span class="accent">queued</span></td><td>10</td><td>2026-08-31T23:38:54Z</td></tr>
+      <tr><td><span class="accent">null</span></td><td><span class="ok">done</span></td><td>58</td><td>2026-08-29T23:19:02+05:00</td></tr>
+      <tr><td><span class="accent">osc-expansion</span></td><td><span class="ok">done</span></td><td>3</td><td>2026-09-01T03:22:52+0500</td></tr>
+      <tr><td><span class="accent">null</span></td><td><span class="ok">done</span></td><td>8</td><td>2026-08-29T17:35:00Z</td></tr>
+      <tr><td><span class="accent">release-engineering</span></td><td><span class="ok">done</span></td><td>48</td><td>2026-08-30T06:32:19Z</td></tr>
+      <tr><td><span class="accent">renderer-moat</span></td><td><span class="ok">done</span></td><td>3</td><td>2026-09-01T04:09:05+0500</td></tr>
+      <tr><td><span class="accent">Renderer Unification</span></td><td><span class="ok">done</span></td><td>71</td><td>2026-08-28T14:35:00Z</td></tr>
+      <tr><td><span class="accent">null</span></td><td><span class="ok">done</span></td><td>30</td><td>null</td></tr>
+      <tr><td><span class="accent">null</span></td><td><span class="ok">done</span></td><td>21</td><td>2026-08-31T12:24:03+0500</td></tr>
+      <tr><td><span class="accent">UI-FINAL</span></td><td><span class="ok">done</span></td><td>14</td><td>null</td></tr>
+      <tr><td><span class="accent">UI-V2-HOTFIX</span></td><td><span class="accent">queued</span></td><td>0</td><td>null</td></tr>
+      <tr><td><span class="accent">UI-V2</span></td><td><span class="ok">done</span></td><td>19</td><td>2026-08-28T06:52:29Z</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: avalonia · queued · null commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">queued</span></li>
+      <li>Started: 2026-09-02T15:04:15+0500</li>
+      <li>Finished: null</li>
+      <li>Commits: null</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code>Ты работаешь в репозитории Harbor-Harness (.NET 10). Спринт Avalonia Desktop Polish.  ## Context Harbor имеет полноценную Avalonia desktop GUI (`apps/Harbor.App.Avalonia/`), но она не покрыта dedicated спринтом. В то же время в ROADMAP.md висят Avalonia-specific задачи: accessibility audit, reusable component catalog, E2E coverage.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: ci-cd-maturity · done · 0 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: 2026-09-01T06:38:35+0500</li>
+      <li>Finished: null</li>
+      <li>Commits: 0</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># CI/CD Maturity — довести GitHub Actions до production качества  ## Цель Сделать CI быстрым, надежным и информативным: сборка, тесты, coverage, perf gate, артефакты, релизы.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: codegen-boilerplate · failed · 0 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">failed</span></li>
+      <li>Started: 2026-09-02T08:31:00+0500</li>
+      <li>Finished: null</li>
+      <li>Commits: 0</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># Sprint: CodeGen Boilerplate Reduction  ## Context Harbor уже использует 6 source generators (ResourceKeyGenerator, MemoryPack, CommunityToolkit.Mvvm, ZLinq, System.Text.Json, TUnit), но boilerplate in TUI/render pipeline remains heavy. Самый больной участок — UI layer (biggest pain point per user). Цель: добавить новые source generators для устранения повторяющегося кода в renderer backends и CAS-циклах.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: demo-gif · done · 3 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: null</li>
+      <li>Finished: 2026-08-31T23:45:05Z</li>
+      <li>Commits: 3</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># Demo GIF — терминальные демо для README  ## Цель Сделать reproducible GIF/MP4 демо работы Harbor-Harness для README и docs, чтобы проект можно было показать без установки.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: design-system-product · done · 3 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: 2026-08-28T21:16:40+05:00</li>
+      <li>Finished: 2026-08-28T23:40:00+05:00</li>
+      <li>Commits: 3</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># SPRINT: Design System as Product  ## Context Harbor.DesignSystem + TerminalColorPalette is a moat: one design system powers ConsoleEx + Avalonia + Blazor. This sprint extracts it into a standalone, consumable library with documentation, theme marketplace, and public API.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: gh-issue-13-god-objects · queued · null commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">queued</span></li>
+      <li>Started: null</li>
+      <li>Finished: null</li>
+      <li>Commits: null</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># SPRINT: gh-issue-13-god-objects  ## Goal Разбить оставшиеся god-objects на domain-объекты: OpenAI/Anthropic клиенты, HarborConfig, HostBuilder, SessionManager.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: gh-issue-14-flaky-tests · queued · null commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">queued</span></li>
+      <li>Started: null</li>
+      <li>Finished: null</li>
+      <li>Commits: null</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># SPRINT: gh-issue-14-flaky-tests  ## Goal Исправить известные нестабильные и падающие тесты (Avalonia headless + IPC на Linux).  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: gh-issue-15-mcp-transports · queued · null commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">queued</span></li>
+      <li>Started: null</li>
+      <li>Finished: null</li>
+      <li>Commits: null</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># SPRINT: gh-issue-15-mcp-transports  ## Goal Довести MCP-слой Harbor до production-уровня: добавить HTTP/SSE транспорты, resources, prompts, OAuth, lazy reconnect.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: gh-issue-16-skills · queued · null commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">queued</span></li>
+      <li>Started: null</li>
+      <li>Finished: null</li>
+      <li>Commits: null</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># SPRINT: gh-issue-16-skills  ## Goal Реализовать Skills system: SKILL.md discovery, skill tool, system-prompt injection.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: gh-issue-17-lsp · queued · null commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">queued</span></li>
+      <li>Started: null</li>
+      <li>Finished: null</li>
+      <li>Commits: null</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># SPRINT: gh-issue-17-lsp  ## Goal Интегрировать LSP для диагностики, переходов по коду и definition tools.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: gh-issue-18-session-polish · queued · null commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">queued</span></li>
+      <li>Started: null</li>
+      <li>Finished: null</li>
+      <li>Commits: null</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># SPRINT: gh-issue-18-session-polish  ## Goal Session polish: /tree, branch summaries, JSONL import/export, rename.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: ide-integration · done · 51 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: 2026-08-31T06:23:51+0500</li>
+      <li>Finished: 2026-08-31T03:53:57Z</li>
+      <li>Commits: 51</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code>Ты работаешь в репозитории Harbor-Harness (.NET 10). Спринт IDE Integration.  ## Context Harbor — terminal-native harness, но IDE integration отложен на v0.7 (LSP) и /ide IPC bridge вообще выбит из UI-FINAL deferred list. Конкуренты (Orca с electron-pty + xterm, Kilo с VS Code extension) ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: mascot-brand · queued · 10 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">queued</span></li>
+      <li>Started: 2026-08-31T22:50:14+0500</li>
+      <li>Finished: 2026-09-01T00:42:43+0500</li>
+      <li>Commits: 10</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># SPRINT: Mascot as Brand — State-Reactive ASCII Character  ## Context Harbor's ambient mascot is functional but lacks depth vs Claude Code's /buddy. This sprint makes the mascot memorable and state-reactive without breaking zero-alloc/CI constraints. Goal: a character, not a Tamagotchi clone.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: multi-agent · done · 58 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: null</li>
+      <li>Finished: null</li>
+      <li>Commits: 58</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code>Ты работаешь в репозитории Harbor-Harness (.NET 10). Спринт Multi-Agent.  ## Context Harbor умеет запускать фоновых агентов (R25-R26: per-session UiStore, EventBus маршрутизация по SessionId), но sub-agent execution — заглушка. TaskTool валидирует, что агент — sub-agent, и падает с "not implemented" ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: osc-expansion · done · 3 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: 2026-09-01T02:49:23+0500</li>
+      <li>Finished: 2026-09-01T03:22:52+0500</li>
+      <li>Commits: 3</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># SPRINT: OSC Expansion — Terminal Protocol Fluency  ## Context Harbor already speaks OSC 11 (auto-theme) and OSC 52 (copy-on-select). This sprint expands the protocol stack to make Harbor the most terminal-fluent TUI in existence. Competitors don't even have OSC 11.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: performance · done · 8 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: null</li>
+      <li>Finished: null</li>
+      <li>Commits: 8</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code>Ты работаешь в репозитории Harbor-Harness (.NET 10). Спринт Performance.  ## Context Harbor позиционируется как быстрый AI harness, но в коде остались 4 "убийцы" производительности, которые никто из конкурентов не имеет — и которые мы можем убрать. ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: release-engineering · done · 48 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: null</li>
+      <li>Finished: null</li>
+      <li>Commits: 48</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code>Ты работаешь в репозитории Harbor-Harness (.NET 10). Спринт Release Engineering.  ## Context Harbor использует kilo-chain для автономных спринтов (.kilo-docs/sprint-chain.md + scripts/sprint-chain.sh). Очередь спринтов уже заполнена (6 спринтов без prompt.md), но диспатчер всё ещё требует ручных шагов: ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: renderer-moat · done · 3 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: 2026-09-01T02:22:16+0500</li>
+      <li>Finished: 2026-09-01T04:09:05+0500</li>
+      <li>Commits: 3</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># SPRINT: Renderer Moat — Cell-Diff Deepening  ## Context Harbor's cell-diff engine is the #1 unfair advantage vs ratatui/line-based TUIs. This sprint hardens it: partial-scan diffs, lock-free hot-swap runtime, and shader-like post-render effects. Goal: make the renderer moat unclonable for 12+ months.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: renderer-unification · done · 71 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: 2026-08-28T10:30:00Z</li>
+      <li>Finished: 2026-08-28T20:30:00Z</li>
+      <li>Commits: 71</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># Sprint: Renderer Unification  ## Context Выполняем после UI-V2. Цель: унифицировать рендереры, переименовать ConsoleEx, добавить Nickprotop/ConsoleEx как второй backend.  ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: security · done · 30 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: null</li>
+      <li>Finished: null</li>
+      <li>Commits: 30</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code>Ты работаешь в репозитории Harbor-Harness (.NET 10). Спринт Security & Sandboxing.  ## Context У Harbor уже есть IPluginTrustPolicy + TrustingPluginSource (fail-closed gate, sha256 path binding, ~/.harbor/plugins/trust.json, approve y/N at startup, docs/ROADMAP.md v0.5.0). ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: testing-strategy · done · 21 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: 2026-08-31T09:23:55+0500</li>
+      <li>Finished: 2026-08-31T13:05:00Z</li>
+      <li>Commits: 21</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code>Ты работаешь в репозитории Harbor-Harness (.NET 10). Спринт Testing Strategy.  ## Context ~1350 unit tests проходят, но E2E покрытие — 12 тестов + ConsoleEx PTY suite (8 сценариев). Нет screenshot-diff тестов для Avalonia компонентов, нет concurrent multi-session load tests, ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: UI-FINAL · done · 14 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: 2026-08-27T16:30:00+05:00</li>
+      <li>Finished: 2026-08-27T18:00:00+05:00</li>
+      <li>Commits: 14</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code>Ты работаешь в репозитории Harbor-Harness (.NET 10). Спринт UI-FINAL.  СТАТУС: агент-человек уже сделал часть инфраструктуры, но UI всё ещё выглядит как кал. Твоя задача — довести до продакшена.  УЖЕ СДЕЛАНО (не трогай): ...</code></p>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: ui-v2 · done · 19 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">done</span></li>
+      <li>Started: 2026-08-27T20:25:15+0500</li>
+      <li>Finished: 2026-08-28T08:33:53Z</li>
+      <li>Commits: 19</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code>Ты работаешь в репозитории Harbor-Harness (.NET 10). Спринт UI-V2.  СТАТУС: UI-FINAL закрыт. Твоя задача — только UI/UX код, не возвращайся к сессиям/плагинам/агенту/storage.  УЖЕ СДЕЛАНО (не трогай): ...</code></p>
+    <h3>Findings</h3>
+  </div>
+  <div class="card">
+    <div class="title">Sprint: ui-v2-hotfix · queued · 0 commits</div>
+    <h3>Status</h3>
+    <ul>
+      <li>State: <span class="accent">queued</span></li>
+      <li>Started: null</li>
+      <li>Finished: null</li>
+      <li>Commits: 0</li>
+    </ul>
+    <h3>Prompt</h3>
+    <p><code># HOTFIX SPRINT: Approval Gate Queue, Renderer Lag, Windows PTY  ## Context Bug investigation of `Harbor-Harness` (C#/.NET 10, Avalonia + ConsoleEx TUI) found three regressions blocking the next stable release. This sprint fixes them with minimal surface area. Do NOT refactor adjacent code. Do NOT rewrite the renderer. Fix only the identified roots.  ...</code></p>
+  </div>
+</div>
+</body>
+</html>
