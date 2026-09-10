@@ -41,6 +41,16 @@ internal static class JsonlMessageCodec
     ///     of the JSONL line. Uses named DTO types (AOT-registered in
     ///     <see cref="JsonlCodecContext" />) instead of anonymous types.
     /// </summary>
+    /// <remarks>
+    ///     <b>#51:</b> <see cref="ToolResultEntry.Metadata" /> is deliberately
+    ///     dropped here. It is <c>object?</c>-typed (arbitrary runtime content),
+    ///     so the source-generated <see cref="JsonlCodecContext" /> has no
+    ///     <c>TypeInfo</c> for it and serialization throws per turn whenever a
+    ///     tool attaches non-null metadata. The read path
+    ///     (<see cref="JsonlLineParser" />) never restores metadata either, and
+    ///     the <c>ToolResult.Success/Error</c> contract documents it as
+    ///     "not serialized" — dropping on write is fidelity-neutral.
+    /// </remarks>
     public static object SerializeMessagePayload(AgentMessage message)
     {
         return message switch
@@ -53,7 +63,8 @@ internal static class JsonlMessageCodec
                 Model: a.Model,
                 IsSummary: a.IsSummary,
                 SummaryFirstKeptId: a.SummaryFirstKeptId),
-            ToolResultMessage tr => new ToolResultPayload(tr.Results.ToArray()),
+            ToolResultMessage tr => new ToolResultPayload(
+                tr.Results.Select(r => new ToolResultEntry(r.ToolCallId, r.ToolName, r.Output, r.IsError)).ToArray()),
             _ => new UnknownPartPayload("unknown")
         };
     }
