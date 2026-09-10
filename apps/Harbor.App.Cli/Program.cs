@@ -192,6 +192,7 @@ public static class Program
             return sub.Length == 0 ? 2 : 1;
         }
 
+        MarkApproverless(); // #52: one-shot, frame loop не крутится
         using var host = HostBuilder.Build(args);
         return await TaskRunRunner.RunAsync(Console.Out, Console.Error, host.Services, args.Skip(1).ToArray())
             .ConfigureAwait(false);
@@ -286,6 +287,7 @@ public static class Program
         }
         string prompt = string.Join(' ', StripLogArgs(args));
         _logger.LogInformation("Starting ask command with prompt length {Length}", prompt.Length);
+        MarkApproverless(); // #52: one-shot, frame loop не крутится
         using var host = HostBuilder.Build(args);
         await StartIpcAsync(host.Services).ConfigureAwait(false);
         var scriptResult = await RunStartupScriptAsync(host.Services, scriptPath).ConfigureAwait(false);
@@ -908,6 +910,17 @@ public static class Program
     }
 
     // ── Helpers ──
+    /// <summary>
+    ///     Помечает процесс как approver-less (#52): one-shot verbs
+    ///     (<c>ask</c>, <c>run task</c>) никогда не крутят ChatScreen frame
+    ///     loop, поэтому approval-карточка CellForge заведомо не может быть
+    ///     отвечена. <see cref="Hosting.CellForgeModule" /> по этому маркеру
+    ///     не подменяет fail-closed <c>PermissionService</c> интерактивным
+    ///     asker'ом — Ask-вызовы получают быстрый Deny вместо вечного ожидания.
+    /// </summary>
+    internal static void MarkApproverless() =>
+        Environment.SetEnvironmentVariable("HARBOR_NO_APPROVER", "1");
+
     // Delegates to HarborLogManager.ResolveConsoleLevel so the default level
     // (Debug under debugger, Information otherwise) and the --log-level /
     // --loglevel / -ll / HARBOR_LOGLEVEL forms stay in one place. Kept for
