@@ -17,7 +17,8 @@
 | P1 | `EventBus.PublishAsync` | фикс. 8.1 KB alloc даже при 0 подписчиков | ring-buffer scrollback |
 | P2 | `StreamingCoalescer` tool-call Materialize | 481 µs @1000 дельт (35–48× медленнее текста) | кэш разобранных аргументов |
 | P2 | `PatchTool` apply | 10.1 ms / **9.3 MB** @5000 hunks | стримить вместо List<string>+Join |
-| P2 | `DefaultUiProjector` | 20.8 ms @5000 строк за кадр | инкрементальная проекция по revision |
+| P2 | `DefaultUiProjector` | 20.8 ms @5000 строк за кадр (холодный полный проход; инкрементальный кэш уже влито — см. ниже) | инкрементальная проекция по revision |
+| OK | `DefaultUiProjector` инкремент | 1000 дельт → 1001 проекция: **962 no-op reuse, 38 tail (флаши), 1 history**; markdown-парсов на store-пути 0; итого 475 µs / 1.03 MB (2026-09-10, `StreamingDeltaFrequencyBenchmark`, регрессия — `StreamingFrequencyTests`) | пожара нет; следить за transcript-композицией при росте history |
 | P3 | `SessionId` Dictionary key | медленнее string (7.9 vs 6.3 µs), HashSet быстрее — проверить GetHashCode | override hash |
 | P3 | `OpenAiSseParser` | плоские ~10 µs floor на любой чанк | Utf8JsonReader поверх span без ToString() |
 
@@ -33,6 +34,8 @@
 | JsonlSessionStore.Append ×100 | 1.74 ms | 187 KB |
 | Sqlite WAL Append ×10 | 2.2–2.6 ms | 155 KB |
 | AppStore.Dispatch TextDelta ×1000 | 1.72 ms | 19.4 MB |
+| UiStore dispatch + DefaultUiProjector per delta ×1000 (24B deltas, 2026-09-10) | 475 µs | 1.03 MB |
+| UiStore dispatch + DefaultUiProjector per delta ×2000 (24B deltas, 2026-09-10) | 1.09 ms | 2.46 MB |
 | DefaultUiProjector 5000 lines | 20.8 ms | ~MB |
 | Terminal ANSI vs plain blit | 364 / 330 µs | 12 / 10 KB |
 | PatchTool apply 5000 hunks | 10.1 ms | 9.3 MB |
