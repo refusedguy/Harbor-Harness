@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Harbor.Abstractions.Permissions;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering.Widgets;
@@ -18,6 +19,15 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     private const int MaxPendingGates = 8;
 
     private readonly Queue<ApprovalGateView> _pendingGates = new();
+
+    /// <summary>
+    ///     Runtime approval coordinator (#49 PR1). When set, every recorded
+    ///     decision is stamped into the coordinator after the view applies it —
+    ///     the coordinator is the single rendezvous for the asker waiter vs
+    ///     cancellation. Null keeps the legacy view-only path (tests, hosts
+    ///     without the coordinator registered).
+    /// </summary>
+    public IApprovalCoordinator? Coordinator { get; set; }
 
     /// <summary>Gates posted off the render thread (tool-execution context), drained by <see cref="DrainQueued" />.</summary>
     private readonly ConcurrentQueue<ApprovalGateView> _gateQueue = new();
@@ -92,6 +102,7 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
         if (!gate.IsPending)
         {
             _ = _pendingGates.Dequeue();
+            StampDecision(gate);
         }
 
         panel.Timeline.MarkLastDirty();
@@ -128,6 +139,7 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
         if (!gate.IsPending)
         {
             _ = _pendingGates.Dequeue();
+            StampDecision(gate);
         }
 
         panel.Timeline.MarkLastDirty();
@@ -155,9 +167,31 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
         _pendingGates.Enqueue(gate);
         while (_pendingGates.Count > MaxPendingGates)
         {
-            _ = _pendingGates.Dequeue().TryDecide(ApprovalChoice.Deny);
+            var dropped = _pendingGates.Dequeue();
+            if (dropped.TryDecide(ApprovalChoice.Deny))
+            {
+                StampDecision(dropped);
+            }
         }
     }
+
+    /// <summary>
+    ///     Records a view-applied decision in the coordinator (#49 PR1).
+    ///     Best-effort: the asker waiter is already unblocked by either the
+    ///     decision or a raced cancel, so a non-Accepted disposition only
+    ///     documents the race (cancel won first / duplicate stamp).
+    /// </summary>
+    private void StampDecision(ApprovalGateView gate)
+    {
+        Coordinator?.DecideApproval(gate.Id, MapChoice(gate.Decision));
+    }
+
+    private static ApprovalResolution MapChoice(ApprovalChoice choice) => choice switch
+    {
+        ApprovalChoice.Approve => new ApprovalResolution(Approved: true, PersistDecision: false),
+        ApprovalChoice.AlwaysAllow => new ApprovalResolution(Approved: true, PersistDecision: true),
+        _ => new ApprovalResolution(Approved: false, PersistDecision: false),
+    };
 
     /// <summary>Drops gates resolved off the routing path (e.g. host called
     /// <see cref="Widgets.ApprovalGateView.TryDecide" /> directly).</summary>

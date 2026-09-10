@@ -6,6 +6,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
@@ -41,6 +42,7 @@ public sealed class InProcessHarborClient : IHarborClient
 {
     private readonly IAgent _agent;
     private readonly IAgentRegistry _agents;
+    private readonly IApprovalCoordinator? _coordinator;
     private readonly IEventBus _eventBus;
     private readonly CancellationTokenSource _eventBusCts = new();
     private readonly IDisposable _eventBusSubscription;
@@ -70,6 +72,7 @@ public sealed class InProcessHarborClient : IHarborClient
     /// <param name="tools">The tool registry.</param>
     /// <param name="eventBus">The event bus (source of streaming events).</param>
     /// <param name="logger">Logger.</param>
+    /// <param name="coordinator">#49 PR1 approval/cancellation coordinator (null in tests).</param>
     public InProcessHarborClient(
         IAgent agent,
         IAgentRegistry agents,
@@ -77,7 +80,8 @@ public sealed class InProcessHarborClient : IHarborClient
         IProviderRegistry providers,
         IToolRegistry tools,
         IEventBus eventBus,
-        ILogger<InProcessHarborClient> logger)
+        ILogger<InProcessHarborClient> logger,
+        IApprovalCoordinator? coordinator = null)
     {
         _agent = agent;
         _agents = agents;
@@ -86,6 +90,7 @@ public sealed class InProcessHarborClient : IHarborClient
         _tools = tools;
         _eventBus = eventBus;
         _logger = logger;
+        _coordinator = coordinator;
 
         // Bounded channel: backpressure if the consumer can't keep up.
         // Drop-oldest keeps the latest events visible (matches TUI semantics).
@@ -147,7 +152,17 @@ public sealed class InProcessHarborClient : IHarborClient
     /// <inheritdoc />
     public Task<Result> AbortAgentAsync(CancellationToken ct = default)
     {
-        _agent.AbortSource.Cancel();
+        // #49 PR1: single cancellation ingress (null = direct construction in
+        // tests without the coordinator; production hosts always pass it).
+        if (_coordinator is not null)
+        {
+            _coordinator.RequestCancel(_agent);
+        }
+        else
+        {
+            _agent.AbortSource.Cancel();
+        }
+
         return Task.FromResult(Result.Success());
     }
 
