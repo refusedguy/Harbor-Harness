@@ -2,12 +2,14 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Permissions;
 using Harbor.App.Cli.Repl;
+using Harbor.Application.Permissions;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering.Widgets;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -18,11 +20,13 @@ namespace Harbor.App.Cli.Tests;
 /// </summary>
 public class CellForgePermissionAskerTests
 {
-    private static ChatScreenBridge MakeBridge(out ChatTimelinePanel panel)
+    private static ChatScreenBridge MakeBridge(out ChatTimelinePanel panel, IApprovalCoordinator coordinator)
     {
         panel = new ChatTimelinePanel("chat", 40, 6);
-        return new ChatScreenBridge(new InMemoryEventBus(), panel, new StatusViewModel(), autoSubscribe: false);
+        return new ChatScreenBridge(new InMemoryEventBus(), panel, new StatusViewModel(), autoSubscribe: false, coordinator: coordinator);
     }
+
+    private static ApprovalCoordinator NewCoordinator() => new(NullLogger<ApprovalCoordinator>.Instance);
 
     private static PermissionRequest Request(string tool, string json) => new(
         tool, "*", JsonDocument.Parse(json).RootElement.Clone(), ["allow", "deny"]);
@@ -30,8 +34,9 @@ public class CellForgePermissionAskerTests
     [Test]
     public async Task AlwaysAllow_Maps_ToAllowWithPersist()
     {
-        using var bridge = MakeBridge(out var panel);
-        var asker = new CellForgePermissionAsker(() => bridge);
+        var coordinator = NewCoordinator();
+        using var bridge = MakeBridge(out var panel, coordinator);
+        var asker = new CellForgePermissionAsker(() => bridge, coordinator);
 
         var ask = asker.AskAsync(Request("bash", "{\"command\":\"cargo build\"}"), CancellationToken.None);
         bridge.Tick(0);
@@ -46,8 +51,9 @@ public class CellForgePermissionAskerTests
     [Test]
     public async Task Deny_Maps_ToDenyWithoutPersist()
     {
-        using var bridge = MakeBridge(out _);
-        var asker = new CellForgePermissionAsker(() => bridge);
+        var coordinator = NewCoordinator();
+        using var bridge = MakeBridge(out _, coordinator);
+        var asker = new CellForgePermissionAsker(() => bridge, coordinator);
 
         var ask = asker.AskAsync(Request("write", "{\"path\":\"out.cs\",\"x\":1}"), CancellationToken.None);
         bridge.Tick(0);
@@ -59,17 +65,23 @@ public class CellForgePermissionAskerTests
     }
 
     [Test]
-    public async Task Cancellation_Fails_Ask_TokenCancelled()
+    public async Task Cancellation_FailsClosed_Deny()
     {
-        using var bridge = MakeBridge(out _);
-        var asker = new CellForgePermissionAsker(() => bridge);
+        // #49 PR1: a fired abort token unblocks the approval wait as
+        // fail-closed Deny (previously the TCS was TrySetCanceled and the
+        // await threw OperationCanceledException).
+        var coordinator = NewCoordinator();
+        using var bridge = MakeBridge(out _, coordinator);
+        var asker = new CellForgePermissionAsker(() => bridge, coordinator);
         using var cts = new CancellationTokenSource();
 
         var ask = asker.AskAsync(Request("bash", "{\"command\":\"sleep 10\"}"), cts.Token);
         bridge.Tick(0); // gate is visible but undecided
         cts.Cancel();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(async () => await ask);
+        var response = await ask;
+        await Assert.That(response.Action).IsEqualTo(PermissionAction.Deny);
+        await Assert.That(response.PersistDecision).IsFalse();
     }
 
     [Test]

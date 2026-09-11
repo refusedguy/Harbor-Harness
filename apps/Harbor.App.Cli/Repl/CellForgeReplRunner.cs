@@ -7,6 +7,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Commands;
@@ -995,7 +996,9 @@ internal sealed class CellForgeReplRunner(
     {
         if (agent.State.IsRunning)
         {
-            agent.AbortSource.Cancel();
+            // #49 PR1: single cancellation ingress — the coordinator orders this
+            // against any in-flight approval decision and unblocks its waiter.
+            services.GetRequiredService<IApprovalCoordinator>().RequestCancel(agent);
             Pipeline.ClearQueue(); // abort drops queued prompts — never sent after a kill
             bridge.AppendSystemLine("^C — прерываю текущий ход…");
             _wake.Writer.TryWrite(null);

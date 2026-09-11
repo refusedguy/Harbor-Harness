@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
@@ -404,7 +405,17 @@ public sealed class SessionManager : ISessionManager
         _logger.LogInformation("Aborting in-flight agent before rebind (session={OldSession})",
             _agent.State.SessionId);
 
-        _agent.AbortSource.Cancel();
+        // #49 PR1: single cancellation ingress (null-safe: hosts/tests without
+        // the coordinator registered keep the direct cancel).
+        var coordinator = _services.GetService<IApprovalCoordinator>();
+        if (coordinator is not null)
+        {
+            coordinator.RequestCancel(_agent);
+        }
+        else
+        {
+            _agent.AbortSource.Cancel();
+        }
 
         try
         {

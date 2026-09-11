@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Permissions;
+
 namespace Harbor.Ipc.Protocol;
 /// <summary>
 ///     Server-side dispatcher: takes a <see cref="HarborRequest" /> and
@@ -137,7 +139,8 @@ public sealed class RequestDispatcher
     private HarborResponse HandleAbortAgent(AbortAgentRequest r)
     {
         var agent = _serviceProvider.GetRequiredService<IAgent>();
-        agent.AbortSource.Cancel();
+        // #49 PR1: single cancellation ingress.
+        _serviceProvider.GetRequiredService<IApprovalCoordinator>().RequestCancel(agent);
         return new OkResponse { RequestId = r.RequestId };
     }
 
