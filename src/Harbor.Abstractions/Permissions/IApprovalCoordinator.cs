@@ -80,4 +80,23 @@ public interface IApprovalCoordinator
     ///     run source outside the lock. Safe to call when idle or twice.
     /// </summary>
     void RequestCancel(IAgentRunner agent);
+
+    /// <summary>
+    ///     Open an execution-commit scope (#49 PR2). Captures the current
+    ///     cancel generation: a <see cref="RequestCancel" /> issued after this
+    ///     call invalidates the scope. Scopes are epoch-scoped, not once-only —
+    ///     parallel tool calls approved in the same epoch share fate by design.
+    /// </summary>
+    long BeginApprovalScope();
+
+    /// <summary>
+    ///     Commit barrier between approval (Ready) and execution (Executing).
+    ///     Returns <see langword="true" /> iff no <see cref="RequestCancel" />
+    ///     happened after the scope was issued — i.e. cancellation did NOT win
+    ///     before commit, so the tool may start. Returns <see langword="false" />
+    ///     when cancel won: the caller must NOT start the tool (fail closed).
+    ///     Idempotent: re-committing the same live scope returns
+    ///     <see langword="true" /> (parallel calls share the epoch).
+    /// </summary>
+    bool TryCommitApproval(long scope);
 }

@@ -28,17 +28,28 @@ namespace Harbor.Ipc.Protocol;
 public sealed class RequestDispatcher
 {
     private readonly EventBroadcaster _broadcaster;
+    private readonly IApprovalCoordinator _coordinator;
     private readonly IServiceProvider _serviceProvider;
     private readonly SessionLeaseRegistry _leases;
 
     /// <summary>
     ///     Construct a dispatcher backed by the host's service provider.
     /// </summary>
-    public RequestDispatcher(IServiceProvider serviceProvider, EventBroadcaster broadcaster, SessionLeaseRegistry? leases = null)
+    public RequestDispatcher(
+        IServiceProvider serviceProvider,
+        EventBroadcaster broadcaster,
+        SessionLeaseRegistry? leases = null,
+        // #49: injected, not service-located (the per-request resolutions
+        // below are a separate cleanup — see #63).
+        IApprovalCoordinator? coordinator = null)
     {
         _serviceProvider = serviceProvider;
         _broadcaster = broadcaster;
         _leases = leases ?? new SessionLeaseRegistry();
+        // Resolved once at composition, not per request. Fallback keeps
+        // direct constructions working; production passes it explicitly.
+        _coordinator = coordinator
+            ?? serviceProvider.GetRequiredService<IApprovalCoordinator>();
     }
 
     /// <summary>
@@ -140,7 +151,7 @@ public sealed class RequestDispatcher
     {
         var agent = _serviceProvider.GetRequiredService<IAgent>();
         // #49 PR1: single cancellation ingress.
-        _serviceProvider.GetRequiredService<IApprovalCoordinator>().RequestCancel(agent);
+        _coordinator.RequestCancel(agent);
         return new OkResponse { RequestId = r.RequestId };
     }
 

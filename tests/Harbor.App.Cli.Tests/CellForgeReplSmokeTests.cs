@@ -8,6 +8,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
 using Harbor.App.Cli.Repl;
+using Harbor.Application.Permissions;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
@@ -69,7 +70,8 @@ public class CellForgeReplSmokeTests
         };
         var runner = new CellForgeReplRunner(
             services, agent, sessionModel, session, screen, bridge, input,
-            new NullModeController(), backend, NullLogger<CellForgeReplRunner>.Instance);
+            new NullModeController(), backend, NullLogger<CellForgeReplRunner>.Instance,
+            new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance));
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         int exitCode = await runner.RunAsync(cts.Token);

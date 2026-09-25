@@ -2,6 +2,7 @@ using Harbor.Application.Agents;
 using Harbor.Application.Onboarding;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Diagnostics;
@@ -45,7 +46,8 @@ internal static class CoreModule
             sp.GetRequiredService<IToolRegistry>(),
             sp.GetRequiredService<IPermissionService>(),
             sp.GetRequiredService<IEventBus>(),
-            sp.GetRequiredService<ILogger<ToolDispatcher>>()));
+            sp.GetRequiredService<ILogger<ToolDispatcher>>(),
+            sp.GetRequiredService<IApprovalCoordinator>()));
         services.AddSingleton<IAgentLoop, AgentLoop>();
         services.AddSingleton<DefaultAgent>();
         // sprint3-C C1: IAgent consumers get the tracing proxy (agent.turn span,

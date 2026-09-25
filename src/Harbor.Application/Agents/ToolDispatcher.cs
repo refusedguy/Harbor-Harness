@@ -50,7 +50,10 @@ public sealed class ToolDispatcher(
     IEventBus eventBus,
     // ROP-C П.8: own category instead of the borrowed ILogger<AgentLoop>
     // (S6672) — dispatcher records are filterable by their own type.
-    ILogger<ToolDispatcher> logger) : IToolDispatcher
+    ILogger<ToolDispatcher> logger,
+    // #49 PR2: execution-commit barrier. Null (tests, manual construction)
+    // keeps the legacy token-only path.
+    IApprovalCoordinator? coordinator = null) : IToolDispatcher
 {
     private static readonly ActivitySource Source = new("Harbor");
     private const string ToolNameTag = "gen_ai.tool.name";
@@ -233,7 +236,11 @@ public sealed class ToolDispatcher(
                 return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, invalid);
             }
 
-            // Permission check
+            // Permission check.
+            // #49 PR2: open the commit scope BEFORE the check so a cancel
+            // landing anywhere in approve→commit invalidates it. Scopes are
+            // epoch-scoped (parallel calls share fate), not once-only.
+            long commitScope = coordinator?.BeginApprovalScope() ?? 0;
             var permResponse = await permissions.CheckAsync(
                 agent.Name.Value, toolCall.ToolName, toolCall.Args, effectiveCt).ConfigureAwait(false);
 
@@ -243,13 +250,35 @@ public sealed class ToolDispatcher(
             if (permResponse.IsFailure || permResponse.Value.Action == PermissionAction.Deny)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, "Permission denied");
+                // Honest strings (#49 PR2): a deny produced by a cancelled wait
+                // is a cancellation, not a policy decision.
+                bool cancelled = ct.IsCancellationRequested;
                 string reason = permResponse.IsFailure
                     ? $"Permission check failed: {permResponse.Error}"
+                    : cancelled ? "Tool execution was cancelled before start."
                     : "Permission denied";
+                if (cancelled)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
+                }
+
                 var denied = ToolResult.Error(reason);
                 await eventBus.PublishAsync(new ToolExecutionEndEvent(
                     toolCall.Id, denied, true), ct).ConfigureAwait(false);
                 return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, denied);
+            }
+
+            // Commit barrier (#49 PR2): cancel winning after approval but
+            // before the first tool instruction must prevent the START —
+            // token observation inside the tool is best-effort only and a
+            // token-ignoring tool would otherwise run despite the abort.
+            if (coordinator is not null && !coordinator.TryCommitApproval(commitScope))
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
+                var cancelledBeforeStart = ToolResult.Error("Tool execution was cancelled before start.");
+                await eventBus.PublishAsync(new ToolExecutionEndEvent(
+                    toolCall.Id, cancelledBeforeStart, true), ct).ConfigureAwait(false);
+                return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelledBeforeStart);
             }
 
             // Execute
