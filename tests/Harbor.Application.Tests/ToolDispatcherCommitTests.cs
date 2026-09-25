@@ -7,7 +7,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
-using Harbor.Application.Tests.Fakes;
+using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -53,6 +53,11 @@ public class ToolDispatcherCommitTests
         public Task<Result<PermissionResponse>> AskUserAsync(
             PermissionRequest request, CancellationToken ct = default) =>
             Task.FromResult(Result.Success(new PermissionResponse(PermissionAction.Deny, false)));
+
+        public PermissionRuleset GetRuleset(string agentName) => PermissionRuleset.Empty;
+
+        public Task<Result> SaveAsync(CancellationToken ct = default) =>
+            Task.FromResult(Result.Success());
     }
 
     private sealed class SpyTool : ITool
