@@ -14,6 +14,12 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
     private readonly object _gate = new();
     private readonly Dictionary<string, GateSlot> _gates = new(StringComparer.Ordinal);
 
+    /// <summary>
+    ///     Cancel generation (#49 PR2 commit barrier). Bumped by every
+    ///     <see cref="RequestCancel" />; scopes capture its value at issue time.
+    /// </summary>
+    private long _cancelGeneration;
+
     private sealed class GateSlot
     {
         public TaskCompletionSource<ApprovalResolution?> Tcs { get; } = new(
@@ -99,12 +105,34 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
     }
 
     /// <inheritdoc />
+    public long BeginApprovalScope()
+    {
+        lock (_gate)
+        {
+            return _cancelGeneration;
+        }
+    }
+
+    /// <inheritdoc />
+    public bool TryCommitApproval(long scope)
+    {
+        lock (_gate)
+        {
+            return scope == _cancelGeneration;
+        }
+    }
+
+    /// <inheritdoc />
     public void RequestCancel(IAgentRunner agent)
     {
         ArgumentNullException.ThrowIfNull(agent);
         List<TaskCompletionSource<ApprovalResolution?>> swept;
         lock (_gate)
         {
+            // Bump the generation FIRST so every scope issued before this
+            // cancel fails its commit — even scopes whose waiters haven't
+            // attached yet (cancel wins before Ready→Executing by construction).
+            _cancelGeneration++;
             // Sweep only undecided gates: a decision that won the race before
             // this cancel keeps its win (the run token below still aborts the
             // execution — cancel always kills the run, it just doesn't rewrite

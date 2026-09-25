@@ -61,7 +61,10 @@ internal sealed class CellForgeReplRunner(
     TerminalInputSource inputSource,
     ITerminalModeController modeController,
     ITerminalBackend backend,
-    ILogger<CellForgeReplRunner> logger)
+    ILogger<CellForgeReplRunner> logger,
+    // #49: injected, not service-located — the class already takes its deps
+    // via ctor; resolving per abort gesture was a step back.
+    IApprovalCoordinator coordinator)
     : IReplHost
 {
     private const string SeqEnterAltScreen = "\x1B[?1049h\x1B[?25l\x1B[?2004h\x1B[?1000h\x1B[?1002h\x1B[?1006h";
@@ -998,7 +1001,7 @@ internal sealed class CellForgeReplRunner(
         {
             // #49 PR1: single cancellation ingress — the coordinator orders this
             // against any in-flight approval decision and unblocks its waiter.
-            services.GetRequiredService<IApprovalCoordinator>().RequestCancel(agent);
+            coordinator.RequestCancel(agent);
             Pipeline.ClearQueue(); // abort drops queued prompts — never sent after a kill
             bridge.AppendSystemLine("^C — прерываю текущий ход…");
             _wake.Writer.TryWrite(null);

@@ -67,7 +67,10 @@ public sealed class AgentLoop : IAgentLoop
         ITracer? tracer = null,
         IToolDispatcher? toolDispatcher = null,
         IMcpRegistry? mcpRegistry = null,
-        IBackgroundTaskRegistry? backgroundTasks = null)
+        IBackgroundTaskRegistry? backgroundTasks = null,
+        // #49 PR2: forwarded to the fallback dispatcher so tests driving the
+        // loop directly still get the commit barrier when they pass one.
+        IApprovalCoordinator? coordinator = null)
     {
         _providers = providers;
         _tools = tools;
@@ -90,7 +93,7 @@ public sealed class AgentLoop : IAgentLoop
         // fallback uses a NullLogger because the loop's own typed logger must
         // not be lent out under a foreign category (S6672).
         _toolDispatcher = toolDispatcher
-            ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance);
+            ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance, coordinator);
         // §3.5 pipeline: run-level cross-cutting concerns are middleware over the
         // whole run; per-turn behaviors (compaction, steering, max steps) are
         // extracted classes the core loop calls each turn. Behaviors share the

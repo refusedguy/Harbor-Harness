@@ -28,17 +28,26 @@ namespace Harbor.Ipc.Protocol;
 public sealed class RequestDispatcher
 {
     private readonly EventBroadcaster _broadcaster;
+    private readonly IApprovalCoordinator? _coordinator;
     private readonly IServiceProvider _serviceProvider;
     private readonly SessionLeaseRegistry _leases;
 
     /// <summary>
     ///     Construct a dispatcher backed by the host's service provider.
     /// </summary>
-    public RequestDispatcher(IServiceProvider serviceProvider, EventBroadcaster broadcaster, SessionLeaseRegistry? leases = null)
+    public RequestDispatcher(
+        IServiceProvider serviceProvider,
+        EventBroadcaster broadcaster,
+        SessionLeaseRegistry? leases = null,
+        // #49: injected, not service-located (the per-request resolutions
+        // below are a separate cleanup — see #63). Null keeps minimal/test
+        // hosts working with direct cancel.
+        IApprovalCoordinator? coordinator = null)
     {
         _serviceProvider = serviceProvider;
         _broadcaster = broadcaster;
         _leases = leases ?? new SessionLeaseRegistry();
+        _coordinator = coordinator;
     }
 
     /// <summary>
@@ -139,8 +148,17 @@ public sealed class RequestDispatcher
     private HarborResponse HandleAbortAgent(AbortAgentRequest r)
     {
         var agent = _serviceProvider.GetRequiredService<IAgent>();
-        // #49 PR1: single cancellation ingress.
-        _serviceProvider.GetRequiredService<IApprovalCoordinator>().RequestCancel(agent);
+        // #49 PR1: single cancellation ingress (null = minimal host without
+        // the coordinator; direct cancel as before).
+        if (_coordinator is not null)
+        {
+            _coordinator.RequestCancel(agent);
+        }
+        else
+        {
+            agent.AbortSource.Cancel();
+        }
+
         return new OkResponse { RequestId = r.RequestId };
     }
 
