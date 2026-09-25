@@ -89,7 +89,12 @@ public sealed class RetryPolicy : IRetryPolicy
     ///     <c>[0, target)</c> — full jitter — so concurrent callers that fail
     ///     together de-synchronize instead of forming retry waves.
     /// </summary>
-    private static TimeSpan ComputeDelay(RetryOptions options, int failedAttempt)
+    /// <remarks>
+    ///     Public so the tool-dispatch retry loop (#43) shares the exact same
+    ///     backoff mechanics instead of duplicating the formula: decision lives
+    ///     in <c>IToolRetryDecider</c>, computation lives here.
+    /// </remarks>
+    public static TimeSpan ComputeDelay(RetryOptions options, int failedAttempt)
     {
         double target = Math.Min(
             options.BaseDelay.TotalMilliseconds * Math.Pow(2, failedAttempt - 1),

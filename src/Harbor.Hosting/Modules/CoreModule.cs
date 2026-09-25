@@ -39,6 +39,7 @@ internal static class CoreModule
         services.AddSingleton<ISkillProvider, SkillProvider>();
         services.AddSingleton<MessageConverter>();
         services.AddSingleton<IRetryPolicy, RetryPolicy>();
+        services.AddSingleton<IToolRetryDecider, DefaultToolRetryDecider>();
         // ROP-C П.5: the loop depends on the IToolDispatcher seam; the concrete
         // dispatcher logs under its own category instead of borrowing the
         // AgentLoop's (ROP-C П.8).
@@ -47,7 +48,8 @@ internal static class CoreModule
             sp.GetRequiredService<IPermissionService>(),
             sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ILogger<ToolDispatcher>>(),
-            sp.GetRequiredService<IApprovalCoordinator>()));
+            sp.GetRequiredService<IApprovalCoordinator>(),
+            sp.GetRequiredService<IToolRetryDecider>()));
         services.AddSingleton<IAgentLoop, AgentLoop>();
         services.AddSingleton<DefaultAgent>();
         // sprint3-C C1: IAgent consumers get the tracing proxy (agent.turn span,
