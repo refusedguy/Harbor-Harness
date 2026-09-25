@@ -85,7 +85,8 @@ internal static class CellForgeModule
             sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ChatScreen>().Timeline,
             sp.GetRequiredService<StatusViewModel>(),
-            autoSubscribe: false)); // events pumped through the frame loop thread
+            autoSubscribe: false, // events pumped through the frame loop thread
+            coordinator: sp.GetRequiredService<IApprovalCoordinator>()));
 
         // Permission asks вместо молчаливого fail-closed deny: карточка
         // ApprovalGateView в таймлайне + ожидание y/n/a. Ленивое замыкание на
@@ -97,10 +98,12 @@ internal static class CellForgeModule
         // крутят ChatScreen frame loop — решение гейта не придёт никогда и
         // Ask-вызовы висят вечно. Без доступного аппрувера оверрайд не
         // регистрируем: остаётся fail-closed Deny из IntelligenceModule.
+        // #49 PR1: внутри гейта asker идёт через IApprovalCoordinator.
         if (IsApprovalPromptAvailable())
         {
             services.AddSingleton(sp => new CellForgePermissionAsker(
-                () => sp.GetRequiredService<ChatScreenBridge>()));
+                () => sp.GetRequiredService<ChatScreenBridge>(),
+                sp.GetRequiredService<IApprovalCoordinator>()));
             services.AddSingleton<IPermissionService>(sp => new PermissionService(
                 sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<

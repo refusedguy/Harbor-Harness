@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Permissions;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering.Markdown;
@@ -63,12 +64,17 @@ public sealed class ChatScreenBridge : IDisposable
         public long StartedMs { get; set; } = long.MinValue;
     }
 
-    public ChatScreenBridge(IEventBus bus, ChatTimelinePanel panel, StatusViewModel status, bool autoSubscribe = true)
+    public ChatScreenBridge(
+        IEventBus bus,
+        ChatTimelinePanel panel,
+        StatusViewModel status,
+        bool autoSubscribe = true,
+        IApprovalCoordinator? coordinator = null)
     {
         _bus = bus ?? throw new ArgumentNullException(nameof(bus));
         _panel = panel ?? throw new ArgumentNullException(nameof(panel));
         _status = status ?? throw new ArgumentNullException(nameof(status));
-        _gates = new ApprovalGateRouter(panel, status);
+        _gates = new ApprovalGateRouter(panel, status) { Coordinator = coordinator };
         // Auto-subscribe suits fire-and-forget hosts (CE-3 tests). A driven
         // host (CellForge REPL frame loop) passes false and pumps events via
         // <see cref="AcceptAsync"/> so all timeline mutation stays on the

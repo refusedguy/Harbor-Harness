@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Permissions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.State;
 /// <summary>
@@ -30,6 +31,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
     private readonly CancellationToken _appCt;
     private readonly ILogger<TuiEffectHost>? _logger;
     private readonly Func<string, Task>? _slash;
+    private readonly IApprovalCoordinator? _coordinator;
     private UiStore _store;
 
     public TuiEffectHost(
@@ -37,13 +39,15 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         UiStore store,
         Func<string, Task>? slash = null,
         CancellationToken appCt = default,
-        ILogger<TuiEffectHost>? logger = null)
+        ILogger<TuiEffectHost>? logger = null,
+        IApprovalCoordinator? coordinator = null)
     {
         _agent = agent;
         _store = store;
         _slash = slash;
         _appCt = appCt;
         _logger = logger;
+        _coordinator = coordinator;
     }
 
     public void RebindStore(UiStore newStore)
@@ -158,7 +162,16 @@ public sealed class TuiEffectHost : ITuiEffectRunner
 
     private async Task AbortAsync()
     {
-        _agent.AbortSource.Cancel();
+        // #49 PR1: single cancellation ingress. Null (tests, contrib hosts
+        // without the coordinator) falls back to the direct cancel.
+        if (_coordinator is not null)
+        {
+            _coordinator.RequestCancel(_agent);
+        }
+        else
+        {
+            _agent.AbortSource.Cancel();
+        }
         try
         {
             // Bound the wait so a misbehaving agent loop can't hang the UI
