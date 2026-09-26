@@ -266,19 +266,26 @@ public sealed class OnboardingWizard
         ProviderPresets.Preset provider, Action<string> writer, CancellationToken ct)
     {
         if (_providers is null)
+        {
+            writer("  ⚠ Model list unavailable (provider registry unavailable) — manual entry.");
             return null;
+        }
 
-        var pid = Abstractions.Models.Identifiers.ProviderId.TryCreate(provider.Id);
-        if (pid.IsFailure)
-            return null;
-
-        var clientResult = _providers.GetClient(pid.Value);
+        // ROP boundary #101: shared TryCreate → GetClient preamble; every
+        // unavailable-list reason prints the same warning as the client-failure
+        // path below so degraded setup is always explicit, never silent.
+        var clientResult = _providers.ResolveClient(provider.Id);
         if (clientResult.IsFailure)
         {
             writer($"  ⚠ Model list unavailable ({clientResult.Error.TrimEnd('.')}) — manual entry.");
             return null;
         }
 
+        // ROP boundary #101: GetModelsAsync is Result-only by contract — the
+        // expected path is the IsSuccess check below. The catches are
+        // network-only insurance: our own 10 s budget firing, or a transport
+        // fault escaping a client. Warning text matches every other
+        // unavailable-list reason above.
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(Abstractions.Providers.IProviderHealthCheck.DefaultTimeout);
         try

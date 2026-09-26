@@ -132,11 +132,8 @@ public sealed class InProcessHarborClient : IHarborClient
     /// <inheritdoc />
     public async Task<Result> StartAgentAsync(string sessionId, string agentName, CancellationToken ct = default)
     {
-        var nameResult = AgentName.TryCreate(agentName);
-        if (nameResult.IsFailure)
-            return Result.Failure(nameResult.Error);
-
-        var agentDefResult = _agents.GetAgent(nameResult.Value);
+        // ROP boundary #101: shared TryCreate → GetAgent preamble (same as RequestDispatcher).
+        var agentDefResult = _agents.ResolveAgent(agentName);
         if (agentDefResult.IsFailure)
             return Result.Failure(agentDefResult.Error);
 
@@ -206,11 +203,8 @@ public sealed class InProcessHarborClient : IHarborClient
             return await _providers.GetAllModelsAsync(ct).ConfigureAwait(false);
         }
 
-        var pidResult = ProviderId.TryCreate(providerId);
-        if (pidResult.IsFailure)
-            return Result.Failure<IReadOnlyList<ModelInfo>>(pidResult.Error);
-
-        var clientResult = _providers.GetClient(pidResult.Value);
+        // ROP boundary #101: shared TryCreate → GetClient preamble (same as RequestDispatcher).
+        var clientResult = _providers.ResolveClient(providerId);
         if (clientResult.IsFailure)
             return Result.Failure<IReadOnlyList<ModelInfo>>(clientResult.Error);
 

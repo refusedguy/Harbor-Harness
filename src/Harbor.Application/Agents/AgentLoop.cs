@@ -387,10 +387,12 @@ public sealed class AgentLoop : IAgentLoop
         for (int i = 0; i < done.Count; i++)
         {
             var completion = done[i];
-            string output = completion.Result.Match(
-                run => $"[background sub-agent '{completion.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s)]\n\n{run.FinalOutput}",
-                err => $"[background sub-agent '{completion.AgentName}' failed: {err}]");
-            entries.Add(new ToolResultEntry(completion.Id, "task", output, completion.Result.IsFailure));
+            // ROP boundary #101: single Match inspection — the payload and the
+            // error flag come out of one pass instead of Match + IsFailure.
+            var (output, isError) = completion.Result.Match(
+                run => ($"[background sub-agent '{completion.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s)]\n\n{run.FinalOutput}", false),
+                err => ($"[background sub-agent '{completion.AgentName}' failed: {err}]", true));
+            entries.Add(new ToolResultEntry(completion.Id, "task", output, isError));
             _logger.LogInformation("Background task drained: id={Id} agent={Agent}", completion.Id, completion.AgentName);
         }
 
@@ -402,39 +404,29 @@ public sealed class AgentLoop : IAgentLoop
 
     /// <summary>
     ///     Resolve the provider id, LLM client and concrete model for this run.
-    ///     Errors are routed structurally by the Bind chain: any step failing
-    ///     short-circuits to the single <c>IsFailure</c> exit. The "model may be
-    ///     absent" case is expressed as <see cref="Maybe{T}"/> → ToResult rather
-    ///     than a null-check convention.
+    ///     Errors are routed structurally by a flat Bind chain (parse → client →
+    ///     catalog): any step failing short-circuits to the single Match exit.
+    ///     The "model may be absent" case is expressed as <see cref="Maybe{T}"/>
+    ///     → ToResult rather than a null-check convention.
     /// </summary>
     private async Task<Result<(ILlmClient Client, ModelInfo Model)>> ResolveModelAsync(
         AgentDefinition agent,
         CancellationToken ct)
     {
+        // ROP boundary #101: flat Bind railway with one Match exit — no nested
+        // ifs, no IsFailure + .Value double-inspection.
         Result<(ILlmClient Client, IReadOnlyList<ModelInfo> Catalog)> provider =
             await ProviderId.TryCreate(agent.ProviderId)
-                .Bind(async id =>
-                {
-                    var clientResult = _providers.GetClient(id);
-                    if (clientResult.IsFailure) // §4.6-ok: тело рельсы ResolveModelAsync — ранний выход внутри Bind-лямбды.
-                        return Result.Failure<(ILlmClient, IReadOnlyList<ModelInfo>)>(clientResult.Error);
-
-                    var models = await _providers.GetModelsCachedAsync(id, ct).ConfigureAwait(false);
-                    return models.IsSuccess
-                        ? Result.Success((clientResult.Value, models.Value))
-                        : Result.Failure<(ILlmClient, IReadOnlyList<ModelInfo>)>(models.Error);
-                })
+                .Bind(id => _providers.GetClient(id).Map(client => (id, client)))
+                .Bind(async t => (await _providers.GetModelsCachedAsync(t.id, ct).ConfigureAwait(false))
+                    .Map(models => (t.client, models)))
                 .ConfigureAwait(false);
 
-        if (provider.IsFailure) // §4.6-ok: Match-граница рельсы — один выход вместо трёх if.
-        {
-            return Result.Failure<(ILlmClient, ModelInfo)>(provider.Error);
-        }
-
-        var (client, models) = provider.Value;
-        return Maybe.From(FindModel(models, agent.Model))
-            .ToResult($"Model '{agent.Model}' not found in provider '{agent.ProviderId}'.")
-            .Map(m => (client, m));
+        return provider.Match(
+            catalog => Maybe.From(FindModel(catalog.Catalog, agent.Model))
+                .ToResult($"Model '{agent.Model}' not found in provider '{agent.ProviderId}'.")
+                .Map(m => (Client: catalog.Client, Model: m)),
+            error => Result.Failure<(ILlmClient Client, ModelInfo Model)>(error));
     }
 
     /// <summary>

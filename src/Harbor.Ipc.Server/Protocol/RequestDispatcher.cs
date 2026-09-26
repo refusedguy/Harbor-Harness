@@ -118,11 +118,8 @@ public sealed class RequestDispatcher
         var agents = _serviceProvider.GetRequiredService<IAgentRegistry>();
         var sessions = _serviceProvider.GetRequiredService<ISessionStore>();
 
-        var nameResult = AgentName.TryCreate(r.AgentName);
-        if (nameResult.IsFailure)
-            return new ErrorResponse { RequestId = r.RequestId, Message = nameResult.Error };
-
-        var agentDefResult = agents.GetAgent(nameResult.Value);
+        // ROP boundary #101: shared TryCreate → GetAgent preamble (same as InProcessHarborClient).
+        var agentDefResult = agents.ResolveAgent(r.AgentName);
         if (agentDefResult.IsFailure)
             return new ErrorResponse { RequestId = r.RequestId, Message = agentDefResult.Error };
 
@@ -238,11 +235,8 @@ public sealed class RequestDispatcher
         }
         else
         {
-            var pidResult = ProviderId.TryCreate(r.ProviderId!);
-            if (pidResult.IsFailure)
-                return new ErrorResponse { RequestId = r.RequestId, Message = pidResult.Error };
-
-            var clientResult = providers.GetClient(pidResult.Value);
+            // ROP boundary #101: shared TryCreate → GetClient preamble (same as InProcessHarborClient).
+            var clientResult = providers.ResolveClient(r.ProviderId!);
             if (clientResult.IsFailure)
                 return new ErrorResponse { RequestId = r.RequestId, Message = clientResult.Error };
 
