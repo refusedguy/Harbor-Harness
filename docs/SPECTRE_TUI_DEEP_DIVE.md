@@ -1227,6 +1227,6 @@ public override void Render(RenderContext context) {
 
 - [Spectre.TUI исходники](https://github.com/spectreconsole/spectre.console/tree/main/src/Spectre.Tui) — фреймворк, на котором построен.
 - [Spectre.Console docs](https://spectreconsole.net/) — markdown, tables, borders.
-- [specs/07-tui.md](../specs/07-tui.md) — изначальная спецификация TUI.
+- [specs/07-tui.md](./specs/07-tui.md) — изначальная спецификация TUI.
 - [docs/CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — §FP-005 и §FP-007 теперь RESOLVED.
 - [CLAUDE.md §Full-screen TUI development](../CLAUDE.md) — hotkey table для `FullscreenTuiRenderer` (другой renderer, но паттерны те же).

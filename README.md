@@ -201,7 +201,7 @@ Users:
 - [Tools Catalog](./docs/TOOLS_CATALOG.md) — every builtin tool: schema, examples, decision matrix
 
 Developers:
-- [Architecture](./docs/ARCHITECTURE.md) + [Architecture Layers](./docs/ARCHITECTURE_LAYERS.md) + [specs/](./specs/README.md)
+- [Architecture](./docs/ARCHITECTURE.md) + [Architecture Layers](./docs/ARCHITECTURE_LAYERS.md) + [docs/specs/](./docs/specs/README.md)
 - [Development Guide](./docs/DEVELOPMENT.md) — workflows + principles checklist
 - [Plugin Development](./docs/PLUGIN_DEVELOPMENT.md) / [Plugin System](./docs/PLUGIN_SYSTEM.md)
 - [Component Catalog](./docs/COMPONENT_CATALOG.md) — reusable UI components across Avalonia/Blazor/WPF
@@ -209,7 +209,7 @@ Developers:
 - [Spectre.Tui Deep Dive](./docs/SPECTRE_TUI_DEEP_DIVE.md) — anatomy of the interactive shell (contrib/tui/Harbor.Tui.SpectreTui)
 - For AI agents: [AGENTS.md](./AGENTS.md) (operations) and [CLAUDE.md](./CLAUDE.md) (conventions)
 
-Design specs: 16+ documents in [specs/](./specs/README.md) — architecture, plugins, providers, tools, sessions, MCP, TUI, NativeAOT, benchmarks.
+Design specs: 16+ documents in [docs/specs/](./docs/specs/README.md) — architecture, plugins, providers, tools, sessions, MCP, TUI, NativeAOT, benchmarks.
 
 ## Roadmap
 

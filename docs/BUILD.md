@@ -157,7 +157,7 @@ Size: ~5-10 MB. Startup: <50ms. RSS: <30MB.
 - Source-gen JSON required
 - Some libraries may not be AOT-compatible
 
-See [specs/08-native-aot.md](../specs/08-native-aot.md) for details.
+See [specs/08-native-aot.md](./specs/08-native-aot.md) for details.
 
 ## Publish as `dotnet tool`
 

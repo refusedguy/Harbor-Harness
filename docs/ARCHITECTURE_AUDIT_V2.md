@@ -1952,7 +1952,7 @@ documented with implementation sketches in §3.
 - `docs/ANTIPATTERNS.md` — antipattern catalogue.
 - `docs/KILLER_FEATURES.md` — flagship features planned.
 - `docs/BENCHMARKS.md` — perf baselines.
-- `specs/14-architecture-revised.md` — revised architecture spec.
+- `docs/specs/14-architecture-revised.md` — revised architecture spec.
 
 ---
 

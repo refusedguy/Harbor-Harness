@@ -1645,5 +1645,5 @@ dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- \
 - [docs/EXAMPLES.md](./EXAMPLES.md) — task-oriented recipes.
 - [docs/PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md) — Roslyn `.cs` plugin system for tools that aren't builtins.
 - [docs/SCRIPTING.md](./SCRIPTING.md) — JS/TS script-registered tools (lighter-weight than .cs plugins).
-- [specs/04-tools.md](../specs/04-tools.md) — original tool spec.
-- [specs/06-mcp.md](../specs/06-mcp.md) — MCP spec.
+- [specs/04-tools.md](./specs/04-tools.md) — original tool spec.
+- [specs/06-mcp.md](./specs/06-mcp.md) — MCP spec.

@@ -1,6 +1,6 @@
 # Architecture
 
-> High-level design of Harbor. For full details, see [specs/](../specs/).
+> High-level design of Harbor. For full details, see [docs/specs/](./specs/).
 >
 > **Связанные документы:**
 > - [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) — canonical Clean / Hexagonal / Onion layering rules + the allowed/forbidden ProjectReference matrix, enforced by `Harbor.Architecture.Tests`.
@@ -767,11 +767,11 @@ Known existing violations documented in [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCI
 └─────────────────────────────────────────────────────────────┘
 ```
 
-See [specs/14-architecture-revised.md](../specs/14-architecture-revised.md) for full design.
+See [docs/specs/14-architecture-revised.md](./specs/14-architecture-revised.md) for full design.
 
 ## References
 
-- [Specifications](../specs/README.md) — 16 detailed design documents.
+- [Specifications](./specs/README.md) — 16 detailed design documents.
 - [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) — layering matrix + architecture tests.
 - [CLAUDE.md](../CLAUDE.md) — code conventions.
 - [AGENTS.md](../AGENTS.md) — guide for AI agents.

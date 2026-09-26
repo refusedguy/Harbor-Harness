@@ -7,7 +7,7 @@
 Связанные документы:
 - [EXAMPLES.md §Plugins](./EXAMPLES.md#plugins) — короткие рецепты.
 - [DEVELOPMENT.md §Workflow: contribute a plugin](./DEVELOPMENT.md#workflow-contribute-a-plugin).
-- [specs/02-plugins.md](../specs/02-plugins.md) — design rationale.
+- [specs/02-plugins.md](./specs/02-plugins.md) — design rationale.
 - [SCRIPTING.md](./SCRIPTING.md) — scripting alternative (shipped under `contrib/scripting/`).
 
 ---
@@ -924,7 +924,7 @@ tools, then `method: "tools/call"` with `{"name": ..., "arguments": ...}` to inv
 
 No plugin code needed — MCP servers expose their own tool schemas.
 
-See [specs/06-mcp.md](../specs/06-mcp.md) for the design.
+See [specs/06-mcp.md](./specs/06-mcp.md) for the design.
 
 ---
 
@@ -1114,6 +1114,6 @@ using Harbor.Abstractions.Events;   // AgentEvent comes from here
 - [EXAMPLES.md §Plugins](./EXAMPLES.md#plugins) — short recipes.
 - [DEVELOPMENT.md §Workflow: contribute a plugin](./DEVELOPMENT.md#workflow-contribute-a-plugin).
 - [ARCHITECTURE.md §Plugin contract](./ARCHITECTURE.md#8-plugin-contract).
-- [specs/02-plugins.md](../specs/02-plugins.md) — design rationale.
+- [specs/02-plugins.md](./specs/02-plugins.md) — design rationale.
 - [SCRIPTING.md](./SCRIPTING.md) — scripting alternative (shipped under `contrib/scripting/`).
-- [specs/06-mcp.md](../specs/06-mcp.md) — MCP server integration.
+- [specs/06-mcp.md](./specs/06-mcp.md) — MCP server integration.

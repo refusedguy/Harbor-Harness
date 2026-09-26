@@ -463,8 +463,8 @@ strong naming, etc.).
 
 - [PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md) — DLL-based plugin development guide
   (legacy path, kept for projects that need full .NET project features).
-- [specs/02-plugins.md](../specs/02-plugins.md) — Original plugin spec.
-- [specs/08-native-aot.md](../specs/08-native-aot.md) — NativeAOT constraints and why
+- [specs/02-plugins.md](./specs/02-plugins.md) — Original plugin spec.
+- [specs/08-native-aot.md](./specs/08-native-aot.md) — NativeAOT constraints and why
   in-process Roslyn compilation does not work under AOT.
 - [samples/plugins-cs/HelloWorldPlugin.cs](../samples/plugins-cs/HelloWorldPlugin.cs) —
   Canonical CS-source sample plugin.

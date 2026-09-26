@@ -1,7 +1,7 @@
 # Roadmap
 
 > Harbor development roadmap. Last updated: 2026-08-27 (post CE-5 / PROD-UI-0 sprints and the
-> DOCS-ZERO docs pass; autonomous sprint-chain infra lives in [`.kilo-docs/`](../.kilo-docs/) —
+> DOCS-ZERO docs pass; autonomous sprint-chain infra lives in [`.kilo-docs/`](./.kilo-docs/) —
 > `sprint-chain.md` queue + `scripts/sprint-chain.sh` dispatcher, HEAD 3625e8e).
 > See [CHANGELOG.md](../CHANGELOG.md) for the per-release change history.
 >
@@ -306,7 +306,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 | Decision | Rationale | Date |
 |---|---|---|
 | Split `Harbor.Abstractions.Models` types into `Harbor.Domain.dll` | Domain layer should hold value objects + entities; Abstractions is just interfaces | v0.3 |
-| **Reverse the split**: `Harbor.Domain.dll` renamed to `Harbor.Abstractions.Contracts` (F1 decoupling) | Full decoupling of Abstractions from external callers; see ADR-008 in [`DECISIONS.md`](../DECISIONS.md) and commit fa8d3ae (2026-08-24). Namespace stays `Harbor.Abstractions.Models` | 2026-08-24 |
+| **Reverse the split**: `Harbor.Domain.dll` renamed to `Harbor.Abstractions.Contracts` (F1 decoupling) | Full decoupling of Abstractions from external callers; see ADR-008 in [`docs/adr/DECISIONS.md`](./adr/DECISIONS.md) and commit fa8d3ae (2026-08-24). Namespace stays `Harbor.Abstractions.Models` | 2026-08-24 |
 | Extract `Harbor.Ui.Framework` from `Harbor.Tui.Abstractions` | TEA + Panel system is shared by TUI and desktop GUIs; terminal-specific stuff stays separate | v0.4 (R6) |
 | Per-session `UiStore` instead of singleton | User wanted concurrent agents: "agents don't stop when I switch sessions" | v0.4 (R25) |
 | Move `ToolCallViewModel` to `Harbor.Ui.Framework.ViewModels` | Same VM reusable by Avalonia / WPF / MAUI / Blazor; replace `IBrush` with `string StatusBrushKey` | v0.4 (R28) |
