@@ -29,7 +29,7 @@ Sixel-capable terminals draw the image inline.
 
 - `Harbor.Abstractions`
 - `Harbor.Tui.Abstractions`
-- `Harbor.Tui.Ansi` (this renderer inherits from `AnsiTuiRenderer`)
+- `Harbor.Tui.AnsiPlain` (this renderer inherits from `AnsiTuiRenderer`)
 - `Microsoft.Extensions.Logging.Abstractions`
 
 The skeleton does not depend on `System.Drawing.Common` or `ImageSharp`. The
@@ -39,7 +39,7 @@ P/Invoke `libsixel`.
 
 ## Files
 
-- `Harbor.Tui.Sixel.csproj` — `net10.0`, references `Harbor.Tui.Ansi`.
+- `Harbor.Tui.Sixel.csproj` — `net10.0`, references `Harbor.Tui.AnsiPlain`.
 - `SixelTuiRenderer.cs` — sealed class extending `AnsiTuiRenderer`. Overrides
   `RenderAsync` to intercept `ToolExecutionEndEvent` whose output contains an
   image path; emits a Sixel sequence before delegating to the base renderer.

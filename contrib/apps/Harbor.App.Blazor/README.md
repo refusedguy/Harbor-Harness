@@ -100,6 +100,6 @@ app.Run();
 
 ## See also
 
-- [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) — full UI comparison
-- [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
-- [../Harbor.App.Cli/README.md](../Harbor.App.Cli/README.md) — the CLI app
+- [../../../docs/ALTERNATIVE_UIS.md](../../../docs/ALTERNATIVE_UIS.md) — full UI comparison
+- [../../../docs/ARCHITECTURE_LAYERS.md](../../../docs/ARCHITECTURE_LAYERS.md)
+- [../../../apps/Harbor.App.Cli/README.md](../../../apps/Harbor.App.Cli/README.md) — the CLI app

@@ -1,6 +1,6 @@
 # 01 — Архитектура ядра
 
-> **SUPERSEDED** by [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) + [docs/ARCHITECTURE_LAYERS.md](../docs/ARCHITECTURE_LAYERS.md) and [specs/14-architecture-revised.md](./14-architecture-revised.md) — this v1 layout (single Harbor.sln, SQLite-first storage, `IExtensionHost`) does not match the shipped solution.
+> **SUPERSEDED** by [docs/ARCHITECTURE.md](../ARCHITECTURE.md) + [docs/ARCHITECTURE_LAYERS.md](../ARCHITECTURE_LAYERS.md) and [specs/14-architecture-revised.md](./14-architecture-revised.md) — this v1 layout (single Harbor.sln, SQLite-first storage, `IExtensionHost`) does not match the shipped solution.
 
 > **Drift note (2026-09-26, verified against `origin/dev` HEAD `b0d92c1`; 108 commits since Sep 5).** Key relocations since this spec was frozen — the pipeline/product direction below is unchanged, only the homes moved:
 > - `AgentLoop` — was `src/Harbor.Core/`, now `src/Harbor.Application/Agents/AgentLoop.cs` (`Harbor.Application` = use cases: AgentLoop, CompactionService, SystemPromptBuilder, MessageConverter, PermissionService, OnboardingWizard).

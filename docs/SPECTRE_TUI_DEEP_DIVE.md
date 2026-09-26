@@ -4,9 +4,9 @@
 > живёт в contrib ([`contrib/tui/Harbor.Tui.SpectreTui/`](../contrib/tui/Harbor.Tui.SpectreTui/),
 > собирается через `contrib/Contrib.slnx`), но при этом дефолтная CLI-сборка всё ещё
 > компилирует его в via флага `HarborWithSpectreTui` (включён по умолчанию;
-> `HARBOR_MINIMAL=true` исключает). Вторая интерактивная оболочка — **`src/Harbor.Tui.ConsoleEx/`**
+> `HARBOR_MINIMAL=true` исключает). Вторая интерактивная оболочка — **`src/Harbor.Tui.CellForge/`**
 > (raw-mode вход, cell-diff вывод, виртуализированный таймлайн; включение —
-> `HARBOR_TUI=consoleex`, см. README проекта). Этот документ полезен и как источник
+> `HARBOR_TUI=cellforge`, см. README проекта). Этот документ полезен и как источник
 > рецептов (diff-view, slash-completion, file-tree) для переноса в ConsoleEx.
 
 **Цель документа:** дать полное понимание того, как устроен SpectreTUI-рендерер, чтобы вы могли:
@@ -1227,6 +1227,6 @@ public override void Render(RenderContext context) {
 
 - [Spectre.TUI исходники](https://github.com/spectreconsole/spectre.console/tree/main/src/Spectre.Tui) — фреймворк, на котором построен.
 - [Spectre.Console docs](https://spectreconsole.net/) — markdown, tables, borders.
-- [specs/07-tui.md](../specs/07-tui.md) — изначальная спецификация TUI.
+- [specs/07-tui.md](./specs/07-tui.md) — изначальная спецификация TUI.
 - [docs/CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — §FP-005 и §FP-007 теперь RESOLVED.
 - [CLAUDE.md §Full-screen TUI development](../CLAUDE.md) — hotkey table для `FullscreenTuiRenderer` (другой renderer, но паттерны те же).

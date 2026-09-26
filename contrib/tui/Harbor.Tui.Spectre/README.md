@@ -35,6 +35,6 @@ Set `HARBOR_TUI=spectre` for richer panels/tables in non-interactive mode. For i
 
 ## See also
 
-- [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
-- [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) — full TUI/GUI renderer comparison
-- [../../docs/SPECTRE_TUI_DEEP_DIVE.md](../../docs/SPECTRE_TUI_DEEP_DIVE.md)
+- [../../../docs/ARCHITECTURE_LAYERS.md](../../../docs/ARCHITECTURE_LAYERS.md)
+- [../../../docs/ALTERNATIVE_UIS.md](../../../docs/ALTERNATIVE_UIS.md) — full TUI/GUI renderer comparison
+- [../../../docs/SPECTRE_TUI_DEEP_DIVE.md](../../../docs/SPECTRE_TUI_DEEP_DIVE.md)

@@ -637,4 +637,4 @@ $ HARBOR_LOGLEVEL=debug dotnet run --project apps/Harbor.App.Cli
 - Read [EXAMPLES.md](./EXAMPLES.md) for 40+ recipes (tools, providers, storage, TUI, plugins).
 - Read [PATTERNS.md](./PATTERNS.md) to understand the codebase (18 patterns catalogued).
 - Read [ANTIPATTERNS.md](./ANTIPATTERNS.md) for what NOT to do (38 antipatterns with code).
-- Read [specs/](../specs/) for the full design rationale.
+- Read [docs/specs/](./specs/) for the full design rationale.

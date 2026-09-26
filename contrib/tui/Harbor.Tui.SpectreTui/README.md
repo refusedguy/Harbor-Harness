@@ -37,6 +37,6 @@ This is what `harbor` boots into when stdout is a TTY and no `HARBOR_TUI` env va
 
 ## See also
 
-- [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
-- [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) — full TUI/GUI renderer comparison
-- [../../docs/SPECTRE_TUI_DEEP_DIVE.md](../../docs/SPECTRE_TUI_DEEP_DIVE.md)
+- [../../../docs/ARCHITECTURE_LAYERS.md](../../../docs/ARCHITECTURE_LAYERS.md)
+- [../../../docs/ALTERNATIVE_UIS.md](../../../docs/ALTERNATIVE_UIS.md) — full TUI/GUI renderer comparison
+- [../../../docs/SPECTRE_TUI_DEEP_DIVE.md](../../../docs/SPECTRE_TUI_DEEP_DIVE.md)

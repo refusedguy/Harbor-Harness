@@ -1,7 +1,7 @@
 # Roadmap
 
 > Harbor development roadmap. Last updated: 2026-08-27 (post CE-5 / PROD-UI-0 sprints and the
-> DOCS-ZERO docs pass; autonomous sprint-chain infra lives in [`.kilo-docs/`](../.kilo-docs/) —
+> DOCS-ZERO docs pass; autonomous sprint-chain infra lives in [`.kilo-docs/`](./.kilo-docs/) —
 > `sprint-chain.md` queue + `scripts/sprint-chain.sh` dispatcher, HEAD 3625e8e).
 > See [CHANGELOG.md](../CHANGELOG.md) for the per-release change history.
 >
@@ -40,13 +40,13 @@
 
 ### ✅ Completed — ConsoleEx MVP (CE-0…CE-5)
 
-Second render path for the interactive REPL (`src/Harbor.Tui.ConsoleEx/`, opt-in only):
+Second render path for the interactive REPL (`src/Harbor.Tui.CellForge/`, opt-in only):
 
 - **Input** (CE-0): kitty keyboard protocol, SGR mouse, bracketed paste with anti-injection; raw-mode via termios P/Invoke
 - **Rendering** (CE-1): `ScreenBuffer` → `DiffEngine` cell-diff frames through `AnsiWriter` (SGR automaton, cursor elision, DECSYNC wrapper); resize policy à la ratatui
 - **Widgets** (CE-2/3): virtualized chat timeline with byte-budget ring, streaming markdown with pacer-gated reveal, tool-call cards with unified-diff bodies, status segment bar + tick-driven spinner, multi-line composer
-- **Live REPL wire-up** (CE-4): select via `HARBOR_TUI=consoleex` or `tui: "consoleex"` (+ kill-switch `ui.consoleEx.enabled`), `ConsoleExModule` DI graph, event pump keeps all timeline mutation on the frame thread, Ctrl+C = abort turn → second press quits, event-driven frames + 80 ms spinner heartbeat, golden E2E smoke (`tests/fixtures/celldiff/ce4-consoleex-repl.golden.txt`). See [README](../src/Harbor.Tui.ConsoleEx/README.md).
-- **PTY hardening** (CE-5): `PtyHarness` runs the real process in a pseudo-terminal (`tests/Harbor.Tui.ConsoleEx.PtyTests/`, 8 scenarios — launch/submit/kitty/mouse/paste/resize/Ctrl+C/termios); fixed Termios struct size 49→60 bytes (kernel wrote past struct → stack corruption in raw-mode Enter, commit 1749841).
+- **Live REPL wire-up** (CE-4): select via `HARBOR_TUI=cellforge` or `tui: "cellforge"` (+ kill-switch `ui.consoleEx.enabled`), `CellForgeModule` DI graph, event pump keeps all timeline mutation on the frame thread, Ctrl+C = abort turn → second press quits, event-driven frames + 80 ms spinner heartbeat, golden E2E smoke (`tests/fixtures/celldiff/ce4-consoleex-repl.golden.txt`). See [README](../src/Harbor.Tui.CellForge/README.md).
+- **PTY hardening** (CE-5): `PtyHarness` runs the real process in a pseudo-terminal (`tests/Harbor.Tui.CellForge.PtyTests/`, 8 scenarios — launch/submit/kitty/mouse/paste/resize/Ctrl+C/termios); fixed Termios struct size 49→60 bytes (kernel wrote past struct → stack corruption in raw-mode Enter, commit 1749841).
 
 ### ✅ Completed — Tools (14 builtin)
 
@@ -306,7 +306,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 | Decision | Rationale | Date |
 |---|---|---|
 | Split `Harbor.Abstractions.Models` types into `Harbor.Domain.dll` | Domain layer should hold value objects + entities; Abstractions is just interfaces | v0.3 |
-| **Reverse the split**: `Harbor.Domain.dll` renamed to `Harbor.Abstractions.Contracts` (F1 decoupling) | Full decoupling of Abstractions from external callers; see ADR-008 in [`DECISIONS.md`](../DECISIONS.md) and commit fa8d3ae (2026-08-24). Namespace stays `Harbor.Abstractions.Models` | 2026-08-24 |
+| **Reverse the split**: `Harbor.Domain.dll` renamed to `Harbor.Abstractions.Contracts` (F1 decoupling) | Full decoupling of Abstractions from external callers; see ADR-008 in [`docs/adr/DECISIONS.md`](./adr/DECISIONS.md) and commit fa8d3ae (2026-08-24). Namespace stays `Harbor.Abstractions.Models` | 2026-08-24 |
 | Extract `Harbor.Ui.Framework` from `Harbor.Tui.Abstractions` | TEA + Panel system is shared by TUI and desktop GUIs; terminal-specific stuff stays separate | v0.4 (R6) |
 | Per-session `UiStore` instead of singleton | User wanted concurrent agents: "agents don't stop when I switch sessions" | v0.4 (R25) |
 | Move `ToolCallViewModel` to `Harbor.Ui.Framework.ViewModels` | Same VM reusable by Avalonia / WPF / MAUI / Blazor; replace `IBrush` with `string StatusBrushKey` | v0.4 (R28) |

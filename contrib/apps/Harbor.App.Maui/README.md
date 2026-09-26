@@ -91,6 +91,6 @@ dotnet run --project apps/Harbor.App.Maui -f net10.0-maccatalyst
 
 ## See also
 
-- [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md)
-- [../../docs/DESKTOP_APP_PLAN.md](../../docs/DESKTOP_APP_PLAN.md)
-- [../Harbor.App.Avalonia/README.md](../Harbor.App.Avalonia/README.md) — recommended cross-platform desktop GUI
+- [../../../docs/ALTERNATIVE_UIS.md](../../../docs/ALTERNATIVE_UIS.md)
+- [../../../docs/DESKTOP_APP_PLAN.md](../../../docs/DESKTOP_APP_PLAN.md)
+- [../../../apps/Harbor.App.Avalonia/README.md](../../../apps/Harbor.App.Avalonia/README.md) — recommended cross-platform desktop GUI

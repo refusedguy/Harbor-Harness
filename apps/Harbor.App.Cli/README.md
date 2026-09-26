@@ -108,7 +108,7 @@ Interactive renderers own the alt-screen buffer; console logging is routed into 
 diagnostics panel (F12) instead of stdout. `consoleex` is the newest interactive renderer:
 event-driven frame loop, virtualized timeline, streaming markdown with frozen tail,
 Ctrl+C aborts the current agent turn and repeats to exit — see its README
-([../../src/Harbor.Tui.ConsoleEx/README.md](../../src/Harbor.Tui.ConsoleEx/README.md)).
+([../../src/Harbor.Tui.CellForge/README.md](../../src/Harbor.Tui.CellForge/README.md)).
 Enable it persistently with `"tui": "consoleex"` in `~/.harbor/config.json` or
 `{ "defaultTuiRenderer": "consoleex" }` in `~/.harbor/cli.json`.
 
@@ -196,7 +196,7 @@ Composition root — references every Harbor library, grouped per build flavor
 (`Harbor.App.Cli.csproj:145-224`):
 
 - Always: `Harbor.Abstractions`, `Harbor.Core`, `Harbor.Hosting` (+ transitively Domain/Application layers), `Harbor.Desktop.Abstractions`, `Harbor.Tools.Builtin`
-- Always: storage `Jsonl` + `Memory`; providers `Ollama`; renderers `Tui.Plain`, `Tui.Ansi`, `Tui.ConsoleEx`
+- Always: storage `Jsonl` + `Memory`; providers `Ollama`; renderers `Tui.AnsiPlain`, `Tui.CellForge` (+`CellForge.Engine`)
 - Always: IPC quartet `Harbor.Ipc.{Abstractions,InProcess,Server,Client}` (mode via `HARBOR_MODE`: `inprocess` | `ipc-server` | `ipc-client`)
 - `HarborWithPlugins=true`: `Harbor.Plugins.{Runtime,Storage,Compilation,Instantiation,Registration,Hosting}`
 - `HarborWithAllProviders=true`: `Harbor.Storage.Sqlite`, `Harbor.Providers.{OpenAiCompatible,Anthropic,OpenAI}`

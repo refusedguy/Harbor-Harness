@@ -208,16 +208,16 @@ exercised with zero external dependencies.
 
 ## 6. Roadmap — TUI E2E
 
-### 6.1 PTY-based TUI E2E — DELIVERED for ConsoleEx
+### 6.1 PTY-based TUI E2E — DELIVERED for CellForge
 
-**Status:** ✅ `tests/Harbor.Tui.ConsoleEx.PtyTests/` runs real L2 scenarios: a
+**Status:** ✅ `tests/Harbor.Tui.CellForge.PtyTests/` runs real L2 scenarios: a
 `PtyHarness` spawns the CLI as a real process inside a pseudo-terminal and
 drives it — launch, submit, kitty-keyboard keys, mouse, paste injection,
 resize, Ctrl+C, termios restore, plus golden grid-dump fixtures. Run with:
 
 ```bash
 dotnet build
-dotnet test tests/Harbor.Tui.ConsoleEx.PtyTests -c Release --no-build
+dotnet run --project tests/Harbor.Tui.CellForge.PtyTests -c Release --no-build
 ```
 
 The legacy placeholder suites for the contrib renderers remain at

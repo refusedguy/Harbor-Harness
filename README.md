@@ -43,7 +43,7 @@ CI regenerates the GIFs on TUI changes (`.github/workflows/demo.yml`).
   - JSON configs: `anthropic`, `kilocode` (with **FREE** models), `deepseek`, `groq`, `mistral`, `xai`, `together`, `fireworks`, `cerebras`, `openrouter`, `vllm`, `ollama` presets in [`providers/*.json`](./providers/)
 - **Storage backends**: `Jsonl` (default, zero native deps), `Memory` (tests), `Sqlite` — switched via `HARBOR_STORAGE`
 - **Terminal UIs**:
-  - `Harbor.Tui.ConsoleEx` — the new second render path: own raw-mode input pipeline (kitty keyboard protocol, SGR mouse 1000/1002/1006, bracketed paste), cell-grid diff renderer (`DiffEngine`), zero-allocation steady-state budgets, virtualized chat timeline with streaming markdown and unified-diff blocks. Opt-in, see below.
+  - `Harbor.Tui.CellForge` — the canonical fullscreen render path: own raw-mode input pipeline (kitty keyboard protocol, SGR mouse 1000/1002/1006, bracketed paste), cell-grid diff renderer (`DiffEngine`), zero-allocation steady-state budgets, virtualized chat timeline with streaming markdown and unified-diff blocks. Opt-in, see below.
   - `AnsiTuiRenderer` / `PlainTuiRenderer` — classic streaming/plain-text renderers
   - Additional interactive renderers (`Spectre.Tui` shell, `Fullscreen`, `Terminal.Gui`, `Termina`, `RazorConsole`) physically live in [`contrib/tui/`](./contrib/tui) but are compiled into the default CLI build
   - `Notifications` renderer (desktop OS notifications), Avalonia desktop app (`apps/Harbor.App.Avalonia`)
@@ -201,7 +201,7 @@ Users:
 - [Tools Catalog](./docs/TOOLS_CATALOG.md) — every builtin tool: schema, examples, decision matrix
 
 Developers:
-- [Architecture](./docs/ARCHITECTURE.md) + [Architecture Layers](./docs/ARCHITECTURE_LAYERS.md) + [specs/](./specs/README.md)
+- [Architecture](./docs/ARCHITECTURE.md) + [Architecture Layers](./docs/ARCHITECTURE_LAYERS.md) + [docs/specs/](./docs/specs/README.md)
 - [Development Guide](./docs/DEVELOPMENT.md) — workflows + principles checklist
 - [Plugin Development](./docs/PLUGIN_DEVELOPMENT.md) / [Plugin System](./docs/PLUGIN_SYSTEM.md)
 - [Component Catalog](./docs/COMPONENT_CATALOG.md) — reusable UI components across Avalonia/Blazor/WPF
@@ -209,7 +209,7 @@ Developers:
 - [Spectre.Tui Deep Dive](./docs/SPECTRE_TUI_DEEP_DIVE.md) — anatomy of the interactive shell (contrib/tui/Harbor.Tui.SpectreTui)
 - For AI agents: [AGENTS.md](./AGENTS.md) (operations) and [CLAUDE.md](./CLAUDE.md) (conventions)
 
-Design specs: 16+ documents in [specs/](./specs/README.md) — architecture, plugins, providers, tools, sessions, MCP, TUI, NativeAOT, benchmarks.
+Design specs: 16+ documents in [docs/specs/](./docs/specs/README.md) — architecture, plugins, providers, tools, sessions, MCP, TUI, NativeAOT, benchmarks.
 
 ## Roadmap
 

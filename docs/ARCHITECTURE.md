@@ -1,6 +1,6 @@
 # Architecture
 
-> High-level design of Harbor. For full details, see [specs/](../specs/).
+> High-level design of Harbor. For full details, see [docs/specs/](./specs/).
 >
 > **Связанные документы:**
 > - [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) — canonical Clean / Hexagonal / Onion layering rules + the allowed/forbidden ProjectReference matrix, enforced by `Harbor.Architecture.Tests`.
@@ -277,7 +277,7 @@ Harbor следует строгим принципам OOP/SOLID/GoF/FP/ROP/per
 - `System.Text.Json` source-gen (planned; MCP уже использует `McpJsonSerializerContext`).
 - No `AssemblyLoadContext` collectible.
 
-**TUI** (`Harbor.Tui.Ansi`, `Harbor.Tui.ConsoleEx`, optional `contrib/tui/Harbor.Tui.TerminalGui`) — JIT, runs in-process today; two-process mode planned:
+**TUI** (`Harbor.Tui.AnsiPlain`, `Harbor.Tui.CellForge`, optional `contrib/tui/Harbor.Tui.TerminalGui`) — JIT, runs in-process today; two-process mode planned:
 - Can use any library.
 - Planned: NDJSON over Unix domain sockets (v0.9, см. ROADMAP).
 - Crash isolation — TUI crash doesn't kill Core.
@@ -767,11 +767,11 @@ Known existing violations documented in [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCI
 └─────────────────────────────────────────────────────────────┘
 ```
 
-See [specs/14-architecture-revised.md](../specs/14-architecture-revised.md) for full design.
+See [docs/specs/14-architecture-revised.md](./specs/14-architecture-revised.md) for full design.
 
 ## References
 
-- [Specifications](../specs/README.md) — 16 detailed design documents.
+- [Specifications](./specs/README.md) — 16 detailed design documents.
 - [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) — layering matrix + architecture tests.
 - [CLAUDE.md](../CLAUDE.md) — code conventions.
 - [AGENTS.md](../AGENTS.md) — guide for AI agents.

@@ -47,9 +47,9 @@ src/                                   — ~50 projects (all included in Harbor.
 ├── Harbor.Tools.Builtin/              — 14 builtin tools under Tools/
 │                                        (read/write/edit/bash/glob/grep/ls/task + webfetch/patch/notebook/ripgrep/tree/mcp)
 ├── Harbor.Terminal.Abstractions/      — ITuiRenderer, ITuiRenderContext, BaseTuiRenderer, views/VMs
-├── Harbor.Tui.{Ansi,Plain}/           — ANSI streaming + plain-text renderers
-├── Harbor.Tui.ConsoleEx/              — second in-process terminal renderer (raw-mode input,
-│                                        cell-diff output; opt-in via HARBOR_TUI=consoleex)
+├── Harbor.Tui.AnsiPlain/               — ANSI streaming + plain-text renderers (AnsiTuiRenderer, PlainTuiRenderer)
+├── Harbor.Tui.CellForge(+.Engine)/        — canonical fullscreen cell-diff renderer (raw-mode input,
+│                                        cell-diff output; HARBOR_TUI=cellforge, legacy alias: consoleex)
 ├── Harbor.Tui.Notifications/          — desktop OS notifications renderer
 ├── Harbor.Ui.Framework*/              — TEA-style UI state/reducers/projection/services shared by apps
 ├── Harbor.Plugins.{Abstractions,Compilation,Instantiation,Registration,
@@ -89,7 +89,7 @@ innermost layer (Domain/Abstractions) references nothing but the BCL.
 | **Domain**       | `Harbor.Abstractions`, `Harbor.Tui.Abstractions`                                                             | BCL only (no other Harbor project, except Tui.Abstractions → Abstractions) |
 | **Application**  | `Harbor.Core`, `Harbor.Plugins.Runtime`, `Harbor.Scripting`                                                  | Domain only (NOT each other, NOT Infrastructure, NOT Presentation) |
 | **Infrastructure** | `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`                                           | Domain only (NOT `Harbor.Core`, NOT each other) |
-| **Presentation** | `Harbor.App.Cli`, `Harbor.App.Avalonia`, `Harbor.Tui.Plain/Ansi/ConsoleEx/Notifications`, `contrib/tui/*` (SpectreTui shell, Fullscreen, TerminalGui, Termina, RazorConsole) | Domain only (NOT Application, NOT Infrastructure, NOT each other) |
+| **Presentation** | `Harbor.App.Cli`, `Harbor.App.Avalonia`, `Harbor.Tui.AnsiPlain/CellForge/NickConsoleEx/Notifications`, `contrib/tui/*` (SpectreTui shell, Fullscreen, TerminalGui, Termina, RazorConsole) | Domain only (NOT Application, NOT Infrastructure, NOT each other) |
 | **Composition Root** | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (+ `src/Harbor.Hosting/Modules/*`) | Everything — the ONLY place that `new`s concrete impls |
 
 ### Hard rules (CI-enforced via `Harbor.Architecture.Tests`)
@@ -1190,7 +1190,7 @@ See `specs/` for the full design rationale. Key decisions:
 
 ## When in doubt
 
-- Read the spec — `specs/14-architecture-revised.md` for current architecture.
+- Read the spec — `docs/specs/14-architecture-revised.md` for current architecture.
 - Check existing patterns — `Harbor.Tools.Builtin/Read/ReadTool.cs` is a good reference.
 - Look at tests — `tests/Harbor.Abstractions.Tests/` for assertion patterns.
 - Check `.editorconfig` for analyzer suppressions.
