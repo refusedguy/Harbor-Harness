@@ -30,7 +30,7 @@ The list below is the **ruthless, ship-first** ranking. Each entry has:
 | 5  | Intra-line word-diff highlighting (not just line)  | 5      | M      | Pi (diff lib) | ✅ R+ (dependency-free `WordDiff` LCS + `DiffBlock` 1:1 pairing; insertion/deletion covered) |
 | 6  | Toast notifications with slide-in + auto-dismiss   | 4      | S      | Orca (sonner) | ✅ R28 |
 | 7  | Tab-strip with drag-reorder + close-gesture        | 4      | L      | Orca          | ❌ |
-| 8  | Worktree jump palette (Cmd-J / Ctrl+J)             | 5      | M      | Orca          | ⚠️ partial (model + Ctrl+J hotkey + reducer; renderer panel pending) |
+| 8  | Worktree jump palette (Cmd-J / Ctrl+J)             | 5      | M      | Orca          | ⚠️ partial (model + Ctrl+J hotkey + reducer + CellForge jump panel; overlay polish pending) |
 | 9  | Agent pet mascot that reacts to agent state        | 4      | S      | Orca          | ❌ |
 | 10 | Markdown rich editor (TipTap) with code blocks     | 5      | L      | Orca          | ⚠️ partial (renderer, no editor) |
 | 11 | Image preview inline in chat                       | 4      | M      | Opencode, Kilo | ❌ |
