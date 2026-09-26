@@ -1,5 +1,6 @@
 using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Ui.Framework.ViewModels;
 /// <summary>
 ///     One chat line projected for the UI. Role + text + brush key + optional

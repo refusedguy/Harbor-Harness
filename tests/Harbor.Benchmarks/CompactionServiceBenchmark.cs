@@ -22,7 +22,7 @@ namespace Harbor.Benchmarks;
 ///     </para>
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(warmupCount: 2, iterationCount: 3)]
+[SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class CompactionServiceBenchmark
 {
     private IReadOnlyList<AgentMessage> _messages = null!;

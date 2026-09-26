@@ -11,7 +11,7 @@ namespace Harbor.Benchmarks;
 ///     PRAGMAs (<c>journal_mode=WAL</c>, <c>synchronous=NORMAL</c>).
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(warmupCount: 2, iterationCount: 3)]
+[SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class SqliteSessionStoreWalBenchmark
 {
     private SqliteSessionStore _store = null!;

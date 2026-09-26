@@ -123,6 +123,70 @@ public class JsonlSessionStoreTests
             if (Directory.Exists(store.GetRootDirectory())) Directory.Delete(store.GetRootDirectory(), true);
         }
     }
+
+    [Test]
+    public async Task DeleteAsync_UnknownId_ReturnsFailure()
+    {
+        var store = CreateStore();
+        try
+        {
+            var result = await store.DeleteAsync("nonexistent");
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            if (Directory.Exists(store.GetRootDirectory())) Directory.Delete(store.GetRootDirectory(), true);
+        }
+    }
+
+    [Test]
+    public async Task UpdateMessageAsync_UnknownSession_ReturnsFailure()
+    {
+        var store = CreateStore();
+        try
+        {
+            var msg = new UserMessage(
+                "msg-1",
+                "nonexistent",
+                DateTimeOffset.UtcNow,
+                "Hello",
+                "code",
+                "claude-opus-4");
+            var result = await store.UpdateMessageAsync("nonexistent", msg);
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            if (Directory.Exists(store.GetRootDirectory())) Directory.Delete(store.GetRootDirectory(), true);
+        }
+    }
+
+    [Test]
+    public async Task UpdateMessageAsync_UnknownMessage_ReturnsFailure()
+    {
+        var store = CreateStore();
+        try
+        {
+            var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
+            var ghost = new UserMessage(
+                "msg-ghost",
+                session.Id,
+                DateTimeOffset.UtcNow,
+                "Ghost",
+                "code",
+                "claude-opus-4");
+            var result = await store.UpdateMessageAsync(session.Id, ghost);
+            await Assert.That(result.IsFailure).IsTrue();
+
+            var messages = await store.GetMessagesAsync(session.Id);
+            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages.Value.Count).IsEqualTo(0);
+        }
+        finally
+        {
+            if (Directory.Exists(store.GetRootDirectory())) Directory.Delete(store.GetRootDirectory(), true);
+        }
+    }
 }
 
 internal static class JsonlSessionStoreExtensions

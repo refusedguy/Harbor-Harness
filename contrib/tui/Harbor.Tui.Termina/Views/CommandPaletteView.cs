@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Tui.Termina.Rendering;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using TerminaColor = Termina.Terminal.Color;
 
 namespace Harbor.Tui.Termina.Views;

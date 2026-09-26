@@ -18,7 +18,7 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     NXDOMAIN, and the injected handler records whether the gate ever let
 ///     a request through.
 /// </summary>
-[NotInParallel]
+[NotInParallel("network")]
 public class WebFetchSsrfNegativeTests
 {
     private static ToolContext Ctx() => new(

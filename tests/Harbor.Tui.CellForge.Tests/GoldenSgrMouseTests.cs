@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -10,6 +11,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// Drag vs Release synthesis, wheel mapping and the >223-column case that
 /// legacy X10 encoding cannot represent.
 /// </summary>
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class GoldenSgrMouseTests
 {
     private readonly EscapeSequenceParser _parser = new();

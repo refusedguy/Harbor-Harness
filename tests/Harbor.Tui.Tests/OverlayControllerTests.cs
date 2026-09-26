@@ -41,7 +41,7 @@ public class OverlayControllerTests
         controller.Register("settings", v => calls.Add(v));
         controller.Open("settings");
 
-        await Assert.That(calls).HasCount(1);
+        await Assert.That(calls).Count().IsEqualTo(1);
         await Assert.That(calls[0]).IsTrue();
         await Assert.That(stack.Current).IsEqualTo("settings");
     }
@@ -61,7 +61,7 @@ public class OverlayControllerTests
         calls.Clear();
         controller.Close("palette");
 
-        await Assert.That(calls).HasCount(1);
+        await Assert.That(calls).Count().IsEqualTo(1);
         await Assert.That(calls[0]).IsFalse();
     }
 

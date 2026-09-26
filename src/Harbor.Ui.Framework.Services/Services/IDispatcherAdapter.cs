@@ -1,5 +1,6 @@
 namespace Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 /// <summary>
 ///     Abstraction for marshalling work to the UI thread.
 ///     Each desktop app implements this (Avalonia → Dispatcher.UIThread,

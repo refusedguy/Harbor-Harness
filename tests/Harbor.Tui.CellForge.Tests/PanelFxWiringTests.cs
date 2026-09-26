@@ -29,8 +29,8 @@ public class PanelFxWiringTests
         var buffer = PaintTimeline(tl, 40, 4, tick: 0);
 
         await Assert.That(GridDump.Art(buffer)).Contains("hello");
-        // Prefix accent is exact — no alpha blending on cold screens.
-        await Assert.That(buffer.Get(0, 0).Style.Fg).IsEqualTo(ChatPalette.Accent);
+        // v2 YOU header sits at col 1 with the accent — no blending on cold screens.
+        await Assert.That(buffer.Get(1, 0).Style.Fg).IsEqualTo(ChatPalette.Accent);
     }
 
     [Test]
@@ -43,9 +43,13 @@ public class PanelFxWiringTests
         tl.Append(new UserBlock("late arrival"));
         tl.ScrollToEnd(6);
 
-        ScreenBuffer animating = PaintTimeline(tl, 40, 6, tick: 1);
+        ScreenBuffer animating = PaintTimeline(tl, 40, 6, tick: 5);
         ScreenBuffer settled = PaintTimeline(tl, 40, 6, tick: 99);
 
+        // Mid-slide tick: SlideMaxRows=2 over SlideFrames=18 — tick 5 gives
+        // offset 1, so the v2 block (YOU header + body + gap) still shows its
+        // body while shifted (motion visible, alpha < 1). Tick 1 would clip
+        // everything but the header (offset 2 of 3 rows).
         string animArt = GridDump.Art(animating);
         string settledArt = GridDump.Art(settled);
 

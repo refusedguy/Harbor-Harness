@@ -15,7 +15,7 @@ namespace Harbor.Ipc.Tests;
 ///     processed sequence receives exactly the missed envelopes in order; a
 ///     gap larger than the ring yields ResyncRequired instead.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
 public class ReconnectReplayTests
 {
     private static async Task<(HarborIpcServer Server, IEventBus Bus, IServiceProvider Sp, string Pipe)> StartServer()

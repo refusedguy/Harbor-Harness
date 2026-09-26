@@ -2,6 +2,7 @@ using Harbor.Tui.SpectreTui.Panels.Builtin;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.Tests;

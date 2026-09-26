@@ -77,16 +77,13 @@ public sealed class WriteTool : ITool
             return ToolResult.Error(
                 $"content too large ({content.Length} chars; max {MaxContentChars}).");
 
-        var resolvedPath = ToolPaths.Resolve(rawPath);
+        var resolvedPath = ToolPaths.Resolve(rawPath)
+            .Bind(p => SymlinkGuard.Check(p).Map(() => p));
         if (resolvedPath.IsFailure)
             return ToolResult.Error(resolvedPath.Error);
         string path = resolvedPath.Value;
 
         _logger.LogInformation("Writing: {Path} ({Chars} chars)", path, content.Length);
-
-        var symlinkCheck = SymlinkGuard.Check(path);
-        if (symlinkCheck.IsFailure)
-            return ToolResult.Error(symlinkCheck.Error);
 
         if (Directory.Exists(path))
             return ToolResult.Error($"Path is a directory, not a file: {path}");

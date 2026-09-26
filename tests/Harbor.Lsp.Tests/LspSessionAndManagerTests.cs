@@ -32,7 +32,7 @@ internal static class TestPaths
 
 /// <summary>Wire-level flow over a real out-of-process fake server (python3).</summary>
 [SkipUnlessPython3]
-[NotInParallel]
+[NotInParallel("lsp")]
 public class LspServerSessionIntegrationTests
 {
     private const string FakeServerScript = """
@@ -84,8 +84,8 @@ public class LspServerSessionIntegrationTests
     [Test]
     public async Task Open_PublishesDiagnostics_DefinitionResolves()
     {
-        string scriptPath = Path.Combine(Path.GetTempPath(), $"harbor-fake-lsp-{Guid.NewGuid():N}.py");
-        string workspace = Path.Combine(Path.GetTempPath(), $"harbor-lsp-ws-{Guid.NewGuid():N}");
+        string scriptPath = Harbor.TestKit.TestTempDirs.NewFilePath("harbor-fake-lsp", ".py");
+        string workspace = Harbor.TestKit.TestTempDirs.NewDirectory("harbor-lsp-ws");
         Directory.CreateDirectory(workspace);
         string filePath = Path.Combine(workspace, "a.ts");
         await File.WriteAllTextAsync(scriptPath, FakeServerScript);
@@ -105,7 +105,7 @@ public class LspServerSessionIntegrationTests
 
             await Assert.That(changed).IsEqualTo(filePath);
             IReadOnlyList<LspDiagnostic> diagnostics = session.GetDiagnostics(filePath);
-            await Assert.That(diagnostics).HasCount().EqualTo(1);
+            await Assert.That(diagnostics.Count()).IsEqualTo(1);
             await Assert.That(diagnostics[0].Severity).IsEqualTo(LspSeverity.Error);
             await Assert.That(diagnostics[0].Message).IsEqualTo("fake error");
 
@@ -125,6 +125,7 @@ public class LspServerSessionIntegrationTests
             }
             catch (IOException)
             {
+                // best-effort cleanup of a temp workspace
             }
         }
     }

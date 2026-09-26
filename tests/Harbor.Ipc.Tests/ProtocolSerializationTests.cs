@@ -10,7 +10,7 @@ namespace Harbor.Ipc.Tests;
 ///     <c>[Key]</c> ordering bugs and missing <c>[Union]</c> tags early
 ///     — long before they reach a non-.NET client.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
     public class ProtocolSerializationTests
 {
     /// <summary>

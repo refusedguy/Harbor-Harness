@@ -37,6 +37,7 @@ public sealed class AgentLoop : IAgentLoop
     private readonly ITokenTracker _tokenTracker;
     private readonly IToolDispatcher _toolDispatcher;
     private readonly IToolRegistry _tools;
+    private readonly IBackgroundTaskRegistry? _backgroundTasks;
     private readonly AgentPipeline _pipeline;
     private readonly CompactionBehavior _compactionBehavior;
     private readonly SteeringDrainBehavior _steering;
@@ -65,7 +66,11 @@ public sealed class AgentLoop : IAgentLoop
         IMetrics? metrics = null,
         ITracer? tracer = null,
         IToolDispatcher? toolDispatcher = null,
-        IMcpRegistry? mcpRegistry = null)
+        IMcpRegistry? mcpRegistry = null,
+        IBackgroundTaskRegistry? backgroundTasks = null,
+        // #49 PR2: forwarded to the fallback dispatcher so tests driving the
+        // loop directly still get the commit barrier when they pass one.
+        IApprovalCoordinator? coordinator = null)
     {
         _providers = providers;
         _tools = tools;
@@ -88,7 +93,7 @@ public sealed class AgentLoop : IAgentLoop
         // fallback uses a NullLogger because the loop's own typed logger must
         // not be lent out under a foreign category (S6672).
         _toolDispatcher = toolDispatcher
-            ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance);
+            ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance, coordinator);
         // §3.5 pipeline: run-level cross-cutting concerns are middleware over the
         // whole run; per-turn behaviors (compaction, steering, max steps) are
         // extracted classes the core loop calls each turn. Behaviors share the
@@ -103,6 +108,9 @@ public sealed class AgentLoop : IAgentLoop
         // ROP-D Z3: MCP server instructions flow into the system prompt when a
         // registry is composed in; tests without one keep the section absent.
         _mcpRegistry = mcpRegistry;
+        // Background-task ping: detached runs drain into the session when the
+        // loop is composed with a registry; tests without one skip silently.
+        _backgroundTasks = backgroundTasks;
     }
 
     /// <summary>
@@ -147,6 +155,10 @@ public sealed class AgentLoop : IAgentLoop
             var (client, model) = resolved.Value;
 
             await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, SnapshotMessages(session.Messages), model), ct).ConfigureAwait(false);
+
+            // Previous-run background completions land before the first turn
+            // so a new run picks up reports that finished while idle.
+            await DrainBackgroundAsync(session, ct).ConfigureAwait(false);
 
             int turn = 0;
             // Set when LLM-based compaction fails; the CURRENT and every
@@ -289,6 +301,10 @@ public sealed class AgentLoop : IAgentLoop
                 // B3: tool results are pure appends — extend the running estimate.
                 _tokenTracker.RecordAppendedMessage(toolResults);
 
+                // Background-task ping ("boss, I'm done"): finished detached
+                // runs append as tool results so the NEXT turn picks them up.
+                await DrainBackgroundAsync(session, ct).ConfigureAwait(false);
+
                 // Ф2/B2: mid-run steering injection INSIDE the turn. Drained
                 // right AFTER the tool results are persisted (never between
                 // the assistant tool_calls and their results — providers
@@ -350,40 +366,67 @@ public sealed class AgentLoop : IAgentLoop
     }
 
     /// <summary>
+    ///     Background-task ping: drain finished detached runs for this session
+    ///     into a tool-result message. No-op when unwired or nothing finished.
+    /// </summary>
+    private async Task DrainBackgroundAsync(ISessionContext session, CancellationToken ct)
+    {
+        var registry = _backgroundTasks;
+        if (registry is null)
+        {
+            return;
+        }
+
+        var done = registry.DrainCompleted(session.Session.Id);
+        if (done.Count == 0)
+        {
+            return;
+        }
+
+        var entries = new List<ToolResultEntry>(done.Count);
+        for (int i = 0; i < done.Count; i++)
+        {
+            var completion = done[i];
+            // ROP boundary #101: single Match inspection — the payload and the
+            // error flag come out of one pass instead of Match + IsFailure.
+            var (output, isError) = completion.Result.Match(
+                run => ($"[background sub-agent '{completion.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s)]\n\n{run.FinalOutput}", false),
+                err => ($"[background sub-agent '{completion.AgentName}' failed: {err}]", true));
+            entries.Add(new ToolResultEntry(completion.Id, "task", output, isError));
+            _logger.LogInformation("Background task drained: id={Id} agent={Agent}", completion.Id, completion.AgentName);
+        }
+
+        var message = new ToolResultMessage(
+            Guid.NewGuid().ToString("N"), session.Session.Id, DateTimeOffset.UtcNow, entries);
+        await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
+        _tokenTracker.RecordAppendedMessage(message);
+    }
+
+    /// <summary>
     ///     Resolve the provider id, LLM client and concrete model for this run.
-    ///     Errors are routed structurally by the Bind chain: any step failing
-    ///     short-circuits to the single <c>IsFailure</c> exit. The "model may be
-    ///     absent" case is expressed as <see cref="Maybe{T}"/> → ToResult rather
-    ///     than a null-check convention.
+    ///     Errors are routed structurally by a flat Bind chain (parse → client →
+    ///     catalog): any step failing short-circuits to the single Match exit.
+    ///     The "model may be absent" case is expressed as <see cref="Maybe{T}"/>
+    ///     → ToResult rather than a null-check convention.
     /// </summary>
     private async Task<Result<(ILlmClient Client, ModelInfo Model)>> ResolveModelAsync(
         AgentDefinition agent,
         CancellationToken ct)
     {
+        // ROP boundary #101: flat Bind railway with one Match exit — no nested
+        // ifs, no IsFailure + .Value double-inspection.
         Result<(ILlmClient Client, IReadOnlyList<ModelInfo> Catalog)> provider =
             await ProviderId.TryCreate(agent.ProviderId)
-                .Bind(async id =>
-                {
-                    var clientResult = _providers.GetClient(id);
-                    if (clientResult.IsFailure) // §4.6-ok: тело рельсы ResolveModelAsync — ранний выход внутри Bind-лямбды.
-                        return Result.Failure<(ILlmClient, IReadOnlyList<ModelInfo>)>(clientResult.Error);
-
-                    var models = await _providers.GetModelsCachedAsync(id, ct).ConfigureAwait(false);
-                    return models.IsSuccess
-                        ? Result.Success((clientResult.Value, models.Value))
-                        : Result.Failure<(ILlmClient, IReadOnlyList<ModelInfo>)>(models.Error);
-                })
+                .Bind(id => _providers.GetClient(id).Map(client => (id, client)))
+                .Bind(async t => (await _providers.GetModelsCachedAsync(t.id, ct).ConfigureAwait(false))
+                    .Map(models => (t.client, models)))
                 .ConfigureAwait(false);
 
-        if (provider.IsFailure) // §4.6-ok: Match-граница рельсы — один выход вместо трёх if.
-        {
-            return Result.Failure<(ILlmClient, ModelInfo)>(provider.Error);
-        }
-
-        var (client, models) = provider.Value;
-        return Maybe.From(FindModel(models, agent.Model))
-            .ToResult($"Model '{agent.Model}' not found in provider '{agent.ProviderId}'.")
-            .Map(m => (client, m));
+        return provider.Match(
+            catalog => Maybe.From(FindModel(catalog.Catalog, agent.Model))
+                .ToResult($"Model '{agent.Model}' not found in provider '{agent.ProviderId}'.")
+                .Map(m => (Client: catalog.Client, Model: m)),
+            error => Result.Failure<(ILlmClient Client, ModelInfo Model)>(error));
     }
 
     /// <summary>

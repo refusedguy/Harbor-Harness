@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.State;
+
 namespace Harbor.Ui.Framework.Sessions;
 /// <summary>
 ///     Per-session context — holds the session's UiStore (chat state),

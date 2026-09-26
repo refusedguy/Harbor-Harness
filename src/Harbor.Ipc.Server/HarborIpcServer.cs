@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Permissions;
+
 namespace Harbor.Ipc;
 /// <summary>
 ///     Harbor IPC server. Hosts the <see cref="MessagePackRpcServer" />,
@@ -70,7 +72,13 @@ public sealed class HarborIpcServer : IHarborServer
             serviceProvider.GetRequiredService<IEventBus>(),
             _loggerFactory.CreateLogger<EventBroadcaster>(),
             _leases);
-        var dispatcher = new RequestDispatcher(serviceProvider, _broadcaster, _leases);
+        var dispatcher = new RequestDispatcher(
+            serviceProvider,
+            _broadcaster,
+            _leases,
+            // Nullable: minimal/test hosts may not register the coordinator —
+            // the dispatcher falls back to direct cancel there.
+            serviceProvider.GetService<IApprovalCoordinator>());
         _rpc = new MessagePackRpcServer(
             _transport, dispatcher, _broadcaster,
             _loggerFactory.CreateLogger<MessagePackRpcServer>(), psk);

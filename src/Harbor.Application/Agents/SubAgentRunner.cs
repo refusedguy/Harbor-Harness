@@ -140,9 +140,14 @@ public sealed class SubAgentRunner(
         }
 
         var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
-        if (history.IsFailure || history.Value.Count == 0) // §4.6-ok: divergent read-back is a storage bug, surfaced verbatim.
+        // Storage failure vs empty history are distinct diagnoses: the
+        // store's own error travels verbatim, emptiness gets its own text.
+        if (history.IsFailure)
             return Result.Failure<SubAgentRunResult>(
-                $"Sub-agent '{agent.Name.Value}' finished but produced no readable history (session {session.Id}).");
+                $"Sub-agent '{agent.Name.Value}' history unreadable: {history.Error} (session {session.Id}).");
+        if (history.Value.Count == 0)
+            return Result.Failure<SubAgentRunResult>(
+                $"Sub-agent '{agent.Name.Value}' finished without producing a final assistant message (session {session.Id}).");
 
         var finalOutput = ExtractFinalOutput(history.Value);
         if (string.IsNullOrWhiteSpace(finalOutput))

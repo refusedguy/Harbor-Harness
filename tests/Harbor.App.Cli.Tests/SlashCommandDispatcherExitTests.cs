@@ -4,6 +4,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
 using Harbor.Terminal.Abstractions;
@@ -11,6 +12,7 @@ using Harbor.Terminal.Abstractions.Renderers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -28,7 +30,9 @@ public class SlashCommandDispatcherExitTests
 
     private static async Task<SlashCommandOutcome> DispatchAsync(string input)
     {
-        using var sp = new ServiceCollection().BuildServiceProvider();
+        using var sp = new ServiceCollection()
+            .AddSingleton<IToolRegistry>(new FakeToolRegistry())
+            .BuildServiceProvider();
         var dispatcher = CreateDispatcher();
         return await dispatcher.HandleAsync(
             input,
@@ -136,18 +140,6 @@ public class SlashCommandDispatcherExitTests
         {
             public void Dispose() { }
         }
-    }
-
-    private sealed class FakeAgentRegistry : IAgentRegistry
-    {
-        public IReadOnlyList<AgentDefinition> GetAllAgents() => Array.Empty<AgentDefinition>();
-
-        public Result<AgentDefinition> GetAgent(AgentName name) =>
-            Result.Failure<AgentDefinition>($"No agents registered in tests: {name.Value}");
-
-        public Result Register(AgentDefinition agent) => Result.Failure("Registration is not supported in tests.");
-
-        public Result Unregister(AgentName name) => Result.Failure("Unregistration is not supported in tests.");
     }
 
     private sealed class FakeProviderRegistry : IProviderRegistry

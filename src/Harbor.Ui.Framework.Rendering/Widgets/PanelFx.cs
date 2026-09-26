@@ -154,7 +154,13 @@ public static class PanelFx
         {
             for (int x = region.X; x < region.Right; x++)
             {
-                var faded = WithAlpha(buffer.Get(x, y).Style, alpha);
+                var cell = buffer.Get(x, y);
+                if (cell.Width == Cell.WSkip)
+                {
+                    continue;
+                }
+
+                var faded = WithAlpha(cell.Style, alpha);
                 buffer.SetStyleAt(x, y, in faded);
             }
         }

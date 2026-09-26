@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Blazor.Services;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Blazor.ViewModels;
 /// <summary>

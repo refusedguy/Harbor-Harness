@@ -8,7 +8,7 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     A2 (sprint 5): behavior matrix for the write-path symlink guard.
 ///     Uses real temp directories and real symlinks — Linux only.
 /// </summary>
-[NotInParallel]
+[NotInParallel("filesystem")]
 [SkipWhenNotLinux]
 public class SymlinkGuardTests
 {

@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -11,6 +12,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// <c>tests/fixtures/celldiff/*.golden.txt</c>. Regenerate with
 /// HARBOR_UPDATE_GOLDENS=1; companion SVGs are written for human review.
 /// </summary>
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class GoldenGridDumpTests
 {
     [Test]

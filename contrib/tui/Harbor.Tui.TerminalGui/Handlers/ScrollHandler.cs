@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Tui.TerminalGui.Handlers;
 /// <summary>
 ///     Pure scroll math over <see cref="UiState" />. Mirrors SpectreTui's

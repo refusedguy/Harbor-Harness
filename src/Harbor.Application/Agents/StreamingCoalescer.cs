@@ -85,7 +85,21 @@ internal sealed class StreamingCoalescer : IDisposable
     }
 
     /// <summary>Begin accumulating args for a tool call.</summary>
-    public void StartToolCall(string id, string toolName) => _pendingToolCalls[id] = (toolName, StringBuilderPool.Rent());
+    /// <remarks>
+    ///     #53 audit: a repeated start for the same <paramref name="id" />
+    ///     disposes the previously rented args builder before replacing it.
+    ///     Overwriting without disposal leaked the pooled builder (never
+    ///     returned to <c>StringBuilderPool</c>) and silently dropped the
+    ///     earlier args. Last-start-wins is preserved.
+    /// </remarks>
+    public void StartToolCall(string id, string toolName)
+    {
+        if (_pendingToolCalls.TryGetValue(id, out var existing))
+        {
+            existing.Args.Dispose();
+        }
+        _pendingToolCalls[id] = (toolName, StringBuilderPool.Rent());
+    }
 
     /// <summary>Append a tool-call args delta.</summary>
     public void AppendToolCallDelta(string id, string argsDelta)

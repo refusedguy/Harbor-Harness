@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Ui.Framework.State;
 

@@ -43,6 +43,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.CodeGen\Harbor.CodeGen.csproj">
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>

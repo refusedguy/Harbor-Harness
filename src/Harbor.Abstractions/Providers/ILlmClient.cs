@@ -17,6 +17,18 @@ namespace Harbor.Abstractions.Providers;
 ///         Implementations MUST be thread-safe for <see cref="GetModelsAsync" />. <see cref="StreamAsync" />
 ///         is single-use per call: a fresh <see cref="IAsyncEnumerable{T}" /> is returned each time.
 ///     </para>
+///     <para>
+///         <b>Result-only contract (ROP boundary):</b> <see cref="GetModelsAsync" />
+///         never throws on expected failures — unknown/unreachable provider data,
+///         HTTP error statuses, malformed payloads all come back as
+///         <see cref="Result{T}" /> failures. The only exceptions that may
+///         escape are <see cref="OperationCanceledException" /> (caller
+///         cancellation / timeout budgets) and truly unexpected transport
+///         faults. Callers keep narrow catches for those as network-only
+///         insurance; they must not rely on catching provider errors.
+///         <see cref="StreamAsync" /> surfaces terminal provider errors
+///         in-stream as <c>ErrorEvent</c> for the same reason.
+///     </para>
 /// </remarks>
 public interface ILlmClient
 {

@@ -1,6 +1,7 @@
 using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Immutable;

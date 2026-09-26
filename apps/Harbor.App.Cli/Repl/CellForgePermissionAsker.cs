@@ -14,39 +14,34 @@ namespace Harbor.App.Cli.Repl;
 ///     попадает на таймлайн через очередь моста (рендер-поток), решение
 ///     приходит событием при обработке клавиш тем же рендер-потоком.
 /// </summary>
-internal sealed class CellForgePermissionAsker(Func<ChatScreenBridge> bridge)
+/// <remarks>
+///     #49 PR1: ожидание идёт через <see cref="IApprovalCoordinator" /> —
+///     единую точку линеаризации решения vs отмены. Отмена (Ctrl+C/Esc,
+///     RPC, session-switch) прилетает как <see langword="null" /> и
+///     маппится в fail-closed Deny; view-решение штампует роутер через тот же
+///     координатор, повторные/поздние решения гейт не трогают.
+/// </remarks>
+internal sealed class CellForgePermissionAsker(
+    Func<ChatScreenBridge> bridge,
+    IApprovalCoordinator coordinator)
 {
     private const int MaxDetailChars = 96;
 
     public async Task<PermissionResponse> AskAsync(PermissionRequest request, CancellationToken ct)
     {
         var gate = bridge().RequestApprovalGate(request.Permission, Describe(request));
+        coordinator.RegisterGate(gate.Id);
 
-        // RunContinuationsAsynchronously: continuation уходит из render-потока,
-        // чтобы await не продолжился синхронно внутри обработки клавиши.
-        var tcs = new TaskCompletionSource<ApprovalChoice>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        void OnDecision(object? _, EventArgs __) => tcs.TrySetResult(gate.Decision);
-        gate.DecisionRecorded += OnDecision;
+        var resolution = await coordinator.WaitForDecisionAsync(gate.Id, ct).ConfigureAwait(false);
+        if (resolution is null)
+        {
+            // Cancel won: fail closed. Resolve the card visually so it doesn't
+            // linger as pending (best-effort — the router may have pruned it).
+            gate.TryDecide(ApprovalChoice.Deny);
+            return new(PermissionAction.Deny, false);
+        }
 
-        try
-        {
-            var reg = ct.Register(() => tcs.TrySetCanceled(ct));
-            try
-            {
-                return Map(await tcs.Task.ConfigureAwait(false));
-            }
-            finally
-            {
-                // Регистрация отмены живёт только в ask-фазе; после решения
-                // конвейера она больше не нужна.
-                await reg.DisposeAsync().ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            gate.DecisionRecorded -= OnDecision;
-        }
+        return Map(resolution);
     }
 
     /// <summary>Одна строка «цель запроса»: правило-паттерн плюс однострочный JSON аргументов.</summary>
@@ -64,10 +59,10 @@ internal sealed class CellForgePermissionAsker(Func<ChatScreenBridge> bridge)
         return $"{request.Pattern} {args}".Trim();
     }
 
-    private static PermissionResponse Map(ApprovalChoice choice) => choice switch
+    private static PermissionResponse Map(ApprovalResolution resolution) => resolution switch
     {
-        ApprovalChoice.AlwaysAllow => new(PermissionAction.Allow, PersistDecision: true),
-        ApprovalChoice.Approve => new(PermissionAction.Allow, false),
+        { Approved: true, PersistDecision: true } => new(PermissionAction.Allow, PersistDecision: true),
+        { Approved: true } => new(PermissionAction.Allow, false),
         _ => new(PermissionAction.Deny, false),
     };
 }

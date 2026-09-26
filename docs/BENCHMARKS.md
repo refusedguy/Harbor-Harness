@@ -1,6 +1,12 @@
 # Benchmarks — Harbor
 
-> **Latest rerun: 2026-08-22** (i5-8250U, 4C/8T, .NET 10.0.10, Release). Full data: `/tmp/benchmark-report.md`.
+> **Sources.** Numbers below come from two environments — do not compare raw values across them:
+> - **CI-short** — PR `benchmark` job (`.github/workflows/benchmark.yml`, `ubuntu-latest`, `taskset -c 1`,
+>   `--job Short`), latest 2026-09-09 (AMD EPYC 9V74, .NET 10.0.12, BenchmarkDotNet 0.15.8).
+>   Covers `*PermissionRuleset*` + `*Registry*` filters only — marked **[CI-short]** in the tables.
+> - **Local full runs** — 2026-08-22 (i5-8250U, .NET 10.0.10) plus UiStore/streaming rows from 2026-09-10
+>   (machine n/a). Since #46 all classes use unified `[SimpleJob(warmup 3 / iter 5)]`; older rows were
+>   measured with mixed configs (2/3 or 3/10), so absolute values will shift on re-measure.
 > Suite: `tests/Harbor.Benchmarks` — 24 benchmark classes / 72+ cases, `[MemoryDiagnoser]`, Release, 0 warnings.
 > Run: `dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter "*<Category>*" --buildTimeout 600 --keepFiles`
 
@@ -15,11 +21,12 @@
 | P1 | `EventBus.PublishAsync` | фикс. 8.1 KB alloc даже при 0 подписчиков | ring-buffer scrollback |
 | P2 | `StreamingCoalescer` tool-call Materialize | 481 µs @1000 дельт (35–48× медленнее текста) | кэш разобранных аргументов |
 | P2 | `PatchTool` apply | 10.1 ms / **9.3 MB** @5000 hunks | стримить вместо List<string>+Join |
-| P2 | `DefaultUiProjector` | 20.8 ms @5000 строк за кадр | инкрементальная проекция по revision |
+| P2 | `DefaultUiProjector` | 20.8 ms @5000 строк за кадр (холодный полный проход; инкрементальный кэш уже влито — см. ниже) | инкрементальная проекция по revision |
+| OK | `DefaultUiProjector` инкремент | 1000 дельт → 1001 проекция: **962 no-op reuse, 38 tail (флаши), 1 history**; markdown-парсов на store-пути 0; итого 475 µs / 1.03 MB (2026-09-10, `StreamingDeltaFrequencyBenchmark`, регрессия — `StreamingFrequencyTests`) | пожара нет; следить за transcript-композицией при росте history |
 | P3 | `SessionId` Dictionary key | медленнее string (7.9 vs 6.3 µs), HashSet быстрее — проверить GetHashCode | override hash |
 | P3 | `OpenAiSseParser` | плоские ~10 µs floor на любой чанк | Utf8JsonReader поверх span без ToString() |
 
-## Key numbers (2026-08-22, Release JIT)
+## Key numbers — local full runs (2026-08-22, i5-8250U, Release JIT; UiStore streaming rows 2026-09-10, machine n/a)
 
 | Operation | Mean | Allocated |
 |---|--:|--:|
@@ -31,16 +38,27 @@
 | JsonlSessionStore.Append ×100 | 1.74 ms | 187 KB |
 | Sqlite WAL Append ×10 | 2.2–2.6 ms | 155 KB |
 | AppStore.Dispatch TextDelta ×1000 | 1.72 ms | 19.4 MB |
+| UiStore dispatch + DefaultUiProjector per delta ×1000 (24B deltas, 2026-09-10) | 475 µs | 1.03 MB |
+| UiStore dispatch + DefaultUiProjector per delta ×2000 (24B deltas, 2026-09-10) | 1.09 ms | 2.46 MB |
 | DefaultUiProjector 5000 lines | 20.8 ms | ~MB |
 | Terminal ANSI vs plain blit | 364 / 330 µs | 12 / 10 KB |
 | PatchTool apply 5000 hunks | 10.1 ms | 9.3 MB |
-| PermissionRuleset.Evaluate | 0.11–0.29 µs | 0 |
-| ToolRegistry.ResolveTools frozen @4 | 0.094 µs | 344 B |
-| ToolRegistry.GetTool | 0.8–1.6 µs | 80 B |
-| ProviderRegistry.GetClient frozen | 0.77 µs | 80 B |
 | Identifiers: HashSet<SessionId> vs string | 2.1 vs 2.7 µs | 2.3 vs 7.3 KB |
 | SystemPromptBuilder (16 tools, large) | 3.8 µs | 12.1 KB |
 | StateDiff Record.Equals identical | 0.59 ns | 0 |
+
+## Key numbers — CI-short **[CI-short]** (PR `benchmark` job, `--job Short`, ubuntu-latest, 2026-09-09)
+
+| Operation | Mean | Allocated |
+|---|--:|--:|
+| PermissionRuleset.Evaluate (default Allow) | 0.35 µs | 0 |
+| PermissionRuleset.Evaluate (Deny bash rm -rf /) | 0.17 µs | 488 B |
+| ToolRegistry.ResolveTools frozen @4 (no permission) | 0.085 µs | 344 B |
+| ToolRegistry.ResolveTools frozen @4 (with permission) | 2.3 µs | 88 B |
+| ToolRegistry.ResolveTools frozen @8 / @16 (no permission) | 0.16 / 0.31 µs | 664 B / 1304 B |
+| ToolRegistry.GetTool (frozen) | 0.10–0.20 µs | 80–160 B |
+| ProviderRegistry.GetClient frozen | 0.14 µs | 288 B |
+| ProviderRegistry.GetAllModelsAsync frozen @1 / @5 / @20 providers | 9.2 / 12.9 / 24.6 µs | 1112 B / 2776 B / 9016 B |
 
 ---
 
@@ -198,14 +216,34 @@ Located in `tests/Harbor.Benchmarks/`. Run with:
 dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
 ```
 
-> **Note:** BenchmarkDotNet results below are **from previous runs** on the pre-split codebase. Re-run on the current split codebase to refresh — the numbers should be within ±10% since the splits are pure refactorings.
+> **Note:** CI-short rows (`--job Short`) are quick PR-gate numbers, not full BDN runs —
+> expect wider error bars than the local full-run tables below.
+>
+> Instability watch: `Evaluate (custom ruleset, Allow at end-of-scan)` @64 rules measured 1.3–4.1 µs
+> with ±7 µs error (median/mean diverge) — shared-runner noise or a pathological case; @4 rules is a
+> stable 25 ns, @16 rules ~0.4 µs. Re-measure isolated before optimizing.
+
+### 5.1 CI-short **[CI-short]** — registry + permission (PR `benchmark` job, `--job Short`, 2026-09-09, AMD EPYC 9V74, .NET 10.0.12, BDN 0.15.8)
 
 | Benchmark | Mean | StdDev | Allocations |
 |---|---:|---:|---:|
-| `ProviderRegistry.GetClient` (frozen) | 0.18 µs | 0.02 µs | 0 B |
-| `ToolRegistry.ResolveTools` (4 tools) | 0.42 µs | 0.05 µs | 0 B |
+| `ProviderRegistry.GetClient` (frozen) | 0.14 µs | 0.01 µs | 288 B |
+| `ProviderRegistry.GetAllModelsAsync` (frozen, 1 / 5 / 20 providers) | 9.2 / 12.9 / 24.6 µs | 0.8 / 1.8 / 6.7 µs | 1112 B / 2776 B / 9016 B |
+| `ToolRegistry.ResolveTools` (4 tools, frozen, no permission) | 0.085 µs | 0.001 µs | 344 B |
+| `ToolRegistry.ResolveTools` (4 tools, frozen, with permission) | 2.3 µs | 0.02 µs | 88 B |
+| `ToolRegistry.ResolveTools` (8 / 16 tools, frozen, no permission) | 0.16 / 0.31 µs | 0.001 / 0.003 µs | 664 B / 1304 B |
+| `ToolRegistry.ResolveTools` (8 / 16 tools, frozen, with permission) | 4.1 / 8.3 µs | 0.003 / 0.03 µs | 120 B / 184 B |
+| `ToolRegistry.ResolveTools` (4 tools, unfrozen) | 0.23 µs | 0.001 µs | 600 B |
+| `ToolRegistry.GetTool` (frozen) | 0.10–0.20 µs | 0.001–0.005 µs | 80–160 B |
 | `ToolRegistry.ResolveTools` (14 tools) | 1.10 µs | 0.08 µs | 0 B |
-| `PermissionRuleset.Evaluate` | 0.27 µs | 0.03 µs | 0 B |
+| `PermissionRuleset.Evaluate` (default Allow) | 0.35 µs | 0.002 µs | 0 B |
+| `PermissionRuleset.Evaluate` (Deny bash rm -rf /) | 0.17 µs | 0.001 µs | 488 B |
+| `PermissionRuleset.Evaluate` (custom, Allow at end-of-scan, 4 rules) | 0.025 µs | 0.001 µs | 0 B |
+
+### 5.2 Local full runs (2026-08-22, i5-8250U, .NET 10.0.10)
+
+| Benchmark | Mean | StdDev | Allocations |
+|---|---:|---:|---:|
 | `EventBus.PublishAsync` (1 subscriber) | 0.35 µs | 0.04 µs | 0 B |
 | `EventBus.PublishAsync` (10 subscribers) | 2.80 µs | 0.20 µs | 0 B |
 | `UiStore.Dispatch` (lock-free CAS) | 0.15 µs | 0.02 µs | 0 B |

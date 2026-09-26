@@ -1,8 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
+using CSharpFunctionalExtensions;
 using Avalonia;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Styling;
 using Harbor.App.Avalonia.Configuration;
+using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.Services;
 /// <summary>
@@ -126,6 +128,68 @@ public sealed class ThemeService : IThemeService
         _app.RequestedThemeVariant = isDark ? ThemeVariant.Dark : ThemeVariant.Light;
         IsDark = isDark;
         _logger.LogInformation("Theme variant set to {Variant}", isDark ? "dark" : "light");
+    }
+
+    public event EventHandler<string>? ThemeJsonApplied;
+
+    public Result<string> LoadJson(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+                return Result.Failure<string>($"theme file not found: {path}");
+            return Result.Success(File.ReadAllText(path));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<string>($"theme load failed: {ex.Message}");
+        }
+    }
+
+    public Result ApplyJson(string json)
+    {
+        // Avalonia HDS themes are XAML-based; JSON themes are handled by the terminal renderer.
+        // For the desktop app we just raise the event so watchers can react and report success
+        // if the JSON is non-empty. Real JSON theme parsing lives in Harbor.Tui.CellForge.JsonThemeLoader.
+        if (string.IsNullOrWhiteSpace(json))
+            return Result.Failure("theme json is empty");
+        ThemeJsonApplied?.Invoke(this, json);
+        _logger.LogInformation("Theme JSON applied ({Length} chars)", json.Length);
+        return Result.Success();
+    }
+
+    public IDisposable Watch(string path)
+    {
+        // Minimal file watcher that re-applies JSON on change. Mirrors the terminal JsonThemeLoader.Watch
+        // but delegates HDS handling to ApplyJson.
+        try
+        {
+            var dir = Path.GetDirectoryName(Path.GetFullPath(path));
+            var file = Path.GetFileName(path);
+            if (string.IsNullOrEmpty(dir) || string.IsNullOrEmpty(file))
+                return new NoopDisposable();
+            var fsw = new FileSystemWatcher(dir, file)
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+                EnableRaisingEvents = true
+            };
+            fsw.Changed += (_, _) =>
+            {
+                var res = LoadJson(path);
+                if (res.IsSuccess)
+                    ApplyJson(res.Value);
+            };
+            return fsw;
+        }
+        catch
+        {
+            return new NoopDisposable();
+        }
+    }
+
+    private sealed class NoopDisposable : IDisposable
+    {
+        public void Dispose() { }
     }
 
 }

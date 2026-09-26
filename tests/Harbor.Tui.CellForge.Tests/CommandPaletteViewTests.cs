@@ -2,6 +2,7 @@ using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -10,6 +11,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// navigation, commit contract, and painted content. Deterministic — pure
 /// state transitions plus one-off buffer paints.
 /// </summary>
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class CommandPaletteViewTests
 {
     private static readonly CommandItem[] Commands =

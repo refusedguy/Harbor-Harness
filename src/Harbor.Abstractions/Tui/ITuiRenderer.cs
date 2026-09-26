@@ -92,6 +92,16 @@ public interface ISlashCommand
     public IReadOnlyList<string> Aliases { get; }
 
     /// <summary>
+    ///     Optional argument suggestions shown in the command palette when
+    ///     the command is selected but not yet executed. Used by the slash-
+    ///     command palette to offer a second-step picker (e.g. model list,
+    ///     agent list, renderer backends). Return <see langword="null" /> or
+    ///     an empty list when the command takes no arguments or suggestions
+    ///     are not available.
+    /// </summary>
+    public IReadOnlyList<string>? ArgSuggestions { get; }
+
+    /// <summary>
     ///     Execute the command with the supplied args.
     /// </summary>
     /// <param name="args">The arguments after the command name.</param>

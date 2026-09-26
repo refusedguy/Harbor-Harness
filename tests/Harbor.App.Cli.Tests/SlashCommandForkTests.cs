@@ -1,11 +1,13 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Repl;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+using Harbor.TestKit;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -78,7 +80,7 @@ public class SlashCommandForkTests
     public async Task HandleAsync_ForkWithBoundary_CopiesPrefixAndReportsNewId()
     {
         var store = new FakeStore();
-        var parent = (await store.CreateAsync("/tmp/harbor-fork-repl", "code", "test", "test-model")).Value;
+        var parent = (await store.CreateAsync("/harbor-fork-repl", "code", "test", "test-model")).Value;
         for (int i = 0; i < 3; i++)
         {
             await store.AppendMessageAsync(parent.Id,
@@ -99,6 +101,7 @@ public class SlashCommandForkTests
     {
         using var sp = new ServiceCollection()
             .AddSingleton<ISessionStore>(store)
+            .AddSingleton<IToolRegistry>(new FakeToolRegistry())
             .BuildServiceProvider();
         var dispatcher = new SlashCommandDispatcher(
             NullLoggerFactory.Instance.CreateLogger<SlashCommandDispatcher>());
@@ -107,7 +110,7 @@ public class SlashCommandForkTests
             writer: lines.Add,
             reader: _ => Task.FromResult(string.Empty),
             agent: null!, agentRegistry: null!, configStore: null!, authStore: null!,
-            providers: null!, session: Session.Create("/tmp/harbor-fork-tests", "code", "t", "m"));
+            providers: null!, session: Session.Create("/harbor-fork-tests", "code", "t", "m"));
         await Assert.That(outcome.ShouldQuit).IsFalse();
         return lines;
     }

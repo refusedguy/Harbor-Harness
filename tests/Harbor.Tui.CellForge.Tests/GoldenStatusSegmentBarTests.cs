@@ -1,5 +1,6 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -8,6 +9,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// real DiffEngine into a recording backend; three-layer dump compared against
 /// tests/fixtures/celldiff/ce3-status-*.golden.txt.
 /// </summary>
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class GoldenStatusSegmentBarTests
 {
     [Test]

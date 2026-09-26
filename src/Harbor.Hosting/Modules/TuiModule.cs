@@ -2,6 +2,7 @@ using Harbor.Abstractions.Tui;
 using Harbor.Hosting.Rendering;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

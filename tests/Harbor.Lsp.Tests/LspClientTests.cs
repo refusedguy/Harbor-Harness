@@ -15,10 +15,11 @@ public class LspClientTests
         server.Run();
         server.Client.Start();
 
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         JsonElement? result = await server.Client.SendRequestAsync(
             "initialize",
             JsonSerializer.SerializeToElement(new { processId = (int?)1, rootUri = "file:///tmp" }),
-            new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
+            cts.Token);
 
         await Assert.That(result is not null).IsTrue();
         await Assert.That(result!.Value.TryGetProperty("capabilities", out _)).IsTrue();
@@ -32,9 +33,10 @@ public class LspClientTests
         server.Run();
         server.Client.Start();
 
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         Task requestTask = server.Client.SendRequestAsync(
             "textDocument/definition", null,
-            new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
+            cts.Token);
 
         try
         {
@@ -71,8 +73,9 @@ public class LspClientTests
         await using var server = new FakeLspServer();
         server.Client.Start();
 
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         await Assert.ThrowsAsync<TaskCanceledException>(() => server.Client.SendRequestAsync(
-            "initialize", null, new CancellationTokenSource(TimeSpan.FromMilliseconds(200)).Token));
+            "initialize", null, cts.Token));
     }
 
     [Test]
@@ -85,8 +88,9 @@ public class LspClientTests
         TaskCompletionSource disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
         server.Client.Disconnected += (_, _) => disconnected.TrySetResult();
 
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         Task requestTask = server.Client.SendRequestAsync(
-            "initialize", null, new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
+            "initialize", null, cts.Token);
         await server.DisposeAsync(); // pull the pipes
 
         await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(5));

@@ -74,6 +74,36 @@ public class WordDiffTests
     }
 
     [Test]
+    public async Task InsertionWithinLine_MarksAddedRunOnly()
+    {
+        const string oldLine = "git commit";
+        const string newLine = "git commit --amend";
+        var sides = WordDiff.Segment(oldLine, newLine);
+        await AssertReconstructs(oldLine, newLine, sides);
+
+        await Assert.That(sides.Removed.All(s => s.Kind == WordSegKind.Equal)).IsTrue();
+        await Assert.That(Render(sides.Inserted, WordSegKind.Added)).IsEqualTo("--amend");
+
+        string insertedAll = string.Join(' ', sides.Inserted.Select(s => s.Text));
+        await Assert.That(insertedAll).IsEqualTo(newLine);
+    }
+
+    [Test]
+    public async Task DeletionWithinLine_MarksDeletedRunOnly()
+    {
+        const string oldLine = "git commit --amend";
+        const string newLine = "git commit";
+        var sides = WordDiff.Segment(oldLine, newLine);
+        await AssertReconstructs(oldLine, newLine, sides);
+
+        await Assert.That(sides.Inserted.All(s => s.Kind == WordSegKind.Equal)).IsTrue();
+        await Assert.That(Render(sides.Removed, WordSegKind.Deleted)).IsEqualTo("--amend");
+
+        string removedAll = string.Join(' ', sides.Removed.Select(s => s.Text));
+        await Assert.That(removedAll).IsEqualTo(oldLine);
+    }
+
+    [Test]
     public async Task Reordering_ReportsMinimalChanges()
     {
         var sides = WordDiff.Segment("b a", "a b");

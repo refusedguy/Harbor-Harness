@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -10,6 +11,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// alt=4, super/hyper/meta collapse to Meta). The critical composer cases —
 /// Enter vs Shift+Enter vs Ctrl+Enter — are pinned here.
 /// </summary>
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class GoldenKittyKeyTests
 {
     private readonly EscapeSequenceParser _parser = new();

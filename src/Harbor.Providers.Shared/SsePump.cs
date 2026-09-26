@@ -223,10 +223,14 @@ internal static class SsePump
         Action? onComplete = null) =>
         RunAsync(writer, http, request, async (line, token) =>
         {
-            if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase)) return true;
+            // SSE allows `data:{...}` with no space; only the `data:` prefix
+            // itself is significant. TrimStart keeps payload JSON intact
+            // (JsonDocument tolerates leading whitespace anyway).
+            if (!line.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return true;
 
-            string data = line["data: ".Length..];
-            if (data == "[DONE]") return false;
+            string data = line["data:".Length..].TrimStart();
+            if (data.Length == 0) return true; // Heartbeat `data:` — no payload.
+            if (data.Trim().Equals("[DONE]", StringComparison.Ordinal)) return false;
 
             await onData(data, token).ConfigureAwait(false);
             return true;

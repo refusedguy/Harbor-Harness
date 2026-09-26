@@ -64,10 +64,14 @@ public class HostBuilderDiTests
         // these pure-DI assertions — same pattern as E2eTestBase. Without this,
         // Build_Registers_CommonConfig fails on any machine whose saved config
         // differs from the code default ("anthropic").
+        // NOTE: HARBOR_HOME is required on top of HOME/USERPROFILE — on Windows
+        // GetFolderPath(UserProfile) resolves from the user token and ignores a
+        // swapped USERPROFILE process variable (see HarborPaths).
         var tempHome = Path.Combine(Path.GetTempPath(), $"harbor-cli-di-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempHome);
         Environment.SetEnvironmentVariable("HOME", tempHome);
         Environment.SetEnvironmentVariable("USERPROFILE", tempHome);
+        Environment.SetEnvironmentVariable("HARBOR_HOME", Path.Combine(tempHome, ".harbor"));
 
         var host = HostBuilder.Build("--log-level", "Warning");
         return host;

@@ -162,7 +162,7 @@ public class SessionForkServiceTests
 
         await Assert.That(result.IsFailure).IsTrue();
         // No half-forked orphan may survive: the shell was created, then rolled back.
-        await Assert.That(store.DeletedIds).HasCount().EqualTo(1);
+        await Assert.That(store.DeletedIds.Count()).IsEqualTo(1);
         await Assert.That(store.Sessions.ContainsKey(store.DeletedIds[0])).IsFalse();
     }
 

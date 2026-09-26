@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
 using Harbor.Application.Agents;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -41,7 +42,7 @@ public class AbortSelfHealTests
         var session = Session.Create("/tmp/harbor-abort-selfheal-tests", "code", "test", "test-model");
         var loop = new TokenObservingLoop();
         var agent = new DefaultAgent(
-            new FakeSessionStore(session),
+            new Harbor.Application.Tests.Fakes.FakeSessionStore(session),
             loop,
             new FakeEventBus(),
             NullLogger<DefaultAgent>.Instance);

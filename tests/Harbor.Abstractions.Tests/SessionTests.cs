@@ -113,4 +113,22 @@ public class MessageTests
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).IsEqualTo("failed");
     }
+
+    [Test]
+    public async Task ProjectIdFor_IsDeterministicSha256()
+    {
+        // Pinned value: SHA-256("/tmp/x") first 8 bytes, lowercase hex.
+        // string.GetHashCode (the old implementation) is randomized per
+        // process and would fail this across restarts by design.
+        await Assert.That(Session.ProjectIdFor("/tmp/x")).IsEqualTo("2e56aa36f538b33b");
+        await Assert.That(Session.ProjectIdFor("/tmp/x")).IsEqualTo(Session.ProjectIdFor("/tmp/x"));
+        await Assert.That(Session.ProjectIdFor("/tmp/y")).IsNotEqualTo(Session.ProjectIdFor("/tmp/x"));
+    }
+
+    [Test]
+    public async Task Session_Create_UsesDeterministicProjectId()
+    {
+        var session = Session.Create("/tmp/x", "code", "test", "test-model");
+        await Assert.That(session.ProjectId).IsEqualTo("2e56aa36f538b33b");
+    }
 }

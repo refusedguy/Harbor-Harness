@@ -5,12 +5,13 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
-using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Tests.Fakes;
+using Harbor.Application.Agents.Pipeline;
+using Harbor.TestKit;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using TUnit.Assertions.Extensions;
 
 namespace Harbor.Application.Tests;
@@ -22,7 +23,7 @@ namespace Harbor.Application.Tests;
 public class PipelineBehaviorTests
 {
     private static PromptRequest NewRequest() => new(
-        new TestSessionContext(Session.Create("/tmp/harbor-pipeline-tests", "code", "test", "test-model")),
+        TestSessionContext.Create("/tmp/harbor-pipeline-tests"),
         new AgentDefinition(
             AgentName.Create("code"),
             "Code",
@@ -206,8 +207,8 @@ public class TurnBehaviorTests
 
         await Assert.That(compaction.Calls).IsEqualTo(1);
         await Assert.That(session.Messages.OfType<AssistantMessage>().Any(m => m.IsSummary)).IsTrue();
-        await Assert.That(bus.Events.OfType<CompactionStartedEvent>()).HasCount(1);
-        await Assert.That(bus.Events.OfType<CompactionCompletedEvent>()).HasCount(1);
+        await Assert.That(bus.Events.OfType<CompactionStartedEvent>()).Count().IsEqualTo(1);
+        await Assert.That(bus.Events.OfType<CompactionCompletedEvent>()).Count().IsEqualTo(1);
         await Assert.That(outcome.TruncationFallback).IsFalse();
         // The compacted view folds the history into [summary]: 3 seeded → 1 summary line.
         await Assert.That(outcome.TurnMessages.Count).IsEqualTo(1);
@@ -225,7 +226,7 @@ public class TurnBehaviorTests
         CompactionOutcome outcome = await behavior.BeforeTurnAsync(
             session, session.Messages, TestModel, truncationFallback: false, CancellationToken.None);
 
-        await Assert.That(bus.Events.OfType<CompactionFailedEvent>()).HasCount(1);
+        await Assert.That(bus.Events.OfType<CompactionFailedEvent>()).Count().IsEqualTo(1);
         await Assert.That(outcome.TruncationFallback).IsTrue();
     }
 
@@ -263,7 +264,7 @@ public class TurnBehaviorTests
         // F17: an Esc during compaction is NOT a summarizer failure — no fallback,
         // no destructive truncation of the session.
         await Assert.That(outcome.TruncationFallback).IsFalse();
-        await Assert.That(bus.Events.OfType<CompactionFailedEvent>()).HasCount(0);
+        await Assert.That(bus.Events.OfType<CompactionFailedEvent>()).Count().IsEqualTo(0);
     }
 
     [Test]

@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 namespace Harbor.Abstractions.Permissions;
 /// <summary>
@@ -39,10 +38,23 @@ public sealed record PermissionRuleset
     private readonly PermissionRule[] _sortedRules;
 
     /// <summary>
+    ///     Argument-safety strategies consulted by <see cref="Evaluate" />. Defaults to
+    ///     <see cref="DefaultSafetyPolicies" />; inject a custom list to guard a new
+    ///     path-like or exec-style tool without editing the contract.
+    /// </summary>
+    private readonly IReadOnlyList<IArgSafetyPolicy> _safetyPolicies;
+
+    /// <summary>
     ///     Construct a ruleset from an enumeration of rules.
     /// </summary>
     /// <param name="rules">The rules to include. Order is preserved; evaluation reorders by specificity.</param>
-    public PermissionRuleset(IEnumerable<PermissionRule> rules)
+    /// <param name="safetyPolicies">
+    ///     Argument-safety strategies for <see cref="Evaluate" />. When <see langword="null" />,
+    ///     <see cref="DefaultSafetyPolicies" /> is used.
+    /// </param>
+    public PermissionRuleset(
+        IEnumerable<PermissionRule> rules,
+        IReadOnlyList<IArgSafetyPolicy>? safetyPolicies = null)
     {
         // Materialize once, then sort in-place by (specificity desc, Deny-first).
         // We deliberately avoid LINQ here so construction is allocation-light.
@@ -66,6 +78,7 @@ public sealed record PermissionRuleset
         });
 
         _sortedRules = arr;
+        _safetyPolicies = safetyPolicies ?? DefaultSafetyPolicies;
     }
 
     /// <summary>
@@ -83,14 +96,33 @@ public sealed record PermissionRuleset
     }
 
     /// <summary>
-    ///     An empty ruleset — no rules, every action falls through to <see cref="PermissionAction.Ask" />.
+    ///     The argument-safety strategies consulted by <see cref="Evaluate" />.
     /// </summary>
-    public static PermissionRuleset Empty => new(Array.Empty<PermissionRule>());
+    public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies => _safetyPolicies;
+
+    /// <summary>
+    ///     The default argument-safety strategies: <see cref="BashSafetyPolicy.Instance" />
+    ///     and <see cref="PathGuardSafetyPolicy.Instance" />. Extend per-ruleset via the
+    ///     constructor (like <c>ProviderConfig.Quirks</c>) to guard a new path-like or
+    ///     exec-style tool without editing the contract.
+    /// </summary>
+    public static IReadOnlyList<IArgSafetyPolicy> DefaultSafetyPolicies { get; } = new IArgSafetyPolicy[]
+    {
+        BashSafetyPolicy.Instance,
+        PathGuardSafetyPolicy.Instance
+    };
+
+    /// <summary>
+    ///     An empty ruleset — no rules, every action falls through to <see cref="PermissionAction.Ask" />.
+    ///     Cached singleton; instances are immutable and safe to share.
+    /// </summary>
+    public static PermissionRuleset Empty { get; } = new(Array.Empty<PermissionRule>());
 
     /// <summary>
     ///     The default safe ruleset for the <c>code</c> agent.
+    ///     Cached singleton; instances are immutable and safe to share.
     /// </summary>
-    public static PermissionRuleset Default => new(new PermissionRule[]
+    public static PermissionRuleset Default { get; } = new(new PermissionRule[]
     {
         new("read", "*", PermissionAction.Allow),
         new("glob", "*", PermissionAction.Allow),
@@ -118,10 +150,13 @@ public sealed record PermissionRuleset
         new("ripgrep", "*", PermissionAction.Allow),
         new("notebook", "*", PermissionAction.Allow),
         new("mcp", "*", PermissionAction.Ask),
+        new("read_mcp_resource", "*", PermissionAction.Ask),
+        new("mcp_prompt", "*", PermissionAction.Ask),
         new("lsp", "*", PermissionAction.Allow),
         new("patch", "src/*", PermissionAction.Allow),
         new("patch", "*", PermissionAction.Ask),
-        new("task", "*", PermissionAction.Allow)
+        new("task", "*", PermissionAction.Allow),
+        new("skill", "*", PermissionAction.Allow)
     });
 
     /// <summary>
@@ -134,7 +169,14 @@ public sealed record PermissionRuleset
     {
         // Pre-size the dictionary for the upper bound (no resizes).
         int capacity = _sortedRules.Length + other._sortedRules.Length;
-        if (capacity == 0) return Empty;
+        if (capacity == 0)
+        {
+            // Both empty: share the cached instance when policies are default,
+            // otherwise keep this ruleset's custom policies.
+            return ReferenceEquals(_safetyPolicies, DefaultSafetyPolicies)
+                ? Empty
+                : new PermissionRuleset(Array.Empty<PermissionRule>(), _safetyPolicies);
+        }
 
         var merged = new Dictionary<string, PermissionRule>(capacity, StringComparer.Ordinal);
         foreach (var rule in _sortedRules)
@@ -148,7 +190,8 @@ public sealed record PermissionRuleset
 
         var values = new PermissionRule[merged.Count];
         merged.Values.CopyTo(values, 0);
-        return new PermissionRuleset(values);
+        // The merged ruleset keeps this ruleset's safety policies.
+        return new PermissionRuleset(values, _safetyPolicies);
     }
 
     /// <summary>
@@ -173,7 +216,7 @@ public sealed record PermissionRuleset
     ///         silently authorize <c>cat f; rm -rf ~</c>.
     ///     </para>
     ///     <para>
-    ///         For path-like tools (<see cref="PathGuardTools" />) whose argument contains a
+    ///         For path-like tools (see <see cref="PathGuardSafetyPolicy" />) whose argument contains a
     ///         <c>..</c> segment or is rooted (A1/A2): glob Allow patterns must not silently
     ///         authorize traversal escapes (<c>src/*</c> matching <c>src/../../../etc/passwd</c>)
     ///         and absolute paths carry no workspace-relative meaning inside a ruleset, so Allow
@@ -186,41 +229,44 @@ public sealed record PermissionRuleset
     public PermissionAction Evaluate(string permission, string argPath)
     {
         var rules = _sortedRules;
-        bool isBash = permission.Equals("bash", StringComparison.OrdinalIgnoreCase);
+        var policies = _safetyPolicies;
 
-        // A2: recursive-force deletions of dangerous targets are always denied, regardless
-        // of how the flags are spelled or whether the rm sits in a compound command tail.
-        if (isBash && BashArgMatcher.IsDestructiveCommand(argPath))
-            return PermissionAction.Deny;
+        // Hoist per-call policy work (argv parsing) out of the rule loop: run
+        // pre-walk short-circuits and collect extra deny targets once. Applicable
+        // policies are usually 0-1, so this stays allocation-free in practice.
+        IReadOnlyList<string>? extraDenyTargets = null;
+        bool hasApplicablePolicy = false;
+        for (int p = 0; p < policies.Count; p++)
+        {
+            var policy = policies[p];
+            if (!policy.AppliesTo(permission)) continue;
+            hasApplicablePolicy = true;
 
-        bool bashMetachars = isBash && BashArgMatcher.HasShellMetacharacters(argPath);
-        // A2: computed for EVERY bash command, not just metacharacter-bearing ones, so
-        // Deny rules see argv[0] / basename / normalized-command targets of all segments.
-        IReadOnlyList<string>? denyTargets = isBash ? BashArgMatcher.GetDenyMatchTargets(argPath) : null;
-        bool pathGuard = PathGuardTools.Contains(permission) && HasUnsafePathShape(argPath);
+            var pre = policy.PreEvaluate(argPath);
+            if (pre.HasValue) return pre.Value;
+
+            var targets = policy.GetExtraDenyTargets(argPath);
+            if (targets is not null && targets.Count > 0)
+                extraDenyTargets = extraDenyTargets is null ? targets : MergeTargets(extraDenyTargets, targets);
+        }
 
         for (int i = 0; i < rules.Length; i++)
         {
             ref readonly var rule = ref rules[i];
             if (!rule.MatchesPermission(permission)) continue;
 
-            if (denyTargets is not null)
+            if (rule.Action == PermissionAction.Deny
+                && extraDenyTargets is not null
+                && MatchesAnyTarget(extraDenyTargets, rule))
             {
-                if (rule.Action == PermissionAction.Deny
-                    && (rule.MatchesPattern(argPath) || MatchesAnyTarget(denyTargets, rule)))
-                {
-                    return PermissionAction.Deny;
-                }
+                return PermissionAction.Deny;
             }
 
-            if (rule.Action == PermissionAction.Allow)
+            if (rule.Action == PermissionAction.Allow
+                && hasApplicablePolicy
+                && SuppressAllow(policies, permission, rule.Pattern, argPath))
             {
-                if (bashMetachars) continue; // Allow must not match; anything else falls through to Ask.
-                if (pathGuard && !IsLiteralPattern(rule.Pattern)) continue;
-                // C1 (sprint 6): bash Allow rules match TOKEN-wise, not
-                // string-glob-wise — "git *" allows real git invocations only
-                // (exact argv[0], case-sensitive), never "gitk" or "GIT push".
-                if (isBash && !BashArgMatcher.IsAllowedByPrefixRule(rule.Pattern, argPath)) continue;
+                continue; // Allow must not match; anything else falls through to Ask.
             }
 
             if (!rule.MatchesPattern(argPath)) continue;
@@ -231,48 +277,86 @@ public sealed record PermissionRuleset
     }
 
     /// <summary>
-    ///     Tools whose primary argument is a workspace-relative file path and therefore get the
-    ///     unsafe-path guard applied in <see cref="Evaluate" /> (A2).
+    ///     Value equality over the sorted rule sequence plus the policy list by element:
+    ///     the compiler-synthesized record equality would compare the rule array by
+    ///     reference, making two identically-constructed rulesets unequal. Policies
+    ///     compare by element equality (reference equality unless a policy overrides
+    ///     <see cref="object.Equals(object?)" />); the builtin policies are singletons.
     /// </summary>
-    private static readonly FrozenSet<string> PathGuardTools = new[]
+    /// <param name="other">The ruleset to compare against.</param>
+    public bool Equals(PermissionRuleset? other)
     {
-        "read", "write", "edit", "ls", "glob", "grep", "tree", "ripgrep", "notebook", "patch", "mcp"
-    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+        if (ReferenceEquals(other, null)) return false;
+        if (ReferenceEquals(this, other)) return true;
+        if (_sortedRules.Length != other._sortedRules.Length) return false;
+        for (int i = 0; i < _sortedRules.Length; i++)
+        {
+            if (!_sortedRules[i].Equals(other._sortedRules[i])) return false;
+        }
+
+        if (_safetyPolicies.Count != other._safetyPolicies.Count) return false;
+        for (int p = 0; p < _safetyPolicies.Count; p++)
+        {
+            if (!ReferenceEquals(_safetyPolicies[p], other._safetyPolicies[p])
+                && !_safetyPolicies[p].Equals(other._safetyPolicies[p])) return false;
+        }
+
+        return true;
+    }
 
     /// <summary>
-    ///     Returns <see langword="true" /> when <paramref name="argPath" /> either contains a
-    ///     <c>..</c> segment (traversal escape, on <c>/</c> or <c>\</c> separators) or is rooted
-    ///     (absolute), i.e. has no safe workspace-relative meaning for glob rule matching.
+    ///     Content hash over the sorted rules plus the policy list, consistent with
+    ///     <see cref="Equals(PermissionRuleset?)" />.
     /// </summary>
-    private static bool HasUnsafePathShape(string argPath)
+    public override int GetHashCode()
     {
-        if (argPath.Length == 0) return false;
-        if (argPath[0] == '/' || argPath[0] == '\\' || Path.IsPathRooted(argPath)) return true;
+        var hash = new HashCode();
+        for (int i = 0; i < _sortedRules.Length; i++) hash.Add(_sortedRules[i]);
+        for (int p = 0; p < _safetyPolicies.Count; p++) hash.Add(_safetyPolicies[p]);
+        return hash.ToHashCode();
+    }
 
-        int segmentStart = 0;
-        for (int i = 0; i <= argPath.Length; i++)
+    /// <summary>
+    ///     Returns <see langword="true" /> when any policy applicable to
+    ///     <paramref name="permission" /> suppresses the Allow rule with the given pattern
+    ///     for this argument.
+    /// </summary>
+    private static bool SuppressAllow(
+        IReadOnlyList<IArgSafetyPolicy> policies,
+        string permission,
+        string rulePattern,
+        string argPath)
+    {
+        for (int p = 0; p < policies.Count; p++)
         {
-            if (i < argPath.Length && argPath[i] != '/' && argPath[i] != '\\') continue;
-            int len = i - segmentStart;
-            if (len == 2 && argPath[segmentStart] == '.' && argPath[segmentStart + 1] == '.') return true;
-            segmentStart = i + 1;
+            var policy = policies[p];
+            if (policy.AppliesTo(permission) && policy.SuppressAllow(rulePattern, argPath))
+                return true;
         }
 
         return false;
     }
 
     /// <summary>
-    ///     Returns <see langword="true" /> when the glob pattern contains no <c>*</c>/<c>?</c>
-    ///     metacharacters, meaning it can only ever match its literal subject and therefore
-    ///     cannot over-match an unsafe path shape.
+    ///     Merges extra deny targets from two policies, de-duplicated (Ordinal).
+    ///     Allocated only when 2+ policies yield targets for one call.
     /// </summary>
-    private static bool IsLiteralPattern(string pattern)
+    private static IReadOnlyList<string> MergeTargets(IReadOnlyList<string> first, IReadOnlyList<string> second)
     {
-        for (int i = 0; i < pattern.Length; i++)
+        var merged = new List<string>(first.Count + second.Count);
+        for (int i = 0; i < first.Count; i++) merged.Add(first[i]);
+        for (int i = 0; i < second.Count; i++)
         {
-            if (pattern[i] == '*' || pattern[i] == '?') return false;
+            string candidate = second[i];
+            bool seen = false;
+            for (int j = 0; j < merged.Count; j++)
+            {
+                if (merged[j].Equals(candidate, StringComparison.Ordinal)) { seen = true; break; }
+            }
+            if (!seen) merged.Add(candidate);
         }
-        return true;
+
+        return merged;
     }
 
     private static bool MatchesAnyTarget(IReadOnlyList<string> targets, PermissionRule rule)

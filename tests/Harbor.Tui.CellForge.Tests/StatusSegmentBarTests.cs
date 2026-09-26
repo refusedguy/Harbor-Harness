@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -62,6 +63,29 @@ public class StatusSegmentBarTests
         await Assert.That(StatusViewModel.ContextBar(0.25)).IsEqualTo("▰▰▱▱▱▱"); // 1.5 → 2
         await Assert.That(StatusViewModel.ContextBar(0.0)).IsEqualTo("▱▱▱▱▱▱");
         await Assert.That(StatusViewModel.ContextBar(1.0)).IsEqualTo("▰▰▰▰▰▰");
+    }
+
+    [Test]
+    public async Task Thresholds_Are_SingleSourced_From_ContextUsage()
+    {
+        // #75 unification pin: the bar bands must stay identical to the
+        // canonical helper — change them in ContextUsage, not here.
+        await Assert.That(StatusViewModel.CtxWarnThreshold).IsEqualTo(ContextUsage.WarnThreshold);
+        await Assert.That(StatusViewModel.CtxDangerThreshold).IsEqualTo(ContextUsage.DangerThreshold);
+    }
+
+    [Test]
+    public async Task BuildSegments_Ratio_Uses_Canonical_Helper()
+    {
+        // #75 convergence pin: SetContext takes the canonical "used"
+        // (accumulated in+out); 7400+700 over 10000 → 81% → warn band,
+        // 5 filled cells (4.86 → 5).
+        var vm = Vm();
+        vm.SetContext(7400 + 700, 10_000);
+        var ws = new StatusSeg[8];
+        _ = vm.BuildSegments(ws);
+        await Assert.That(ws[1].Accent).IsEqualTo(StatusAccent.Warning);
+        await Assert.That(ws[1].Text).IsEqualTo("▰▰▰▰▰▱");
     }
 
     [Test]

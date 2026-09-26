@@ -113,6 +113,7 @@ api/
 ## E2E screenshots / test artifacts
 docs/screenshots/
 tests/**/docs/
+e2e/
 
 ## Build artifacts
 *.binlog
@@ -130,3 +131,15 @@ opencode.json
 /skills-lock.json
 temp/
 assets/demo/frames/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# AI agents scratchpads & local session storage
+.claude/
+.devin/
+.ai-factory/
+tmp/
+
+# git worktrees (local clones, e.g. .worktrees/tunit-audit)
+.worktrees/

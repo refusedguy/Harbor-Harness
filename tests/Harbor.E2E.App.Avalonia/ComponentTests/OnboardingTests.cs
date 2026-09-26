@@ -29,7 +29,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         <see cref="ComponentTestBase.CaptureOnboardingWindowAsync"/>.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class OnboardingTests : ComponentTestBase
 {
     [Before(HookType.Test)]
@@ -52,7 +52,6 @@ public sealed class OnboardingTests : ComponentTestBase
             return w;
         }).GetAwaiter().GetResult();
 
-        await Task.Delay(180).ConfigureAwait(false);
         return (window, vm);
     }
 
@@ -138,7 +137,6 @@ public sealed class OnboardingTests : ComponentTestBase
                 anthropic.IsSelected = true;
                 vm.RefreshSelectedProviderCommand.Execute(null);
             });
-            await Task.Delay(150).ConfigureAwait(false);
 
             var hasApiKey = await Driver.WaitForTextInWindowAsync(window, "API key", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
@@ -222,7 +220,6 @@ public sealed class OnboardingTests : ComponentTestBase
             await Assert.That(stepBefore).IsEqualTo(3);
 
             UI(() => vm.BackCommand.Execute(null));
-            await Task.Delay(150).ConfigureAwait(false);
 
             var stepAfter = UI(() => vm.CurrentStep);
             await Assert.That(stepAfter).IsEqualTo(2);
@@ -249,9 +246,19 @@ public sealed class OnboardingTests : ComponentTestBase
         try
         {
             UI(() => vm.SkipCommand.Execute(null));
-            await Task.Delay(150).ConfigureAwait(false);
 
-            var isCompleted = UI(() => vm.IsCompleted);
+            // Skip completion propagates asynchronously — poll instead of
+            // reading instantly (was: instant fail on loaded runners).
+            bool isCompleted = false;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.Elapsed < TimeSpan.FromSeconds(2))
+            {
+                isCompleted = UI(() => vm.IsCompleted);
+                if (isCompleted)
+                    break;
+                await Task.Delay(50).ConfigureAwait(false);
+            }
+
             await Assert.That(isCompleted).IsTrue();
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-skip")

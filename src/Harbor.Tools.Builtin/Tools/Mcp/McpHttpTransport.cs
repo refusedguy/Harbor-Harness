@@ -25,8 +25,9 @@ internal interface IMcpRemoteTransport : IAsyncDisposable
 ///     exponential backoff. The server-assigned <c>Mcp-Session-Id</c> is captured on
 ///     the first response and replayed on later requests.
 ///     Authentication: an explicit <c>Authorization</c> header wins; otherwise an
-///     OAuth token provider result is attached as <c>Bearer</c>. The provider is a
-///     placeholder for the full OAuth2 authorization-code flow (deferred).
+///     OAuth token provider result is attached as <c>Bearer</c> (backed by
+///     <see cref="McpOAuthHandler" /> when the server has an <c>auth</c> config,
+///     else the <c>HARBOR_MCP_OAUTH_TOKEN</c> environment fallback).
 /// </summary>
 public sealed class McpHttpTransport : IMcpRemoteTransport
 {
@@ -35,7 +36,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
 
     private readonly Uri _endpoint;
     private readonly IReadOnlyDictionary<string, string>? _headers;
-    private readonly Func<string?>? _oauthTokenProvider;
+    private readonly Func<CancellationToken, Task<string?>>? _oauthTokenProvider;
     private readonly ILogger? _logger;
     private readonly TimeSpan _requestTimeout;
     private HttpClient? _client;
@@ -45,7 +46,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     public McpHttpTransport(
         Uri endpoint,
         IReadOnlyDictionary<string, string>? headers = null,
-        Func<string?>? oauthTokenProvider = null,
+        Func<CancellationToken, Task<string?>>? oauthTokenProvider = null,
         ILogger? logger = null,
         TimeSpan? requestTimeout = null)
     {
@@ -70,6 +71,9 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         ObjectDisposedException.ThrowIf(_disposed, this);
         HttpClient client = GetClient();
         string body = request.GetRawText();
+        string? oauthToken = _oauthTokenProvider is not null
+            ? await _oauthTokenProvider(cancellationToken).ConfigureAwait(false)
+            : null;
         int attempt = 1;
 
         while (true)
@@ -78,7 +82,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             attemptCts.CancelAfter(_requestTimeout);
             try
             {
-                using HttpRequestMessage httpRequest = BuildRequest(body);
+                using HttpRequestMessage httpRequest = BuildRequest(body, oauthToken);
                 using HttpResponseMessage httpResponse = await client
                     .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, attemptCts.Token)
                     .ConfigureAwait(false);
@@ -135,7 +139,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     private async Task BackoffAsync(int attempt, CancellationToken cancellationToken)
         => await Task.Delay(FirstRetryDelay * (1 << (attempt - 1)), cancellationToken).ConfigureAwait(false);
 
-    private HttpRequestMessage BuildRequest(string body)
+    private HttpRequestMessage BuildRequest(string body, string? oauthToken)
     {
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, _endpoint)
         {
@@ -154,9 +158,9 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             }
         }
 
-        if (!hasAuthorization && _oauthTokenProvider?.Invoke() is { Length: > 0 } token)
+        if (!hasAuthorization && oauthToken is { Length: > 0 })
         {
-            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
         }
 
         if (_sessionId is not null)

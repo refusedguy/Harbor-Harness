@@ -2,6 +2,7 @@ using Harbor.Tui.Termina.Handlers;
 using Harbor.Tui.Termina.Rendering;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Tui.Termina.Views;
 /// <summary>
 ///     Projects an immutable <see cref="UiScreenModel" /> snapshot into the

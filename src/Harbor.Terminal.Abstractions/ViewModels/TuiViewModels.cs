@@ -17,6 +17,8 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
 
     /// <summary>
     ///     Current context size in tokens (last step's input/prompt token count).
+    ///     Informational only — <see cref="ContextPct" /> is computed from the
+    ///     accumulated <c>TokensIn + TokensOut</c> totals (see #75), not from this.
     /// </summary>
     [ObservableProperty]
     private int _contextTokens;
@@ -46,8 +48,11 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
 
     /// <summary>
     ///     Context usage as a percentage of <see cref="_contextWindow" />. 0 when unknown.
+    ///     Canonical #75 definition: accumulated input+output over the window
+    ///     (see <see cref="ContextUsage" />) — consistent with the accumulated
+    ///     <c>TokensIn/Out</c> totals shown beside it.
     /// </summary>
-    public int ContextPct => ContextWindow > 0 ? Math.Min(100, ContextTokens * 100 / ContextWindow) : 0;
+    public int ContextPct => ContextUsage.PercentUsed(TokensIn, TokensOut, ContextWindow);
 
     /// <summary>
     ///     Formatted status line for rendering. Cost is formatted with the
@@ -56,7 +61,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     ///     renderer output.
     /// </summary>
     public string Formatted => ContextWindow > 0
-        ? $"{Provider}/{Model} | agent: {Agent} | {CostText} | {TokensIn}↑ {TokensOut}↓ | ctx: {ContextTokens / 1000}k/{ContextPct}% | {Status}"
+        ? $"{Provider}/{Model} | agent: {Agent} | {CostText} | {TokensIn}↑ {TokensOut}↓ | ctx: {((long)TokensIn + TokensOut) / 1000}k/{ContextPct}% | {Status}"
         : $"{Provider}/{Model} | agent: {Agent} | {CostText} | {TokensIn}↑ {TokensOut}↓ | {Status}";
 
     private string CostText => "$" + Cost.ToString("F4", CultureInfo.InvariantCulture);
@@ -309,6 +314,12 @@ public sealed partial class DiffPreviewViewModel : ObservableObject, ITuiViewMod
     public void AddDiff(DiffEntry entry)
     {
         _diffs.Add(entry);
+        if (CurrentIndex < 0) CurrentIndex = 0;
+    }
+
+    public void AddDiff(string diffContent)
+    {
+        _diffs.Add(new DiffEntry("diff", diffContent, DateTimeOffset.UtcNow));
         if (CurrentIndex < 0) CurrentIndex = 0;
     }
 

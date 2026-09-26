@@ -1,5 +1,6 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -7,6 +8,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// CE-3 goldens for the styled markdown block painted into the cell grid
 /// (headings, inline bold/italic/code, bullets, fences).
 /// </summary>
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class GoldenMarkdownBlockTests
 {
     [Test]

@@ -13,15 +13,19 @@ function with no I/O, no dispatcher, no framework references.
 ## Threading contract
 
 1. `IUiProjector.Project` — pure, thread-safe, no dispatcher.
-2. `UiStore` notifications — as today; subscribers read `store.State` at the moment
-   of execution, never capture it in a delayed closure.
+2. `UiStore` notifications — consume `e.State` (which carries the monotonic
+   `Revision` bumped on every transition); never re-read `store.State` in the
+   handler, and drop any notification with `Revision <= last applied`
+   (`UiStateChangedEventArgs.IsStale`) — CAS success and delivery are not
+   atomic across threads, so late notifications must not rewind state.
 3. `IUiViewport.Apply` — either called already on the UI/main loop thread, or
    marshals itself and reads `store.State` inside the callback (latest-wins).
 
 ## Identity contract
 
 - Each `UiBlock.Id` is stable across stream updates.
-- Message: `msg:{index}`; tool: `tool:{lineIndex}`; panel: `panel:{name}`.
+- Message: `msg:{index}`; tool: the `ToolCallId` when present (see `ToolCallKey`),
+  else `tool:{lineIndex}` / `tool-result:{lineIndex}`; panel: `panel:{name}`.
 - Adapters reconcile by Id (GUI) or full-repaint (TUI).
 
 ## Streaming contract

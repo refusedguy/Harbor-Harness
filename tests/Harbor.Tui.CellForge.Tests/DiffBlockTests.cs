@@ -1,8 +1,11 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class DiffBlockTests
 {
     private const string Sample = """
@@ -131,6 +134,62 @@ public class DiffBlockTests
         // Unpaired context row keeps plain styling.
         await Assert.That(buffer.Get(signCol + 2, 3).Style.Fg)
             .IsEqualTo(CellStyle.Plain.Fg);
+    }
+
+    [Test]
+    public async Task InsertionWithinLine_AccentsAddedTokensOnly()
+    {
+        const string sample = """
+            @@ -1,1 +1,1 @@
+            -git commit
+            +git commit --amend
+            """;
+
+        var block = new DiffBlock(sample);
+        var buffer = new ScreenBuffer(48, 3);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 48, 3), 0));
+
+        int signCol = DiffBlock.GutterWidth;
+        // Delete row carries no deletions: every body cell stays dim context.
+        bool sawError = false;
+        for (int x = signCol + 1; x < 48; x++)
+        {
+            sawError |= buffer.Get(x, 1).Style.Fg == ChatPalette.ToolError.Fg;
+        }
+
+        // Add row: "git commit" dim, " --amend" takes the add accent.
+        // Body starts at signCol+1; "git commit" is 10 cells + one blank separator.
+        await Assert.That(buffer.Get(signCol + 1, 2).Style.Fg).IsEqualTo(ChatPalette.ToolBody.Fg);
+        await Assert.That(buffer.Get(signCol + 12, 2).Style.Fg).IsEqualTo(ChatPalette.ToolOk.Fg);
+        await Assert.That(sawError).IsFalse();
+    }
+
+    [Test]
+    public async Task DeletionWithinLine_AccentsDeletedTokensOnly()
+    {
+        const string sample = """
+            @@ -1,1 +1,1 @@
+            -git commit --amend
+            +git commit
+            """;
+
+        var block = new DiffBlock(sample);
+        var buffer = new ScreenBuffer(48, 3);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 48, 3), 0));
+
+        int signCol = DiffBlock.GutterWidth;
+        // Delete row: "git commit" dim, " --amend" takes the delete accent.
+        await Assert.That(buffer.Get(signCol + 1, 1).Style.Fg).IsEqualTo(ChatPalette.ToolBody.Fg);
+        await Assert.That(buffer.Get(signCol + 12, 1).Style.Fg).IsEqualTo(ChatPalette.ToolError.Fg);
+
+        // Add row carries no additions: no add accent in its body.
+        bool sawOk = false;
+        for (int x = signCol + 1; x < 48; x++)
+        {
+            sawOk |= buffer.Get(x, 2).Style.Fg == ChatPalette.ToolOk.Fg;
+        }
+
+        await Assert.That(sawOk).IsFalse();
     }
 }
 

@@ -41,7 +41,9 @@ public sealed class ChatKeyMap
         // '?' — toggle help panel.
         new(ChatAction.HelpPanel, "help"),
         // F12 — toggle the in-TUI diagnostics / logs panel.
-        new(ChatAction.ToggleLogsPanel, "logs", new Binding(UiKeyCode.F12))
+        new(ChatAction.ToggleLogsPanel, "logs", new Binding(UiKeyCode.F12)),
+        // Ctrl+J — open the worktree jump palette, reported by most frameworks as a character — handled separately.
+        new(ChatAction.JumpPalette, "jump worktree")
     ];
 
     public ChatKeyMap()

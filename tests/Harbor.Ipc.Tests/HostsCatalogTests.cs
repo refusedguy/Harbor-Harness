@@ -139,4 +139,22 @@ public class HostsCatalogTests
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("Unknown host 'pluto'");
     }
+
+    [Test]
+    public async Task Load_MultipleBadEntries_AggregatesAllErrors()
+    {
+        // ROP boundary #101: every bad entry is reported, not just the first.
+        string path = WriteTempHostsFile("""{ "bad1": { "kind": "tcp", "port": 1 }, "bad2": { "kind": "bogus" } }""");
+        try
+        {
+            var result = HostsCatalog.Load(path);
+            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result.Error).Contains("bad1");
+            await Assert.That(result.Error).Contains("bad2");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

@@ -43,12 +43,15 @@ internal static class RegistriesModule
         // only exist inside the container. The deferred forwarder closes that gap: the
         // tool holds it now, the real runner attaches on first resolution (F4-decouple).
         var subAgents = new Harbor.Application.Agents.DeferredSubAgentRunner();
+        var backgroundTasks = new Harbor.Application.Agents.BackgroundTaskRegistry(
+            ctx.LoggerFactory.CreateLogger<Harbor.Application.Agents.BackgroundTaskRegistry>());
+        services.AddSingleton<Harbor.Abstractions.Agents.IBackgroundTaskRegistry>(backgroundTasks);
         // LSP facade: one manager for the whole process — the `lsp` tool and the
         // desktop editor share the same auto-spawned language servers + cache.
         var lspService = new Harbor.Lsp.LspManager(
             ctx.LoggerFactory.CreateLogger<Harbor.Lsp.LspManager>());
         services.AddSingleton<Harbor.Abstractions.Lsp.ILspService>(lspService);
-        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents, lspService);
+        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents, backgroundTasks, lspService);
         services.AddSingleton<Harbor.Abstractions.Agents.ISubAgentRunner>(sp =>
         {
             var real = new Harbor.Application.Agents.SubAgentRunner(

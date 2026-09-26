@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using SpectreColor = Spectre.Console.Color;
 
 namespace Harbor.Tui.RazorConsole.Rendering;

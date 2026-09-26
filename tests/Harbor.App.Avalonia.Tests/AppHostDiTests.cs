@@ -10,6 +10,7 @@ using Harbor.App.Avalonia.ViewModels;
 using Harbor.Application.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

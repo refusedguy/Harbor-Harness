@@ -2,6 +2,7 @@ using Harbor.Tui.TerminalGui.Rendering;
 using Harbor.Tui.TerminalGui.Views;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Terminal.Gui;
 using Terminal.Gui.Views;
 

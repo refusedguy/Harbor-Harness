@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Termina.Terminal;
 namespace Harbor.Tui.Termina.Rendering;
 /// <summary>

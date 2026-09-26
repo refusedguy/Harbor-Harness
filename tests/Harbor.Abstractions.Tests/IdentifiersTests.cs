@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models.Identifiers;
 namespace Harbor.Abstractions.Tests;
 public class IdentifiersTests
@@ -88,6 +89,18 @@ public class IdentifiersTests
     {
         var result = ModelRef.TryParse("invalid");
         await Assert.That(result.IsSuccess).IsFalse();
+    }
+
+    [Test]
+    public async Task ModelRef_TryParse_BlankModel_NeverThrows()
+    {
+        // "provider/ " survives the split (whitespace is not empty) — a Try
+        // method must return Failure, not throw from Create.
+        foreach (string bad in new[] { "provider/ ", "provider/", "  ", "", " ", null! })
+        {
+            Result<ModelRef> result = ModelRef.TryParse(bad);
+            await Assert.That(result.IsSuccess).IsFalse();
+        }
     }
 
     [Test]

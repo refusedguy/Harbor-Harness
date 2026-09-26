@@ -38,7 +38,7 @@ public class SystemPromptBuilderTests
     private static SystemPromptContext Context(
         AgentDefinition agent,
         IReadOnlyList<ToolDescriptor> tools,
-        string workingDirectory = "/tmp/harbor") => new(
+        string workingDirectory = "~/.cache/harbor-tests") => new(
         agent,
         TestModel,
         tools,

@@ -70,9 +70,20 @@ public sealed record ToolExecutionStartEvent(
 /// <summary>
 ///     Emitted on a tool progress update. <see cref="PartialResult" /> is opaque and tool-specific.
 /// </summary>
+/// <remarks>
+///     <b>#76 retry projection:</b> when the dispatcher schedules a tool retry,
+///     <see cref="RetryAttempt" />/<see cref="RetryMaxAttempts" />/
+///     <see cref="RetryBackoffSeconds" /> carry the failed-attempt fraction and
+///     the backoff the dispatcher sleeps before the next attempt. UI hosts mirror
+///     these fields render-only (see <c>RetryCountdown</c>) — they never trigger,
+///     cancel, or reschedule the retry. Null on ordinary progress updates.
+/// </remarks>
 public sealed record ToolExecutionUpdateEvent(
     string ToolCallId,
-    object PartialResult) : AgentEvent;
+    object PartialResult,
+    int? RetryAttempt = null,
+    int? RetryMaxAttempts = null,
+    double? RetryBackoffSeconds = null) : AgentEvent;
 
 /// <summary>
 ///     Emitted when a tool call completes (success or failure).

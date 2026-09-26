@@ -136,6 +136,7 @@ public class WriteEditBypassTests
     }
 }
 
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
 internal sealed class SkipWhenSymlinksUnsupportedAttribute : SkipAttribute
 {
     public SkipWhenSymlinksUnsupportedAttribute() : base("Symbolic link creation is not supported on this platform.")

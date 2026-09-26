@@ -30,7 +30,7 @@ namespace Harbor.Benchmarks;
 /// <see cref="ReportStreamBytes" /> (min = paced, max = unpaced).
 /// </remarks>
 [MemoryDiagnoser]
-[SimpleJob(warmupCount: 3, iterationCount: 10)]
+[SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class DiffEngineBenchmark
 {
     private sealed class NullBackend : ITerminalBackend

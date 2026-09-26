@@ -23,10 +23,13 @@ public sealed class KittyKeysScenarioTests : CellForgePtyScenarioBase
         Session.SendKey("\x1b[13;2u"); // kitty CSI u: Shift+Enter
         Session.SendKey("BB");
 
-        await Task.Delay(400).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("AA", StringComparison.Ordinal)) &&
+                 l.Any(x => x.Contains("BB", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // THE assertion: newline inserted, nothing submitted yet.
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
 
         // Composer shows both lines in order (AA above BB).
         string[] lines = NormalizedLines();

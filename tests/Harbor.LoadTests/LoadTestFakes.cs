@@ -12,6 +12,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.LoadTests;
 

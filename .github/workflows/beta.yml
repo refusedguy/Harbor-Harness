@@ -1,0 +1,81 @@
+# Harbor beta — dev binaries without a tag.
+#
+# Triggered by pushes to dev (and manually). Publishes self-contained
+# single-file Harbor.App.Cli for linux-x64 only (fast; win/arm ride the
+# tag-driven release.yml) and uploads it as a workflow artifact, so testers
+# can grab the latest dev build without waiting for a v* tag.
+#
+# Download: Actions tab → beta run → Artifacts → harbor-cli-linux-x64,
+# or: gh run download -R refusedguy/Harbor-Harness -n harbor-cli-linux-x64
+name: beta
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: beta-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+  NUGET_CERT_REVOCATION_MODE: offline
+  MSBuildEnableWorkloadResolver: false
+
+jobs:
+  binary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      - name: Publish Harbor.App.Cli (linux-x64)
+        run: >-
+          dotnet publish apps/Harbor.App.Cli -c Release -r linux-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:IncludeAllContentForSelfExtract=true
+          -p:ContinuousIntegrationBuild=true
+          -o publish/linux-x64
+
+      - name: Smoke — published binary runs
+        run: ./publish/linux-x64/Harbor.App.Cli --version
+
+      - name: Archive (tar.gz)
+        run: >-
+          tar -czf "harbor-cli-dev-${{ github.sha }}-linux-x64.tar.gz"
+          -C publish/linux-x64 .
+
+      - name: Generate Checksums
+        run: |
+          sha256sum harbor-cli-*.tar.gz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload beta artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: harbor-cli-linux-x64
+          path: |
+            harbor-cli-*.tar.gz
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14

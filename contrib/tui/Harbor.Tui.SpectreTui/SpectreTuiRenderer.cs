@@ -11,6 +11,7 @@ using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 using Spectre.Tui;
 using Spectre.Tui.App;
@@ -294,6 +295,9 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 action = ChatAction.Clear;
             else if (key.Character == 'c' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
                 action = ChatAction.Abort;
+            // Ctrl+J → worktree jump palette (KILLER_FEATURES §2.7 Feature 3).
+            else if (key.Character == 'j' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
+                action = ChatAction.JumpPalette;
             // '?' → toggle help panel.
             else if (key.Character == '?' && !key.Modifiers.HasFlag(KeyModifier.Ctrl))
                 action = ChatAction.HelpPanel;

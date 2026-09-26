@@ -15,7 +15,7 @@ namespace Harbor.Ipc.Tests;
 ///     <see cref="Channel{T}" /> for explicit synchronization — no
 ///     <c>Task.Delay</c>.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
     public class IpcTimingTests
 {
     /// <summary>

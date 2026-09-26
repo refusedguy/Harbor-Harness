@@ -30,7 +30,7 @@
         and ColumnSpan=3, using ZIndex for stacking.
     -->
     <Grid RowDefinitions="Auto,*,Auto"
-          ColumnDefinitions="56,*,Auto">
+          ColumnDefinitions="Auto,*,Auto">
 
         <!-- ════════════ Title bar ════════════ -->
         <chrome:TitleBarView Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"

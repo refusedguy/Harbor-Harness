@@ -1,6 +1,7 @@
 using Harbor.Tui.TerminalGui.Handlers;
 using Harbor.Tui.TerminalGui.Rendering;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Tui.TerminalGui.Views;
 /// <summary>
 ///     Projects an immutable <see cref="UiState" /> snapshot into the

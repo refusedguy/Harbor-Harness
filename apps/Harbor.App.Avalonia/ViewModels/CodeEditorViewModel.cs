@@ -33,6 +33,22 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     [ObservableProperty]
     private IReadOnlyList<LspDiagnostic> _activeDiagnostics = [];
 
+    [ObservableProperty]
+    private string? _inlineEditPrompt;
+
+    [ObservableProperty]
+    private string? _inlineEditDiff;
+
+    [ObservableProperty]
+    private bool _inlineEditVisible;
+
+    [ObservableProperty]
+    private bool _isInlineEditLoading;
+
+    private string _inlineEditSelectedText = string.Empty;
+    private int _inlineEditSelectionStart;
+    private int _inlineEditSelectionEnd;
+
     /// <summary>Construct the code editor view-model.</summary>
     public CodeEditorViewModel(
         AvaloniaFilePicker picker,
@@ -160,7 +176,6 @@ public sealed partial class CodeEditorViewModel : ObservableObject
 
     private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // User edits flow here: push the new text to the language server.
         if (e.PropertyName == nameof(EditorTabViewModel.Content)
             && sender is EditorTabViewModel { } tab
             && ActiveTab == tab
@@ -251,6 +266,115 @@ public sealed partial class CodeEditorViewModel : ObservableObject
             _logger.LogWarning(ex, "LSP diagnostics read failed for {Path}", filePath);
         }
     }
+
+    // ── Inline Edit (Cmd+K / Ctrl+K) ────────────────────────────────────
+
+    /// <summary>
+    ///     Opens the inline edit overlay for the current selection.
+    ///     Called from <see cref="CodeEditorView"/> when Cmd+K / Ctrl+K is pressed.
+    /// </summary>
+    public void OpenInlineEdit(string selectedText, int selectionStart, int selectionEnd, double caretPixelTop)
+    {
+        if (string.IsNullOrEmpty(selectedText)) return;
+        _inlineEditSelectedText = selectedText;
+        _inlineEditSelectionStart = selectionStart;
+        _inlineEditSelectionEnd = selectionEnd;
+        InlineEditPrompt = string.Empty;
+        InlineEditDiff = null;
+        InlineEditVisible = true;
+        _logger.LogDebug("Inline edit opened: {Start}-{End} ({Length} chars)", selectionStart, selectionEnd, selectedText.Length);
+    }
+
+    /// <summary>
+    ///     Cancels the inline edit overlay without applying changes.
+    /// </summary>
+    [RelayCommand]
+    private void RejectInlineEdit()
+    {
+        InlineEditVisible = false;
+        InlineEditPrompt = string.Empty;
+        InlineEditDiff = null;
+        _inlineEditSelectedText = string.Empty;
+        _logger.LogDebug("Inline edit rejected");
+    }
+
+    /// <summary>
+    ///     Accepts the proposed diff: replaces the original selected text with
+    ///     <see cref="InlineEditDiff"/> in the active tab's content.
+    ///     Called after the orchestrator wires up the agent call and populates
+    ///     <see cref="InlineEditDiff"/>.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanAcceptInlineEdit))]
+    private void AcceptInlineEdit()
+    {
+        if (ActiveTab is null || InlineEditDiff is null) return;
+
+        var content = ActiveTab.Content;
+        if (_inlineEditSelectionStart >= 0
+            && _inlineEditSelectionEnd <= content.Length
+            && _inlineEditSelectionStart < _inlineEditSelectionEnd)
+        {
+            var newContent = string.Concat(
+                content.AsSpan(0, _inlineEditSelectionStart),
+                InlineEditDiff.AsSpan(),
+                content.AsSpan(_inlineEditSelectionEnd));
+            ActiveTab.Content = newContent;
+            _logger.LogInformation("Inline edit accepted: replaced {OldLen} chars with {NewLen} chars at {Start}-{End}",
+                _inlineEditSelectionEnd - _inlineEditSelectionStart,
+                InlineEditDiff.Length,
+                _inlineEditSelectionStart,
+                _inlineEditSelectionEnd);
+        }
+
+        InlineEditVisible = false;
+        InlineEditPrompt = string.Empty;
+        InlineEditDiff = null;
+        _inlineEditSelectedText = string.Empty;
+    }
+
+    private bool CanAcceptInlineEdit()
+        => InlineEditVisible && !IsInlineEditLoading && InlineEditDiff is not null;
+
+    /// <summary>
+    ///     Called by the orchestrator-wired agent callback once the edit diff
+    ///     is ready. Runs on the dispatcher to update observable state safely.
+    /// </summary>
+    public void SetInlineEditResult(string diff)
+    {
+        _dispatcher.Post(() =>
+        {
+            InlineEditDiff = diff;
+            IsInlineEditLoading = false;
+        });
+    }
+
+    /// <summary>
+    ///     Called by the orchestrator-wired agent callback on error.
+    /// </summary>
+    public void SetInlineEditError(string error)
+    {
+        _dispatcher.Post(() =>
+        {
+            IsInlineEditLoading = false;
+            InlineEditDiff = null;
+            _toasts.Show($"Inline edit failed: {error}", ToastKind.Error);
+            InlineEditVisible = false;
+        });
+    }
+
+    /// <summary>
+    ///     Sets the loading state while the agent is processing the edit request.
+    /// </summary>
+    public void SetInlineEditLoading(bool loading)
+    {
+        _dispatcher.Post(() => IsInlineEditLoading = loading);
+    }
+
+    /// <summary>
+    ///     Returns the currently selected text range for the inline edit overlay.
+    /// </summary>
+    public (string Text, int Start, int End) GetInlineEditSelection()
+        => (_inlineEditSelectedText, _inlineEditSelectionStart, _inlineEditSelectionEnd);
 }
 
 /// <summary>One editor tab — file path, name, extension, content, dirty flag. Inherits shared model; adds AvaloniaEdit-specific SyntaxName.</summary>

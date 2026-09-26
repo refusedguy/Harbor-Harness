@@ -62,9 +62,15 @@ internal static class BlockMath
     }
 }
 
-/// <summary>User prompt block: bold accent prefix «› » + bold body (widgets §3.1).</summary>
+/// <summary>User prompt bubble: accent header («YOU»), accent bar and tinted
+/// body (widgets §3.1). The header costs one row; wrap width is unchanged
+/// (2-cell gutter, same as the old «› » prefix).</summary>
 public sealed class UserBlock : IChatBlock
 {
+    private const string Header = "YOU";
+    private const int Gutter = 2;
+
+    /// <summary>Legacy text prefix kept for <see cref="RawText" /> (selection copy + history matching).</summary>
     private const string Prefix = "› ";
     private readonly WrappedText _text;
 
@@ -77,9 +83,9 @@ public sealed class UserBlock : IChatBlock
     public int BudgetBytes => 64 + (_text.SourceLength * 2);
 
     public BlockMeasure Measure(int width) =>
-        BlockMeasure.Exact(Math.Max(1, _text.GetLines(BodyWidth(width)).Length));
+        BlockMeasure.Exact(2 + Math.Max(1, _text.GetLines(BodyWidth(width)).Length));
 
-    public int CheapEstimate(int width) => BlockMath.EstimateLines(_text.Source, Math.Max(1, BodyWidth(width)));
+    public int CheapEstimate(int width) => 2 + BlockMath.EstimateLines(_text.Source, Math.Max(1, BodyWidth(width)));
 
     public void Paint(in BlockPaintContext ctx)
     {
@@ -92,21 +98,43 @@ public sealed class UserBlock : IChatBlock
 
         int y = ctx.Rect.Y;
         int rows = ctx.Rect.Bottom - y;
-        var lines = _text.GetLines(bodyWidth);
-        for (int i = 0; i < lines.Length && i < rows; i++)
+        int skip = ctx.SkipRows;
+        if (rows <= 0)
         {
-            if (i == 0)
+            return;
+        }
+
+        var headerStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
+        var barStyle = new CellStyle(ChatPalette.Accent);
+        var bodyStyle = new CellStyle(ChatPalette.UserText.Fg, ChatPalette.Surface, ChatPalette.UserText.Attrs);
+        var bgCell = Cell.From(new Rune(' '), new CellStyle(bg: ChatPalette.Surface));
+
+        var lines = _text.GetLines(bodyWidth);
+        int totalRows = lines.Length + 2;
+        for (int i = 0; i < rows && (skip + i) < totalRows; i++)
+        {
+            int row = skip + i;
+            int paintY = y + i;
+            if (row == totalRows - 1)
             {
-                buffer.SetText(ctx.Rect.X, y, Prefix, ChatPalette.UserPrefix);
+                continue; // trailing gap row: breathing room between bubbles
             }
 
-            buffer.SetText(ctx.Rect.X + Prefix.Length, y + i, lines.Span[i], ChatPalette.UserText);
+            buffer.Fill(new Rect(ctx.Rect.X, paintY, ctx.Rect.Width, 1), in bgCell);
+            if (row == 0)
+            {
+                buffer.SetText(ctx.Rect.X + 1, paintY, Header, headerStyle);
+                continue;
+            }
+
+            buffer.SetText(ctx.Rect.X, paintY, "│", barStyle);
+            buffer.SetText(ctx.Rect.X + Gutter, paintY, lines.Span[row - 1], bodyStyle);
         }
     }
 
     public string RawText() => Prefix + _text.Source;
 
-    private static int BodyWidth(int rectWidth) => rectWidth - Prefix.Length;
+    private static int BodyWidth(int rectWidth) => rectWidth - Gutter;
 }
 
 /// <summary>Dim italic system notice (session events, compaction, errors).</summary>
@@ -132,9 +160,10 @@ public sealed class SystemBlock : IChatBlock
         var buffer = ctx.Buffer;
         var lines = _text.GetLines(Math.Max(1, ctx.Rect.Width));
         int rows = ctx.Rect.Height;
-        for (int i = 0; i < lines.Length && i < rows; i++)
+        int skip = ctx.SkipRows;
+        for (int i = 0; i < rows && (skip + i) < lines.Length; i++)
         {
-            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, lines.Span[i], ChatPalette.System);
+            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, lines.Span[skip + i], ChatPalette.System);
         }
     }
 

@@ -1,0 +1,25 @@
+{
+  "sprint": "codegen-boilerplate",
+  "state": "done",
+  "retries": 0,
+  "base": "",
+  "model": "openrouter/z-ai/glm-5.3-flash",
+  "base_sha": "472d1f0",
+  "created_at": "2026-09-01T08:40:00Z",
+  "started_at": "2026-09-02T08:31:00+0500",
+  "finished_at": null,
+  "last_activity": "2026-09-03T01:11:15+0500",
+  "commits": 1,
+  "failures": 3,
+  "prompt": ".kilo-docs/sprints/codegen-boilerplate/prompt.md",
+  "progress": {
+    "current_task": "",
+    "tasks_done": 3,
+    "tasks_total": 3,
+    "eta_minutes": 0,
+    "last_heartbeat": null
+  },
+  "head": "44681cdb48daae6e41cb77da3a6f2770f7ec12b8",
+  "name": "codegen-boilerplate",
+  "finished": "2026-09-03T03:10:00Z"
+}

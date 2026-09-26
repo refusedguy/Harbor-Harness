@@ -7,6 +7,7 @@ namespace Harbor.Storage.Tests;
 ///     Tests for SqliteSessionStore — uses a temp file per test and deletes it in finally.
 ///     Verifies CRUD, message ordering, and cascading delete of messages.
 /// </summary>
+[ParallelLimiter<SqliteStoreLimit>]
 public class SqliteSessionStoreTests
 {
     private static string NewTempDbPath() =>
@@ -228,10 +229,10 @@ public class SqliteSessionStoreTests
             var fetched = await store.GetAsync(session.Id);
             await Assert.That(fetched.IsFailure).IsTrue();
 
-            // Messages are also gone (FK cascade).
+            // Messages are also gone: the session no longer exists, so the
+            // read surfaces Failure instead of a silent empty list (#84).
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
-            await Assert.That(messages.Value.Count).IsEqualTo(0);
+            await Assert.That(messages.IsFailure).IsTrue();
         }
         finally
         {
@@ -301,6 +302,93 @@ public class SqliteSessionStoreTests
             await Assert.That(stats.Value.TokensOutput).IsEqualTo(100);
             await Assert.That(stats.Value.TokensReasoning).IsEqualTo(50);
             await Assert.That(stats.Value.MessageCount).IsEqualTo(4);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task DeleteAsync_UnknownId_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var result = await store.DeleteAsync("nonexistent");
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task UpdateMessageAsync_UnknownMessage_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
+            var ghost = NewUserMessage(session.Id, "ghost");
+            var result = await store.UpdateMessageAsync(session.Id, ghost);
+            await Assert.That(result.IsFailure).IsTrue();
+
+            var messages = await store.GetMessagesAsync(session.Id);
+            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages.Value.Count).IsEqualTo(0);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task UpdateMessageAsync_UnknownSession_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var msg = NewUserMessage("nonexistent", "hello");
+            var result = await store.UpdateMessageAsync("nonexistent", msg);
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task GetMessagesAsync_UnknownSession_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var result = await store.GetMessagesAsync("nonexistent");
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task UpdateStatsAsync_UnknownSession_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var result = await store.UpdateStatsAsync("nonexistent", SessionMetadata.Empty);
+            await Assert.That(result.IsFailure).IsTrue();
         }
         finally
         {

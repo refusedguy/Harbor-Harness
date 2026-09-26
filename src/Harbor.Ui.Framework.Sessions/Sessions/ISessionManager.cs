@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Services;
@@ -36,13 +37,15 @@ public interface ISessionManager
     Task RebindFromCommonConfigAsync();
 
     /// <summary>Create a new session and switch to it.</summary>
-    Task<Session?> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null);
+    /// <returns>The new active session, or a failure carrying the cause.</returns>
+    Task<Result<Session>> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null);
 
     /// <summary>Open (switch to) an existing session.</summary>
     Task<bool> OpenSessionAsync(string sessionId);
 
     /// <summary>Branch the active session.</summary>
-    Task<Session?> BranchActiveAsync();
+    /// <returns>The new active branch, or a failure carrying the cause.</returns>
+    Task<Result<Session>> BranchActiveAsync();
 
     /// <summary>Delete the given session.</summary>
     Task<bool> DeleteSessionAsync(string sessionId);

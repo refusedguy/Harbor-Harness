@@ -1,5 +1,6 @@
 using System.Text;
 using Harbor.Tui.CellForge.Rendering;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -9,6 +10,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// text runs) plus paired resizes; every step flushes through the real engine
 /// and asserts the mirror property.
 /// </summary>
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class DiffEngineFuzzTests
 {
     private static readonly Rune[] RunePool =

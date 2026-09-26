@@ -44,9 +44,13 @@ public static class CollectionExtensions
 
     /// <summary>
     ///     Add multiple items to a List{T} without intermediate allocations.
+    ///     Pre-grows the list once (#90: the old per-item Add loop caused
+    ///     O(log n) backing-array reallocations + copies on large ranges).
     /// </summary>
     public static void AddRange<T>(this List<T> list, ReadOnlySpan<T> items)
     {
+        ArgumentNullException.ThrowIfNull(list);
+        list.EnsureCapacity(list.Count + items.Length);
         foreach (var item in items)
             list.Add(item);
     }

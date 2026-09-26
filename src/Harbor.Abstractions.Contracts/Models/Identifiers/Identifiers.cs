@@ -359,6 +359,11 @@ public sealed class ModelRef : ValueObject
         if (providerResult.IsFailure)
             return Result.Failure<ModelRef>(providerResult.Error);
 
+        // A Try-method must never throw: "provider/ " survives the split
+        // (whitespace is not empty) but Create rejects blank model ids.
+        if (string.IsNullOrWhiteSpace(parts[1]))
+            return Result.Failure<ModelRef>($"Invalid model reference '{value}'. Expected 'provider/model'.");
+
         return Result.Success(Create(providerResult.Value, parts[1].Trim()));
     }
 

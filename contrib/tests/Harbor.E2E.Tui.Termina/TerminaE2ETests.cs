@@ -8,43 +8,17 @@ namespace Harbor.E2E.Tui.Termina;
 ///     platform matrix.
 /// </summary>
 [Category("E2E")]
-[NotInParallel]
-public class TerminaE2ETests : E2eTestBase
+[NotInParallel("tui-e2e")]
+public class TerminaE2ETests : TuiE2eTestBase
 {
-    private const string CliProjectPath = "apps/Harbor.App.Cli/Harbor.App.Cli.csproj";
-    private const string TuiName = "termina";
-
-    /// <summary>
-    ///     Sentinel string that appears in the renderer's footer/header
-    ///     immediately after boot. Used as a stable "TUI is up" signal —
-    ///     more reliable than brand text which varies by configured provider.
-    /// </summary>
-    private const string BootSentinel = "test-model";
-    private static readonly TimeSpan BootTimeout = TimeSpan.FromSeconds(20);
-
-    private static async Task<bool> WaitBootAsync(TuiDriver driver)
-    {
-        bool saw = await driver.WaitForTextAsync(BootSentinel, BootTimeout).ConfigureAwait(false);
-        if (!saw)
-        {
-            string screen = await driver.ReadScreenAsync().ConfigureAwait(false);
-            string head = screen.Length > 600 ? screen[..600] : screen;
-            Console.WriteLine($"[TUI-E2E] boot sentinel '{BootSentinel}' not seen. Screen (first 600 chars):\n{head}");
-        }
-        return saw;
-    }
-
-    /// <summary>The renderer boots and shows the welcome banner.</summary>
+{
+    protected override string TuiName => "termina";
     [Test]
     [Category("E2E")]
     public async Task Start_ShowsWelcomeBanner()
     {
-        EnsurePtyAvailable();
-
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-
-        bool saw = await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        bool saw = await WaitForBootAsync(driver).ConfigureAwait(false);
         await Assert.That(saw).IsTrue();
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
@@ -57,11 +31,8 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task SlashHelp_IsDispatched()
     {
-        EnsurePtyAvailable();
-
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/help\r").ConfigureAwait(false);
         bool saw = await driver.WaitForTextAsync("/help", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
@@ -76,11 +47,8 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task CtrlC_AbortsTui()
     {
-        EnsurePtyAvailable();
-
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.C, ConsoleModifiers.Control).ConfigureAwait(false);
         await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
@@ -95,16 +63,14 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Screenshot_CapturesCoreStates()
     {
-        EnsurePtyAvailable();
-
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         string screenshotDir = "/mnt/projects/Harbor-Harness/docs/screenshots/tui/termina";
         Directory.CreateDirectory(screenshotDir);
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
 
         try
         {
-            bool booted = await WaitBootAsync(driver).ConfigureAwait(false);
+            bool booted = await WaitForBootAsync(driver).ConfigureAwait(false);
             await Assert.That(booted).IsTrue();
             string boot = Path.Combine(screenshotDir, "01-boot.png");
             await driver.CapturePngAsync(boot).ConfigureAwait(false);
@@ -142,13 +108,11 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Streaming_ShowsResponse()
     {
-        EnsurePtyAvailable();
-
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         Server.SetResponse("test-model", "Hello from the mock LLM!");
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello world\r").ConfigureAwait(false);
 
@@ -175,13 +139,11 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ToolCall_RendersToolCard()
     {
-        EnsurePtyAvailable();
-
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         Server.SetToolCallResponse("test-model", "read", new { path = "/test.txt" });
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("read the file\r").ConfigureAwait(false);
 
@@ -200,13 +162,11 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ErrorState_ShowsError()
     {
-        EnsurePtyAvailable();
-
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         Server.SetErrorResponse("test-model", "mock LLM error: rate limit exceeded");
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("trigger an error\r").ConfigureAwait(false);
 
@@ -225,13 +185,11 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Compaction_ShowsCompactionStatus()
     {
-        EnsurePtyAvailable();
-
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         Server.SetResponse("test-model", string.Concat(Enumerable.Repeat("word ", 500)));
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
 
@@ -254,13 +212,11 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task AgentRunning_ShowsRunningBanner()
     {
-        EnsurePtyAvailable();
-
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         Server.SetResponse("test-model", "Agent is responding.");
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
 
@@ -287,11 +243,8 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task F12_TogglesLogsPanel()
     {
-        EnsurePtyAvailable();
-
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.F12).ConfigureAwait(false);
         bool sawLogs = await driver.WaitForTextAsync("Logs", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
@@ -312,11 +265,8 @@ public class TerminaE2ETests : E2eTestBase
     [Skip("Termina renderer does not implement Alt+digit panel toggling (no panel registry; F12 logs is the only panel).")]
     public async Task Alt1_TogglesPanel()
     {
-        EnsurePtyAvailable();
-
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.D1, ConsoleModifiers.Alt).ConfigureAwait(false);
         bool sawPanel = await driver.WaitForTextAsync("panel", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
@@ -338,11 +288,8 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task CtrlTab_CyclesPanelFocus()
     {
-        EnsurePtyAvailable();
-
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.Tab, ConsoleModifiers.Control).ConfigureAwait(false);
         // Short debounce between rapid key presses — no observable state change expected.
@@ -363,14 +310,12 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ScrollUp_ScrollsHistory()
     {
-        EnsurePtyAvailable();
-
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         // Configure a mock response so we can poll for the round-trip completion.
         Server.SetResponse("test-model", "Mock reply for scroll.");
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
         // Poll for the mock response instead of a fixed delay — proves the agent
@@ -393,14 +338,12 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task AltUp_NavigatesInputHistory()
     {
-        EnsurePtyAvailable();
-
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
         // Configure a mock response so we can poll for the round-trip completion.
         Server.SetResponse("test-model", "Mock reply for history.");
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("first prompt\r").ConfigureAwait(false);
         // Poll for the mock response instead of a fixed delay — proves the agent
@@ -423,11 +366,8 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Tab_AutocompleteSlashCommand()
     {
-        EnsurePtyAvailable();
-
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync().ConfigureAwait(false);
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/hel").ConfigureAwait(false);
         await driver.SendKeyAsync(ConsoleKey.Tab).ConfigureAwait(false);

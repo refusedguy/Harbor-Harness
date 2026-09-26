@@ -24,10 +24,12 @@ namespace Harbor.Ui.Framework.ViewModels;
 ///         <c>ChatRole.ToolResult</c> line arrives).
 ///     </para>
 ///     <para>
-///         <b>Id</b> is a stable identifier used to coalesce start/end
-///         events. Currently derived from the tool name + index in the
-///         transcript — a future refactor should use a real correlation
-///         id from <c>AgentEvent</c>.
+///         <b>Id</b> is the <c>ToolCallId</c> correlation key from the
+///         originating tool execution — the same key carried by the
+///         transcript <c>ChatLine.ToolCallId</c>, the projected
+///         <c>UiMessageBlock.Id</c> (see <c>ToolCallKey</c>), and the
+///         CellForge <c>ToolCallBlock</c>, so start/result lines and cards
+///         join on one id instead of living on parallel paths.
 ///     </para>
 /// </remarks>
 public sealed partial class ToolCallViewModel : ObservableObject

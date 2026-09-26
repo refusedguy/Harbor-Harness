@@ -36,6 +36,26 @@ public sealed class DefaultAgent : IAgent
     private CancellationTokenSource _abortSource = new();
 
     /// <summary>
+    ///     Abort-source generation (#91). Bumped on every successful
+    ///     <see cref="ResetAbortSource" /> swap, starting at 0 for the
+    ///     construction-time source. Lets a reset tell whether the in-flight
+    ///     run (if any) is bound to the current source or an older one —
+    ///     mirroring the cancel generation the approval coordinator already
+    ///     tracks, but for the source-swap side.
+    /// </summary>
+    private long _abortGeneration;
+
+    /// <summary>
+    ///     Abort generation the in-flight <see cref="PromptAsync" /> run is
+    ///     bound to, or -1 when idle. Captured under the run gate at run
+    ///     start, cleared before the gate is released at run end, so
+    ///     <see cref="ResetAbortSource" /> can refuse a swap that would orphan
+    ///     a live run (a later cancel would hit the fresh source while the old
+    ///     run still waits on the disposed one).
+    /// </summary>
+    private long _activeRunAbortGeneration = -1;
+
+    /// <summary>
     ///     Per-run completion source. A fresh instance is swapped in at the
     ///     start of every <see cref="PromptAsync" /> call (see
     ///     <see cref="StartRunCompletion" />) and completed with the run's
@@ -135,10 +155,15 @@ public sealed class DefaultAgent : IAgent
 
     /// <summary>
     ///     Recreate <see cref="AbortSource" /> if (and only if) the current
-    ///     source has already been cancelled. No-op when the current source is
-    ///     still live, so calling this in the middle of a run is safe but does
-    ///     nothing. After this returns, <see cref="AbortSource" /> points at a
-    ///     fresh, un-cancelled <see cref="CancellationTokenSource" />.
+    ///     source has already been cancelled AND no run bound to this (or an
+    ///     older) abort generation is still alive. No-op when the current
+    ///     source is still live, or when an in-flight run holds it — swapping
+    ///     underneath a live run would orphan it from future cancels, so the
+    ///     reset is refused and retried later (the next
+    ///     <see cref="PromptAsync" /> self-heal runs once idle). After a
+    ///     successful reset, <see cref="AbortSource" /> points at a fresh,
+    ///     un-cancelled <see cref="CancellationTokenSource" /> of the next
+    ///     generation.
     /// </summary>
     public void ResetAbortSource()
     {
@@ -153,10 +178,21 @@ public sealed class DefaultAgent : IAgent
             return;
         }
 
+        // #91: refuse the swap while a run bound to this (or an older)
+        // generation is still alive — e.g. a session switch whose bounded
+        // WaitForIdleAsync timed out must not swap the token out from under
+        // the zombie run; the next prompt would then race it.
+        long activeGeneration = Volatile.Read(ref _activeRunAbortGeneration);
+        if (activeGeneration >= 0 && activeGeneration <= Volatile.Read(ref _abortGeneration))
+        {
+            return;
+        }
+
         var fresh = new CancellationTokenSource();
         CancellationTokenSource winner = Interlocked.CompareExchange(ref _abortSource, fresh, observed);
         if (ReferenceEquals(winner, observed))
         {
+            Interlocked.Increment(ref _abortGeneration);
             observed.Dispose();
         }
         else
@@ -281,10 +317,18 @@ public sealed class DefaultAgent : IAgent
             // so every later prompt would die on an already-cancelled token unless
             // someone remembered to reset it (IPC abort paths never did). Resetting
             // here, under the run gate, removes that external temporal coupling.
+            // #91: the reset is refused while a run is alive, but under this gate
+            // the previous run has finished (it clears _activeRunAbortGeneration
+            // before releasing the gate), so the self-heal always goes through.
             if (_abortSource.IsCancellationRequested)
             {
                 ResetAbortSource();
             }
+
+            // #91: bind this run to the current abort generation so a concurrent
+            // ResetAbortSource (e.g. after a WaitForIdleAsync timeout) refuses
+            // to swap the source out from under us.
+            Volatile.Write(ref _activeRunAbortGeneration, Volatile.Read(ref _abortGeneration));
 
             // F14: a failed persist used to be invisible — the run continued,
             // the reloaded context lacked the user's message (model answered
@@ -348,6 +392,9 @@ public sealed class DefaultAgent : IAgent
         }
         finally
         {
+            // #91: unbind before releasing the gate — a ResetAbortSource racing
+            // the release must see the idle marker, never a stale generation.
+            Volatile.Write(ref _activeRunAbortGeneration, -1);
             _runGate.Release();
         }
     }

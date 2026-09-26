@@ -37,7 +37,9 @@ public sealed class SubmitScenarioTests : CellForgePtyScenarioBase
         await Assert.That(LastUserContent(requests[^1].RawBody)).IsEqualTo("привет");
 
         // Block COMMITTED (survives past streaming end), composer cleared.
-        await Task.Delay(800).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         string[] settled = NormalizedLines();
         await Assert.That(settled.Any(x => x.Contains("Привет из mock!", StringComparison.Ordinal))).IsTrue();
         await Assert.That(settled.Any(x => x.Contains("привет", StringComparison.Ordinal))).IsTrue();

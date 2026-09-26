@@ -100,4 +100,40 @@ public class JsonlMessageCodecTests
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).IsEqualTo("assistant message a1: missing 'model'");
     }
+
+    /// <summary>
+    ///     #51: a tool result carrying non-null <c>Metadata</c> (arbitrary
+    ///     <c>object?</c> content) must survive the JSONL write path — metadata
+    ///     is dropped (read path never restores it), field content intact.
+    /// </summary>
+    [Test]
+    public async Task Serialize_ToolResultWithMetadata_DoesNotThrow_AndRoundTrips()
+    {
+        var message = new ToolResultMessage(
+            "m1",
+            "sess-1",
+            DateTimeOffset.Parse("2026-01-01T00:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
+            new[]
+            {
+                new ToolResultEntry("tc1", "bash", "ok", false,
+                    new System.Collections.Generic.Dictionary<string, object?> { ["cwd"] = "/tmp" }),
+                new ToolResultEntry("tc2", "write", "denied", true, "plain-string-meta"),
+            });
+
+        var entry = new MessageEntry(
+            "message", message.Id, message.ParentId, message.Role, message.CreatedAt,
+            JsonlMessageCodec.SerializeMessagePayload(message));
+
+        // Must not throw: source-gen has no TypeInfo for arbitrary metadata.
+        string line = JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry);
+
+        var parsed = JsonlLineParser.Parse(System.Text.Encoding.UTF8.GetBytes(line), "sess-1");
+        await Assert.That(parsed.IsSuccess).IsTrue();
+        var back = (ToolResultMessage)parsed.Value;
+        await Assert.That(back.Results.Count).IsEqualTo(2);
+        await Assert.That(back.Results[0].Output).IsEqualTo("ok");
+        await Assert.That(back.Results[0].IsError).IsFalse();
+        await Assert.That(back.Results[1].Output).IsEqualTo("denied");
+        await Assert.That(back.Results[1].IsError).IsTrue();
+    }
 }

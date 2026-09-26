@@ -56,7 +56,10 @@ public interface IAgentRunner
     ///     for a fresh run after the previous token was cancelled. No-op if the
     ///     current source has not been cancelled (calling this in the middle of a
     ///     run would blow away the in-flight cancellation token, so the guard
-    ///     prevents footguns).
+    ///     prevents footguns) and no-op while a run bound to the current (or an
+    ///     older) abort generation is still alive (#91: a reset after a
+    ///     WaitForIdleAsync timeout must not orphan the zombie run — the next
+    ///     prompt self-heals once idle instead).
     /// </summary>
     /// <remarks>
     ///     <para>

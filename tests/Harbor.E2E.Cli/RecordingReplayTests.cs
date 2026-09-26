@@ -9,6 +9,7 @@ namespace Harbor.E2E.Cli;
 ///     by a fresh server in replay mode, including tool-call turns and error
 ///     entries, with a loud marker once the recorded sequence is exhausted.
 /// </summary>
+[ParallelLimiter<MockServerLimit>]
 public class RecordingReplayTests : IAsyncDisposable
 {
     private readonly List<MockLlmServer> _servers = [];

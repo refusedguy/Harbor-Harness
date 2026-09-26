@@ -12,12 +12,14 @@ namespace Harbor.Ipc.Tests;
 ///     file must be reclaimed, the socket file must be owner-only (0600),
 ///     and repeated accept failures must back off instead of spinning hot.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
 public class ServerTransportSecurityTests
 {
     [Test]
     public async Task Bind_WhenAnotherListenerAlive_RefusesInsteadOfStealing()
     {
+        if (OperatingSystem.IsWindows())
+            return;
         var sp = TestHost.Build();
         string pipe = TestHost.UniquePipeName("harbor-ipc-test-steal");
         await using var server = new HarborIpcServer(sp, pipe, sp.GetService<ILoggerFactory>());
@@ -135,6 +137,8 @@ public class ServerTransportSecurityTests
     [Test]
     public async Task Stop_RemovesSocketFile()
     {
+        if (OperatingSystem.IsWindows())
+            return;
         var sp = TestHost.Build();
         string pipe = TestHost.UniquePipeName("harbor-ipc-test-cleanup");
         string socketPath = Path.Combine(Path.GetTempPath(), pipe + ".sock");

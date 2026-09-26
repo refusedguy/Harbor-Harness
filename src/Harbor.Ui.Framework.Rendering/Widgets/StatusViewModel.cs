@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Threading;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Ui.Framework.Rendering.Widgets;
@@ -58,6 +59,11 @@ public sealed class StatusViewModel
         return ContextTokensUsed.HasValue && ContextWindow > 0;
     }
 
+    /// <summary>
+    ///     Canonical #75 "used" definition: accumulated input+output tokens
+    ///     (see <see cref="ContextUsage" />). The percent/bar derived from it
+    ///     matches the cumulative totals fed via <see cref="SetUsage" />.
+    /// </summary>
     public void SetContext(int usedTokens, int windowTokens)
     {
         ContextTokensUsed = usedTokens;
@@ -107,7 +113,7 @@ public sealed class StatusViewModel
 
         if (TryGetContextTokens(out var used))
         {
-            double ratio = Math.Clamp((double)used / ContextWindow, 0, 1);
+            double ratio = ContextUsage.RatioUsed(used, ContextWindow);
             var accent = ratio >= CtxDangerThreshold ? StatusAccent.Error
                 : ratio >= CtxWarnThreshold ? StatusAccent.Warning
                 : StatusAccent.Success;
@@ -127,8 +133,16 @@ public sealed class StatusViewModel
         return n;
     }
 
-    public const double CtxWarnThreshold = 0.50;
-    public const double CtxDangerThreshold = 0.85;
+    /// <summary>
+    ///     Warn band (≥ 50%). Single-sourced from <see cref="ContextUsage.WarnThreshold" />;
+    ///     the only surface that renders color bands is the CellForge bar — text
+    ///     surfaces (status line, sidebar) show the raw percent with no bands.
+    /// </summary>
+    public const double CtxWarnThreshold = ContextUsage.WarnThreshold;
+    /// <summary>
+    ///     Danger band (≥ 85%). Single-sourced from <see cref="ContextUsage.DangerThreshold" />.
+    /// </summary>
+    public const double CtxDangerThreshold = ContextUsage.DangerThreshold;
     public const int CtxCells = 6;
     private const char Filled = '▰';
     private const char Empty = '▱';

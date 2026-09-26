@@ -159,12 +159,13 @@ public sealed partial class SessionListViewModel : ObservableObject
     {
         try
         {
-            var session = await _sessionManager.NewSessionAsync(workingDirectory: Environment.CurrentDirectory).ConfigureAwait(false);
-            if (session is null)
+            var createResult = await _sessionManager.NewSessionAsync(workingDirectory: Environment.CurrentDirectory).ConfigureAwait(false);
+            if (createResult.IsFailure)
             {
-                _toasts.Show("Failed to create session — check that a provider + model are configured.", ToastKind.Error);
+                _toasts.Show($"Failed to create session: {createResult.Error}", ToastKind.Error);
                 return;
             }
+            var session = createResult.Value;
             await RefreshAsync().ConfigureAwait(false);
             // Must run on UI thread — Sessions is ObservableCollection modified by RefreshAsync.
             // Accessing it from a background thread (after ConfigureAwait(false)) throws
@@ -192,12 +193,13 @@ public sealed partial class SessionListViewModel : ObservableObject
     {
         try
         {
-            var branch = await _sessionManager.BranchActiveAsync().ConfigureAwait(false);
-            if (branch is null)
+            var branchResult = await _sessionManager.BranchActiveAsync().ConfigureAwait(false);
+            if (branchResult.IsFailure)
             {
-                _toasts.Show("Branch failed — no active session.", ToastKind.Error);
+                _toasts.Show($"Branch failed: {branchResult.Error}", ToastKind.Error);
                 return;
             }
+            var branch = branchResult.Value;
             await RefreshAsync().ConfigureAwait(false);
             _dispatcher.Post(() =>
             {
