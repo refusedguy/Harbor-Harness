@@ -224,8 +224,12 @@ public sealed class InProcessHarborClient : IHarborClient
 
     /// <inheritdoc />
     public async IAsyncEnumerable<HarborEvent> SubscribeToEventsAsync(
-        [EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default, ulong? sinceSequence = null)
     {
+        // In-process bridging is live-only: the channel holds no history, so
+        // sinceSequence (an IPC replay-ring cursor) is accepted for interface
+        // parity and ignored here.
+
         // Ensure the TCS is created so callers awaiting SubscriptionReady
         // don't race with this method.
         var _ = SubscriptionReady;

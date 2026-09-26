@@ -220,10 +220,11 @@ public sealed class IpcHarborClient : IHarborClient
 
     /// <inheritdoc />
     public async IAsyncEnumerable<HarborEvent> SubscribeToEventsAsync(
-        [EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default, ulong? sinceSequence = null)
     {
-        // Tell the server to start pushing events for this client.
-        var resp = await _rpc.SendAsync(new SubscribeToEventsRequest(), ct).ConfigureAwait(false);
+        // Tell the server to start pushing events for this client, replaying
+        // anything missed after sinceSequence (server replay ring, wire-stable).
+        var resp = await _rpc.SendAsync(new SubscribeToEventsRequest(sinceSequence), ct).ConfigureAwait(false);
         if (resp is ErrorResponse err)
         {
             _logger.LogWarning("Event subscription rejected: {Error}", err.Message);
