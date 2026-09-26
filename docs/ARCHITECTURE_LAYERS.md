@@ -26,8 +26,9 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - apps/Harbor.App.Cli                                          │
 │  - apps/Harbor.App.Avalonia (cross-platform desktop GUI)        │
 │  - contrib/apps/: Harbor.App.Wpf / App.Maui / App.Blazor        │
-│  - In-solution TUI renderers: Tui.Ansi / Tui.Plain /            │
-│    Tui.ConsoleEx / Tui.Notifications                            │
+│  - In-solution TUI renderers: Tui.AnsiPlain (unified ANSI +     │
+│    plain) / Tui.CellForge (+ .Engine) / Tui.NickConsoleEx /    │
+│    Tui.Notifications                                            │
 │  - Optional contrib/tui renderers: Spectre / .Fullscreen /      │
 │    SpectreTui / TerminalGui / Termina / RazorConsole / Sixel    │
 │  Depends on: Application + Ui.Framework + Abstractions          │
@@ -37,8 +38,9 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  UI FRAMEWORK (TEA + reusable VMs + components)                 │
-│  - Harbor.Ui.Framework (+ split projects State/, ViewModels/,   │
-│    Services/, Sessions/, Projection/, Abstractions/)            │
+│  - Harbor.Ui.Framework (+ split projects Abstractions/, State/, │
+│    Reducers/, ViewModels/, Rendering/, Projection/, Services/,  │
+│    Sessions/; shell csproj is a meta-package)                   │
 │    State/      (UiStore, UiReducer, UiMsg, UiState — TEA)       │
 │    ViewModels/ (ChatLineVM, ToolCallVM, TokenUsageVM, ...)      │
 │    Rendering/  (ChatMessageRenderer, ChatStreamingPresenter)    │
@@ -58,9 +60,9 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  APPLICATION (use cases, orchestration)                         │
 │  - Harbor.Application (AgentLoop, Sessions, Agents,             │
 │                        Configuration, Permissions, Onboarding)  │
-│  - Harbor.Core (EventBus, helpers) + Harbor.Registries          │
-│  - Harbor.Plugins.{Runtime, Hosting, Registration, Instantiation│
-│                    Compilation, Storage}                        │
+│  - Harbor.Core (deprecated facade) + Harbor.Registries          │
+│  - Harbor.Plugins.{Abstractions, Runtime, Hosting, Registration,│
+│    Instantiation, Compilation, Storage, Host} (8 projects)      │
 │  - contrib/scripting: Harbor.Scripting.* (ScriptHost, Bridge)   │
 │  - Harbor.Ipc.{Abstractions, InProcess, Server, Client}         │
 │  - Harbor.Logging (Serilog per-run timestamped files)           │
@@ -75,13 +77,11 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  INFRASTRUCTURE (adapters, I/O, external services)              │
 │  - Harbor.Storage.Jsonl / Memory / Sqlite                       │
 │  - Harbor.Providers.OpenAiCompatible / Anthropic / OpenAI /     │
-│    Ollama / Shared                                              │
+│    Ollama (+ Shared — linked-source, без .csproj)               │
 │  - Harbor.Tools.Builtin — все builtin tools в одном проекте,    │
-│    каталог Tools/ (read/write/edit/bash/glob/grep/ls/task/      │
-│    webfetch/patch/notebook/ripgrep/tree/mcp; MCP-клиент в       │
-│    подкаталоге Mcp/)                                            │
-│  - DesignSystem lives in src/Harbor.Desktop.Abstractions/       │
-│    DesignSystem/ (не отдельный проект)                          │
+│    каталог Tools/ (18 tools — см. docs/TOOLS_CATALOG.md;        │
+│    MCP-клиент в подкаталоге Mcp/)                               │
+│  - DesignSystem — отдельный проект src/Harbor.DesignSystem/     │
 │  Depends on: Domain ONLY                                        │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
@@ -138,8 +138,8 @@ over its own `ICommonConfigStore` (e.g. `CommonConfigReaderAdapter` in Avalonia)
 flowchart TB
     subgraph Pres["Presentation (UI / CLI)"]
         Cli["Harbor.App.Cli<br/>(Composition Root)"]
-        TuiAnsi["Harbor.Tui.Ansi / .Plain<br/>/ .Notifications"]
-        TuiConsoleEx["Harbor.Tui.ConsoleEx<br/>(alt-screen cell-diff MVP)"]
+        TuiAnsi["Harbor.Tui.AnsiPlain (ANSI + plain)<br/>/ .Notifications"]
+        TuiConsoleEx["Harbor.Tui.CellForge (+ .Engine)<br/>/ .NickConsoleEx (cell-diff backends)"]
         TuiContrib["contrib/tui: Spectre / SpectreTui<br/>/ TerminalGui / Termina / RazorConsole / Sixel"]
     end
 
@@ -151,13 +151,13 @@ flowchart TB
 
     subgraph Infra["Infrastructure (adapters)"]
         Storage["Harbor.Storage.Jsonl / Memory / Sqlite"]
-        Providers["Harbor.Providers.OpenAiCompatible / Anthropic / OpenAI / Ollama / Shared"]
+        Providers["Harbor.Providers.OpenAiCompatible / Anthropic / OpenAI / Ollama<br/>(+ Shared linked-source, no csproj)"]
         Tools["Harbor.Tools.Builtin<br/>(18 tools incl. MCP client)"]
     end
 
     subgraph Domain["Domain / Abstractions (hexagon core)"]
         Abs["Harbor.Abstractions + Abstractions.Contracts<br/>(IAgent, ITool, ILlmClient, ISessionStore, ...)"]
-        TuiAbs["Harbor.Tui.Abstractions<br/>(ITuiRenderer, UiState, panels)"]
+        TuiAbs["Harbor.Terminal.Abstractions<br/>(ITuiRenderer, UiState, panels)"]
     end
 
     Cli --> Core
@@ -323,13 +323,13 @@ Concrete implementations of:
   CLI `Main` entry point (`apps/Harbor.App.Avalonia/Program.cs` for the desktop app).
   `Harbor.Tui.*` projects are renderers — each implements
   `ITuiRenderer` (or one of the more specific TUI interfaces from
-  `Harbor.Tui.Abstractions`).
+  `Harbor.Terminal.Abstractions`).
 - **Composition Root:** `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` is the only place that
   knows about concrete Infrastructure types. It wires them into the DI container by
   interface.
 - **Forbidden:** Presentation projects must NOT reference each other (e.g.
-  `Harbor.Tui.ConsoleEx` must not reference `Harbor.Tui.Plain`). They may share the
-  `Harbor.Tui.Abstractions` contract surface.
+  `Harbor.Tui.AnsiPlain` must not reference `Harbor.Tui.CellForge`). They may share the
+  `Harbor.Terminal.Abstractions` contract surface.
 
 ---
 
@@ -355,7 +355,9 @@ Concrete implementations of:
 mechanically-enforced rules. The test project references every Harbor project so it can
 load each assembly via reflection and assert on `GetReferencedAssemblies()`.
 
-The tests come in **four files** (counts as of 2026-08-27; the executed total may exceed
+The tests come in **five files** (`LayerDependencyTests`, `NetArchLayerRules`,
+`AbstractionsSplitLayerRules`, `FullLayerMatrixTests`, `CellForgeGraphRules`;
+counts as of 2026-08-27 predate `CellForgeGraphRules` — the executed total may exceed
 the method count due to parameterised cases — latest full run: 54/54 passed):
 
 ### 5.1 Reflection-based — `LayerDependencyTests.cs`
@@ -475,7 +477,8 @@ public async Task NetArch_SomeRule()
 The architecture suite passes cleanly; the previously cited counts (46 tests =
 21 reflection + 25 NetArchTest) are historical — today it is
 `LayerDependencyTests` (12) + `NetArchLayerRules` (21) + `AbstractionsSplitLayerRules` (3)
-+ `FullLayerMatrixTests` (4, data-table rows) — 54 executed cases in the 2026-08-22 run,
++ `FullLayerMatrixTests` (4, data-table rows) + `CellForgeGraphRules` (1) —
+54 executed cases in the 2026-08-22 run (predates `CellForgeGraphRules`),
 all green.
 
 The previously suspected violation — *"Harbor.Tui.Abstractions references

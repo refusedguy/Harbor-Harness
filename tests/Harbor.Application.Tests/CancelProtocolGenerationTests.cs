@@ -69,13 +69,12 @@ public class CancelProtocolGenerationTests
             await WaitUntilRunningAsync(agent);
 
             // Abort ingress, then the timed-out WaitForIdle path calls reset
-            // while the run is still alive: the swap must be refused.
-            agent.AbortSource.Cancel();
-            var bound = agent.AbortSource;
+            // while the run is still alive: the swap must be refused, so the
+            // token stays cancelled.
+            agent.RequestAbort();
             agent.ResetAbortSource();
 
-            await Assert.That(ReferenceEquals(bound, agent.AbortSource)).IsTrue();
-            await Assert.That(agent.AbortSource.IsCancellationRequested).IsTrue();
+            await Assert.That(agent.AbortToken.IsCancellationRequested).IsTrue();
 
             // The run drains; once idle the deferred reset must go through and
             // the agent must be usable again.
@@ -84,8 +83,7 @@ public class CancelProtocolGenerationTests
             await Assert.That(result.IsSuccess).IsTrue();
 
             agent.ResetAbortSource();
-            await Assert.That(ReferenceEquals(bound, agent.AbortSource)).IsFalse();
-            await Assert.That(agent.AbortSource.IsCancellationRequested).IsFalse();
+            await Assert.That(agent.AbortToken.IsCancellationRequested).IsFalse();
 
             var next = await agent.PromptAsync("after reset");
             await Assert.That(next.IsSuccess).IsTrue();
@@ -106,12 +104,10 @@ public class CancelProtocolGenerationTests
             var first = await agent.PromptAsync("prime");
             await Assert.That(first.IsSuccess).IsTrue();
 
-            agent.AbortSource.Cancel();
-            var cancelled = agent.AbortSource;
+            agent.RequestAbort();
             agent.ResetAbortSource();
 
-            await Assert.That(ReferenceEquals(cancelled, agent.AbortSource)).IsFalse();
-            await Assert.That(agent.AbortSource.IsCancellationRequested).IsFalse();
+            await Assert.That(agent.AbortToken.IsCancellationRequested).IsFalse();
         }
         finally
         {

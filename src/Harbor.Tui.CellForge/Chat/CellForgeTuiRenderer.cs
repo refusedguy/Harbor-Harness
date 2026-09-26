@@ -15,6 +15,7 @@ using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
+using Harbor.Tui.CellForge.Capabilities;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tui.CellForge;
@@ -468,13 +469,15 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
 
     public void EnterAlternateScreen()
     {
-        _writer.Raw("\x1B[?1049h\x1B[?1000h\x1B[?1002h\x1B[?1006h");
+        // Full mouse grab (issue #36) — same single-source-of-truth flag as
+        // the interactive runner; byte-identical to the previous literal.
+        _writer.Raw("\x1B[?1049h" + TerminalQueries.MouseFullEnable);
         Flush();
     }
 
     public void ExitAlternateScreen()
     {
-        _writer.Raw("\x1B[?1006l\x1B[?1002l\x1B[?1000l\x1B[?25h\x1B[?1049l");
+        _writer.Raw(TerminalQueries.MouseDisable + "\x1B[?25h\x1B[?1049l");
         Flush();
     }
 

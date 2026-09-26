@@ -20,7 +20,9 @@ public class TuiEffectHostConcurrencyTests
     /// <summary>Runner whose PromptAsync returns a pre-set (possibly pending) task.</summary>
     private sealed class GatedRunner(Task<Result> outcome) : IAgentRunner
     {
-        public CancellationTokenSource AbortSource { get; } = new();
+        private readonly CancellationTokenSource _abortSource = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
 
         public Task<Result> PromptAsync(string text, CancellationToken ct = default) => outcome;
 

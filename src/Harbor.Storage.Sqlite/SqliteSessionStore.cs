@@ -219,7 +219,9 @@ public sealed class SqliteSessionStore : ISessionStore
 
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
-        // For SQLite we replace by (session_id, id)
+        // For SQLite we replace by id. A 0-row update means the session or the
+        // message does not exist — an honest Failure, not a silent no-op
+        // (same rows==0 pattern as UpdateAsync).
         return Task.FromResult(Result.Try(() =>
         {
             EnsureInitialized();
@@ -237,9 +239,12 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
                 cmd.Parameters.AddWithValue("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds());
                 cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), JsonOptions));
-                cmd.ExecuteNonQuery();
+                return cmd.ExecuteNonQuery();
             }
-        }, ResultErrors.Message));
+        }, ResultErrors.Message))
+        .Bind(rows => rows == 0
+            ? Result.Failure($"Message '{message.Id}' not found in session '{sessionId}'.")
+            : Result.Success());
     }
 
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
@@ -248,6 +253,12 @@ public sealed class SqliteSessionStore : ISessionStore
         {
             EnsureInitialized();
             using var conn = OpenConnection();
+            using var exists = conn.CreateCommand();
+            exists.CommandText = "SELECT 1 FROM sessions WHERE id = @sid";
+            exists.Parameters.AddWithValue("@sid", sessionId);
+            if (await exists.ExecuteScalarAsync(ct).ConfigureAwait(false) is null)
+                throw new InvalidOperationException($"Session '{sessionId}' not found.");
+
             using var cmd = conn.CreateCommand();
             // Chronological by instant (Unix-ms stamp, same semantics as
             // JsonlSessionStore's OrderBy(CreatedAt)); rowid breaks ties.
@@ -281,11 +292,19 @@ public sealed class SqliteSessionStore : ISessionStore
             {
                 using var conn = OpenConnection();
                 using var cmd = conn.CreateCommand();
-                cmd.CommandText = "DELETE FROM sessions WHERE id = @id; DELETE FROM messages WHERE session_id = @id;";
+                cmd.CommandText = "DELETE FROM sessions WHERE id = @id;";
                 cmd.Parameters.AddWithValue("@id", sessionId);
-                cmd.ExecuteNonQuery();
+                int rows = cmd.ExecuteNonQuery();
+                using var msgCmd = conn.CreateCommand();
+                msgCmd.CommandText = "DELETE FROM messages WHERE session_id = @id;";
+                msgCmd.Parameters.AddWithValue("@id", sessionId);
+                msgCmd.ExecuteNonQuery();
+                return rows;
             }
-        }, ResultErrors.Message));
+        }, ResultErrors.Message))
+        .Bind(rows => rows == 0
+            ? Result.Failure($"Session '{sessionId}' not found.")
+            : Result.Success());
     }
 
     /// <summary>
@@ -386,9 +405,12 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.CommandText = "UPDATE sessions SET metadata = @meta WHERE id = @id";
                 cmd.Parameters.AddWithValue("@id", sessionId);
                 cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(metadata, JsonOptions));
-                cmd.ExecuteNonQuery();
+                return cmd.ExecuteNonQuery();
             }
-        }, ResultErrors.Message));
+        }, ResultErrors.Message))
+        .Bind(rows => rows == 0
+            ? Result.Failure($"Session '{sessionId}' not found.")
+            : Result.Success());
     }
 
     public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)

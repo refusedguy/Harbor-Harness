@@ -229,10 +229,10 @@ public class SqliteSessionStoreTests
             var fetched = await store.GetAsync(session.Id);
             await Assert.That(fetched.IsFailure).IsTrue();
 
-            // Messages are also gone (FK cascade).
+            // Messages are also gone: the session no longer exists, so the
+            // read surfaces Failure instead of a silent empty list (#84).
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
-            await Assert.That(messages.Value.Count).IsEqualTo(0);
+            await Assert.That(messages.IsFailure).IsTrue();
         }
         finally
         {
@@ -311,6 +311,93 @@ public class SqliteSessionStoreTests
     }
 
     [Test]
+    public async Task DeleteAsync_UnknownId_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var result = await store.DeleteAsync("nonexistent");
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task UpdateMessageAsync_UnknownMessage_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
+            var ghost = NewUserMessage(session.Id, "ghost");
+            var result = await store.UpdateMessageAsync(session.Id, ghost);
+            await Assert.That(result.IsFailure).IsTrue();
+
+            var messages = await store.GetMessagesAsync(session.Id);
+            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages.Value.Count).IsEqualTo(0);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task UpdateMessageAsync_UnknownSession_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var msg = NewUserMessage("nonexistent", "hello");
+            var result = await store.UpdateMessageAsync("nonexistent", msg);
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task GetMessagesAsync_UnknownSession_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var result = await store.GetMessagesAsync("nonexistent");
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task UpdateStatsAsync_UnknownSession_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var result = await store.UpdateStatsAsync("nonexistent", SessionMetadata.Empty);
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
     public async Task SameMessageId_InTwoSessions_DoesNotCollide()
     {
         var store = Create(out string dbPath);
@@ -345,6 +432,30 @@ public class SqliteSessionStoreTests
             await store.UpdateMessageAsync(s1.Id, edited);
             var m2After = await store.GetMessagesAsync(s2.Id);
             await Assert.That(((UserMessage)m2After.Value[0]).Content).IsEqualTo("session-two");
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task AppendMessageAsync_UpdatesSessionTimestamp()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
+            var originalUpdatedAt = session.UpdatedAt;
+
+            // Small delay to ensure UpdatedAt differs.
+            await Task.Delay(50);
+            await store.AppendMessageAsync(session.Id, NewUserMessage(session.Id, "hello"));
+
+            var fetched = await store.GetAsync(session.Id);
+            await Assert.That(fetched.IsSuccess).IsTrue();
+            await Assert.That(fetched.Value.UpdatedAt).IsGreaterThan(originalUpdatedAt);
         }
         finally
         {
