@@ -47,7 +47,7 @@ public enum ChatAction
     /// <summary>F12 — toggle the in-TUI diagnostics / logs panel (shows live ILogger output).</summary>
     ToggleLogsPanel,
 
-    /// <summary>Ctrl+J — open the worktree jump palette (KILLER_FEATURES §2.7 Feature 3).</summary>
+    /// <summary>Ctrl+J (or a bare LF on terminals that send it instead) — open the worktree jump palette.</summary>
     JumpPalette
 }
 
