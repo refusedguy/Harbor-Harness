@@ -37,6 +37,7 @@ public static class LocatorRegistration
         services.AddKeyedSingleton(s_markerKey, static (_, _) => nameof(ViewModelLocator));
 
         // Single provider-bound factory — not per-call-site AddSingletons.
+        // #63: composition-root factory lambdas (idiomatic MS DI).
         services.TryAddSingleton<ViewModelLocator>(static sp => new ViewModelLocator(sp));
         services.TryAddSingleton<IViewModelLocator>(static sp => sp.GetRequiredService<ViewModelLocator>());
         services.TryAddSingleton<ShowPlaceholderFactory>();

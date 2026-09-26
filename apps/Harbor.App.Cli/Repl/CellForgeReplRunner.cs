@@ -25,7 +25,6 @@ using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Tui.CellForge.Widgets;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Cli.Repl;
@@ -54,7 +53,15 @@ namespace Harbor.App.Cli.Repl;
 ///     </para>
 /// </remarks>
 internal sealed class CellForgeReplRunner(
-    IServiceProvider services,
+    IConfigStore configStore,
+    IProviderRegistry providerRegistry,
+    IAgentRegistry agentRegistry,
+    AuthStore authStore,
+    ISessionStore? sessionStore,
+    IRendererPipeline? rendererPipeline,
+    IEventBus eventBus,
+    ITokenTracker? tokens,
+    LegacySlashRunner legacySlash,
     IAgent agent,
     Session sessionModel,
     ScreenSession screenSession,
@@ -146,20 +153,18 @@ internal sealed class CellForgeReplRunner(
     Task IReplHost.SyncSessionsToStoreAsync(CancellationToken ct) => Sessions.SyncSessionsToStoreAsync(ct);
     Task<int> IReplHost.ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
         => ResolveContextWindowAsync(providerId, modelId, ct);
-    IConfigStore IReplHost.ConfigStore => services.GetRequiredService<IConfigStore>();
-    IProviderRegistry IReplHost.ProviderRegistry => services.GetRequiredService<IProviderRegistry>();
-    IAgentRegistry IReplHost.AgentRegistry => services.GetRequiredService<IAgentRegistry>();
-    AuthStore IReplHost.AuthStore => services.GetRequiredService<AuthStore>();
-    ISessionStore? IReplHost.SessionStore => services.GetService<ISessionStore>();
-    IRendererPipeline? IReplHost.RendererPipeline => services.GetService<IRendererPipeline>();
+    IConfigStore IReplHost.ConfigStore => configStore;
+    IProviderRegistry IReplHost.ProviderRegistry => providerRegistry;
+    IAgentRegistry IReplHost.AgentRegistry => agentRegistry;
+    AuthStore IReplHost.AuthStore => authStore;
+    ISessionStore? IReplHost.SessionStore => sessionStore;
+    IRendererPipeline? IReplHost.RendererPipeline => rendererPipeline;
 
     private readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
 
     // ── Extracted collaborators (SRP: the runner owns the frame loop + input
     // dispatch; sessions/titles/prompts live in focused classes behind IReplHost).
-    // Lazy: they take `this` as host, unavailable in field initializers.
-    private LegacySlashRunner? _legacySlash;
-    private LegacySlashRunner LegacySlash => _legacySlash ??= LegacySlashRunner.FromServices(services);
+    private LegacySlashRunner LegacySlash => legacySlash;
     private PromptPipeline? _pipeline;
     private PromptPipeline Pipeline => _pipeline ??= new PromptPipeline(
         this, _catalog, logger, _tokens, new Lazy<LegacySlashRunner>(() => LegacySlash));
@@ -171,7 +176,7 @@ internal sealed class CellForgeReplRunner(
 
     /// <summary>Token-usage source (null when the host has no tracker —
     /// feed no-ops, the status bar just stays without token segments).</summary>
-    private readonly ITokenTracker? _tokens = services.GetService<ITokenTracker>();
+    private readonly ITokenTracker? _tokens = tokens;
 
     /// <summary>Leader chord hand-off for async slash commands: the chord resolves
     /// into catalog execution on the frame loop (async work can't run inside Bind actions).</summary>
@@ -213,7 +218,7 @@ internal sealed class CellForgeReplRunner(
     internal async Task<int> ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
     {
         // Best-effort: hosts without a provider registry (smoke tests) get 0.
-        if (services.GetService<IProviderRegistry>() is not { } registry)
+        if (providerRegistry is not { } registry)
         {
             return 0;
         }
@@ -318,7 +323,7 @@ internal sealed class CellForgeReplRunner(
         // post-render effect pipeline (diff → transform → SGR encode).
         _timeline.EnablePostFx = true;
 
-        using var busPump = services.GetRequiredService<IEventBus>()
+        using var busPump = eventBus
             .Subscribe((evt, _) =>
             {
                 _events.Writer.TryWrite(evt);
@@ -1213,7 +1218,7 @@ internal sealed class CellForgeReplRunner(
 
     private async Task PrintWelcomeAsync()
     {
-        var configResult = await services.GetRequiredService<IConfigStore>()
+        var configResult = await configStore
             .LoadAsync().ConfigureAwait(false);
         string model = configResult.IsSuccess ? configResult.Value.EffectiveModel : "?";
         bridge.AppendSystemLine("Harbor — modular AI coding agent [consoleex]");

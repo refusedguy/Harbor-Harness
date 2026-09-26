@@ -3,8 +3,9 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Repl;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Harbor.Application.Configuration;
+using Harbor.Application.Onboarding;
+using Harbor.Application.Permissions;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using Harbor.TestKit;
@@ -99,14 +100,15 @@ public class SlashCommandForkTests
     /// <summary>Dispatch through the CellForge renderer-free overload, capturing writer lines.</summary>
     private static async Task<List<string>> DispatchAsync(string input, FakeStore store)
     {
-        using var sp = new ServiceCollection()
-            .AddSingleton<ISessionStore>(store)
-            .AddSingleton<IToolRegistry>(new FakeToolRegistry())
-            .BuildServiceProvider();
+        var configStore = new JsonConfigStore();
         var dispatcher = new SlashCommandDispatcher(
-            NullLoggerFactory.Instance.CreateLogger<SlashCommandDispatcher>());
+            NullLoggerFactory.Instance.CreateLogger<SlashCommandDispatcher>(),
+            new FakeToolRegistry(),
+            store,
+            new OnboardingWizard(configStore, new AuthStore(configStore)),
+            new PermissionService(new FakeAgentRegistry(), NullLogger<PermissionService>.Instance));
         var lines = new List<string>();
-        var outcome = await dispatcher.HandleCoreAsync(input, sp,
+        var outcome = await dispatcher.HandleCoreAsync(input,
             writer: lines.Add,
             reader: _ => Task.FromResult(string.Empty),
             agent: null!, agentRegistry: null!, configStore: null!, authStore: null!,

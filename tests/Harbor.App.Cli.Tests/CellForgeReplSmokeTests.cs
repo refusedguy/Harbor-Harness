@@ -8,7 +8,9 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
 using Harbor.App.Cli.Repl;
+using Harbor.Application.Onboarding;
 using Harbor.Application.Permissions;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
@@ -63,13 +65,32 @@ public class CellForgeReplSmokeTests
             SizeProvider = () => (Cols, Rows),
         });
 
-        var services = new MapServiceProvider
-        {
-            [typeof(IEventBus)] = bus,
-            [typeof(IConfigStore)] = new StubConfigStore(),
-        };
+        var configStore = new StubConfigStore();
+        var agentRegistry = new FakeAgentRegistry(agentDef);
+        var authStore = new AuthStore(configStore);
+        var providerRegistry = new FakeProviderRegistry(new ScriptedLlmClient());
+        var legacySlash = new LegacySlashRunner(
+            new SlashCommandDispatcher(
+                NullLogger<SlashCommandDispatcher>.Instance,
+                new FakeToolRegistry(),
+                new FakeSessionStore(),
+                new OnboardingWizard(configStore, authStore),
+                new PermissionService(agentRegistry, NullLogger<PermissionService>.Instance)),
+            agentRegistry,
+            configStore,
+            authStore,
+            providerRegistry);
         var runner = new CellForgeReplRunner(
-            services, agent, sessionModel, session, screen, bridge, input,
+            configStore,
+            providerRegistry,
+            agentRegistry,
+            authStore,
+            sessionStore: null,
+            rendererPipeline: null,
+            bus,
+            tokens: null,
+            legacySlash,
+            agent, sessionModel, session, screen, bridge, input,
             new NullModeController(), backend, NullLogger<CellForgeReplRunner>.Instance,
             new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance));
 
@@ -221,18 +242,7 @@ public class CellForgeReplSmokeTests
             Task.FromResult(Result.Failure<string>("not available in smoke harness"));
     }
 
-    private sealed class MapServiceProvider : IServiceProvider
-    {
-        public Dictionary<Type, object> Map { get; } = [];
-
-        public object? this[Type serviceType]
-        {
-            get => Map.TryGetValue(serviceType, out var value) ? value : null;
-            set => Map[serviceType] = value!;
-        }
-
-        public object? GetService(Type serviceType) => this[serviceType];
-    }
+    // ── Local test infrastructure (CellForge.Tests helpers are internal to that assembly) ──
 }
 
 /// <summary>Fixture plumbing mirroring CellForge.Tests' Golden helper (same fixtures dir).</summary>

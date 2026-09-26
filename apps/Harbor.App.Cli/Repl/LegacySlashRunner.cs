@@ -1,9 +1,12 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Application.Configuration;
+using Harbor.Application.Onboarding;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -15,13 +18,13 @@ namespace Harbor.App.Cli.Repl;
 ///     copy-pasted <c>HandleCoreAsync</c> block with five service lookups each.
 ///     All dependencies resolve ONCE via <see cref="FromServices"/>; per-call
 ///     state (agent, session) travels as arguments because sessions switch
-///     mid-run. The <c>IServiceProvider</c> field is the contained legacy seam —
-///     <c>HandleCoreAsync</c> demands it for <c>IToolRegistry</c>.
+///     mid-run. No held <c>IServiceProvider</c> (#63) — the optional host
+///     services (plugin reload, renderer pipeline) travel inside the
+///     dispatcher as optional ctor deps.
 /// </summary>
 internal sealed class LegacySlashRunner
 {
     private readonly SlashCommandDispatcher _dispatcher;
-    private readonly IServiceProvider _services;
     private readonly IAgentRegistry _agents;
     private readonly IConfigStore _config;
     private readonly AuthStore _auth;
@@ -32,14 +35,12 @@ internal sealed class LegacySlashRunner
 
     public LegacySlashRunner(
         SlashCommandDispatcher dispatcher,
-        IServiceProvider services,
         IAgentRegistry agents,
         IConfigStore config,
         AuthStore auth,
         IProviderRegistry providers)
     {
         _dispatcher = dispatcher;
-        _services = services;
         _agents = agents;
         _config = config;
         _auth = auth;
@@ -48,8 +49,14 @@ internal sealed class LegacySlashRunner
 
     /// <summary>Composition-root factory: single resolution point.</summary>
     public static LegacySlashRunner FromServices(IServiceProvider services) => new(
-        new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>()),
-        services,
+        new SlashCommandDispatcher(
+            services.GetRequiredService<ILogger<SlashCommandDispatcher>>(),
+            services.GetRequiredService<IToolRegistry>(),
+            services.GetRequiredService<ISessionStore>(),
+            services.GetRequiredService<OnboardingWizard>(),
+            services.GetRequiredService<IPermissionService>(),
+            services.GetService<Harbor.Hosting.PluginReloadService>(),
+            services.GetService<Harbor.Hosting.Rendering.IRendererPipeline>()),
         services.GetRequiredService<IAgentRegistry>(),
         services.GetRequiredService<IConfigStore>(),
         services.GetRequiredService<AuthStore>(),
@@ -63,7 +70,7 @@ internal sealed class LegacySlashRunner
         Session session)
     {
         return _dispatcher.HandleCoreAsync(
-            text, _services, writer, reader,
+            text, writer, reader,
             agent, _agents, _config, _auth, _providers, session);
     }
 }

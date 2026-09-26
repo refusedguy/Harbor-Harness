@@ -807,6 +807,10 @@ dotnet-gcdump collect -n harbor
 - [ ] **DIP**: зависимости только через `Harbor.Abstractions` интерфейсы, не через конкретные классы.
 - [ ] **Sealed** по умолчанию. Открытый для наследования класс — явный design decision.
 - [ ] **Encapsulation**: после конструирования объект в валидном состоянии. Никаких `sessionId = "" // populated by caller`.
+- [ ] **No runtime service location** (#63): бизнес-логика берёт зависимости через ctor. `GetRequiredService` / `GetService` вне ctor допустимы только с коротким комментарием-обоснованием:
+  - factory-лямбды DI-модулей и композишн-рут (`Program.cs`, `*Module.cs`, `Use*` extensions) — idiomatic MS DI;
+  - optional-зависимости с graceful fallback (`GetService` + null-handling, никогда `GetRequiredService`);
+  - framework-created инстансы, которым нельзя дать DI (панели через `PanelContext`, XAML-`ViewModelLocator`, контракт `ITuiRenderer.RunInteractiveAsync(agent, host)`).
 
 ### GoF
 

@@ -7,10 +7,10 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
+using Harbor.Application.Onboarding;
+using Harbor.Application.Permissions;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.TestKit;
 
@@ -25,18 +25,23 @@ namespace Harbor.App.Cli.Tests;
 /// </summary>
 public class SlashCommandDispatcherExitTests
 {
-    private static SlashCommandDispatcher CreateDispatcher() =>
-        new(NullLoggerFactory.Instance.CreateLogger<SlashCommandDispatcher>());
+    private static SlashCommandDispatcher CreateDispatcher()
+    {
+        var configStore = new JsonConfigStore();
+        var agents = new FakeAgentRegistry();
+        return new SlashCommandDispatcher(
+            NullLoggerFactory.Instance.CreateLogger<SlashCommandDispatcher>(),
+            new FakeToolRegistry(),
+            new FakeSessionStore(),
+            new OnboardingWizard(configStore, new AuthStore(configStore)),
+            new PermissionService(agents, NullLogger<PermissionService>.Instance));
+    }
 
     private static async Task<SlashCommandOutcome> DispatchAsync(string input)
     {
-        using var sp = new ServiceCollection()
-            .AddSingleton<IToolRegistry>(new FakeToolRegistry())
-            .BuildServiceProvider();
         var dispatcher = CreateDispatcher();
         return await dispatcher.HandleAsync(
             input,
-            sp,
             new FakeRenderer(),
             new FakeAgent(),
             new FakeAgentRegistry(),

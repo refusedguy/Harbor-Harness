@@ -462,8 +462,8 @@ public sealed class SessionManager : ISessionManager
 
         // #49 PR1: single cancellation ingress (null-safe: hosts/tests without
         // the coordinator registered keep the direct cancel).
-        // #63 legitimate: optional dependency — GetService, never
-        // GetRequiredService, so coordinator-less hosts keep working.
+        // #63 legitimate: optional dependency — plain GetService (never the
+        // throwing variant), so coordinator-less hosts keep working.
         var coordinator = _services.GetService<IApprovalCoordinator>();
         if (coordinator is not null)
         {
