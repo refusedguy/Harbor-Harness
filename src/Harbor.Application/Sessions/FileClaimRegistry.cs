@@ -21,6 +21,21 @@ public sealed class FileClaimRegistry : IDisposable
     private readonly ConcurrentDictionary<string, FileClaim> _active = new(StringComparer.Ordinal);
 
     /// <summary>
+    ///     Serializes the steal sequence (check → delete → recreate → verify)
+    ///     between same-process contenders (#57). Without it two contenders
+    ///     can both decide "stealable" off the same seed file, then the loser
+    ///     deletes the winner's fresh file with an unconditional
+    ///     <c>File.Delete</c> and recreates its own — two simultaneous grants.
+    ///     Cross-process interleavings keep advisory semantics (the atomic
+    ///     <c>CreateNew</c> plus post-create verification still apply); the
+    ///     lock only removes the in-process check-then-act hole. Entries are
+    ///     never removed (scope names are bounded by sessions) and the lock
+    ///     covers the steal path only — the fresh-create fast path stays
+    ///     lock-free. Async-compatible (<c>SemaphoreSlim</c>, never a monitor).
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _stealLocks = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Create a registry bound to a claims directory.
     /// </summary>
     /// <param name="directory">Directory holding <c>*.claim</c> files (created on demand).</param>
@@ -58,24 +73,53 @@ public sealed class FileClaimRegistry : IDisposable
         }
 
         // Existing file: readable-but-dead owner past grace ⇒ steal.
+        // The whole steal sequence rides the per-scope lock so same-process
+        // contenders serialize: the first completer's live-pid file makes
+        // every later check refuse (see _stealLocks).
         if (!ShouldSteal(claimPath, out string? failure))
         {
             return Result.Failure<FileClaim>(failure ?? $"Scope '{scope}' is held by another live process.");
         }
 
+        var stealLock = _stealLocks.GetOrAdd(scope, static _ => new SemaphoreSlim(1, 1));
+        await stealLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            File.Delete(claimPath);
-        }
-        catch (IOException)
-        {
-            // Lost the steal race — the stealer that won owns it now.
-        }
+            // Re-check under the lock: a previous holder may have completed
+            // while we queued, and its live-pid file must refuse us now.
+            if (!ShouldSteal(claimPath, out failure))
+            {
+                return Result.Failure<FileClaim>(failure ?? $"Scope '{scope}' is held by another live process.");
+            }
 
-        created = await CreateClaimAsync(scope, claimPath, ct).ConfigureAwait(false);
-        if (created is null)
+            try
+            {
+                File.Delete(claimPath);
+            }
+            catch (IOException)
+            {
+                // Lost the steal race — the stealer that won owns it now.
+            }
+
+            created = await CreateClaimAsync(scope, claimPath, ct).ConfigureAwait(false);
+            if (created is null)
+            {
+                return Result.Failure<FileClaim>($"Lost steal race for scope '{scope}'.");
+            }
+
+            // Post-create verification: confirm the on-disk token is still
+            // ours (a cross-process deleter could have slipped between our
+            // create and now — in-process contenders cannot, they wait on
+            // the lock). A mismatch means we lost: concede without
+            // registering, and never touch the foreign file.
+            if (!OwnsFile(claimPath, created.Token))
+            {
+                return Result.Failure<FileClaim>($"Lost steal race for scope '{scope}'.");
+            }
+        }
+        finally
         {
-            return Result.Failure<FileClaim>($"Lost steal race for scope '{scope}'.");
+            stealLock.Release();
         }
 
         _active[scope] = created;
@@ -100,6 +144,23 @@ public sealed class FileClaimRegistry : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return null;
+        }
+    }
+
+    /// <summary>
+    ///     True when the file at <paramref name="claimPath" /> still carries
+    ///     our <paramref name="token" />. Any I/O failure reads as "not ours"
+    ///     (fail closed — the file vanished or belongs to the winner).
+    /// </summary>
+    private static bool OwnsFile(string claimPath, string token)
+    {
+        try
+        {
+            return File.ReadAllText(claimPath).Contains($"token={token}", StringComparison.Ordinal);
+        }
+        catch (IOException)
+        {
+            return false;
         }
     }
 

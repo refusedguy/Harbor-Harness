@@ -277,8 +277,9 @@ public class FileClaimRegistryTests : IDisposable
     /// <summary>
     /// E2E steal storm: K independent instances hammer one dead-owner claim
     /// past grace. Deterministic outcome for same-process contenders — the
-    /// first recreated stamp carries OUR live pid, freezing all later
-    /// candidates — so at most one simultaneous grant and no leftovers.
+    /// steal sequence is serialized per scope (#57: check → delete → recreate
+    /// → verify under a lock), so the first completer wins and its live-pid
+    /// file makes every later check refuse. Exactly one grant, no leftovers.
     /// </summary>
     [Test]
     public async Task StealStorm_DeadOwner_AtMostOneGrant_NoOrphans()
@@ -314,18 +315,17 @@ public class FileClaimRegistryTests : IDisposable
                     }
                 });
 
-            await Assert.That(winners.Count).IsLessThanOrEqualTo(1);
+            await Assert.That(winners.Count).IsEqualTo(1);
 
             foreach (var w in winners)
             {
                 w.Dispose();
             }
 
-            // Either the lone winner released its own file, or no contender
-            // ever won (kernel-side jitter) and the frozen seed remains —
-            // both states leave at most the one original artifact behind.
+            // The lone winner stole (deleted) the seed and released its own
+            // file on dispose — nothing may remain.
             string[] leftovers = Directory.GetFiles(_dir, "*.claim");
-            await Assert.That(leftovers.Length).IsLessThanOrEqualTo(1);
+            await Assert.That(leftovers.Length).IsEqualTo(0);
         }
         finally
         {
