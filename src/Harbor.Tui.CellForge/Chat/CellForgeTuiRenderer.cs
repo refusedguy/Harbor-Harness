@@ -57,6 +57,14 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     private bool _syncingInput;
 
     /// <summary>
+    ///     Revision of the last applied <see cref="UiStore" /> notification
+    ///     (#94 stale-drop: CAS success and <c>Changed</c> delivery are not
+    ///     atomic across threads, so a delayed notification must not rewind
+    ///     the widgets — see <see cref="UiStateChangedEventArgs.IsStale" />).
+    /// </summary>
+    private long _lastProjectedRevision;
+
+    /// <summary>
     /// CF-E-002 wiring (TOP-1 #27): renderer-owned panel registry holding the 7
     /// cell-native builtin providers (see <see cref="RegisterBuiltinPanels"/>).
     /// Registration order is significant — Alt+1..9 hotkey slots follow it.
@@ -158,6 +166,9 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     private void OnStoreChanged(object? sender, UiStateChangedEventArgs e)
     {
+        if (e.IsStale(_lastProjectedRevision))
+            return;
+        _lastProjectedRevision = e.Revision;
         ProjectStateIntoWidgets(e.State);
     }
 
@@ -220,9 +231,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         if (_chatVm is ChatHistoryViewModel chvm)
         {
             chvm.IsStreaming = state.IsStreaming;
-            chvm.StreamingText = state.Active.TextBuffer;
-            chvm.ThinkingText = state.Active.ThinkBuffer;
-            chvm.IsThinking = state.Active.ThinkBuffer.Length != 0;
+            // Visible streaming text includes unflushed pending deltas (#94):
+            // Concat returns the synced prefix itself when nothing is pending.
+            chvm.StreamingText = StreamingSync.Concat(state.Active.TextBuffer, state.PendingStreamText);
+            chvm.ThinkingText = StreamingSync.Concat(state.Active.ThinkBuffer, state.PendingStreamThink);
+            chvm.IsThinking = chvm.ThinkingText.Length != 0;
         }
 
         SyncInputFromState(state);
