@@ -34,7 +34,7 @@ The list below is the **ruthless, ship-first** ranking. Each entry has:
 | 9  | Agent pet mascot that reacts to agent state        | 4      | S      | Orca          | ❌ |
 | 10 | Markdown rich editor (TipTap) with code blocks     | 5      | L      | Orca          | ⚠️ partial (renderer, no editor) |
 | 11 | Image preview inline in chat                       | 4      | M      | Opencode, Kilo | ❌ |
-| 12 | Skill freshness pill (update available)            | 3      | S      | Orca          | ❌ |
+| 12 | Skill freshness pill (update available)            | 3      | S      | Orca          | ⚠️ partial (pure `SkillFreshnessModel` + `CellForgeSkillFreshnessPanel`, host seeding pending) |
 | 13 | Setup-guide progress ring + checklist              | 4      | M      | Orca          | ✅ R28 (onboarding wizard with stepper) |
 | 14 | Dictation / speech-to-text input                   | 3      | L      | Orca (sherpa) | ❌ |
 | 15 | Browser/markup overlay for screenshots             | 4      | L      | Orca          | ❌ |
@@ -1067,6 +1067,13 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** S (2 hours)
 - **Priority:** P2
 - **Dependencies:** Plugin version metadata
+- **Status:** Slice 1 landed (`feat/23-small-slice`, issue #23): pure
+  `SkillFreshnessModel` (`Harbor.Ui.Framework.Projection`, entry = name +
+  installed/locked hashes, `✓/●/?/✗` pills) with TUnit coverage
+  (`SkillFreshnessTests`); `PanelRows.SkillFreshnessRows` shared row builder;
+  `CellForgeSkillFreshnessPanel` (`skill-freshness`, Right/40, pure, host opt-in —
+  deliberately unregistered so the 9-panel Alt+1..9 slot order stays pinned).
+  Pending: host seeding (installed hashes vs `skills-lock.json`), renderer slot.
 
 ---
 

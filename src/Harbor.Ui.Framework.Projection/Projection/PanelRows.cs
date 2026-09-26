@@ -282,6 +282,38 @@ public static class PanelRows
         return rows;
     }
 
+    /// <summary>Skill-freshness rows: header, one pill row per skill, stale summary.</summary>
+    public static List<string> SkillFreshnessRows(IReadOnlyList<SkillFreshnessEntry> skills)
+    {
+        ArgumentNullException.ThrowIfNull(skills);
+        var rows = new List<string>(skills.Count + 5);
+        rows.Add($"Skills ({skills.Count})");
+        rows.Add(PanelText.Separator);
+        if (skills.Count == 0)
+        {
+            rows.Add("No skills installed.");
+            rows.Add("Drop a SKILL.md in .harbor/skills/ to add one.");
+        }
+        else
+        {
+            int stale = 0;
+            for (int i = 0; i < skills.Count; i++)
+            {
+                if (skills[i].IsStale)
+                {
+                    stale++;
+                }
+
+                rows.Add($"{skills[i].PillText}  {skills[i].Name}");
+            }
+
+            rows.Add(PanelText.Separator);
+            rows.Add(stale == 0 ? "All skills up to date." : $"{stale} need attention (sync skills-lock.json).");
+        }
+
+        return rows;
+    }
+
     private static string ShortenCategory(string category)
     {
         if (string.IsNullOrEmpty(category))
