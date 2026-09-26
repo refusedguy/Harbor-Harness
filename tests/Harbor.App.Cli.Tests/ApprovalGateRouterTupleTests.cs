@@ -45,12 +45,13 @@ public class ApprovalGateRouterTupleTests
 
         await Assert.That(router.TryRouteApprovalKey(KeyEvent.Char(new System.Text.Rune('y')))).IsTrue();
 
+        // The winning stamp was recorded: a late twin is AlreadyDecided, not a second accept.
+        // (Before the waiter consumes the gate — WaitForDecisionAsync forgets it on consume.)
+        await Assert.That(coordinator.DecideApproval(gate.Id, "inv-1", 1, Approve()))
+            .IsEqualTo(ApprovalDecisionDisposition.AlreadyDecided);
         var outcome = await wait;
         await Assert.That(outcome).IsNotNull();
         await Assert.That(outcome!.Approved).IsTrue();
-        // The winning stamp was recorded: a late twin is AlreadyDecided, not a second accept.
-        await Assert.That(coordinator.DecideApproval(gate.Id, "inv-1", 1, Approve()))
-            .IsEqualTo(ApprovalDecisionDisposition.AlreadyDecided);
     }
 
     [Test]
