@@ -16,7 +16,9 @@ internal sealed class StubAgent : IAgent
     private readonly List<Func<AgentEvent, CancellationToken, ValueTask>> _listeners = new();
     private readonly object _listenersLock = new();
 
-    public CancellationTokenSource AbortSource { get; private set; } = new();
+    public CancellationToken AbortToken => _abortSource.Token;
+    public void RequestAbort() => _abortSource.Cancel();
+    private CancellationTokenSource _abortSource = new();
     public AgentState State { get; private set; } = null!;
     public string? LastPrompt { get; private set; }
     public string? LastSessionId { get; private set; }
@@ -49,9 +51,9 @@ internal sealed class StubAgent : IAgent
     /// </summary>
     public void ResetAbortSource()
     {
-        if (!AbortSource.IsCancellationRequested) return;
-        var old = AbortSource;
-        AbortSource = new CancellationTokenSource();
+        if (!_abortSource.IsCancellationRequested) return;
+        var old = _abortSource;
+        _abortSource = new CancellationTokenSource();
         old.Dispose();
     }
 
@@ -72,7 +74,7 @@ internal sealed class StubAgent : IAgent
 
     public void Dispose()
     {
-        AbortSource.Dispose();
+        _abortSource.Dispose();
     }
 
     internal async ValueTask PublishAsync(AgentEvent evt, CancellationToken ct)

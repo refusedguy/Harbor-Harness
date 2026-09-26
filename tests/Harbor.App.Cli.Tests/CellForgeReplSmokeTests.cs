@@ -141,7 +141,9 @@ public class CellForgeReplSmokeTests
             State = AgentState.Idle(sessionId, placeholderDef);
         }
 
-        public CancellationTokenSource AbortSource { get; } = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
+        private readonly CancellationTokenSource _abortSource = new();
         public AgentState State { get; private set; }
 
         public void Initialize(Session session, AgentDefinition agent)
@@ -199,7 +201,7 @@ public class CellForgeReplSmokeTests
         {
         }
 
-        public void Dispose() => AbortSource.Dispose();
+        public void Dispose() => _abortSource.Dispose();
     }
 
     private sealed class StubConfigStore : IConfigStore

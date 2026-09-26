@@ -123,6 +123,8 @@ internal static class TuiModule
         // DI-shared UiStore. It must be registered here (CLI composition
         // root) — previously only Avalonia registered it, so the CLI host
         // always passed null and restore-across-swap was silently dead.
+        // Renderers keep their own private stores; the pipeline reads this
+        // shared snapshot, never writes it.
         services.AddSingleton<UiStore>();
 
         // Phase 6.3: hot-swappable renderer runtime. The pipeline owns the

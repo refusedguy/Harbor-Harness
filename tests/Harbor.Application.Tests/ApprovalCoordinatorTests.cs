@@ -14,7 +14,9 @@ public class ApprovalCoordinatorTests
 {
     private sealed class FakeRunner : IAgentRunner
     {
-        public CancellationTokenSource AbortSource { get; } = new();
+        private readonly CancellationTokenSource _abortSource = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
         public Task<Result> PromptAsync(string text, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
         public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
@@ -86,7 +88,7 @@ public class ApprovalCoordinatorTests
 
         var outcome = await wait;
         await Assert.That(outcome).IsNull(); // fail closed → asker maps to Deny
-        await Assert.That(runner.AbortSource.IsCancellationRequested).IsTrue();
+        await Assert.That(runner.AbortToken.IsCancellationRequested).IsTrue();
     }
 
     [Test]
@@ -120,7 +122,7 @@ public class ApprovalCoordinatorTests
         // the tool executes with a cancelled token (existing ToolDispatcher path).
         var outcome = await wait;
         await Assert.That(outcome!.Approved).IsTrue();
-        await Assert.That(runner.AbortSource.IsCancellationRequested).IsTrue();
+        await Assert.That(runner.AbortToken.IsCancellationRequested).IsTrue();
     }
 
     [Test]
@@ -132,7 +134,7 @@ public class ApprovalCoordinatorTests
         coordinator.RequestCancel(runner);
         coordinator.RequestCancel(runner);
 
-        await Assert.That(runner.AbortSource.IsCancellationRequested).IsTrue();
+        await Assert.That(runner.AbortToken.IsCancellationRequested).IsTrue();
     }
 
     [Test]
@@ -162,7 +164,7 @@ public class ApprovalCoordinatorTests
                 await Assert.That(outcome).IsNull();
             }
 
-            await Assert.That(runner.AbortSource.IsCancellationRequested).IsTrue();
+            await Assert.That(runner.AbortToken.IsCancellationRequested).IsTrue();
         }
     }
 

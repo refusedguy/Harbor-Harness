@@ -31,6 +31,9 @@ internal sealed class StubHarborClient : IHarborClient
 
     public bool IsConnected { get; private set; }
 
+    /// <summary>Last <c>sinceSequence</c> cursor passed to <see cref="SubscribeToEventsAsync" />.</summary>
+    public ulong? LastSinceSequence { get; private set; }
+
     public Session? BoundSession { get; set; }
 
     /// <summary>Blocks subsequent <see cref="SendPromptAsync" /> calls until released.</summary>
@@ -140,8 +143,9 @@ internal sealed class StubHarborClient : IHarborClient
         => Task.FromResult(Result.Success<IReadOnlyList<ToolDescriptor>>([]));
 
     public async IAsyncEnumerable<HarborEvent> SubscribeToEventsAsync(
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default, ulong? sinceSequence = null)
     {
+        LastSinceSequence = sinceSequence;
         await foreach (HarborEvent evt in _events.Reader.ReadAllAsync(ct).ConfigureAwait(false))
         {
             yield return evt;

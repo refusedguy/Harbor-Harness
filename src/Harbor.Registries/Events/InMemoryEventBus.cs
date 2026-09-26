@@ -169,14 +169,24 @@ public sealed class InMemoryEventBus : IEventBus
     /// <inheritdoc />
     public async Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        _logger.LogDebug("Publishing event: {EventType}", @event.GetType().Name);
-
         // ── Fast path: nothing to retain, nobody to notify, nothing to filter.
         //    Returns before touching any collection — zero allocation, and the
         //    async state machine completes synchronously (cached task).
+        //    NOTE (#97 per-delta): the Debug log below must stay AFTER this
+        //    check. LogDebug evaluates @event.GetType().Name + the params
+        //    object[] eagerly even when Debug is off, which allocated on EVERY
+        //    publish (one per streaming delta) and broke the zero-alloc claim.
         if (_middlewares.Count == 0 && _maxScrollback == 0 && _subscriptions.IsEmpty)
         {
             return;
+        }
+
+        // Guarded with IsEnabled — same hot-path pattern as AgentLoop
+        // (per-stream-event Trace guard) and ToolDispatcher (GetRawText guard):
+        // avoids the params-array + GetType().Name allocation when Debug is off.
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("Publishing event: {EventType}", @event.GetType().Name);
         }
 
         // ── Middleware pipeline (BEFORE scrollback + fan-out) ──

@@ -350,7 +350,9 @@ public class DecoratorTelemetryTests : IDisposable
     {
         public AgentState State { get; private set; } = null!;
 
-        public CancellationTokenSource AbortSource { get; } = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
+        private readonly CancellationTokenSource _abortSource = new();
 
         public void ResetAbortSource()
         {

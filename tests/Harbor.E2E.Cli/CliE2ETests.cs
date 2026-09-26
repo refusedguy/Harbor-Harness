@@ -54,15 +54,16 @@ public class CliE2ETests : E2eTestBase
     }
 
     /// <summary>
-    ///     <c>harbor tui</c> lists every TUI renderer name so the user can
-    ///     pick one via <c>HARBOR_TUI</c>.
+    ///     <c>harbor tui --help</c> lists every TUI renderer name so the user can
+    ///     pick one via <c>HARBOR_TUI</c>. (Bare <c>harbor tui</c> attaches to a
+    ///     running daemon instead — see serve/tui verbs.)
     /// </summary>
     [Test]
     [Category("E2E")]
     public async Task TuiCommand_ListsAllRenderers()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(["tui"], this.GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["tui", "--help"], this.GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 

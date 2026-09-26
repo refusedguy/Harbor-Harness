@@ -152,7 +152,10 @@ public sealed class JsonlSessionStore : ISessionStore
     {
         // §3.4: observe cancellation BEFORE the existence policy.
         ct.ThrowIfCancellationRequested();
-        string sessionFile = GetSessionFilePath(sessionId);
+        var resolved = TryResolveSessionFile(sessionId);
+        if (resolved.IsFailure)
+            return Result.Failure<Session>(resolved.Error);
+        string sessionFile = resolved.Value;
         if (!File.Exists(sessionFile))
             return Result.Failure<Session>($"Session '{sessionId}' not found.");
 
@@ -223,7 +226,10 @@ public sealed class JsonlSessionStore : ISessionStore
         // §3.4: observe cancellation BEFORE the existence policy — an Esc must
         // never surface as "session not found".
         ct.ThrowIfCancellationRequested();
-        string sessionFile = GetSessionFilePath(sessionId);
+        var resolved = TryResolveSessionFile(sessionId);
+        if (resolved.IsFailure)
+            return Result.Failure(resolved.Error);
+        string sessionFile = resolved.Value;
         if (!File.Exists(sessionFile))
         {
             _messageCache.TryRemove(sessionId, out _);
@@ -271,7 +277,10 @@ public sealed class JsonlSessionStore : ISessionStore
         // §3.4: observe cancellation BEFORE the existence policy — an Esc must
         // never surface as "session not found".
         ct.ThrowIfCancellationRequested();
-        string sessionFile = GetSessionFilePath(sessionId);
+        var resolved = TryResolveSessionFile(sessionId);
+        if (resolved.IsFailure)
+            return Task.FromResult(Result.Failure(resolved.Error));
+        string sessionFile = resolved.Value;
         if (!File.Exists(sessionFile))
         {
             _messageCache.TryRemove(sessionId, out _);
@@ -315,7 +324,7 @@ public sealed class JsonlSessionStore : ISessionStore
                     JsonlMessageCodec.SerializeMessagePayload(message));
 
                 kept.Add(JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry));
-                File.WriteAllLines(sessionFile, kept);
+                WriteAllLinesAtomic(sessionFile, kept);
             }
             finally
             {
@@ -396,7 +405,10 @@ public sealed class JsonlSessionStore : ISessionStore
     {
         // §3.4: observe cancellation BEFORE the existence policy.
         ct.ThrowIfCancellationRequested();
-        string sessionFile = GetSessionFilePath(sessionId);
+        var resolved = TryResolveSessionFile(sessionId);
+        if (resolved.IsFailure)
+            return Result.Failure<IReadOnlyList<AgentMessage>>(resolved.Error);
+        string sessionFile = resolved.Value;
         if (!File.Exists(sessionFile))
         {
             _messageCache.TryRemove(sessionId, out _);
@@ -442,12 +454,15 @@ public sealed class JsonlSessionStore : ISessionStore
     /// </remarks>
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
     {
+        var resolved = TryResolveSessionFile(sessionId);
+        if (resolved.IsFailure)
+            return Task.FromResult(Result.Failure(resolved.Error));
         return Result.Try(async () =>
         {
             ct.ThrowIfCancellationRequested();
             _messageCache.TryRemove(sessionId, out _);
 
-            string sessionFile = GetSessionFilePath(sessionId);
+            string sessionFile = resolved.Value;
             if (!File.Exists(sessionFile))
             {
                 throw new InvalidOperationException($"Session '{sessionId}' not found.");
@@ -481,6 +496,9 @@ public sealed class JsonlSessionStore : ISessionStore
     /// </summary>
     public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
     {
+        var resolved = TryResolveSessionFile(sessionId);
+        if (resolved.IsFailure)
+            return Task.FromResult(Result.Failure<int>(resolved.Error));
         return Result.Try(async () =>
         {
             ct.ThrowIfCancellationRequested();
@@ -490,7 +508,7 @@ public sealed class JsonlSessionStore : ISessionStore
             await semaphore.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                string sessionFile = GetSessionFilePath(sessionId);
+                string sessionFile = resolved.Value;
                 string[] lines = File.ReadAllLines(sessionFile);
 
                 int anchorLine = -1;
@@ -534,7 +552,7 @@ public sealed class JsonlSessionStore : ISessionStore
 
                 if (removed > 0)
                 {
-                    File.WriteAllLines(sessionFile, kept);
+                    WriteAllLinesAtomic(sessionFile, kept);
                 }
             }
             finally
@@ -613,7 +631,10 @@ public sealed class JsonlSessionStore : ISessionStore
     {
         // §3.4: observe cancellation BEFORE the existence policy.
         ct.ThrowIfCancellationRequested();
-        string sessionFile = GetSessionFilePath(session.Id);
+        var resolved = TryResolveSessionFile(session.Id);
+        if (resolved.IsFailure)
+            return Result.Failure(resolved.Error);
+        string sessionFile = resolved.Value;
         if (!File.Exists(sessionFile))
             return Result.Failure($"Session '{session.Id}' not found.");
 
@@ -647,7 +668,7 @@ public sealed class JsonlSessionStore : ISessionStore
                     session.GitIsDirty);
 
                 lines[0] = JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry);
-                File.WriteAllLines(sessionFile, lines);
+                WriteAllLinesAtomic(sessionFile, lines);
             }
             finally
             {
@@ -689,6 +710,9 @@ public sealed class JsonlSessionStore : ISessionStore
         var errors = new List<string>(capacity: 0);
 
         long fileLength = new FileInfo(sessionFile).Length;
+        if (fileLength > int.MaxValue)
+            return Result.Failure<IReadOnlyList<AgentMessage>>(
+                $"Session file too large ({fileLength} bytes); refusing unbounded read.");
         byte[] buffer = ArrayPool<byte>.Shared.Rent((int)Math.Max(fileLength, 1));
         try
         {
@@ -760,6 +784,68 @@ public sealed class JsonlSessionStore : ISessionStore
 
     private string GetSessionFilePath(string sessionId) =>
         Path.Combine(_rootDirectory, $"{sessionId}.jsonl");
+
+    /// <summary>
+    ///     Issue #83: session ids come from callers/CLI and must never escape
+    ///     the store root. Only <c>[A-Za-z0-9_-]</c> (max 128 chars) is
+    ///     accepted — everything else (<c>../</c>, absolute paths, separators)
+    ///     fails before any <c>File.*</c> call. Fresh ids from
+    ///     <see cref="Session.Create" /> (Guid "N") always satisfy this.
+    /// </summary>
+    private static bool IsValidSessionId(string? sessionId)
+    {
+        if (string.IsNullOrEmpty(sessionId) || sessionId.Length > 128)
+            return false;
+        for (int i = 0; i < sessionId.Length; i++)
+        {
+            char c = sessionId[i];
+            bool ok = (c >= 'A' && c <= 'Z')
+                || (c >= 'a' && c <= 'z')
+                || (c >= '0' && c <= '9')
+                || c == '-' || c == '_';
+            if (!ok)
+                return false;
+        }
+        return true;
+    }
+
+    private Result<string> TryResolveSessionFile(string? sessionId)
+    {
+        if (!IsValidSessionId(sessionId))
+            return Result.Failure<string>($"Invalid session id '{sessionId}'.");
+        return Result.Success(GetSessionFilePath(sessionId!));
+    }
+
+    /// <summary>
+    ///     Issue #83: crash-safe full-file rewrite. Content goes to a temp
+    ///     file in the SAME directory, then <c>File.Move(overwrite: true)</c>
+    ///     renames it over the target — same-volume rename is atomic, so a
+    ///     crash leaves either the old file or the new file, never a
+    ///     half-written one. A leftover temp is removed on failure.
+    /// </summary>
+    private static void WriteAllLinesAtomic(string targetPath, IReadOnlyList<string> lines)
+    {
+        string directory = Path.GetDirectoryName(targetPath)!;
+        string tempPath = Path.Combine(directory, $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.WriteAllLines(tempPath, lines);
+            File.Move(tempPath, targetPath, overwrite: true);
+        }
+        catch
+        {
+            try
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Best-effort temp cleanup; the original exception below is what matters.
+            }
+            throw;
+        }
+    }
 
     /// <summary>
     ///     Real last-activity timestamp for a session. Legacy files written

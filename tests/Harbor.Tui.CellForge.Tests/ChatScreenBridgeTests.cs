@@ -538,4 +538,24 @@ public class ChatScreenBridgeTests
         await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("recovered"), IsError: false));
         await Assert.That(status.Retry).IsNull();
     }
+
+    [Test]
+    public async Task ManualPump_PublishesNothingUntilAcceptAsync()
+    {
+        // Issue #81: with autoSubscribe:false the bus publisher thread never
+        // touches the timeline — the driven host pumps events through
+        // AcceptAsync on the render thread instead.
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel { Model = "m" };
+        using var bridge = new ChatScreenBridge(bus, panel, status, autoSubscribe: false);
+
+        await bus.PublishAsync(new AgentStartEvent("s1", [UserMsg("s1", "hi there")]));
+        await Assert.That(panel.Timeline.Count).IsEqualTo(0);
+
+        await bridge.AcceptAsync(new AgentStartEvent("s1", [UserMsg("s1", "hi there")]));
+        await Assert.That(panel.Timeline.Count).IsEqualTo(1);
+        await Assert.That(panel.Timeline.BlockAt(0).Kind).IsEqualTo("user");
+        await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Running);
+    }
 }

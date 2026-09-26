@@ -307,4 +307,25 @@ public class RegistrationCompositionTests
         public void ExitAlternateScreen() { }
         public void Flush() { }
     }
+
+    // ── Issue #77: shared UiStore for pipeline snapshot-restore ──────────
+
+    [Test]
+    public async Task AddHarbor_RegistersSharedUiStore_ForRendererPipelineSnapshotRestore()
+    {
+        using var sp = Compose(new HarborComposeOptions
+        {
+            HarborDir = TempHarborDir(),
+            DefaultStorageBackend = "memory",
+            DefaultTuiRenderer = "plain",
+        });
+
+        // The CLI host never registered UiStore (only Avalonia did), so the
+        // RendererPipeline always received null and snapshot-restore across
+        // renderer swaps was silently dead. Both must resolve from the same
+        // composed container.
+        await Assert.That(sp.GetRequiredService<UiStore>()).IsNotNull();
+        await Assert.That(sp.GetRequiredService<UiStore>()).IsSameReferenceAs(sp.GetRequiredService<UiStore>());
+        await Assert.That(sp.GetRequiredService<IRendererPipeline>()).IsNotNull();
+    }
 }
