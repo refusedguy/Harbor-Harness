@@ -1,7 +1,9 @@
 using System.Text.Json;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
+using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Core.Tests;
@@ -237,5 +239,149 @@ public class PermissionServiceTests
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
+    }
+
+    /// <summary>
+    ///     Config store whose load blocks on a gate (#82 regression harness).
+    ///     A blocking ctor would hang construction until <see cref="Release" />.
+    /// </summary>
+    private sealed class GatedConfigStore : IConfigStore
+    {
+        private readonly TaskCompletionSource<bool> _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly HarborConfig _config;
+
+        public GatedConfigStore(HarborConfig config) => _config = config;
+
+        public int LoadCalls { get; private set; }
+
+        public void Release() => _gate.TrySetResult(true);
+
+        public async Task<Result<HarborConfig>> LoadAsync(CancellationToken ct = default)
+        {
+            LoadCalls++;
+            await _gate.Task.WaitAsync(ct).ConfigureAwait(false);
+            return Result.Success(_config);
+        }
+
+        public Task<Result> SaveAsync(HarborConfig config, CancellationToken ct = default) =>
+            Task.FromResult(Result.Success());
+
+        public Task<Result> UpdateAsync(Func<HarborConfig, HarborConfig> updater, CancellationToken ct = default) =>
+            Task.FromResult(Result.Success(updater(_config)));
+
+        public Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default) =>
+            Task.FromResult(Result.Failure<string>($"No API key for '{providerId}'."));
+    }
+
+    private static HarborConfig ConfigWith(params PermissionRule[] persisted)
+    {
+        var config = new HarborConfig { Provider = "kilocode", Model = "test-model" };
+        config.Permissions["code"] = new List<PermissionRule>(persisted);
+        return config;
+    }
+
+    [Test]
+    public async Task Ctor_WithSlowConfigStore_ReturnsWithoutBlocking()
+    {
+        var registry = new AgentRegistry();
+        registry.Register(AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
+        var store = new GatedConfigStore(ConfigWith(new PermissionRule("read", "*", PermissionAction.Allow)));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var ctorTask = Task.Run(
+            () => new PermissionService(registry, NullLogger<PermissionService>.Instance, configStore: store),
+            CancellationToken.None);
+        var firstDone = await Task.WhenAny(ctorTask, Task.Delay(TimeSpan.FromSeconds(5), CancellationToken.None)).ConfigureAwait(false);
+
+        await Assert.That(ReferenceEquals(firstDone, ctorTask)).IsTrue();
+        var svc = await ctorTask.ConfigureAwait(false);
+        await Assert.That(store.LoadCalls).IsEqualTo(1);
+        store.Release();
+        _ = await svc.SaveAsync(cts.Token).ConfigureAwait(false);
+    }
+
+    [Test]
+    public async Task CheckAsync_WaitsForBackgroundPersistedLoad()
+    {
+        var registry = new AgentRegistry();
+        registry.Register(AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)));
+        var store = new GatedConfigStore(ConfigWith(new PermissionRule("bash", "make build", PermissionAction.Allow)));
+        var svc = new PermissionService(registry, NullLogger<PermissionService>.Instance, configStore: store);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var checkTask = svc.CheckAsync("code", "bash", Args(("command", "make build")), cts.Token);
+        await Task.Delay(TimeSpan.FromMilliseconds(50), CancellationToken.None).ConfigureAwait(false);
+        store.Release();
+        var result = await checkTask.ConfigureAwait(false);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
+    }
+
+    [Test]
+    public async Task CreateAsync_LoadsPersistedRulesBeforeReturning()
+    {
+        var registry = new AgentRegistry();
+        registry.Register(AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
+        var store = new GatedConfigStore(ConfigWith(new PermissionRule("bash", "make *", PermissionAction.Allow)));
+        store.Release();
+
+        var svc = await PermissionService.CreateAsync(
+            registry, NullLogger<PermissionService>.Instance, configStore: store).ConfigureAwait(false);
+        var ruleset = svc.GetRuleset("code");
+
+        await Assert.That(ruleset.Evaluate("bash", "make build")).IsEqualTo(PermissionAction.Allow);
+        await Assert.That(ruleset.Evaluate("read", "any.txt")).IsEqualTo(PermissionAction.Allow);
+    }
+
+    [Test]
+    public async Task AskUserAsync_CancelledCaller_ThrowsInsteadOfDeny()
+    {
+        Task<PermissionResponse> CancelledAsker(PermissionRequest req, CancellationToken ct) =>
+            Task.FromCanceled<PermissionResponse>(ct);
+
+        var (svc, _) = CreateService(
+            AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)),
+            CancelledAsker);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var request = new PermissionRequest("bash", "*", JsonDocument.Parse("{}").RootElement, Array.Empty<string>());
+
+        Exception? caught = null;
+        try
+        {
+            _ = await svc.AskUserAsync(request, cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex)
+        {
+            caught = ex;
+        }
+
+        await Assert.That(caught).IsNotNull();
+    }
+
+    [Test]
+    public async Task CheckAsync_CancelledCaller_PropagatesCancellation()
+    {
+        Task<PermissionResponse> CancelledAsker(PermissionRequest req, CancellationToken ct) =>
+            Task.FromCanceled<PermissionResponse>(ct);
+
+        var (svc, _) = CreateService(
+            AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)),
+            CancelledAsker);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Exception? caught = null;
+        try
+        {
+            _ = await svc.CheckAsync("code", "bash", Args(("command", "make build")), cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex)
+        {
+            caught = ex;
+        }
+
+        await Assert.That(caught).IsNotNull();
     }
 }
