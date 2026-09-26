@@ -44,19 +44,6 @@ public sealed class KeyHandler
         // only translates the native key into UiKey and dispatches.
         var action = _keyMap.Resolve(key);
 
-<<<<<<< HEAD
-=======
-        // Ctrl+L → clear (most terminals report it as a character).
-        if (key.Code == UiKeyCode.Char && key.Character == 'l' && key.Mods.HasFlag(KeyModifierSet.Ctrl))
-            action = ChatAction.Clear;
-        else if (key.Code == UiKeyCode.Char && key.Character == 'c' && key.Mods.HasFlag(KeyModifierSet.Ctrl))
-            action = ChatAction.Abort;
-        else if (key.Code == UiKeyCode.Char && key.Character == 'j' && key.Mods.HasFlag(KeyModifierSet.Ctrl))
-            action = ChatAction.JumpPalette;
-        else if (key.Code == UiKeyCode.Char && key.Character == '?')
-            action = ChatAction.HelpPanel;
-
->>>>>>> origin/dev
         if (action == ChatAction.None)
             return new TuiEffect.None();
 
