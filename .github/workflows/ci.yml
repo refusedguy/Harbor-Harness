@@ -112,6 +112,14 @@ jobs:
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version
 
+      # Advisory report only: surfaces `dotnet list package --vulnerable`
+      # output (NU190x advisories) on every PR without failing the build.
+      # continue-on-error is intentional — see "Dependency & advisory policy"
+      # in docs/DEVELOPMENT.md. Failing on advisories is deferred (issue #25).
+      - name: Report vulnerable packages (non-blocking)
+        continue-on-error: true
+        run: dotnet list Harbor.slnx package --vulnerable --include-transitive
+
       - name: Upload architecture-gate log
         if: always()
         uses: actions/upload-artifact@v7
