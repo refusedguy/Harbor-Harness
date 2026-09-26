@@ -479,7 +479,20 @@ public sealed record PermissionRequest(
     string Permission,
     string Pattern,
     JsonElement Args,
-    IReadOnlyList<string> AlwaysOptions);
+    IReadOnlyList<string> AlwaysOptions)
+{
+    /// <summary>
+    ///     Create a request from possibly short-lived <see cref="JsonElement" />
+    ///     args. The args are cloned so the request owns them beyond the source
+    ///     <see cref="JsonDocument" /> lifetime (#87).
+    /// </summary>
+    public static PermissionRequest Create(
+        string permission,
+        string pattern,
+        JsonElement args,
+        IReadOnlyList<string> alwaysOptions) =>
+        new(permission, pattern, args.ValueKind == JsonValueKind.Undefined ? args : args.Clone(), alwaysOptions);
+}
 
 /// <summary>
 ///     The user's response to a <see cref="PermissionRequest" />.
