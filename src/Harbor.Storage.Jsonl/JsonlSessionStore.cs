@@ -288,13 +288,22 @@ public sealed class JsonlSessionStore : ISessionStore
 
                 string[] lines = File.ReadAllLines(sessionFile);
                 var kept = new List<string>(lines.Length + 1);
+                bool found = false;
 
                 foreach (var line in lines)
                 {
-                    if (!IsMessageEntryWithId(line, message.Id))
+                    if (IsMessageEntryWithId(line, message.Id))
                     {
-                        kept.Add(line);
+                        found = true;
+                        continue;
                     }
+                    kept.Add(line);
+                }
+
+                if (!found)
+                {
+                    throw new InvalidOperationException(
+                        $"Message '{message.Id}' not found in session '{sessionId}'.");
                 }
 
                 var entry = new MessageEntry(
@@ -438,11 +447,16 @@ public sealed class JsonlSessionStore : ISessionStore
             ct.ThrowIfCancellationRequested();
             _messageCache.TryRemove(sessionId, out _);
 
+            string sessionFile = GetSessionFilePath(sessionId);
+            if (!File.Exists(sessionFile))
+            {
+                throw new InvalidOperationException($"Session '{sessionId}' not found.");
+            }
+
             var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
             await semaphore.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                string sessionFile = GetSessionFilePath(sessionId);
                 if (File.Exists(sessionFile))
                 {
                     File.Delete(sessionFile);

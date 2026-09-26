@@ -311,6 +311,94 @@ public class SqliteSessionStoreTests
     }
 
     [Test]
+    public async Task DeleteAsync_UnknownId_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var result = await store.DeleteAsync("nonexistent");
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task UpdateMessageAsync_UnknownMessage_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
+            var ghost = NewUserMessage(session.Id, "ghost");
+            var result = await store.UpdateMessageAsync(session.Id, ghost);
+            await Assert.That(result.IsFailure).IsTrue();
+
+            var messages = await store.GetMessagesAsync(session.Id);
+            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages.Value.Count).IsEqualTo(0);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task UpdateMessageAsync_UnknownSession_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var msg = NewUserMessage("nonexistent", "hello");
+            var result = await store.UpdateMessageAsync("nonexistent", msg);
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task GetMessagesAsync_UnknownSession_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var result = await store.GetMessagesAsync("nonexistent");
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task UpdateStatsAsync_UnknownSession_ReturnsFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var result = await store.UpdateStatsAsync("nonexistent", SessionMetadata.Empty);
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+}
+    {
+    [Test]
     public async Task AppendMessageAsync_UpdatesSessionTimestamp()
     {
         var store = Create(out string dbPath);

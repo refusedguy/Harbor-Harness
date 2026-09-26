@@ -65,10 +65,9 @@ public sealed class MemorySessionStore : ISessionStore
         lock (list)
         {
             int idx = list.FindIndex(m => m.Id == message.Id);
-            if (idx >= 0)
-                list[idx] = message;
-            else
-                list.Add(message);
+            if (idx < 0)
+                return Task.FromResult(Result.Failure($"Message '{message.Id}' not found in session '{sessionId}'."));
+            list[idx] = message;
         }
         return Task.FromResult(Result.Success());
     }
@@ -87,6 +86,8 @@ public sealed class MemorySessionStore : ISessionStore
 
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
     {
+        if (!_sessions.ContainsKey(sessionId))
+            return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
         _sessions.TryRemove(sessionId, out _);
         _messages.TryRemove(sessionId, out _);
         return Task.FromResult(Result.Success());

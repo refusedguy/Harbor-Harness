@@ -154,11 +154,11 @@ public class MemorySessionStoreTests
     }
 
     [Test]
-    public async Task DeleteAsync_UnknownId_StillSucceeds()
+    public async Task DeleteAsync_UnknownId_ReturnsFailure()
     {
         var store = Create();
         var result = await store.DeleteAsync("nonexistent");
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.IsFailure).IsTrue();
     }
 
     [Test]
@@ -190,6 +190,28 @@ public class MemorySessionStoreTests
         var messages = await store.GetMessagesAsync(session.Id);
         await Assert.That(messages.Value.Count).IsEqualTo(1);
         await Assert.That(((UserMessage)messages.Value[0]).Content).IsEqualTo("edited");
+    }
+
+    [Test]
+    public async Task UpdateMessageAsync_UnknownSession_ReturnsFailure()
+    {
+        var store = Create();
+        var msg = NewUserMessage("nonexistent", "hello");
+        var result = await store.UpdateMessageAsync("nonexistent", msg);
+        await Assert.That(result.IsFailure).IsTrue();
+    }
+
+    [Test]
+    public async Task UpdateMessageAsync_UnknownMessage_ReturnsFailure()
+    {
+        var store = Create();
+        var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
+        var msg = NewUserMessage(session.Id, "ghost");
+        var result = await store.UpdateMessageAsync(session.Id, msg);
+        await Assert.That(result.IsFailure).IsTrue();
+
+        var messages = await store.GetMessagesAsync(session.Id);
+        await Assert.That(messages.Value.Count).IsEqualTo(0);
     }
 
     [Test]
