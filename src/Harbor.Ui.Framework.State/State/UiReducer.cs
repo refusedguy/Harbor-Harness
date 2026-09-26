@@ -321,6 +321,7 @@ public static class UiReducer
         UiMsg.HydrateSession h => (HydrateSession(h), new TuiEffect.None()),
         UiMsg.InputText it => (state.SetInput(state.Input.SetText(it.Text)), new TuiEffect.None()),
         UiMsg.Quit => (state with { Ui = state.Ui with { ShouldQuit = true } }, new TuiEffect.None()),
+        UiMsg.Reset => (new UiState(), new TuiEffect.None()),
         UiMsg.KeyInput k => UpdateKey(state, k),
         UiMsg.Viewport v => (state with { Ui = state.Ui with { ViewportLines = v.HistoryHeight } }, new TuiEffect.None()),
         UiMsg.HistoryMeasured t => (state with { Ui = state.Ui with { TotalLines = t.TotalLines } }, new TuiEffect.None()),

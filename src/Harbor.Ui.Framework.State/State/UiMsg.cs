@@ -81,6 +81,15 @@ public abstract record UiMsg
     /// <summary>Host asks the app to quit (<see cref="UiState.ShouldQuit" />).</summary>
     public sealed record Quit : UiMsg;
 
+    /// <summary>
+    ///     Reset to a fresh empty state (e.g. clear-screen). The TEA replacement
+    ///     for the old <c>Transition(_ => new UiState())</c> fold — rides the same
+    ///     CAS + <see cref="UiReducer.Update" /> path as every other message, so a
+    ///     racing agent event serializes strictly before or after the reset,
+    ///     never interleaved mid-state.
+    /// </summary>
+    public sealed record Reset : UiMsg;
+
     /// <summary>A resolved UI action with the originating key (key-input path).</summary>
     /// <param name="Action">The abstract action, resolved from the raw key via <see cref="ChatKeyMap" />.</param>
     /// <param name="Pressed">The original key, for any action that needs the character/modifiers.</param>

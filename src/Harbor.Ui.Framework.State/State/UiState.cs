@@ -166,7 +166,8 @@ public sealed record UiState
 
     /// <summary>
     ///     Registered panel ids in registration order. Maintained by the host
-    ///     (<c>PanelRegistry</c>) via <c>UiStore.Transition</c>. Read by the reducer
+    ///     (<c>PanelRegistry</c>) via <c>Dispatch(new UiMsg.SeedPanels(...))</c>.
+    ///     Read by the reducer
     ///     for <c>CyclePanelFocus</c> so it stays pure (no IRegistry dependency).
     /// </summary>
     public ImmutableArray<string> RegisteredPanelIds { get => Ui.RegisteredPanelIds; init => Ui = Ui with { RegisteredPanelIds = value }; }

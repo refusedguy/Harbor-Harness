@@ -199,7 +199,9 @@ Markdig + CommunityToolkit.Mvvm 8.4.x + Microsoft.Extensions.Hosting 10.
 
 ### Known caveats
 
-- `UiStore.Transition` stays `internal` (TEA purity guard). Desktop GUIs access it via
+- Every state fold goes through `UiStore.Dispatch(UiMsg)` (TEA purity guard;
+  the old `UiStore.Transition` escape hatch was removed in the #92
+  Transition→UiMsg migration). Desktop GUIs access internals via
   `<InternalsVisibleTo Include="Harbor.App.Avalonia"/>` declared in
   `src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj:23`.
 - Minimal/no-AOT builds only: Avalonia UI assemblies require JIT.

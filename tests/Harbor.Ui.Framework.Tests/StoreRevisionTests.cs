@@ -80,4 +80,37 @@ public class StoreRevisionTests
         await Assert.That(current!.Revision).IsEqualTo(2);
         await Assert.That(current.Lines.Length).IsEqualTo(1);
     }
+
+    [Test]
+    public async Task BindSession_RoutesThroughReducer()
+    {
+        // #92 Transition→UiMsg remainder: the wrapper must produce exactly the
+        // ConfigureRuntime fold (chrome set, revision bumped, subscribers told).
+        var store = new UiStore();
+        var notifications = 0;
+        store.Changed += (_, _) => notifications++;
+
+        store.BindSession("m", "p", "code");
+
+        await Assert.That(store.State.Model).IsEqualTo("m");
+        await Assert.That(store.State.Provider).IsEqualTo("p");
+        await Assert.That(store.State.AgentName).IsEqualTo("code");
+        await Assert.That(store.State.Lines.Length).IsEqualTo(0);
+        await Assert.That(store.State.Revision).IsEqualTo(1);
+        await Assert.That(notifications).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Dispatch_Event_RoutesThroughUpdate()
+    {
+        // #92: the AgentEvent overload must fold exactly what Update does —
+        // Update is the single entry point, the store only adds the revision.
+        var store = new UiStore();
+        var @event = new AgentStartEvent("s1", Array.Empty<AgentMessage>());
+        store.Dispatch(@event);
+
+        var expected = UiReducer.Update(new UiState(), new UiMsg.Agent(@event)).State;
+        await Assert.That(store.State with { Revision = 0 }).IsEqualTo(expected);
+        await Assert.That(store.State.Revision).IsEqualTo(1);
+    }
 }
