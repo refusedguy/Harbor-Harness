@@ -140,7 +140,9 @@ public static class Program
             "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
             "sessions" => await RunSessionsAsync(args.Skip(1).ToArray()),
             "mcp" => await McpLoginRunner.RunAsync(Console.Out, Console.Error, args.Skip(1).ToArray()),
-            "tui" => PrintTuiOptions(),
+            "serve" => await RunServeAsync(args.Skip(1).ToArray()),
+            "tui" => await RunTuiAttachAsync(args.Skip(1).ToArray()),
+            "events" => await RunEventsAsync(args.Skip(1).ToArray()),
             "storage" => PrintStorageOptions(),
             "setup" => await RunSetupAsync(),
             "auth" => await RunAuthAsync(args.Skip(1).ToArray()),
@@ -847,6 +849,73 @@ public static class Program
         return 0;
     }
 
+    /// <summary>
+    ///     <c>harbor serve</c> — foreground alias over <see cref="RunHeadlessAsync" />:
+    ///     full agent host + IPC server, blocking until SIGINT/SIGTERM.
+    /// </summary>
+    private static async Task<int> RunServeAsync(string[] args)
+    {
+        var options = ServeOptions.Parse(args);
+        if (options.ShowHelp)
+        {
+            ServeOptions.PrintUsage(Console.Out);
+            return 0;
+        }
+
+        return await RunHeadlessAsync(args).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     <c>harbor tui</c> — attach to a live daemon: handshake, optional
+    ///     session bind, then the event stream as JSON lines until Ctrl-C.
+    ///     Defaults to <c>HARBOR_MODE=ipc-client</c> so it attaches instead of
+    ///     spawning its own agent.
+    /// </summary>
+    private static async Task<int> RunTuiAttachAsync(string[] args)
+    {
+        if (!TuiAttachOptions.TryParse(args, out var options, out string? parseError) || options is null)
+        {
+            Console.Error.WriteLine(parseError);
+            TuiAttachOptions.PrintUsage(Console.Out);
+            return 2;
+        }
+
+        if (options.ShowHelp)
+        {
+            TuiAttachOptions.PrintUsage(Console.Out);
+            PrintTuiOptions();
+            return 0;
+        }
+
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_MODE")))
+            Environment.SetEnvironmentVariable("HARBOR_MODE", "ipc-client");
+
+        using var host = HostBuilder.Build(args);
+        var client = host.Services.GetRequiredService<IHarborClient>();
+        return await TuiAttachRunner.RunAsync(Console.Out, Console.Error, client, options).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     <c>harbor events --watch</c> — print the daemon's event stream as
+    ///     JSON lines. Defaults to <c>HARBOR_MODE=ipc-client</c>.
+    /// </summary>
+    private static async Task<int> RunEventsAsync(string[] args)
+    {
+        if (!EventsWatchOptions.TryParse(args, out var options, out string? parseError) || options is null)
+        {
+            Console.Error.WriteLine(parseError);
+            EventsWatchOptions.PrintUsage(Console.Out);
+            return 2;
+        }
+
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_MODE")))
+            Environment.SetEnvironmentVariable("HARBOR_MODE", "ipc-client");
+
+        using var host = HostBuilder.Build(args);
+        var client = host.Services.GetRequiredService<IHarborClient>();
+        return await EventsWatchRunner.RunAsync(Console.Out, Console.Error, client, options).ConfigureAwait(false);
+    }
+
     private static int PrintTuiOptions()
     {
         Console.WriteLine("""
@@ -874,7 +943,7 @@ public static class Program
     {
         Console.WriteLine("""
                           Harbor — modular AI coding agent.
-                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|demo|setup|auth|config|providers|models|sessions|mcp|tui|storage|logs|help|version] [--script <path>]
+                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|demo|setup|auth|config|providers|models|sessions|mcp|serve|tui|events|storage|logs|help|version] [--script <path>]
 
                           demo [--scene hero|markdown|approval|all] [--tui ansi|plain]
                                             Scripted demo with an in-process mock LLM — no API keys.
