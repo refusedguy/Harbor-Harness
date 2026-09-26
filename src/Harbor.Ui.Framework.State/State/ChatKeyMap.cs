@@ -1,9 +1,10 @@
 namespace Harbor.Ui.Framework.State;
 /// <summary>
 ///     Central registry of key bindings + human-readable labels for the chat UI.
-///     Both the input handler (per-renderer, ~5 lines) and the footer/help text
-///     (LayoutBuilder) read from here, so there is a single source of truth for
-///     "what key does what" across all renderers.
+///     Every shell translates its native key into <see cref="UiKey" /> and resolves
+///     it here, so this table is the single source of truth for "what key does
+///     what" across all renderers. Shells must not add their own key→action
+///     branches — put the binding here and handle the action in the reducer.
 /// </summary>
 public sealed class ChatKeyMap
 {
@@ -13,7 +14,10 @@ public sealed class ChatKeyMap
     private readonly Entry[] _entries =
     [
         new(ChatAction.Quit, "quit", new Binding(UiKeyCode.Escape)),
-        new(ChatAction.Abort, "abort", new Binding(UiKeyCode.Escape)),
+        // Ctrl+C — reported by most frameworks as a character, not a key code.
+        new(ChatAction.Abort, "abort",
+            new Binding(UiKeyCode.Escape),
+            new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 'c')),
         new(ChatAction.Submit, "send", new Binding(UiKeyCode.Enter)),
         new(ChatAction.ToggleFocus, "focus", new Binding(UiKeyCode.F2)),
         new(ChatAction.ScrollUpLine, "up", new Binding(UiKeyCode.Up)),
@@ -26,8 +30,11 @@ public sealed class ChatKeyMap
         new(ChatAction.InputHistoryNext, "next input", new Binding(UiKeyCode.Down, KeyModifierSet.Alt)),
         new(ChatAction.Autocomplete, "complete", new Binding(UiKeyCode.Tab)),
         new(ChatAction.Backspace, "backspace", new Binding(UiKeyCode.Backspace)),
-        // Clear is bound to Ctrl+L, reported by most frameworks as a character — handled separately.
-        new(ChatAction.Clear, "clear"),
+        // Ctrl+L — reported by most frameworks as a character, not a key code.
+        new(ChatAction.Clear, "clear", new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 'l')),
+        // '?' — toggle help panel. Listed before the coarse Alt+char slot entry
+        // below so Alt+'?' keeps resolving here, as the old shell overrides did.
+        new(ChatAction.HelpPanel, "help", new Binding(UiKeyCode.Char, KeyModifierSet.None, '?')),
 
         // ── panel hotkeys ────────────────────────────────────────────────
         // Alt+1..Alt+9 — toggle the Nth registered panel. Slot comes from the key's Character.
@@ -38,10 +45,14 @@ public sealed class ChatKeyMap
         new(ChatAction.ResizePanelGrow, "grow panel", new Binding(UiKeyCode.Up, KeyModifierSet.Ctrl)),
         // Ctrl+Down / Ctrl+Left — shrink focused panel.
         new(ChatAction.ResizePanelShrink, "shrink panel", new Binding(UiKeyCode.Down, KeyModifierSet.Ctrl)),
-        // '?' — toggle help panel.
-        new(ChatAction.HelpPanel, "help"),
         // F12 — toggle the in-TUI diagnostics / logs panel.
-        new(ChatAction.ToggleLogsPanel, "logs", new Binding(UiKeyCode.F12))
+        new(ChatAction.ToggleLogsPanel, "logs", new Binding(UiKeyCode.F12)),
+        // Ctrl+J — open the worktree jump palette. Most frameworks report it as
+        // 'j' + Ctrl, but some terminals send a bare LF (0x0A) with no Ctrl flag
+        // instead — both resolve here so no shell needs its own branch.
+        new(ChatAction.JumpPalette, "jump worktree",
+            new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 'j'),
+            new Binding(UiKeyCode.Char, KeyModifierSet.None, '\n'))
     ];
 
     public ChatKeyMap()
@@ -74,11 +85,19 @@ public sealed class ChatKeyMap
     /// <summary>Get the documented entry for an action.</summary>
     public Entry Get(ChatAction action) => _byAction[action];
 
-    /// <summary>Match spec: a key code, optionally gated by required modifiers.</summary>
-    public readonly record struct Binding(UiKeyCode Code, KeyModifierSet Mods = KeyModifierSet.None)
+    /// <summary>Match spec: a key code, optionally gated by required modifiers and/or an exact character.</summary>
+    /// <remarks>
+    ///     A <see langword="null" /> character matches any character (e.g. the
+    ///     Alt+1..Alt+9 panel slots); a set character restricts the binding to that
+    ///     exact char (Ctrl+L clear, '?' help, Ctrl+J / LF jump palette). Character
+    ///     bindings exist because most frameworks report Ctrl+letter combos as
+    ///     characters rather than key codes — resolving them here keeps every
+    ///     shell free of key→action branches.
+    /// </remarks>
+    public readonly record struct Binding(UiKeyCode Code, KeyModifierSet Mods = KeyModifierSet.None, char? Character = null)
     {
         public bool Matches(UiKey key)
-            => key.Code == Code && key.Mods.HasFlag(Mods);
+            => key.Code == Code && key.Mods.HasFlag(Mods) && (Character is null || key.Character == Character);
     }
 
     /// <summary>One documented action: its label and the key bindings that trigger it.</summary>

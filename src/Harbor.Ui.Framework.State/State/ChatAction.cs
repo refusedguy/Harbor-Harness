@@ -45,7 +45,10 @@ public enum ChatAction
     HelpPanel,
 
     /// <summary>F12 — toggle the in-TUI diagnostics / logs panel (shows live ILogger output).</summary>
-    ToggleLogsPanel
+    ToggleLogsPanel,
+
+    /// <summary>Ctrl+J (or a bare LF on terminals that send it instead) — open the worktree jump palette.</summary>
+    JumpPalette
 }
 
 /// <summary>

@@ -27,14 +27,10 @@ public sealed class KeyHandler
     public TuiEffect Handle(ConsoleKeyInfo info)
     {
         var key = ToUiKey(info);
+        // Single source of truth: ChatKeyMap owns every key→action mapping
+        // (Clear, Abort, HelpPanel, JumpPalette incl. the LF alias). This shell
+        // only translates the native key into UiKey and dispatches.
         var action = _keyMap.Resolve(key);
-
-        if (key.Code == UiKeyCode.Char && key.Character == 'l' && key.Mods.HasFlag(KeyModifierSet.Ctrl))
-            action = ChatAction.Clear;
-        else if (key.Code == UiKeyCode.Char && key.Character == 'c' && key.Mods.HasFlag(KeyModifierSet.Ctrl))
-            action = ChatAction.Abort;
-        else if (key.Code == UiKeyCode.Char && key.Character == '?')
-            action = ChatAction.HelpPanel;
 
         if (action == ChatAction.None)
             return new TuiEffect.None();
@@ -50,6 +46,12 @@ public sealed class KeyHandler
         if ((info.Modifiers & ConsoleModifiers.Shift) != 0) mods |= KeyModifierSet.Shift;
         if ((info.Modifiers & ConsoleModifiers.Control) != 0) mods |= KeyModifierSet.Ctrl;
         if ((info.Modifiers & ConsoleModifiers.Alt) != 0) mods |= KeyModifierSet.Alt;
+
+        // LF (0x0A) is how some terminals report Ctrl+J (no Ctrl flag, Key=J or
+        // Enter with a line-feed char). Preserve it as a character so the central
+        // ChatKeyMap resolves it to JumpPalette; plain Enter arrives as '\r'.
+        if (info.KeyChar == '\n')
+            return UiKey.ForChar('\n', mods);
 
         if (info.KeyChar is >= (char)32 and not (char)127)
             return UiKey.ForChar(info.KeyChar, mods);

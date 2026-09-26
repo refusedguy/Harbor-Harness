@@ -288,16 +288,10 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 return;
 
             var uiKey = ToUiKey(key);
+            // Single source of truth: ChatKeyMap owns every key→action mapping
+            // (Clear, Abort, HelpPanel, JumpPalette incl. the LF alias). The shell
+            // only translates the native key into UiKey and dispatches.
             var action = _keyMap.Resolve(uiKey);
-
-            // Framework reports these as characters, not key codes.
-            if (key.Character == 'l' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
-                action = ChatAction.Clear;
-            else if (key.Character == 'c' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
-                action = ChatAction.Abort;
-            // '?' → toggle help panel.
-            else if (key.Character == '?' && !key.Modifiers.HasFlag(KeyModifier.Ctrl))
-                action = ChatAction.HelpPanel;
 
             // Handle panel-specific actions before falling through to the reducer.
             if (HandlePanelAction(action, uiKey))
@@ -526,6 +520,12 @@ private static IWidget ParagraphFromFooter(string markup)
             if (key.Modifiers.HasFlag(KeyModifier.Shift)) mods |= KeyModifierSet.Shift;
             if (key.Modifiers.HasFlag(KeyModifier.Ctrl)) mods |= KeyModifierSet.Ctrl;
             if (key.Modifiers.HasFlag(KeyModifier.Alt)) mods |= KeyModifierSet.Alt;
+
+            // LF (0x0A) is how some terminals report Ctrl+J. Preserve it as a
+            // character so the central ChatKeyMap resolves it to JumpPalette
+            // (plain Enter arrives as Key.Enter, filtered by the paste guard above).
+            if (key.Character is '\n')
+                return UiKey.ForChar('\n', mods);
 
             if (key.Character is >= (char)32 and not (char)127)
                 return UiKey.ForChar(key.Character.Value, mods);
