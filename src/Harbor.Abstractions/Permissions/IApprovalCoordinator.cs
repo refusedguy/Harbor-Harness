@@ -91,12 +91,33 @@ public interface IApprovalCoordinator
 
     /// <summary>
     ///     Commit barrier between approval (Ready) and execution (Executing).
-    ///     Returns <see langword="true" /> iff no <see cref="RequestCancel" />
-    ///     happened after the scope was issued — i.e. cancellation did NOT win
-    ///     before commit, so the tool may start. Returns <see langword="false" />
-    ///     when cancel won: the caller must NOT start the tool (fail closed).
-    ///     Idempotent: re-committing the same live scope returns
-    ///     <see langword="true" /> (parallel calls share the epoch).
     /// </summary>
-    bool TryCommitApproval(long scope);
+    /// <remarks>
+    ///     <para>
+    ///         Returns <see langword="true" /> iff no <see cref="RequestCancel" />
+    ///         happened after the scope was issued AND this
+    ///         <c>(invocationId, generation)</c> pair was not committed before —
+    ///         i.e. cancellation did NOT win before commit and this is not a
+    ///         duplicate/stale attempt, so the tool may start. Otherwise returns
+    ///         <see langword="false" /> and the caller must NOT start the tool
+    ///         (fail closed).
+    ///     </para>
+    ///     <para>
+    ///         Identity: <c>invocationId</c> is the tool-call id, unique per
+    ///         requested execution; <c>generation</c> is the 1-based attempt
+    ///         (retries bump it — a retried attempt commits a NEW generation,
+    ///         a replayed old one is rejected as stale). Higher generation for
+    ///         a live invocation supersedes; equal-or-lower is rejected, which
+    ///         bounds duplicate dispatch to a single start.
+    ///         <see cref="CompleteInvocation" /> retires the record afterwards.
+    ///     </para>
+    /// </remarks>
+    bool TryCommitApproval(long scope, string invocationId, int generation);
+
+    /// <summary>
+    ///     Retire an invocation record after its terminal outcome (success,
+    ///     error, or cancellation). Unknown ids are ignored. After completion
+    ///     any late commit for the id fails (stale touches nothing).
+    /// </summary>
+    void CompleteInvocation(string invocationId);
 }

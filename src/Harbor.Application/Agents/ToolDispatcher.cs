@@ -275,19 +275,18 @@ public sealed class ToolDispatcher(
                 return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, denied);
             }
 
-            // Commit barrier (#49 PR2): cancel winning after approval but
-            // before the first tool instruction must prevent the START —
-            // token observation inside the tool is best-effort only and a
-            // token-ignoring tool would otherwise run despite the abort.
-            if (coordinator is not null && !coordinator.TryCommitApproval(commitScope))
+            // Execution with commit barrier (#49 PR2/PR3): cancel winning
+            // after approval but before the first tool instruction must
+            // prevent the START — token observation inside the tool is
+            // best-effort only and a token-ignoring tool would otherwise run
+            // despite the abort. The commit lives INSIDE the retry loop,
+            // bound to (invocation, generation): each attempt commits its own
+            // generation, duplicates and stale replays are rejected, and the
+            // record is retired in finally so the registry holds only
+            // in-flight executions.
+            bool committed = false;
+            try
             {
-                activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
-                var cancelledBeforeStart = ToolResult.Error("Tool execution was cancelled before start.");
-                await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                    toolCall.Id, cancelledBeforeStart, true), ct).ConfigureAwait(false);
-                return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelledBeforeStart);
-            }
-
             // Execute
             // Guard the GetRawText() call with IsEnabled — JsonElement.GetRawText()
             // allocates a fresh string every call, and LogDebug evaluates its args
@@ -331,14 +330,26 @@ public sealed class ToolDispatcher(
                 null!);
 
             // #43: bounded retry of transport-class failures. Only the bare
-            // ExecuteAsync is retried — validation, permission and commit
-            // already happened. Each retry re-enters under the same approval
-            // (no re-ask); cancellation between attempts surfaces either at
-            // the delay or inside the tool via the token.
+            // ExecuteAsync is retried — validation and permission already
+            // happened. Each retry re-enters under the same approval (no
+            // re-ask) but commits a NEW generation; cancellation between
+            // attempts surfaces either at the commit, at the delay, or inside
+            // the tool via the token.
             ToolResult result;
             while (true)
             {
                 attempt++;
+                if (coordinator is not null
+                    && !coordinator.TryCommitApproval(commitScope, toolCall.Id, attempt))
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
+                    var cancelledBeforeStart = ToolResult.Error("Tool execution was cancelled before start.");
+                    await eventBus.PublishAsync(new ToolExecutionEndEvent(
+                        toolCall.Id, cancelledBeforeStart, true), ct).ConfigureAwait(false);
+                    return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelledBeforeStart);
+                }
+
+                committed = true;
                 try
                 {
                     result = await tool.ExecuteAsync(toolCall.Args, ctx, effectiveCt).ConfigureAwait(false);
@@ -364,6 +375,14 @@ public sealed class ToolDispatcher(
                 toolCall.Id, result, result.IsError), effectiveCt).ConfigureAwait(false);
 
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, result);
+            }
+            finally
+            {
+                if (committed)
+                {
+                    coordinator?.CompleteInvocation(toolCall.Id);
+                }
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

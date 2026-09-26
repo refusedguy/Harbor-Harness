@@ -113,12 +113,49 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
         }
     }
 
+    /// <summary>
+    ///     Committed invocations (#49 PR3 identity): invocation id →
+    ///     highest committed generation. Retired by
+    ///     <see cref="CompleteInvocation" />, so the map holds only
+    ///     in-flight executions.
+    /// </summary>
+    private readonly Dictionary<string, int> _committed = new(StringComparer.Ordinal);
+
     /// <inheritdoc />
-    public bool TryCommitApproval(long scope)
+    public bool TryCommitApproval(long scope, string invocationId, int generation)
     {
+        ArgumentException.ThrowIfNullOrEmpty(invocationId);
         lock (_gate)
         {
-            return scope == _cancelGeneration;
+            if (scope != _cancelGeneration)
+            {
+                return false;
+            }
+
+            if (_committed.TryGetValue(invocationId, out int committed)
+                && generation <= committed)
+            {
+                // Duplicate dispatch of the same attempt, or a stale retry
+                // replaying an older generation — never start twice.
+                return false;
+            }
+
+            _committed[invocationId] = generation;
+            return true;
+        }
+    }
+
+    /// <inheritdoc />
+    public void CompleteInvocation(string invocationId)
+    {
+        if (string.IsNullOrEmpty(invocationId))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _committed.Remove(invocationId);
         }
     }
 
