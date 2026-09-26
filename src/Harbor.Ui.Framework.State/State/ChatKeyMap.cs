@@ -97,7 +97,21 @@ public sealed class ChatKeyMap
     public readonly record struct Binding(UiKeyCode Code, KeyModifierSet Mods = KeyModifierSet.None, char? Character = null)
     {
         public bool Matches(UiKey key)
-            => key.Code == Code && key.Mods.HasFlag(Mods) && (Character is null || key.Character == Character);
+        {
+            if (key.Code != Code)
+                return false;
+            if (Character is not null && key.Character != Character)
+                return false;
+            // Bare key-code bindings (Mods.None) match only with no modifiers
+            // held: otherwise plain Tab would shadow Ctrl+Tab (HasFlag(None)
+            // is always true) and entry order would decide. Specified
+            // modifiers keep subset semantics (Ctrl+Shift+Tab still cycles).
+            // Character bindings keep subset semantics: '?' resolves with Alt
+            // held (as the old shell overrides did), exact letters pin theirs.
+            if (Code != UiKeyCode.Char && Mods == KeyModifierSet.None)
+                return key.Mods == KeyModifierSet.None;
+            return key.Mods.HasFlag(Mods);
+        }
     }
 
     /// <summary>One documented action: its label and the key bindings that trigger it.</summary>
