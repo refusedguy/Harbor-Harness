@@ -56,7 +56,10 @@ public static class UiReducer
         {
             Chat = state.Chat with
             {
-                Status = "idle",
+                // Mirror OnAgentEnded: a preceding AgentErrorEvent leaves
+                // "error" behind; a blind reset to idle would repaint a
+                // failed run as a clean finish.
+                Status = state.Status == "error" ? "error" : "idle",
                 IsAgentRunning = false,
                 WasRunning = state.IsAgentRunning,
                 IsStreaming = false,
@@ -88,13 +91,56 @@ public static class UiReducer
         if (next.Lines.Length != 0)
             return next;
 
+        // Empty store: replay history so a late attach shows the full
+        // transcript, mirroring the live rendering of each role. No dedup:
+        // replay runs only on the empty store, and submit is suppressed
+        // while running, so the echo cannot double — a tail-match would risk
+        // eating a legitimate repeated prompt.
         foreach (var m in ase.Messages)
         {
-            if (m is UserMessage u)
-                next = next.AddLine(ChatRole.User, u.Content);
+            next = ReplayMessage(next, m);
         }
 
         return next;
+    }
+
+    private static UiState ReplayMessage(UiState state, AgentMessage m) => m switch
+    {
+        UserMessage u => state.AddLine(ChatRole.User, u.Content),
+        AssistantMessage a => ReplayAssistant(state, a),
+        ToolResultMessage tr => ReplayResults(state, tr),
+        _ => state
+    };
+
+    private static UiState ReplayAssistant(UiState state, AssistantMessage a)
+    {
+        foreach (var part in a.Parts)
+        {
+            switch (part)
+            {
+                case TextPart t when !string.IsNullOrWhiteSpace(t.Text):
+                    state = state.AddLine(ChatRole.Assistant, t.Text);
+                    break;
+                case ThinkingPart th when !string.IsNullOrWhiteSpace(th.Text):
+                    state = state.AddLine(ChatRole.Thinking, th.Text);
+                    break;
+                case ToolCallPart tc:
+                    state = state.AddLine(ChatRole.Tool, $"→ {tc.ToolName}", tc.Id);
+                    break;
+            }
+        }
+
+        return state;
+    }
+
+    private static UiState ReplayResults(UiState state, ToolResultMessage tr)
+    {
+        foreach (var r in tr.Results)
+        {
+            state = state.AddLine(ChatRole.ToolResult, r.Output, r.ToolCallId);
+        }
+
+        return state;
     }
 
     private static UiState OnMessageStart(UiState state) =>
@@ -285,7 +331,10 @@ public static class UiReducer
         UiMsg.ScrollResetToTail => (state with
         {
             Ui = state.Ui with { ScrollOffset = 0 },
-            Chat = state.Chat with { WasRunning = true }
+            // Snapshot, don't force: fabricating WasRunning=true breaks the
+            // rising-edge invariant (IsRunning && !WasRunning) that tells
+            // renderers a run just started (e.g. to snap to tail).
+            Chat = state.Chat with { WasRunning = state.IsAgentRunning }
         }, new TuiEffect.None()),
         UiMsg.ScrollClamp sc => (state with
         {
@@ -575,14 +624,20 @@ public static class UiReducer
 
     /// <summary>
     ///     Start an abort: emit a plain system note and the host effect that cancels
-    ///     the running agent. Streaming buffers are cleared so a half-rendered message
-    ///     does not linger until <see cref="AgentEndEvent" /> arrives. Colour is the
-    ///     renderer's responsibility (driven by <see cref="ChatRole" />), so the text
-    ///     here is markup-free.
+    ///     the running agent. Partially streamed text is folded into the transcript
+    ///     first (same as <see cref="OnMessageEnd" />) so the abort does not eat
+    ///     already-received content; only then are the buffers cleared. Colour is
+    ///     the renderer's responsibility (driven by <see cref="ChatRole" />), so the
+    ///     text here is markup-free.
     /// </summary>
     private static (UiState State, TuiEffect Effect) TransitionAbort(UiState state)
     {
-        var next = state
+        var next = FlushPending(state);
+        if (!string.IsNullOrEmpty(next.Active.ThinkBuffer))
+            next = next.AddLine(ChatRole.Thinking, next.Active.ThinkBuffer.Trim());
+        if (!string.IsNullOrEmpty(next.Active.TextBuffer))
+            next = next.AddLine(ChatRole.Assistant, next.Active.TextBuffer.Trim());
+        next = next
                 .AddLine(ChatRole.System, "Aborted.")
             with
             {
