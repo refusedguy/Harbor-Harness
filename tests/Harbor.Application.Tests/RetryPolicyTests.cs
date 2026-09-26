@@ -239,18 +239,23 @@ public class RetryPolicyTests
 
     // Hermetic since #54-fix: delays are recorded by the fake clock, so no
     // wall-clock bound can overshoot on loaded runners. [Retry] removed.
+    // NOTE: Task.Delay(TimeSpan, TimeProvider, ct) truncates sub-millisecond
+    // delays to zero and skips the timer entirely — a jitter draw < 1ms is
+    // simply not recorded. Retry COUNT is therefore proven via onRetry
+    // (deterministic), delay VALUES via ComputeDelay unit tests below.
     [Test]
     public async Task ExecuteAsync_Jitter_DelayNeverExceedsBaseDelay()
     {
         var time = new RecordingTimeProvider();
         var policy = new RetryPolicy(time);
-        var options = Opts(max: 4, delayMs: 40, jitter: true);
+        var attempts = new List<int>();
 
         try
         {
             await policy.ExecuteAsync<HttpResponseMessage>(
                 _ => throw new HttpRequestException("reset", inner: null, HttpStatusCode.ServiceUnavailable),
-                options,
+                Opts(max: 4, delayMs: 40, jitter: true),
+                onRetry: (_, attempt) => attempts.Add(attempt),
                 CancellationToken.None);
         }
         catch (HttpRequestException)
@@ -258,12 +263,42 @@ public class RetryPolicyTests
             // expected exhaustion
         }
 
-        // max=4 attempts → 3 retries; jitter draws from [0, BaseDelay·2^(n-1)).
-        await Assert.That(time.Delays.Count).IsEqualTo(3);
-        for (int i = 0; i < time.Delays.Count; i++)
+        // max=4 attempts → 3 retries, in order, regardless of timers.
+        await Assert.That(attempts.Count).IsEqualTo(3);
+        await Assert.That(attempts[0]).IsEqualTo(1);
+        await Assert.That(attempts[1]).IsEqualTo(2);
+        await Assert.That(attempts[2]).IsEqualTo(3);
+
+        // Every delay that reached the clock is within the global cap
+        // (largest per-attempt cap for this config: 40ms·2² = 160ms).
+        foreach (TimeSpan delay in time.Delays)
         {
-            await Assert.That(time.Delays[i]).IsGreaterThanOrEqualTo(TimeSpan.Zero);
-            await Assert.That(time.Delays[i]).IsLessThan(TimeSpan.FromMilliseconds(40 * (1 << i)));
+            await Assert.That(delay).IsGreaterThanOrEqualTo(TimeSpan.Zero);
+            await Assert.That(delay).IsLessThan(TimeSpan.FromMilliseconds(160));
+        }
+    }
+
+    [Test]
+    public async Task ComputeDelay_NoJitter_IsExact()
+    {
+        var options = Opts(max: 5, delayMs: 40, jitter: false);
+        await Assert.That(RetryPolicy.ComputeDelay(options, 1)).IsEqualTo(TimeSpan.FromMilliseconds(40));
+        await Assert.That(RetryPolicy.ComputeDelay(options, 2)).IsEqualTo(TimeSpan.FromMilliseconds(80));
+        await Assert.That(RetryPolicy.ComputeDelay(options, 3)).IsEqualTo(TimeSpan.FromMilliseconds(160));
+    }
+
+    [Test]
+    public async Task ComputeDelay_Jitter_StaysWithinCap()
+    {
+        var options = Opts(max: 5, delayMs: 40, jitter: true);
+        for (int i = 0; i < 1000; i++)
+        {
+            for (int attempt = 1; attempt <= 3; attempt++)
+            {
+                TimeSpan delay = RetryPolicy.ComputeDelay(options, attempt);
+                await Assert.That(delay).IsGreaterThanOrEqualTo(TimeSpan.Zero);
+                await Assert.That(delay).IsLessThan(TimeSpan.FromMilliseconds(40 * (1 << (attempt - 1))));
+            }
         }
     }
 
