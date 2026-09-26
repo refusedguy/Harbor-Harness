@@ -9,12 +9,14 @@ namespace Harbor.TestKit;
 public sealed class FakeAgent : IAgent
 {
     public AgentState State { get; }
-    public CancellationTokenSource AbortSource { get; } = new();
+    private readonly CancellationTokenSource _abortSource = new();
+    public CancellationToken AbortToken => _abortSource.Token;
+    public void RequestAbort() => _abortSource.Cancel();
     public FakeAgent(AgentState state)
     {
         State = state;
     }
-    public void Dispose() => AbortSource.Dispose();
+    public void Dispose() => _abortSource.Dispose();
     public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NoopDisposable();
     public Task<Result> PromptAsync(string text, CancellationToken ct = default) => Task.FromResult(Result.Success());
     public Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) => Task.FromResult(Result.Success());

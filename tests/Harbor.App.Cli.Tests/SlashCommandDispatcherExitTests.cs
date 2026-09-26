@@ -113,7 +113,9 @@ public class SlashCommandDispatcherExitTests
 
     private sealed class FakeAgent : IAgent
     {
-        public CancellationTokenSource AbortSource { get; } = new();
+        private readonly CancellationTokenSource _abortSource = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
 
         public AgentState State => throw new NotSupportedException("Not used in these tests.");
 

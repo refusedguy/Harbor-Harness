@@ -27,11 +27,13 @@ public sealed class DefaultAgent : IAgent
     private readonly Channel<AgentMessage> _steeringQueue;
 
     /// <summary>
-    ///     Backing field for <see cref="AbortSource" />. Replaced wholesale by
+    ///     Backing field for <see cref="AbortToken" />. Replaced wholesale by
     ///     <see cref="ResetAbortSource" /> — a single CTS can only be cancelled
     ///     once, so after every abort we swap in a fresh one or the next
     ///     <see cref="PromptAsync" /> would observe the cancelled token and
-    ///     fail immediately.
+    ///     fail immediately. Never exposed: external code observes
+    ///     <see cref="AbortToken" /> and aborts via <see cref="RequestAbort" />
+    ///     (#79), so the coordinated funnel cannot be bypassed or disposed.
     /// </summary>
     private CancellationTokenSource _abortSource = new();
 
@@ -147,23 +149,31 @@ public sealed class DefaultAgent : IAgent
     public AgentState State { get; private set; } = null!;
 
     /// <summary>
-    ///     Cancellation token source used to abort the current run. Replaced
-    ///     wholesale by <see cref="ResetAbortSource" /> after each abort so the
-    ///     agent is ready for a new run.
+    ///     Token observing the current run's abort state. The live source
+    ///     stays private (#79) — abort via <see cref="RequestAbort" />.
+    ///     Replaced wholesale by <see cref="ResetAbortSource" /> after each
+    ///     abort so the agent is ready for a new run.
     /// </summary>
-    public CancellationTokenSource AbortSource => _abortSource;
+    public CancellationToken AbortToken => Volatile.Read(ref _abortSource).Token;
 
     /// <summary>
-    ///     Recreate <see cref="AbortSource" /> if (and only if) the current
+    ///     Abort the current run at the next safe boundary. The only external
+    ///     abort ingress on this runner (#79): the approval coordinator calls
+    ///     this after sweeping pending gates, and direct callers use it when
+    ///     no coordinator is available.
+    /// </summary>
+    public void RequestAbort() => Volatile.Read(ref _abortSource).Cancel();
+
+    /// <summary>
+    ///     Recreate the internal abort source if (and only if) the current
     ///     source has already been cancelled AND no run bound to this (or an
     ///     older) abort generation is still alive. No-op when the current
     ///     source is still live, or when an in-flight run holds it — swapping
     ///     underneath a live run would orphan it from future cancels, so the
     ///     reset is refused and retried later (the next
     ///     <see cref="PromptAsync" /> self-heal runs once idle). After a
-    ///     successful reset, <see cref="AbortSource" /> points at a fresh,
-    ///     un-cancelled <see cref="CancellationTokenSource" /> of the next
-    ///     generation.
+    ///     successful reset, <see cref="AbortToken" /> observes a fresh,
+    ///     un-cancelled source of the next generation.
     /// </summary>
     public void ResetAbortSource()
     {
@@ -235,7 +245,7 @@ public sealed class DefaultAgent : IAgent
     ///     </para>
     /// </summary>
     /// <param name="text">The user's prompt text.</param>
-    /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
+    /// <param name="ct">Optional cancellation token linked to <see cref="AbortToken" />.</param>
     /// <returns>Success on completion (or after steering an active run), or failure with an error message.</returns>
     public async Task<Result> PromptAsync(string text, CancellationToken ct = default)
     {
@@ -274,7 +284,7 @@ public sealed class DefaultAgent : IAgent
     ///     callers are serialized atomically; the loser steers the active run.
     /// </remarks>
     /// <param name="message">The user message to submit.</param>
-    /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
+    /// <param name="ct">Optional cancellation token linked to <see cref="AbortToken" />.</param>
     /// <returns>Success on completion (or after steering an active run), or failure with an error message.</returns>
     public async Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default)
     {
@@ -313,7 +323,7 @@ public sealed class DefaultAgent : IAgent
 
         try
         {
-            // G1 self-heal: an aborted run leaves AbortSource permanently cancelled,
+            // G1 self-heal: an aborted run leaves the abort source permanently cancelled,
             // so every later prompt would die on an already-cancelled token unless
             // someone remembered to reset it (IPC abort paths never did). Resetting
             // here, under the run gate, removes that external temporal coupling.
@@ -352,7 +362,7 @@ public sealed class DefaultAgent : IAgent
 
             State = State with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
 
-            var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(AbortSource.Token, ct);
+            var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(AbortToken, ct);
 
             try
             {
@@ -473,7 +483,7 @@ public sealed class DefaultAgent : IAgent
     public void Dispose()
     {
         _eventBusSubscription?.Dispose();
-        AbortSource?.Dispose();
+        _abortSource.Dispose();
         _runGate.Dispose();
         _steeringQueue.Writer.TryComplete();
     }

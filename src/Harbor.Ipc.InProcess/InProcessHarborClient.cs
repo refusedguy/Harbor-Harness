@@ -157,7 +157,7 @@ public sealed class InProcessHarborClient : IHarborClient
         }
         else
         {
-            _agent.AbortSource.Cancel();
+            _agent.RequestAbort();
         }
 
         return Task.FromResult(Result.Success());

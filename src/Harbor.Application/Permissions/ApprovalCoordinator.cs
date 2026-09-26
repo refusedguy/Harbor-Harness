@@ -217,11 +217,11 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
         // Outside the lock: CTS.Cancel runs continuations synchronously.
         try
         {
-            agent.AbortSource.Cancel();
+            agent.RequestAbort();
         }
         catch (ObjectDisposedException ex)
         {
-            logger.LogDebug(ex, "AbortSource already disposed during coordinated cancel");
+            logger.LogDebug(ex, "Abort source already disposed during coordinated cancel");
         }
 
         foreach (var tcs in swept)
