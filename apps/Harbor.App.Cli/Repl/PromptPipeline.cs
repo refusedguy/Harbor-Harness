@@ -35,6 +35,8 @@ internal sealed class PromptPipeline(
     private volatile bool _promptInFlight;
 
     private int _retryAttempt;
+    private int _retryMax = MaxStreamRetries;
+    private bool _retryFromTool;
     private long _retryErrorMs = -1;
     private int _retryTotalSec;
 
@@ -260,7 +262,12 @@ internal sealed class PromptPipeline(
 
     /// <summary>Retry countdown feed (sprint UI-V2 P6.3): a transient provider
     /// error while the agent runs starts the UI-side backoff clock. The agent
-    /// loop retries on its own policy; the status bar only mirrors the window.</summary>
+    /// loop retries on its own policy; the status bar only mirrors the window.
+    /// #76 adds the tool-dispatcher mirror: a retry-scheduled update carries
+    /// attempt/max/backoff and feeds the same single slot (last-writer-wins —
+    /// stream and tool retries are sequential turn phases). Render-only; the
+    /// frame loop pumps <see cref="TryGetRetryProjection"/> into
+    /// <c>SetProjectedRetry</c>, never back into the dispatcher.</summary>
     public void ObserveEvent(AgentEvent evt)
     {
         if (evt is MessageUpdateEvent { LlmEvent: ErrorEvent { Kind: var kind } }
@@ -268,10 +275,52 @@ internal sealed class PromptPipeline(
             && host.Agent.State.IsRunning)
         {
             _retryAttempt++;
+            _retryMax = MaxStreamRetries;
+            _retryFromTool = false;
             _retryErrorMs = Environment.TickCount64;
             _retryTotalSec = RetryCountdown.BackoffSeconds(Math.Min(_retryAttempt, MaxStreamRetries));
-            host.Status.Retry = RetryCountdown.Line(_retryAttempt, MaxStreamRetries, _retryTotalSec);
+            host.Status.Retry = RetryCountdown.Line(_retryAttempt, _retryMax, _retryTotalSec);
         }
+        else if (evt is ToolExecutionUpdateEvent { RetryAttempt: not null, RetryMaxAttempts: not null } retry
+            && host.Agent.State.IsRunning)
+        {
+            _retryAttempt = retry.RetryAttempt.Value;
+            _retryMax = retry.RetryMaxAttempts.Value;
+            _retryFromTool = true;
+            _retryErrorMs = Environment.TickCount64;
+            _retryTotalSec = Math.Max(0, (int)Math.Ceiling(retry.RetryBackoffSeconds ?? 0));
+            host.Status.Retry = RetryCountdown.Line(_retryAttempt, _retryMax, _retryTotalSec);
+        }
+        else if (evt is ToolExecutionEndEvent && _retryFromTool)
+        {
+            // The retried call settled (success or final failure) — drop the
+            // mirror. Stream-retry windows are untouched (own clock, own flag).
+            _retryFromTool = false;
+            _retryErrorMs = -1;
+            host.Status.Retry = null;
+        }
+    }
+
+    /// <summary>Structured retry mirror for the frame loop (#76): the current
+    /// attempt fraction plus live remaining seconds, or false when no retry is
+    /// pending. The runner feeds this into <c>SetProjectedRetry</c> every frame;
+    /// the panel owns pixels, the pipeline owns state, the dispatcher owns the
+    /// schedule — the UI never triggers.</summary>
+    public bool TryGetRetryProjection(out int attempt, out int maxAttempts, out int secondsRemaining)
+    {
+        if (_retryErrorMs < 0)
+        {
+            attempt = 0;
+            maxAttempts = 0;
+            secondsRemaining = 0;
+            return false;
+        }
+
+        int remaining = _retryTotalSec - (int)((Environment.TickCount64 - _retryErrorMs) / 1000);
+        attempt = _retryAttempt;
+        maxAttempts = _retryMax;
+        secondsRemaining = Math.Max(0, remaining);
+        return true;
     }
 
     /// <summary>Recomputes the countdown from wall clock each frame; expires
@@ -286,7 +335,7 @@ internal sealed class PromptPipeline(
         int remaining = _retryTotalSec - (int)((Environment.TickCount64 - _retryErrorMs) / 1000);
         if (remaining > 0)
         {
-            host.Status.Retry = RetryCountdown.Line(_retryAttempt, MaxStreamRetries, remaining);
+            host.Status.Retry = RetryCountdown.Line(_retryAttempt, _retryMax, remaining);
         }
         else
         {
@@ -299,6 +348,8 @@ internal sealed class PromptPipeline(
     private void ResetRetryCountdown()
     {
         _retryAttempt = 0;
+        _retryMax = MaxStreamRetries;
+        _retryFromTool = false;
         _retryErrorMs = -1;
         host.Status.Retry = null;
     }

@@ -50,6 +50,14 @@ public sealed class ChatScreenBridge : IDisposable
     private int _msgTokensIn;
     private int _msgTokensOut;
 
+    /// <summary>
+    ///     #76: true while the tool-retry mirror owns <see cref="StatusViewModel.Retry"/>.
+    ///     The bridge clears the slot on <see cref="ToolExecutionEndEvent"/> only when it
+    ///     set it — a stream-retry line owned by the REPL pipeline (same singleton) is
+    ///     never clobbered. Render-only: the dispatcher owns the schedule.
+    /// </summary>
+    private bool _toolRetryShown;
+
     private readonly HashSet<string> _displayedMessageIds = new();
 
     /// <summary>AgentErrorEvent seen since the last AgentStart — decides
@@ -181,8 +189,24 @@ public sealed class ChatScreenBridge : IDisposable
                     break;
                 }
 
+            case ToolExecutionUpdateEvent { RetryAttempt: not null, RetryMaxAttempts: not null } retry:
+                // #76: tool-retry mirror — render-only. Precomputed once per change
+                // (never interpolated per frame); cleared on ToolExecutionEndEvent.
+                _status.Retry = RetryCountdown.Line(
+                    retry.RetryAttempt.Value,
+                    retry.RetryMaxAttempts.Value,
+                    Math.Max(0, (int)Math.Ceiling(retry.RetryBackoffSeconds ?? 0)));
+                _toolRetryShown = true;
+                break;
+
             case ToolExecutionEndEvent execEnd:
                 CompleteCard(execEnd);
+                if (_toolRetryShown)
+                {
+                    _status.Retry = null;
+                    _toolRetryShown = false;
+                }
+
                 break;
 
             case MessageEndEvent:
