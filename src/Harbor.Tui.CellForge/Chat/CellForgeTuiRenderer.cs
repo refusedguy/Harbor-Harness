@@ -79,10 +79,15 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         ILogger<CellForgeTuiRenderer> logger,
         StatusBarViewModel? statusVm = null,
         ChatHistoryViewModel? chatVm = null,
-        InputViewModel? inputVm = null)
+        InputViewModel? inputVm = null,
+        UiStore? store = null)
         : base(logger)
     {
-        _store = new UiStore();
+        // Issue #77: the DI-shared store is injected by the composition root
+        // (TuiModule) so chat writes land in the same instance the
+        // RendererPipeline restores from. Null keeps the previous behaviour
+        // (private store) for tests and non-composed hosts.
+        _store = store ?? new UiStore();
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
@@ -97,10 +102,13 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         ITerminalBackend backend,
         StatusBarViewModel? statusVm = null,
         ChatHistoryViewModel? chatVm = null,
-        InputViewModel? inputVm = null)
+        InputViewModel? inputVm = null,
+        UiStore? store = null)
         : base(logger)
     {
-        _store = new UiStore();
+        // Issue #77: see the primary ctor — injected shared store or a
+        // private one when null.
+        _store = store ?? new UiStore();
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
