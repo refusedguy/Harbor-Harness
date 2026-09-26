@@ -2,6 +2,7 @@ using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -14,6 +15,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// (viewport-wide on content shifts, narrow fx rects on quiet animation
 /// frames) exactly like <c>CellForgeReplRunner.ApplyFrameDamageHints</c>.
 /// </summary>
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class FrameHintGoldenTests
 {
     private sealed class Session
