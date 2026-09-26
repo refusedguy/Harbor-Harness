@@ -80,7 +80,7 @@ public sealed class PluginHost
             if (compiled.IsFailure)
             {
                 _logger.LogError("Plugin compilation failed for {Path}: {Error}", script.Path, compiled.Error);
-                if (!_options.ContinueOnError)
+                if (FailOrContinue(compiled.Error))
                     return Result.Failure<IReadOnlyList<LoadedPlugin>>(compiled.Error);
                 continue;
             }
@@ -89,7 +89,7 @@ public sealed class PluginHost
             if (instantiated.IsFailure)
             {
                 _logger.LogError("Plugin instantiation failed for {Path}: {Error}", script.Path, instantiated.Error);
-                if (!_options.ContinueOnError)
+                if (FailOrContinue(instantiated.Error))
                     return Result.Failure<IReadOnlyList<LoadedPlugin>>(instantiated.Error);
                 continue;
             }
@@ -100,7 +100,7 @@ public sealed class PluginHost
                 if (registerResult.IsFailure)
                 {
                     _logger.LogError("Plugin registration failed for {DisplayName}: {Error}", plugin.DisplayName, registerResult.Error);
-                    if (!_options.ContinueOnError)
+                    if (FailOrContinue(registerResult.Error))
                         return Result.Failure<IReadOnlyList<LoadedPlugin>>(registerResult.Error);
                     continue;
                 }
@@ -111,5 +111,18 @@ public sealed class PluginHost
         }
 
         return Result.Success<IReadOnlyList<LoadedPlugin>>(loaded);
+    }
+
+    /// <summary>
+    ///     Shared tail for the three per-plugin failure branches above:
+    ///     returns <see langword="true" /> when the run must abort
+    ///     (<c>ContinueOnError=false</c>), <see langword="false" /> to skip
+    ///     the broken plugin and continue with the next. Logging stays at
+    ///     the call site (each branch logs its own context).
+    /// </summary>
+    private bool FailOrContinue(string error)
+    {
+        _ = error;
+        return !_options.ContinueOnError;
     }
 }

@@ -91,6 +91,18 @@ public class IdentifiersTests
     }
 
     [Test]
+    public async Task ModelRef_TryParse_BlankModel_NeverThrows()
+    {
+        // "provider/ " survives the split (whitespace is not empty) — a Try
+        // method must return Failure, not throw from Create.
+        foreach (string bad in new[] { "provider/ ", "provider/", "  ", "", " ", null! })
+        {
+            Result<ModelRef> result = ModelRef.TryParse(bad);
+            await Assert.That(result.IsSuccess).IsFalse();
+        }
+    }
+
+    [Test]
     public async Task ModelRef_ToString_CombinesProviderAndModel()
     {
         var ref_ = ModelRef.Create(ProviderId.Create("openai"), "gpt-4o");

@@ -93,12 +93,7 @@ public sealed class PermissionService : IPermissionService
             action = PermissionAction.Ask;
         }
 
-        if (action == PermissionAction.Allow)
-        {
-            return Result.Success(new PermissionResponse(action, false));
-        }
-
-        if (action == PermissionAction.Deny)
+        if (action is PermissionAction.Allow or PermissionAction.Deny)
         {
             return Result.Success(new PermissionResponse(action, false));
         }
