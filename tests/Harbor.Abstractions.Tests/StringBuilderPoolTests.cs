@@ -28,7 +28,7 @@ public class StringBuilderPoolTests
     {
         // A builder that grew past MaxRetainCapacity (16 KB) must be dropped
         // on return, never recycled — a later Rent must not observe it.
-        var big = new PooledStringBuilder(new StringBuilder(20 * 1024));
+        var big = new StringBuilderPool.PooledStringBuilder(new StringBuilder(20 * 1024));
         big.Builder.Append('x', 20 * 1024);
         big.Dispose();
 

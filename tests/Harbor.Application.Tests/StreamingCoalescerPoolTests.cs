@@ -3,6 +3,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
+using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
 namespace Harbor.Application.Tests;
 
