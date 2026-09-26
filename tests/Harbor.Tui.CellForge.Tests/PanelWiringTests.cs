@@ -11,7 +11,7 @@ namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
 /// CF-E-002 wiring (TOP-1 #27): the renderer owns a <see cref="CellForgePanelRegistry"/>
-/// with the 7 cell-native builtins in Spectre Alt+1..9 slot order,
+/// with the 9 cell-native builtins in Spectre Alt+1..9 slot order,
 /// <c>InitializeAsync</c> seeds them into <see cref="UiState"/>,
 /// <see cref="ChatScreenPanelDock"/> draws visible panels through
 /// <see cref="CellForgePanelAdapter"/> into <see cref="LayoutTree"/> dock regions
@@ -44,6 +44,7 @@ public class PanelWiringTests
         "diagnostics",
         "logs",
         "session-sidebar",
+        "jump",
     ];
 
     private static CellForgeTuiRenderer Create(RecordingBackend backend) =>
@@ -74,7 +75,7 @@ public class PanelWiringTests
     }
 
     [Test]
-    public async Task Registry_Has_Seven_Builtins_In_Spectre_Slot_Order()
+    public async Task Registry_Has_Nine_Builtins_In_Spectre_Slot_Order()
     {
         var backend = new RecordingBackend();
         using var renderer = Create(backend);
