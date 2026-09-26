@@ -69,6 +69,29 @@ public static class ArrayPoolExtensions
 ///     Thread-safe StringBuilder pool. Reuses StringBuilder instances across hot paths
 ///     to eliminate per-call allocations.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>#53 retention policy (accepted-retention):</b> the text data path
+///         is treated as potentially sensitive (secrets can arrive via
+///         files, tool stdout, or user input — not only via auth config).
+///         <c>StringBuilder.Clear()</c> resets <c>Length</c> but is NOT a
+///         secure wipe of the underlying char buffer, and this pool makes no
+///         secure-erase claims. Reuse of cleared buffers across calls is
+///         accepted for this personal-tool harness; every <c>Rent</c> returns
+///         a zero-length builder so no stale content is ever observable, but
+///         sensitive chars may physically linger in pooled buffers. Callers
+///         with wipe requirements must not route material through this pool.
+///     </para>
+///     <para>
+///         <b>Ownership:</b> the rented wrapper must be disposed exactly once
+///         by its owner, on the same logical flow that rented it. Do not copy
+///         the wrapper (it is a struct — copies share one builder and a
+///         double-<c>Dispose</c> would return the same builder twice, letting
+///         two renters share one instance) and do not retain
+///         <c>Builder</c> past <c>Dispose</c> (use-after-return appends into a
+///         builder that may already serve another renter).
+///     </para>
+/// </remarks>
 public static class StringBuilderPool
 {
     // Max capacity we are willing to retain; larger builders are dropped to avoid
@@ -125,6 +148,7 @@ public static class StringBuilderPool
         /// <summary>
         ///     Return the underlying builder to the pool. Builders that grew past
         ///     <c>MaxRetainCapacity</c> are dropped to avoid holding LOH buffers.
+        ///     Dispose exactly once; do not touch <see cref="Builder" /> afterwards.
         /// </summary>
         public void Dispose()
         {
