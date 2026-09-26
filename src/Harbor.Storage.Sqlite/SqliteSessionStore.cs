@@ -14,6 +14,11 @@ namespace Harbor.Storage.Sqlite;
 ///     Use for: long-running deployments, many sessions, efficient queries.
 ///     Note: pulls in native e_sqlite3 (~1.5 MB) — use JsonlSessionStore if you want zero native deps.
 /// </summary>
+/// <remarks>
+///     Construction is side-effect free: the database file and schema are
+///     created lazily on first use (<see cref="EnsureInitialized" />), so
+///     `new SqliteSessionStore(path, logger)` never touches the file system.
+/// </remarks>
 public sealed class SqliteSessionStore : ISessionStore
 {
 
@@ -35,17 +40,19 @@ public sealed class SqliteSessionStore : ISessionStore
                                   CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
 
                                   CREATE TABLE IF NOT EXISTS messages (
-                                      id TEXT PRIMARY KEY,
+                                      id TEXT NOT NULL,
                                       session_id TEXT NOT NULL,
                                       parent_id TEXT,
                                       role TEXT NOT NULL,
                                       agent TEXT,
                                       model TEXT,
                                       created_at TEXT NOT NULL,
+                                      created_at_ms INTEGER NOT NULL DEFAULT 0,
                                       payload TEXT NOT NULL,
+                                      PRIMARY KEY (session_id, id),
                                       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
                                   );
-                                  CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
+                                  CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at_ms);
                                   CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
                                   """;
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
@@ -61,17 +68,17 @@ public sealed class SqliteSessionStore : ISessionStore
         return options;
     }
 
+    private readonly string _dbPath;
     private readonly string _connectionString;
     private readonly object _lock = new();
     private readonly ILogger<SqliteSessionStore> _logger;
-    private bool _initialized;
+    private volatile bool _initialized;
 
     public SqliteSessionStore(string dbPath, ILogger<SqliteSessionStore> logger)
     {
+        _dbPath = dbPath;
         _connectionString = $"Data Source={dbPath}";
         _logger = logger;
-        Directory.CreateDirectory(Path.GetDirectoryName(dbPath) ?? ".");
-        Initialize();
     }
 
     public Task<Result<Session>> CreateAsync(
@@ -80,6 +87,7 @@ public sealed class SqliteSessionStore : ISessionStore
     {
         return Task.FromResult(Result.Try(() =>
         {
+            EnsureInitialized();
             var session = Session.Create(directory, agentName, providerId, modelId);
 
             lock (_lock)
@@ -126,6 +134,7 @@ public sealed class SqliteSessionStore : ISessionStore
     {
         return Result.Try(async () =>
         {
+            EnsureInitialized();
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT * FROM sessions WHERE id = @id";
@@ -143,6 +152,7 @@ public sealed class SqliteSessionStore : ISessionStore
     {
         return await Result.Try(async () =>
         {
+            EnsureInitialized();
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
 
@@ -171,6 +181,7 @@ public sealed class SqliteSessionStore : ISessionStore
     {
         return Task.FromResult(Result.Try(() =>
         {
+            EnsureInitialized();
             lock (_lock)
             {
                 using var conn = OpenConnection();
@@ -178,8 +189,8 @@ public sealed class SqliteSessionStore : ISessionStore
                 using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
                 cmd.CommandText = """
-                                  INSERT INTO messages (id, session_id, parent_id, role, agent, model, created_at, payload)
-                                  VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @payload)
+                                  INSERT INTO messages (id, session_id, parent_id, role, agent, model, created_at, created_at_ms, payload)
+                                  VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @createdMs, @payload)
                                   """;
                 cmd.Parameters.AddWithValue("@id", message.Id);
                 cmd.Parameters.AddWithValue("@sid", sessionId);
@@ -188,6 +199,7 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@agent", message is UserMessage u ? u.Agent : DBNull.Value);
                 cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : message is AssistantMessage a ? a.Model : DBNull.Value);
                 cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
+                cmd.Parameters.AddWithValue("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds());
                 cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), JsonOptions));
                 cmd.ExecuteNonQuery();
 
@@ -207,21 +219,23 @@ public sealed class SqliteSessionStore : ISessionStore
 
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
-        // For SQLite we replace by id
+        // For SQLite we replace by (session_id, id)
         return Task.FromResult(Result.Try(() =>
         {
+            EnsureInitialized();
             lock (_lock)
             {
                 using var conn = OpenConnection();
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = """
-                                  UPDATE messages SET payload = @payload, role = @role, created_at = @created
+                                  UPDATE messages SET payload = @payload, role = @role, created_at = @created, created_at_ms = @createdMs
                                   WHERE id = @id AND session_id = @sid
                                   """;
                 cmd.Parameters.AddWithValue("@id", message.Id);
                 cmd.Parameters.AddWithValue("@sid", sessionId);
                 cmd.Parameters.AddWithValue("@role", message.Role);
                 cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
+                cmd.Parameters.AddWithValue("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds());
                 cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), JsonOptions));
                 cmd.ExecuteNonQuery();
             }
@@ -232,9 +246,14 @@ public sealed class SqliteSessionStore : ISessionStore
     {
         return await Result.Try(async () =>
         {
+            EnsureInitialized();
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT role, payload FROM messages WHERE session_id = @sid ORDER BY created_at ASC";
+            // Chronological by instant (Unix-ms stamp, same semantics as
+            // JsonlSessionStore's OrderBy(CreatedAt)); rowid breaks ties.
+            // created_at TEXT is display-only — ISO-8601 text does NOT sort
+            // chronologically across mixed UTC offsets.
+            cmd.CommandText = "SELECT role, payload FROM messages WHERE session_id = @sid ORDER BY created_at_ms ASC, rowid ASC";
             cmd.Parameters.AddWithValue("@sid", sessionId);
 
             var result = new List<AgentMessage>();
@@ -257,6 +276,7 @@ public sealed class SqliteSessionStore : ISessionStore
     {
         return Task.FromResult(Result.Try(() =>
         {
+            EnsureInitialized();
             lock (_lock)
             {
                 using var conn = OpenConnection();
@@ -270,14 +290,16 @@ public sealed class SqliteSessionStore : ISessionStore
 
     /// <summary>
     ///     "Rewind to here": delete every message ordered after the target row.
-    ///     Ordering follows the same created_at ASC used by
-    ///     <see cref="GetMessagesAsync" /> (ISO-8601 text sorts chronologically),
+    ///     Ordering follows the same created_at_ms ASC used by
+    ///     <see cref="GetMessagesAsync" /> (Unix-ms instant, matching
+    ///     JsonlSessionStore's DateTimeOffset ordering),
     ///     with rowid as the deterministic tie-breaker for equal timestamps.
     /// </summary>
     public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
     {
         return Task.FromResult(Result.Try(() =>
         {
+            EnsureInitialized();
             lock (_lock)
             {
                 using var conn = OpenConnection();
@@ -285,16 +307,16 @@ public sealed class SqliteSessionStore : ISessionStore
                 int deleted;
                 using (var scope = conn.BeginTransaction())
                 {
-                    // Anchor: created_at of the kept message; ties broken by its rowid.
+                    // Anchor: created_at_ms of the kept message; ties broken by its rowid.
                     cmd.Transaction = scope;
                     cmd.CommandText = """
-                        SELECT created_at, rowid FROM messages
+                        SELECT created_at_ms, rowid FROM messages
                         WHERE session_id = @sid AND id = @mid LIMIT 1
                         """;
                     cmd.Parameters.AddWithValue("@sid", sessionId);
                     cmd.Parameters.AddWithValue("@mid", messageId);
 
-                    string anchorCreatedAt;
+                    long anchorMs;
                     long anchorRowId;
                     using (var reader = cmd.ExecuteReader())
                     {
@@ -304,16 +326,16 @@ public sealed class SqliteSessionStore : ISessionStore
                                 $"Message '{messageId}' not found in session '{sessionId}'.");
                         }
 
-                        anchorCreatedAt = reader.GetString(0);
+                        anchorMs = reader.GetInt64(0);
                         anchorRowId = reader.GetInt64(1);
                     }
 
                     cmd.CommandText = """
                         DELETE FROM messages
                         WHERE session_id = @sid
-                          AND (created_at > @anchor OR (created_at = @anchor AND rowid > @rid))
+                          AND (created_at_ms > @anchor OR (created_at_ms = @anchor AND rowid > @rid))
                         """;
-                    cmd.Parameters.AddWithValue("@anchor", anchorCreatedAt);
+                    cmd.Parameters.AddWithValue("@anchor", anchorMs);
                     cmd.Parameters.AddWithValue("@rid", anchorRowId);
                     deleted = cmd.ExecuteNonQuery();
 
@@ -336,6 +358,7 @@ public sealed class SqliteSessionStore : ISessionStore
     {
         return await Result.Try(async () =>
             {
+                EnsureInitialized();
                 using var conn = OpenConnection();
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = "SELECT metadata FROM sessions WHERE id = @id";
@@ -355,6 +378,7 @@ public sealed class SqliteSessionStore : ISessionStore
     {
         return Task.FromResult(Result.Try(() =>
         {
+            EnsureInitialized();
             lock (_lock)
             {
                 using var conn = OpenConnection();
@@ -371,6 +395,7 @@ public sealed class SqliteSessionStore : ISessionStore
     {
         return Task.FromResult(Result.Try(() =>
             {
+                EnsureInitialized();
                 lock (_lock)
                 {
                     using var conn = OpenConnection();
@@ -393,20 +418,201 @@ public sealed class SqliteSessionStore : ISessionStore
                 : Result.Success());
     }
 
-    private void Initialize()
+    /// <summary>
+    ///     One-time lazy initialization: create the directory, apply the schema,
+    ///     and migrate pre-#85 databases (global message PK, missing integer
+    ///     ordering stamp). The constructor performs no I/O; every public
+    ///     method funnels through here first, so init failures travel the
+    ///     Result channel instead of throwing from the ctor.
+    /// </summary>
+    private void EnsureInitialized()
     {
         if (_initialized) return;
         lock (_lock)
         {
             if (_initialized) return;
 
+            string? dir = Path.GetDirectoryName(_dbPath);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = Schema;
             cmd.ExecuteNonQuery();
 
+            MigrateMessagesIfNeeded(conn);
+
             _initialized = true;
         }
+    }
+
+    /// <summary>
+    ///     Migrate databases created before #85:
+    ///     (1) global PRIMARY KEY (id) → composite (session_id, id);
+    ///     (2) missing created_at_ms integer stamp → add + backfill from text;
+    ///     (3) ordering index rebuilt over the integer stamp.
+    /// </summary>
+    private static void MigrateMessagesIfNeeded(SqliteConnection conn)
+    {
+        if (HasLegacyMessagePk(conn))
+            RebuildMessagesTable(conn);
+
+        if (!HasColumn(conn, "messages", "created_at_ms"))
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE messages ADD COLUMN created_at_ms INTEGER NOT NULL DEFAULT 0";
+            alter.ExecuteNonQuery();
+            BackfillCreatedAtMs(conn);
+        }
+
+        using var idx = conn.CreateCommand();
+        idx.CommandText = """
+                          DROP INDEX IF EXISTS idx_messages_session;
+                          CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at_ms);
+                          """;
+        idx.ExecuteNonQuery();
+    }
+
+    private static bool HasColumn(SqliteConnection conn, string table, string column)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"PRAGMA table_info({table})";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasLegacyMessagePk(SqliteConnection conn)
+    {
+        var pkCols = new List<string>();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info(messages)";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            if (reader.GetInt64(5) > 0)
+                pkCols.Add(reader.GetString(1));
+        }
+
+        // Current shape: PRIMARY KEY (session_id, id). Anything else (notably
+        // the pre-#85 global PRIMARY KEY (id)) needs a rebuild.
+        return !(pkCols.Contains("session_id", StringComparer.OrdinalIgnoreCase)
+            && pkCols.Contains("id", StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static void BackfillCreatedAtMs(SqliteConnection conn)
+    {
+        var rows = new List<(string SessionId, string Id, string CreatedAt)>();
+        using (var select = conn.CreateCommand())
+        {
+            select.CommandText = "SELECT session_id, id, created_at FROM messages";
+            using var reader = select.ExecuteReader();
+            while (reader.Read())
+                rows.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+        }
+
+        foreach (var (sessionId, id, createdAt) in rows)
+        {
+            long ms = DateTimeOffset.TryParse(createdAt, out var dto)
+                ? dto.ToUnixTimeMilliseconds()
+                : 0;
+            using var upd = conn.CreateCommand();
+            upd.CommandText = "UPDATE messages SET created_at_ms = @ms WHERE session_id = @sid AND id = @mid";
+            upd.Parameters.AddWithValue("@ms", ms);
+            upd.Parameters.AddWithValue("@sid", sessionId);
+            upd.Parameters.AddWithValue("@mid", id);
+            upd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    ///     Rebuild the messages table to the composite-PK shape, preserving
+    ///     every row (timestamps re-stamped from created_at text).
+    /// </summary>
+    private static void RebuildMessagesTable(SqliteConnection conn)
+    {
+        var rows = new List<(string Id, string SessionId, string? ParentId, string Role, string? Agent, string? Model, string CreatedAt, string Payload)>();
+        using (var select = conn.CreateCommand())
+        {
+            select.CommandText = "SELECT id, session_id, parent_id, role, agent, model, created_at, payload FROM messages";
+            using var reader = select.ExecuteReader();
+            while (reader.Read())
+            {
+                rows.Add((
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2),
+                    reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    reader.GetString(6),
+                    reader.GetString(7)));
+            }
+        }
+
+        using var tx = conn.BeginTransaction();
+        using (var create = conn.CreateCommand())
+        {
+            create.Transaction = tx;
+            create.CommandText = """
+                                 CREATE TABLE messages_new (
+                                     id TEXT NOT NULL,
+                                     session_id TEXT NOT NULL,
+                                     parent_id TEXT,
+                                     role TEXT NOT NULL,
+                                     agent TEXT,
+                                     model TEXT,
+                                     created_at TEXT NOT NULL,
+                                     created_at_ms INTEGER NOT NULL DEFAULT 0,
+                                     payload TEXT NOT NULL,
+                                     PRIMARY KEY (session_id, id),
+                                     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+                                 )
+                                 """;
+            create.ExecuteNonQuery();
+        }
+
+        foreach (var row in rows)
+        {
+            long ms = DateTimeOffset.TryParse(row.CreatedAt, out var dto)
+                ? dto.ToUnixTimeMilliseconds()
+                : 0;
+            using var ins = conn.CreateCommand();
+            ins.Transaction = tx;
+            ins.CommandText = """
+                              INSERT INTO messages_new (id, session_id, parent_id, role, agent, model, created_at, created_at_ms, payload)
+                              VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @createdMs, @payload)
+                              """;
+            ins.Parameters.AddWithValue("@id", row.Id);
+            ins.Parameters.AddWithValue("@sid", row.SessionId);
+            ins.Parameters.AddWithValue("@pid", (object?)row.ParentId ?? DBNull.Value);
+            ins.Parameters.AddWithValue("@role", row.Role);
+            ins.Parameters.AddWithValue("@agent", (object?)row.Agent ?? DBNull.Value);
+            ins.Parameters.AddWithValue("@model", (object?)row.Model ?? DBNull.Value);
+            ins.Parameters.AddWithValue("@created", row.CreatedAt);
+            ins.Parameters.AddWithValue("@createdMs", ms);
+            ins.Parameters.AddWithValue("@payload", row.Payload);
+            ins.ExecuteNonQuery();
+        }
+
+        using (var swap = conn.CreateCommand())
+        {
+            swap.Transaction = tx;
+            swap.CommandText = """
+                               DROP TABLE messages;
+                               ALTER TABLE messages_new RENAME TO messages;
+                               CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
+                               """;
+            swap.ExecuteNonQuery();
+        }
+
+        tx.Commit();
     }
 
     private SqliteConnection OpenConnection()

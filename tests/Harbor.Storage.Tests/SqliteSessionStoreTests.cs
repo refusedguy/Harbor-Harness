@@ -188,7 +188,7 @@ public class SqliteSessionStoreTests
             var baseTime = DateTimeOffset.UtcNow;
 
             // Insert messages with explicit, non-monotonic timestamps.
-            // SqliteSessionStore orders by created_at ASC, so order should follow timestamps, not insertion order.
+            // SqliteSessionStore orders by created_at_ms ASC, so order should follow timestamps, not insertion order.
             await store.AppendMessageAsync(session.Id, new UserMessage(
                 "m1", session.Id, baseTime.AddSeconds(10), "second-inserted-first-ts", "code", "claude"));
             await store.AppendMessageAsync(session.Id, new UserMessage(
@@ -311,26 +311,103 @@ public class SqliteSessionStoreTests
     }
 
     [Test]
-    public async Task AppendMessageAsync_UpdatesSessionTimestamp()
+    public async Task SameMessageId_InTwoSessions_DoesNotCollide()
     {
         var store = Create(out string dbPath);
         try
         {
-            var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
-            var originalUpdatedAt = session.UpdatedAt;
+            var s1 = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
+            var s2 = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
 
-            // Small delay to ensure UpdatedAt differs.
-            await Task.Delay(50);
-            await store.AppendMessageAsync(session.Id, NewUserMessage(session.Id, "hello"));
+            // Same message id in two sessions (e.g. double ImportAsync preserving ids).
+            var r1 = await store.AppendMessageAsync(s1.Id, new UserMessage(
+                "shared-id", s1.Id, DateTimeOffset.UtcNow, "session-one", "code", "claude"));
+            var r2 = await store.AppendMessageAsync(s2.Id, new UserMessage(
+                "shared-id", s2.Id, DateTimeOffset.UtcNow, "session-two", "code", "claude"));
 
-            var fetched = await store.GetAsync(session.Id);
-            await Assert.That(fetched.IsSuccess).IsTrue();
-            await Assert.That(fetched.Value.UpdatedAt).IsGreaterThan(originalUpdatedAt);
+            await Assert.That(r1.IsSuccess).IsTrue();
+            await Assert.That(r2.IsSuccess).IsTrue();
+
+            var m1 = await store.GetMessagesAsync(s1.Id);
+            var m2 = await store.GetMessagesAsync(s2.Id);
+            await Assert.That(m1.Value.Count).IsEqualTo(1);
+            await Assert.That(m2.Value.Count).IsEqualTo(1);
+            await Assert.That(((UserMessage)m1.Value[0]).Content).IsEqualTo("session-one");
+            await Assert.That(((UserMessage)m2.Value[0]).Content).IsEqualTo("session-two");
+
+            // Same-session duplicate is still a PK violation.
+            var dup = await store.AppendMessageAsync(s1.Id, new UserMessage(
+                "shared-id", s1.Id, DateTimeOffset.UtcNow, "dup", "code", "claude"));
+            await Assert.That(dup.IsFailure).IsTrue();
+
+            // Updates stay scoped to their own session.
+            var edited = (UserMessage)m1.Value[0] with { Content = "session-one-edited" };
+            await store.UpdateMessageAsync(s1.Id, edited);
+            var m2After = await store.GetMessagesAsync(s2.Id);
+            await Assert.That(((UserMessage)m2After.Value[0]).Content).IsEqualTo("session-two");
         }
         finally
         {
             SqliteConnection.ClearAllPools();
             if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task GetMessagesAsync_OrdersByInstant_NotLexicalText()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
+
+            // 23:59 UTC vs 00:01+02:00 next local day (= 22:01 UTC previous day):
+            // chronologically the 00:01 message is FIRST, but its ISO-8601 text
+            // ("2026-05-01T00:01...+02:00") sorts lexically AFTER "2026-04-30T23:59Z".
+            var afterMidnightLocal = new DateTimeOffset(2026, 5, 1, 0, 1, 0, TimeSpan.FromHours(2));
+            var beforeMidnightUtc = new DateTimeOffset(2026, 4, 30, 23, 59, 0, TimeSpan.Zero);
+
+            await store.AppendMessageAsync(session.Id, new UserMessage(
+                "m-late-text", session.Id, beforeMidnightUtc, "second-instant", "code", "claude"));
+            await store.AppendMessageAsync(session.Id, new UserMessage(
+                "m-early-instant", session.Id, afterMidnightLocal, "first-instant", "code", "claude"));
+
+            var messages = await store.GetMessagesAsync(session.Id);
+
+            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages.Value.Count).IsEqualTo(2);
+            await Assert.That(((UserMessage)messages.Value[0]).Content).IsEqualTo("first-instant");
+            await Assert.That(((UserMessage)messages.Value[1]).Content).IsEqualTo("second-instant");
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task Ctor_DoesNotTouchFileSystem()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"harbor-sqlite-nodb-{Guid.NewGuid():N}");
+        string dbPath = Path.Combine(dir, "sessions.db");
+        try
+        {
+            _ = new SqliteSessionStore(dbPath, NullLogger<SqliteSessionStore>.Instance);
+
+            await Assert.That(Directory.Exists(dir)).IsFalse();
+            await Assert.That(File.Exists(dbPath)).IsFalse();
+
+            // First use initializes lazily.
+            var store = new SqliteSessionStore(dbPath, NullLogger<SqliteSessionStore>.Instance);
+            var created = await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4");
+            await Assert.That(created.IsSuccess).IsTrue();
+            await Assert.That(File.Exists(dbPath)).IsTrue();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
         }
     }
 }
