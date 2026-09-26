@@ -28,12 +28,12 @@ Harbor.Tui.Abstractions → Harbor.Ui.Framework          → Harbor.Abstractions
 
 ## InternalsVisibleTo
 
-The `InternalsVisibleTo` grants for `UiStore.Transition` now live in
+The `InternalsVisibleTo` grants now live in
 `src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj:23-27`
 (`Harbor.App.Avalonia`, `Harbor.App.Wpf`, `Harbor.App.Maui`, `Harbor.App.Blazor`,
-`Harbor.App.Cli`). Desktop GUIs use it to fold non-agent state transitions (e.g.
-inserting a user-input line into the transcript before the agent emits a
-UserMessage event).
+`Harbor.App.Cli`). Desktop GUIs use them for internal state access; every state
+fold goes through `UiStore.Dispatch(UiMsg)` (the old `UiStore.Transition`
+escape hatch was removed in the #92 Transition→UiMsg migration).
 
 ## Usage
 

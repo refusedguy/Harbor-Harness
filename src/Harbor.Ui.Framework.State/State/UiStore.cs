@@ -51,11 +51,10 @@ public sealed class UiStore
     // provides a full barrier on success).
     //
     // §FP-007 (RESOLVED): the old `Transition(Func<UiState,UiState>)` escape
-    // hatch is gone — the last callers (TuiEffectHost, SessionManager,
-    // SessionSwitcher) now dispatcher UiMsg.AgentStarted / AgentEnded /
-    // StatusChanged / AppendLine through the pure reducer instead. Concurrent
-    // agents therefore cannot corrupt each other's state via shared mutation:
-    // every fold rides the same CAS + UiReducer.Update path.
+    // hatch is gone — every fold (BindSession, Reset, agent events, host
+    // messages) rides the same CAS + UiReducer.Update path via
+    // Dispatch(UiMsg). Concurrent agents therefore cannot corrupt each
+    // other's state via shared mutation.
     private volatile UiState _state;
 
 
@@ -127,26 +126,13 @@ public sealed class UiStore
     }
 
     /// <summary>
-    ///     Apply a manual state fold through a reducer function. Private on
-    ///     purpose (§FP-007 resolved): every state change must be expressible as a
-    ///     <see cref="Dispatch(UiMsg)" /> so concurrent agents in different
-    ///     sessions can never bypass the pure reducer. Only the store's own
-    ///     convenience wrappers (<see cref="BindSession" />, <see cref="Reset" />) fold directly.
+    ///     Bind session chrome (model/provider/agent) into the state.
+    ///     Convenience wrapper over <c>Dispatch(new UiMsg.ConfigureRuntime(...))</c>
+    ///     so hosts keep a stable call site while the fold rides the pure reducer.
     /// </summary>
-    private void Transition(Func<UiState, UiState> reducer)
+    public void BindSession(string model, string provider, string agentName)
     {
-        UiState original;
-        UiState next;
-        do
-        {
-            original = _state; // volatile read
-            next = reducer(original);
-            if (ReferenceEquals(original, next))
-                return;
-            next = next with { Revision = original.Revision + 1 };
-        } while (Interlocked.CompareExchange(ref _state, next, original) != original);
-
-        Notify(next);
+        Dispatch(new UiMsg.ConfigureRuntime(model, provider, agentName));
     }
 
     /// <summary>
@@ -179,9 +165,6 @@ public sealed class UiStore
             }
         }
     }
-
-    /// <summary>Bind session chrome (model/provider/agent) into the state.</summary>
-    public void BindSession(string model, string provider, string agentName) => Transition(s => s with { Model = model, Provider = provider, AgentName = agentName });
 
     /// <summary>Reset to a fresh empty state (e.g. on clear-screen).</summary>
     public void Reset()

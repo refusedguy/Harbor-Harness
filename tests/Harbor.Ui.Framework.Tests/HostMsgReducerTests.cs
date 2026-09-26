@@ -94,4 +94,14 @@ public class HostMsgReducerTests
         await Assert.That(result.State).IsEqualTo(new UiState());
         await Assert.That(result.Effect).IsTypeOf<TuiEffect.None>();
     }
+
+    [Test]
+    public async Task ConfigureRuntime_BindsSessionChrome()
+    {
+        var result = UiReducer.Update(new UiState(), new UiMsg.ConfigureRuntime("m", "p", "code"));
+        await Assert.That(result.State.Model).IsEqualTo("m");
+        await Assert.That(result.State.Provider).IsEqualTo("p");
+        await Assert.That(result.State.AgentName).IsEqualTo("code");
+        await Assert.That(result.State.Lines.Length).IsEqualTo(0);
+    }
 }
