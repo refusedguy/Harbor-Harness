@@ -118,8 +118,14 @@ public interface IHarborClient : IAsyncDisposable
     ///     the client is disposed.
     /// </summary>
     /// <param name="ct">Cancellation token that ends the subscription.</param>
+    /// <param name="sinceSequence">
+    ///     Replay envelopes newer than this server sequence before going live
+    ///     (the daemon's replay ring). Null = live from now. In-process
+    ///     clients always stream live (no history); IPC clients replay from
+    ///     the server ring when the gap fits.
+    /// </param>
     /// <returns>An async stream of events.</returns>
-    public IAsyncEnumerable<HarborEvent> SubscribeToEventsAsync(CancellationToken ct = default);
+    public IAsyncEnumerable<HarborEvent> SubscribeToEventsAsync(CancellationToken ct = default, ulong? sinceSequence = null);
 
     /// <summary>Establish the connection. No-op for in-process clients.</summary>
     public Task ConnectAsync(CancellationToken ct = default);
