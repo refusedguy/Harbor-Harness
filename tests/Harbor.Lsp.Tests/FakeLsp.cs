@@ -111,6 +111,7 @@ public sealed class FakeLspServer : IAsyncDisposable
     private readonly MemPipeStream _serverToClient = new();
     private readonly CancellationTokenSource _cts = new();
     private Task? _loopTask;
+    private bool _disposed;
 
     public FakeLspServer()
     {
@@ -251,6 +252,13 @@ public sealed class FakeLspServer : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Idempotent: tests dispose mid-run to simulate server exit and again via await-using.
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         await _cts.CancelAsync().ConfigureAwait(false);
         if (_loopTask is not null)
         {
