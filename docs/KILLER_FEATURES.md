@@ -27,7 +27,7 @@ The list below is the **ruthless, ship-first** ranking. Each entry has:
 | 2  | Collapsible tool-call cards with status + duration | 5      | M      | Orca, Opencode | ✅ R28 |
 | 3  | Command palette with recent items + fuzzy + kbd    | 5      | M      | Orca (cmdk)   | ✅ R28+ (fuzzy filter: `CommandPaletteViewModelBase.FuzzyScore`; re-verified 2026-08-27) |
 | 4  | Token-usage sparkline in status bar (live)         | 4      | S      | Opencode, Kilo | ✅ R28 |
-| 5  | Intra-line word-diff highlighting (not just line)  | 5      | M      | Pi (diff lib) | ⚠️ partial (line-level only) |
+| 5  | Intra-line word-diff highlighting (not just line)  | 5      | M      | Pi (diff lib) | ✅ R+ (dependency-free `WordDiff` LCS + `DiffBlock` 1:1 pairing; insertion/deletion covered) |
 | 6  | Toast notifications with slide-in + auto-dismiss   | 4      | S      | Orca (sonner) | ✅ R28 |
 | 7  | Tab-strip with drag-reorder + close-gesture        | 4      | L      | Orca          | ❌ |
 | 8  | Worktree jump palette (Cmd-J / Ctrl+J)             | 5      | M      | Orca          | ❌ |
@@ -945,6 +945,11 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** M (8 hours)
 - **Priority:** P1
 - **Dependencies:** `DiffMatchNet` NuGet package
+- **Status:** Implemented dependency-free (no NuGet): whitespace-token LCS in
+  `src/Harbor.Ui.Framework.Rendering/Widgets/WordDiff.cs`, wired into
+  `DiffBlock` for 1:1 delete→add pairs (context tokens dim, changed tokens
+  take the row accent). Covered by `WordDiffTests` (replace/insert/delete)
+  + `DiffBlockTests` paint-level insertion/deletion tests.
 
 ---
 
