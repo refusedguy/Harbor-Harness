@@ -14,7 +14,7 @@ namespace Harbor.Ipc.Tests;
 ///     services (ISessionStore, IProviderRegistry, IToolRegistry, IAgent)
 ///     without serialization.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
     public class InProcessClientTests
 {
     /// <summary>

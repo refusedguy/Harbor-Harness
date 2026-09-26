@@ -6,6 +6,7 @@ using Harbor.App.Blazor.ViewModels;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Storage.Memory;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

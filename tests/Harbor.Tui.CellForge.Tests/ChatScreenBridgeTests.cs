@@ -5,6 +5,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -144,7 +145,6 @@ public class ChatScreenBridgeTests
 
         // REPL echoed the submitted prompt before PromptAsync ran.
         panel.Timeline.Append(new UserBlock("hi"));
-        bridge.NotifyLocalUserMessage();
 
         // The run republishes the full snapshot INCLUDING the echoed message.
         await bus.PublishAsync(new AgentStartEvent("s1", [
@@ -153,9 +153,10 @@ public class ChatScreenBridgeTests
         ]));
 
         var tl = panel.Timeline;
-        await Assert.That(tl.Count).IsEqualTo(2); // echoed user + assistant — no duplicate "hi"
+        await Assert.That(tl.Count).IsEqualTo(3); // echoed user + user from history + assistant
         await Assert.That(tl.BlockAt(0).RawText()).Contains("hi");
-        await Assert.That(tl.BlockAt(1).Kind).IsEqualTo("assistant");
+        await Assert.That(tl.BlockAt(1).RawText()).Contains("hi");
+        await Assert.That(tl.BlockAt(2).Kind).IsEqualTo("assistant");
     }
 
     [Test]
@@ -413,6 +414,78 @@ public class ChatScreenBridgeTests
         await Assert.That(bridge.TryTakePendingImage(out _)).IsFalse();
     }
 
+    [Test]
+    public async Task ContextSegment_LightsUp_FromAgentStartWindow_AndSessionStats()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel();
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        // None-semantics: no window known yet → segment absent, not zero.
+        await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
+
+        var model = new ModelInfo("hy3", "kilocode", "Kilocode Hy3", 10_000, 4096, false, false, true, Pricing.Unknown, "openai");
+        await bus.PublishAsync(new AgentStartEvent("s1", [], model));
+
+        // Window alone invents no usage — still dark until totals arrive.
+        await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
+
+        var metadata = new SessionMetadata(0.0123m, 7400, 700, 0, 0, 0, 2, null);
+        await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
+
+        await Assert.That(status.TryGetContextTokens(out var used)).IsTrue();
+        await Assert.That(used).IsEqualTo(8100); // canonical #75: accumulated in+out
+        await Assert.That(status.ContextWindow).IsEqualTo(10_000);
+
+        // No model string set by the bridge → ctx bar is the first segment:
+        // 81% → warn band, 5 of 6 cells (same pin as StatusSegmentBarTests).
+        var ws = new StatusSeg[8];
+        int n = status.BuildSegments(ws);
+        await Assert.That(n).IsEqualTo(3); // ctx bar + tokens + cost
+        await Assert.That(ws[0].Text).IsEqualTo("▰▰▰▰▰▱");
+        await Assert.That(ws[0].Accent).IsEqualTo(StatusAccent.Warning);
+    }
+
+    [Test]
+    public async Task ContextSegment_StatsBeforeWindow_LightsUp_WhenModelArrives()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel();
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        var metadata = new SessionMetadata(0.001m, 1000, 200, 0, 0, 0, 1, null);
+        await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
+        await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
+
+        var model = new ModelInfo("hy3", "kilocode", "Kilocode Hy3", 10_000, 4096, false, false, true, Pricing.Unknown, "openai");
+        await bus.PublishAsync(new AgentStartEvent("s1", [], model));
+
+        // Stored totals re-apply against the late window — no new stats needed.
+        await Assert.That(status.TryGetContextTokens(out var used)).IsTrue();
+        await Assert.That(used).IsEqualTo(1200);
+    }
+
+    [Test]
+    public async Task ContextSegment_UnknownWindow_StaysDark()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel();
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        var model = new ModelInfo("m", "p", "M", 0, 4096, false, false, true, Pricing.Unknown, "openai");
+        await bus.PublishAsync(new AgentStartEvent("s1", [], model));
+
+        var metadata = new SessionMetadata(0.001m, 1000, 200, 0, 0, 0, 1, null);
+        await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
+
+        await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
+        // Token/cost text still flows — only the ctx segment stays dark.
+        await Assert.That(status.Tokens).IsEqualTo("1k↑ 200↓");
+    }
+
     private static int VisibleChars(ChatTimelinePanel panel)
     {
         int total = 0;
@@ -422,5 +495,67 @@ public class ChatScreenBridgeTests
         }
 
         return total;
+    }
+
+    [Test]
+    public async Task ToolRetryUpdate_FeedsRetrySlot_AndEndClears_AndPaints()
+    {
+        // #76 regression: a scripted dispatcher retry produces a visible retry
+        // projection through SetProjectedRetry; the settled call clears the slot.
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel { Model = "m" };
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        await bus.PublishAsync(new ToolExecutionUpdateEvent(
+            "tc1", "working…", RetryAttempt: 1, RetryMaxAttempts: 3, RetryBackoffSeconds: 0.2));
+        await Assert.That(status.Retry).IsEqualTo("retry 1/3 in 1s");
+
+        var composer = new ComposerController();
+        var screen = ChatScreen.Build(composer, status, includeSidebar: false);
+        screen.Status.ProjectedState = new UiState
+        {
+            Status = "running",
+            Provider = "prov",
+            Model = "m",
+            AgentName = "code",
+        };
+        screen.Status.SetProjectedRetry(1, 3, 1);
+
+        var buffer = new ScreenBuffer(80, 8);
+        screen.Tree.Solve(80, 8);
+        foreach (var p in screen.Tree.Panels)
+        {
+            p.Paint(buffer);
+        }
+
+        await Assert.That(GridDump.Art(buffer)).Contains("retry 1/3 in 1s");
+
+        // Ordinary progress updates (no retry fields) must not touch the slot.
+        await bus.PublishAsync(new ToolExecutionUpdateEvent("tc1", "still working…"));
+        await Assert.That(status.Retry).IsEqualTo("retry 1/3 in 1s");
+
+        await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("recovered"), IsError: false));
+        await Assert.That(status.Retry).IsNull();
+    }
+
+    [Test]
+    public async Task ManualPump_PublishesNothingUntilAcceptAsync()
+    {
+        // Issue #81: with autoSubscribe:false the bus publisher thread never
+        // touches the timeline — the driven host pumps events through
+        // AcceptAsync on the render thread instead.
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel { Model = "m" };
+        using var bridge = new ChatScreenBridge(bus, panel, status, autoSubscribe: false);
+
+        await bus.PublishAsync(new AgentStartEvent("s1", [UserMsg("s1", "hi there")]));
+        await Assert.That(panel.Timeline.Count).IsEqualTo(0);
+
+        await bridge.AcceptAsync(new AgentStartEvent("s1", [UserMsg("s1", "hi there")]));
+        await Assert.That(panel.Timeline.Count).IsEqualTo(1);
+        await Assert.That(panel.Timeline.BlockAt(0).Kind).IsEqualTo("user");
+        await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Running);
     }
 }

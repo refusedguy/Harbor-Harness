@@ -15,11 +15,12 @@ namespace Harbor.Benchmarks;
 ///     under concurrent subscriber load.
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(warmupCount: 2, iterationCount: 3)]
+[SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class EventBroadcasterThroughputBenchmark
 {
     private EventBroadcaster _broadcaster = null!;
     private InMemoryEventBus _eventBus = null!;
+    private List<Pipe> _clientPipes = null!;
     private List<PipeStream> _clientStreams = null!;
     private List<SemaphoreSlim> _writeLocks = null!;
 
@@ -34,6 +35,7 @@ public class EventBroadcasterThroughputBenchmark
         _broadcaster.Start();
 
         _clientStreams = new List<PipeStream>(ClientCount);
+        _clientPipes = new List<Pipe>(ClientCount);
         _writeLocks = new List<SemaphoreSlim>(ClientCount);
 
         for (int i = 0; i < ClientCount; i++)
@@ -43,8 +45,26 @@ public class EventBroadcasterThroughputBenchmark
             var writeLock = new SemaphoreSlim(1, 1);
             _broadcaster.RegisterAsync(stream, writeLock, lastSequence: null, clientId: $"bench-{i}")
                 .GetAwaiter().GetResult();
+            _clientPipes.Add(pipe);
             _clientStreams.Add(stream);
             _writeLocks.Add(writeLock);
+        }
+    }
+
+    [IterationCleanup]
+    public void DrainClientPipes()
+    {
+        // Nobody reads the client side: the broadcaster's per-client writer
+        // tasks buffer framed envelopes into the pipes. Drain between iterations
+        // so pooled pipe memory does not accumulate and contaminate later ones.
+        foreach (var pipe in _clientPipes)
+        {
+            while (pipe.Reader.TryRead(out var result))
+            {
+                pipe.Reader.AdvanceTo(result.Buffer.End);
+                if (result.Buffer.Length == 0)
+                    break;
+            }
         }
     }
 

@@ -60,8 +60,13 @@ EventBus fixed alloc (8.1 KB/publish). Полная таблица и план P
 
 ## Known broken / pre-existing
 
+- **CI `build` job red on `dev` (Sep 2026, fixed in worktree):** unresolved merge markers (`CS8300`) in `src/Harbor.CodeGen/{EscapeCodeGenerator,MoodFrameGenerator}.cs` from the codegen-boilerplate merge, a missing CodeGen-analyzer reference in `Harbor.Terminal.Abstractions`, HEAD-side consumers (`Harbor.CodeGen.*Attribute`, hand-rolled `EscapeCodes`) vs sprint-side contracts, plus Avalonia-12 API drift (`Selection.StartOffset`, `Dispatcher.UIThread`, `HierarchicalDataTemplate`/`TreeView.Virtualize`). All fixed; `dotnet build Harbor.slnx -c Release` is green (0 errors).
+- **`dotnet test` discovers zero tests repo-wide** (MTP bridge exits 5 with one silent discovery error; same DLLs run green via `dotnet run --project` / direct exec). CI + NUKE + docs switched to `dotnet run --project tests/<X> -- --minimum-expected-tests 1` (issue #24).
+- **Golden CRLF trap on Windows:** `*.golden.txt` blobs are LF; without normalization Windows checkouts (CRLF) fail string compares. Fixed via `Golden.Normalize` in both helpers + `.gitattributes` (`*.golden.txt text eol=lf`).
+- **Windows-only test isolation leak:** `GetFolderPath(UserProfile)` ignores a swapped `USERPROFILE` env, so `Build_Registers_CommonConfig` read the dev-box config. Fixed via `HARBOR_HOME` override (`HarborPaths`) + test isolation.
 - **3 Avalonia 12 headless test failures** (на момент свипа 22.08): `MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — fail with `InvalidOperationException: Stack empty` in `AvaloniaPropertyDictionaryPool.Get()`. Похоже на баг пакета Avalonia.Headless, не Harbor-кода; re-check ROP-D (25.08) фиксировал красными только пару флакующих `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered` (introduced 61ee126).
 - **8 IPC timing-test failures** on Linux: named-pipe disposal race in `Harbor.Ipc.Tests`. Tests pass on Windows.
+- **Pre-existing reds verified on Windows (untouched by current work):** `PatchTool` ×3 (`AppliesSimpleAdditionPatch`, `AppliesModificationPatch`, `PreviewIncludesAddedAndRemovedLines`), `McpProcessClientStartInfoTests.Register_StartInfo_SpawnsWithArgsEnvCwd` (`KeyNotFoundException 'cwd'`), markdown `TokenByToken_EqualsWholeDocument_AtWidth` ×3 + `RandomChunkSplits_ProduceIdenticalFinalLines`, PTY `Enter_WithNonTtyStdin` (`DllNotFoundException 'libc'`), permission `CheckAsync_PersistedAllowDecision_SecondCallDoesNotPromptAgain` (fails on pristine tree too) + `ConcurrentStress`/`StealStorm` flakes.
 
 ## Top 3 next steps (recommended priority)
 
@@ -91,7 +96,7 @@ full backlog. Highlights:
 | IPC (MessagePack over pipe/UDS) | `src/Harbor.Ipc.{Abstractions,Client,Server,InProcess}/` + `src/Harbor.Transport.Remote/` |
 | Storage backends | `src/Harbor.Storage.{Jsonl,Memory,Sqlite}/` |
 | LLM providers | `src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/` |
-| Builtin tools (14) | `src/Harbor.Tools.Builtin/Tools/` (read/write/edit/bash/glob/grep/ls/task/webfetch/patch/notebook/ripgrep/tree/mcp и др.) |
+| Builtin tools (18) | `src/Harbor.Tools.Builtin/Tools/` (read/write/edit/bash/glob/grep/ls/task/webfetch/patch/notebook/ripgrep/tree/mcp/skill/read_mcp_resource/mcp_prompt и др.) |
 | Terminal TUI renderers | in-solution: `src/Harbor.Tui.{Ansi,Plain,ConsoleEx,Notifications}/`; optional (`contrib/tui/`): Spectre, Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel |
 | Platform apps (composition roots) | `apps/Harbor.App.{Cli,Avalonia}/`; WPF / MAUI / Blazor — `contrib/apps/` |
 | Reusable UI components | `apps/Harbor.App.Avalonia/Views/Components/`, `contrib/apps/Harbor.App.Blazor/Components/Shared/`, `contrib/apps/Harbor.App.Wpf/Controls/` |
@@ -117,16 +122,17 @@ dotnet run --project apps/Harbor.App.Avalonia
 dotnet run --project contrib/apps/Harbor.App.Blazor
 # → open http://localhost:5000
 
-# Запуск тестов ВАЖНО: целиком Harbor.slnx под MTP-host не прогоняется — известное
-# ограничение хоста. Прогоняйте per-project:
-dotnet test tests/Harbor.Core.Tests
-dotnet test tests/Harbor.Tui.ConsoleEx.PtyTests   # CE-5 PTY e2e
+# Запуск тестов ВАЖНО: `dotnet test` в этом репо находит НОЛЬ тестов (сломанный
+# MTP-bridge: хост выходит с кодом 5 и одной silent-ошибкой discovery).
+# Прогоняйте per-project как обычные exe:
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
+dotnet run --project tests/Harbor.Tui.ConsoleEx.PtyTests -c Release --no-build   # CE-5 PTY e2e
 
 # Run plugin tests (the ones that were broken in R29 and fixed in R30)
-dotnet test tests/Harbor.Plugins.Runtime.Tests
+dotnet run --project tests/Harbor.Plugins.Runtime.Tests -c Release --no-build -- --minimum-expected-tests 1
 
 # Enforce layer-dep rules
-dotnet test tests/Harbor.Architecture.Tests
+dotnet run --project tests/Harbor.Architecture.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 ## Key environment variables

@@ -28,6 +28,7 @@ public class CapabilityProbeTests
     {
         await Assert.That(TerminalQueries.MouseClickEnable).IsEqualTo("\u001B[?1000h\u001B[?1006h");
         await Assert.That(TerminalQueries.MouseDragEnable).IsEqualTo("\u001B[?1002h");
+        await Assert.That(TerminalQueries.MouseFullEnable).IsEqualTo("\u001B[?1000h\u001B[?1002h\u001B[?1006h");
         await Assert.That(TerminalQueries.MouseDisable).IsEqualTo("\u001B[?1006l\u001B[?1002l\u001B[?1000l");
         await Assert.That(TerminalQueries.PasteEnable).IsEqualTo("\u001B[?2004h");
         await Assert.That(TerminalQueries.PasteDisable).IsEqualTo("\u001B[?2004l");

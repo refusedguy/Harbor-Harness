@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Ui.Framework.Services;
 

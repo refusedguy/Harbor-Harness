@@ -17,9 +17,11 @@ chmod +x dotnet-install.sh && ./dotnet-install.sh --channel 10.0
 export PATH="$HOME/.dotnet:$PATH"
 
 # 2. Склонируй и собери Harbor
-git clone https://github.com/harbor-sh/harbor
-cd harbor
+git clone --recurse-submodules https://github.com/refusedguy/Harbor-Harness.git
+cd Harbor-Harness
 dotnet build
+# Уже склонировал без сабмодулей (external/ConsoleEx пустой)?
+git submodule update --init --recursive
 
 # 3. Установи API ключ (Kilocode = бесплатно, без кредитки)
 #    Получи ключ на https://kilo.ai
@@ -147,8 +149,8 @@ export PATH="$HOME/.dotnet:$PATH"
 ### 2. Build Harbor
 
 ```bash
-git clone https://github.com/harbor-sh/harbor
-cd harbor
+git clone --recurse-submodules https://github.com/refusedguy/Harbor-Harness.git
+cd Harbor-Harness
 dotnet build
 ```
 
@@ -396,9 +398,12 @@ Full set (`HarborToolSetKind.Full14`, the CLI default — see
 | `ripgrep` | Fast content search via `rg` binary (gitignore-aware) |
 | `tree` | ASCII directory tree (gitignore-aware) |
 | `mcp` | Bridge to registered MCP servers |
+| `read_mcp_resource` | Read an MCP server resource by URI |
+| `mcp_prompt` | Render an MCP server prompt by name |
+| `skill` | Load a SKILL.md skill body by name |
 
 The Avalonia desktop host registers the smaller `Standard10` set (without
-`task`, `webfetch`, `ripgrep`, `mcp`).
+`task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`).
 
 ## Agents (modes)
 

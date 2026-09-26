@@ -64,3 +64,16 @@ public sealed record SkillDescriptor(
     string Name,
     string Description,
     string FilePath);
+
+/// <summary>
+///     Provides skill discovery and content loading for a working directory.
+/// </summary>
+public interface ISkillProvider
+{
+    /// <summary>List all available skills for the given working directory.</summary>
+    IReadOnlyList<SkillDescriptor> GetSkills(string workingDirectory);
+
+    /// <summary>Read the full content of a skill by name.</summary>
+    /// <returns>The skill's Markdown content, or null if not found.</returns>
+    string? ReadSkill(string workingDirectory, string name);
+}

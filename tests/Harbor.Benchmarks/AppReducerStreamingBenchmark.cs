@@ -3,6 +3,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Reducers;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Benchmarks;
 
@@ -23,7 +24,7 @@ namespace Harbor.Benchmarks;
 ///     (ChunkedBuffer + materialization) actually costs.
 /// </remarks>
 [MemoryDiagnoser]
-[SimpleJob(warmupCount: 3, iterationCount: 10)]
+[SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class AppReducerStreamingBenchmark
 {
     private AgentEvent[] _events = null!;

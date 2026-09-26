@@ -23,12 +23,14 @@ public sealed class TaskTool : ITool
     private readonly IAgentRegistry _agents;
     private readonly ILogger<TaskTool> _logger;
     private readonly ISubAgentRunner? _subAgents;
+    private readonly IBackgroundTaskRegistry? _backgroundTasks;
 
-    public TaskTool(IAgentRegistry agents, ILogger<TaskTool> logger, ISubAgentRunner? subAgents = null)
+    public TaskTool(IAgentRegistry agents, ILogger<TaskTool> logger, ISubAgentRunner? subAgents = null, IBackgroundTaskRegistry? backgroundTasks = null)
     {
         _agents = agents;
         _logger = logger;
         _subAgents = subAgents;
+        _backgroundTasks = backgroundTasks;
     }
 
     public ToolName Name => ToolName.Create("task");
@@ -37,7 +39,9 @@ public sealed class TaskTool : ITool
         "Delegate a self-contained task to a sub-agent (explore, plan, or custom agents marked as sub-agents). " +
         "The sub-agent runs in its own isolated session with its own context window and tool access; " +
         "only its final answer is returned here. Use it for wide read-only reconnaissance or focused planning " +
-        "that would otherwise flood your context. The sub-agent cannot spawn further sub-agents.";
+        "that would otherwise flood your context. The sub-agent cannot spawn further sub-agents. " +
+        "Long independent work: pass background=true and continue other work — the final report " +
+        "arrives as a follow-up message, no polling needed.";
 
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
 
@@ -47,7 +51,8 @@ public sealed class TaskTool : ITool
     [
         "`prompt` must be fully self-contained: include file paths, constraints, and exactly what to report back",
         "sub-agents cannot see this conversation and cannot delegate further — do not ask them to call `task`",
-        "prefer `task(explore)` for broad code searches, keep small lookups in your own session"
+        "prefer `task(explore)` for broad code searches, keep small lookups in your own session",
+        "long independent recon: `background: true`, keep working — the report arrives as a follow-up message, do not poll"
     ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
@@ -61,7 +66,11 @@ public sealed class TaskTool : ITool
                                                                           "prompt": {
                                                                             "type": "string",
                                                                             "description": "Task description for the sub-agent. Should be self-contained."
-                                                                          }
+                                                                          },
+                                                                          "background": {
+                                                                            "type": "boolean",
+                                                                            "description": "Run detached and return immediately with a handle (task_N). The final report arrives as a follow-up message; continue other work meanwhile."
+                                                                            }
                                                                         },
                                                                         "required": ["agent", "prompt"]
                                                                       }
@@ -76,6 +85,10 @@ public sealed class TaskTool : ITool
         if (!args.TryGetProperty("prompt", out var promptEl) || promptEl.ValueKind != JsonValueKind.String
                                                              || string.IsNullOrWhiteSpace(promptEl.GetString()))
             return Result.Failure("Missing required argument 'prompt'.");
+
+        if (args.TryGetProperty("background", out var bgEl)
+            && bgEl.ValueKind != JsonValueKind.True && bgEl.ValueKind != JsonValueKind.False)
+            return Result.Failure("Optional argument 'background' must be a boolean.");
 
         return Result.Success();
     }
@@ -120,6 +133,32 @@ public sealed class TaskTool : ITool
         // Surface activity while the sub-run streams elsewhere.
         await context.ReportProgress(
             new ToolProgressUpdate($"Running sub-agent '{agentName}'…"), cancellationToken);
+
+        // Detached launch: the run is bound to this turn's token (parent abort
+        // cancels it, turn boundaries do not) and scheduled on the pool — the
+        // tool returns the handle NOW, the report pings the loop on completion.
+        if (args.TryGetProperty("background", out var bgEl) && bgEl.ValueKind == JsonValueKind.True)
+        {
+            if (_backgroundTasks is null)
+                return ToolResult.Error(
+                    "Background execution is unavailable in this configuration (no registry wired). Run without 'background' instead.");
+
+            var started = _backgroundTasks.Start(
+                agentName,
+                context.SessionId,
+                ct => _subAgents!.RunAsync(
+                    validated.Value,
+                    new SubAgentRunRequest(prompt, ParentSessionId: context.SessionId),
+                    ct),
+                cancellationToken);
+            if (started.IsFailure)
+                return ToolResult.Error(started.Error);
+
+            await context.ReportProgress(
+                new ToolProgressUpdate($"Sub-agent '{agentName}' running in background as {started.Value}…"), cancellationToken);
+            return ToolResult.Success(
+                $"[sub-agent '{agentName}' started in background as {started.Value} — continue other work; its final report will arrive as a follow-up message]");
+        }
 
         var result = await _subAgents.RunAsync(
             validated.Value,

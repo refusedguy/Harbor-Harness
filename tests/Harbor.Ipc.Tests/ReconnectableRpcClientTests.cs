@@ -14,7 +14,7 @@ namespace Harbor.Ipc.Tests;
 ///     its last sequence, receives the exact missed range in order without
 ///     duplicates, and only loads a snapshot on first subscribe / resync.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
 public class ReconnectableRpcClientTests
 {
     [Test]

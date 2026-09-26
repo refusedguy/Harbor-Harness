@@ -318,7 +318,9 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             switch (key.Key)
             {
                 case ConsoleKey.Escape:
-                    agent.AbortSource.Cancel();
+                    // TODO(principles)[ARCH, single-ingress]: route through IApprovalCoordinator.RequestCancel (#49 PR2).
+                    // Contrib renderer has no DI access to the coordinator (own solution, logger-only ctor).
+                    agent.RequestAbort();
                     _chat.Add("system", "[yellow]⏹ Aborted.[/]");
                     await agent.WaitForIdleAsync(ct).ConfigureAwait(false);
                     break;
@@ -329,7 +331,8 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
                 case ConsoleKey.Home: DoScrollToTop(); break;
                 case ConsoleKey.End: DoScrollToBottom(); break;
                 case ConsoleKey.C when (key.Modifiers & ConsoleModifiers.Control) != 0:
-                    agent.AbortSource.Cancel();
+                    // TODO(principles)[ARCH, single-ingress]: same as Esc above (#49 PR2).
+                    agent.RequestAbort();
                     _chat.Add("system", "[yellow]⏹ Cancelled (Ctrl+C).[/]");
                     await agent.WaitForIdleAsync(ct).ConfigureAwait(false);
                     break;

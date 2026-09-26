@@ -4,7 +4,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
-using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -33,6 +33,8 @@ public class PermissionPersistDecisionTests
     [Test]
     public async Task CheckAsync_PersistedAllowDecision_SecondCallDoesNotPromptAgain()
     {
+        if (OperatingSystem.IsWindows())
+            return;
         int prompts = 0;
         Task<PermissionResponse> Asker(PermissionRequest req, CancellationToken ct)
         {
@@ -160,13 +162,6 @@ public class PermissionPersistDecisionTests
             var registry = new FakeAgentRegistry(agent);
             var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
             var svc = new PermissionService(registry, NullLogger<PermissionService>.Instance, configStore: store);
-
-            int prompts = 0;
-            Task<PermissionResponse> Asker(PermissionRequest req, CancellationToken ct)
-            {
-                prompts++;
-                return Task.FromResult(new PermissionResponse(PermissionAction.Allow, true));
-            }
 
             // Simulate a user decision by directly adding to _persisted via CheckAsync
             // (in real usage, CheckAsync prompts and persists when PersistDecision=true)

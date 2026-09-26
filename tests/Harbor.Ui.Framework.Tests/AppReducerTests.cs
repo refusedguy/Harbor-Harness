@@ -3,6 +3,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
@@ -84,11 +85,16 @@ public class AppReducerTests
     }
 
     [Test]
-    public async Task ScrollResetToTail_PinsScrollAndSetsWasRunning()
+    public async Task ScrollResetToTail_PinsScrollAndSnapshotsWasRunning()
     {
         var state = new UiState { ScrollOffset = 10 };
         var result = UiReducer.Update(state, new UiMsg.ScrollResetToTail());
         await Assert.That(result.State.ScrollOffset).IsEqualTo(0);
-        await Assert.That(result.State.WasRunning).IsTrue();
+        // WasRunning mirrors IsAgentRunning (rising-edge invariant) instead
+        // of being forced true — see UiReducerRegressionTests.
+        await Assert.That(result.State.WasRunning).IsFalse();
+
+        var running = UiReducer.Update(new UiState { IsAgentRunning = true }, new UiMsg.ScrollResetToTail());
+        await Assert.That(running.State.WasRunning).IsTrue();
     }
 }

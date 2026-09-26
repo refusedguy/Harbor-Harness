@@ -182,10 +182,12 @@ public sealed class DiffBlock : IChatBlock
         EnsureParsed();
         var buffer = ctx.Buffer;
         int rows = Math.Min(ctx.Rect.Height, _lines.Count);
+        int skip = ctx.SkipRows;
 
-        for (int i = 0; i < rows; i++)
+        for (int i = 0; i < rows && (skip + i) < _lines.Count; i++)
         {
-            var dl = _lines[i];
+            int lineIdx = skip + i;
+            var dl = _lines[lineIdx];
             int y = ctx.Rect.Y + i;
 
             buffer.SetText(ctx.Rect.X, y, Gutter(dl), ChatPalette.Dim);
@@ -217,7 +219,7 @@ public sealed class DiffBlock : IChatBlock
                 continue;
             }
 
-            if (_pairSegs.TryGetValue(i, out var sides))
+            if (_pairSegs.TryGetValue(lineIdx, out var sides))
             {
                 bool addSide = dl.Kind == DiffLineKind.Add;
                 IReadOnlyList<WordSeg> segs = addSide ? sides.Inserted : sides.Removed;

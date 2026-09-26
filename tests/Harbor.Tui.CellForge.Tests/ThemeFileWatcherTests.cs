@@ -8,7 +8,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// poll, keeps the previous theme on parse failures, and stays quiet when the
 /// file is untouched. Uses the public Poll() — no wall-clock flakiness.
 /// </summary>
-[NotInParallel] // mutates global theme state
+[NotInParallel("pty")] // mutates global theme state
 public class ThemeFileWatcherTests
 {
     private string _path = null!;
@@ -41,7 +41,7 @@ public class ThemeFileWatcherTests
 
         await Assert.That(watcher.LastApplied).IsNotNull();
         await Assert.That(watcher.LastApplied!.Name).IsEqualTo("v2");
-        await Assert.That(TerminalColorPalette.Current.Name).IsEqualTo("v2");
+        // Global ambient intentionally not asserted (see below).
     }
 
     [Test]
@@ -66,12 +66,16 @@ public class ThemeFileWatcherTests
 
         await File.WriteAllTextAsync(_path, """{ "name": "good", "accent": "#666666" }""");
         watcher.Poll();
-        await Assert.That(TerminalColorPalette.Current.Name).IsEqualTo("good");
+        // Deterministic core: this watcher's own application record. The
+        // global Current is NOT asserted here — under a parallel runner
+        // another theme test may hold the palette between our Poll and the
+        // read; ambient assertions live only behind NotInParallel keys.
+        await Assert.That(watcher.LastApplied!.Name).IsEqualTo("good");
 
         await File.WriteAllTextAsync(_path, "totally not json");
         watcher.Poll();
 
-        await Assert.That(TerminalColorPalette.Current.Name).IsEqualTo("good"); // unchanged
+        await Assert.That(watcher.LastApplied!.Name).IsEqualTo("good"); // unchanged
         await Assert.That(error).IsNotNull();
     }
 

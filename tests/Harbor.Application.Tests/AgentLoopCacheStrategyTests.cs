@@ -1,10 +1,12 @@
-using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
+using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
+using Harbor.Application.Tests.Fakes;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
@@ -13,7 +15,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
-
 /// <summary>
 ///     A1: every main-loop <see cref="LlmRequest" /> carries
 ///     <see cref="CacheStrategy.Ephemeral" /> while the system prompt is
@@ -22,29 +23,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class AgentLoopCacheStrategyTests
 {
-    private static AgentDefinition AllowAllAgent() => new(
-        AgentName.Create("code"),
-        "Code",
-        "Cache-strategy harness agent",
-        "test-model",
-        "test",
-        new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }));
-
-    private static AgentLoop CreateLoop(ScriptedLlmClient client) => new(
-        new FakeProviderRegistry(client),
-        new FakeToolRegistry(),
-        new FakeAgentRegistry(AllowAllAgent()),
-        new StubSystemPromptBuilder(),
-        new FakeCompactionService(),
-        new FakeTokenTracker(),
-        new RetryPolicy(),
-        new FakeEventBus(),
-        new PermissionService(
-            new FakeAgentRegistry(AllowAllAgent()),
-            NullLogger<PermissionService>.Instance),
-        new MessageConverter(),
-        NullLogger<AgentLoop>.Instance);
-
     [Test]
     public async Task RunAsync_TwoTurnRunWithSameTools_RequestsCarryEphemeralCacheStrategy()
     {
@@ -62,12 +40,10 @@ public class AgentLoopCacheStrategyTests
                 new StepFinishEvent(1, "stop", new Usage(1, 1))
             }
         ]);
-        var loop = CreateLoop(client);
-        var session = new Fakes.TestSessionContext(
+        var loop = TestLoops.Create(client);
+        var session = new TestSessionContext(
             Session.Create("/tmp/harbor-cache-strategy-tests", "code", "test", "test-model"));
-
-        var result = await loop.RunAsync(session, AllowAllAgent());
-
+        var result = await loop.RunAsync(session, TestAgents.AllowAll());
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(client.Requests.Count).IsEqualTo(2);
         await Assert.That(client.Requests[0].CacheStrategy).IsEqualTo(CacheStrategy.Ephemeral);

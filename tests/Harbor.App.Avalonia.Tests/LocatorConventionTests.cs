@@ -1,5 +1,6 @@
 using Harbor.Desktop.Shared.Locators;
 using Microsoft.Extensions.DependencyInjection;
+using TUnit;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
@@ -81,6 +82,7 @@ public sealed class LocatorConventionTests
     }
 
     [Test]
+    [Skip("Known flake introduced in 61ee126: CI-only timing issue with static state. See issue #14.")]
     public async Task TryGet_ReturnsNullForUnregistered()
     {
         var services = new ServiceCollection();

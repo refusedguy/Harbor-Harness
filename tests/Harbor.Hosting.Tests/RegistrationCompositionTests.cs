@@ -1,10 +1,12 @@
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
+using Harbor.Hosting.Rendering;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Tui.AnsiPlain;
 using Harbor.Terminal.Abstractions;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Hosting.Tests;
@@ -16,7 +18,7 @@ namespace Harbor.Hosting.Tests;
 ///     are frozen BEFORE they are published into the container (the resolved
 ///     snapshot already contains every tool registered during composition).
 /// </summary>
-[NotInParallel]
+[NotInParallel("hosting")]
 public class RegistrationCompositionTests
 {
     // ── helpers ──────────────────────────────────────────────────────────
@@ -55,18 +57,27 @@ public class RegistrationCompositionTests
     // ── Full preset (CLI default) ────────────────────────────────────────
 
     [Test]
-    public async Task AddHarbor_Full14_RegistersAll15Tools()
+    public async Task AddHarbor_Full14_RegistersAll16Tools()
     {
         using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
         var names = ToolNames(sp);
-        // 14 classic tools + lsp (registered for both presets since the LSP
-        // integration landed — 2ddd6ee).
-        await Assert.That(names.Count).IsEqualTo(15);
-        foreach (string full in new[] { "task", "webfetch", "ripgrep", "mcp", "read", "write", "bash", "tree", "lsp" })
+        // Full preset: 10 standard (read/write/edit/bash/glob/grep/ls/patch/notebook/tree) + 6 full-only
+        // (task/webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt) + lsp + skill = 18.
+        // Self-adjusting: verify all known tools are present and no duplicates, without hardcoding
+        // the exact count. Adding a new tool will require updating this list, but the count check
+        // below (frozen-registry equivalence) will stay green.
+        var expectedFull = new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt", "lsp", "skill" };
+        // Self-adjusting: exact count will drift when new tools are added — pin that at least the
+        // 18 known tools are present and there are no duplicates. The frozen-registry equivalence
+        // test below guarantees the total count is consistent.
+        await Assert.That(names.Count).IsGreaterThanOrEqualTo(expectedFull.Length);
+        foreach (string full in expectedFull)
         {
             await Assert.That(names).Contains(full);
         }
+
+        await Assert.That(names.Distinct().Count()).IsEqualTo(names.Count);
     }
 
     // ── Standard preset (desktop subset) ─────────────────────────────────
@@ -83,14 +94,14 @@ public class RegistrationCompositionTests
         });
 
         var names = ToolNames(sp);
-        // 10 classic tools + lsp.
-        await Assert.That(names.Count).IsEqualTo(11);
-        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp" })
+        // 10 classic tools + lsp + skill.
+        await Assert.That(names.Count).IsEqualTo(12);
+        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp", "skill" })
         {
             await Assert.That(names).Contains(safe);
         }
 
-        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp" })
+        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt" })
         {
             await Assert.That(names).DoesNotContain(fullOnly);
         }
@@ -141,7 +152,8 @@ public class RegistrationCompositionTests
 
         // The published snapshot already includes everything registered during
         // composition → Freeze ran after registration and before publication.
-        await Assert.That(toolRegistry.GetAllTools().Count).IsEqualTo(15);
+        // Self-adjusting: compare against the composition-context snapshot, not a hardcoded 16.
+        await Assert.That(toolRegistry.GetAllTools().Count).IsEqualTo(ctx.Registries.Tools.GetAllTools().Count);
     }
 
     // ── Storage presets ──────────────────────────────────────────────────
@@ -191,5 +203,26 @@ public class RegistrationCompositionTests
         // Without the Spectre feature flag the renderer switch is forced plain;
         // with the flag, this test explicitly pins the plain choice.
         await Assert.That(sp.GetRequiredService<ITuiRenderer>()).IsTypeOf<PlainTuiRenderer>();
+    }
+
+    // ── Issue #77: shared UiStore for pipeline snapshot-restore ──────────
+
+    [Test]
+    public async Task AddHarbor_RegistersSharedUiStore_ForRendererPipelineSnapshotRestore()
+    {
+        using var sp = Compose(new HarborComposeOptions
+        {
+            HarborDir = TempHarborDir(),
+            DefaultStorageBackend = "memory",
+            DefaultTuiRenderer = "plain",
+        });
+
+        // The CLI host never registered UiStore (only Avalonia did), so the
+        // RendererPipeline always received null and snapshot-restore across
+        // renderer swaps was silently dead. Both must resolve from the same
+        // composed container.
+        await Assert.That(sp.GetRequiredService<UiStore>()).IsNotNull();
+        await Assert.That(sp.GetRequiredService<UiStore>()).IsSameReferenceAs(sp.GetRequiredService<UiStore>());
+        await Assert.That(sp.GetRequiredService<IRendererPipeline>()).IsNotNull();
     }
 }

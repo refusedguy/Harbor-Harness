@@ -4,9 +4,9 @@
 >
 > **Quick state (branch dev):**
 > - Solutions are `.slnx` files: `Harbor.slnx` (main) and `Harbor.Samples.slnx`; no plain `.sln`.
-> - Tests must be run **per project** (`dotnet test tests/<Project> -c Release --no-build`); whole-solution test invocations currently break under the Microsoft.Testing.Platform (MTP) host — do not rely on them.
+> - Tests must be run **per project as plain executables** (`dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`); `dotnet test` discovers ZERO tests under the Microsoft.Testing.Platform (MTP) bridge in this repo (host exits 5 with a silent discovery error) and whole-solution invocations are doubly broken — do not use either.
 > - Known/flaky tests historically cited (verify against `docs/ROADMAP.md` before counting on current numbers): Avalonia-12 headless `MarkdownRenderer`/`CodeBlock`/`TypewriterStreamingText` ("Stack empty" in `SetInheritanceParent`), the IPC named-pipe event-stream class on Linux (self-skips unless `HARBOR_IPC_EVENTSTREAM=1`), and an occasional `ChatView_Inflates` ListBoxItem `StaticResource` flake.
-> - ConsoleEx (second in-process terminal renderer) MVP is complete and opt-in via `HARBOR_TUI=consoleex`; MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
+> - CellForge (+ Engine — fullscreen cell-diff terminal renderer) is the canonical interactive backend (`HARBOR_TUI=cellforge`, `consoleex` kept as legacy alias); AnsiPlain covers ANSI-streaming + plain pipes/CI; MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
 >
 > **Связанные документы:**
 > - [.ai-factory/DESCRIPTION.md](./.ai-factory/DESCRIPTION.md) — спецификация проекта и стек
@@ -28,8 +28,8 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 2. Read [docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md) for the canonical
    Clean / Hexagonal / Onion layering rules. **Before adding any `<ProjectReference>` to
    a `.csproj`, check the allowed/forbidden matrix in §2.** The rules are mechanically
-   enforced by `tests/Harbor.Architecture.Tests/` (46 tests: 21 reflection-based +
-   25 NetArchTest-based — see §5 of that doc) — run it (`dotnet test
+   enforced by `tests/Harbor.Architecture.Tests/` (see §5–§6 of that doc for the
+   current rule/file counts) — run it (`dotnet run --project
    tests/Harbor.Architecture.Tests/ -c Release --no-build`) after every
    project-reference change.
 3. Read [docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md) for known
@@ -42,29 +42,28 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 7. Read [docs/ROADMAP.md](./docs/ROADMAP.md) for current state + planned next steps.
 8. If touching the interactive shell (`contrib/tui/Harbor.Tui.SpectreTui`, compiled into the default CLI build) or any renderer — read [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) for render-loop anatomy + recipes for opencode/kilocode/pi-agent features.
 9. Run `dotnet build` to make sure the project compiles.
-10. Run the affected test projects individually (`dotnet test tests/<Project> -c Release --no-build`) — **including `tests/Harbor.Architecture.Tests/`** after every project-reference change. Whole-solution `dotnet test` is unreliable under the MTP host.
+10. Run the affected test projects individually (`dotnet run --project tests/<Project> -c Release --no-build`) — **including `tests/Harbor.Architecture.Tests/`** after every project-reference change. `dotnet test` discovers zero tests in this repo (broken MTP bridge) — never use it.
 
 ## Project structure quick reference
 
 ```
 src/Harbor.Abstractions/              — base contracts (zero deps)
 src/Harbor.Abstractions.Contracts/    — models, events, ValueObjects, PermissionRuleset
-src/Harbor.Core/                      — EventBus, AgentLoop, config, onboarding, compaction
+src/Harbor.Core/                      — deprecated thin facade (FacadeMarker only; AgentLoop/config/onboarding/compaction live in Harbor.Application, EventBus in Harbor.Registries)
 src/Harbor.Registries/                — Agent/Tool/Provider registries (builtin agents: code, plan, explore)
 src/Harbor.Application/               — sessions, permissions, configuration
 src/Harbor.Hosting/                   — DI modules wired by the CLI (TuiModule, StorageModule, CoreModule, ...)
 src/Harbor.Terminal.Abstractions/     — ITuiRenderer, ITuiRenderContext, BaseTuiRenderer, views/VMs
-src/Harbor.Tui.Ansi/                  — ANSI streaming renderer
-src/Harbor.Tui.Plain/                 — plain text renderer (pipes/CI, HARBOR_TUI=plain)
-src/Harbor.Tui.ConsoleEx/             — second in-process terminal renderer (raw-mode input,
-                                        cell-diff output; opt-in via HARBOR_TUI=consoleex)
+src/Harbor.Tui.AnsiPlain/             — unified ANSI-streaming + plain-text renderer (pipes/CI via HARBOR_TUI=plain; merges former Ansi/Plain backends)
+src/Harbor.Tui.CellForge(+.Engine)/   — canonical fullscreen cell-diff renderer (HARBOR_TUI=cellforge; `consoleex` is a legacy alias)
+src/Harbor.Tui.NickConsoleEx/         — SharpConsoleUI-based renderer (HARBOR_TUI=nickconsoleex; complements CellForge)
 src/Harbor.Tui.Notifications/         — desktop OS notifications renderer
-src/Harbor.Ui.Framework*/             — TEA-style UI state/reducers/projection/services shared by apps
+src/Harbor.Ui.Framework{,.Abstractions,.State,.Reducers,.ViewModels,.Rendering,.Projection,.Services,.Sessions}/ — TEA-style UI state/reducers/projection/services shared by apps (shell csproj is a meta-package)
 src/Harbor.Desktop.{Abstractions,Shared,Animations} — desktop app support
 src/Harbor.Storage.{Jsonl,Memory,Sqlite}/ — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
-src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/ — LLM clients + shared-source compat layer
-src/Harbor.Tools.Builtin/             — 14 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
-                                        ls/task/webfetch/patch/notebook/ripgrep/tree/mcp)
+src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible}/ — LLM clients; Harbor.Providers.Shared/ is linked-source (no .csproj, compiled into each provider)
+src/Harbor.Tools.Builtin/             — 18 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
+                                        ls/task/webfetch/patch/notebook/ripgrep/tree/mcp/skill/read_mcp_resource/mcp_prompt/lsp)
 src/Harbor.Plugins.*                  — plugin hosting split: Abstractions, Compilation (Roslyn),
                                         Instantiation, Registration, Hosting, Runtime (CS loader),
                                         Host, Storage
@@ -84,9 +83,9 @@ samples/plugins/                      — 4 DLL-based sample plugins (WebSearch,
 samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPlugin.cs), compiled at startup
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
-specs/                                — ~17 design specification documents
-docs/                                 — ~35 docs (architecture, tools catalog, roadmap, patterns, ...)
-tests/                                — 27 test/bench project directories (25 runnable TUnit suites)
+docs/specs/                           — 19 design specification documents (top-level specs/ no longer exists)
+docs/                                 — 60 docs (architecture, tools catalog, roadmap, patterns, ...)
+tests/                                — 36 test/bench project directories
                                         incl. shared Harbor.TestKit and Harbor.Benchmarks
 ```
 
@@ -111,7 +110,7 @@ Two solution files exist: `Harbor.slnx` (main) and `Harbor.Samples.slnx` (sample
 | `vllm` (local) | (none) |
 
 > **Common gotcha**: Kilocode's env var is `KILO_API_KEY` (not `KILOCODE_API_KEY`).
-> The free model is `kilocode/tencent/hy3:free` — no credit card required.
+> The free model is `kilocode/kilo-auto/free` — no credit card required.
 
 ## Key concepts
 
@@ -343,7 +342,7 @@ public class YourTests
 }
 ```
 
-Run: `dotnet test tests/Harbor.YourNamespace.Tests -c Release --no-build` (run `dotnet build` first; whole-solution test runs are unreliable under the MTP host).
+Run: `dotnet run --project tests/Harbor.YourNamespace.Tests -c Release --no-build -- --minimum-expected-tests 1` (run `dotnet build` first; `dotnet test` discovers zero tests in this repo — never use it).
 
 ### Add a TUI view model
 
@@ -377,7 +376,7 @@ CS plugins are compiled in-memory via Roslyn at startup. Cached by source SHA-25
 
 ### Add a TUI plugin (DLL-based, legacy path)
 
-1. Create a class library project referencing `Harbor.Tui.Abstractions`.
+1. Create a class library project referencing `Harbor.Terminal.Abstractions` (`Harbor.Tui.Abstractions` is a deprecated facade slated for removal in v0.6 — do not use for new code).
 2. Implement `ITuiPlugin` — set `Name`, `Version`, `Description`.
 3. In `RegisterTui(ViewRegistry, ViewModelRegistry)`, register any custom views / view models.
 4. Register *before* `BaseTuiRenderer.InitializeAsync` to override builtins.
@@ -421,14 +420,14 @@ CS plugins are compiled in-memory via Roslyn at startup. Cached by source SHA-25
 ## E2E testing
 
 End-to-end tests verify the full agent pipeline against a real provider. Harbor's
-**E2E-verified** provider is **Kilocode** with the free `tencent/hy3:free` model —
+**E2E-verified** provider is **Kilocode** with the free `kilo-auto/free` model —
 no credit card required, $0 cost per call.
 
 ### Running the E2E smoke test
 
 ```bash
 export KILO_API_KEY=klo_xxxxxxxxxxxxxxxxxxxxxx
-export HARBOR_MODEL=kilocode/tencent/hy3:free
+export HARBOR_MODEL=kilocode/kilo-auto/free
 export HARBOR_TUI=plain   # easy to capture stdout
 
 dotnet run --project apps/Harbor.App.Cli -- ask "Print hello world in 3 languages"
@@ -447,7 +446,7 @@ Hello! Here are three ways to print "Hello, World!":
 [message_end] id=01HN1234567890abcdefghijklm
 [turn_end] turn=1
 [agent_end] new_messages=1
-status: kilocode/tencent/hy3:free | agent: code | $0.0000 | 142↑ 87↓ | idle
+status: kilocode/kilo-auto/free | agent: code | $0.0000 | 142↑ 87↓ | idle
 ```
 
 **What each line means** (so you can debug regressions):
@@ -490,7 +489,7 @@ Here are the first 10 lines of README.md:
 [message_end] id=m2
 [turn_end] turn=2
 [agent_end] new_messages=3
-status: kilocode/tencent/hy3:free | agent: code | $0.0000 | 312↑ 187↓ | idle
+status: kilocode/kilo-auto/free | agent: code | $0.0000 | 312↑ 187↓ | idle
 ```
 
 Note `new_messages=3` — user message, assistant tool-call message, tool result
@@ -529,11 +528,12 @@ Harbor benchmarks live in `docs/BENCHMARKS.md`. Key numbers:
 | Cold start (Debug JIT) | **38 ms** |
 | RSS idle | **28 MB** |
 | Binary size | **5 MB** |
-| `ProviderRegistry.GetClient` (frozen) | **0.18 µs** |
-| `ToolRegistry.ResolveTools` (4 tools) | **0.42 µs** |
-| `PermissionRuleset.Evaluate` | **0.27 µs** |
+| `ProviderRegistry.GetClient` (frozen) | **0.14 µs** |
+| `ToolRegistry.ResolveTools` (4 tools, no permission) | **0.085 µs** |
+| `ToolRegistry.ResolveTools` (4 tools, with permission) | **2.3 µs** |
+| `PermissionRuleset.Evaluate` | **0.35 µs** |
 
-Historical spot-checks from `docs/BENCHMARKS.md`; re-measure before quoting on hot-path PRs.
+2026-09-09 PR run (AMD EPYC); full table in `docs/BENCHMARKS.md`. Historical spot-checks there; re-measure before quoting on hot-path PRs.
 
 ### Adding a benchmark
 
@@ -551,6 +551,20 @@ Historical spot-checks from `docs/BENCHMARKS.md`; re-measure before quoting on h
 - Warm up 3 iterations, measure 10 iterations.
 - Report mean ± std dev, plus allocation count.
 - Compare against the previous version when refactoring hot paths.
+
+### Evals (task-solving quality, contour B)
+
+Unit/integration suites prove Harbor honors contracts; evals prove it solves
+tasks. Runner: `tools/Harbor.Evals` (external, no runtime changes), fixtures
+in `evals/tasks/`, protocol in `docs/EVALS.md`. Live runs need a model key
+(`KILO_API_KEY`); CI runs them via the `evals` workflow (manual dispatch +
+weekly schedule — live signal, never a merge gate).
+
+```bash
+dotnet build apps/Harbor.App.Cli -c Release
+export KILO_API_KEY=klo_...
+dotnet run --project tools/Harbor.Evals -c Release -- --tasks evals/tasks --profile evals/profiles/local.json
+```
 
 ## Code principles — quick reference
 
@@ -584,7 +598,7 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 8. **Don't suppress warnings with `#pragma warning disable`** — fix the code or add to `.editorconfig`.
 9. **Don't create C# design-token classes** (`*Tokens.cs`, `*Theme.cs`, `*Palette.cs`) in the UI layer. The source of truth is the XAML `ResourceDictionary`. Dual ownership causes sync drift, memory leaks on theme switch, and AOT breaks.
 10. **Don't break the build** — `dotnet build` must succeed with 0 warnings (treat as errors).
-11. **Don't break tests** — run affected test projects individually before commit (`dotnet test tests/<Project> -c Release --no-build`).
+11. **Don't break tests** — run affected test projects individually before commit (`dotnet run --project tests/<Project> -c Release --no-build`).
 
 ## Build & test commands
 
@@ -593,13 +607,15 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 dotnet build
 
 # Run a specific test project (recommended way to test).
-# TUnit uses --treenode-filter for filtering, NOT --filter.
-dotnet test tests/Harbor.Core.Tests -c Release --no-build
-dotnet test tests/Harbor.Tui.Tests --treenode-filter "/*/*/DefaultUiProjectorTests/*"
+# Tests run as plain executables — `dotnet test` discovers ZERO tests in this
+# repo (broken MTP bridge: host exits 5 with a silent discovery error).
+# TUnit uses --treenode-filter for filtering (forwarded after --), NOT --filter.
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
+dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --treenode-filter "/*/*/DefaultUiProjectorTests/*"
 
-# WARNING: do NOT run dotnet test across the whole Harbor.slnx — whole-solution
-# invocations currently break under the Microsoft.Testing.Platform (MTP) host.
-# Always target one test project directory at a time.
+# WARNING: do NOT use `dotnet test` at all here — neither per-project nor
+# across the whole Harbor.slnx. Always run test .csproj files via `dotnet run`
+# (or execute the built test DLL directly), one project at a time.
 
 # Run CLI
 dotnet run --project apps/Harbor.App.Cli
@@ -616,7 +632,7 @@ dotnet run --project apps/Harbor.App.Cli -- sessions
 
 1. Make the change.
 2. `dotnet build` — must succeed with 0 warnings.
-3. Run the affected test projects individually with `dotnet test tests/<Project> -c Release --no-build` — all tests in them must pass. Do not run solution-wide `dotnet test` (see MTP warning above).
+3. Run the affected test projects individually with `dotnet run --project tests/<Project> -c Release --no-build` — all tests in them must pass. Do not use `dotnet test` (see MTP warning above).
 4. If you added a new tool — add tests for it.
 5. If you changed an interface — update all implementations.
 6. Run the CLI manually to verify: `dotnet run --project apps/Harbor.App.Cli -- help`.
@@ -646,7 +662,7 @@ dotnet run --project apps/Harbor.App.Cli -- sessions
 
 ```bash
 $ dotnet build
-src/Harbor.Core/Agents/AgentLoop.cs(123,45): error MA0046: Unsafe code is not allowed.
+src/Harbor.Application/Agents/AgentLoop.cs(123,45): error MA0046: Unsafe code is not allowed.
 ```
 
 `MA0046` is the analyzer that forbids `unsafe`. Even though we have `0% unsafe`,
@@ -775,3 +791,45 @@ on every turn. Fix the provider's `modelMapping` in `providers/<name>.json`:
 - Final newline at EOF.
 
 These are enforced by `.editorconfig`.
+
+<!-- graft:start -->
+## Graft — repo context graph
+
+This repo is indexed in `graft/`: small linked markdown nodes that explain each
+system and carry exact file:line spans, kept in sync with the code through git.
+
+For ANY task here — understanding how something works, finding where code lives,
+or scoping a change — get context from the graph before grepping or opening
+source files. Re-ask freely (it's cheap) and reuse literal identifiers you
+already have (symbol, error string, file name) as the query. New to this repo?
+Run `graft map` first — a token-budgeted orientation (dir clusters, hubs,
+hotspots), no LLM, no key.
+
+- Run `graft ask "<your question>" --source` → ranked nodes with the relevant
+  code spans inlined (each hit's ≤8-line crux by default; `--full` for whole
+  definitions when the crux isn't enough). Match the tool to the task shape:
+  for understanding or editing, the top node IS the answer — cite its
+  `covers:` file:line spans and edit straight from `--source`. For
+  exhaustive tasks ("every occurrence / every caller of this pattern"), ranked
+  results are top-N, not complete — run `graft grep "<literal>"` instead
+  (exhaustive over indexed files, grouped by enclosing symbol), falling back
+  to raw `grep -rn` only for unindexed files.
+- `graft skeleton <file>` → every definition's signature + span, ~10× cheaper
+  than reading the file; use it to skim an API surface.
+- `graft callers <symbol>` gives precomputed, exact edges — who calls this.
+  Add `--direction out` for what it calls, or `--depth N` to walk
+  transitively for the full blast radius. For structural questions, skip
+  ranking and use this directly.
+- Or browse: `graft/INDEX.md` lists every node; follow the links.
+- Monorepos and folders of multiple repos rank fairly across sub-projects —
+  hits carry `[scope/]` labels naming which one they're from. Narrow with
+  `graft ask "<task>" --in <scope>/` once you know where you're working.
+
+If a returned span is truncated ("+N more lines"), open the file at that exact
+range before finalizing. Only open source files when a node genuinely lacks a
+needed detail, and then at the exact file:line the node points to — never
+re-read whole files.
+
+After big code changes, refresh the graph with `graft build` (deterministic,
+no API key, $0).
+<!-- graft:end -->

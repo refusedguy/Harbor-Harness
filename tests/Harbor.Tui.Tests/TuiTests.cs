@@ -103,6 +103,30 @@ public class StatusBarViewModelTests
         await Assert.That(vm.TokensOut).IsEqualTo(0);
         await Assert.That(vm.Status).IsEqualTo("idle");
     }
+
+    [Test]
+    public async Task ContextPct_Uses_Accumulated_Totals_Not_Last_Step()
+    {
+        // #75 convergence pin: accumulated (3000+500)+(4000+600) = 8100 → 81%.
+        // Last-step-only would report 4000/10000 = 40%.
+        var vm = new StatusBarViewModel();
+        vm.SetModel(new ModelInfo("m", "p", "M", 10_000, 4000, false, false, true, new Pricing(0, 0), string.Empty));
+        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(3000, 500)), AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new StepFinishEvent(1, "stop", new Usage(4000, 600)), AssistantMessage.Empty("s1", "m2")));
+        await Assert.That(vm.TokensIn).IsEqualTo(7000);
+        await Assert.That(vm.TokensOut).IsEqualTo(1100);
+        await Assert.That(vm.ContextPct).IsEqualTo(ContextUsage.PercentUsed(7000, 1100, 10_000));
+        await Assert.That(vm.ContextPct).IsEqualTo(81);
+        await Assert.That(vm.Formatted).Contains("81%");
+    }
+
+    [Test]
+    public async Task ContextPct_Zero_When_Window_Unknown()
+    {
+        var vm = new StatusBarViewModel();
+        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(3000, 500)), AssistantMessage.Empty("s1", "m")));
+        await Assert.That(vm.ContextPct).IsEqualTo(0);
+    }
 }
 
 public class ChatHistoryViewModelTests

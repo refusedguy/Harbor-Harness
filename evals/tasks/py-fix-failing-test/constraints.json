@@ -1,0 +1,5 @@
+{
+  "readOnly": false,
+  "mustRemainUnchanged": ["test_cart.py"],
+  "mustNotCreate": ["*.bak", "__pycache__/**"]
+}

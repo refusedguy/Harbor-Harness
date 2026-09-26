@@ -30,17 +30,32 @@ namespace Harbor.Abstractions.Agents;
 public interface IAgentRunner
 {
     /// <summary>
-    ///     Cancellation token source used to abort the current run. Call
-    ///     <see cref="CancellationTokenSource.Cancel" /> to interrupt the agent at the
-    ///     next safe boundary (between turns or during a streaming await).
+    ///     Token observing the current run's abort state. Cancelled when the
+    ///     run is aborted via <see cref="RequestAbort" /> (directly, or
+    ///     through the approval coordinator's funnel, which sweeps pending
+    ///     gates first and then aborts here).
     /// </summary>
-    public CancellationTokenSource AbortSource { get; }
+    /// <remarks>
+    ///     <para>
+    ///         The live <see cref="CancellationTokenSource" /> stays private
+    ///         to the runner (#79): callers only observe the token and abort
+    ///         through <see cref="RequestAbort" />, so no external code can
+    ///         bypass the coordinated cancel funnel or dispose the source.
+    ///     </para>
+    /// </remarks>
+    public CancellationToken AbortToken { get; }
+
+    /// <summary>
+    ///     Abort the current run at the next safe boundary (between turns or
+    ///     during a streaming await). Safe to call when idle or twice.
+    /// </summary>
+    public void RequestAbort();
 
     /// <summary>
     ///     Submit a user prompt as plain text and run the agent loop to completion.
     /// </summary>
     /// <param name="text">The user's prompt text.</param>
-    /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
+    /// <param name="ct">Optional cancellation token linked to <see cref="AbortToken" />.</param>
     /// <returns>Success on completion, or failure with an error message.</returns>
     public Task<Result> PromptAsync(string text, CancellationToken ct = default);
 
@@ -52,11 +67,14 @@ public interface IAgentRunner
     public Task WaitForIdleAsync(CancellationToken ct = default);
 
     /// <summary>
-    ///     Recreate the internal <see cref="AbortSource" /> so the agent is ready
+    ///     Recreate the internal abort source so the agent is ready
     ///     for a fresh run after the previous token was cancelled. No-op if the
     ///     current source has not been cancelled (calling this in the middle of a
     ///     run would blow away the in-flight cancellation token, so the guard
-    ///     prevents footguns).
+    ///     prevents footguns) and no-op while a run bound to the current (or an
+    ///     older) abort generation is still alive (#91: a reset after a
+    ///     WaitForIdleAsync timeout must not orphan the zombie run — the next
+    ///     prompt self-heals once idle instead).
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -94,7 +112,8 @@ public interface IAgentRunner
 ///         The default implementation is <c>DefaultAgent</c> in <c>Harbor.Core</c>.
 ///     </para>
 ///     <para>
-///         <b>ISP note (§ARCH-002):</b> the runner surface (<see cref="AbortSource" />,
+///         <b>ISP note (§ARCH-002):</b> the runner surface (<see cref="IAgentRunner.AbortToken" />,
+///         <see cref="IAgentRunner.RequestAbort" />,
 ///         <see cref="PromptAsync(string, CancellationToken)" />,
 ///         <see cref="WaitForIdleAsync" />) is also exposed on
 ///         <see cref="IAgentRunner" />. Callers that do not need steering /
@@ -121,7 +140,7 @@ public interface IAgent : IAgentRunner, IDisposable
     ///     Submit a pre-built <see cref="UserMessage" /> and run the agent loop to completion.
     /// </summary>
     /// <param name="message">The fully-formed user message (id, timestamp, etc. supplied by caller).</param>
-    /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
+    /// <param name="ct">Optional cancellation token linked to <see cref="IAgentRunner.AbortToken" />.</param>
     /// <returns>Success on completion, or failure with an error message.</returns>
     public Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default);
 

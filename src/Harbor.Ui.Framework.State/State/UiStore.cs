@@ -68,12 +68,21 @@ public sealed class UiStore
     /// <summary>The current immutable snapshot. Cheap to read; never mutate.</summary>
     public UiState State => _state;
 
-    /// <summary>Raised after every successful <see cref="Dispatch" />.</summary>
+    /// <summary>
+    ///     Raised after every successful <see cref="Dispatch" />.
+    ///     Delivery is synchronous on the dispatching thread: subscribers must
+    ///     consume <see cref="UiStateChangedEventArgs.State" /> (and drop stale
+    ///     revisions via <see cref="UiStateChangedEventArgs.IsStale" />) — never
+    ///     re-read the store and never mutate state. A throwing subscriber is
+    ///     isolated: remaining subscribers are still notified.
+    /// </summary>
     public event EventHandler<UiStateChangedEventArgs>? Changed;
 
     /// <summary>
     ///     Apply an agent event through the pure reducer and notify subscribers.
     ///     Thread-safe; concurrent dispatches are coalesced via CAS retry.
+    ///     The published snapshot carries a monotonic <see cref="UiState.Revision" />
+    ///     (issue #94) so subscribers can drop out-of-order deliveries.
     /// </summary>
     public void Dispatch(AgentEvent @event)
     {
@@ -86,9 +95,10 @@ public sealed class UiStore
             // No-op short-circuit: avoid the event if nothing changed.
             if (ReferenceEquals(original, next))
                 return;
+            next = next with { Revision = original.Revision + 1 };
         } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
-        Changed?.Invoke(this, new UiStateChangedEventArgs(next));
+        Notify(next);
     }
 
     /// <summary>
@@ -109,9 +119,10 @@ public sealed class UiStore
             // No-op short-circuit: state unchanged, no event.
             if (ReferenceEquals(original, next))
                 return effect;
+            next = next with { Revision = original.Revision + 1 };
         } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
-        Changed?.Invoke(this, new UiStateChangedEventArgs(next));
+        Notify(next);
         return effect;
     }
 
@@ -132,9 +143,41 @@ public sealed class UiStore
             next = reducer(original);
             if (ReferenceEquals(original, next))
                 return;
+            next = next with { Revision = original.Revision + 1 };
         } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
-        Changed?.Invoke(this, new UiStateChangedEventArgs(next));
+        Notify(next);
+    }
+
+    /// <summary>
+    ///     Fan-out to <see cref="Changed" /> subscribers. The delegate is
+    ///     snapshotted once, so concurrent subscribe/unsubscribe never tears
+    ///     the delivery set; each subscriber runs in its own try/catch so one
+    ///     failing renderer cannot starve the rest or fail the dispatch.
+    ///     Still synchronous on the dispatching thread — the frame loop owns
+    ///     marshaling (consume <c>e.State</c>, drop stale via
+    ///     <see cref="UiStateChangedEventArgs.IsStale" />).
+    /// </summary>
+    private void Notify(UiState next)
+    {
+        var handlers = Changed;
+        if (handlers is null)
+            return;
+        var args = new UiStateChangedEventArgs(next);
+        foreach (EventHandler<UiStateChangedEventArgs> single in handlers.GetInvocationList()
+                     .Cast<EventHandler<UiStateChangedEventArgs>>())
+        {
+            try
+            {
+                single(this, args);
+            }
+            catch
+            {
+                // Isolated per subscriber (issue #81): notification fan-out
+                // must survive a failing renderer. No logging here — the store
+                // is framework-free by design; renderers own error reporting.
+            }
+        }
     }
 
     /// <summary>Bind session chrome (model/provider/agent) into the state.</summary>
@@ -152,6 +195,22 @@ public sealed class UiStateChangedEventArgs : EventArgs
         State = state;
     }
 
-    /// <summary>The new UI snapshot after the transition.</summary>
+    /// <summary>The new UI snapshot after the transition. Consume this — never re-read the store.</summary>
     public UiState State { get; }
+
+    /// <summary>
+    ///     Monotonic revision of <see cref="State" /> (issue #94). Every
+    ///     successful <see cref="UiStore" /> transition bumps it by exactly one.
+    /// </summary>
+    public long Revision => State.Revision;
+
+    /// <summary>
+    ///     Whether this notification is stale relative to an already-applied one.
+    ///     CAS success and event delivery are not atomic across threads, so a
+    ///     subscriber that applied revision N must ignore any notification with
+    ///     <c>Revision &lt;= N</c> instead of rewinding visible state.
+    /// </summary>
+    /// <param name="lastAppliedRevision">Revision of the last applied notification.</param>
+    /// <returns>True when this notification must be dropped.</returns>
+    public bool IsStale(long lastAppliedRevision) => Revision <= lastAppliedRevision;
 }

@@ -25,10 +25,13 @@ public sealed class PasteEdgeScenarioTests : CellForgePtyScenarioBase
         // as a separate turn. The paste contract keeps it verbatim. (A payload
         // with a leading slash is covered by PasteInjectionScenarioTests.)
         Session.SendKey("\x1b[200~alpha\nbravo\n\x1b[201~");
-        await Task.Delay(700).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("alpha", StringComparison.Ordinal)) &&
+                 l.Any(x => x.Contains("bravo", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // Nothing executed while pasting: zero LLM requests.
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
 
         // Both payload fragments visible in the composer area.
         string[] lines = NormalizedLines();
@@ -65,17 +68,19 @@ public sealed class PasteEdgeScenarioTests : CellForgePtyScenarioBase
         for (int off = 0; off < paste.Length; off += 512)
         {
             Session.SendKey(paste[off..Math.Min(off + 512, paste.Length)]);
-            await Task.Delay(20).ConfigureAwait(false);
+            await Task.Delay(20).ConfigureAwait(false); // PTY chunk gap: real timing
         }
 
         // Head of the payload visible in the clipped composer row.
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("chunk000", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-        await Task.Delay(300).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("chunk000", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // Nothing executed while pasting.
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
 
         // Submit → the FULL 2.5 KB reaches the model byte-exact.
         Session.SendKey("\r");

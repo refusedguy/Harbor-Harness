@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Ui.Framework.Panels;
 /// <summary>
 ///     Provider contract for one dockable panel. Implementations live either in the

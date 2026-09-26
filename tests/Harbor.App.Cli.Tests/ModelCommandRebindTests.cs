@@ -178,7 +178,9 @@ public class ModelCommandRebindTests
 
         public AgentState State { get; private set; } = AgentState.Idle("sess-1", initialDef);
 
-        public CancellationTokenSource AbortSource { get; } = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
+        private readonly CancellationTokenSource _abortSource = new();
 
         public void Initialize(Session session, AgentDefinition agent)
         {
@@ -201,7 +203,7 @@ public class ModelCommandRebindTests
 
         public void ResetAbortSource() { }
 
-        public void Dispose() => AbortSource.Dispose();
+        public void Dispose() => _abortSource.Dispose();
 
         private sealed class DummySubscription : IDisposable
         {

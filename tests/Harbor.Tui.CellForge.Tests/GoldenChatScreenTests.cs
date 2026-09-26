@@ -1,6 +1,7 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -8,6 +9,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// Full chat-screen golden (CE-3 W2.4): timeline feed above, live composer
 /// below, status footer at the bottom — one LayoutTree, one frame pipeline.
 /// </summary>
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class GoldenChatScreenTests
 {
     [Test]

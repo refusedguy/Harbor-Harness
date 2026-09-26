@@ -7,6 +7,8 @@ using Harbor.Tui.Termina.Views;
 using Harbor.Tui.TerminalGui;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StatusBarView = Harbor.Tui.TerminalGui.Views.StatusBarView;
@@ -28,7 +30,7 @@ public class TeaBridgeTests
         var state = AgentState.Idle("s1", definition);
         var mock = new Mock<IAgent>();
         mock.SetupGet(a => a.State).Returns(state);
-        mock.SetupGet(a => a.AbortSource).Returns(new CancellationTokenSource());
+        mock.SetupGet(a => a.AbortToken).Returns(new CancellationTokenSource().Token);
         return mock.Object;
     }
 

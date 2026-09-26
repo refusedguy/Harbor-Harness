@@ -41,6 +41,10 @@ public sealed class ProviderHealthCheck : IProviderHealthCheck
         cts.CancelAfter(_timeout);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        // ROP boundary #101: GetModelsAsync is Result-only by contract, so the
+        // expected path is the IsFailure check below. These catches are
+        // network-only insurance — our own timeout budget firing, or a
+        // transport fault escaping a client — never the provider error path.
         try
         {
             var result = await clientResult.Value.GetModelsAsync(cts.Token).ConfigureAwait(false);

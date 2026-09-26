@@ -40,22 +40,69 @@
             </StackPanel>
         </Grid>
 
-        <!-- Active editor -->
+        <!-- Active editor with floating inline edit overlay -->
         <Border Grid.Row="1" Classes="CodeEditorHost" Margin="0">
-            <Grid>
+            <Canvas>
                 <TextBlock Text="No file open — press Ctrl+O to open a file."
+                           Canvas.Left="0" Canvas.Top="0"
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            Foreground="{StaticResource TextSubtleBrush}"
                            IsVisible="{Binding ActiveTab, Converter={x:Static views:ObjectIsNullConverter.Instance}}" />
                 <avaloniaEdit:TextEditor
                     x:Name="Editor"
+                    Canvas.Left="0" Canvas.Top="0"
+                    Width="{Binding $parent.Canvas.Bounds.Width}"
+                    Height="{Binding $parent.Canvas.Bounds.Height}"
                     IsVisible="{Binding ActiveTab, Converter={x:Static views:ObjectNotNullConverter.Instance}}"
                     ShowLineNumbers="True"
                     FontFamily="JetBrains Mono, Cascadia Code, monospace"
                     FontSize="13"
                     Background="Transparent"
-                    Foreground="{DynamicResource TextPrimaryBrush}" />
-            </Grid>
+                    Foreground="{DynamicResource TextPrimaryBrush}"
+                    KeyDown="Editor_KeyDown" />
+
+                <!-- Inline Edit Overlay (Cmd+K / Ctrl+K) -->
+                <Border x:Name="InlineEditOverlay"
+                        Canvas.Left="8"
+                        Canvas.Top="0"
+                        IsVisible="{Binding InlineEditVisible}"
+                        Background="{DynamicResource BgPanelBrush}"
+                        BorderBrush="{DynamicResource AccentPrimaryBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="10,8"
+                        Width="420"
+                        MaxHeight="120"
+                        BoxShadow="0 4 12 0 #00000040">
+                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
+                        <TextBox Grid.Row="0" Grid.Column="0"
+                                 Classes="hds-textbox"
+                                 Watermark="Describe the change..."
+                                 Text="{Binding InlineEditPrompt, Mode=TwoWay}"
+                                 FontSize="13"
+                                 MinHeight="32"
+                                 Margin="0,0,4,4"
+                                 KeyDown="InlineEditPrompt_KeyDown" />
+                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
+                            <Button Classes="hds-primary" Content="Accept"
+                                    Command="{Binding AcceptInlineEditCommand}"
+                                    IsEnabled="{Binding CanAcceptInlineEdit}"
+                                    MinHeight="32" Padding="12,4"
+                                    FontSize="12" />
+                            <Button Classes="hds-danger" Content="Reject"
+                                    Command="{Binding RejectInlineEditCommand}"
+                                    MinHeight="32" Padding="12,4"
+                                    FontSize="12" />
+                        </StackPanel>
+                        <ProgressBar Grid.Row="1" Grid.ColumnSpan="2"
+                                     IsVisible="{Binding IsInlineEditLoading}"
+                                     IsIndeterminate="True"
+                                     Height="4"
+                                     Margin="0,4,0,0"
+                                     Foreground="{DynamicResource AccentPrimaryBrush}" />
+                    </Grid>
+                </Border>
+            </Canvas>
         </Border>
     </Grid>
 </UserControl>

@@ -22,7 +22,9 @@ public sealed class TracingAgentProxy(IAgent inner, IMetrics metrics, ITracer tr
 
     public AgentState State => inner.State;
 
-    public CancellationTokenSource AbortSource => inner.AbortSource;
+    public CancellationToken AbortToken => inner.AbortToken;
+
+    public void RequestAbort() => inner.RequestAbort();
 
     public void ResetAbortSource() => inner.ResetAbortSource();
 

@@ -35,6 +35,15 @@ namespace Harbor.Application.Resilience;
 /// </remarks>
 public sealed class RetryPolicy : IRetryPolicy
 {
+    private readonly TimeProvider _time;
+
+    /// <summary>
+    ///     Construct with an explicit clock (#54). Production uses
+    ///     <see cref="TimeProvider.System" />; tests pass a recording fake so
+    ///     no wall-clock assertion can flake on loaded runners.
+    /// </summary>
+    public RetryPolicy(TimeProvider? timeProvider = null) =>
+        _time = timeProvider ?? TimeProvider.System;
     /// <summary>
     ///     Upper bound for the scaled exponential backoff: late attempts stop
     ///     growing past this ceiling regardless of the attempt counter.
@@ -76,7 +85,7 @@ public sealed class RetryPolicy : IRetryPolicy
                 // Prefer the server-provided retry hint when the classifier
                 // surfaced one; otherwise use the exponentially scaled backoff.
                 TimeSpan delay = retryAfter ?? ComputeDelay(options, attempt);
-                await Task.Delay(delay, ct).ConfigureAwait(false);
+                await Task.Delay(delay, _time, ct).ConfigureAwait(false);
             }
         }
     }
@@ -89,7 +98,12 @@ public sealed class RetryPolicy : IRetryPolicy
     ///     <c>[0, target)</c> — full jitter — so concurrent callers that fail
     ///     together de-synchronize instead of forming retry waves.
     /// </summary>
-    private static TimeSpan ComputeDelay(RetryOptions options, int failedAttempt)
+    /// <remarks>
+    ///     Public so the tool-dispatch retry loop (#43) shares the exact same
+    ///     backoff mechanics instead of duplicating the formula: decision lives
+    ///     in <c>IToolRetryDecider</c>, computation lives here.
+    /// </remarks>
+    public static TimeSpan ComputeDelay(RetryOptions options, int failedAttempt)
     {
         double target = Math.Min(
             options.BaseDelay.TotalMilliseconds * Math.Pow(2, failedAttempt - 1),

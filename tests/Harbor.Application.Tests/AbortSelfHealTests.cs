@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
 using Harbor.Application.Agents;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -12,8 +13,8 @@ using TUnit.Assertions;
 namespace Harbor.Application.Tests;
 
 /// <summary>
-///     G1 (deep2-core): aborting an agent cancels its CancellationTokenSource
-///     permanently; callers who only call <c>AbortSource.Cancel()</c> (IPC server,
+///     G1 (deep2-core): aborting an agent cancels its abort source
+///     permanently; callers who only call <c>RequestAbort()</c> (IPC server,
 ///     InProcess client) never reset it, so every subsequent prompt died with
 ///     "Agent was cancelled." until process restart. The agent must self-heal at
 ///     gate acquisition instead of relying on external temporal coupling.
@@ -41,7 +42,7 @@ public class AbortSelfHealTests
         var session = Session.Create("/tmp/harbor-abort-selfheal-tests", "code", "test", "test-model");
         var loop = new TokenObservingLoop();
         var agent = new DefaultAgent(
-            new FakeSessionStore(session),
+            new Harbor.Application.Tests.Fakes.FakeSessionStore(session),
             loop,
             new FakeEventBus(),
             NullLogger<DefaultAgent>.Instance);
@@ -66,13 +67,13 @@ public class AbortSelfHealTests
 
             // Exactly what RequestDispatcher.HandleAbortAgent / InProcessHarborClient
             // .AbortAgentAsync do — no ResetAbortSource anywhere nearby.
-            agent.AbortSource.Cancel();
+            agent.RequestAbort();
 
             var second = await agent.PromptAsync("second");
 
             await Assert.That(second.IsSuccess).IsTrue();
             await Assert.That(loop.Runs).IsEqualTo(2);
-            await Assert.That(agent.AbortSource.IsCancellationRequested).IsFalse();
+            await Assert.That(agent.AbortToken.IsCancellationRequested).IsFalse();
         }
         finally
         {
@@ -88,7 +89,7 @@ public class AbortSelfHealTests
         {
             var run = await agent.PromptAsync("prime");
             await Assert.That(run.IsSuccess).IsTrue();
-            agent.AbortSource.Cancel();
+            agent.RequestAbort();
 
             // F2: N racing resets must not double-dispose or strand sources.
             await Task.WhenAll(Enumerable.Range(0, 8)
@@ -96,7 +97,7 @@ public class AbortSelfHealTests
 
             var next = await agent.PromptAsync("after-races");
             await Assert.That(next.IsSuccess).IsTrue();
-            await Assert.That(agent.AbortSource.IsCancellationRequested).IsFalse();
+            await Assert.That(agent.AbortToken.IsCancellationRequested).IsFalse();
         }
         finally
         {

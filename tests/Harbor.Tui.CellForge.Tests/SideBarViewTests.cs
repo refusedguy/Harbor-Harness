@@ -108,6 +108,23 @@ public class SideBarViewTests
         await Assert.That(SideBarView.FormatTokens(1_234_567)).IsEqualTo("1.2M");
     }
 
+    [Test]
+    public async Task Paint_ContextPercent_Uses_Accumulated_Totals()
+    {
+        // #75 convergence pin: (7400+700)/10000 = 81%, same canonical
+        // definition as the status-bar VM and the status bar ratio.
+        var (buffer, rect) = MakeBuffer(cols: 80, rows: 30);
+        var state = new SideBarState(
+            SessionTitle: "s",
+            Model: "m",
+            TokensIn: 7400,
+            TokensOut: 700,
+            ContextWindow: 10_000);
+        SideBarView.Paint(buffer, rect, state);
+        string dump = Dump(buffer, rect);
+        await Assert.That(dump).Contains("ctx 81%");
+    }
+
     private static string Dump(ScreenBuffer buffer, Rect rect)
     {
         var sb = new System.Text.StringBuilder();

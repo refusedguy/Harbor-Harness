@@ -2,6 +2,7 @@ using Harbor.Abstractions.Tui;
 using Harbor.Hosting.Rendering;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -114,6 +115,14 @@ internal static class TuiModule
 #endif
         });
 
+        // Issue #77: the pipeline reads its snapshot-restore state from the
+        // DI-shared UiStore. It must be registered here (CLI composition
+        // root) — previously only Avalonia registered it, so the CLI host
+        // always passed null and restore-across-swap was silently dead.
+        // Renderers keep their own private stores; the pipeline reads this
+        // shared snapshot, never writes it.
+        services.AddSingleton<UiStore>();
+
         // Phase 6.3: hot-swappable renderer runtime. The pipeline owns the
         // published renderer (CAS-gated swaps), restores the UiState snapshot
         // into the new backend, and disposes the old one exactly once. The
@@ -124,7 +133,7 @@ internal static class TuiModule
             var pipeline = new RendererPipeline(
                 sp.GetRequiredService<ITuiRenderer>(),
                 tui.ToLowerInvariant(),
-                sp.GetService<UiStore>(),
+                sp.GetRequiredService<UiStore>(),
                 sp.GetRequiredService<ILogger<RendererPipeline>>());
 
             pipeline.Register("cellforge", () => new Harbor.Tui.CellForge.CellForgeTuiRenderer(

@@ -11,7 +11,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- #75: direct reference instead of transitive (CF-A-001 precedent) —
+         StatusViewModel consumes the canonical ContextUsage helper. -->
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
     <ProjectReference Include="..\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
     <ProjectReference Include="..\Harbor.Desktop.Animations\Harbor.Desktop.Animations.csproj"/>
   </ItemGroup>
@@ -21,6 +25,7 @@
          (ScreenBuffer row-hash internals, BlockMath, StreamingMarkdownRenderer
          .RenderRange) across the assembly boundary by design. -->
     <InternalsVisibleTo Include="Harbor.Tui.CellForge"/>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.Engine"/>
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
   </ItemGroup>
 

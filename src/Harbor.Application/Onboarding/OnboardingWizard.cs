@@ -154,7 +154,8 @@ public sealed class OnboardingWizard
     private async Task<Result<ProviderPresets.Preset>> PickProviderAsync(Func<string, Task<string>> reader, Action<string> writer, CancellationToken ct)
     {
         var presets = ProviderPresets.All;
-        while (true)
+        int emptyAttempts = 0;
+        while (!ct.IsCancellationRequested)
         {
             writer("");
             writer("Pick a provider (recommended: kilocode — has FREE models):");
@@ -167,8 +168,15 @@ public sealed class OnboardingWizard
             }
             writer("");
             string input = await reader("Enter number (or 'list' for details): ").ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(input)) continue;
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                emptyAttempts++;
+                if (emptyAttempts >= 3)
+                    return Result.Failure<ProviderPresets.Preset>("Non-interactive input or setup aborted.");
+                continue;
+            }
 
+            emptyAttempts = 0;
             if (input.Equals("list", StringComparison.OrdinalIgnoreCase))
             {
                 foreach (var p in presets)
@@ -182,12 +190,13 @@ public sealed class OnboardingWizard
             if (int.TryParse(input, out int idx) && idx >= 1 && idx <= presets.Count)
                 return Result.Success(presets[idx - 1]);
 
-            // Try as provider ID
             var byId = ProviderPresets.Find(input);
             if (byId is not null) return Result.Success(byId);
 
             writer($"Invalid selection: {input}");
         }
+
+        return Result.Failure<ProviderPresets.Preset>("Setup cancelled.");
     }
 
     /// <summary>Prompt + persist the API key when the preset needs one; pass the provider through otherwise.</summary>
@@ -257,19 +266,26 @@ public sealed class OnboardingWizard
         ProviderPresets.Preset provider, Action<string> writer, CancellationToken ct)
     {
         if (_providers is null)
+        {
+            writer("  ⚠ Model list unavailable (provider registry unavailable) — manual entry.");
             return null;
+        }
 
-        var pid = Abstractions.Models.Identifiers.ProviderId.TryCreate(provider.Id);
-        if (pid.IsFailure)
-            return null;
-
-        var clientResult = _providers.GetClient(pid.Value);
+        // ROP boundary #101: shared TryCreate → GetClient preamble; every
+        // unavailable-list reason prints the same warning as the client-failure
+        // path below so degraded setup is always explicit, never silent.
+        var clientResult = _providers.ResolveClient(provider.Id);
         if (clientResult.IsFailure)
         {
             writer($"  ⚠ Model list unavailable ({clientResult.Error.TrimEnd('.')}) — manual entry.");
             return null;
         }
 
+        // ROP boundary #101: GetModelsAsync is Result-only by contract — the
+        // expected path is the IsSuccess check below. The catches are
+        // network-only insurance: our own 10 s budget firing, or a transport
+        // fault escaping a client. Warning text matches every other
+        // unavailable-list reason above.
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(Abstractions.Providers.IProviderHealthCheck.DefaultTimeout);
         try

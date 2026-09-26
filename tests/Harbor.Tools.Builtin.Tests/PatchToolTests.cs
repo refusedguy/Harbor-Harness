@@ -25,21 +25,15 @@ public class PatchToolTests
     }
 
     [Test]
-    public async Task ValidateArguments_MissingPath_ReturnsFailure()
+    [Arguments("""{"patch":"@@ -1,1 +1,2 @@\n-a\n+b\n"}""", false)]
+    [Arguments("""{"path":"/tmp/x.txt"}""", false)]
+    [Arguments("""{"path":"/tmp/x.txt","patch":"@@ -1,1 +1,1 @@\n-a\n+b\n"}""", true)]
+    public async Task ValidateArguments_Theory(string json, bool expectSuccess)
     {
         var tool = new PatchTool(NullLogger<PatchTool>.Instance);
-        var args = JsonDocument.Parse("""{"patch":"@@ -1,1 +1,2 @@\n-a\n+b\n"}""").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-    }
-
-    [Test]
-    public async Task ValidateArguments_MissingPatch_ReturnsFailure()
-    {
-        var tool = new PatchTool(NullLogger<PatchTool>.Instance);
-        var args = JsonDocument.Parse("""{"path":"/tmp/x.txt"}""").RootElement;
-        var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
     }
 
     [Test]

@@ -52,6 +52,7 @@
     <ProjectReference Include="..\..\src\Harbor.Lsp\Harbor.Lsp.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Pty\Harbor.Terminal.Pty.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Engine\Harbor.Tui.CellForge.Engine.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
 
     <!-- ROP-D Z2: every remaining main-solution src project joins enforcement

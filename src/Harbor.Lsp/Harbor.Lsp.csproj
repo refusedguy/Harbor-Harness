@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Lsp</PackageId>
-    <Description>Harbor LSP client — auto-spawned out-of-process language servers (TypeScript, Python, Go, Rust, C#) over stdio JSON-RPC, diagnostics/definition/references for the editor and the agent tools. AOT-safe (source-generated JSON).</Description>
+    <Description>Harbor LSP client — auto-spawned out-of-process language servers (TypeScript, Python, Go, Rust, C#, C/C++, Java, HTML, CSS, JSON, Lua) over stdio JSON-RPC, diagnostics/definition/references for the editor and the agent tools. AOT-safe (source-generated JSON).</Description>
     <PackageTags>harbor;lsp;language-server;diagnostics</PackageTags>
   </PropertyGroup>
 

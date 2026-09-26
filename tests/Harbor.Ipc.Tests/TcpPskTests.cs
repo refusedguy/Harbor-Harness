@@ -13,7 +13,7 @@ namespace Harbor.Ipc.Tests;
 ///     closes the connection; unauthenticated requests get the structured
 ///     PSK_REQUIRED error; and a second listener cannot steal the port.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
 public class TcpPskTests
 {
     private const string Key = "dGVzdC1wc2sta2V5LTEyMzQ1Njc4OTA=";

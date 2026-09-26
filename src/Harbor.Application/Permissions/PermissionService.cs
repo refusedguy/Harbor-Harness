@@ -24,6 +24,12 @@ public sealed class PermissionService : IPermissionService
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, PermissionRule>> _persisted = new();
 
     /// <summary>
+    ///     Background load of persisted permission decisions (#82). Kicked off
+    ///     in the ctor without blocking; awaited via <see cref="EnsureLoadedAsync" />.
+    /// </summary>
+    private readonly Task _persistedLoad;
+
+    /// <summary>
     ///     Construct a <see cref="PermissionService" /> wired to the supplied registry.
     /// </summary>
     /// <param name="agents">The agent registry for ruleset lookup.</param>
@@ -49,28 +55,65 @@ public sealed class PermissionService : IPermissionService
         _workspaceRoot = workspaceRoot;
         _configStore = configStore;
 
-        if (_configStore is not null)
-        {
-#pragma warning disable RS0030
-            LoadPersistedAsync().GetAwaiter().GetResult();
-#pragma warning restore RS0030
-        }
+        // #82: never block the ctor on IO (sync-over-async deadlocks under any
+        // SynchronizationContext). The persisted-permissions load runs in the
+        // background; CheckAsync/SaveAsync/CreateAsync await it via
+        // EnsureLoadedAsync. Invoking an async method never throws
+        // synchronously — failures surface as a faulted task observed there.
+        _persistedLoad = _configStore is not null
+            ? LoadPersistedAsync()
+            : Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Construct a <see cref="PermissionService" /> and await the
+    ///     persisted-permissions load. Prefer this over the ctor when the
+    ///     effective ruleset must be complete before the first use
+    ///     (e.g. <see cref="GetRuleset" /> immediately after construction).
+    /// </summary>
+    public static async Task<PermissionService> CreateAsync(
+        IAgentRegistry agents,
+        ILogger<PermissionService> logger,
+        Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? userAsker = null,
+        string? workspaceRoot = null,
+        IConfigStore? configStore = null,
+        CancellationToken ct = default)
+    {
+        var service = new PermissionService(agents, logger, userAsker, workspaceRoot, configStore);
+        await service.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        return service;
+    }
+
+    private Task EnsureLoadedAsync(CancellationToken ct)
+    {
+        // Fast path: load already finished (the common case after warmup).
+        if (_persistedLoad.IsCompleted)
+            return _persistedLoad;
+        // #82: caller cancellation aborts the wait with
+        // OperationCanceledException instead of collapsing into a Deny
+        // verdict; the background load itself keeps running to completion.
+        return _persistedLoad.WaitAsync(ct);
     }
 
     /// <inheritdoc />
-    public Task<Result<PermissionResponse>> CheckAsync(
+    public async Task<Result<PermissionResponse>> CheckAsync(
         string agentName,
         string toolName,
         JsonElement args,
         CancellationToken ct = default)
     {
+        // #82: await the background persisted-load so the first check already
+        // sees stored decisions. Cancellation propagates (never a verdict).
+        await EnsureLoadedAsync(ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+
         // ROP-B П.12: name parsing → registry lookup → verdict ride one Bind
         // chain. An invalid agent name is an expected failure (e.g. provider
         // routed a request with a malformed header), so it surfaces as
         // Result.Failure without any .Value read ever compiling in.
-        return AgentName.TryCreate(agentName)
+        return await AgentName.TryCreate(agentName)
             .Bind(_agents.GetAgent)
-            .Bind(agent => EvaluateActionAsync(agent, agentName, toolName, args, ct));
+            .Bind(agent => EvaluateActionAsync(agent, agentName, toolName, args, ct)).ConfigureAwait(false);
     }
 
     private async Task<Result<PermissionResponse>> EvaluateActionAsync(
@@ -93,12 +136,7 @@ public sealed class PermissionService : IPermissionService
             action = PermissionAction.Ask;
         }
 
-        if (action == PermissionAction.Allow)
-        {
-            return Result.Success(new PermissionResponse(action, false));
-        }
-
-        if (action == PermissionAction.Deny)
+        if (action is PermissionAction.Allow or PermissionAction.Deny)
         {
             return Result.Success(new PermissionResponse(action, false));
         }
@@ -145,6 +183,10 @@ public sealed class PermissionService : IPermissionService
         PermissionRequest request,
         CancellationToken ct = default)
     {
+        // #82: an already-cancelled caller never gets a verdict —
+        // cancellation propagates instead of collapsing into Deny.
+        ct.ThrowIfCancellationRequested();
+
         if (_userAsker is null)
             return Result.Success(new PermissionResponse(PermissionAction.Deny, false));
 
@@ -155,6 +197,11 @@ public sealed class PermissionService : IPermissionService
         }
         catch (Exception ex)
         {
+            // #82: caller cancellation (OperationCanceledException or any
+            // failure racing with it) propagates instead of collapsing into
+            // a Deny verdict that would let the run continue.
+            if (ct.IsCancellationRequested)
+                throw;
             _logger.LogError(ex, CoreResources.GetError("PermissionDenied"), request.Permission, request.Pattern);
             return Result.Success(new PermissionResponse(PermissionAction.Deny, false));
         }
@@ -163,6 +210,9 @@ public sealed class PermissionService : IPermissionService
     /// <inheritdoc />
     public PermissionRuleset GetRuleset(string agentName)
     {
+        // NOTE(#82): synchronous by contract — merges whatever persisted
+        // decisions have loaded so far. Construction-time IO is backgrounded,
+        // so prefer CreateAsync when the merged view must be complete.
         // ROP-B П.12 (residual): same railway as CheckAsync — name parsing and
         // registry lookup ride one Bind chain with no .Value read compiling in.
         // GetRuleset's contract is "best-effort lookup", so any failure (bad
@@ -230,6 +280,10 @@ public sealed class PermissionService : IPermissionService
     {
         if (_configStore is null)
             return Result.Failure("No config store configured — permissions cannot be persisted.");
+
+        // Await the background load first so a save racing construction
+        // cannot clobber not-yet-loaded decisions with an empty snapshot.
+        await EnsureLoadedAsync(ct).ConfigureAwait(false);
 
         var permissions = new Dictionary<string, List<PermissionRule>>();
         foreach (var (agentKey, byRule) in _persisted)

@@ -3,6 +3,10 @@
         <Project Path="build/_build.csproj"/>
     </Folder>
 
+    <Folder Name="/tools/">
+        <Project Path="tools/Harbor.Evals/Harbor.Evals.csproj"/>
+    </Folder>
+
     <Folder Name="/samples/plugins/">
         <Project Path="samples/plugins/Harbor.Plugin.FileTree/Harbor.Plugin.FileTree.csproj"/>
         <Project Path="samples/plugins/Harbor.Plugin.GitTools/Harbor.Plugin.GitTools.csproj"/>
@@ -80,6 +84,7 @@
     <Folder Name="/src/TUI/">
         <Project Path="src/Harbor.Tui.AnsiPlain/Harbor.Tui.AnsiPlain.csproj"/>
         <Project Path="src/Harbor.Tui.CellForge/Harbor.Tui.CellForge.csproj"/>
+        <Project Path="src/Harbor.Tui.CellForge.Engine/Harbor.Tui.CellForge.Engine.csproj"/>
         <Project Path="src/Harbor.Tui.NickConsoleEx/Harbor.Tui.NickConsoleEx.csproj"/>
         <Project Path="src/Harbor.Tui.Notifications/Harbor.Tui.Notifications.csproj"/>
     </Folder>

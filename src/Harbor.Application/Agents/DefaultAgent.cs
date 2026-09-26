@@ -27,13 +27,35 @@ public sealed class DefaultAgent : IAgent
     private readonly Channel<AgentMessage> _steeringQueue;
 
     /// <summary>
-    ///     Backing field for <see cref="AbortSource" />. Replaced wholesale by
+    ///     Backing field for <see cref="AbortToken" />. Replaced wholesale by
     ///     <see cref="ResetAbortSource" /> — a single CTS can only be cancelled
     ///     once, so after every abort we swap in a fresh one or the next
     ///     <see cref="PromptAsync" /> would observe the cancelled token and
-    ///     fail immediately.
+    ///     fail immediately. Never exposed: external code observes
+    ///     <see cref="AbortToken" /> and aborts via <see cref="RequestAbort" />
+    ///     (#79), so the coordinated funnel cannot be bypassed or disposed.
     /// </summary>
     private CancellationTokenSource _abortSource = new();
+
+    /// <summary>
+    ///     Abort-source generation (#91). Bumped on every successful
+    ///     <see cref="ResetAbortSource" /> swap, starting at 0 for the
+    ///     construction-time source. Lets a reset tell whether the in-flight
+    ///     run (if any) is bound to the current source or an older one —
+    ///     mirroring the cancel generation the approval coordinator already
+    ///     tracks, but for the source-swap side.
+    /// </summary>
+    private long _abortGeneration;
+
+    /// <summary>
+    ///     Abort generation the in-flight <see cref="PromptAsync" /> run is
+    ///     bound to, or -1 when idle. Captured under the run gate at run
+    ///     start, cleared before the gate is released at run end, so
+    ///     <see cref="ResetAbortSource" /> can refuse a swap that would orphan
+    ///     a live run (a later cancel would hit the fresh source while the old
+    ///     run still waits on the disposed one).
+    /// </summary>
+    private long _activeRunAbortGeneration = -1;
 
     /// <summary>
     ///     Per-run completion source. A fresh instance is swapped in at the
@@ -127,18 +149,31 @@ public sealed class DefaultAgent : IAgent
     public AgentState State { get; private set; } = null!;
 
     /// <summary>
-    ///     Cancellation token source used to abort the current run. Replaced
-    ///     wholesale by <see cref="ResetAbortSource" /> after each abort so the
-    ///     agent is ready for a new run.
+    ///     Token observing the current run's abort state. The live source
+    ///     stays private (#79) — abort via <see cref="RequestAbort" />.
+    ///     Replaced wholesale by <see cref="ResetAbortSource" /> after each
+    ///     abort so the agent is ready for a new run.
     /// </summary>
-    public CancellationTokenSource AbortSource => _abortSource;
+    public CancellationToken AbortToken => Volatile.Read(ref _abortSource).Token;
 
     /// <summary>
-    ///     Recreate <see cref="AbortSource" /> if (and only if) the current
-    ///     source has already been cancelled. No-op when the current source is
-    ///     still live, so calling this in the middle of a run is safe but does
-    ///     nothing. After this returns, <see cref="AbortSource" /> points at a
-    ///     fresh, un-cancelled <see cref="CancellationTokenSource" />.
+    ///     Abort the current run at the next safe boundary. The only external
+    ///     abort ingress on this runner (#79): the approval coordinator calls
+    ///     this after sweeping pending gates, and direct callers use it when
+    ///     no coordinator is available.
+    /// </summary>
+    public void RequestAbort() => Volatile.Read(ref _abortSource).Cancel();
+
+    /// <summary>
+    ///     Recreate the internal abort source if (and only if) the current
+    ///     source has already been cancelled AND no run bound to this (or an
+    ///     older) abort generation is still alive. No-op when the current
+    ///     source is still live, or when an in-flight run holds it — swapping
+    ///     underneath a live run would orphan it from future cancels, so the
+    ///     reset is refused and retried later (the next
+    ///     <see cref="PromptAsync" /> self-heal runs once idle). After a
+    ///     successful reset, <see cref="AbortToken" /> observes a fresh,
+    ///     un-cancelled source of the next generation.
     /// </summary>
     public void ResetAbortSource()
     {
@@ -153,10 +188,21 @@ public sealed class DefaultAgent : IAgent
             return;
         }
 
+        // #91: refuse the swap while a run bound to this (or an older)
+        // generation is still alive — e.g. a session switch whose bounded
+        // WaitForIdleAsync timed out must not swap the token out from under
+        // the zombie run; the next prompt would then race it.
+        long activeGeneration = Volatile.Read(ref _activeRunAbortGeneration);
+        if (activeGeneration >= 0 && activeGeneration <= Volatile.Read(ref _abortGeneration))
+        {
+            return;
+        }
+
         var fresh = new CancellationTokenSource();
         CancellationTokenSource winner = Interlocked.CompareExchange(ref _abortSource, fresh, observed);
         if (ReferenceEquals(winner, observed))
         {
+            Interlocked.Increment(ref _abortGeneration);
             observed.Dispose();
         }
         else
@@ -199,7 +245,7 @@ public sealed class DefaultAgent : IAgent
     ///     </para>
     /// </summary>
     /// <param name="text">The user's prompt text.</param>
-    /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
+    /// <param name="ct">Optional cancellation token linked to <see cref="AbortToken" />.</param>
     /// <returns>Success on completion (or after steering an active run), or failure with an error message.</returns>
     public async Task<Result> PromptAsync(string text, CancellationToken ct = default)
     {
@@ -238,7 +284,7 @@ public sealed class DefaultAgent : IAgent
     ///     callers are serialized atomically; the loser steers the active run.
     /// </remarks>
     /// <param name="message">The user message to submit.</param>
-    /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
+    /// <param name="ct">Optional cancellation token linked to <see cref="AbortToken" />.</param>
     /// <returns>Success on completion (or after steering an active run), or failure with an error message.</returns>
     public async Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default)
     {
@@ -277,14 +323,22 @@ public sealed class DefaultAgent : IAgent
 
         try
         {
-            // G1 self-heal: an aborted run leaves AbortSource permanently cancelled,
+            // G1 self-heal: an aborted run leaves the abort source permanently cancelled,
             // so every later prompt would die on an already-cancelled token unless
             // someone remembered to reset it (IPC abort paths never did). Resetting
             // here, under the run gate, removes that external temporal coupling.
+            // #91: the reset is refused while a run is alive, but under this gate
+            // the previous run has finished (it clears _activeRunAbortGeneration
+            // before releasing the gate), so the self-heal always goes through.
             if (_abortSource.IsCancellationRequested)
             {
                 ResetAbortSource();
             }
+
+            // #91: bind this run to the current abort generation so a concurrent
+            // ResetAbortSource (e.g. after a WaitForIdleAsync timeout) refuses
+            // to swap the source out from under us.
+            Volatile.Write(ref _activeRunAbortGeneration, Volatile.Read(ref _abortGeneration));
 
             // F14: a failed persist used to be invisible — the run continued,
             // the reloaded context lacked the user's message (model answered
@@ -308,7 +362,7 @@ public sealed class DefaultAgent : IAgent
 
             State = State with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
 
-            var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(AbortSource.Token, ct);
+            var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(AbortToken, ct);
 
             try
             {
@@ -348,6 +402,9 @@ public sealed class DefaultAgent : IAgent
         }
         finally
         {
+            // #91: unbind before releasing the gate — a ResetAbortSource racing
+            // the release must see the idle marker, never a stale generation.
+            Volatile.Write(ref _activeRunAbortGeneration, -1);
             _runGate.Release();
         }
     }
@@ -426,7 +483,7 @@ public sealed class DefaultAgent : IAgent
     public void Dispose()
     {
         _eventBusSubscription?.Dispose();
-        AbortSource?.Dispose();
+        _abortSource.Dispose();
         _runGate.Dispose();
         _steeringQueue.Writer.TryComplete();
     }

@@ -25,32 +25,18 @@ public class NotebookToolTests
     }
 
     [Test]
-    public async Task ValidateArguments_MissingAction_ReturnsFailure()
+    [Arguments("{}", false, null)]
+    [Arguments("""{"action":"frobnicate","key":"k"}""", false, "frobnicate")]
+    [Arguments("""{"action":"set","key":"k"}""", false, "content")]
+    [Arguments("""{"action":"set","key":"k","content":"v"}""", true, null)]
+    public async Task ValidateArguments_Theory(string json, bool expectSuccess, string? expectedErrorSubstring = null)
     {
         var tool = NewTool();
-        var args = JsonDocument.Parse("{}").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-    }
-
-    [Test]
-    public async Task ValidateArguments_UnknownAction_ReturnsFailure()
-    {
-        var tool = NewTool();
-        var args = JsonDocument.Parse("""{"action":"frobnicate","key":"k"}""").RootElement;
-        var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("frobnicate");
-    }
-
-    [Test]
-    public async Task ValidateArguments_SetRequiresContent()
-    {
-        var tool = NewTool();
-        var args = JsonDocument.Parse("""{"action":"set","key":"k"}""").RootElement;
-        var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("content");
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
+        if (expectedErrorSubstring is not null)
+            await Assert.That(result.Error).Contains(expectedErrorSubstring);
     }
 
     [Test]
@@ -172,6 +158,22 @@ public class NotebookToolTests
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("No note");
+    }
+
+    [Test]
+    public async Task List_LargeNoteCount_CompletesWithCappedInitialRent()
+    {
+        // #53 audit: List rents with a capped initial capacity (8 KB max) and
+        // lets the builder grow — 200 notes (under the 256/session cap) must
+        // succeed without a huge up-front allocation.
+        var tool = NewTool();
+        for (int i = 0; i < 200; i++)
+            await tool.ExecuteAsync(Args(("action", "set"), ("key", $"k{i:000}"), ("content", $"note number {i}")), CreateContext());
+        var result = await tool.ExecuteAsync(Args(("action", "list")), CreateContext());
+
+        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result.Output).Contains("200 note(s)");
+        await Assert.That(result.Output).Contains("k199");
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────

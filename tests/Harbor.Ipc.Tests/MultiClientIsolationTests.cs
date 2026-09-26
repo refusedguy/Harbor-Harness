@@ -18,7 +18,7 @@ namespace Harbor.Ipc.Tests;
 ///     owned session are addressed to the owner only, and disconnecting the
 ///     owner releases the lease so broadcast resumes.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
 public class MultiClientIsolationTests
 {
     private static AgentDefinition Definition() => new(

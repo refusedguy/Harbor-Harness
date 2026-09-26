@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 using MemoryPack;
 namespace Harbor.Abstractions.Models;
@@ -65,7 +67,7 @@ public sealed partial record Session(
     public static Session Create(string directory, string agentName, string providerId, string modelId, string? title = null)
     {
         string id = Guid.NewGuid().ToString("N");
-        string projectId = directory.GetHashCode(StringComparison.Ordinal).ToString("x");
+        string projectId = ProjectIdFor(directory);
         var now = DateTimeOffset.UtcNow;
         return new Session(
             id,
@@ -78,6 +80,20 @@ public sealed partial record Session(
             now,
             now,
             SessionMetadata.Empty);
+    }
+
+    /// <summary>
+    ///     Deterministic project id for a working directory. Was
+    ///     <c>string.GetHashCode</c> (randomized per process — sessions
+    ///     regrouped differently after every restart); now the first 16 hex
+    ///     chars of SHA-256, stable across processes and machines.
+    ///     NOTE: ids minted before this change do not match — a one-time
+    ///     regrouping on upgrade.
+    /// </summary>
+    public static string ProjectIdFor(string directory)
+    {
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(directory));
+        return Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();
     }
 }
 
@@ -224,7 +240,7 @@ public enum StopReason
     /// <summary>An error occurred during generation.</summary>
     Error,
 
-    /// <summary>The user cancelled the run via <see cref="IAgent.AbortSource" />.</summary>
+    /// <summary>The user cancelled the run.</summary>
     Aborted
 }
 

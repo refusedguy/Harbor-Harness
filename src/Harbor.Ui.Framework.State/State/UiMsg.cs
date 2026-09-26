@@ -1,7 +1,14 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.Panels;
 namespace Harbor.Ui.Framework.State;
+// TODO(principles)[SRP, AOT]: split into AppMsg (generic: KeyInput, Scroll,
+// TogglePanel, InputText) + ChatMsg (AgentStarted/AgentEnded/AppendLine) with a
+// typed AppState{Ui, Chat} composition — NO ImmutableDictionary<string,object?>
+// extensions (boxing, IL2xxx). Next PR after this branch merges.
+
 /// <summary>
 ///     The single message type for the interactive UI (TEA/MVU "Msg"). Every input
 ///     — agent events, key presses, and view-measured geometry — flows through this
@@ -32,6 +39,34 @@ public abstract record UiMsg
     /// <summary>Direct status-bar text update (e.g. <c>"idle"</c> after an abort).</summary>
     /// <param name="Status">The new status-bar text.</param>
     public sealed record StatusChanged(string Status) : UiMsg;
+
+    /// <summary>
+    ///     Atomic session hydration (#89): reset to a fresh state, bind the
+    ///     session chrome (model / provider / agent) and replay the persisted
+    ///     history lines in a SINGLE reducer transition. Replaces the old
+    ///     Reset + BindSession + N×AppendLine sequence, whose N+2 separate
+    ///     store transitions let a background agent event interleave
+    ///     mid-replay and corrupt the transcript order. With this message a
+    ///     racing event serializes strictly before or after the swap via the
+    ///     store's CAS loop.
+    /// </summary>
+    /// <param name="Model">The session's model id.</param>
+    /// <param name="Provider">The session's provider id.</param>
+    /// <param name="AgentName">The session's agent name.</param>
+    /// <param name="Lines">The replayed history lines, oldest first.</param>
+    public sealed record HydrateSession(
+        string Model,
+        string Provider,
+        string AgentName,
+        ImmutableArray<ChatLine> Lines) : UiMsg;
+
+    /// <summary>
+    ///     Runtime identity for the status chrome (model / provider / agent).
+    ///     The store never learns these from <see cref="AgentEvent" /> traffic,
+    ///     so hosts that bypass the onboarding seed push them explicitly —
+    ///     e.g. the CellForge REPL on startup and after model/agent switches.
+    /// </summary>
+    public sealed record ConfigureRuntime(string Model, string Provider, string AgentName) : UiMsg;
 
     /// <summary>
     ///     Host-side transcript line (slash handler errors, session-switch notes).
@@ -121,4 +156,13 @@ public abstract record UiMsg
         ImmutableArray<string> Ids,
         ImmutableDictionary<string, TuiPanelState> States,
         ImmutableDictionary<string, int> Sizes) : UiMsg;
+
+    /// <summary>
+    ///     Host-side session list sync (CellForge REPL): recent sessions with the
+    ///     active mark, so the session-sidebar panel renders from the store
+    ///     instead of staying empty. Dispatched on startup/switch/new/fork.
+    /// </summary>
+    public sealed record SyncSessions(
+        ImmutableArray<SessionInfo> Sessions,
+        SessionId? ActiveSessionId) : UiMsg;
 }

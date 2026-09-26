@@ -34,7 +34,9 @@ internal static class PtyGolden
                 $"golden fixture missing: {path} (run once with HARBOR_UPDATE_GOLDENS=1 to seed it)");
         }
 
-        return File.ReadAllText(path);
+        // Fixtures are committed LF; Windows checkouts may materialize CRLF —
+        // normalize like GoldenFile does so goldens compare content, not EOL.
+        return File.ReadAllText(path).Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 
     private static string ResolveFixtureDir()

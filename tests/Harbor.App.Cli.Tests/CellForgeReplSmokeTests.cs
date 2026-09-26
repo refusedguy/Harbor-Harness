@@ -8,6 +8,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
 using Harbor.App.Cli.Repl;
+using Harbor.Application.Permissions;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
@@ -69,7 +70,8 @@ public class CellForgeReplSmokeTests
         };
         var runner = new CellForgeReplRunner(
             services, agent, sessionModel, session, screen, bridge, input,
-            new NullModeController(), backend, NullLogger<CellForgeReplRunner>.Instance);
+            new NullModeController(), backend, NullLogger<CellForgeReplRunner>.Instance,
+            new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance));
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         int exitCode = await runner.RunAsync(cts.Token);
@@ -139,7 +141,9 @@ public class CellForgeReplSmokeTests
             State = AgentState.Idle(sessionId, placeholderDef);
         }
 
-        public CancellationTokenSource AbortSource { get; } = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
+        private readonly CancellationTokenSource _abortSource = new();
         public AgentState State { get; private set; }
 
         public void Initialize(Session session, AgentDefinition agent)
@@ -197,7 +201,7 @@ public class CellForgeReplSmokeTests
         {
         }
 
-        public void Dispose() => AbortSource.Dispose();
+        public void Dispose() => _abortSource.Dispose();
     }
 
     private sealed class StubConfigStore : IConfigStore
@@ -240,12 +244,13 @@ internal static class Golden
 
     public static string Verify(string name, string actualContent)
     {
+        string normalizedActual = Normalize(actualContent);
         string path = Path.Combine(FixtureDir.Value, name + ".golden.txt");
         if (Environment.GetEnvironmentVariable("HARBOR_UPDATE_GOLDENS") == "1")
         {
             Directory.CreateDirectory(FixtureDir.Value);
-            File.WriteAllText(path, actualContent);
-            return actualContent;
+            File.WriteAllText(path, normalizedActual);
+            return normalizedActual;
         }
 
         if (!File.Exists(path))
@@ -254,8 +259,15 @@ internal static class Golden
                 $"golden fixture missing: {path} (run once with HARBOR_UPDATE_GOLDENS=1 to seed it)");
         }
 
-        return File.ReadAllText(path);
+        return Normalize(File.ReadAllText(path));
     }
+
+    /// <summary>
+    ///     Normalizes environment-dependent line endings so goldens are stable
+    ///     across Windows (CRLF checkout) / Linux (LF checkout) test hosts.
+    /// </summary>
+    public static string Normalize(string s) =>
+        s.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
 
     private static string ResolveFixtureDir()
     {

@@ -99,8 +99,7 @@
                                            FontSize="11" FontWeight="SemiBold"
                                            Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}" />
                             </Border>
-                            <!-- Message body — plain TextBlock (MarkdownRenderer
-                                 returns once markdig API migration is done). -->
+                            <!-- Message body — MarkdownRenderer -->
                             <Border Grid.Column="1"
                                     Background="{DynamicResource BgRailBrush}"
                                     CornerRadius="8"
@@ -108,12 +107,7 @@
                                     Margin="10,0,0,0"
                                     BorderBrush="{DynamicResource BorderSubtleBrush}"
                                     BorderThickness="1">
-                                <TextBlock Text="{Binding Text}"
-                                           TextWrapping="Wrap"
-                                           FontFamily="{DynamicResource FontUi}"
-                                           FontSize="14"
-                                           LineHeight="20"
-                                           Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}" />
+                                <ctrl:MarkdownRenderer Markdown="{Binding Text}" />
                             </Border>
                         </Grid>
                     </Panel>
@@ -217,13 +211,8 @@
                                    VerticalAlignment="Center" />
                     </StackPanel>
                     <!-- Streaming text: wraps, bounded width, no overflow -->
-                    <TextBlock Text="{Binding StreamingBuffer}"
-                               TextWrapping="Wrap"
-                               FontFamily="{DynamicResource FontUi}"
-                               FontSize="14"
-                               LineHeight="20"
-                               Foreground="{DynamicResource TextPrimaryBrush}"
-                               MaxWidth="800" />
+                    <ctrl:MarkdownRenderer Markdown="{Binding StreamingBuffer}"
+                                           MaxWidth="800" />
                 </StackPanel>
             </Border>
 
