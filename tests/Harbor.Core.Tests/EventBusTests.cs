@@ -128,4 +128,41 @@ public class EventBusTests
 
         await Assert.That(received.Count).IsEqualTo(1);
     }
+
+    /// <summary>
+    ///     #97 per-delta slice regression: moving the PublishAsync Debug log
+    ///     below the zero-subscriber fast path (and guarding it with IsEnabled)
+    ///     must not change observable behavior. The same 3 per-delta/per-message
+    ///     event shapes deliver identically — same order, same instance
+    ///     equality, same scrollback tail — as before the reorder.
+    /// </summary>
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Test]
+    public async Task PublishAsync_PerDeltaShapes_DeliverIdentically(int shape)
+    {
+        var bus = new InMemoryEventBus(maxScrollback: 8);
+        var received = new List<AgentEvent>();
+        bus.Subscribe(async (evt, ct) => received.Add(evt));
+
+        AgentEvent evt = shape switch
+        {
+            0 => new MessageUpdateEvent(
+                new TextDeltaEvent("m1", "hello"),
+                AssistantMessage.Empty("s", "m")),
+            1 => new MessageUpdateEvent(
+                new ToolCallDeltaEvent("tc_1", "{\"path\":"),
+                AssistantMessage.Empty("s", "m")),
+            _ => new TurnStartEvent(7),
+        };
+
+        await bus.PublishAsync(evt);
+
+        await Assert.That(received.Count).IsEqualTo(1);
+        await Assert.That(received[0]).IsEqualTo(evt);
+        var tail = bus.GetScrollback(1);
+        await Assert.That(tail.Count).IsEqualTo(1);
+        await Assert.That(tail[0]).IsEqualTo(evt);
+    }
 }

@@ -25,7 +25,9 @@ public class ToolDispatcherCommitTests
 {
     private sealed class FakeRunner : IAgentRunner
     {
-        public CancellationTokenSource AbortSource { get; } = new();
+        private readonly CancellationTokenSource _abortSource = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
         public Task<Result> PromptAsync(string text, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
         public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
@@ -126,7 +128,7 @@ public class ToolDispatcherCommitTests
         var permissions = new GatedPermissions(gate);
         var tool = new SpyTool();
         var dispatcher = NewDispatcher(permissions, tool, coordinator);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(runner.AbortSource.Token);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(runner.AbortToken);
 
         var run = dispatcher.ExecuteAsync([Call()], NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), cts.Token);
         await WaitForAsync(() => permissions.Checks == 1, "permission check entered");
@@ -167,7 +169,7 @@ public class ToolDispatcherCommitTests
         var permissions = new GatedPermissions(null);
         var tool = new SpyTool();
         var dispatcher = NewDispatcher(permissions, tool, coordinator);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(runner.AbortSource.Token);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(runner.AbortToken);
 
         var run = dispatcher.ExecuteAsync([Call()], NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), cts.Token);
         await tool.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);

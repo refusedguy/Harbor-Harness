@@ -158,7 +158,9 @@ internal static class TestAgentFactory
     private sealed class StubAgent(AgentDefinition definition) : IAgent
     {
         public AgentState State { get; } = AgentState.Idle("test-session", definition);
-        public CancellationTokenSource AbortSource { get; } = new();
+        private readonly CancellationTokenSource _abortSource = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NoopDisposable();
         public Task<CSharpFunctionalExtensions.Result> PromptAsync(string text, CancellationToken ct = default) => Task.FromResult(CSharpFunctionalExtensions.Result.Success());
         public Task<CSharpFunctionalExtensions.Result> PromptAsync(UserMessage message, CancellationToken ct = default) => Task.FromResult(CSharpFunctionalExtensions.Result.Success());
@@ -167,7 +169,7 @@ internal static class TestAgentFactory
         public void ResetAbortSource() { }
         public void Steer(AgentMessage message) { }
         public void FollowUp(AgentMessage message) { }
-        public void Dispose() => AbortSource.Dispose();
+        public void Dispose() => _abortSource.Dispose();
         private sealed class NoopDisposable : IDisposable { public void Dispose() { } }
     }
 }

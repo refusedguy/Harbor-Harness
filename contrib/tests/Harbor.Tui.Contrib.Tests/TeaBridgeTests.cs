@@ -30,7 +30,7 @@ public class TeaBridgeTests
         var state = AgentState.Idle("s1", definition);
         var mock = new Mock<IAgent>();
         mock.SetupGet(a => a.State).Returns(state);
-        mock.SetupGet(a => a.AbortSource).Returns(new CancellationTokenSource());
+        mock.SetupGet(a => a.AbortToken).Returns(new CancellationTokenSource().Token);
         return mock.Object;
     }
 

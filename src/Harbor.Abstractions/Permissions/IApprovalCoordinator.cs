@@ -16,7 +16,7 @@ public enum ApprovalDecisionDisposition
     /// <summary>Cancellation won first; the gate is closed, the late decision touched nothing.</summary>
     AlreadyCancelled,
 
-    /// <summary>Unknown gate id (stale view, double-consume, or never registered).</summary>
+    /// <summary>Unknown gate id, or invocation/generation mismatch against the gate's binding (stale view, double-consume, never registered, or wrong-identity replay — touches nothing).</summary>
     StaleGate,
 }
 
@@ -36,7 +36,7 @@ public sealed record ApprovalResolution(bool Approved, bool PersistDecision);
 /// <remarks>
 ///     <para>
 ///         Today approval waits (asker TCS on the gate view) and cancellation
-///         (<c>AbortSource.Cancel()</c> from 6 call sites) meet nowhere: a
+///         (<c>RequestAbort()</c> from 6 call sites) meet nowhere: a
 ///         cancel racing a keypress can approve-then-kill or hang a waiter.
 ///         All runtime cancel ingresses funnel through
 ///         <see cref="RequestCancel" />; all gate decisions funnel through
@@ -48,7 +48,10 @@ public sealed record ApprovalResolution(bool Approved, bool PersistDecision);
 ///     <para>
 ///         PR1 covers ingress + decision stamping. The execution-commit state
 ///         machine (<c>Ready → Executing</c>, <c>GateId/InvocationId/Generation</c>
-///         identity) is PR2 and builds on these dispositions.
+///         identity) is PR2 and builds on these dispositions. PR4 binds the same
+///         identity at the gate: the UI sends the full 4-tuple
+///         <c>(GateId, InvocationId, Generation, Choice)</c> and the coordinator
+///         validates every component — a mismatch touches nothing (fail closed).
 ///     </para>
 /// </remarks>
 public interface IApprovalCoordinator
@@ -56,15 +59,39 @@ public interface IApprovalCoordinator
     /// <summary>
     ///     Open a waitable gate. Idempotent — re-registering a live gate is a no-op.
     ///     A gate registered after a cancel still waits normally (cancel is edge-triggered,
-    ///     mirroring <c>AbortSource</c> semantics; it is not a latched deny).
+    ///     mirroring <c>AbortToken</c> semantics; it is not a latched deny).
     /// </summary>
     void RegisterGate(string gateId);
+
+    /// <summary>
+    ///     Open a waitable gate bound to one execution attempt (#49 PR4).
+    ///     Idempotent — re-registering a live gate keeps the first binding.
+    ///     The 4-tuple <see cref="DecideApproval(string, string, int, ApprovalResolution)" />
+    ///     accepts a decision only when all three identity components match.
+    /// </summary>
+    /// <param name="gateId">Gate id (same as <see cref="RegisterGate(string)" />).</param>
+    /// <param name="invocationId">Tool-call id, unique per requested execution.</param>
+    /// <param name="generation">1-based attempt (retries bump it, mirroring <see cref="TryCommitApproval" />).</param>
+    void RegisterGate(string gateId, string invocationId, int generation);
 
     /// <summary>
     ///     Record a decision for a gate. Exactly one decision wins per gate;
     ///     late or unknown ids never mutate state (see <see cref="ApprovalDecisionDisposition" />).
     /// </summary>
     ApprovalDecisionDisposition DecideApproval(string gateId, ApprovalResolution decision);
+
+    /// <summary>
+    ///     Record a UI decision carrying the full 4-tuple identity (#49 PR4):
+    ///     the gate, the invocation, and the generation must ALL match the
+    ///     binding recorded by <see cref="RegisterGate(string, string, int)" />.
+    ///     Any mismatch returns <see cref="ApprovalDecisionDisposition.StaleGate" />,
+    ///     touches nothing, and is logged — the waiter stays pending until the
+    ///     genuine decision or cancellation arrives (fail closed: a wrong-identity
+    ///     approve can never approve the wrong gate). Race outcomes keep their
+    ///     PR1 dispositions (<c>AlreadyCancelled</c> / <c>AlreadyDecided</c>).
+    /// </summary>
+    ApprovalDecisionDisposition DecideApproval(
+        string gateId, string invocationId, int generation, ApprovalResolution decision);
 
     /// <summary>
     ///     Wait for a gate's decision. Returns <see langword="null" /> when cancellation
@@ -75,7 +102,7 @@ public interface IApprovalCoordinator
 
     /// <summary>
     ///     The single runtime cancellation ingress: replaces every direct
-    ///     <c>AbortSource.Cancel()</c> call. Marks pending gates cancelled (their
+    ///     <see cref="IAgentRunner.RequestAbort()" /> call. Marks pending gates cancelled (their
     ///     waiters complete with <see langword="null" />), then cancels the
     ///     run source outside the lock. Safe to call when idle or twice.
     /// </summary>

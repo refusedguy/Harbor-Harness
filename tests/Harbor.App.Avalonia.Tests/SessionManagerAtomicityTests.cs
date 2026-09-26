@@ -250,4 +250,70 @@ public class SessionManagerAtomicityTests
         // …while the deleted session's context is parked, not dropped.
         await Assert.That(manager.GetContext(sessionB.Id)).IsNotNull();
     }
+
+    [Test]
+    public async Task ConcurrentGetContext_DuringDelete_NeverObservesGap()
+    {
+        // Issue #81: GetContext runs on the EventBus publisher (tool) thread
+        // while DeleteSessionAsync runs on the UI thread. Park-before-remove
+        // means readers must never observe the gap where the session is
+        // neither live nor parked. Deterministic: bounded spin on task
+        // completion, no sleeps, no timeouts.
+        var agentDef = TestAgents.AllowAll();
+        var store = new TestSessionStore();
+        var sessionA = Session.Create("/tmp/issue81a", agentDef.Name.Value, agentDef.ProviderId, agentDef.Model);
+        var sessionB = Session.Create("/tmp/issue81b", agentDef.Name.Value, agentDef.ProviderId, agentDef.Model);
+        store.Seed(sessionA);
+        store.Seed(sessionB);
+        var manager = CreateManager(store, agentDef);
+
+        await Assert.That(await manager.OpenSessionAsync(sessionA.Id)).IsTrue();
+        var ctxA = manager.GetContext(sessionA.Id);
+        await Assert.That(await manager.OpenSessionAsync(sessionB.Id)).IsTrue();
+
+        var delete = manager.DeleteSessionAsync(sessionA.Id);
+        long nulls = 0;
+        var readers = new Task[8];
+        for (int i = 0; i < readers.Length; i++)
+        {
+            readers[i] = Task.Run(() =>
+            {
+                for (int n = 0; n < 10_000 && !delete.IsCompleted; n++)
+                {
+                    if (manager.GetContext(sessionA.Id) is null)
+                        Interlocked.Increment(ref nulls);
+                }
+            });
+        }
+
+        await Assert.That(await delete).IsTrue();
+        await Task.WhenAll(readers);
+
+        await Assert.That(nulls).IsEqualTo(0);
+        await Assert.That(ReferenceEquals(manager.GetContext(sessionA.Id), ctxA)).IsTrue();
+    }
+
+    [Test]
+    public async Task ConcurrentOpen_SameSession_CompletesCoherently()
+    {
+        // Issue #81: concurrent opens of the same session (double-click /
+        // restore race) share one context via GetOrAdd instead of tearing
+        // the map or forking two UiStores.
+        var agentDef = TestAgents.AllowAll();
+        (var store, var session) = SeededStore(agentDef);
+        var manager = CreateManager(store, agentDef);
+
+        var opens = new Task<bool>[8];
+        for (int i = 0; i < opens.Length; i++)
+            opens[i] = manager.OpenSessionAsync(session.Id);
+
+        var results = await Task.WhenAll(opens);
+
+        await Assert.That(results.All(r => r)).IsTrue();
+        await Assert.That(manager.GetContext(session.Id)).IsNotNull();
+        await Assert.That(manager.Active!.Id).IsEqualTo(session.Id);
+        // Both opens hydrate the SAME store with the same payload
+        // (replace semantics): no duplicated replay, no torn transcript.
+        await Assert.That(manager.GetContext(session.Id)!.Store.State.Lines.Length).IsEqualTo(3);
+    }
 }

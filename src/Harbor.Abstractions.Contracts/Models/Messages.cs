@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MemoryPack;
 namespace Harbor.Abstractions.Models;
 /// <summary>
@@ -14,6 +15,9 @@ namespace Harbor.Abstractions.Models;
 ///         MemoryPack uses <see cref="MemoryPackUnionAttribute" /> to serialize the polymorphic
 ///         hierarchy as tagged unions: <c>0</c> = <see cref="UserMessage" />, <c>1</c> =
 ///         <see cref="AssistantMessage" />, <c>2</c> = <see cref="ToolResultMessage" />.
+///         System.Text.Json carries the same cases via the <c>$type</c> discriminator
+///         (<c>user</c>/<c>assistant</c>/<c>tool_result</c>), so a base-typed
+///         round-trip preserves the runtime case (#87).
 ///     </para>
 /// </remarks>
 /// <param name="Id">Stable unique identifier (typically a guid as N-string).</param>
@@ -24,6 +28,10 @@ namespace Harbor.Abstractions.Models;
 [MemoryPackUnion(0, typeof(UserMessage))]
 [MemoryPackUnion(1, typeof(AssistantMessage))]
 [MemoryPackUnion(2, typeof(ToolResultMessage))]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(UserMessage), "user")]
+[JsonDerivedType(typeof(AssistantMessage), "assistant")]
+[JsonDerivedType(typeof(ToolResultMessage), "tool_result")]
 public abstract partial record AgentMessage(
     string Id,
     string SessionId,
@@ -200,6 +208,11 @@ public sealed partial record ToolResultMessage(
 [MemoryPackUnion(1, typeof(ThinkingPart))]
 [MemoryPackUnion(2, typeof(ToolCallPart))]
 [MemoryPackUnion(3, typeof(FilePart))]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(TextPart), "text")]
+[JsonDerivedType(typeof(ThinkingPart), "thinking")]
+[JsonDerivedType(typeof(ToolCallPart), "tool_call")]
+[JsonDerivedType(typeof(FilePart), "file")]
 public abstract partial record ContentPart
 {
     /// <summary>
@@ -244,6 +257,22 @@ public sealed partial record ToolCallPart(
 {
     /// <inheritdoc />
     public override string Type => "tool_call";
+
+    /// <summary>
+    ///     Create a <see cref="ToolCallPart" /> from a possibly short-lived
+    ///     <see cref="JsonElement" />. The args are cloned so the part owns
+    ///     them beyond the source <see cref="JsonDocument" /> lifetime (the
+    ///     OpenAiWire eager-materialization rule, #86/#87) — the document may
+    ///     be disposed right after this call.
+    /// </summary>
+    /// <param name="id">The tool call id (matches <see cref="ToolResultEntry.ToolCallId" />).</param>
+    /// <param name="toolName">The name of the tool to invoke.</param>
+    /// <param name="args">The raw JSON arguments (view or owned — cloned).</param>
+    public static ToolCallPart Create(string id, string toolName, JsonElement args) =>
+        new(id, toolName, CloneOwned(args));
+
+    private static JsonElement CloneOwned(JsonElement args) =>
+        args.ValueKind == JsonValueKind.Undefined ? args : args.Clone();
 
     // MemoryPack source-gen hook: register the JsonElement formatter before any
     // (de)serialization of ToolCallPart occurs. This ensures the Args member can

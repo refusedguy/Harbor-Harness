@@ -65,7 +65,16 @@ public sealed record MessageEndEvent(AssistantMessage Message) : AgentEvent;
 public sealed record ToolExecutionStartEvent(
     string ToolCallId,
     string ToolName,
-    JsonElement Args) : AgentEvent;
+    JsonElement Args) : AgentEvent
+{
+    /// <summary>
+    ///     Create an event from possibly short-lived <see cref="JsonElement" />
+    ///     args. The args are cloned so the event owns them beyond the source
+    ///     <see cref="JsonDocument" /> lifetime (#87).
+    /// </summary>
+    public static ToolExecutionStartEvent Create(string toolCallId, string toolName, JsonElement args) =>
+        new(toolCallId, toolName, args.ValueKind == JsonValueKind.Undefined ? args : args.Clone());
+}
 
 /// <summary>
 ///     Emitted on a tool progress update. <see cref="PartialResult" /> is opaque and tool-specific.
@@ -233,7 +242,16 @@ public sealed record ToolCallDeltaEvent(string Id, string ArgsDelta) : LlmEvent;
 /// <summary>
 ///     Marks the end of a tool call; <see cref="Args" /> is the parsed JSON arguments object.
 /// </summary>
-public sealed record ToolCallEndEvent(string Id, string ToolName, JsonElement Args) : LlmEvent;
+public sealed record ToolCallEndEvent(string Id, string ToolName, JsonElement Args) : LlmEvent
+{
+    /// <summary>
+    ///     Create an event from possibly short-lived <see cref="JsonElement" />
+    ///     args. The args are cloned so the event owns them beyond the source
+    ///     <see cref="JsonDocument" /> lifetime (#87).
+    /// </summary>
+    public static ToolCallEndEvent Create(string id, string toolName, JsonElement args) =>
+        new(id, toolName, args.ValueKind == JsonValueKind.Undefined ? args : args.Clone());
+}
 
 /// <summary>
 ///     Marks the start of an inference step (e.g. a reasoning step on Anthropic extended thinking).

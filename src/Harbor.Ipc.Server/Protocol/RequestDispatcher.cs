@@ -159,7 +159,7 @@ public sealed class RequestDispatcher
         }
         else
         {
-            _agent.AbortSource.Cancel();
+            _agent.RequestAbort();
         }
 
         return new OkResponse { RequestId = r.RequestId };
