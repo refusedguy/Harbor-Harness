@@ -185,14 +185,19 @@ public sealed class SessionFactory
 
         var branch = branchResult.Value with { Title = source.Title + " (branch)" };
         var messagesResult = await _sessionStore.GetMessagesAsync(source.Id).ConfigureAwait(false);
-        if (messagesResult.IsSuccess)
+        if (messagesResult.IsFailure)
         {
-            foreach (var msg in messagesResult.Value)
-            {
-                // Re-parent the message to the new session id and persist it.
-                var reborn = msg with { SessionId = branch.Id, Id = Guid.NewGuid().ToString("N") };
-                await _sessionStore.AppendMessageAsync(branch.Id, reborn).ConfigureAwait(false);
-            }
+            // Do not silently ship an empty branch: surface the copy failure.
+            // (Full Result migration of the factory/manager null-railway is tracked separately.)
+            _logger.LogError("Branch session {Id} message copy failed: {Error}", source.Id, messagesResult.Error);
+            return null;
+        }
+
+        foreach (var msg in messagesResult.Value)
+        {
+            // Re-parent the message to the new session id and persist it.
+            var reborn = msg with { SessionId = branch.Id, Id = Guid.NewGuid().ToString("N") };
+            await _sessionStore.AppendMessageAsync(branch.Id, reborn).ConfigureAwait(false);
         }
 
         _logger.LogInformation("Branched session {Old} → {New}", source.Id, branch.Id);
