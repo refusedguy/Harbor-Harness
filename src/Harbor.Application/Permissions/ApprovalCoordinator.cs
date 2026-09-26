@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.Application.Permissions;
 
 /// <summary>
-///     Runtime-owned approval/cancellation coordinator (#49 PR1).
+///     Runtime-owned approval/cancellation coordinator (#49 PR1; PR4 4-tuple).
 ///     Single lock orders decisions vs cancellation per gate; every blocking
 ///     or reentrant action (CTS cancel, TCS completion) happens outside it.
 /// </summary>
@@ -27,6 +27,14 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
         public bool Decided;
         public ApprovalResolution? Decision;
         public bool Cancelled;
+
+        /// <summary>
+        ///     PR4 identity binding. Set only by
+        ///     <c>RegisterGate(gateId, invocationId, generation)</c>; legacy
+        ///     gates stay unbound (<see langword="null" /> invocation).
+        /// </summary>
+        public string? InvocationId;
+        public int Generation;
     }
 
     /// <inheritdoc />
@@ -36,6 +44,18 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
         lock (_gate)
         {
             _gates.TryAdd(gateId, new GateSlot());
+        }
+    }
+
+    /// <inheritdoc />
+    public void RegisterGate(string gateId, string invocationId, int generation)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(gateId);
+        ArgumentException.ThrowIfNullOrEmpty(invocationId);
+        ArgumentOutOfRangeException.ThrowIfLessThan(generation, 1);
+        lock (_gate)
+        {
+            _gates.TryAdd(gateId, new GateSlot { InvocationId = invocationId, Generation = generation });
         }
     }
 
@@ -75,6 +95,101 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
         }
 
         return disposition;
+    }
+
+    /// <inheritdoc />
+    public ApprovalDecisionDisposition DecideApproval(
+        string gateId, string invocationId, int generation, ApprovalResolution decision)
+    {
+        ArgumentNullException.ThrowIfNull(decision);
+        GateSlot? slot;
+        ApprovalDecisionDisposition disposition;
+        // Captured under the lock, logged after it: no IO (not even the
+        // logger) ever runs under the coordinator lock.
+        TupleMismatch? mismatch = null;
+        lock (_gate)
+        {
+            if (!_gates.TryGetValue(gateId, out slot))
+            {
+                mismatch = new TupleMismatch(TupleMismatchKind.UnknownGate, null, 0);
+                disposition = ApprovalDecisionDisposition.StaleGate;
+            }
+            // Terminal races keep their PR1 dispositions — identity is moot
+            // on a dead gate, and neither branch mutates state.
+            else if (slot.Cancelled)
+            {
+                disposition = ApprovalDecisionDisposition.AlreadyCancelled;
+            }
+            else if (slot.Decided)
+            {
+                disposition = ApprovalDecisionDisposition.AlreadyDecided;
+            }
+            else if (slot.InvocationId is null
+                || !string.Equals(slot.InvocationId, invocationId, StringComparison.Ordinal))
+            {
+                // Fail closed: no binding (legacy gate) or a foreign invocation —
+                // without a verified (gate, invocation) pair the decision is dropped.
+                // The explicit null check keeps a degenerate (null, 0) sender from
+                // matching an unbound slot via Equals(null, null) + 0 == 0.
+                mismatch = new TupleMismatch(TupleMismatchKind.Invocation, slot.InvocationId, slot.Generation);
+                disposition = ApprovalDecisionDisposition.StaleGate;
+            }
+            else if (slot.Generation != generation)
+            {
+                // Stale-generation replay (or a future attempt answering the wrong
+                // gate): dropped, the live attempt still waits for its own decision.
+                mismatch = new TupleMismatch(TupleMismatchKind.Generation, slot.InvocationId, slot.Generation);
+                disposition = ApprovalDecisionDisposition.StaleGate;
+            }
+            else
+            {
+                slot.Decided = true;
+                slot.Decision = decision;
+                disposition = ApprovalDecisionDisposition.Accepted;
+            }
+        }
+
+        if (mismatch is { } m)
+        {
+            LogTupleMismatch(gateId, invocationId, generation, m);
+        }
+
+        // Complete outside the lock: continuations run on the completer.
+        if (disposition == ApprovalDecisionDisposition.Accepted)
+        {
+            slot!.Tcs.TrySetResult(decision);
+        }
+
+        return disposition;
+    }
+
+    private enum TupleMismatchKind
+    {
+        UnknownGate,
+        Invocation,
+        Generation,
+    }
+
+    private sealed record TupleMismatch(TupleMismatchKind Kind, string? ExpectedInvocation, int ExpectedGeneration);
+
+    private void LogTupleMismatch(string gateId, string invocationId, int generation, TupleMismatch mismatch)
+    {
+        switch (mismatch.Kind)
+        {
+            case TupleMismatchKind.UnknownGate:
+                logger.LogDebug("Approval 4-tuple for unknown gate '{GateId}' rejected as stale", gateId);
+                break;
+            case TupleMismatchKind.Invocation:
+                logger.LogWarning(
+                    "Approval 4-tuple invocation mismatch on gate '{GateId}': expected '{ExpectedInvocation}', got '{ActualInvocation}' — rejected, gate untouched",
+                    gateId, mismatch.ExpectedInvocation ?? "<unbound>", invocationId);
+                break;
+            default:
+                logger.LogWarning(
+                    "Approval 4-tuple generation mismatch on gate '{GateId}' invocation '{InvocationId}': expected {ExpectedGeneration}, got {ActualGeneration} — rejected, gate untouched",
+                    gateId, invocationId, mismatch.ExpectedGeneration, generation);
+                break;
+        }
     }
 
     /// <inheritdoc />

@@ -16,7 +16,7 @@ public enum ApprovalDecisionDisposition
     /// <summary>Cancellation won first; the gate is closed, the late decision touched nothing.</summary>
     AlreadyCancelled,
 
-    /// <summary>Unknown gate id (stale view, double-consume, or never registered).</summary>
+    /// <summary>Unknown gate id, or invocation/generation mismatch against the gate's binding (stale view, double-consume, never registered, or wrong-identity replay — touches nothing).</summary>
     StaleGate,
 }
 
@@ -48,7 +48,10 @@ public sealed record ApprovalResolution(bool Approved, bool PersistDecision);
 ///     <para>
 ///         PR1 covers ingress + decision stamping. The execution-commit state
 ///         machine (<c>Ready → Executing</c>, <c>GateId/InvocationId/Generation</c>
-///         identity) is PR2 and builds on these dispositions.
+///         identity) is PR2 and builds on these dispositions. PR4 binds the same
+///         identity at the gate: the UI sends the full 4-tuple
+///         <c>(GateId, InvocationId, Generation, Choice)</c> and the coordinator
+///         validates every component — a mismatch touches nothing (fail closed).
 ///     </para>
 /// </remarks>
 public interface IApprovalCoordinator
@@ -61,10 +64,34 @@ public interface IApprovalCoordinator
     void RegisterGate(string gateId);
 
     /// <summary>
+    ///     Open a waitable gate bound to one execution attempt (#49 PR4).
+    ///     Idempotent — re-registering a live gate keeps the first binding.
+    ///     The 4-tuple <see cref="DecideApproval(string, string, int, ApprovalResolution)" />
+    ///     accepts a decision only when all three identity components match.
+    /// </summary>
+    /// <param name="gateId">Gate id (same as <see cref="RegisterGate(string)" />).</param>
+    /// <param name="invocationId">Tool-call id, unique per requested execution.</param>
+    /// <param name="generation">1-based attempt (retries bump it, mirroring <see cref="TryCommitApproval" />).</param>
+    void RegisterGate(string gateId, string invocationId, int generation);
+
+    /// <summary>
     ///     Record a decision for a gate. Exactly one decision wins per gate;
     ///     late or unknown ids never mutate state (see <see cref="ApprovalDecisionDisposition" />).
     /// </summary>
     ApprovalDecisionDisposition DecideApproval(string gateId, ApprovalResolution decision);
+
+    /// <summary>
+    ///     Record a UI decision carrying the full 4-tuple identity (#49 PR4):
+    ///     the gate, the invocation, and the generation must ALL match the
+    ///     binding recorded by <see cref="RegisterGate(string, string, int)" />.
+    ///     Any mismatch returns <see cref="ApprovalDecisionDisposition.StaleGate" />,
+    ///     touches nothing, and is logged — the waiter stays pending until the
+    ///     genuine decision or cancellation arrives (fail closed: a wrong-identity
+    ///     approve can never approve the wrong gate). Race outcomes keep their
+    ///     PR1 dispositions (<c>AlreadyCancelled</c> / <c>AlreadyDecided</c>).
+    /// </summary>
+    ApprovalDecisionDisposition DecideApproval(
+        string gateId, string invocationId, int generation, ApprovalResolution decision);
 
     /// <summary>
     ///     Wait for a gate's decision. Returns <see langword="null" /> when cancellation
