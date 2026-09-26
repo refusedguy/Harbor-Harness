@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using MemoryPack;
 namespace Harbor.Abstractions.Models;
