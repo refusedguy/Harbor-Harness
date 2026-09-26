@@ -46,6 +46,14 @@ public static class TerminalQueries
     /// <summary>Enable drag tracking additionally: CSI ?1002h (v2 panel resize).</summary>
     public const string MouseDragEnable = "\u001B[?1002h";
 
+    /// <summary>
+    /// Full mouse grab for the interactive session (issue #36, decision: full
+    /// grab): X10 click tracking + button-event drag + SGR encoding, in
+    /// enable order ?1000h ?1002h ?1006h. Shift-bypass stays terminal-side
+    /// (the terminal intercepts Shift+select itself — nothing to implement).
+    /// </summary>
+    public const string MouseFullEnable = "\u001B[?1000h\u001B[?1002h\u001B[?1006h";
+
     /// <summary>Disable all mouse tracking in reverse-enable order.</summary>
     public const string MouseDisable = "\u001B[?1006l\u001B[?1002l\u001B[?1000l";
 
