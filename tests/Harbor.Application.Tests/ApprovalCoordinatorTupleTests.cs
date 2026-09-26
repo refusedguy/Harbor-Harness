@@ -17,7 +17,9 @@ public class ApprovalCoordinatorTupleTests
 {
     private sealed class FakeRunner : IAgentRunner
     {
-        public CancellationTokenSource AbortSource { get; } = new();
+        private readonly CancellationTokenSource _cts = new();
+        public CancellationToken AbortToken => _cts.Token;
+        public void RequestAbort() => _cts.Cancel();
         public Task<Result> PromptAsync(string text, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
         public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;

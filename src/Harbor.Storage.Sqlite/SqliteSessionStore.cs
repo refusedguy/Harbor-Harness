@@ -480,7 +480,7 @@ public sealed class SqliteSessionStore : ISessionStore
         if (HasLegacyMessagePk(conn))
             RebuildMessagesTable(conn);
 
-        if (!HasColumn(conn, "messages", "created_at_ms"))
+        if (!HasColumn(conn, "created_at_ms"))
         {
             using var alter = conn.CreateCommand();
             alter.CommandText = "ALTER TABLE messages ADD COLUMN created_at_ms INTEGER NOT NULL DEFAULT 0";
@@ -496,10 +496,12 @@ public sealed class SqliteSessionStore : ISessionStore
         idx.ExecuteNonQuery();
     }
 
-    private static bool HasColumn(SqliteConnection conn, string table, string column)
+    private static bool HasColumn(SqliteConnection conn, string column)
     {
+        // S2077: PRAGMA takes no parameters — the table name is a hardcoded
+        // internal constant, never user input.
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"PRAGMA table_info({table})";
+        cmd.CommandText = "PRAGMA table_info(messages)";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
