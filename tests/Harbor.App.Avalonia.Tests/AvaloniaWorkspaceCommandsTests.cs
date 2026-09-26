@@ -30,10 +30,10 @@ public class AvaloniaWorkspaceCommandsTests
         public Task EnsureDefaultSessionAsync() => Task.CompletedTask;
         public Task RebindFromCommonConfigAsync() => Task.CompletedTask;
 
-        public Session? NewSessionResult { get; set; }
+        public Result<Session> NewSessionResult { get; set; } = Result.Failure<Session>("Not configured.");
         public bool NewSessionCalled { get; private set; }
 
-        public Task<Session?> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null)
+        public Task<Result<Session>> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null)
         {
             NewSessionCalled = true;
             return Task.FromResult(NewSessionResult);
@@ -41,10 +41,10 @@ public class AvaloniaWorkspaceCommandsTests
 
         public Task<bool> OpenSessionAsync(string sessionId) => Task.FromResult(true);
 
-        public Session? BranchResult { get; set; }
+        public Result<Session> BranchResult { get; set; } = Result.Failure<Session>("Not configured.");
         public bool BranchCalled { get; private set; }
 
-        public Task<Session?> BranchActiveAsync()
+        public Task<Result<Session>> BranchActiveAsync()
         {
             BranchCalled = true;
             return Task.FromResult(BranchResult);
@@ -180,9 +180,9 @@ public class AvaloniaWorkspaceCommandsTests
 
         var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects);
 
-        sessionManager.NewSessionResult = new Session(
+        sessionManager.NewSessionResult = Result.Success(new Session(
             "test-id", "proj", "/tmp", "Test", "agent", "model", "provider",
-            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, SessionMetadata.Empty);
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, SessionMetadata.Empty));
 
         commands.NewSession();
 
@@ -201,9 +201,9 @@ public class AvaloniaWorkspaceCommandsTests
 
         var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects);
 
-        sessionManager.BranchResult = new Session(
+        sessionManager.BranchResult = Result.Success(new Session(
             "branch-id", "proj", "/tmp", "Branch", "agent", "model", "provider",
-            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, SessionMetadata.Empty);
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, SessionMetadata.Empty));
 
         commands.BranchSession();
 

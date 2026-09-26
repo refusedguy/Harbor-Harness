@@ -2,6 +2,13 @@
 
 > Документ: streaming rendering, slash-commands, split-panes, ANSI, ConsoleAppFramework integration. Custom ANSI wrapper вместо Spectre.Console.Cli. Streaming markdown rendering.
 
+> **Drift note (2026-09-26, verified against `origin/dev` HEAD `b0d92c1`).** There is no single `Harbor.Tui` project; the shipped renderer layout (selection logic in `src/Harbor.Hosting/Modules/TuiModule.cs`) is:
+> - `src/Harbor.Tui.AnsiPlain/` — `AnsiTuiRenderer` (id `ansi`) + `PlainTuiRenderer` (id `plain`; default when built without the Spectre flag).
+> - `src/Harbor.Tui.CellForge/` + `src/Harbor.Tui.CellForge.Engine/` — canonical id `cellforge`, always compiled in; **`consoleex` is a legacy alias** (`HARBOR_TUI=cellforge` or `HARBOR_TUI=consoleex` both select it).
+> - `src/Harbor.Tui.NickConsoleEx/` — id `nickconsoleex`, behind the `HARBOR_WITH_NICK_CONSOLE_EX` build flag.
+> - `src/Harbor.Tui.Notifications/` + `src/Harbor.Tui.Abstractions/`; interactive default with the Spectre flag is `spectre-tui` (sources in `contrib/tui/`: SpectreTui, Spectre, Spectre.Fullscreen, TerminalGui, Termina, RazorConsole, Sixel).
+> - Contracts/views shared by renderers: `src/Harbor.Terminal.Abstractions/` (`ITuiRenderer`, `BaseTuiRenderer`, views/VMs) + `src/Harbor.Terminal.Pty/`; TEA-style state split across 9 `src/Harbor.Ui.Framework*/` projects (Abstractions, State, Reducers, Projection, Rendering, Services, Sessions, ViewModels + base). The Elm-style single-switch render loop (§2.1) and the `Ansi` helper (§3, now inside AnsiPlain) describe intent that still holds per-renderer.
+
 ## 1. Цели
 
 1. **Real-time streaming** — токены появляются на экране по мере прихода от LLM, latency <20ms.

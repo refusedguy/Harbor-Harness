@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
@@ -185,8 +186,10 @@ public sealed class SessionManager : ISessionManager
     {
         if (ActiveContext is not null) return;
 
-        var session = await _factory.CreateDefaultAsync().ConfigureAwait(false);
-        if (session is null) return;
+        var createResult = await _factory.CreateDefaultAsync().ConfigureAwait(false);
+        if (createResult.IsFailure) return;
+
+        var session = createResult.Value;
 
         var ctx = GetOrCreateContext(session);
         ActiveContext = ctx;
@@ -240,19 +243,25 @@ public sealed class SessionManager : ISessionManager
     ///     it continues running in the background and its events keep
     ///     flowing into its own UiStore.
     /// </summary>
-    public async Task<Session?> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null)
+    /// <returns>The new active session, or a failure carrying the cause.</returns>
+    public async Task<Result<Session>> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null)
     {
-        var session = await _factory.CreateNewAsync(agentName, providerId, modelId, workingDirectory).ConfigureAwait(false);
-        if (session is null) return null;
+        var createResult = await _factory.CreateNewAsync(agentName, providerId, modelId, workingDirectory).ConfigureAwait(false);
+        if (createResult.IsFailure) return createResult;
 
+        var session = createResult.Value;
         var ctx = GetOrCreateContext(session);
         ActiveContext = ctx;
         ClearTokenUsageForActiveSession();
         RebindChatViewModel(ctx);
 
-        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return null;
+        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false))
+        {
+            SetStatus(session.Id, SessionStatus.Error);
+            return Result.Failure<Session>($"Session '{session.Id}' was created but could not be opened.");
+        }
         ctx.StoreWasHydrated = true;
-        return session;
+        return Result.Success(session);
     }
 
     /// <summary>
@@ -314,13 +323,19 @@ public sealed class SessionManager : ISessionManager
     ///     Branch the active session — create a new session with the same
     ///     messages and metadata but a new id, then switch to the branch.
     /// </summary>
-    public async Task<Session?> BranchActiveAsync()
+    /// <returns>The new active branch, or a failure carrying the cause.</returns>
+    public async Task<Result<Session>> BranchActiveAsync()
     {
-        if (ActiveContext is null) return null;
-        var branch = await _factory.CreateBranchAsync(ActiveContext.Session).ConfigureAwait(false);
-        if (branch is null) return null;
-        await OpenSessionAsync(branch.Id).ConfigureAwait(false);
-        return branch;
+        if (ActiveContext is null) return Result.Failure<Session>("No active session to branch.");
+        var branchResult = await _factory.CreateBranchAsync(ActiveContext.Session).ConfigureAwait(false);
+        if (branchResult.IsFailure) return branchResult;
+        var branch = branchResult.Value;
+        if (!await OpenSessionAsync(branch.Id).ConfigureAwait(false))
+        {
+            SetStatus(branch.Id, SessionStatus.Error);
+            return Result.Failure<Session>($"Branch '{branch.Id}' was created but could not be opened.");
+        }
+        return Result.Success(branch);
     }
 
     /// <summary>

@@ -33,7 +33,9 @@ namespace Harbor.App.Cli.Repl;
 /// <summary>
 ///     CE-4 интерактивный REPL поверх CellForge-движка: второй путь рендера
 ///     рядом с legacy AnsiTuiRenderer. Владеет полным жизненным циклом экрана
-///     (raw-режим, alt-screen, bracketed paste), кадровым циклом и submit-
+///     (raw-режим, alt-screen, bracketed paste, full mouse grab — решение #36:
+///     скролл/клики внутри Harbor, копирование в буфер через Shift/палитру),
+///     кадровым циклом и submit-
 ///     пайплайном композера — тем же, что обслуживал старый рендер
 ///     (<see cref="SlashCommandDispatcher"/> для <c>/команд</c>,
 ///     <see cref="IAgentRunner.PromptAsync"/> для промптов).
@@ -67,8 +69,16 @@ internal sealed class CellForgeReplRunner(
     IApprovalCoordinator coordinator)
     : IReplHost
 {
-    private const string SeqEnterAltScreen = "\x1B[?1049h\x1B[?25l\x1B[?2004h\x1B[?1000h\x1B[?1002h\x1B[?1006h";
-    private const string SeqLeaveAltScreen = "\x1B[?2004l\x1B[?25h\x1B[?1049l\x1B[?1006l\x1B[?1002l\x1B[?1000l";
+    /// <summary>
+    /// Interactive enter/leave sequences (issue #36, decision: full grab).
+    /// Composed from <see cref="TerminalQueries"/> single-source-of-truth
+    /// constants so the byte order can never drift from the PTY contract:
+    /// enter = alt-screen + hide-cursor + paste + full mouse grab, leave =
+    /// paste-off + show-cursor + alt-screen-off + mouse-off in reverse order.
+    /// Internal for the grab-lifecycle unit tests (InternalsVisibleTo).
+    /// </summary>
+    internal const string SeqEnterAltScreen = "\x1B[?1049h\x1B[?25l\x1B[?2004h" + TerminalQueries.MouseFullEnable;
+    internal const string SeqLeaveAltScreen = "\x1B[?2004l\x1B[?25h\x1B[?1049l" + TerminalQueries.MouseDisable;
 
     /// <summary>Idle-Ctrl+C window for the «press again to quit» gesture.</summary>
     private const long QuitGestureWindowMs = 2000;

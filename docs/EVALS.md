@@ -38,6 +38,23 @@ separately); constraint-pass share + coverage; false-success share;
 never zero); failure classes (`incorrect_change`, `broke_existing`,
 `violated_constraint`, `timeout`, `harness_or_crash`, `unknown`).
 
+## CI (`evals` workflow — live signal, never a merge gate)
+
+- Triggers: `workflow_dispatch` (inputs: `attempts`, `tasks`) + weekly
+  schedule (Monday 03:00 UTC). No `push`/`pull_request` triggers.
+- What it does: builds `apps/Harbor.App.Cli` (Release), then runs
+  `dotnet run --project tools/Harbor.Evals -- --tasks evals/tasks
+  --profile evals/profiles/local.json`, uploads `evals/results/` as artifact.
+- Model key: repository secret **`KILO_API_KEY`**
+  (Settings → Secrets and variables → Actions → New repository secret,
+  value `klo_...`). The workflow reads it as `secrets.KILO_API_KEY` and
+  passes it as env `KILO_API_KEY` to the runner (model
+  `kilocode/kilo-auto/free`, free tier, no card required).
+- No key → graceful skip (green): the `Check model key` step writes a
+  notice + job summary and skips build/run; the run stays green because
+  live evals are diagnostic, not a gate. Add the secret by hand to enable
+  live baselines.
+
 ## Rules
 
 - Verifier prompt never gets verifier feedback (no runner-as-fixer loop).

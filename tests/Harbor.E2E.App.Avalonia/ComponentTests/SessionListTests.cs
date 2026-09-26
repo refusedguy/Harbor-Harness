@@ -34,8 +34,10 @@ public sealed class SessionListTests : ComponentTestBase
     private static async Task<string> SeedSessionAsync(string title)
     {
         var manager = Driver.Host.Services.GetRequiredService<ISessionManager>();
-        var session = await manager.NewSessionAsync(
+        var created = await manager.NewSessionAsync(
             workingDirectory: E2EHelpers.FindRepoRoot()).ConfigureAwait(false);
+        await Assert.That(created.IsSuccess).IsTrue();
+        var session = created.Value;
         var renamed = await manager.RenameSessionAsync(session.Id, title).ConfigureAwait(false);
         await Assert.That(renamed).IsTrue();
         return session.Id;
