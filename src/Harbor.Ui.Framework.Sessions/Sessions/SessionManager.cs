@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
@@ -57,6 +58,19 @@ public sealed class SessionManager : ISessionManager
     ///     doesn't leak messages into session B's chat transcript.
     /// </summary>
     private readonly Dictionary<string, SessionContext> _contexts = new();
+
+    /// <summary>
+    ///     Parked (tombstoned) contexts for deleted sessions (#89). A deleted
+    ///     session's background agent may still emit events while
+    ///     <see cref="DeleteSessionAsync" /> awaits the switch to the next
+    ///     session; <see cref="GetContext" /> falls back to the parked store
+    ///     so those late events land in the dead session's own transcript
+    ///     instead of leaking into the newly-active session (via the
+    ///     ActiveContext fallback in the event router) or dropping silently.
+    ///     Parked contexts are never rebound to the UI — they are pure event
+    ///     sinks, kept for the app lifetime.
+    /// </summary>
+    private readonly Dictionary<string, SessionContext> _tombstones = new();
     private readonly SessionFactory _factory;
     private readonly SessionGitTracker _gitTracker;
     private readonly ILogger<SessionManager> _logger;
@@ -128,11 +142,18 @@ public sealed class SessionManager : ISessionManager
     ///     exists in the store but has never been opened in this app run).
     ///     Used by <c>AppHost</c>'s EventBus subscriber to route agent events
     ///     to the correct per-session UiStore.
+    ///     Falls back to the parked (tombstoned) context of a deleted session
+    ///     (#89) so late background events still have a home and never leak
+    ///     into the active session's transcript.
     /// </summary>
     /// <param name="sessionId">The session id to look up.</param>
     /// <returns>The <see cref="SessionContext" />, or null.</returns>
-    public SessionContext? GetContext(string sessionId) =>
-        _contexts.TryGetValue(sessionId, out var ctx) ? ctx : null;
+    public SessionContext? GetContext(string sessionId)
+    {
+        if (_contexts.TryGetValue(sessionId, out var ctx)) return ctx;
+        _tombstones.TryGetValue(sessionId, out var parked);
+        return parked;
+    }
 
     /// <summary>Get the status of a session.</summary>
     public SessionStatus GetStatus(string sessionId) => _statusTracker.Get(sessionId);
@@ -259,22 +280,26 @@ public sealed class SessionManager : ISessionManager
         }
         else
         {
-            ctx.Store.Reset();
             var agents = _services.GetRequiredService<IAgentRegistry>();
             var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
                            ?? agents.GetAllAgents().First()
                            ?? throw new InvalidOperationException("No agents registered.");
             _agent.Initialize(session, agentDef);
-            ctx.Store.BindSession(session.Model, session.ProviderId, session.Agent);
+            // #89: hydrate-then-swap — same single-UiMsg atomic replay as
+            // SessionSwitcher.OpenAsync (see comment there).
             var messages = await _sessionStore.GetMessagesAsync(session.Id).ConfigureAwait(false);
+            var lines = ImmutableArray.CreateBuilder<ChatLine>();
             if (messages.IsSuccess)
             {
                 foreach (var msg in messages.Value)
                 {
                     (var role, string text) = SessionFactory.MessageToChatLine(msg);
-                    ctx.Store.Dispatch(new UiMsg.AppendLine(role, text));
+                    lines.Add(new ChatLine(role, text));
                 }
             }
+
+            ctx.Store.Dispatch(new UiMsg.HydrateSession(
+                session.Model, session.ProviderId, session.Agent, lines.ToImmutable()));
         }
 
         RefreshGitInfo(session.Id, session.Directory);
@@ -312,7 +337,9 @@ public sealed class SessionManager : ISessionManager
             return false;
         }
 
-        _contexts.Remove(sessionId);
+        _contexts.Remove(sessionId, out var removed);
+        if (removed is not null)
+            _tombstones[sessionId] = removed;
         _logger.LogInformation("Deleted session {Id}", sessionId);
 
         if (ActiveContext?.Session.Id == sessionId)
@@ -356,6 +383,14 @@ public sealed class SessionManager : ISessionManager
         }
 
         _logger.LogInformation("Renamed session {Id} → '{Title}'", sessionId, updated.Title);
+
+        // #89: the store write above is durable, but the live Session records
+        // held by this manager would keep serving the stale title — update
+        // every in-memory copy with the same value just persisted.
+        if (_contexts.TryGetValue(sessionId, out var ctx))
+            ctx.Session = updated;
+        if (ActiveContext?.Session.Id == sessionId)
+            ActiveContext.Session = updated;
         return true;
     }
 

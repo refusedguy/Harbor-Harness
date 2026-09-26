@@ -41,6 +41,26 @@ public abstract record UiMsg
     public sealed record StatusChanged(string Status) : UiMsg;
 
     /// <summary>
+    ///     Atomic session hydration (#89): reset to a fresh state, bind the
+    ///     session chrome (model / provider / agent) and replay the persisted
+    ///     history lines in a SINGLE reducer transition. Replaces the old
+    ///     Reset + BindSession + N×AppendLine sequence, whose N+2 separate
+    ///     store transitions let a background agent event interleave
+    ///     mid-replay and corrupt the transcript order. With this message a
+    ///     racing event serializes strictly before or after the swap via the
+    ///     store's CAS loop.
+    /// </summary>
+    /// <param name="Model">The session's model id.</param>
+    /// <param name="Provider">The session's provider id.</param>
+    /// <param name="AgentName">The session's agent name.</param>
+    /// <param name="Lines">The replayed history lines, oldest first.</param>
+    public sealed record HydrateSession(
+        string Model,
+        string Provider,
+        string AgentName,
+        ImmutableArray<ChatLine> Lines) : UiMsg;
+
+    /// <summary>
     ///     Runtime identity for the status chrome (model / provider / agent).
     ///     The store never learns these from <see cref="AgentEvent" /> traffic,
     ///     so hosts that bypass the onboarding seed push them explicitly —

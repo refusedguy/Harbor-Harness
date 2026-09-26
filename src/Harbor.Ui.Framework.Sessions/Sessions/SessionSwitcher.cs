@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
@@ -65,19 +66,25 @@ public sealed class SessionSwitcher
                        ?? agents.GetAllAgents().First();
 
         _agent.Initialize(session, agentDef);
-        targetStore.Reset();
-        targetStore.BindSession(session.Model, session.ProviderId, session.Agent);
 
-        // Replay history from the session store into the per-session UiStore.
+        // #89: hydrate-then-swap — build the replayed lines off to the side
+        // and swap them in with a SINGLE UiMsg (one reducer transition, one
+        // store CAS) instead of Reset + BindSession + N×AppendLine, whose N+2
+        // separate transitions let a background agent event interleave
+        // mid-replay and corrupt the transcript order.
         var messages = await _sessionStore.GetMessagesAsync(session.Id).ConfigureAwait(false);
+        var lines = ImmutableArray.CreateBuilder<ChatLine>();
         if (messages.IsSuccess)
         {
             foreach (var msg in messages.Value)
             {
                 (var role, string text) = SessionFactory.MessageToChatLine(msg);
-                targetStore.Dispatch(new UiMsg.AppendLine(role, text));
+                lines.Add(new ChatLine(role, text));
             }
         }
+
+        targetStore.Dispatch(new UiMsg.HydrateSession(
+            session.Model, session.ProviderId, session.Agent, lines.ToImmutable()));
 
         _logger.LogInformation("Opened session {Id}, dir={Dir}, replayed {Count} messages",
             session.Id, session.Directory, messages.IsSuccess ? messages.Value.Count : 0);
