@@ -76,12 +76,12 @@ public sealed class TokenTracker : ITokenTracker
         int increment = _estimator.EstimateMessage(message);
         lock (_sync)
         {
-            if (_estimates.TryGetValue(message.SessionId, out SessionEstimate current))
+            if (_estimates.TryGetValue(message.SessionId, out SessionEstimate? current))
             {
-                _estimates[message.SessionId] = current with
+                _estimates[message.SessionId] = current.Value with
                 {
-                    Estimate = current.Estimate + increment,
-                    Count = current.Count + 1
+                    Estimate = current.Value.Estimate + increment,
+                    Count = current.Value.Count + 1
                 };
             }
             else
@@ -119,12 +119,12 @@ public sealed class TokenTracker : ITokenTracker
         lock (_sync)
         {
             if (sessionId is not null
-                && _estimates.TryGetValue(sessionId, out SessionEstimate cached)
-                && cached.Count == messages.Count)
+                && _estimates.TryGetValue(sessionId, out SessionEstimate? cached)
+                && cached.Value.Count == messages.Count)
             {
                 // Fast path: the entry covers exactly this session's history
                 // length, so no message can have been appended or pruned since.
-                estimated = cached.Estimate;
+                estimated = cached.Value.Estimate;
             }
             else
             {
