@@ -272,6 +272,7 @@ public static class UiReducer
         UiMsg.StatusChanged sc => (state with { Chat = state.Chat with { Status = sc.Status } }, new TuiEffect.None()),
         UiMsg.ConfigureRuntime cr => (state with { Chat = state.Chat with { Model = cr.Model, Provider = cr.Provider, AgentName = cr.AgentName } }, new TuiEffect.None()),
         UiMsg.AppendLine al => (state.AddLine(al.Role, al.Text, al.ToolCallId), new TuiEffect.None()),
+        UiMsg.HydrateSession h => (HydrateSession(h), new TuiEffect.None()),
         UiMsg.InputText it => (state.SetInput(state.Input.SetText(it.Text)), new TuiEffect.None()),
         UiMsg.Quit => (state with { Ui = state.Ui with { ShouldQuit = true } }, new TuiEffect.None()),
         UiMsg.KeyInput k => UpdateKey(state, k),
@@ -312,6 +313,29 @@ public static class UiReducer
         }, new TuiEffect.None()),
         _ => (state, new TuiEffect.None())
     };
+
+    /// <summary>
+    ///     Atomic session hydration (#89). Folds Reset + session-chrome bind +
+    ///     history replay into one pure transition so the swap rides a single
+    ///     store CAS: a concurrent background event applies strictly before
+    ///     (superseded by the fresh state) or after (appended in order), never
+    ///     interleaved mid-history.
+    /// </summary>
+    private static UiState HydrateSession(UiMsg.HydrateSession h)
+    {
+        var next = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Model = h.Model,
+                Provider = h.Provider,
+                AgentName = h.AgentName,
+            },
+        };
+        foreach (var line in h.Lines)
+            next = next.AddLine(line.Role, line.Text, line.ToolCallId);
+        return next;
+    }
 
     /// <summary>
     ///     Run-end fold for the effect host. A null <see cref="UiMsg.AgentEnded.Status" />
