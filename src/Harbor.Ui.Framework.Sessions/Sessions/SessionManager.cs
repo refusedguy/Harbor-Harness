@@ -449,7 +449,7 @@ public sealed class SessionManager : ISessionManager
         }
         else
         {
-            _agent.AbortSource.Cancel();
+            _agent.RequestAbort();
         }
 
         try

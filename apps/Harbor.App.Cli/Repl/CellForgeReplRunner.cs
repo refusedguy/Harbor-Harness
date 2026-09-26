@@ -47,7 +47,7 @@ namespace Harbor.App.Cli.Repl;
 ///     </para>
 ///     <para>
 ///         <b>Ctrl+C:</b> во время хода агента — прерывание через существующий
-///         механизм <see cref="IAgentRunner.AbortSource"/>; в idle — двукратное
+///         механизм <see cref="IAgentRunner.RequestAbort()"/>; в idle — двукратное
 ///         нажатие выходит из REPL (первое печатает подсказку).
 ///     </para>
 /// </remarks>

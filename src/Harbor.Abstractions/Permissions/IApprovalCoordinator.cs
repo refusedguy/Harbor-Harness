@@ -36,7 +36,7 @@ public sealed record ApprovalResolution(bool Approved, bool PersistDecision);
 /// <remarks>
 ///     <para>
 ///         Today approval waits (asker TCS on the gate view) and cancellation
-///         (<c>AbortSource.Cancel()</c> from 6 call sites) meet nowhere: a
+///         (<c>RequestAbort()</c> from 6 call sites) meet nowhere: a
 ///         cancel racing a keypress can approve-then-kill or hang a waiter.
 ///         All runtime cancel ingresses funnel through
 ///         <see cref="RequestCancel" />; all gate decisions funnel through
@@ -56,7 +56,7 @@ public interface IApprovalCoordinator
     /// <summary>
     ///     Open a waitable gate. Idempotent — re-registering a live gate is a no-op.
     ///     A gate registered after a cancel still waits normally (cancel is edge-triggered,
-    ///     mirroring <c>AbortSource</c> semantics; it is not a latched deny).
+    ///     mirroring <c>AbortToken</c> semantics; it is not a latched deny).
     /// </summary>
     void RegisterGate(string gateId);
 
@@ -75,7 +75,7 @@ public interface IApprovalCoordinator
 
     /// <summary>
     ///     The single runtime cancellation ingress: replaces every direct
-    ///     <c>AbortSource.Cancel()</c> call. Marks pending gates cancelled (their
+    ///     <see cref="IAgentRunner.RequestAbort()" /> call. Marks pending gates cancelled (their
     ///     waiters complete with <see langword="null" />), then cancels the
     ///     run source outside the lock. Safe to call when idle or twice.
     /// </summary>

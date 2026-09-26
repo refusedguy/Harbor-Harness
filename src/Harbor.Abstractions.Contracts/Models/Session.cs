@@ -240,7 +240,7 @@ public enum StopReason
     /// <summary>An error occurred during generation.</summary>
     Error,
 
-    /// <summary>The user cancelled the run via <see cref="IAgent.AbortSource" />.</summary>
+    /// <summary>The user cancelled the run.</summary>
     Aborted
 }
 

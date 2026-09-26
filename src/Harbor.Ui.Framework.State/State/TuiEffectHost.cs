@@ -202,7 +202,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         }
         else
         {
-            _agent.AbortSource.Cancel();
+            _agent.RequestAbort();
         }
         try
         {

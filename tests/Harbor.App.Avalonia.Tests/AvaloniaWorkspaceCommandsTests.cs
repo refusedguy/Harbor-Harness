@@ -109,7 +109,9 @@ public class AvaloniaWorkspaceCommandsTests
 
     private sealed class FakeAgentRunner : IAgentRunner
     {
-        public CancellationTokenSource AbortSource { get; } = new CancellationTokenSource();
+        private readonly CancellationTokenSource _abortSource = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
         public Task<Result> PromptAsync(string text, CancellationToken ct = default) => Task.FromResult(Result.Success());
         public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
         public void ResetAbortSource() => ResetAbortSourceCalled = true;
@@ -260,12 +262,12 @@ public class AvaloniaWorkspaceCommandsTests
         commands.StopAgent();
 
         bool aborted = await WaitForConditionAsync(
-            () => agentRunner.AbortSource.IsCancellationRequested,
+            () => agentRunner.AbortToken.IsCancellationRequested,
             TimeSpan.FromSeconds(2),
             TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
 
         await Assert.That(aborted).IsTrue();
-        await Assert.That(agentRunner.AbortSource.IsCancellationRequested).IsTrue();
+        await Assert.That(agentRunner.AbortToken.IsCancellationRequested).IsTrue();
         await Assert.That(toasts.LastMessage).Contains("Abort requested");
     }
 
