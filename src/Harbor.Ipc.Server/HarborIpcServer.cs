@@ -25,7 +25,6 @@ public sealed class HarborIpcServer : IHarborServer
     private readonly EventBroadcaster _broadcaster;
     private readonly ILoggerFactory _loggerFactory;
     private readonly MessagePackRpcServer _rpc;
-    private readonly IServiceProvider _serviceProvider;
     private readonly IIpcServerTransport _transport;
     private readonly SessionLeaseRegistry _leases;
     private int _disposed;
@@ -37,7 +36,9 @@ public sealed class HarborIpcServer : IHarborServer
     /// </summary>
     /// <param name="serviceProvider">
     ///     The host's DI container (must expose IAgent, ISessionStore, IProviderRegistry,
-    ///     IToolRegistry, IEventBus, IAgentRegistry).
+    ///     IToolRegistry, IEventBus, IAgentRegistry). Resolved ONCE here at
+    ///     construction (#63: composition-time wiring — the dispatcher itself
+    ///     takes all deps via ctor, never resolves per request).
     /// </param>
     /// <param name="pipeName">Pipe name (Windows) or socket file basename (Unix). Defaults to <c>harbor-ipc</c>.</param>
     /// <param name="loggerFactory">Logger factory.</param>
@@ -64,7 +65,6 @@ public sealed class HarborIpcServer : IHarborServer
         ILoggerFactory? loggerFactory = null,
         string? psk = null)
     {
-        _serviceProvider = serviceProvider;
         _loggerFactory = loggerFactory ?? LoggerFactory.Create(b => b.AddSimpleConsole());
         _transport = transport;
         _leases = new SessionLeaseRegistry();
@@ -73,7 +73,11 @@ public sealed class HarborIpcServer : IHarborServer
             _loggerFactory.CreateLogger<EventBroadcaster>(),
             _leases);
         var dispatcher = new RequestDispatcher(
-            serviceProvider,
+            serviceProvider.GetRequiredService<IAgent>(),
+            serviceProvider.GetRequiredService<IAgentRegistry>(),
+            serviceProvider.GetRequiredService<ISessionStore>(),
+            serviceProvider.GetRequiredService<IProviderRegistry>(),
+            serviceProvider.GetRequiredService<IToolRegistry>(),
             _broadcaster,
             _leases,
             // Nullable: minimal/test hosts may not register the coordinator —

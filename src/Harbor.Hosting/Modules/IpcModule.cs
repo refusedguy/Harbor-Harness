@@ -82,6 +82,8 @@ internal static class IpcModule
 
         services.AddSingleton<IHarborServer>(sp =>
         {
+            // #63: composition-root factory lambda — resolving here is
+            // idiomatic MS DI, not service location.
             ILoggerFactory loggerFactory = sp.GetRequiredService<ILoggerFactory>();
             var transport = new TcpServerTransport(bindText, port,
                 loggerFactory.CreateLogger<TcpServerTransport>());

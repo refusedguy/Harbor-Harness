@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -119,6 +120,126 @@ public class AgentLoopLifecycleTests
         var toolResults = session.Messages.OfType<ToolResultMessage>().ToList();
         await Assert.That(toolResults.Count).IsEqualTo(1);
         await Assert.That(toolResults[0].Results.Single().IsError).IsTrue();
+    }
+
+    [Test]
+    public async Task RunAsync_SingleMalformedCall_PlaceholderArgsAreEmptyObject()
+    {
+        var counter = new TestKit.CountingTool();
+        var client = new ScriptedLlmClient(
+        [
+            new LlmEvent[]
+            {
+                new ToolCallStartEvent("call-1", "counter"),
+                new ToolCallDeltaEvent("call-1", "{ this is not json"),
+                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+            },
+            new LlmEvent[]
+            {
+                new TextDeltaEvent("t", "recovered"),
+                new StepFinishEvent(1, "stop", new Usage(1, 1))
+            }
+        ]);
+        var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
+        var session = NewSession();
+
+        var result = await loop.RunAsync(session, TestAgents.AllowAll());
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(counter.Executions).IsEqualTo(0);
+        var toolCalls = session.Messages.OfType<AssistantMessage>().SelectMany(m => m.Parts.OfType<ToolCallPart>()).ToList();
+        await Assert.That(toolCalls.Count).IsEqualTo(1);
+        await Assert.That(toolCalls[0].Id).IsEqualTo("call-1");
+        await Assert.That(toolCalls[0].Args.ValueKind).IsEqualTo(JsonValueKind.Object);
+        await Assert.That(toolCalls[0].Args.GetRawText()).IsEqualTo("{}");
+        var toolResults = session.Messages.OfType<ToolResultMessage>().ToList();
+        await Assert.That(toolResults.Count).IsEqualTo(1);
+        await Assert.That(toolResults[0].Results.Single().IsError).IsTrue();
+        await Assert.That(toolResults[0].Results.Single().ToolCallId).IsEqualTo("call-1");
+    }
+
+    [Test]
+    public async Task RunAsync_TwoMalformedCalls_BothPlaceholdersAreEmptyObjects()
+    {
+        var counter = new TestKit.CountingTool();
+        var client = new ScriptedLlmClient(
+        [
+            new LlmEvent[]
+            {
+                new ToolCallStartEvent("call-1", "counter"),
+                new ToolCallDeltaEvent("call-1", "{ broken one"),
+                new ToolCallStartEvent("call-2", "counter"),
+                new ToolCallDeltaEvent("call-2", "{ broken two"),
+                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+            },
+            new LlmEvent[]
+            {
+                new TextDeltaEvent("t", "recovered"),
+                new StepFinishEvent(1, "stop", new Usage(1, 1))
+            }
+        ]);
+        var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
+        var session = NewSession();
+
+        var result = await loop.RunAsync(session, TestAgents.AllowAll());
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(counter.Executions).IsEqualTo(0);
+        var toolCalls = session.Messages.OfType<AssistantMessage>().SelectMany(m => m.Parts.OfType<ToolCallPart>()).ToList();
+        await Assert.That(toolCalls.Count).IsEqualTo(2);
+        for (int i = 0; i < toolCalls.Count; i++)
+        {
+            await Assert.That(toolCalls[i].Args.ValueKind).IsEqualTo(JsonValueKind.Object);
+            await Assert.That(toolCalls[i].Args.GetRawText()).IsEqualTo("{}");
+        }
+        var toolResults = session.Messages.OfType<ToolResultMessage>().ToList();
+        await Assert.That(toolResults.Count).IsEqualTo(1);
+        await Assert.That(toolResults[0].Results.Count).IsEqualTo(2);
+        for (int i = 0; i < toolResults[0].Results.Count; i++)
+        {
+            await Assert.That(toolResults[0].Results[i].IsError).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task RunAsync_MixedValidAndMalformedCalls_ValidExecutesWithRealArgsMalformedGetsEmptyPlaceholder()
+    {
+        var counter = new TestKit.CountingTool();
+        var client = new ScriptedLlmClient(
+        [
+            new LlmEvent[]
+            {
+                new ToolCallStartEvent("call-1", "counter"),
+                new ToolCallDeltaEvent("call-1", """{"n":7}"""),
+                new ToolCallStartEvent("call-2", "counter"),
+                new ToolCallDeltaEvent("call-2", "{ broken"),
+                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+            },
+            new LlmEvent[]
+            {
+                new TextDeltaEvent("t", "recovered"),
+                new StepFinishEvent(1, "stop", new Usage(1, 1))
+            }
+        ]);
+        var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
+        var session = NewSession();
+
+        var result = await loop.RunAsync(session, TestAgents.AllowAll());
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(counter.Executions).IsEqualTo(1);
+        await Assert.That(counter.ExecutedArgs.Single()).IsEqualTo("""{"n":7}""");
+        var toolCalls = session.Messages.OfType<AssistantMessage>().SelectMany(m => m.Parts.OfType<ToolCallPart>()).ToList();
+        await Assert.That(toolCalls.Count).IsEqualTo(2);
+        var valid = toolCalls.Single(c => c.Id == "call-1");
+        await Assert.That(valid.Args.GetRawText()).IsEqualTo("""{"n":7}""");
+        var malformed = toolCalls.Single(c => c.Id == "call-2");
+        await Assert.That(malformed.Args.ValueKind).IsEqualTo(JsonValueKind.Object);
+        await Assert.That(malformed.Args.GetRawText()).IsEqualTo("{}");
+        var toolResults = session.Messages.OfType<ToolResultMessage>().ToList();
+        await Assert.That(toolResults.Count).IsEqualTo(1);
+        await Assert.That(toolResults[0].Results.Count).IsEqualTo(2);
+        await Assert.That(toolResults[0].Results.Single(r => r.ToolCallId == "call-2").IsError).IsTrue();
     }
 
     [Test]

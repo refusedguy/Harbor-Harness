@@ -236,6 +236,9 @@ public sealed class EditTool : ITool
     {
         try
         {
+            // #63 legitimate: optional per-call enrichment — the default
+            // AgentLoop never populates ToolContext.Services, so a missing
+            // LSP service degrades to no diagnostics instead of a throw.
             if (context.Services?.GetService<ILspService>() is not { } lsp)
                 return string.Empty;
             if (!lsp.SupportsFile(path))

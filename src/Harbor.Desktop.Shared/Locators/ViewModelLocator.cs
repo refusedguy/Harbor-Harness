@@ -18,6 +18,9 @@ namespace Harbor.Desktop.Shared.Locators;
 ///     <see cref="IViewModelLocator" /> implementations, not subclasses.
 ///     Re-registering is guarded by <c>TryAdd</c> — see
 ///     <c>LocatorRegistration.AddViewModelLocator</c>.
+///     #63 legitimate: this type IS the locator (XAML creates view-models by
+///     convention outside DI) — the contained provider is the pattern, not
+///     a violation of it.
 /// </remarks>
 public sealed class ViewModelLocator : IViewModelLocator
 {

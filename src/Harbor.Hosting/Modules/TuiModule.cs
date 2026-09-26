@@ -78,8 +78,11 @@ internal static class TuiModule
                 // path through the AnsiWriter SGR automaton. The interactive
                 // raw-mode entry remains ReplRunner (ScreenSession), which
                 // bypasses ITuiRenderer entirely.
+                // Issue #77: chat writes must land in the DI-shared UiStore so
+                // the pipeline restores them across renderer swaps.
                 return new Harbor.Tui.CellForge.CellForgeTuiRenderer(
-                    sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>());
+                    sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>(),
+                    store: sp.GetRequiredService<UiStore>());
             }
 #if HARBOR_WITH_NICK_CONSOLE_EX
             // Phase 3: ADDITIVE backend — nickprotop/ConsoleEx window system.
@@ -115,7 +118,8 @@ internal static class TuiModule
                 // UiStore so the pipeline restores them across swaps.
                 "plain" => new PlainTuiRenderer(store: sp.GetRequiredService<UiStore>()),
                 "consoleex" or "cellforge" => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
-                    sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>()),
+                    sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>(),
+                    store: sp.GetRequiredService<UiStore>()),
                 _ => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(
                     sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>(),
                     store: sp.GetRequiredService<UiStore>())
@@ -145,7 +149,8 @@ internal static class TuiModule
                 sp.GetRequiredService<ILogger<RendererPipeline>>());
 
             pipeline.Register("cellforge", () => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
-                sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>()));
+                sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>(),
+                store: sp.GetRequiredService<UiStore>()));
             pipeline.Register("ansi", () => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(
                 sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>(),
                 store: sp.GetRequiredService<UiStore>()));

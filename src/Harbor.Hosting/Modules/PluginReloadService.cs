@@ -42,7 +42,12 @@ public sealed record PluginReloadSummary(int Loaded, IReadOnlyList<string> Notes
 /// </remarks>
 public sealed class PluginReloadService
 {
-    private readonly IServiceProvider _sp;
+    private readonly IToolRegistry _tools;
+    private readonly IProviderRegistry _providers;
+    private readonly IAgentRegistry _agents;
+    private readonly PanelRegistry _panels;
+    private readonly IEventBus _eventBus;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly string _harborDir;
     private readonly ILogger<PluginReloadService> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -50,14 +55,26 @@ public sealed class PluginReloadService
     /// <summary>
     ///     Construct the service. Registered by <see cref="RegistriesModule" /> with the
     ///     resolved harbor directory and host configuration snapshot.
+    ///     Live registry singletons arrive via ctor (#63) — no per-reload
+    ///     service location.
     /// </summary>
     public PluginReloadService(
-        IServiceProvider sp,
+        IToolRegistry tools,
+        IProviderRegistry providers,
+        IAgentRegistry agents,
+        PanelRegistry panels,
+        IEventBus eventBus,
+        ILoggerFactory loggerFactory,
         string harborDir,
         IConfiguration configuration,
         ILogger<PluginReloadService> logger)
     {
-        _sp = sp ?? throw new ArgumentNullException(nameof(sp));
+        _tools = tools ?? throw new ArgumentNullException(nameof(tools));
+        _providers = providers ?? throw new ArgumentNullException(nameof(providers));
+        _agents = agents ?? throw new ArgumentNullException(nameof(agents));
+        _panels = panels ?? throw new ArgumentNullException(nameof(panels));
+        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _harborDir = harborDir ?? throw new ArgumentNullException(nameof(harborDir));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -84,13 +101,6 @@ public sealed class PluginReloadService
 
     private async Task<PluginReloadSummary> ReloadCoreAsync(CancellationToken ct)
     {
-        var tools = _sp.GetRequiredService<IToolRegistry>();
-        var providers = _sp.GetRequiredService<IProviderRegistry>();
-        var agents = _sp.GetRequiredService<IAgentRegistry>();
-        var panels = _sp.GetRequiredService<PanelRegistry>();
-        var eventBus = _sp.GetRequiredService<IEventBus>();
-        var loggerFactory = _sp.GetRequiredService<ILoggerFactory>();
-
         string globalPluginsDir = Path.Combine(_harborDir, "plugins");
         string projectPluginsDir = Path.Combine(Directory.GetCurrentDirectory(), ".harbor", "plugins");
 
@@ -99,12 +109,12 @@ public sealed class PluginReloadService
         var (loadHost, runtime) = PluginRuntimeComposer.Compose(
             new ServiceCollection(),
             _configuration,
-            loggerFactory,
-            eventBus,
-            tools,
-            providers,
-            agents,
-            panels,
+            _loggerFactory,
+            _eventBus,
+            _tools,
+            _providers,
+            _agents,
+            _panels,
             globalPluginsDir,
             projectPluginsDir,
             trustPrompt: null);

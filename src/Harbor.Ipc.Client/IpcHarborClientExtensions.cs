@@ -14,6 +14,7 @@ public static class IpcHarborClientExtensions
     /// </summary>
     /// <param name="services">The DI container.</param>
     /// <param name="pipeName">Pipe name (Windows) or socket basename (Unix). Default <c>harbor-ipc</c>.</param>
+    /// <remarks>#63: composition-root factory lambda — resolving here is idiomatic MS DI, not service location.</remarks>
     public static IServiceCollection UseIpcHarborClient(this IServiceCollection services, string pipeName = "harbor-ipc")
     {
         services.AddSingleton<IHarborClient>(sp =>
