@@ -72,34 +72,10 @@ public class UiReducerRegressionTests
     }
 
     [Test]
-    public async Task SubmitEcho_WhenTailAlreadyShowsPrompt_DoesNotDuplicate()
-    {
-        // Race order B: AgentStart replay won first (echo on tail), the local
-        // submit arrives second — still dispatches the effect, adds no line.
-        var assistant = AssistantMessage.Empty("s", "m") with
-        {
-            Parts = new ContentPart[] { new TextPart("hello there") }
-        };
-        var history = new AgentMessage[]
-        {
-            new UserMessage("u1", "s", DateTimeOffset.UtcNow, "hi", "code", "m", null),
-            assistant,
-        };
-        var started = UiReducer.Update(new UiState(), new UiMsg.Agent(new AgentStartEvent("s", history)));
-
-        var resubmitted = UiReducer.Update(
-            started.State with { Input = new InputModel("hi", [], -1) },
-            new UiMsg.KeyInput(ChatAction.Submit, new UiKey(UiKeyCode.Enter)));
-
-        await Assert.That(resubmitted.State.Lines.Count(l => l.Role == ChatRole.User && l.Text == "hi")).IsEqualTo(1);
-        await Assert.That(resubmitted.Effect).IsTypeOf<TuiEffect.PromptAgent>();
-    }
-
-    [Test]
     public async Task SubmitEcho_NormalPath_AddsLineOnce()
     {
-        // Race order A (common): local echo first, AgentStart replay skipped
-        // wholesale on the non-empty store — still exactly one echo.
+        // Common order: local echo first, AgentStart replay skipped wholesale
+        // on the non-empty store — still exactly one echo.
         var submitted = UiReducer.Update(
             new UiState { Input = new InputModel("hi", [], -1) },
             new UiMsg.KeyInput(ChatAction.Submit, new UiKey(UiKeyCode.Enter)));

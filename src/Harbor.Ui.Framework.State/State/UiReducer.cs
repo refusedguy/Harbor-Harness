@@ -92,9 +92,10 @@ public static class UiReducer
             return next;
 
         // Empty store: replay history so a late attach shows the full
-        // transcript, mirroring the live rendering of each role. The trailing
-        // UserMessage that ClassifySubmit just echoed is skipped (tail-echo
-        // dedup) — anything else would double the prompt line.
+        // transcript, mirroring the live rendering of each role. No dedup:
+        // replay runs only on the empty store, and submit is suppressed
+        // while running, so the echo cannot double — a tail-match would risk
+        // eating a legitimate repeated prompt.
         foreach (var m in ase.Messages)
         {
             next = ReplayMessage(next, m);
@@ -105,21 +106,11 @@ public static class UiReducer
 
     private static UiState ReplayMessage(UiState state, AgentMessage m) => m switch
     {
-        UserMessage u when !IsTailEcho(state, ChatRole.User, u.Content)
-            => state.AddLine(ChatRole.User, u.Content),
-        UserMessage => state,
+        UserMessage u => state.AddLine(ChatRole.User, u.Content),
         AssistantMessage a => ReplayAssistant(state, a),
         ToolResultMessage tr => ReplayResults(state, tr),
         _ => state
     };
-
-    private static bool IsTailEcho(UiState state, ChatRole role, string text)
-    {
-        if (state.Lines.Length == 0)
-            return false;
-        var last = state.Lines[^1];
-        return last.Role == role && last.Text == text;
-    }
 
     private static UiState ReplayAssistant(UiState state, AssistantMessage a)
     {
@@ -603,12 +594,6 @@ public static class UiReducer
 
         if (trimmed.StartsWith('/'))
             return (state, new TuiEffect.RunSlash(trimmed));
-
-        // Echo race with AgentStart replay (#92): if the tail already shows
-        // this exact prompt (the run's AgentStart won the race and replayed
-        // it), don't append a second copy — but still dispatch the effect.
-        if (IsTailEcho(state, ChatRole.User, submitted))
-            return (state, new TuiEffect.PromptAgent(submitted));
 
         return (state.AddLine(ChatRole.User, submitted), new TuiEffect.PromptAgent(submitted));
     }
