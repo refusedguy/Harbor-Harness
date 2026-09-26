@@ -108,7 +108,7 @@ Interactive renderers own the alt-screen buffer; console logging is routed into 
 diagnostics panel (F12) instead of stdout. `consoleex` is the newest interactive renderer:
 event-driven frame loop, virtualized timeline, streaming markdown with frozen tail,
 Ctrl+C aborts the current agent turn and repeats to exit — see its README
-([../../src/Harbor.Tui.ConsoleEx/README.md](../../src/Harbor.Tui.ConsoleEx/README.md)).
+([../../src/Harbor.Tui.CellForge/README.md](../../src/Harbor.Tui.CellForge/README.md)).
 Enable it persistently with `"tui": "consoleex"` in `~/.harbor/config.json` or
 `{ "defaultTuiRenderer": "consoleex" }` in `~/.harbor/cli.json`.
 

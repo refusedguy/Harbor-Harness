@@ -874,7 +874,7 @@ dotnet-gcdump collect -n harbor
 архитектура render-loop, layout tree, scroll conventions, и квесты из opencode/kilocode/pi-agent (diff-view, slash-completion, file-tree).
 Проект живёт в contrib с sprint-2 и собирается через `contrib/Contrib.slnx`; при этом дефолтная CLI-сборка
 референсит альтернативные рендереры через `HarborWithSpectreTui` (включён по умолчанию). Вторая интерактивная
-оболочка — `src/Harbor.Tui.ConsoleEx/` (opt-in: `HARBOR_TUI=consoleex`, см. README проекта).
+оболочка — `src/Harbor.Tui.CellForge/` (opt-in: `HARBOR_TUI=cellforge`, см. README проекта).
 
 ## Troubleshooting
 

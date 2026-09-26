@@ -277,7 +277,7 @@ Harbor следует строгим принципам OOP/SOLID/GoF/FP/ROP/per
 - `System.Text.Json` source-gen (planned; MCP уже использует `McpJsonSerializerContext`).
 - No `AssemblyLoadContext` collectible.
 
-**TUI** (`Harbor.Tui.Ansi`, `Harbor.Tui.ConsoleEx`, optional `contrib/tui/Harbor.Tui.TerminalGui`) — JIT, runs in-process today; two-process mode planned:
+**TUI** (`Harbor.Tui.AnsiPlain`, `Harbor.Tui.CellForge`, optional `contrib/tui/Harbor.Tui.TerminalGui`) — JIT, runs in-process today; two-process mode planned:
 - Can use any library.
 - Planned: NDJSON over Unix domain sockets (v0.9, см. ROADMAP).
 - Crash isolation — TUI crash doesn't kill Core.

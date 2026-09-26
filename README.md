@@ -43,7 +43,7 @@ CI regenerates the GIFs on TUI changes (`.github/workflows/demo.yml`).
   - JSON configs: `anthropic`, `kilocode` (with **FREE** models), `deepseek`, `groq`, `mistral`, `xai`, `together`, `fireworks`, `cerebras`, `openrouter`, `vllm`, `ollama` presets in [`providers/*.json`](./providers/)
 - **Storage backends**: `Jsonl` (default, zero native deps), `Memory` (tests), `Sqlite` — switched via `HARBOR_STORAGE`
 - **Terminal UIs**:
-  - `Harbor.Tui.ConsoleEx` — the new second render path: own raw-mode input pipeline (kitty keyboard protocol, SGR mouse 1000/1002/1006, bracketed paste), cell-grid diff renderer (`DiffEngine`), zero-allocation steady-state budgets, virtualized chat timeline with streaming markdown and unified-diff blocks. Opt-in, see below.
+  - `Harbor.Tui.CellForge` — the canonical fullscreen render path: own raw-mode input pipeline (kitty keyboard protocol, SGR mouse 1000/1002/1006, bracketed paste), cell-grid diff renderer (`DiffEngine`), zero-allocation steady-state budgets, virtualized chat timeline with streaming markdown and unified-diff blocks. Opt-in, see below.
   - `AnsiTuiRenderer` / `PlainTuiRenderer` — classic streaming/plain-text renderers
   - Additional interactive renderers (`Spectre.Tui` shell, `Fullscreen`, `Terminal.Gui`, `Termina`, `RazorConsole`) physically live in [`contrib/tui/`](./contrib/tui) but are compiled into the default CLI build
   - `Notifications` renderer (desktop OS notifications), Avalonia desktop app (`apps/Harbor.App.Avalonia`)

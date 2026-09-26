@@ -47,9 +47,9 @@ src/                                   — ~50 projects (all included in Harbor.
 ├── Harbor.Tools.Builtin/              — 14 builtin tools under Tools/
 │                                        (read/write/edit/bash/glob/grep/ls/task + webfetch/patch/notebook/ripgrep/tree/mcp)
 ├── Harbor.Terminal.Abstractions/      — ITuiRenderer, ITuiRenderContext, BaseTuiRenderer, views/VMs
-├── Harbor.Tui.{Ansi,Plain}/           — ANSI streaming + plain-text renderers
-├── Harbor.Tui.ConsoleEx/              — second in-process terminal renderer (raw-mode input,
-│                                        cell-diff output; opt-in via HARBOR_TUI=consoleex)
+├── Harbor.Tui.AnsiPlain/               — ANSI streaming + plain-text renderers (AnsiTuiRenderer, PlainTuiRenderer)
+├── Harbor.Tui.CellForge(+.Engine)/        — canonical fullscreen cell-diff renderer (raw-mode input,
+│                                        cell-diff output; HARBOR_TUI=cellforge, legacy alias: consoleex)
 ├── Harbor.Tui.Notifications/          — desktop OS notifications renderer
 ├── Harbor.Ui.Framework*/              — TEA-style UI state/reducers/projection/services shared by apps
 ├── Harbor.Plugins.{Abstractions,Compilation,Instantiation,Registration,

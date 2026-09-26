@@ -40,13 +40,13 @@
 
 ### ✅ Completed — ConsoleEx MVP (CE-0…CE-5)
 
-Second render path for the interactive REPL (`src/Harbor.Tui.ConsoleEx/`, opt-in only):
+Second render path for the interactive REPL (`src/Harbor.Tui.CellForge/`, opt-in only):
 
 - **Input** (CE-0): kitty keyboard protocol, SGR mouse, bracketed paste with anti-injection; raw-mode via termios P/Invoke
 - **Rendering** (CE-1): `ScreenBuffer` → `DiffEngine` cell-diff frames through `AnsiWriter` (SGR automaton, cursor elision, DECSYNC wrapper); resize policy à la ratatui
 - **Widgets** (CE-2/3): virtualized chat timeline with byte-budget ring, streaming markdown with pacer-gated reveal, tool-call cards with unified-diff bodies, status segment bar + tick-driven spinner, multi-line composer
-- **Live REPL wire-up** (CE-4): select via `HARBOR_TUI=consoleex` or `tui: "consoleex"` (+ kill-switch `ui.consoleEx.enabled`), `ConsoleExModule` DI graph, event pump keeps all timeline mutation on the frame thread, Ctrl+C = abort turn → second press quits, event-driven frames + 80 ms spinner heartbeat, golden E2E smoke (`tests/fixtures/celldiff/ce4-consoleex-repl.golden.txt`). See [README](../src/Harbor.Tui.ConsoleEx/README.md).
-- **PTY hardening** (CE-5): `PtyHarness` runs the real process in a pseudo-terminal (`tests/Harbor.Tui.ConsoleEx.PtyTests/`, 8 scenarios — launch/submit/kitty/mouse/paste/resize/Ctrl+C/termios); fixed Termios struct size 49→60 bytes (kernel wrote past struct → stack corruption in raw-mode Enter, commit 1749841).
+- **Live REPL wire-up** (CE-4): select via `HARBOR_TUI=cellforge` or `tui: "cellforge"` (+ kill-switch `ui.consoleEx.enabled`), `CellForgeModule` DI graph, event pump keeps all timeline mutation on the frame thread, Ctrl+C = abort turn → second press quits, event-driven frames + 80 ms spinner heartbeat, golden E2E smoke (`tests/fixtures/celldiff/ce4-consoleex-repl.golden.txt`). See [README](../src/Harbor.Tui.CellForge/README.md).
+- **PTY hardening** (CE-5): `PtyHarness` runs the real process in a pseudo-terminal (`tests/Harbor.Tui.CellForge.PtyTests/`, 8 scenarios — launch/submit/kitty/mouse/paste/resize/Ctrl+C/termios); fixed Termios struct size 49→60 bytes (kernel wrote past struct → stack corruption in raw-mode Enter, commit 1749841).
 
 ### ✅ Completed — Tools (14 builtin)
 
