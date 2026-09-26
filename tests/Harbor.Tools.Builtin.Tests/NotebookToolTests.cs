@@ -160,6 +160,22 @@ public class NotebookToolTests
         await Assert.That(result.Output).Contains("No note");
     }
 
+    [Test]
+    public async Task List_LargeNoteCount_CompletesWithCappedInitialRent()
+    {
+        // #53 audit: List rents with a capped initial capacity (8 KB max) and
+        // lets the builder grow — 300 notes must succeed without a huge
+        // up-front allocation.
+        var tool = NewTool();
+        for (int i = 0; i < 300; i++)
+            await tool.ExecuteAsync(Args(("action", "set"), ("key", $"k{i:000}"), ("content", $"note number {i}")), CreateContext());
+        var result = await tool.ExecuteAsync(Args(("action", "list")), CreateContext());
+
+        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result.Output).Contains("300 note(s)");
+        await Assert.That(result.Output).Contains("k299");
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private static NotebookTool NewTool()

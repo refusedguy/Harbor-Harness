@@ -53,6 +53,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Benchmarks"/>
+    <InternalsVisibleTo Include="Harbor.Application.Tests"/>
   </ItemGroup>
 
   <ItemGroup>
