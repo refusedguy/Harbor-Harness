@@ -64,8 +64,144 @@ public class FileClaimRegistryTests : IDisposable
     {
         string name = FileClaimRegistry.ScopeToFileName("a/b\\c:d*e?.txt");
 
-        await Assert.That(name).IsEqualTo("a_b_c_d_e__txt");
+        await Assert.That(name).IsEqualTo("a_x002fb_x005cc_x003ad_x002ae_x003f_x002etxt");
         await Assert.That(Path.GetFileName(name)).IsEqualTo(name);
+    }
+
+    [Test]
+    public async Task ScopeToFileName_IsLossless_DistinctScopesDiverge()
+    {
+        // #93: the old lossy fold mapped a/b, a:b and a_b onto one stem.
+        string slash = FileClaimRegistry.ScopeToFileName("a/b");
+        string colon = FileClaimRegistry.ScopeToFileName("a:b");
+        string underscore = FileClaimRegistry.ScopeToFileName("a_b");
+
+        await Assert.That(slash).IsEqualTo("a_x002fb");
+        await Assert.That(colon).IsEqualTo("a_x003ab");
+        await Assert.That(underscore).IsEqualTo("a__b");
+        await Assert.That(slash == colon).IsFalse();
+        await Assert.That(slash == underscore).IsFalse();
+        await Assert.That(colon == underscore).IsFalse();
+
+        foreach (char c in slash + colon + underscore)
+        {
+            await Assert.That(char.IsLetterOrDigit(c) || c == '_').IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task Acquire_DirectoryBlockedByFile_ReturnsFailureInsteadOfThrowing()
+    {
+        // #93: a file occupying the claims-directory path makes
+        // Directory.CreateDirectory raise IOException — must surface as
+        // Result.Failure, never escape as an exception.
+        string blocker = Path.Combine(Path.GetTempPath(), $"harbor-claims-blocker-{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(blocker, "blocker", CancellationToken.None);
+        try
+        {
+            using var registry = new FileClaimRegistry(blocker);
+            var result = await registry.AcquireAsync($"blockedN{Guid.NewGuid():N}", CancellationToken.None);
+
+            await Assert.That(result.IsFailure).IsTrue();
+        }
+        finally
+        {
+            File.Delete(blocker);
+        }
+    }
+
+    [Test]
+    public async Task Acquire_ClaimPathIsDirectory_ReturnsFailureInsteadOfThrowing()
+    {
+        // #93: a directory at the claim path makes CreateNew/ReadAllText raise
+        // UnauthorizedAccessException (Linux) or IOException (Windows) — both
+        // must map to Result.Failure via the broadened catch breadth.
+        using var registry = New();
+        string scopeName = $"dirclaimN{Guid.NewGuid():N}";
+        Directory.CreateDirectory(_dir);
+        Directory.CreateDirectory(Path.Combine(_dir, $"{FileClaimRegistry.ScopeToFileName(scopeName)}.claim"));
+
+        var result = await registry.AcquireAsync(scopeName, CancellationToken.None);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(registry.IsHeld(scopeName)).IsFalse();
+    }
+
+    [Test]
+    public async Task Acquire_HeldScope_ConcurrentSameInstance_AllRefused_NoOrphans()
+    {
+        // #93 atomic fast path: while one holder keeps the scope, parallel
+        // same-instance contenders are refused without a double grant.
+        using var registry = New();
+        string scopeName = $"heldraceN{Guid.NewGuid():N}";
+        var holder = await registry.AcquireAsync(scopeName, CancellationToken.None);
+        await Assert.That(holder.IsSuccess).IsTrue();
+        try
+        {
+            const int contenders = 8;
+            int refused = 0;
+            await Parallel.ForAsync(
+                0,
+                contenders,
+                new ParallelOptions { MaxDegreeOfParallelism = contenders },
+                async (_, _) =>
+                {
+                    var attempt = await registry.AcquireAsync(scopeName, CancellationToken.None);
+                    if (attempt.IsFailure)
+                    {
+                        Interlocked.Increment(ref refused);
+                    }
+                    else
+                    {
+                        attempt.Value.Dispose();
+                    }
+                });
+
+            await Assert.That(refused).IsEqualTo(contenders);
+        }
+        finally
+        {
+            holder.Value.Dispose();
+        }
+
+        await Assert.That(Directory.GetFiles(_dir, "*.claim").Length).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task StealLocks_BoundedAfterManySteals()
+    {
+        // #93: the static steal-lock table is FIFO-capped at MaxStealLocks
+        // (mirrors the ApprovalCoordinator _retired cap); 1280 distinct steal
+        // scopes must not grow it past the cap and must leave no orphans.
+        int deadPid = StartChildAndReap();
+        Directory.CreateDirectory(_dir);
+        using var registry = New(grace: TimeSpan.FromMilliseconds(50));
+        const int scopes = FileClaimRegistry.MaxStealLocks + 256;
+        for (int i = 0; i < scopes; i++)
+        {
+            string scopeName = $"evictN{i:x4}{Guid.NewGuid():N}";
+            await File.WriteAllTextAsync(
+                Path.Combine(_dir, $"{scopeName}.claim"),
+                string.Create(CultureInfo.InvariantCulture,
+                    $"pid={deadPid};token=frozen;ts={DateTime.UtcNow.AddSeconds(-2):o}"),
+                CancellationToken.None);
+
+            var result = await registry.AcquireAsync(scopeName, CancellationToken.None);
+            await Assert.That(result.IsSuccess).IsTrue();
+            result.Value.Dispose();
+        }
+
+        // Transient overshoot from parallel steal tests resolves in
+        // milliseconds (trim runs synchronously inside GetStealLock).
+        for (int attempt = 0;
+            attempt < 50 && FileClaimRegistry.StealLockCount > FileClaimRegistry.MaxStealLocks;
+            attempt++)
+        {
+            await Task.Delay(50, CancellationToken.None);
+        }
+
+        await Assert.That(FileClaimRegistry.StealLockCount <= FileClaimRegistry.MaxStealLocks).IsTrue();
+        await Assert.That(Directory.GetFiles(_dir, "*.claim").Length).IsEqualTo(0);
     }
 
     [Test]

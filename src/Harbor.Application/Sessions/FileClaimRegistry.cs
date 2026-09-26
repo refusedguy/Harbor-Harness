@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using CSharpFunctionalExtensions;
 
 namespace Harbor.Application.Sessions;
@@ -21,6 +22,14 @@ public sealed class FileClaimRegistry : IDisposable
     private readonly ConcurrentDictionary<string, FileClaim> _active = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// In-flight acquire reservations for this instance (#93). A scope is
+    /// added before any filesystem roundtrip and removed on every exit path,
+    /// so same-process contenders fail fast without wasted CreateNew I/O.
+    /// The filesystem backstop still arbitrates across instances.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, byte> _inflight = new(StringComparer.Ordinal);
+
+    /// <summary>
     ///     Serializes the steal sequence (check → delete → recreate → verify)
     ///     between same-process contenders (#57). Without it two contenders
     ///     can both decide "stealable" off the same seed file, then the loser
@@ -29,11 +38,69 @@ public sealed class FileClaimRegistry : IDisposable
     ///     Cross-process interleavings keep advisory semantics (the atomic
     ///     <c>CreateNew</c> plus post-create verification still apply); the
     ///     lock only removes the in-process check-then-act hole. Entries are
-    ///     never removed (scope names are bounded by sessions) and the lock
-    ///     covers the steal path only — the fresh-create fast path stays
-    ///     lock-free. Async-compatible (<c>SemaphoreSlim</c>, never a monitor).
+    ///     bounded by <see cref="MaxStealLocks"/> FIFO eviction (#93; idle
+    ///     instances are disposed, contended ones survive through their
+    ///     holder's local reference) and the lock covers the steal path
+    ///     only — the fresh-create fast path stays lock-free.
+    ///     Async-compatible (<c>SemaphoreSlim</c>, never a monitor).
     /// </summary>
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> _stealLocks = new(StringComparer.Ordinal);
+
+    /// <summary>Maximum steal-lock entries retained (#93; mirrors the ApprovalCoordinator _retired cap).</summary>
+    public const int MaxStealLocks = 1024;
+
+    /// <summary>Current steal-lock entry count (observability for tests and monitoring).</summary>
+    public static int StealLockCount => _stealLocks.Count;
+
+    /// <summary>
+    /// FIFO insertion order for steal-lock eviction. Guarded by
+    /// <see cref="_stealLockGate"/>; membership mirrored in
+    /// <see cref="_stealLockQueued"/> so re-acquires of a live scope do not
+    /// enqueue duplicates.
+    /// </summary>
+    private static readonly object _stealLockGate = new();
+    private static readonly Queue<string> _stealLockOrder = new();
+    private static readonly HashSet<string> _stealLockQueued = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Get (or create) the per-scope steal serializer, evicting the oldest
+    /// idle entries past <see cref="MaxStealLocks"/>. Evicted semaphores are
+    /// disposed only when idle (<c>CurrentCount == 1</c>); a contended lock
+    /// keeps working through its holder's local reference while the next
+    /// contender mints a fresh instance (documented residual: a steal that
+    /// races its own eviction briefly splits serialization, but the atomic
+    /// <c>CreateNew</c> plus post-create verification still arbitrate).
+    /// </summary>
+    private static SemaphoreSlim GetStealLock(string scope)
+    {
+        var sem = _stealLocks.GetOrAdd(scope, static _ => new SemaphoreSlim(1, 1));
+        lock (_stealLockGate)
+        {
+            if (_stealLockQueued.Add(scope))
+            {
+                _stealLockOrder.Enqueue(scope);
+                while (_stealLockOrder.Count > MaxStealLocks
+                    && _stealLockOrder.TryDequeue(out string? oldest))
+                {
+                    _stealLockQueued.Remove(oldest);
+                    if (string.Equals(oldest, scope, StringComparison.Ordinal))
+                    {
+                        // Never evict the entry just added; re-queue and stop.
+                        _stealLockQueued.Add(oldest);
+                        _stealLockOrder.Enqueue(oldest);
+                        break;
+                    }
+
+                    if (_stealLocks.TryRemove(oldest, out var evicted) && evicted.CurrentCount == 1)
+                    {
+                        evicted.Dispose();
+                    }
+                }
+            }
+        }
+
+        return sem;
+    }
 
     /// <summary>
     /// Create a registry bound to a claims directory.
@@ -56,78 +123,133 @@ public sealed class FileClaimRegistry : IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scope);
 
-        var claimPath = Path.Combine(_directory, $"{ScopeToFileName(scope)}.claim");
         if (_active.ContainsKey(scope))
         {
             return Result.Failure<FileClaim>($"Scope '{scope}' is already claimed by this process.");
         }
 
-        Directory.CreateDirectory(_directory);
-
-        // Fresh create wins atomically.
-        FileClaim? created = await CreateClaimAsync(scope, claimPath, ct).ConfigureAwait(false);
-        if (created is not null)
+        // Atomic fast path (#93): reserve before any I/O so same-process
+        // contenders fail without a wasted CreateNew roundtrip.
+        if (!_inflight.TryAdd(scope, 0))
         {
-            _active[scope] = created;
-            return created;
+            return Result.Failure<FileClaim>($"Scope '{scope}' is already claimed by this process.");
         }
 
-        // Existing file: readable-but-dead owner past grace ⇒ steal.
-        // The whole steal sequence rides the per-scope lock so same-process
-        // contenders serialize: the first completer's live-pid file makes
-        // every later check refuse (see _stealLocks).
-        if (!ShouldSteal(claimPath, out string? failure))
-        {
-            return Result.Failure<FileClaim>(failure ?? $"Scope '{scope}' is held by another live process.");
-        }
-
-        var stealLock = _stealLocks.GetOrAdd(scope, static _ => new SemaphoreSlim(1, 1));
-        await stealLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            // Re-check under the lock: a previous holder may have completed
-            // while we queued, and its live-pid file must refuse us now.
-            if (!ShouldSteal(claimPath, out failure))
+            var claimPath = Path.Combine(_directory, $"{ScopeToFileName(scope)}.claim");
+
+            try
+            {
+                Directory.CreateDirectory(_directory);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return Result.Failure<FileClaim>($"Cannot access claims directory '{_directory}': {ex.Message}");
+            }
+
+            // Fresh create wins atomically.
+            FileClaim? created = await CreateClaimAsync(scope, claimPath, ct).ConfigureAwait(false);
+            if (created is not null)
+            {
+                if (!_active.TryAdd(scope, created))
+                {
+                    // Defensive: same-instance reservation makes this
+                    // unreachable; never leave our file orphaned.
+                    created.Dispose();
+                    DeleteOwnFile(claimPath, created.Token);
+                    return Result.Failure<FileClaim>($"Scope '{scope}' is already claimed by this process.");
+                }
+
+                return created;
+            }
+
+            // Existing file: readable-but-dead owner past grace ⇒ steal.
+            // The whole steal sequence rides the per-scope lock so same-process
+            // contenders serialize: the first completer's live-pid file makes
+            // every later check refuse (see _stealLocks).
+            if (!ShouldSteal(claimPath, out string? failure))
             {
                 return Result.Failure<FileClaim>(failure ?? $"Scope '{scope}' is held by another live process.");
             }
 
+            var stealLock = GetStealLock(scope);
+            await stealLock.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                File.Delete(claimPath);
+                // Re-check under the lock: a previous holder may have completed
+                // while we queued, and its live-pid file must refuse us now.
+                if (!ShouldSteal(claimPath, out failure))
+                {
+                    return Result.Failure<FileClaim>(failure ?? $"Scope '{scope}' is held by another live process.");
+                }
+
+                try
+                {
+                    File.Delete(claimPath);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Lost the steal race — the stealer that won owns it now.
+                }
+
+                created = await CreateClaimAsync(scope, claimPath, ct).ConfigureAwait(false);
+                if (created is null)
+                {
+                    return Result.Failure<FileClaim>($"Lost steal race for scope '{scope}'.");
+                }
+
+                // Post-create verification: confirm the on-disk token is still
+                // ours (a cross-process deleter could have slipped between our
+                // create and now — in-process contenders cannot, they wait on
+                // the lock). A mismatch means we lost: concede without
+                // registering, and never touch the foreign file.
+                if (!OwnsFile(claimPath, created.Token))
+                {
+                    return Result.Failure<FileClaim>($"Lost steal race for scope '{scope}'.");
+                }
             }
-            catch (IOException)
+            finally
             {
-                // Lost the steal race — the stealer that won owns it now.
+                stealLock.Release();
             }
 
-            created = await CreateClaimAsync(scope, claimPath, ct).ConfigureAwait(false);
-            if (created is null)
+            if (!_active.TryAdd(scope, created))
             {
-                return Result.Failure<FileClaim>($"Lost steal race for scope '{scope}'.");
+                created.Dispose();
+                DeleteOwnFile(claimPath, created.Token);
+                return Result.Failure<FileClaim>($"Scope '{scope}' is already claimed by this process.");
             }
 
-            // Post-create verification: confirm the on-disk token is still
-            // ours (a cross-process deleter could have slipped between our
-            // create and now — in-process contenders cannot, they wait on
-            // the lock). A mismatch means we lost: concede without
-            // registering, and never touch the foreign file.
-            if (!OwnsFile(claimPath, created.Token))
-            {
-                return Result.Failure<FileClaim>($"Lost steal race for scope '{scope}'.");
-            }
+            return created;
         }
         finally
         {
-            stealLock.Release();
+            _inflight.TryRemove(scope, out _);
         }
-
-        _active[scope] = created;
-        return created;
     }
 
     /// <summary>True while this registry instance holds <paramref name="scope"/>.</summary>
     public bool IsHeld(string scope) => _active.ContainsKey(scope);
+
+    /// <summary>
+    /// Best-effort delete of a just-created claim file carrying our
+    /// <paramref name="token"/>; a foreign token is never touched.
+    /// </summary>
+    private static void DeleteOwnFile(string claimPath, string token)
+    {
+        try
+        {
+            if (OwnsFile(claimPath, token))
+            {
+                File.Delete(claimPath);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Best-effort cleanup; the caller carries the outcome.
+        }
+    }
 
     private async Task<FileClaim?> CreateClaimAsync(string scope, string claimPath, CancellationToken ct)
     {
@@ -158,7 +280,7 @@ public sealed class FileClaimRegistry : IDisposable
         {
             return File.ReadAllText(claimPath).Contains($"token={token}", StringComparison.Ordinal);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return false;
         }
@@ -174,7 +296,7 @@ public sealed class FileClaimRegistry : IDisposable
         {
             content = File.ReadAllText(claimPath);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Disappeared mid-check or unreadable: treat as still-held.
             return false;
@@ -234,22 +356,39 @@ public sealed class FileClaimRegistry : IDisposable
                 File.Delete(claim.ClaimPath);
             }
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Gone already — releasing a missing claim is success.
+            // Gone already (or unreadable) — releasing a missing claim is success.
         }
     }
-    /// <summary>Scope string → safe on-disk stem (unsafe chars → '_').</summary>
+    /// <summary>
+    /// Scope string → safe on-disk stem. Lossless (#93): <c>_</c> escapes to
+    /// <c>__</c>, every other non-letter-or-digit char to <c>_xXXXX</c>
+    /// (lowercase hex UTF-16 code unit), so distinct scopes never collide
+    /// (<c>a/b</c> vs <c>a:b</c> vs <c>a_b</c> all diverge). Output is
+    /// <c>[A-Za-z0-9_]</c> only — safe on POSIX and Windows.
+    /// </summary>
     public static string ScopeToFileName(string scope)
     {
-        Span<char> buf = stackalloc char[scope.Length];
-        for (int i = 0; i < scope.Length; i++)
+        var sb = new StringBuilder(scope.Length);
+        foreach (char c in scope)
         {
-            char c = scope[i];
-            buf[i] = char.IsLetterOrDigit(c) ? c : '_';
+            if (c == '_')
+            {
+                sb.Append("__");
+            }
+            else if (char.IsLetterOrDigit(c))
+            {
+                sb.Append(c);
+            }
+            else
+            {
+                sb.Append("_x");
+                sb.Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+            }
         }
 
-        return new string(buf);
+        return sb.ToString();
     }
 
     public void Dispose()
@@ -360,7 +499,7 @@ internal static class ClaimStamp
             writer.Write(string.Create(CultureInfo.InvariantCulture,
                 $"pid={pid};token={token};ts={stampedUtc.ToString("o", CultureInfo.InvariantCulture)}"));
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Best-effort heartbeat: races resolve into either role harmlessly.
         }
