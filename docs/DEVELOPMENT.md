@@ -9,8 +9,8 @@
 ## Getting started
 
 ```bash
-git clone https://github.com/harbor-sh/harbor
-cd harbor
+git clone --recurse-submodules https://github.com/refusedguy/Harbor-Harness.git
+cd Harbor-Harness
 dotnet build
 dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
