@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
@@ -6,7 +8,9 @@ using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Tui.AnsiPlain;
 using Harbor.Terminal.Abstractions;
+using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Ui.Framework.State;
+using CSharpFunctionalExtensions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Hosting.Tests;
@@ -203,6 +207,105 @@ public class RegistrationCompositionTests
         // Without the Spectre feature flag the renderer switch is forced plain;
         // with the flag, this test explicitly pins the plain choice.
         await Assert.That(sp.GetRequiredService<ITuiRenderer>()).IsTypeOf<PlainTuiRenderer>();
+    }
+
+    // ── Issue #77 follow-up: AnsiPlain prod write path → DI-shared UiStore ──
+
+    [Test]
+    public async Task AddHarbor_PlainWrites_IntoSharedUiStore_RestoreReplaysOneLine()
+    {
+        await WithEnv("HARBOR_TUI", null, async () =>
+        {
+            using var sp = Compose(new HarborComposeOptions
+            {
+                HarborDir = TempHarborDir(),
+                DefaultStorageBackend = "memory",
+                DefaultTuiRenderer = "plain",
+            });
+
+            // Singleton identity: the store the pipeline restores from is the
+            // same instance the container hands out.
+            UiStore shared = sp.GetRequiredService<UiStore>();
+            await Assert.That(shared).IsNotNull();
+            await Assert.That(shared).IsSameReferenceAs(sp.GetRequiredService<UiStore>());
+
+            IRendererPipeline pipeline = sp.GetRequiredService<IRendererPipeline>();
+            await Assert.That(pipeline.CurrentBackendId).IsEqualTo("plain");
+
+            // Prod write path: one assistant message through the composed
+            // plain renderer (RenderAsync → UiStore.Dispatch).
+            var partial = AssistantMessage.Empty("s1", "stub-model");
+            await pipeline.Current.RenderAsync(new MessageStartEvent(partial));
+            await pipeline.Current.RenderAsync(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), partial));
+            await pipeline.Current.RenderAsync(new MessageEndEvent(partial));
+
+            // The write landed in the DI-shared instance — functional proof
+            // the renderer no longer owns a private store.
+            await Assert.That(shared.State.Lines.Length).IsEqualTo(1);
+            await Assert.That(shared.State.Lines[0].Text).IsEqualTo("Hello");
+
+            // Restore: swap to a capturing backend — the pipeline replays the
+            // shared snapshot into it, so no streamed line is lost.
+            var capture = new AnsiPlainCaptureRenderer();
+            pipeline.Register("capture", () => capture);
+            bool swapped = await pipeline.SwapRendererAsync("capture");
+
+            await Assert.That(swapped).IsTrue();
+            await Assert.That(capture.WrittenLines.Count).IsEqualTo(1);
+            await Assert.That(capture.WrittenLines[0]).IsEqualTo("Hello");
+        });
+    }
+
+    /// <summary>Minimal renderer double recording WriteLineAsync traffic (restore target).</summary>
+    private sealed class AnsiPlainCaptureRenderer : ITuiRenderer
+    {
+        public List<string> WrittenLines { get; } = [];
+
+        public ITuiRenderContext Context { get; } = new AnsiPlainNullRenderContext();
+        public ViewRegistry Views { get; } = new();
+        public ViewModelRegistry ViewModels { get; } = new();
+
+        public Task<Result> InitializeAsync(CancellationToken ct = default) => Task.FromResult(Result.Success());
+
+        public Task RenderAsync(AgentEvent @event, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default) =>
+            Task.FromResult(Result.Success(string.Empty));
+
+        public Task<Result> WriteAsync(string text, CancellationToken ct = default)
+        {
+            WrittenLines.Add(text);
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> WriteLineAsync(string? text = null, CancellationToken ct = default)
+        {
+            WrittenLines.Add(text ?? string.Empty);
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> ClearAsync(CancellationToken ct = default) => Task.FromResult(Result.Success());
+
+        public void Dispose() { }
+    }
+
+    private sealed class AnsiPlainNullRenderContext : ITuiRenderContext
+    {
+        public int Width => 80;
+        public int Height => 24;
+        public bool SupportsColor => false;
+        public void Write(string text) { }
+        public void WriteLine(string? text = null) { }
+        public void WriteColored(string text, TuiColor foreground, TuiColor? background = null) { }
+        public void WriteStyled(string text, TuiStyle style) { }
+        public void SetCursorPosition(int row, int col) { }
+        public void ClearLine() { }
+        public void Clear() { }
+        public void HideCursor() { }
+        public void ShowCursor() { }
+        public void EnterAlternateScreen() { }
+        public void ExitAlternateScreen() { }
+        public void Flush() { }
     }
 
     // ── Issue #77: shared UiStore for pipeline snapshot-restore ──────────

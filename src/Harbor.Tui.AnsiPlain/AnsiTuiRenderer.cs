@@ -2,6 +2,7 @@ namespace Harbor.Tui.AnsiPlain;
 
 using Harbor.Abstractions.Contracts;
 using Harbor.Tui.AnsiPlain.EscapeCodes;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
@@ -25,8 +26,8 @@ using Microsoft.Extensions.Logging;
 [TuiRenderer(Backend = "ansi")]
 public partial class AnsiTuiRenderer : AnsiPlainTuiRenderer
 {
-    public AnsiTuiRenderer(ILogger<AnsiTuiRenderer> logger)
-        : base(Console.Out, ownsWriter: false, AnsiEscapeStrategy.Instance, logger)
+    public AnsiTuiRenderer(ILogger<AnsiTuiRenderer> logger, UiStore? store = null)
+        : base(Console.Out, ownsWriter: false, AnsiEscapeStrategy.Instance, logger, store)
     {
     }
 
@@ -34,8 +35,8 @@ public partial class AnsiTuiRenderer : AnsiPlainTuiRenderer
     ///     ANSI mode over a caller-supplied writer (golden-frame tests, string
     ///     capture). Production code keeps using <see cref="Console.Out"/>.
     /// </summary>
-    public AnsiTuiRenderer(ILogger<AnsiTuiRenderer> logger, TextWriter writer)
-        : base(writer, ownsWriter: false, AnsiEscapeStrategy.Instance, logger)
+    public AnsiTuiRenderer(ILogger<AnsiTuiRenderer> logger, TextWriter writer, UiStore? store = null)
+        : base(writer, ownsWriter: false, AnsiEscapeStrategy.Instance, logger, store)
     {
     }
 

@@ -93,7 +93,7 @@ internal static class TuiModule
 #if HARBOR_WITH_SPECTRE_TUI
             return tui.ToLowerInvariant() switch
             {
-                "plain" => new PlainTuiRenderer(),
+                "plain" => new PlainTuiRenderer(store: sp.GetRequiredService<UiStore>()),
                 "spectre" => new Harbor.Tui.Spectre.SpectreTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Spectre.SpectreTuiRenderer>>()),
                 "fullscreen" => new Harbor.Tui.Spectre.Fullscreen.FullscreenTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Spectre.Fullscreen.FullscreenTuiRenderer>>()),
                 "spectre-tui" => new Harbor.Tui.SpectreTui.SpectreTuiRenderer(
@@ -102,15 +102,23 @@ internal static class TuiModule
                 "terminal-gui" => new Harbor.Tui.TerminalGui.TerminalGuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.TerminalGui.TerminalGuiRenderer>>()),
                 "termina" => new Harbor.Tui.Termina.TerminaRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Termina.TerminaRenderer>>()),
                 "razor" => new Harbor.Tui.RazorConsole.RazorConsoleRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.RazorConsole.RazorConsoleRenderer>>()),
-                _ => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>())
+                // Issue #77: ansi writes must land in the DI-shared UiStore so
+                // the pipeline restores them across renderer swaps.
+                _ => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(
+                    sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>(),
+                    store: sp.GetRequiredService<UiStore>())
             };
 #else
             return tui.ToLowerInvariant() switch
             {
-                "plain" => new PlainTuiRenderer(),
+                // Issue #77: plain/ansi writes must land in the DI-shared
+                // UiStore so the pipeline restores them across swaps.
+                "plain" => new PlainTuiRenderer(store: sp.GetRequiredService<UiStore>()),
                 "consoleex" or "cellforge" => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
                     sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>()),
-                _ => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>())
+                _ => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(
+                    sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>(),
+                    store: sp.GetRequiredService<UiStore>())
             };
 #endif
         });
@@ -139,8 +147,10 @@ internal static class TuiModule
             pipeline.Register("cellforge", () => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
                 sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>()));
             pipeline.Register("ansi", () => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(
-                sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>()));
-            pipeline.Register("plain", () => new Harbor.Tui.AnsiPlain.PlainTuiRenderer());
+                sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>(),
+                store: sp.GetRequiredService<UiStore>()));
+            pipeline.Register("plain", () => new Harbor.Tui.AnsiPlain.PlainTuiRenderer(
+                store: sp.GetRequiredService<UiStore>()));
 #if HARBOR_WITH_NICK_CONSOLE_EX
             pipeline.Register("nickconsoleex", () => new Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer(
                 sp.GetRequiredService<ILogger<Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer>>()));
