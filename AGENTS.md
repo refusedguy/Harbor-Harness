@@ -44,6 +44,15 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 9. Run `dotnet build` to make sure the project compiles.
 10. Run the affected test projects individually (`dotnet run --project tests/<Project> -c Release --no-build`) — **including `tests/Harbor.Architecture.Tests/`** after every project-reference change. `dotnet test` discovers zero tests in this repo (broken MTP bridge) — never use it.
 
+## MCP preference
+
+Configured MCP servers are intentional — prefer them over raw alternatives when available:
+- `graft/*` for repo orientation, symbol search, callers/blast-radius (cheaper than full file reads; re-ask freely).
+- `serena/*` for symbol-precise read/rename/edit and project memories (call `initial_instructions` first on a coding task).
+- `context7_*` for external library/framework docs instead of guessing or stale training data (resolve library ID first, one concept per query).
+- Project-local MCPs (`github`, `filesystem`, `chromeDevtools`) for their domains instead of shell workarounds.
+Do not re-read whole files when a `graft` crux or `serena` symbol body already answers. After big code changes run `graft build`.
+
 ## Project structure quick reference
 
 ```
