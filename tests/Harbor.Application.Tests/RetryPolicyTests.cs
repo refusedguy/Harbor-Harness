@@ -258,12 +258,12 @@ public class RetryPolicyTests
             // expected exhaustion
         }
 
-        // max=4 attempts → 3 retries; jitter draws from [0, BaseDelay).
+        // max=4 attempts → 3 retries; jitter draws from [0, BaseDelay·2^(n-1)).
         await Assert.That(time.Delays.Count).IsEqualTo(3);
-        foreach (TimeSpan delay in time.Delays)
+        for (int i = 0; i < time.Delays.Count; i++)
         {
-            await Assert.That(delay).IsGreaterThanOrEqualTo(TimeSpan.Zero);
-            await Assert.That(delay).IsLessThan(TimeSpan.FromMilliseconds(40));
+            await Assert.That(time.Delays[i]).IsGreaterThanOrEqualTo(TimeSpan.Zero);
+            await Assert.That(time.Delays[i]).IsLessThan(TimeSpan.FromMilliseconds(40 * (1 << i)));
         }
     }
 
@@ -282,13 +282,11 @@ public class RetryPolicyTests
         }
         catch (HttpRequestException) { /* exhausted */ }
 
-        // Without jitter every requested delay is exactly BaseDelay.
-        // max=3 attempts → 2 retries.
+        // Without jitter every requested delay is exact: BaseDelay·2^(n-1).
+        // max=3 attempts → 2 retries → [80ms, 160ms].
         await Assert.That(time.Delays.Count).IsEqualTo(2);
-        foreach (TimeSpan delay in time.Delays)
-        {
-            await Assert.That(delay).IsEqualTo(TimeSpan.FromMilliseconds(80));
-        }
+        await Assert.That(time.Delays[0]).IsEqualTo(TimeSpan.FromMilliseconds(80));
+        await Assert.That(time.Delays[1]).IsEqualTo(TimeSpan.FromMilliseconds(160));
     }
 
     [Test]
