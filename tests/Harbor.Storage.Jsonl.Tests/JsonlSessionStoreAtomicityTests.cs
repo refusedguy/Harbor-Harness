@@ -96,7 +96,14 @@ public class JsonlSessionStoreAtomicityTests
             await store.AppendMessageAsync(session.Id, new UserMessage(
                 "msg-2", session.Id, DateTimeOffset.UtcNow.AddSeconds(-1), "second", "code", "claude"));
 
-            // All three atomic-rewrite paths (#83.1).
+            // All three atomic-rewrite paths (#83.1). Truncate FIRST: UpdateMessage
+            // appends the edited entry at the end (pre-existing file-order
+            // semantics), so truncating after an edit would anchor on the
+            // moved entry and remove nothing.
+            var truncate = await store.DeleteMessagesAfterAsync(session.Id, "msg-1");
+            await Assert.That(truncate.IsSuccess).IsTrue();
+            await Assert.That(truncate.Value).IsEqualTo(1);
+
             var edit = await store.UpdateMessageAsync(session.Id, new UserMessage(
                 "msg-1", session.Id, DateTimeOffset.UtcNow.AddSeconds(-2), "edited", "code", "claude"));
             await Assert.That(edit.IsSuccess).IsTrue();
@@ -104,10 +111,6 @@ public class JsonlSessionStoreAtomicityTests
             var renamed = session with { Title = "Renamed" };
             var update = await store.UpdateAsync(renamed);
             await Assert.That(update.IsSuccess).IsTrue();
-
-            var truncate = await store.DeleteMessagesAfterAsync(session.Id, "msg-1");
-            await Assert.That(truncate.IsSuccess).IsTrue();
-            await Assert.That(truncate.Value).IsEqualTo(1);
 
             // No temp files linger: temp + rename must clean up after itself.
             await Assert.That(Directory.GetFiles(root, "*.tmp").Length).IsEqualTo(0);
