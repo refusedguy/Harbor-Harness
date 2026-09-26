@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-///     CF-E-002 contract tests for the 7 cell-native builtin panels: identity
+///     CF-E-002 contract tests for the 9 cell-native builtin panels: identity
 ///     (Id/Title/Placement/Size), <c>Build</c> on empty + populated + clipped +
 ///     null-Services states, and <c>OnKey</c> consumption. No Spectre, no
 ///     filesystem fixtures (file-tree reads the real CWD read-only).
@@ -82,6 +82,7 @@ public class CellForgeBuiltinPanelsTests
         new CellForgeTokenBreakdownPanel(),
         new CellForgeDiagnosticsPanel(),
         new CellForgeLogsPanel(),
+        new CellForgeJumpPalettePanel(),
     ];
 
     [Test]
@@ -128,6 +129,12 @@ public class CellForgeBuiltinPanelsTests
         await Assert.That(logs.Title).IsEqualTo("Logs");
         await Assert.That(logs.DefaultPlacement).IsEqualTo(TuiPanelPlacement.Bottom);
         await Assert.That(logs.DefaultSize).IsEqualTo(10);
+
+        var jump = new CellForgeJumpPalettePanel();
+        await Assert.That(jump.Id).IsEqualTo("jump");
+        await Assert.That(jump.Title).IsEqualTo("Jump");
+        await Assert.That(jump.DefaultPlacement).IsEqualTo(TuiPanelPlacement.Right);
+        await Assert.That(jump.DefaultSize).IsEqualTo(48);
     }
 
     [Test]
