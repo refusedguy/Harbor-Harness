@@ -35,11 +35,11 @@ public sealed class JsonElementMemoryPackFormatter : MemoryPackFormatter<JsonEle
     /// </remarks>
     public override void Serialize<TBufferWriter>(ref MemoryPackWriter<TBufferWriter> writer, scoped ref JsonElement value)
     {
-        // JsonElement is backed by a pooled JsonDocument; serialize to a string.
-        // This is the simplest safe path; for high-throughput scenarios, an
-        // UTF-8 based path could be added (requires MemoryPack internal API).
-        string json = JsonSerializer.Serialize(value, ContractsJsonContext.Default.JsonElement);
-        writer.WriteString(json);
+        // JsonElement is backed by a pooled JsonDocument; persist the original
+        // raw text. GetRawText (unlike JsonSerializer.Serialize, which escapes
+        // non-ASCII) preserves the exact bytes, so round-trips are textually
+        // identical — including unicode payloads.
+        writer.WriteString(value.GetRawText());
     }
 
     /// <inheritdoc />

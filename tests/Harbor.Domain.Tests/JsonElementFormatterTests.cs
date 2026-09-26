@@ -8,8 +8,9 @@ namespace Harbor.Domain.Tests;
 /// <summary>
 ///     #87.1: the <see cref="JsonElement" /> MemoryPack formatter must
 ///     round-trip through the source-generated context (AOT-safe, no
-///     reflection fallback) and be registered order-independently via the
-///     module initializer — not only once <c>ToolCallPart</c> is touched.
+///     reflection fallback) and be registered via ToolCallPart's static
+///     constructor before any holder serializes (no ModuleInitializer:
+///     CA2255 forbids it in libraries).
 /// </summary>
 public class JsonElementFormatterTests
 {
@@ -33,11 +34,12 @@ public class JsonElementFormatterTests
     }
 
     [Test]
-    public async Task Formatter_IsRegistered_WithoutTouchingToolCallPart()
+    public async Task Formatter_IsRegistered_AfterTouchingToolCallPart()
     {
-        // The module initializer in Harbor.Abstractions.Contracts registers the
-        // formatter at assembly load; this must hold even if no test in the
-        // process has serialized a ToolCallPart yet.
+        // No ModuleInitializer in the library (CA2255) — registration rides
+        // on ToolCallPart's static constructor, which runs before any
+        // JsonElement holder (only ToolCallPart.Args) can serialize.
+        _ = ToolCallPart.Create("tc0", "read", JsonDocument.Parse("{}").RootElement);
         await Assert.That(MemoryPackFormatterProvider.IsRegistered<JsonElement>()).IsTrue();
     }
 
