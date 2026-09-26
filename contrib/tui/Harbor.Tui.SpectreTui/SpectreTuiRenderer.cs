@@ -321,7 +321,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                     return;
                 }
 
-                var ctx = new PanelContext(s, 80, 24, _services);
+                var ctx = new PanelContext(s, 80, 24, _services, _store);
                 try
                 {
                     if (focusedPanel.OnKey(uiKey, ctx))

@@ -31,6 +31,7 @@ namespace Harbor.Ui.Framework.Sessions;
 public sealed class SessionFactory
 {
     private readonly IAgent _agent;
+    private readonly IAgentRegistry _agents;
     private readonly ILogger<SessionFactory> _logger;
     private readonly IServiceProvider _services;
     private readonly ISessionStore _sessionStore;
@@ -38,11 +39,13 @@ public sealed class SessionFactory
     /// <summary>Construct a <see cref="SessionFactory" />.</summary>
     public SessionFactory(
         IServiceProvider services,
+        IAgentRegistry agents,
         IAgent agent,
         ISessionStore sessionStore,
         ILogger<SessionFactory> logger)
     {
         _services = services;
+        _agents = agents;
         _agent = agent;
         _sessionStore = sessionStore;
         _logger = logger;
@@ -55,6 +58,8 @@ public sealed class SessionFactory
     /// </summary>
     public async Task<(string? ProviderId, string? ModelId)> ResolveProviderModelFromConfigAsync()
     {
+        // #63 legitimate: optional dependency — hosts without a common-config
+        // reader (tests, minimal embeds) get (null, null) instead of a throw.
         var configReader = _services.GetService<ICommonConfigReader>();
         if (configReader is null) return (null, null);
 
@@ -86,9 +91,8 @@ public sealed class SessionFactory
     /// <returns>The resolved <see cref="AgentDefinition" />.</returns>
     public async Task<AgentDefinition> ResolveAgentDefinitionAsync(string? agentName, string? providerId, string? modelId)
     {
-        var agents = _services.GetRequiredService<IAgentRegistry>();
-        var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == (agentName ?? "code"))
-                       ?? agents.GetAllAgents().First();
+        var agentDef = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == (agentName ?? "code"))
+                       ?? _agents.GetAllAgents().First();
 
         (string? configProvider, string? configModel) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
         string provider = providerId ?? configProvider ?? agentDef.ProviderId;
@@ -108,8 +112,7 @@ public sealed class SessionFactory
     /// <returns>The created session, or a failure carrying the store error.</returns>
     public async Task<Result<Session>> CreateDefaultAsync()
     {
-        var agents = _services.GetRequiredService<IAgentRegistry>();
-        var agentDef = agents.GetAllAgents().FirstOrDefault()
+        var agentDef = _agents.GetAllAgents().FirstOrDefault()
                        ?? throw new InvalidOperationException("No agents registered.");
 
         // Override the agent definition with the fresh CommonConfig values.

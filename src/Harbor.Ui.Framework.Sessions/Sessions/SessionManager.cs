@@ -72,6 +72,7 @@ public sealed class SessionManager : ISessionManager
     ///     sinks, kept for the app lifetime.
     /// </summary>
     private readonly Dictionary<string, SessionContext> _tombstones = new();
+    private readonly IAgentRegistry _agents;
     private readonly SessionFactory _factory;
     private readonly SessionGitTracker _gitTracker;
     private readonly ILogger<SessionManager> _logger;
@@ -84,6 +85,7 @@ public sealed class SessionManager : ISessionManager
     /// <summary>Construct a <see cref="SessionManager" /> facade.</summary>
     public SessionManager(
         IServiceProvider services,
+        IAgentRegistry agents,
         IAgent agent,
         ISessionStore sessionStore,
         UiStore store,
@@ -95,6 +97,7 @@ public sealed class SessionManager : ISessionManager
         ILogger<SessionManager> logger)
     {
         _services = services;
+        _agents = agents;
         _agent = agent;
         _sessionStore = sessionStore;
         _store = store;
@@ -175,6 +178,8 @@ public sealed class SessionManager : ISessionManager
 
     /// <summary>Refresh git info for a session (forwards to <see cref="SessionGitTracker" />).</summary>
     public void RefreshGitInfo(string sessionId, string directory) =>
+        // #63 legitimate: optional dependency — GitService is host-only
+        // (desktop); headless/test hosts refresh without git enrichment.
         _gitTracker.Refresh(sessionId, directory, _services.GetService<GitService>());
 
     /// <summary>
@@ -216,9 +221,8 @@ public sealed class SessionManager : ISessionManager
 
         await AbortRunningAgentAsync().ConfigureAwait(false);
 
-        var agents = _services.GetRequiredService<IAgentRegistry>();
-        var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == "code")
-                       ?? agents.GetAllAgents().FirstOrDefault()
+        var agentDef = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == "code")
+                       ?? _agents.GetAllAgents().FirstOrDefault()
                        ?? throw new InvalidOperationException("No agents registered.");
 
         (string? providerId, string? modelId) = await _factory.ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
@@ -289,9 +293,8 @@ public sealed class SessionManager : ISessionManager
         }
         else
         {
-            var agents = _services.GetRequiredService<IAgentRegistry>();
-            var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
-                           ?? agents.GetAllAgents().First()
+            var agentDef = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
+                           ?? _agents.GetAllAgents().First()
                            ?? throw new InvalidOperationException("No agents registered.");
             _agent.Initialize(session, agentDef);
             // #89: hydrate-then-swap — same single-UiMsg atomic replay as
@@ -414,6 +417,8 @@ public sealed class SessionManager : ISessionManager
     ///     DI container and clear its bars + sparkline + baseline. Called
     ///     on every session switch (open + new) so the chart tracks only
     ///     the active session's tokens.
+    ///     #63 legitimate: optional UI-only dependency — headless hosts never
+    ///     register it, so a missing registration is a no-op, not an error.
     /// </summary>
     private void ClearTokenUsageForActiveSession() => _services.GetService<TokenUsageViewModel>()?.Clear();
 
@@ -457,6 +462,8 @@ public sealed class SessionManager : ISessionManager
 
         // #49 PR1: single cancellation ingress (null-safe: hosts/tests without
         // the coordinator registered keep the direct cancel).
+        // #63 legitimate: optional dependency — GetService, never
+        // GetRequiredService, so coordinator-less hosts keep working.
         var coordinator = _services.GetService<IApprovalCoordinator>();
         if (coordinator is not null)
         {

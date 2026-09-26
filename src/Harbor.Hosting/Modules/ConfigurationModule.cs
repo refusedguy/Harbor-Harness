@@ -54,8 +54,6 @@ internal static class ConfigurationModule
             () => harborStore.LoadAsync().GetAwaiter().GetResult(),
             new HarborConfig(), "HarborConfig", ctx);
 
-        services.AddSingleton(ctx.Common);
-
         string? envModel = Environment.GetEnvironmentVariable("HARBOR_MODEL");
         if (!string.IsNullOrEmpty(envModel))
             ctx.Harbor.Model = envModel;
@@ -63,6 +61,9 @@ internal static class ConfigurationModule
         // App hook (desktop overrides ctx.Common with its async-loaded instance).
         options.AfterConfiguration?.Invoke(ctx);
 
+        // #63: single registration, AFTER the hook — the pre-hook AddSingleton
+        // was a duplicate (harmless: last wins) that hid the override intent.
+        // The value registered here is final, hook override included.
         services.AddSingleton(ctx.Common);
 
         // ---- event bus: constructed explicitly, registered as instance -----

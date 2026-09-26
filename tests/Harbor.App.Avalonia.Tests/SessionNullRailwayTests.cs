@@ -141,11 +141,13 @@ public class SessionNullRailwayTests
         var sessionStore = store ?? new ControllableStore();
         var agent = new FakeAgent();
         var services = new FakeServiceProvider();
-        services.Add<IAgentRegistry>(new FakeAgentRegistry());
-        var factory = new SessionFactory(services, agent, sessionStore, new FakeLogger<SessionFactory>());
-        var switcher = new SessionSwitcher(agent, sessionStore, services, new FakeLogger<SessionSwitcher>());
+        var agents = new FakeAgentRegistry();
+        services.Add<IAgentRegistry>(agents);
+        var factory = new SessionFactory(services, agents, agent, sessionStore, new FakeLogger<SessionFactory>());
+        var switcher = new SessionSwitcher(agent, sessionStore, agents, new FakeLogger<SessionSwitcher>());
         var manager = new SessionManager(
             services,
+            agents,
             agent,
             sessionStore,
             new UiStore(),

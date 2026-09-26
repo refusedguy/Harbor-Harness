@@ -36,11 +36,12 @@ public static class CellForgePanelAdapter
         UiState state,
         int width,
         int height,
-        IServiceProvider? services = null)
+        IServiceProvider? services = null,
+        UiStore? store = null)
     {
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(state);
-        return RenderToRows(provider, new PanelContext(state, width, height, services));
+        return RenderToRows(provider, new PanelContext(state, width, height, services, store));
     }
 
     /// <summary>

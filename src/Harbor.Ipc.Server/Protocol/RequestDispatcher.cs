@@ -5,13 +5,13 @@ namespace Harbor.Ipc.Protocol;
 ///     Server-side dispatcher: takes a <see cref="HarborRequest" /> and
 ///     produces a <see cref="HarborResponse" /> by calling the in-process
 ///     <c>IAgent</c>, <c>ISessionStore</c>, <c>IProviderRegistry</c>,
-///     <c>IToolRegistry</c>, <c>IAgentRegistry</c> resolved from the host's
-///     <see cref="IServiceProvider" />.
+///     <c>IToolRegistry</c>, <c>IAgentRegistry</c> injected via ctor
+///     (#63: no runtime service location — every dependency is explicit).
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Stateless per request:</b> every call resolves its services
-///         afresh from the host's DI container. The
+///         <b>Stateless per request:</b> all services are ctor-injected
+///         singletons shared across calls. The
 ///         <see cref="IAgent" /> is a singleton (single-flight runner), so
 ///         concurrent <see cref="SendPromptRequest" />s will get the agent's
 ///         "already running" failure rather than clobber each other.
@@ -27,24 +27,35 @@ namespace Harbor.Ipc.Protocol;
 /// </remarks>
 public sealed class RequestDispatcher
 {
+    private readonly IAgent _agent;
+    private readonly IAgentRegistry _agents;
+    private readonly ISessionStore _sessions;
+    private readonly IProviderRegistry _providers;
+    private readonly IToolRegistry _tools;
     private readonly EventBroadcaster _broadcaster;
     private readonly IApprovalCoordinator? _coordinator;
-    private readonly IServiceProvider _serviceProvider;
     private readonly SessionLeaseRegistry _leases;
 
     /// <summary>
-    ///     Construct a dispatcher backed by the host's service provider.
+    ///     Construct a dispatcher over explicitly-injected singletons.
     /// </summary>
     public RequestDispatcher(
-        IServiceProvider serviceProvider,
+        IAgent agent,
+        IAgentRegistry agents,
+        ISessionStore sessions,
+        IProviderRegistry providers,
+        IToolRegistry tools,
         EventBroadcaster broadcaster,
         SessionLeaseRegistry? leases = null,
-        // #49: injected, not service-located (the per-request resolutions
-        // below are a separate cleanup — see #63). Null keeps minimal/test
-        // hosts working with direct cancel.
+        // #49: injected, not service-located (null keeps minimal/test
+        // hosts working with direct cancel).
         IApprovalCoordinator? coordinator = null)
     {
-        _serviceProvider = serviceProvider;
+        _agent = agent;
+        _agents = agents;
+        _sessions = sessions;
+        _providers = providers;
+        _tools = tools;
         _broadcaster = broadcaster;
         _leases = leases ?? new SessionLeaseRegistry();
         _coordinator = coordinator;
@@ -114,16 +125,12 @@ public sealed class RequestDispatcher
 
     private async Task<HarborResponse> HandleStartAgentAsync(StartAgentRequest r, string? clientId, CancellationToken ct)
     {
-        var agent = _serviceProvider.GetRequiredService<IAgent>();
-        var agents = _serviceProvider.GetRequiredService<IAgentRegistry>();
-        var sessions = _serviceProvider.GetRequiredService<ISessionStore>();
-
         // ROP boundary #101: shared TryCreate → GetAgent preamble (same as InProcessHarborClient).
-        var agentDefResult = agents.ResolveAgent(r.AgentName);
+        var agentDefResult = _agents.ResolveAgent(r.AgentName);
         if (agentDefResult.IsFailure)
             return new ErrorResponse { RequestId = r.RequestId, Message = agentDefResult.Error };
 
-        var sessionResult = await sessions.GetAsync(r.SessionId, ct).ConfigureAwait(false);
+        var sessionResult = await _sessions.GetAsync(r.SessionId, ct).ConfigureAwait(false);
         if (sessionResult.IsFailure)
             return new ErrorResponse { RequestId = r.RequestId, Message = sessionResult.Error };
 
@@ -138,22 +145,21 @@ public sealed class RequestDispatcher
             };
         }
 
-        agent.Initialize(sessionResult.Value, agentDefResult.Value);
+        _agent.Initialize(sessionResult.Value, agentDefResult.Value);
         return new OkResponse { RequestId = r.RequestId };
     }
 
     private HarborResponse HandleAbortAgent(AbortAgentRequest r)
     {
-        var agent = _serviceProvider.GetRequiredService<IAgent>();
         // #49 PR1: single cancellation ingress (null = minimal host without
         // the coordinator; direct cancel as before).
         if (_coordinator is not null)
         {
-            _coordinator.RequestCancel(agent);
+            _coordinator.RequestCancel(_agent);
         }
         else
         {
-            agent.AbortSource.Cancel();
+            _agent.AbortSource.Cancel();
         }
 
         return new OkResponse { RequestId = r.RequestId };
@@ -161,8 +167,7 @@ public sealed class RequestDispatcher
 
     private async Task<HarborResponse> HandleSendPromptAsync(SendPromptRequest r, CancellationToken ct)
     {
-        var agent = _serviceProvider.GetRequiredService<IAgent>();
-        var result = await agent.PromptAsync(r.Prompt, ct).ConfigureAwait(false);
+        var result = await _agent.PromptAsync(r.Prompt, ct).ConfigureAwait(false);
         return result.IsSuccess
             ? new OkResponse { RequestId = r.RequestId }
             : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
@@ -172,8 +177,7 @@ public sealed class RequestDispatcher
 
     private async Task<HarborResponse> HandleCreateSessionAsync(CreateSessionRequest r, CancellationToken ct)
     {
-        var sessions = _serviceProvider.GetRequiredService<ISessionStore>();
-        var result = await sessions.CreateAsync(r.Directory, r.Agent, r.Provider, r.Model, ct).ConfigureAwait(false);
+        var result = await _sessions.CreateAsync(r.Directory, r.Agent, r.Provider, r.Model, ct).ConfigureAwait(false);
         return result.IsSuccess
             ? new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(result.Value, ct) }
             : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
@@ -181,8 +185,7 @@ public sealed class RequestDispatcher
 
     private async Task<HarborResponse> HandleListSessionsAsync(ListSessionsRequest r, CancellationToken ct)
     {
-        var sessions = _serviceProvider.GetRequiredService<ISessionStore>();
-        var result = await sessions.ListAsync(null, ct).ConfigureAwait(false);
+        var result = await _sessions.ListAsync(null, ct).ConfigureAwait(false);
         return result.IsSuccess
             ? new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(result.Value, ct) }
             : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
@@ -190,8 +193,7 @@ public sealed class RequestDispatcher
 
     private async Task<HarborResponse> HandleGetSessionAsync(GetSessionRequest r, CancellationToken ct)
     {
-        var sessions = _serviceProvider.GetRequiredService<ISessionStore>();
-        var result = await sessions.GetAsync(r.SessionId, ct).ConfigureAwait(false);
+        var result = await _sessions.GetAsync(r.SessionId, ct).ConfigureAwait(false);
         return result.IsSuccess
             ? new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(result.Value, ct) }
             : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
@@ -199,8 +201,7 @@ public sealed class RequestDispatcher
 
     private async Task<HarborResponse> HandleDeleteSessionAsync(DeleteSessionRequest r, CancellationToken ct)
     {
-        var sessions = _serviceProvider.GetRequiredService<ISessionStore>();
-        var result = await sessions.DeleteAsync(r.SessionId, ct).ConfigureAwait(false);
+        var result = await _sessions.DeleteAsync(r.SessionId, ct).ConfigureAwait(false);
         return result.IsSuccess
             ? new OkResponse { RequestId = r.RequestId }
             : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
@@ -208,8 +209,7 @@ public sealed class RequestDispatcher
 
     private async Task<HarborResponse> HandleGetMessagesAsync(GetMessagesRequest r, CancellationToken ct)
     {
-        var sessions = _serviceProvider.GetRequiredService<ISessionStore>();
-        var result = await sessions.GetMessagesAsync(r.SessionId, ct).ConfigureAwait(false);
+        var result = await _sessions.GetMessagesAsync(r.SessionId, ct).ConfigureAwait(false);
         return result.IsSuccess
             ? new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(result.Value, ct) }
             : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
@@ -219,24 +219,22 @@ public sealed class RequestDispatcher
 
     private Task<HarborResponse> HandleListProvidersAsync(ListProvidersRequest r, CancellationToken ct)
     {
-        var providers = _serviceProvider.GetRequiredService<IProviderRegistry>();
-        var ids = providers.GetRegisteredProviderIds();
+        var ids = _providers.GetRegisteredProviderIds();
         return Task.FromResult<HarborResponse>(
             new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(ids, ct) });
     }
 
     private async Task<HarborResponse> HandleListModelsAsync(ListModelsRequest r, CancellationToken ct)
     {
-        var providers = _serviceProvider.GetRequiredService<IProviderRegistry>();
         Result<IReadOnlyList<ModelInfo>> result;
         if (string.IsNullOrEmpty(r.ProviderId))
         {
-            result = await providers.GetAllModelsAsync(ct).ConfigureAwait(false);
+            result = await _providers.GetAllModelsAsync(ct).ConfigureAwait(false);
         }
         else
         {
             // ROP boundary #101: shared TryCreate → GetClient preamble (same as InProcessHarborClient).
-            var clientResult = providers.ResolveClient(r.ProviderId!);
+            var clientResult = _providers.ResolveClient(r.ProviderId!);
             if (clientResult.IsFailure)
                 return new ErrorResponse { RequestId = r.RequestId, Message = clientResult.Error };
 
@@ -252,8 +250,7 @@ public sealed class RequestDispatcher
 
     private Task<HarborResponse> HandleListToolsAsync(ListToolsRequest r, CancellationToken ct)
     {
-        var tools = _serviceProvider.GetRequiredService<IToolRegistry>();
-        var list = tools.GetAllTools();
+        var list = _tools.GetAllTools();
         return Task.FromResult<HarborResponse>(
             new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(list, ct) });
     }

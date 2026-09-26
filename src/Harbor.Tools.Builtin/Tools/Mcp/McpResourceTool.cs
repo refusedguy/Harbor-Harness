@@ -100,6 +100,8 @@ public sealed class McpResourceTool : ITool
         string uri = args.GetProperty("uri").GetString()!;
 
         var registry = _registry;
+        // #63 legitimate: ctor-injected primary with a per-call context
+        // fallback (same shape as LspTool).
         if (registry is null && context.Services is not null)
         {
             registry = context.Services.GetService<IMcpRegistry>();

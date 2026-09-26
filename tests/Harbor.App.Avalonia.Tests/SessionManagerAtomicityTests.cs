@@ -110,11 +110,12 @@ public class SessionManagerAtomicityTests
     private static SessionManager CreateManager(TestSessionStore store, AgentDefinition agentDef)
     {
         var services = new TestServiceProvider(agentDef);
+        var agents = new FakeAgentRegistry(agentDef);
         var agent = new FakeAgent(AgentState.Idle("none", agentDef));
-        var factory = new SessionFactory(services, agent, store, new NopLogger<SessionFactory>());
-        var switcher = new SessionSwitcher(agent, store, services, new NopLogger<SessionSwitcher>());
+        var factory = new SessionFactory(services, agents, agent, store, new NopLogger<SessionFactory>());
+        var switcher = new SessionSwitcher(agent, store, agents, new NopLogger<SessionSwitcher>());
         return new SessionManager(
-            services, agent, store, new UiStore(), factory, switcher,
+            services, agents, agent, store, new UiStore(), factory, switcher,
             new SessionGitTracker(), new SessionStatusTracker(),
             new NopBinder(), new NopLogger<SessionManager>());
     }
@@ -165,9 +166,8 @@ public class SessionManagerAtomicityTests
     {
         var agentDef = TestAgents.AllowAll();
         (var store, var session) = SeededStore(agentDef, messageCount: 2);
-        var services = new TestServiceProvider(agentDef);
         var agent = new FakeAgent(AgentState.Idle("none", agentDef));
-        var switcher = new SessionSwitcher(agent, store, services, new NopLogger<SessionSwitcher>());
+        var switcher = new SessionSwitcher(agent, store, new FakeAgentRegistry(agentDef), new NopLogger<SessionSwitcher>());
         var target = new UiStore();
 
         int transitions = 0;

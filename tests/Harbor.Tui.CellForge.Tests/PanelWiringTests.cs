@@ -217,7 +217,7 @@ public class PanelWiringTests
         var services = new FakeServices().Add<UiStore>(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
-            owner.Registry, store.State, UiKey.ForChar('?'), services);
+            owner.Registry, store.State, UiKey.ForChar('?'), services, store: store);
 
         await Assert.That(consumed).IsTrue();
         await Assert.That(store.State.PanelStates["help"]).IsEqualTo(TuiPanelState.Hidden);
@@ -235,7 +235,7 @@ public class PanelWiringTests
         var services = new FakeServices().Add<UiStore>(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
-            owner.Registry, store.State, new UiKey(UiKeyCode.F12), services);
+            owner.Registry, store.State, new UiKey(UiKeyCode.F12), services, store: store);
 
         await Assert.That(consumed).IsTrue();
         await Assert.That(store.State.PanelStates["logs"]).IsEqualTo(TuiPanelState.Hidden);
@@ -252,7 +252,7 @@ public class PanelWiringTests
         var services = new FakeServices().Add<UiStore>(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
-            owner.Registry, store.State, UiKey.ForChar('?'), services);
+            owner.Registry, store.State, UiKey.ForChar('?'), services, store: store);
 
         await Assert.That(consumed).IsFalse();
         await Assert.That(store.State.PanelStates["help"]).IsEqualTo(TuiPanelState.Visible);
@@ -269,7 +269,7 @@ public class PanelWiringTests
         var services = new FakeServices().Add<UiStore>(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
-            new PanelRegistry(), store.State, UiKey.ForChar('?'), services);
+            new PanelRegistry(), store.State, UiKey.ForChar('?'), services, store: store);
 
         await Assert.That(consumed).IsFalse();
     }
@@ -286,7 +286,7 @@ public class PanelWiringTests
 
         // Todo-list is non-interactive: OnKey returns false, routing must surface it.
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
-            owner.Registry, store.State, UiKey.ForChar('j'), services);
+            owner.Registry, store.State, UiKey.ForChar('j'), services, store: store);
 
         await Assert.That(consumed).IsFalse();
     }

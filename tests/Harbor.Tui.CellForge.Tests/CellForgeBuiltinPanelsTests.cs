@@ -46,8 +46,8 @@ public class CellForgeBuiltinPanelsTests
         public bool OnKey(UiKey key, PanelContext ctx) => false;
     }
 
-    private static PanelContext Ctx(UiState state, int width = 80, int height = 24, IServiceProvider? services = null) =>
-        new(state, width, height, services);
+    private static PanelContext Ctx(UiState state, int width = 80, int height = 24, IServiceProvider? services = null, UiStore? store = null) =>
+        new(state, width, height, services, store);
 
     private static UiState StateWithLines(params ChatLine[] lines) =>
         new UiState { Lines = ImmutableArray.Create(lines) };
@@ -268,7 +268,7 @@ public class CellForgeBuiltinPanelsTests
     {
         var store = SeededStore("help", 48);
         var services = new FakeServices().Add<UiStore>(store);
-        bool consumed = new CellForgeHelpPanel().OnKey(UiKey.ForChar('?'), Ctx(store.State, services: services));
+        bool consumed = new CellForgeHelpPanel().OnKey(UiKey.ForChar('?'), Ctx(store.State, services: services, store: store));
         await Assert.That(consumed).IsTrue();
         await Assert.That(store.State.PanelStates["help"]).IsEqualTo(TuiPanelState.Visible);
     }
@@ -319,7 +319,7 @@ public class CellForgeBuiltinPanelsTests
     {
         var store = SeededStore("logs", 10);
         var services = new FakeServices().Add<UiStore>(store);
-        bool consumed = new CellForgeLogsPanel().OnKey(new UiKey(UiKeyCode.F12), Ctx(store.State, services: services));
+        bool consumed = new CellForgeLogsPanel().OnKey(new UiKey(UiKeyCode.F12), Ctx(store.State, services: services, store: store));
         await Assert.That(consumed).IsTrue();
         await Assert.That(store.State.PanelStates["logs"]).IsEqualTo(TuiPanelState.Visible);
     }

@@ -3,7 +3,6 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Sessions;
 /// <summary>
@@ -28,20 +27,20 @@ namespace Harbor.Ui.Framework.Sessions;
 public sealed class SessionSwitcher
 {
     private readonly IAgent _agent;
+    private readonly IAgentRegistry _agents;
     private readonly ILogger<SessionSwitcher> _logger;
-    private readonly IServiceProvider _services;
     private readonly ISessionStore _sessionStore;
 
     /// <summary>Construct a <see cref="SessionSwitcher" />.</summary>
     public SessionSwitcher(
         IAgent agent,
         ISessionStore sessionStore,
-        IServiceProvider services,
+        IAgentRegistry agents,
         ILogger<SessionSwitcher> logger)
     {
         _agent = agent;
         _sessionStore = sessionStore;
-        _services = services;
+        _agents = agents;
         _logger = logger;
     }
 
@@ -61,9 +60,8 @@ public sealed class SessionSwitcher
     {
         ArgumentNullException.ThrowIfNull(targetStore);
 
-        var agents = _services.GetRequiredService<IAgentRegistry>();
-        var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
-                       ?? agents.GetAllAgents().First();
+        var agentDef = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
+                       ?? _agents.GetAllAgents().First();
 
         _agent.Initialize(session, agentDef);
 

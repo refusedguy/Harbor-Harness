@@ -260,6 +260,7 @@ public sealed class ReadTool : ITool
     {
         try
         {
+            // #63 legitimate: optional per-call enrichment — see EditTool.
             if (context.Services?.GetService<ILspService>() is not { } lsp)
                 return;
             if (!lsp.SupportsFile(path))

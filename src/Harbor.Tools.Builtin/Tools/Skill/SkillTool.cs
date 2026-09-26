@@ -198,6 +198,8 @@ public sealed class SkillTool : ITool
 
         string? projectDir = null;
         var store = _store;
+        // #63 legitimate: ctor-injected primary with a per-call context
+        // fallback (same shape as LspTool).
         if (store is null && context.Services is not null)
             store = context.Services.GetService<ISessionStore>();
         if (store is not null)

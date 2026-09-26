@@ -116,6 +116,8 @@ public sealed class LspTool : ITool
         string action = args.GetProperty("action").GetString()!;
         string path = args.GetProperty("path").GetString()!;
         ILspService? lsp = _lsp;
+        // #63 legitimate: ctor-injected primary with a per-call context
+        // fallback (plugin hosts may provide LSP only via ToolContext).
         if (lsp is null && context.Services is not null)
         {
             lsp = context.Services.GetService<ILspService>();
