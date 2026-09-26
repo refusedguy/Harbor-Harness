@@ -6,7 +6,7 @@
 > - Solutions are `.slnx` files: `Harbor.slnx` (main) and `Harbor.Samples.slnx`; no plain `.sln`.
 > - Tests must be run **per project as plain executables** (`dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`); `dotnet test` discovers ZERO tests under the Microsoft.Testing.Platform (MTP) bridge in this repo (host exits 5 with a silent discovery error) and whole-solution invocations are doubly broken — do not use either.
 > - Known/flaky tests historically cited (verify against `docs/ROADMAP.md` before counting on current numbers): Avalonia-12 headless `MarkdownRenderer`/`CodeBlock`/`TypewriterStreamingText` ("Stack empty" in `SetInheritanceParent`), the IPC named-pipe event-stream class on Linux (self-skips unless `HARBOR_IPC_EVENTSTREAM=1`), and an occasional `ChatView_Inflates` ListBoxItem `StaticResource` flake.
-> - ConsoleEx (second in-process terminal renderer) MVP is complete and opt-in via `HARBOR_TUI=consoleex`; MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
+> - CellForge (+ Engine — fullscreen cell-diff terminal renderer) is the canonical interactive backend (`HARBOR_TUI=cellforge`, `consoleex` kept as legacy alias); AnsiPlain covers ANSI-streaming + plain pipes/CI; MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
 >
 > **Связанные документы:**
 > - [.ai-factory/DESCRIPTION.md](./.ai-factory/DESCRIPTION.md) — спецификация проекта и стек
@@ -28,8 +28,8 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 2. Read [docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md) for the canonical
    Clean / Hexagonal / Onion layering rules. **Before adding any `<ProjectReference>` to
    a `.csproj`, check the allowed/forbidden matrix in §2.** The rules are mechanically
-   enforced by `tests/Harbor.Architecture.Tests/` (46 tests: 21 reflection-based +
-   25 NetArchTest-based — see §5 of that doc) — run it (`dotnet run --project
+   enforced by `tests/Harbor.Architecture.Tests/` (see §5–§6 of that doc for the
+   current rule/file counts) — run it (`dotnet run --project
    tests/Harbor.Architecture.Tests/ -c Release --no-build`) after every
    project-reference change.
 3. Read [docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md) for known
@@ -49,22 +49,21 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 ```
 src/Harbor.Abstractions/              — base contracts (zero deps)
 src/Harbor.Abstractions.Contracts/    — models, events, ValueObjects, PermissionRuleset
-src/Harbor.Core/                      — EventBus, AgentLoop, config, onboarding, compaction
+src/Harbor.Core/                      — deprecated thin facade (FacadeMarker only; AgentLoop/config/onboarding/compaction live in Harbor.Application, EventBus in Harbor.Registries)
 src/Harbor.Registries/                — Agent/Tool/Provider registries (builtin agents: code, plan, explore)
 src/Harbor.Application/               — sessions, permissions, configuration
 src/Harbor.Hosting/                   — DI modules wired by the CLI (TuiModule, StorageModule, CoreModule, ...)
 src/Harbor.Terminal.Abstractions/     — ITuiRenderer, ITuiRenderContext, BaseTuiRenderer, views/VMs
-src/Harbor.Tui.Ansi/                  — ANSI streaming renderer
-src/Harbor.Tui.Plain/                 — plain text renderer (pipes/CI, HARBOR_TUI=plain)
-src/Harbor.Tui.ConsoleEx/             — second in-process terminal renderer (raw-mode input,
-                                        cell-diff output; opt-in via HARBOR_TUI=consoleex)
+src/Harbor.Tui.AnsiPlain/             — unified ANSI-streaming + plain-text renderer (pipes/CI via HARBOR_TUI=plain; merges former Ansi/Plain backends)
+src/Harbor.Tui.CellForge(+.Engine)/   — canonical fullscreen cell-diff renderer (HARBOR_TUI=cellforge; `consoleex` is a legacy alias)
+src/Harbor.Tui.NickConsoleEx/         — SharpConsoleUI-based renderer (HARBOR_TUI=nickconsoleex; complements CellForge)
 src/Harbor.Tui.Notifications/         — desktop OS notifications renderer
-src/Harbor.Ui.Framework*/             — TEA-style UI state/reducers/projection/services shared by apps
+src/Harbor.Ui.Framework{,.Abstractions,.State,.Reducers,.ViewModels,.Rendering,.Projection,.Services,.Sessions}/ — TEA-style UI state/reducers/projection/services shared by apps (shell csproj is a meta-package)
 src/Harbor.Desktop.{Abstractions,Shared,Animations} — desktop app support
 src/Harbor.Storage.{Jsonl,Memory,Sqlite}/ — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
-src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/ — LLM clients + shared-source compat layer
+src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible}/ — LLM clients; Harbor.Providers.Shared/ is linked-source (no .csproj, compiled into each provider)
 src/Harbor.Tools.Builtin/             — 18 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
-                                        ls/task/webfetch/patch/notebook/ripgrep/tree/mcp/skill/read_mcp_resource/mcp_prompt)
+                                        ls/task/webfetch/patch/notebook/ripgrep/tree/mcp/skill/read_mcp_resource/mcp_prompt/lsp)
 src/Harbor.Plugins.*                  — plugin hosting split: Abstractions, Compilation (Roslyn),
                                         Instantiation, Registration, Hosting, Runtime (CS loader),
                                         Host, Storage
@@ -84,9 +83,9 @@ samples/plugins/                      — 4 DLL-based sample plugins (WebSearch,
 samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPlugin.cs), compiled at startup
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
-specs/                                — ~17 design specification documents
-docs/                                 — ~35 docs (architecture, tools catalog, roadmap, patterns, ...)
-tests/                                — 27 test/bench project directories (25 runnable TUnit suites)
+docs/specs/                           — 19 design specification documents (top-level specs/ no longer exists)
+docs/                                 — 60 docs (architecture, tools catalog, roadmap, patterns, ...)
+tests/                                — 36 test/bench project directories
                                         incl. shared Harbor.TestKit and Harbor.Benchmarks
 ```
 
@@ -377,7 +376,7 @@ CS plugins are compiled in-memory via Roslyn at startup. Cached by source SHA-25
 
 ### Add a TUI plugin (DLL-based, legacy path)
 
-1. Create a class library project referencing `Harbor.Tui.Abstractions`.
+1. Create a class library project referencing `Harbor.Terminal.Abstractions` (`Harbor.Tui.Abstractions` is a deprecated facade slated for removal in v0.6 — do not use for new code).
 2. Implement `ITuiPlugin` — set `Name`, `Version`, `Description`.
 3. In `RegisterTui(ViewRegistry, ViewModelRegistry)`, register any custom views / view models.
 4. Register *before* `BaseTuiRenderer.InitializeAsync` to override builtins.
@@ -663,7 +662,7 @@ dotnet run --project apps/Harbor.App.Cli -- sessions
 
 ```bash
 $ dotnet build
-src/Harbor.Core/Agents/AgentLoop.cs(123,45): error MA0046: Unsafe code is not allowed.
+src/Harbor.Application/Agents/AgentLoop.cs(123,45): error MA0046: Unsafe code is not allowed.
 ```
 
 `MA0046` is the analyzer that forbids `unsafe`. Even though we have `0% unsafe`,
