@@ -36,11 +36,19 @@ public sealed record RendererPerformanceContract(
         new("ansi",
             new ThroughputContract(MinimumEventsPerSec: 20_000),
             new LatencyContract(P99Budget: TimeSpan.FromMilliseconds(1)),
-            new MemoryContract(MaxAllocatedMbPerThousandEvents: 0.5)),
+            // Perf-gate note (issue #77, PR #146): every RenderAsync folds the
+            // event into the DI-shared UiStore so the pipeline can restore the
+            // snapshot across renderer swaps. The fold costs ~0.55 MB/1k ev on
+            // its own (repo-measured 567.48 KB per 1000 TextDelta,
+            // docs/.kilo-docs/sprints/performance/benchmark.md §2), so the
+            // ceiling matches cellforge (1.0, same TEA fold path) instead of
+            // the pre-store 0.5 budget. CI steady-state is ~0.8 MB/1k ev.
+            new MemoryContract(MaxAllocatedMbPerThousandEvents: 1.0)),
         new("plain",
             new ThroughputContract(MinimumEventsPerSec: 25_000),
             new LatencyContract(P99Budget: TimeSpan.FromMilliseconds(1)),
-            new MemoryContract(MaxAllocatedMbPerThousandEvents: 0.5)),
+            // Same TEA-fold price as ansi above (shared AnsiPlain pipeline).
+            new MemoryContract(MaxAllocatedMbPerThousandEvents: 1.0)),
         new("cellforge",
             new ThroughputContract(MinimumEventsPerSec: 10_000),
             new LatencyContract(P99Budget: TimeSpan.FromMilliseconds(2)),

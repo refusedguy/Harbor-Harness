@@ -19,6 +19,14 @@ Every renderer backend declares three ceilings
 `renderer-perf-gate` CI job runs `tests/Harbor.Tui.PerfTests` and the PR
 template check requires a contract entry.
 
+> **Memory-ceiling note (2026-09, #146):** `ansi`/`plain` moved 0.5 → 1.0 MB/1k ev.
+> Since #146 every `RenderAsync` folds the event into the DI-shared `UiStore`
+> (cross-renderer swap restore); the fold alone costs ~0.55 MB/1k ev
+> (repo-measured 567.48 KB per 1000 `TextDelta`,
+> `docs/.kilo-docs/sprints/performance/benchmark.md` §2), and CI steady-state
+> sits at ~0.8 MB/1k ev. Parity with `cellforge` (1.0, same TEA fold path) —
+> the honest price of the feature, not a regression.
+
 ## Baselines (dev branch, 2026-08-28, Release, Linux x64)
 
 Reproduce locally:
