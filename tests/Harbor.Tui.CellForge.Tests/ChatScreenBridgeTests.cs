@@ -414,6 +414,78 @@ public class ChatScreenBridgeTests
         await Assert.That(bridge.TryTakePendingImage(out _)).IsFalse();
     }
 
+    [Test]
+    public async Task ContextSegment_LightsUp_FromAgentStartWindow_AndSessionStats()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel();
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        // None-semantics: no window known yet → segment absent, not zero.
+        await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
+
+        var model = new ModelInfo("hy3", "kilocode", "Kilocode Hy3", 10_000, 4096, false, false, true, Pricing.Unknown, "openai");
+        await bus.PublishAsync(new AgentStartEvent("s1", [], model));
+
+        // Window alone invents no usage — still dark until totals arrive.
+        await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
+
+        var metadata = new SessionMetadata(0.0123m, 7400, 700, 0, 0, 0, 2, null);
+        await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
+
+        await Assert.That(status.TryGetContextTokens(out var used)).IsTrue();
+        await Assert.That(used).IsEqualTo(8100); // canonical #75: accumulated in+out
+        await Assert.That(status.ContextWindow).IsEqualTo(10_000);
+
+        // No model string set by the bridge → ctx bar is the first segment:
+        // 81% → warn band, 5 of 6 cells (same pin as StatusSegmentBarTests).
+        var ws = new StatusSeg[8];
+        int n = status.BuildSegments(ws);
+        await Assert.That(n).IsEqualTo(3); // ctx bar + tokens + cost
+        await Assert.That(ws[0].Text).IsEqualTo("▰▰▰▰▰▱");
+        await Assert.That(ws[0].Accent).IsEqualTo(StatusAccent.Warning);
+    }
+
+    [Test]
+    public async Task ContextSegment_StatsBeforeWindow_LightsUp_WhenModelArrives()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel();
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        var metadata = new SessionMetadata(0.001m, 1000, 200, 0, 0, 0, 1, null);
+        await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
+        await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
+
+        var model = new ModelInfo("hy3", "kilocode", "Kilocode Hy3", 10_000, 4096, false, false, true, Pricing.Unknown, "openai");
+        await bus.PublishAsync(new AgentStartEvent("s1", [], model));
+
+        // Stored totals re-apply against the late window — no new stats needed.
+        await Assert.That(status.TryGetContextTokens(out var used)).IsTrue();
+        await Assert.That(used).IsEqualTo(1200);
+    }
+
+    [Test]
+    public async Task ContextSegment_UnknownWindow_StaysDark()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel();
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        var model = new ModelInfo("m", "p", "M", 0, 4096, false, false, true, Pricing.Unknown, "openai");
+        await bus.PublishAsync(new AgentStartEvent("s1", [], model));
+
+        var metadata = new SessionMetadata(0.001m, 1000, 200, 0, 0, 0, 1, null);
+        await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
+
+        await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
+        // Token/cost text still flows — only the ctx segment stays dark.
+        await Assert.That(status.Tokens).IsEqualTo("1k↑ 200↓");
+    }
+
     private static int VisibleChars(ChatTimelinePanel panel)
     {
         int total = 0;

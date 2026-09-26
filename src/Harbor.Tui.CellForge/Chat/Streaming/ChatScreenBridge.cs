@@ -64,6 +64,44 @@ public sealed class ChatScreenBridge : IDisposable
     /// whether AgentEnd flags the run as errored or succeeded (mascot moods).</summary>
     private bool _runHadError;
 
+    // Context-window feed (#75 follow-up): AgentStartEvent carries the resolved
+    // ModelInfo (AgentLoop resolves it from the provider registry up front, so
+    // the window arrives on the event bus — no provider/session lookup from the
+    // TUI layer). SessionStatsEvent carries cumulative totals; together they
+    // feed StatusViewModel.SetContext so the ctx bar segment lights up. Both
+    // halves are Domain events; no Core/Application reference is needed here.
+    private int _contextWindow;
+    private long _usedTokens;
+    private bool _hasUsage;
+
+    private void RememberContextWindow(ModelInfo? model)
+    {
+        if (model is null)
+        {
+            return; // legacy emitter — keep the last known window
+        }
+
+        if (model.ContextWindow <= 0)
+        {
+            _contextWindow = 0;
+            _status.ClearContext();
+            return;
+        }
+
+        _contextWindow = model.ContextWindow;
+        RefreshContextSegment();
+    }
+
+    private void RefreshContextSegment()
+    {
+        if (_contextWindow <= 0 || !_hasUsage)
+        {
+            return;
+        }
+
+        _status.SetContext(_usedTokens > int.MaxValue ? int.MaxValue : (int)_usedTokens, _contextWindow);
+    }
+
     private readonly record struct PendingLine(string Text, long AtMs);
 
     private sealed class ToolCard
@@ -145,6 +183,7 @@ public sealed class ChatScreenBridge : IDisposable
         {
             case AgentStartEvent started:
                 ReplayHistory(started.Messages);
+                RememberContextWindow(started.Model);
                 _runHadError = false;
                 _status.Phase = AgentPhase.Auto;
                 _status.Mode = StatusBarMode.Running;
@@ -225,6 +264,9 @@ public sealed class ChatScreenBridge : IDisposable
 
             case SessionStatsEvent stats:
                 _status.SetUsage(stats.Metadata.TokensInput, stats.Metadata.TokensOutput, stats.Metadata.Cost);
+                _usedTokens = (long)stats.Metadata.TokensInput + stats.Metadata.TokensOutput;
+                _hasUsage = true;
+                RefreshContextSegment();
                 break;
 
             case AgentErrorEvent error:
