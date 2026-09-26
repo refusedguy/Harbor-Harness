@@ -82,12 +82,13 @@ Done already: `{Ui: TerminalUiState, Chat: ChatDomainState}` composition,
 - No namespace renames of existing public types (arch tests pin
   e.g. `Harbor.Tui.CellForge.Input.UnixTermiosModeController`).
 - No `Spectre`/contrib changes (out of scope, owner differs).
-- No product-behavior changes: mouse-grab vs paste-only is decided in #36;
+- No product-behavior changes: mouse-grab vs paste-only decided in #36
+  (full grab — scroll/clicks inside Harbor, Shift/palette for clipboard);
   auto-title hatch (`HARBOR_NO_AUTOTITLE`) stays.
 - No new `.csproj` without updating `FullLayerMatrixTests.AllSrcAssemblies`
   + `CellForgeGraphRules` + `Harbor.slnx` in the same commit.
 
 ## 7. Open decisions for @refusedguy
 
-- #36 (mouse grab), #21 (two-process go/no-go for v1.0), #33 Q1–Q3.
+- #36 decided (full mouse grab), #21 (two-process go/no-go for v1.0), #33 Q1–Q3.
 - Public NuGet from day one vs internal until API stabilizes (#33 Q2).
