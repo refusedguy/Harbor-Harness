@@ -19,8 +19,8 @@ namespace Harbor.Tui.CellForge.Panels;
 //     Purity: every Build reads only ctx.State (+ DI services for help/logs,
 //     the filesystem for file-tree) and returns freshly allocated rows — safe
 //     to call from the render thread. OnKey never mutates UiState; state
-//     transitions go through UiStore.Dispatch resolved from ctx.Services. A
-//     null service provider degrades gracefully: the key is still reported as
+//     transitions go through the explicit ctx.Store (#63). A null store /
+//     service provider degrades gracefully: the key is still reported as
 //     consumed, help/logs render fallback rows.
 // </remarks>
 
@@ -210,6 +210,8 @@ public sealed class CellForgeHelpPanel : IPanelProvider
         rows.Add("  Esc        quit");
         rows.Add(string.Empty);
         rows.Add("Panels");
+        // #63 legitimate: framework-created panels cannot take DI — the
+        // registry lookup stays on ctx.Services (UiStore travels via ctx.Store).
         var registry = ctx.Services?.GetService<IPanelRegistry>();
         if (registry is null || registry.All.Count == 0)
         {
@@ -246,7 +248,8 @@ public sealed class CellForgeHelpPanel : IPanelProvider
     {
         if (key.Code == UiKeyCode.Char && key.Character == '?')
         {
-            if (ctx.Services?.GetService<UiStore>() is UiStore store)
+            // #63: explicit store from the host (no Services lookup).
+            if (ctx.Store is UiStore store)
             {
                 _ = store.Dispatch(new UiMsg.TogglePanel(Id));
             }
@@ -283,6 +286,8 @@ public sealed class CellForgeLogsPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
+        // #63 legitimate: same as above — diagnostics panel is host-registered,
+        // unreachable via ctor on a framework-created panel instance.
         var panel = ctx.Services?.GetService<IDiagnosticsPanel>();
         if (panel is null)
         {
@@ -307,7 +312,8 @@ public sealed class CellForgeLogsPanel : IPanelProvider
     {
         if (key.Code == UiKeyCode.F12)
         {
-            if (ctx.Services?.GetService<UiStore>() is UiStore store)
+            // #63: explicit store from the host (no Services lookup).
+            if (ctx.Store is UiStore store)
             {
                 _ = store.Dispatch(new UiMsg.TogglePanel(Id));
             }
@@ -403,7 +409,7 @@ public sealed class CellForgeFileTreePanel : IPanelProvider
                         _cursor = 0;
                     }
                 }
-                else if (ctx.Services?.GetService<UiStore>() is UiStore store)
+                else if (ctx.Store is UiStore store)
                 {
                     _ = store.Dispatch(new UiMsg.KeyInput(ChatAction.Submit, UiKey.ForChar('\r')));
                 }

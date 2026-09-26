@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Sessions;
+using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Cli.Commands;
 /// <summary>
 ///     <c>harbor run task agent=&lt;name&gt; &lt;prompt&gt;</c> — execute a sub-agent
@@ -49,8 +50,11 @@ public static class TaskRunRunner
             return 2;
         }
 
-        var agents = services.GetService(typeof(IAgentRegistry)) as IAgentRegistry;
-        var runner = services.GetService(typeof(ISubAgentRunner)) as ISubAgentRunner;
+        // #63: CLI-command entry adjacent to the composition root; both deps
+        // are optional (minimal hosts lack the sub-agent runtime), so
+        // GetService + graceful degradation — not GetRequiredService.
+        var agents = services.GetService<IAgentRegistry>();
+        var runner = services.GetService<ISubAgentRunner>();
         if (agents is null || runner is null)
         {
             await stderr.WriteLineAsync("Sub-agent runtime is not available in this host composition.").ConfigureAwait(false);

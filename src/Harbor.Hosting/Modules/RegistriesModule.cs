@@ -94,7 +94,12 @@ internal static class RegistriesModule
 
 #if HARBOR_WITH_PLUGINS
         services.AddSingleton(sp => new PluginReloadService(
-            sp,
+            sp.GetRequiredService<IToolRegistry>(),
+            sp.GetRequiredService<IProviderRegistry>(),
+            sp.GetRequiredService<IAgentRegistry>(),
+            sp.GetRequiredService<PanelRegistry>(),
+            sp.GetRequiredService<IEventBus>(),
+            sp.GetRequiredService<ILoggerFactory>(),
             ctx.Options.HarborDir,
             ctx.Options.Configuration ?? new ConfigurationBuilder().Build(),
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<PluginReloadService>()));

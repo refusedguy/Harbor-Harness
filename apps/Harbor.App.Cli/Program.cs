@@ -170,11 +170,54 @@ public static class Program
         {
             _logger.LogWarning("Startup script failed: {Error}", scriptResult.Error);
         }
-        var runner = new ReplRunner(host.Services.GetRequiredService<ILogger<ReplRunner>>());
-        int exitCode = await runner.RunInteractiveAsync(host.Services).ConfigureAwait(false);
+        var runner = CreateRunner(host.Services);
+        int exitCode = await runner.RunInteractiveAsync().ConfigureAwait(false);
         _logger.LogInformation("Interactive mode ended with exit code {ExitCode}", exitCode);
         await StopIpcAsync(host.Services).ConfigureAwait(false);
         return exitCode;
+    }
+
+    /// <summary>
+    ///     Composition root for the REPL graph (#63): every ReplRunner
+    ///     singleton resolves HERE, once — the runner itself never touches
+    ///     the container (except the host provider forwarded to interactive
+    ///     renderers, whose public contract demands it).
+    /// </summary>
+    private static ReplRunner CreateRunner(IServiceProvider services)
+    {
+        // Plugin hot-reload: resolving the FS watcher glue starts it.
+        // Its disposal rides on the host container teardown.
+        _ = services.GetService<Harbor.Hosting.PluginAutoReloader>();
+
+        // Deferred CellForge screens (see CellForgeScreens): stdin/screens
+        // resolve only when CellForge mode is actually entered.
+        Repl.CellForgeScreens Screens() => new(
+            services.GetRequiredService<Harbor.Tui.CellForge.Streaming.ScreenSession>(),
+            services.GetRequiredService<Harbor.Tui.CellForge.Widgets.ChatScreen>(),
+            services.GetRequiredService<Harbor.Tui.CellForge.Streaming.ChatScreenBridge>(),
+            services.GetRequiredService<Harbor.Tui.CellForge.Input.TerminalInputSource>(),
+            services.GetRequiredService<Harbor.Tui.CellForge.Rendering.ITerminalBackend>(),
+            services.GetRequiredService<Harbor.Abstractions.Permissions.IApprovalCoordinator>());
+
+        return new ReplRunner(
+            services.GetRequiredService<ILogger<ReplRunner>>(),
+            services.GetRequiredService<IConfigStore>(),
+            services.GetRequiredService<AuthStore>(),
+            services.GetRequiredService<OnboardingWizard>(),
+            services.GetRequiredService<ITuiRenderer>(),
+            services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>(),
+            services.GetRequiredService<IAgent>(),
+            services.GetRequiredService<ISessionStore>(),
+            services.GetRequiredService<IAgentRegistry>(),
+            services.GetRequiredService<IProviderRegistry>(),
+            services.GetRequiredService<IToolRegistry>(),
+            services.GetRequiredService<Harbor.Abstractions.Permissions.IPermissionService>(),
+            services.GetRequiredService<ILoggerFactory>(),
+            services.GetService<Harbor.Hosting.PluginReloadService>(),
+            services.GetService<Harbor.Hosting.Rendering.IRendererPipeline>(),
+            services.GetService<ITokenTracker>(),
+            Screens,
+            services);
     }
 
     /// <summary>
@@ -297,8 +340,8 @@ public static class Program
         {
             _logger.LogWarning("Startup script failed: {Error}", scriptResult.Error);
         }
-        var runner = new ReplRunner(host.Services.GetRequiredService<ILogger<ReplRunner>>());
-        int exitCode = await runner.RunAskAsync(host.Services, prompt).ConfigureAwait(false);
+        var runner = CreateRunner(host.Services);
+        int exitCode = await runner.RunAskAsync(prompt).ConfigureAwait(false);
         await StopIpcAsync(host.Services).ConfigureAwait(false);
         return exitCode;
     }

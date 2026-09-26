@@ -12,7 +12,6 @@ using Harbor.App.Cli.Hosting;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Harbor.Terminal.Abstractions;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Cli.Repl;
@@ -30,6 +29,18 @@ internal sealed class SlashCommandDispatcher
 {
     private readonly ILogger<SlashCommandDispatcher> _logger;
     private readonly FrozenDictionary<string, SlashCommandRegistration> _byName;
+    private readonly IToolRegistry _tools;
+    private readonly ISessionStore _sessions;
+    private readonly OnboardingWizard _wizard;
+    private readonly IPermissionService _permissions;
+
+    /// <summary>
+    ///     Optional host services (#63 legitimate: a MINIMAL host never
+    ///     registers the plugin runtime or the renderer pipeline, so their
+    ///     absence is a graceful fallback, never a missing-dependency error).
+    /// </summary>
+    private readonly Harbor.Hosting.PluginReloadService? _pluginReload;
+    private readonly Harbor.Hosting.Rendering.IRendererPipeline? _rendererPipeline;
 
     /// <summary>All registered slash commands (canonical + aliases → single registration).</summary>
     private sealed record SlashCommandRegistration(
@@ -40,7 +51,6 @@ internal sealed class SlashCommandDispatcher
 
     /// <summary>Lightweight context bag passed to command execute delegates.</summary>
     public sealed record CommandContext(
-        IServiceProvider Services,
         Action<string> Writer,
         Func<string, Task<string>>? Reader,
         Session Session,
@@ -49,21 +59,39 @@ internal sealed class SlashCommandDispatcher
         IProviderRegistry Providers,
         IConfigStore ConfigStore,
         AuthStore AuthStore,
-        IToolRegistry ToolRegistry);
+        IToolRegistry ToolRegistry,
+        ISessionStore SessionStore,
+        OnboardingWizard Wizard,
+        IPermissionService Permissions,
+        Harbor.Hosting.PluginReloadService? PluginReload = null,
+        Harbor.Hosting.Rendering.IRendererPipeline? RendererPipeline = null);
 
-    public SlashCommandDispatcher(ILogger<SlashCommandDispatcher> logger)
+    public SlashCommandDispatcher(
+        ILogger<SlashCommandDispatcher> logger,
+        IToolRegistry tools,
+        ISessionStore sessions,
+        OnboardingWizard wizard,
+        IPermissionService permissions,
+        Harbor.Hosting.PluginReloadService? pluginReload = null,
+        Harbor.Hosting.Rendering.IRendererPipeline? rendererPipeline = null)
     {
         _logger = logger;
+        _tools = tools;
+        _sessions = sessions;
+        _wizard = wizard;
+        _permissions = permissions;
+        _pluginReload = pluginReload;
+        _rendererPipeline = rendererPipeline;
         _byName = BuildRegistry();
     }
 
     public async Task<SlashCommandOutcome> HandleAsync(
-        string input, IServiceProvider sp, ITuiRenderer renderer,
+        string input, ITuiRenderer renderer,
         IAgent agent, IAgentRegistry agentRegistry,
         IConfigStore configStore, AuthStore authStore,
         IProviderRegistry providers, Session session)
     {
-        return await HandleCoreAsync(input, sp,
+        return await HandleCoreAsync(input,
             writer: msg => _ = renderer.WriteLineAsync(msg),
             reader: async prompt =>
             {
@@ -79,7 +107,7 @@ internal sealed class SlashCommandDispatcher
     ///     <see cref="ITuiRenderer" />.
     /// </summary>
     public Task<SlashCommandOutcome> HandleCoreAsync(
-        string input, IServiceProvider sp,
+        string input,
         Action<string> writer, Func<string, Task<string>> reader,
         IAgent agent, IAgentRegistry agentRegistry,
         IConfigStore configStore, AuthStore authStore,
@@ -104,8 +132,8 @@ internal sealed class SlashCommandDispatcher
             return Task.FromResult(SlashCommandOutcome.Continue);
         }
 
-        var ctx = new CommandContext(sp, writer, reader, session, agent, agentRegistry, providers,
-            configStore, authStore, sp.GetRequiredService<IToolRegistry>());
+        var ctx = new CommandContext(writer, reader, session, agent, agentRegistry, providers,
+            configStore, authStore, _tools, _sessions, _wizard, _permissions, _pluginReload, _rendererPipeline);
 
         return ExecuteRegisteredAsync(reg, ctx, args);
     }
@@ -195,7 +223,7 @@ internal sealed class SlashCommandDispatcher
 
         Register("setup", [], null, async (ctx, _) =>
         {
-            var result = await ctx.Services.GetRequiredService<OnboardingWizard>()
+            var result = await ctx.Wizard
                 .RunAsync(ctx.Reader!, ctx.Writer).ConfigureAwait(false);
             return result;
         });
@@ -227,15 +255,15 @@ internal sealed class SlashCommandDispatcher
         Register("permissions", [], null, (ctx, _) =>
         {
             return new PermissionsCommand(
-                    ctx.Services.GetRequiredService<IPermissionService>(),
-                    ctx.Services.GetRequiredService<IAgentRegistry>(),
+                    ctx.Permissions,
+                    ctx.AgentRegistry,
                     ctx.ConfigStore, ctx.Writer, ctx.Agent, ctx.Session)
                 .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
         });
 
         Register("providers", [], null, async (ctx, _) =>
         {
-            var providers = ctx.Services.GetRequiredService<IProviderRegistry>();
+            var providers = ctx.Providers;
             ctx.Writer($"Providers ({providers.GetRegisteredProviderIds().Count}):");
             foreach (var id in providers.GetRegisteredProviderIds())
             {
@@ -248,7 +276,7 @@ internal sealed class SlashCommandDispatcher
 
         Register("sessions", [], null, async (ctx, _) =>
         {
-            var store = ctx.Services.GetRequiredService<ISessionStore>();
+            var store = ctx.SessionStore;
             var result = await store.ListAsync().ConfigureAwait(false);
             if (result.IsSuccess)
                 foreach (var s in result.Value)
@@ -258,7 +286,7 @@ internal sealed class SlashCommandDispatcher
 
         Register("tree", [], null, static async (ctx, _) =>
         {
-            var store = ctx.Services.GetRequiredService<ISessionStore>();
+            var store = ctx.SessionStore;
             var built = await SessionTreeRunner.BuildAsync(store, ctx.Session.Id).ConfigureAwait(false);
             if (built.IsFailure)
             {
@@ -282,7 +310,7 @@ internal sealed class SlashCommandDispatcher
                 return Result.Success();
             }
 
-            var outcome = await new SessionForkRunner(ctx.Services.GetRequiredService<ISessionStore>())
+            var outcome = await new SessionForkRunner(ctx.SessionStore)
                 .ForkAsync(args[0], args[1]).ConfigureAwait(false);
             if (outcome.IsFailure)
             {
@@ -296,7 +324,8 @@ internal sealed class SlashCommandDispatcher
 
         Register("plugins", [], null, (ctx, _) =>
         {
-            if (ctx.Services.GetService<Harbor.Hosting.PluginReloadService>() is { } reload)
+            // Optional host service (absent on MINIMAL — see the field note).
+            if (ctx.PluginReload is { } reload)
             {
                 return RunPluginReloadAsync(reload, ctx.Writer);
             }
@@ -319,7 +348,8 @@ internal sealed class SlashCommandDispatcher
 
         Register("renderer", [], null, (ctx, _) =>
         {
-            if (ctx.Services.GetService<Harbor.Hosting.Rendering.IRendererPipeline>() is not { } pipeline)
+            // Optional host service (absent on headless builds — see the field note).
+            if (ctx.RendererPipeline is not { } pipeline)
             {
                 ctx.Writer("Renderer pipeline: not available in this build.");
                 return Task.FromResult(Result.Success());
