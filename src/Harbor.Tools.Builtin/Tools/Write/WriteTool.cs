@@ -78,7 +78,7 @@ public sealed class WriteTool : ITool
                 $"content too large ({content.Length} chars; max {MaxContentChars}).");
 
         var resolvedPath = ToolPaths.Resolve(rawPath)
-            .Bind(p => SymlinkGuard.Check(p).Map(_ => p));
+            .Bind(p => SymlinkGuard.Check(p).Map(() => p));
         if (resolvedPath.IsFailure)
             return ToolResult.Error(resolvedPath.Error);
         string path = resolvedPath.Value;
