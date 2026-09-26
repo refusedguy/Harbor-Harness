@@ -52,6 +52,7 @@ Configured MCP servers are intentional — prefer them over raw alternatives whe
 - `context7_*` for external library/framework docs instead of guessing or stale training data (resolve library ID first, one concept per query).
 - Project-local MCPs (`github`, `filesystem`, `chromeDevtools`) for their domains instead of shell workarounds.
 Do not re-read whole files when a `graft` crux or `serena` symbol body already answers. After big code changes run `graft build`.
+- `tools/pr-ops.sh` for PR/CI routine (`pr-sweep`, `pr-fails`, `pr-build-errors`, `pr-mergeable`, `job-log`, `pr-merge-if-green`) instead of hand-rolled `gh` invocations.
 
 ## Project structure quick reference
 
