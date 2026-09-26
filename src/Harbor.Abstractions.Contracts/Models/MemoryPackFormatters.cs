@@ -1,5 +1,17 @@
+using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
 using MemoryPack;
 namespace Harbor.Abstractions.Models;
+/// <summary>
+///     Source-generation context for the JSON embedded in MemoryPack payloads.
+///     AOT/trim-safe: the NativeAOT compiler (ILC) pre-generates the
+///     <see cref="JsonElement" /> converter from this context, so the
+///     formatter below never falls back to runtime reflection (IL2026).
+/// </summary>
+[JsonSerializable(typeof(JsonElement))]
+internal sealed partial class ContractsJsonContext : JsonSerializerContext
+{
+}
 /// <summary>
 ///     Custom MemoryPack formatter for <see cref="JsonElement" />.
 ///     Stores the JSON as a length-prefixed string (UTF-16), parsed back on deserialize.
@@ -7,28 +19,27 @@ namespace Harbor.Abstractions.Models;
 ///     round-trip semantics correct.
 /// </summary>
 /// <remarks>
-///     This formatter is registered lazily via the static constructor hook on
-///     <see cref="ToolCallPart" /> (MemoryPack's <c>static partial void StaticConstructor()</c>),
-///     so any MemoryPackable type that includes a <see cref="JsonElement" /> member will
-///     pick it up automatically once <see cref="ToolCallPart" /> is touched.
+///     Registration is eager via the module initializer below — there is no
+///     implicit touch-order dependency on <see cref="ToolCallPart" />. Any
+///     MemoryPackable type holding a <see cref="JsonElement" /> member
+///     (tool-call args, execution events, permission requests) round-trips
+///     regardless of which type is serialized first.
 /// </remarks>
 public sealed class JsonElementMemoryPackFormatter : MemoryPackFormatter<JsonElement>
 {
-    /// <summary>
-    ///     Cached JSON serializer options. Re-using a single instance avoids the per-call
-    ///     reflection cache lookup that <see cref="JsonSerializer.Serialize(object?, JsonSerializerOptions?)" />
-    ///     performs when passed a null options instance. The default web options match the
-    ///     previous implicit behavior.
-    /// </summary>
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
-
     /// <inheritdoc />
+    /// <remarks>
+    ///     The <see cref="JsonElement" /> converter resolves from
+    ///     <see cref="ContractsJsonContext" /> (source-generated, trim/AOT-safe);
+    ///     the reflection-based Web defaults must not be used here (IL2026
+    ///     under NativeAOT).
+    /// </remarks>
     public override void Serialize<TBufferWriter>(ref MemoryPackWriter<TBufferWriter> writer, scoped ref JsonElement value)
     {
         // JsonElement is backed by a pooled JsonDocument; serialize to a string.
         // This is the simplest safe path; for high-throughput scenarios, an
         // UTF-8 based path could be added (requires MemoryPack internal API).
-        string json = JsonSerializer.Serialize(value, SerializerOptions);
+        string json = JsonSerializer.Serialize(value, ContractsJsonContext.Default.JsonElement);
         writer.WriteString(json);
     }
 
@@ -42,9 +53,9 @@ public sealed class JsonElementMemoryPackFormatter : MemoryPackFormatter<JsonEle
             return;
         }
 
-        // Parse and Clone to detach from the underlying JsonDocument (which we dispose below).
-        using var doc = JsonDocument.Parse(json);
-        value = doc.RootElement.Clone();
+        // Deserialize<JsonElement> materializes an owned element (backed by its
+        // own document), so no Clone()/Dispose dance is needed here.
+        value = JsonSerializer.Deserialize(json, ContractsJsonContext.Default.JsonElement);
     }
 
     /// <summary>
@@ -58,4 +69,15 @@ public sealed class JsonElementMemoryPackFormatter : MemoryPackFormatter<JsonEle
             MemoryPackFormatterProvider.Register(new JsonElementMemoryPackFormatter());
         }
     }
+
+    /// <summary>
+    ///     Eager, order-independent registration: runs when the Contracts
+    ///     assembly loads, before any serialization path touches
+    ///     <see cref="ToolCallPart" /> or the other <see cref="JsonElement" />
+    ///     holders. <see cref="EnsureRegistered" /> stays the idempotent
+    ///     explicit entry point (also kept for the
+    ///     <c>ToolCallPart.StaticConstructor</c> hook).
+    /// </summary>
+    [ModuleInitializer]
+    internal static void RegisterOnLoad() => EnsureRegistered();
 }
