@@ -102,9 +102,9 @@ public class SessionManagerAtomicityTests
 
     private sealed class NopLogger<T> : ILogger<T>
     {
-        IDisposable? ILogger.BeginScope<TState>(TState state) where TState : notnull => null;
-        bool ILogger.IsEnabled(LogLevel logLevel) => false;
-        void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) { }
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) { }
+        public bool IsEnabled(LogLevel logLevel) => false;
+        public IDisposable BeginScope<TState>(TState state) => null!;
     }
 
     private static SessionManager CreateManager(TestSessionStore store, AgentDefinition agentDef)
