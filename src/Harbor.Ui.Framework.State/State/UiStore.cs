@@ -184,7 +184,10 @@ public sealed class UiStore
     public void BindSession(string model, string provider, string agentName) => Transition(s => s with { Model = model, Provider = provider, AgentName = agentName });
 
     /// <summary>Reset to a fresh empty state (e.g. on clear-screen).</summary>
-    public void Reset() => Transition(_ => new UiState());
+    public void Reset()
+    {
+        Dispatch(new UiMsg.Reset());
+    }
 }
 
 /// <summary>Event args carrying the new immutable <see cref="UiState" /> snapshot.</summary>

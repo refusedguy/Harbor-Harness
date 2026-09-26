@@ -82,4 +82,16 @@ public class HostMsgReducerTests
         var result = UiReducer.Update(new UiState(), new UiMsg.Quit());
         await Assert.That(result.State.ShouldQuit).IsTrue();
     }
+
+    [Test]
+    public async Task Reset_ReturnsFreshState()
+    {
+        var dirty = UiReducer.Update(new UiState(), new UiMsg.ConfigureRuntime("m", "p", "code")).State;
+        dirty = UiReducer.Update(dirty, new UiMsg.AppendLine(ChatRole.User, "hi")).State;
+
+        var result = UiReducer.Update(dirty, new UiMsg.Reset());
+
+        await Assert.That(result.State).IsEqualTo(new UiState());
+        await Assert.That(result.Effect).IsTypeOf<TuiEffect.None>();
+    }
 }
