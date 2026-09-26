@@ -685,16 +685,22 @@ public sealed class AgentLoop : IAgentLoop
     }
 
     /// <summary>
+    ///     Frozen empty-JSON-object element shared by every malformed-call
+    ///     placeholder. Same convention as <see cref="StreamingCoalescer" />'s
+    ///     zero-delta empty-args element: the backing <see cref="JsonDocument" />
+    ///     is never disposed (process-lifetime state), so the element stays
+    ///     valid for all consumers; concurrent reads are safe because parsed
+    ///     JSON is immutable. Avoids a per-call <c>Parse("{}") + Clone()</c>.
+    /// </summary>
+    private static readonly JsonElement EmptyMalformedArgsElement = JsonDocument.Parse("{}").RootElement;
+
+    /// <summary>
     ///     Placeholder args for a malformed tool call's assistant-side part.
     ///     The real arguments were un-parseable; the error tool_result carries
     ///     the diagnostics, while this keeps the tool_call ↔ tool_result
     ///     pairing providers require.
     /// </summary>
-    private static JsonElement EmptyJsonArgs()
-    {
-        using var doc = JsonDocument.Parse("{}");
-        return doc.RootElement.Clone();
-    }
+    private static JsonElement EmptyJsonArgs() => EmptyMalformedArgsElement;
 
     /// <summary>
     ///     Build the ToolDefinition array directly, avoiding the LINQ Select().ToList() allocation
