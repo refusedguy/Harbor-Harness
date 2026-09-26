@@ -65,7 +65,7 @@ public class SkillFreshnessTests
             new SkillFreshnessEntry("gone", null, "bb"),
         ]);
 
-        await Assert.That(model.Entries.Count).IsEqualTo(3);
+        await Assert.That(model.GetEntries().Count).IsEqualTo(3);
         await Assert.That(model.StaleCount).IsEqualTo(2);
     }
 
@@ -76,7 +76,7 @@ public class SkillFreshnessTests
         model.SetSkills([new SkillFreshnessEntry("drifted", "aa", "bb")]);
         model.Clear();
 
-        await Assert.That(model.Entries.Count).IsEqualTo(0);
+        await Assert.That(model.GetEntries().Count).IsEqualTo(0);
         await Assert.That(model.StaleCount).IsEqualTo(0);
     }
 

@@ -68,7 +68,7 @@ public sealed record SkillFreshnessEntry(string Name, string? InstalledHash, str
 ///     Pure skill-freshness model (KILLER_FEATURES §2.7 Feature 10, Orca
 ///     <c>SkillFreshnessStatusPill.tsx</c>). The host refreshes the snapshot
 ///     via <see cref="SetSkills" /> (installed hashes vs lockfile hashes);
-///     the panel paints from <see cref="Entries" />. Internally locked so
+///     the panel paints from <see cref="GetEntries" />. Internally locked so
 ///     <c>Build</c> (render thread) and host refreshes stay thread-safe.
 /// </summary>
 public sealed class SkillFreshnessModel
@@ -77,14 +77,11 @@ public sealed class SkillFreshnessModel
     private List<SkillFreshnessEntry> _entries = new();
 
     /// <summary>Current snapshot (defensive copy).</summary>
-    public IReadOnlyList<SkillFreshnessEntry> Entries
+    public IReadOnlyList<SkillFreshnessEntry> GetEntries()
     {
-        get
+        lock (_gate)
         {
-            lock (_gate)
-            {
-                return new List<SkillFreshnessEntry>(_entries);
-            }
+            return new List<SkillFreshnessEntry>(_entries);
         }
     }
 

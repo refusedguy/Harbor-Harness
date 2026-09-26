@@ -50,7 +50,7 @@ public sealed class CellForgeSkillFreshnessPanel : IPanelProvider
     {
         ArgumentNullException.ThrowIfNull(ctx);
         return PanelText.Clip(
-            PanelRows.SkillFreshnessRows(_model.Entries),
+            PanelRows.SkillFreshnessRows(_model.GetEntries()),
             ctx.Width,
             ctx.Height);
     }
