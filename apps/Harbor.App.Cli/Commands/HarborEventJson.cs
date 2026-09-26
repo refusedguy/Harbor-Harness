@@ -27,7 +27,7 @@ public static class HarborEventJson
     public static string Format(HarborEvent evt)
     {
         ArgumentNullException.ThrowIfNull(evt);
-        using var buffer = new ArrayBufferWriter<byte>();
+        var buffer = new ArrayBufferWriter<byte>();
         using (var writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
