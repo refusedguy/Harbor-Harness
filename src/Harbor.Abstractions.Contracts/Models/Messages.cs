@@ -245,6 +245,22 @@ public sealed partial record ToolCallPart(
     /// <inheritdoc />
     public override string Type => "tool_call";
 
+    /// <summary>
+    ///     Create a <see cref="ToolCallPart" /> from a possibly short-lived
+    ///     <see cref="JsonElement" />. The args are cloned so the part owns
+    ///     them beyond the source <see cref="JsonDocument" /> lifetime (the
+    ///     OpenAiWire eager-materialization rule, #86/#87) — the document may
+    ///     be disposed right after this call.
+    /// </summary>
+    /// <param name="id">The tool call id (matches <see cref="ToolResultEntry.ToolCallId" />).</param>
+    /// <param name="toolName">The name of the tool to invoke.</param>
+    /// <param name="args">The raw JSON arguments (view or owned — cloned).</param>
+    public static ToolCallPart Create(string id, string toolName, JsonElement args) =>
+        new(id, toolName, CloneOwned(args));
+
+    private static JsonElement CloneOwned(JsonElement args) =>
+        args.ValueKind == JsonValueKind.Undefined ? args : args.Clone();
+
     // MemoryPack source-gen hook: register the JsonElement formatter before any
     // (de)serialization of ToolCallPart occurs. This ensures the Args member can
     // be round-tripped even though JsonElement is not natively MemoryPackable.
