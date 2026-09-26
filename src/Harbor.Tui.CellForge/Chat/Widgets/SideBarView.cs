@@ -137,8 +137,8 @@ public static class SideBarView
 
         if (state.ContextWindow > 0)
         {
-            long used = state.TokensIn + state.TokensOut;
-            int pct = (int)Math.Min(100, used * 100L / Math.Max(1, (long)state.ContextWindow));
+            // Canonical #75 definition: accumulated input+output over the window.
+            int pct = ContextUsage.PercentUsed(state.TokensIn, state.TokensOut, state.ContextWindow);
             Span<char> ctxBuf = stackalloc char[16];
             int ctxLen = 0;
             "ctx ".AsSpan().CopyTo(ctxBuf);
