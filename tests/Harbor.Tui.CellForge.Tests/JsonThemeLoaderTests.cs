@@ -15,6 +15,12 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class JsonThemeLoaderTests
 {
+    // Order hygiene (matches HotSwap/Switch/FileWatcher): several tests Apply
+    // themes to the global palette; restore Dark afterwards so later classes
+    // never observe our leftovers regardless of runner parallelism.
+    [After(Test)]
+    public void RestoreDefaultTheme() => TerminalColorPalette.Apply(HarborTheme.HarborDark);
+
     [Test]
     public async Task TryParseHex_AcceptsShortLongAndRejects()
     {
