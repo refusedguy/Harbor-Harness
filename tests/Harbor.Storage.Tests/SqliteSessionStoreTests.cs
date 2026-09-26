@@ -229,10 +229,10 @@ public class SqliteSessionStoreTests
             var fetched = await store.GetAsync(session.Id);
             await Assert.That(fetched.IsFailure).IsTrue();
 
-            // Messages are also gone (FK cascade).
+            // Messages are also gone: the session no longer exists, so the
+            // read surfaces Failure instead of a silent empty list (#84).
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
-            await Assert.That(messages.Value.Count).IsEqualTo(0);
+            await Assert.That(messages.IsFailure).IsTrue();
         }
         finally
         {
