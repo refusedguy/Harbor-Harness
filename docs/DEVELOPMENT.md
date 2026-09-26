@@ -895,6 +895,56 @@ Check if `GetScrollback_ReturnsRecentEvents` is hanging — it's skipped by defa
 - Conventional names: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, etc.
 - Run `echo $ANTHROPIC_API_KEY` to verify.
 
+## Dependency & advisory policy
+
+GitHub Actions and NuGet versions are managed by Dependabot
+(`.github/dependabot.yml`): weekly on Monday, max 10 open PRs per ecosystem.
+NuGet `minor`+`patch` updates are grouped into one PR; GitHub Actions updates
+arrive as one PR per action (no grouping — majors need individual review).
+
+### Version-pinning policy
+
+- **GitHub Actions: pin to the major version tag** (`actions/checkout@v7`,
+  `actions/setup-dotnet@v6`). Never pin `latest`/branch names; never add a
+  new action without a major tag. SHA-pinning is intentionally NOT used —
+  Dependabot tracks tags, and every workflow diff stays human-reviewable.
+- **Major bumps (vN → vN+1) always need human review**: check the action's
+  release notes for breaking changes (e.g. `upload-artifact@v4` dropped
+  implicit `if-no-files-found` behavior in the past). Minor/patch bumps of
+  trusted `actions/*`, `github/*`, and `dorny/*` actions may be merged after
+  green CI without deep review.
+- **NuGet: versions pinned centrally** in `Directory.Packages.props`
+  (Central Package Management; see `docs/CENTRAL_PACKAGE_MANAGEMENT.md`).
+  Per-project `<PackageReference>` entries stay version-less. Dependabot bumps
+  `<PackageVersion>` entries there. Transitive pinning
+  (`CentralPackageTransitivePinningEnabled`) keeps deep dependencies locked.
+
+### Review cadence
+
+- Dependabot PRs land on Monday; triage them within the week — stale action
+  PRs accumulate conflicts and hide real advisories.
+- Monthly: `dotnet list package --vulnerable` locally and confirm CI's
+  advisory report (below) is clean or has tracked suppressions.
+
+### NuGet audit advisories (NU190x)
+
+NuGet audit runs on every restore via the SDK default; advisories surface as
+`NU190x` build warnings (and fail `master`/tag builds through `--warnaserror`).
+CI additionally runs a non-blocking vulnerable-packages report in the `build`
+job (`dotnet list package --vulnerable`, `continue-on-error: true`) so the
+advisory list is visible on every PR without breaking the build.
+Known-accepted advisories must be suppressed per-project with a justification
+comment — never globally. Current example: `MessagePack` NU1902/NU1903
+(typeless-deserialization path; IPC uses it only on locally-trusted
+same-machine transport) suppressed in `Harbor.Ipc.*` with a comment in
+`Directory.Packages.props`.
+
+### Auto-merge (explicitly deferred)
+
+Dependabot auto-merge is NOT enabled. Patch/minor auto-merge for trusted
+actions stays an open option (issue #25) once merge-queue + required-checks
+stabilize; until then every Dependabot PR merges manually after green CI.
+
 ## Contributing
 
 1. Fork the repo.
