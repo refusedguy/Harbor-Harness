@@ -188,7 +188,9 @@ public class FullLayerMatrixTests
         // KeyEventMapper (Input/) translates raw keys to the State UiKey
         // vocabulary so every renderer shares one key meaning — hence State.
         ["Harbor.Ui.Framework.Rendering"] = new(Layer.Presentation,
-            ["Harbor.Ui.Framework.Projection", "Harbor.Ui.Framework.State", "Harbor.DesignSystem", "Harbor.Desktop.Animations"]),
+            ["Harbor.Ui.Framework.Projection", "Harbor.Ui.Framework.State", "Harbor.DesignSystem", "Harbor.Desktop.Animations",
+                // #75: canonical ctx% helper (ContextUsage) — Presentation → Domain is rule-conforming.
+                "Harbor.Abstractions.Contracts"]),
         // HDS v1 token catalog — standalone leaf: ZERO Harbor references. The
         // design-system package ships RgbColor (under the historical Projection
         // namespace) plus the cell-style primitives and ChatPalette, so
