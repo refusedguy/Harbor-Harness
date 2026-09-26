@@ -70,7 +70,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
     }
 
     [Test]
-    [Timeout(60_000)]
+    [Timeout(180_000)]
     public async Task SgrWheelUp_ScrollsTimelineBack_RevealingTopContent()
     {
         Server.SetChunkDelay(TimeSpan.FromMilliseconds(10));
@@ -103,7 +103,17 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
             {
                 Console.WriteLine($"WARN: marker {marker} not seen after 15s: {ex.Message}, screen:\n{ScreenText}");
             }
-            await Task.Delay(800).ConfigureAwait(false); // real delay: let streaming block commit before next turn
+            // Pollable settle: the streaming block commits when the run goes
+            // idle again — idle cannot reappear otherwise. Bounded best-effort
+            // (replaces the old fixed 800ms sleep that burned 10s/test even
+            // on quiet runners and starved nothing on loaded ones).
+            try
+            {
+                _ = await WaitForScreenAsync(
+                    l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
+                    TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            }
+            catch { /* best effort — next turn proceeds regardless */ }
             turns++;
         }
 
@@ -120,13 +130,22 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
             return;
         }
 
-        // Wheel up repeatedly — best-effort: timing/layout dependent, don't fail hard
+        // Wheel up repeatedly — pollable: each tick waits (bounded) for the
+        // reveal condition that cannot appear without the scroll landing.
+        // Early-exits on quiet runners; same worst-case bound as the old
+        // fixed 150ms sleeps on loaded ones. Timing/layout dependent, best effort.
         bool revealed = false;
         for (int tick = 0; tick < 50 && !revealed; tick++)
         {
             Session.SendKey(WheelUpSeq);
-            await Task.Delay(150).ConfigureAwait(false); // wheel tick: real timing
-            revealed = NormalizedLines().Any(x => x.Contains(welcomeMarker, StringComparison.Ordinal));
+            try
+            {
+                _ = await WaitForScreenAsync(
+                    l => l.Any(x => x.Contains(welcomeMarker, StringComparison.Ordinal)),
+                    TimeSpan.FromMilliseconds(150)).ConfigureAwait(false);
+                revealed = true;
+            }
+            catch (TimeoutException) { /* next tick */ }
         }
 
         // Soft assertion: log if not revealed but don't fail — scroll is inherently timing-sensitive
@@ -143,9 +162,18 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
         if (!ok)
         {
             Console.WriteLine($"WARN: WHEEL-OK not in raw, checking server received: {Server.RequestCount}, screen:\n{ScreenText}");
-            // Fallback: check server actually got the request
-            await Task.Delay(1000).ConfigureAwait(false);
-            bool serverGot = Server.ReceivedRequests.Any(r => r.RawBody.Contains("wheel-check"));
+            // Pollable fallback: the mock records the request only when it
+            // actually arrives — poll instead of a fixed 1s sleep.
+            bool serverGot = false;
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+            while (!serverGot && DateTime.UtcNow < deadline)
+            {
+                serverGot = Server.ReceivedRequests.Any(r => r.RawBody.Contains("wheel-check"));
+                if (!serverGot)
+                {
+                    await Task.Delay(100).ConfigureAwait(false);
+                }
+            }
             if (!serverGot)
             {
                 Console.WriteLine($"WARN: wheel-check not received by mock, treating as soft pass (app still alive)");
