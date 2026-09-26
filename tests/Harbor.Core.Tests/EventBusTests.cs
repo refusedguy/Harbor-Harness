@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Core.Tests;
 public class EventBusTests
 {
@@ -164,5 +165,65 @@ public class EventBusTests
         var tail = bus.GetScrollback(1);
         await Assert.That(tail.Count).IsEqualTo(1);
         await Assert.That(tail[0]).IsEqualTo(evt);
+    }
+
+    /// <summary>
+    ///     #47 queue-age instrumentation: the counters track slow-path publishes
+    ///     and reset to zero when quiescent, without changing delivery.
+    /// </summary>
+    [Test]
+    public async Task PublishAsync_QueueAgeInstrumentation_TracksAndResets()
+    {
+        var bus = new InMemoryEventBus(maxScrollback: 8);
+        await Assert.That(bus.PublishedCount).IsEqualTo(0);
+        await Assert.That(bus.InflightPublishCount).IsEqualTo(0);
+        await Assert.That(bus.OldestPendingAge).IsEqualTo(TimeSpan.Zero);
+
+        var received = new List<AgentEvent>();
+        bus.Subscribe(async (evt, ct) => received.Add(evt));
+
+        var evt = new TurnStartEvent(1);
+        await bus.PublishAsync(evt);
+
+        await Assert.That(received.Count).IsEqualTo(1);
+        await Assert.That(received[0]).IsEqualTo(evt);
+        await Assert.That(bus.PublishedCount).IsEqualTo(1);
+        await Assert.That(bus.InflightPublishCount).IsEqualTo(0);
+        await Assert.That(bus.OldestPendingAge).IsEqualTo(TimeSpan.Zero);
+        await Assert.That(bus.MaxDispatchDuration.Ticks).IsGreaterThanOrEqualTo(0);
+    }
+
+    /// <summary>
+    ///     #47 queue-age instrumentation: while a publish is blocked inside a
+    ///     subscriber, InflightPublishCount is 1 and OldestPendingAge grows;
+    ///     both reset once the publish completes.
+    /// </summary>
+    [Test]
+    public async Task PublishAsync_InflightPublish_ExposesOldestPendingAge()
+    {
+        // Budget disabled so the gated handler below is awaited, not left behind.
+        var bus = new InMemoryEventBus(
+            NullLogger<InMemoryEventBus>.Instance, maxScrollback: 8, handlerBudget: TimeSpan.Zero);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        bus.Subscribe(async (evt, ct) =>
+        {
+            entered.TrySetResult();
+            await release.Task.ConfigureAwait(false);
+        });
+
+        Task publish = bus.PublishAsync(new TurnStartEvent(1));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(20);
+
+        await Assert.That(bus.PublishedCount).IsEqualTo(1);
+        await Assert.That(bus.InflightPublishCount).IsEqualTo(1);
+        await Assert.That(bus.OldestPendingAge.Ticks).IsGreaterThan(0);
+
+        release.TrySetResult();
+        await publish.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await Assert.That(bus.InflightPublishCount).IsEqualTo(0);
+        await Assert.That(bus.OldestPendingAge).IsEqualTo(TimeSpan.Zero);
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -51,6 +52,20 @@ namespace Harbor.Abstractions.Events;
 ///                 Scrollback: <see cref="GetScrollback" /> copies the requested
 ///                 tail under the scrollback lock into an exact-size array —
 ///                 no state mutation, no blocking, repeatable reads.
+///             </item>
+///             <item>
+///                 Queue-age instrumentation (#47): every slow-path publish takes
+///                 one monotonic submission timestamp
+///                 (<see cref="Stopwatch.GetTimestamp" />, allocation-free) and
+///                 maintains <see cref="PublishedCount" />,
+///                 <see cref="InflightPublishCount" />,
+///                 <see cref="OldestPendingAge" /> and
+///                 <see cref="MaxDispatchDuration" /> via Interlocked-only updates
+///                 (zero GC pressure, no locks). The fast path returns before any
+///                 of this, so its zero-alloc claim is unchanged. No
+///                 <c>IMetrics</c> dependency: Harbor.Registries may reference
+///                 Harbor.Abstractions only, so percentile export stays in the
+///                 telemetry layer, which polls these counters.
 ///             </item>
 ///         </list>
 ///     </para>
@@ -105,6 +120,20 @@ public sealed class InMemoryEventBus : IEventBus
     ///     for atomic CAS-based updates.
     /// </summary>
     private ImmutableArray<Subscription> _subscriptions = ImmutableArray<Subscription>.Empty;
+
+    /// <summary>
+    ///     Queue-age instrumentation (#47). Updated with
+    ///     <see cref="Interlocked" /> / <see cref="Volatile" /> only — no
+    ///     locks, no allocations — and read via the public counters below.
+    ///     <c>IMetrics</c> is deliberately NOT referenced here:
+    ///     Harbor.Registries may depend on Harbor.Abstractions only
+    ///     (docs/ARCHITECTURE_LAYERS.md §2), so percentile export stays in
+    ///     the telemetry layer, which can poll these counters.
+    /// </summary>
+    private long _publishedCount;
+    private long _inflightPublishCount;
+    private long _oldestEnqueuedTicks;
+    private long _maxDispatchTicks;
 
     /// <summary>
     ///     Construct an <see cref="InMemoryEventBus" /> with a bounded scrollback buffer of the
@@ -176,173 +205,240 @@ public sealed class InMemoryEventBus : IEventBus
         //    check. LogDebug evaluates @event.GetType().Name + the params
         //    object[] eagerly even when Debug is off, which allocated on EVERY
         //    publish (one per streaming delta) and broke the zero-alloc claim.
+        //    Queue-age instrumentation (#47) likewise lives strictly below
+        //    this line so the fast path stays untouched.
         if (_middlewares.Count == 0 && _maxScrollback == 0 && _subscriptions.IsEmpty)
         {
             return;
         }
 
-        // Guarded with IsEnabled — same hot-path pattern as AgentLoop
-        // (per-stream-event Trace guard) and ToolDispatcher (GetRawText guard):
-        // avoids the params-array + GetType().Name allocation when Debug is off.
-        if (_logger.IsEnabled(LogLevel.Debug))
+        // ── Queue-age envelope (#47): one monotonic submission timestamp per
+        //    publish. Stopwatch.GetTimestamp is allocation-free; the
+        //    in-flight/oldest bookkeeping in TrackEnqueued/TrackDequeued is
+        //    Interlocked-only, so this adds time (~50ns) but zero GC pressure.
+        //    The finally below guarantees the in-flight count resets even if
+        //    a middleware or fan-out path below ever throws past its guards.
+        long enqueuedTicks = Stopwatch.GetTimestamp();
+        Interlocked.Increment(ref _publishedCount);
+        Interlocked.Increment(ref _inflightPublishCount);
+        TrackEnqueued(enqueuedTicks);
+        try
         {
-            _logger.LogDebug("Publishing event: {EventType}", @event.GetType().Name);
-        }
-
-        // ── Middleware pipeline (BEFORE scrollback + fan-out) ──
-        // Dropped events never reach scrollback or subscribers.
-        if (_middlewares.Count > 0)
-        {
-            foreach (var mw in _middlewares)
+            // Guarded with IsEnabled — same hot-path pattern as AgentLoop
+            // (per-stream-event Trace guard) and ToolDispatcher (GetRawText guard):
+            // avoids the params-array + GetType().Name allocation when Debug is off.
+            if (_logger.IsEnabled(LogLevel.Debug))
             {
-                try
+                _logger.LogDebug("Publishing event: {EventType}", @event.GetType().Name);
+            }
+
+            // ── Middleware pipeline (BEFORE scrollback + fan-out) ──
+            // Dropped events never reach scrollback or subscribers.
+            if (_middlewares.Count > 0)
+            {
+                foreach (var mw in _middlewares)
                 {
-                    bool continuePipeline = await mw.ProcessAsync(ref @event, ct).ConfigureAwait(false);
-                    if (!continuePipeline)
+                    try
                     {
-                        _logger.LogTrace("Event {EventType} dropped by middleware {Middleware}",
-                            @event.GetType().Name, mw.Name);
+                        bool continuePipeline = await mw.ProcessAsync(ref @event, ct).ConfigureAwait(false);
+                        if (!continuePipeline)
+                        {
+                            // IsEnabled guard (#47): the drop path is cold, but
+                            // the params array + GetType().Name evaluate eagerly
+                            // even when Trace is off — the same pitfall as the
+                            // #97 Debug log above.
+                            if (_logger.IsEnabled(LogLevel.Trace))
+                            {
+                                _logger.LogTrace("Event {EventType} dropped by middleware {Middleware}",
+                                    @event.GetType().Name, mw.Name);
+                            }
+
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Middleware {Middleware} threw — event dropped", mw.Name);
                         return;
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Middleware {Middleware} threw — event dropped", mw.Name);
-                    return;
-                }
-            }
-        }
-
-        // 1. Append to scrollback ring buffer (in-place overwrite, short lock).
-        AppendScrollback(@event);
-
-        // 2. Lock-free snapshot — no List copy, no lock contention
-        var snapshot = _subscriptions;
-        if (snapshot.IsEmpty)
-        {
-            _logger.LogTrace("No subscribers for event {EventType}", @event.GetType().Name);
-            return;
-        }
-
-        _logger.LogTrace("Publishing to {SubscriberCount} subscribers", snapshot.Length);
-
-        // 3. Fan-out to subscribers under the A4 per-handler budget: a handler
-        //    that exceeds its slice is no longer awaited by THIS publisher
-        //    (the orphaned task stays observed via a fault-logging
-        //    continuation), its slow-strike counter increments, and after
-        //    MaxSlowStrikes consecutive strikes the subscriber is evicted.
-        //    Fast handlers — the overwhelmingly common case — complete
-        //    synchronously and keep the exact publish-then-observe contract.
-        Subscription[]? dead = null;
-        int deadCount = 0;
-        try
-        {
-            int snapshotLength = snapshot.Length;
-            bool budgetEnabled = _handlerBudget > TimeSpan.Zero;
-            using CancellationTokenSource? budgetCts = budgetEnabled
-                ? CancellationTokenSource.CreateLinkedTokenSource(ct)
-                : null;
-
-            void MarkDead(Subscription sub)
-            {
-                if (dead is null)
-                {
-                    dead = ArrayPool<Subscription>.Shared.Rent(snapshotLength);
-                }
-
-                dead[deadCount++] = sub;
             }
 
-            async ValueTask RecordSlowStrikeAsync(Subscription sub, Task handlerTask)
+            // 1. Append to scrollback ring buffer (in-place overwrite, short lock).
+            AppendScrollback(@event);
+
+            // 2. Lock-free snapshot — no List copy, no lock contention
+            var snapshot = _subscriptions;
+            if (snapshot.IsEmpty)
             {
-                int strikes = sub.Strike();
-                _logger.LogWarning(
-                    "Subscriber exceeded its {Budget}ms dispatch budget ({Strikes}/{Max} strikes) — continuing without it",
-                    _handlerBudget.TotalMilliseconds, strikes, MaxSlowStrikes);
-                if (strikes >= MaxSlowStrikes)
+                // IsEnabled guard (#47): this is THE benchmarked path
+                // (EventBusBenchmark, 0 subscribers with scrollback enabled) —
+                // without the guard every publish allocates a params object[]
+                // + the GetType().Name string even when Trace is off.
+                if (_logger.IsEnabled(LogLevel.Trace))
                 {
-                    MarkDead(sub);
+                    _logger.LogTrace("No subscribers for event {EventType}", @event.GetType().Name);
                 }
 
-                // Keep the orphaned handler observed so late faults are never
-                // lost (it may still be running against a stale event).
-                try { await handlerTask.ConfigureAwait(false); }
-                catch (OperationCanceledException oce)
-                {
-                    _logger.LogDebug(oce, "Orphaned slow-subscriber handler cancelled with its slice");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(ex, "Orphaned slow-subscriber handler faulted");
-                }
+                return;
             }
 
-            for (int i = 0; i < snapshotLength; i++)
+            // IsEnabled guard (#47): same eager params-array + int boxing
+            // saving as the empty-snapshot branch above.
+            if (_logger.IsEnabled(LogLevel.Trace))
             {
-                var sub = snapshot[i];
-                try
+                _logger.LogTrace("Publishing to {SubscriberCount} subscribers", snapshot.Length);
+            }
+
+            // 3. Fan-out to subscribers under the A4 per-handler budget: a handler
+            //    that exceeds its slice is no longer awaited by THIS publisher
+            //    (the orphaned task stays observed via a fault-logging
+            //    continuation), its slow-strike counter increments, and after
+            //    MaxSlowStrikes consecutive strikes the subscriber is evicted.
+            //    Fast handlers — the overwhelmingly common case — complete
+            //    synchronously and keep the exact publish-then-observe contract.
+            Subscription[]? dead = null;
+            int deadCount = 0;
+            try
+            {
+                int snapshotLength = snapshot.Length;
+                bool budgetEnabled = _handlerBudget > TimeSpan.Zero;
+                // No linked registration when the outer token can never fire:
+                // a fresh CTS behaves identically (CancelAfter still applies)
+                // and skips the linked-cancellation allocation (#47).
+                using CancellationTokenSource? budgetCts = budgetEnabled
+                    ? (ct.CanBeCanceled
+                        ? CancellationTokenSource.CreateLinkedTokenSource(ct)
+                        : new CancellationTokenSource())
+                    : null;
+
+                void MarkDead(Subscription sub)
                 {
-                    if (!budgetEnabled)
+                    if (dead is null)
                     {
-                        await sub.Handler(@event, ct).ConfigureAwait(false);
-                        sub.ResetSlowStrikes();
-                        continue;
+                        dead = ArrayPool<Subscription>.Shared.Rent(snapshotLength);
                     }
 
-                    budgetCts!.CancelAfter(_handlerBudget);
-                    ValueTask dispatch = sub.Handler(@event, budgetCts.Token);
-                    if (dispatch.IsCompletedSuccessfully)
+                    dead[deadCount++] = sub;
+                }
+
+                async ValueTask RecordSlowStrikeAsync(Subscription sub, Task handlerTask)
+                {
+                    int strikes = sub.Strike();
+                    _logger.LogWarning(
+                        "Subscriber exceeded its {Budget}ms dispatch budget ({Strikes}/{Max} strikes) — continuing without it",
+                        _handlerBudget.TotalMilliseconds, strikes, MaxSlowStrikes);
+                    if (strikes >= MaxSlowStrikes)
                     {
-                        sub.ResetSlowStrikes();
-                        continue;
+                        MarkDead(sub);
                     }
 
-                    Task handlerTask = dispatch.AsTask();
-                    Task winner = await Task.WhenAny(handlerTask, Task.Delay(Timeout.InfiniteTimeSpan, ct))
-                        .ConfigureAwait(false);
-                    if (winner != handlerTask)
+                    // Keep the orphaned handler observed so late faults are never
+                    // lost (it may still be running against a stale event).
+                    try { await handlerTask.ConfigureAwait(false); }
+                    catch (OperationCanceledException oce)
                     {
-                        // Publisher slice elapsed while the handler still runs:
-                        // leave it behind (observed), count the strike.
-                        await RecordSlowStrikeAsync(sub, handlerTask).ConfigureAwait(false);
-                        continue;
+                        _logger.LogDebug(oce, "Orphaned slow-subscriber handler cancelled with its slice");
                     }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Orphaned slow-subscriber handler faulted");
+                    }
+                }
 
+                for (int i = 0; i < snapshotLength; i++)
+                {
+                    var sub = snapshot[i];
                     try
                     {
-                        await handlerTask.ConfigureAwait(false);
-                        sub.ResetSlowStrikes();
+                        if (!budgetEnabled)
+                        {
+                            await sub.Handler(@event, ct).ConfigureAwait(false);
+                            sub.ResetSlowStrikes();
+                            continue;
+                        }
+
+                        budgetCts!.CancelAfter(_handlerBudget);
+                        ValueTask dispatch = sub.Handler(@event, budgetCts.Token);
+                        if (dispatch.IsCompletedSuccessfully)
+                        {
+                            sub.ResetSlowStrikes();
+                            continue;
+                        }
+
+                        Task handlerTask = dispatch.AsTask();
+                        if (!ct.CanBeCanceled)
+                        {
+                            // The infinite-delay branch below could never win this
+                            // race (its only completion source is ct), so awaiting
+                            // the handler directly is exactly equivalent — and
+                            // skips a Timer + Task allocation per async-incomplete
+                            // dispatch (#47).
+                            try
+                            {
+                                await handlerTask.ConfigureAwait(false);
+                                sub.ResetSlowStrikes();
+                            }
+                            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                            {
+                                // The handler hit the budget cancellation from INSIDE
+                                // its own body — an over-budget strike, not a death.
+                                await RecordSlowStrikeAsync(sub, Task.CompletedTask).ConfigureAwait(false);
+                            }
+
+                            continue;
+                        }
+
+                        Task winner = await Task.WhenAny(handlerTask, Task.Delay(Timeout.InfiniteTimeSpan, ct))
+                            .ConfigureAwait(false);
+                        if (winner != handlerTask)
+                        {
+                            // Publisher slice elapsed while the handler still runs:
+                            // leave it behind (observed), count the strike.
+                            await RecordSlowStrikeAsync(sub, handlerTask).ConfigureAwait(false);
+                            continue;
+                        }
+
+                        try
+                        {
+                            await handlerTask.ConfigureAwait(false);
+                            sub.ResetSlowStrikes();
+                        }
+                        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                        {
+                            // The handler hit the budget cancellation from INSIDE
+                            // its own body — an over-budget strike, not a death.
+                            await RecordSlowStrikeAsync(sub, Task.CompletedTask).ConfigureAwait(false);
+                        }
                     }
-                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    catch (Exception ex)
                     {
-                        // The handler hit the budget cancellation from INSIDE
-                        // its own body — an over-budget strike, not a death.
-                        await RecordSlowStrikeAsync(sub, Task.CompletedTask).ConfigureAwait(false);
+                        _logger.LogWarning(ex, "Subscriber threw exception — removing dead subscriber");
+                        MarkDead(sub);
                     }
                 }
-                catch (Exception ex)
+
+                if (deadCount > 0)
                 {
-                    _logger.LogWarning(ex, "Subscriber threw exception — removing dead subscriber");
-                    MarkDead(sub);
+                    // dead is guaranteed non-null here: it's assigned the first time
+                    // any subscriber throws (which is the only way deadCount can exceed 0).
+                    RemoveDeadSubscriptions(dead!, deadCount);
                 }
             }
-
-            if (deadCount > 0)
+            finally
             {
-                // dead is guaranteed non-null here: it's assigned the first time
-                // any subscriber throws (which is the only way deadCount can exceed 0).
-                RemoveDeadSubscriptions(dead!, deadCount);
+                if (dead is not null)
+                {
+                    // Clear references so the pooled array doesn't keep the Subscription
+                    // (and indirectly the handler delegate) alive after return.
+                    Array.Clear(dead, 0, deadCount);
+                    ArrayPool<Subscription>.Shared.Return(dead);
+                }
             }
         }
         finally
         {
-            if (dead is not null)
-            {
-                // Clear references so the pooled array doesn't keep the Subscription
-                // (and indirectly the handler delegate) alive after return.
-                Array.Clear(dead, 0, deadCount);
-                ArrayPool<Subscription>.Shared.Return(dead);
-            }
+            TrackDequeued(enqueuedTicks);
         }
     }
 
@@ -448,6 +544,118 @@ public sealed class InMemoryEventBus : IEventBus
                 updated = updated.Remove(dead[i]);
             }
         } while (ImmutableInterlocked.InterlockedCompareExchange(ref _subscriptions, updated, original) != original);
+    }
+
+    /// <summary>
+    ///     Total slow-path publishes since construction. The zero-subscriber /
+    ///     zero-scrollback / zero-middleware fast path returns before this
+    ///     counter, so it counts exactly the publishes that entered the queue.
+    /// </summary>
+    public long PublishedCount => Interlocked.Read(ref _publishedCount);
+
+    /// <summary>
+    ///     Publishes currently inside <see cref="PublishAsync" /> (submitted
+    ///     but not yet fanned out). Zero in the quiescent state.
+    /// </summary>
+    public long InflightPublishCount => Volatile.Read(ref _inflightPublishCount);
+
+    /// <summary>
+    ///     Age of the oldest still-pending publish (#47 queue-age gauge).
+    ///     <see cref="TimeSpan.Zero" /> when nothing is in flight. Exact in the
+    ///     single-publisher case; under concurrency the baseline re-anchors to
+    ///     "now" when the tracked oldest leaves while others remain, so the
+    ///     gauge under-reports rather than over-reports.
+    /// </summary>
+    public TimeSpan OldestPendingAge
+    {
+        get
+        {
+            if (Volatile.Read(ref _inflightPublishCount) == 0)
+            {
+                return TimeSpan.Zero;
+            }
+
+            long oldest = Volatile.Read(ref _oldestEnqueuedTicks);
+            if (oldest == 0)
+            {
+                return TimeSpan.Zero;
+            }
+
+            return StopwatchTicksToTimeSpan(Stopwatch.GetTimestamp() - oldest);
+        }
+    }
+
+    /// <summary>
+    ///     Slowest slow-path publish observed since construction
+    ///     (submission → fan-out complete). Monotonic max; use the telemetry
+    ///     layer's histograms for percentiles.
+    /// </summary>
+    public TimeSpan MaxDispatchDuration => StopwatchTicksToTimeSpan(Volatile.Read(ref _maxDispatchTicks));
+
+    /// <summary>
+    ///     Record a submission timestamp as the oldest pending unless an older
+    ///     baseline is already tracked. Lock-free CAS-min loop.
+    /// </summary>
+    private void TrackEnqueued(long enqueuedTicks)
+    {
+        long observed = Volatile.Read(ref _oldestEnqueuedTicks);
+        while (observed == 0 || enqueuedTicks < observed)
+        {
+            if (Interlocked.CompareExchange(ref _oldestEnqueuedTicks, enqueuedTicks, observed) == observed)
+            {
+                break;
+            }
+
+            observed = Volatile.Read(ref _oldestEnqueuedTicks);
+        }
+    }
+
+    /// <summary>
+    ///     Leave the in-flight set: fold this publish's dispatch duration into
+    ///     the max and reset (or re-anchor) the oldest-pending baseline.
+    ///     Never throws — safe inside finally.
+    /// </summary>
+    private void TrackDequeued(long enqueuedTicks)
+    {
+        long elapsed = Stopwatch.GetTimestamp() - enqueuedTicks;
+        long observedMax = Volatile.Read(ref _maxDispatchTicks);
+        while (elapsed > observedMax)
+        {
+            if (Interlocked.CompareExchange(ref _maxDispatchTicks, elapsed, observedMax) == observedMax)
+            {
+                break;
+            }
+
+            observedMax = Volatile.Read(ref _maxDispatchTicks);
+        }
+
+        if (Interlocked.Decrement(ref _inflightPublishCount) == 0)
+        {
+            // Last publisher out — nothing pending, age resets to zero.
+            Volatile.Write(ref _oldestEnqueuedTicks, 0);
+        }
+        else if (enqueuedTicks <= Volatile.Read(ref _oldestEnqueuedTicks))
+        {
+            // The tracked oldest left while others remain; their individual
+            // starts are not retained, so re-anchor to now (see
+            // OldestPendingAge docs: under-report, never over-report).
+            Volatile.Write(ref _oldestEnqueuedTicks, Stopwatch.GetTimestamp());
+        }
+    }
+
+    private static TimeSpan StopwatchTicksToTimeSpan(long stopwatchTicks)
+    {
+        if (stopwatchTicks <= 0)
+        {
+            return TimeSpan.Zero;
+        }
+
+        if (stopwatchTicks > long.MaxValue / TimeSpan.TicksPerSecond)
+        {
+            return TimeSpan.MaxValue;
+        }
+
+        return TimeSpan.FromTicks(stopwatchTicks * TimeSpan.TicksPerSecond / Stopwatch.Frequency);
     }
 
     /// <summary>
