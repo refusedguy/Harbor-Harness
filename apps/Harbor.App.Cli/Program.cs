@@ -916,7 +916,7 @@ public static class Program
         return await EventsWatchRunner.RunAsync(Console.Out, Console.Error, client, options).ConfigureAwait(false);
     }
 
-    private static int PrintTuiOptions()
+    private static void PrintTuiOptions()
     {
         Console.WriteLine("""
                           TUI renderers (set HARBOR_TUI):
@@ -931,7 +931,6 @@ public static class Program
                           corresponding Harbor.Tui.* project reference to Harbor.App.Cli.csproj
                           (and the matching workload — e.g. `dotnet workload install maui`).
                           """);
-        return 0;
     }
     private static int PrintStorageOptions()
     {

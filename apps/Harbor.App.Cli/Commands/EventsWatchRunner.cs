@@ -22,7 +22,8 @@ public sealed record EventsWatchOptions(bool Watch, int? Count, bool ShowHelp)
         ArgumentNullException.ThrowIfNull(args);
         bool watch = false;
         int? count = null;
-        for (int i = 0; i < args.Length; i++)
+        int i = 0;
+        while (i < args.Length)
         {
             string a = args[i];
             if (a is "--help" or "-h")
@@ -35,6 +36,7 @@ public sealed record EventsWatchOptions(bool Watch, int? Count, bool ShowHelp)
             if (a is "--watch" or "-w")
             {
                 watch = true;
+                i++;
                 continue;
             }
 
@@ -55,7 +57,7 @@ public sealed record EventsWatchOptions(bool Watch, int? Count, bool ShowHelp)
                 }
 
                 count = parsed;
-                i++;
+                i += 2;
                 continue;
             }
 
@@ -70,6 +72,7 @@ public sealed record EventsWatchOptions(bool Watch, int? Count, bool ShowHelp)
                 }
 
                 count = parsed;
+                i++;
                 continue;
             }
 

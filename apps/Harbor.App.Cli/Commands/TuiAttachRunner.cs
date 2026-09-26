@@ -25,7 +25,8 @@ public sealed record TuiAttachOptions(string? SessionId, ulong? SinceSequence, b
         ArgumentNullException.ThrowIfNull(args);
         string? sessionId = null;
         ulong? since = null;
-        for (int i = 0; i < args.Length; i++)
+        int i = 0;
+        while (i < args.Length)
         {
             string a = args[i];
             if (a is "--help" or "-h")
@@ -45,13 +46,14 @@ public sealed record TuiAttachOptions(string? SessionId, ulong? SinceSequence, b
                 }
 
                 sessionId = args[i + 1];
-                i++;
+                i += 2;
                 continue;
             }
 
             if (a.StartsWith("--session=", StringComparison.OrdinalIgnoreCase))
             {
                 sessionId = a["--session=".Length..];
+                i++;
                 continue;
             }
 
@@ -72,7 +74,7 @@ public sealed record TuiAttachOptions(string? SessionId, ulong? SinceSequence, b
                 }
 
                 since = parsed;
-                i++;
+                i += 2;
                 continue;
             }
 
@@ -86,6 +88,7 @@ public sealed record TuiAttachOptions(string? SessionId, ulong? SinceSequence, b
                 }
 
                 since = parsed;
+                i++;
                 continue;
             }
 
