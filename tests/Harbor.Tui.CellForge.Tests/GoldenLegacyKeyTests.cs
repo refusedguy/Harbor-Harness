@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -9,6 +10,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// These are the fallback-path contract — kitty-encoded equivalents must decode
 /// to the SAME logical keys (zone З.1 golden table cross-checks this).
 /// </summary>
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class GoldenLegacyKeyTests
 {
     private readonly EscapeSequenceParser _parser = new();

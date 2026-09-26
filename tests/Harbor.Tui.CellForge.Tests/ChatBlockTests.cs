@@ -1,8 +1,11 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class ChatBlockTests
 {
     [Test]

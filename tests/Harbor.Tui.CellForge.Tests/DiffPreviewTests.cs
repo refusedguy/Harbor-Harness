@@ -1,5 +1,6 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -9,6 +10,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// fallback, preview/full budgets, sentinels — plus the
 /// <c>ToolCallBlock.DiffRenderer</c> 6-line preview cap.
 /// </summary>
+// #58: serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class DiffPreviewTests
 {
     private static int LineCount(string text) => text.Split('\n').Length;
