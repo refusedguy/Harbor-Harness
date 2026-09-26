@@ -33,13 +33,17 @@ public static class ArrayPoolExtensions
 
         /// <summary>
         ///     A <see cref="Span{T}" /> view of the rented region (length = <see cref="Length" />).
+        ///     Sliced to the requested length — never the full oversized
+        ///     <see cref="Array" /> (#90: callers must not read/write past the rented region).
         /// </summary>
-        public Span<T> Span => Array;
+        public Span<T> Span => Array.AsSpan(0, Length);
 
         /// <summary>
-        ///     A <see cref="ReadOnlySpan{T}" /> view of the rented region.
+        ///     A <see cref="ReadOnlySpan{T}" /> view of the rented region (length = <see cref="Length" />).
+        ///     Sliced to the requested length — never the full oversized
+        ///     <see cref="Array" /> (#90).
         /// </summary>
-        public ReadOnlySpan<T> ReadOnlySpan => Array;
+        public ReadOnlySpan<T> ReadOnlySpan => Array.AsSpan(0, Length);
 
         /// <summary>
         ///     The requested length. The underlying <see cref="Array" /> may be larger.
@@ -60,8 +64,12 @@ public static class ArrayPoolExtensions
 
         /// <summary>
         ///     Return the underlying array to the pool.
+        ///     Returned with <c>clearArray: true</c> so the previous caller's
+        ///     bytes never linger in a recycled buffer (#90: unlike the
+        ///     <c>StringBuilder</c> path below — where <c>Clear()</c> only
+        ///     resets <c>Length</c> — arrays can be truly wiped, so we do).
         /// </summary>
-        public void Dispose() => _pool.Return(Array);
+        public void Dispose() => _pool.Return(Array, clearArray: true);
     }
 }
 
@@ -123,6 +131,26 @@ public static class StringBuilderPool
     /// <summary>
     ///     A pooled <see cref="StringBuilder" /> wrapper. Dispose to return the builder to the pool.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>#90: deliberately NOT a ref struct.</b> A ref struct would
+    ///         make do-not-copy/dispose-once compiler-enforced, but every
+    ///         real call site fundamentally needs heap/async-compatible
+    ///         storage: <c>StreamingCoalescer</c> keeps rented builders in
+    ///         instance fields and a <c>Dictionary</c> tuple (ref structs
+    ///         cannot be fields or generic arguments); <c>BashTool</c> holds
+    ///         them across <c>await process.WaitForExitAsync</c> /
+    ///         <c>DrainAsync</c> and touches them from process output
+    ///         callbacks on other threads; <c>CompactionService</c> holds one
+    ///         across <c>await foreach</c>; <c>SystemPromptBuilder</c> rents
+    ///         inside an async method. Forcing ref struct would mean
+    ///         rewriting all of these to raw <c>StringBuilder</c> handling
+    ///         with no pooling discipline gain. The ownership contract below
+    ///         therefore stays a documented convention (single owner,
+    ///         dispose exactly once, never copy, never touch after dispose),
+    ///         enforced by review — see <c>BufferContractsTests</c>.
+    ///     </para>
+    /// </remarks>
     public readonly struct PooledStringBuilder : IDisposable
     {
         /// <summary>

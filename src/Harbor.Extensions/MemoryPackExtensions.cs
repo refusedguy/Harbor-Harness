@@ -7,8 +7,13 @@ namespace Harbor.Abstractions.Extensions;
 public static class MemoryPackExtensions
 {
     /// <summary>
-    ///     Serialize a MemoryPackable object to a pooled byte array.
+    ///     Serialize a MemoryPackable object to a newly allocated byte array.
     /// </summary>
+    /// <remarks>
+    ///     Nothing is pooled on this path: <c>MemoryPackSerializer.Serialize</c>
+    ///     allocates a fresh array per call (#90: the previous docstring
+    ///     wrongly claimed a pooled array).
+    /// </remarks>
     public static byte[] ToMemoryPackBytes<T>(this T value) where T : IMemoryPackable<T> => MemoryPackSerializer.Serialize(value);
 
     /// <summary>
