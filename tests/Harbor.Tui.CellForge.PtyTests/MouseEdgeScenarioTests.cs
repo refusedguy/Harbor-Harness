@@ -73,7 +73,15 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
             {
                 Console.WriteLine($"WARN: D{turns} not seen: {ex.Message}, screen:\n{ScreenText}");
             }
-            await Task.Delay(800).ConfigureAwait(false); // real delay: let streaming block commit before next turn
+            // Pollable settle: idle cannot reappear until the streaming block
+            // commits. Bounded best-effort (replaces fixed 800ms sleep).
+            try
+            {
+                _ = await WaitForScreenAsync(
+                    l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
+                    TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            }
+            catch { /* best effort — next turn proceeds regardless */ }
             turns++;
         }
 
@@ -85,13 +93,21 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
             return;
         }
 
-        // Wheel up until the top content re-enters the viewport — best effort
+        // Wheel up until the top content re-enters the viewport — pollable:
+        // each tick waits (bounded) for the reveal that cannot appear without
+        // the scroll landing. Best effort.
         bool revealed = false;
         for (int tick = 0; tick < 60 && !revealed; tick++)
         {
             Session.SendKey("\x1b[<64;10;5M");
-            await Task.Delay(150).ConfigureAwait(false); // wheel tick: real timing
-            revealed = NormalizedLines().Any(x => x.Contains(welcomeMarker, StringComparison.Ordinal));
+            try
+            {
+                _ = await WaitForScreenAsync(
+                    l => l.Any(x => x.Contains(welcomeMarker, StringComparison.Ordinal)),
+                    TimeSpan.FromMilliseconds(150)).ConfigureAwait(false);
+                revealed = true;
+            }
+            catch (TimeoutException) { /* next tick */ }
         }
 
         if (!revealed)
@@ -99,14 +115,20 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
             Console.WriteLine($"WARN: WheelDown_AfterWheelUp not revealed, screen:\n{ScreenText}");
         }
 
-        // Wheel down walks back to the live bottom — best effort, verify responsiveness instead
+        // Wheel down walks back to the live bottom — pollable per tick, best
+        // effort, verify responsiveness instead.
         bool back = false;
         for (int tick = 0; tick < 60 && !back; tick++)
         {
             Session.SendKey("\x1b[<65;10;5M");
-            await Task.Delay(150).ConfigureAwait(false); // wheel tick: real timing
-            // Consider back as true if newest marker visible, welcome hidden is optional
-            back = NormalizedLines().Any(x => x.Contains($"D{turns - 1}marker", StringComparison.Ordinal));
+            try
+            {
+                _ = await WaitForScreenAsync(
+                    l => l.Any(x => x.Contains($"D{turns - 1}marker", StringComparison.Ordinal)),
+                    TimeSpan.FromMilliseconds(150)).ConfigureAwait(false);
+                back = true;
+            }
+            catch (TimeoutException) { /* next tick */ }
         }
 
         if (!back)
