@@ -28,10 +28,22 @@ public class RetryPolicyTests
 
         public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
 
-        public override Task Delay(TimeSpan delay, CancellationToken cancellationToken = default)
+        public override ITimer CreateTimer(
+            TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
-            Delays.Add(delay);
-            return Task.CompletedTask;
+            Delays.Add(dueTime);
+            // Complete synchronously: Task.Delay's callback sets the task
+            // result, so the policy observes an instantly-elapsed delay.
+            callback(state);
+            return NoopTimer.Instance;
+        }
+
+        private sealed class NoopTimer : ITimer
+        {
+            public static readonly NoopTimer Instance = new();
+            public bool Change(TimeSpan dueTime, TimeSpan period) => false;
+            public void Dispose() { }
+            public ValueTask DisposeAsync() => default;
         }
     }
 

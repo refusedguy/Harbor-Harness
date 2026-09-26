@@ -85,7 +85,7 @@ public sealed class RetryPolicy : IRetryPolicy
                 // Prefer the server-provided retry hint when the classifier
                 // surfaced one; otherwise use the exponentially scaled backoff.
                 TimeSpan delay = retryAfter ?? ComputeDelay(options, attempt);
-                await _time.Delay(delay, ct).ConfigureAwait(false);
+                await Task.Delay(delay, _time, ct).ConfigureAwait(false);
             }
         }
     }
