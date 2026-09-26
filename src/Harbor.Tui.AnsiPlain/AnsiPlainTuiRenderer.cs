@@ -4,6 +4,7 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
 using Harbor.Tui.AnsiPlain.EscapeCodes;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
@@ -28,18 +29,28 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
 {
     private readonly bool _ownsWriter;
     private readonly TextWriter _writer;
+    private readonly UiStore _store;
 
     private protected AnsiPlainTuiRenderer(
         TextWriter writer,
         bool ownsWriter,
         IEscapeCodeStrategy strategy,
-        ILogger logger)
+        ILogger logger,
+        UiStore? store = null)
         : base(logger)
     {
+        // Issue #77: the DI-shared store is injected by the composition root
+        // (TuiModule) so chat writes land in the same instance the
+        // RendererPipeline restores from. Null keeps the previous behaviour
+        // (private store) for tests and non-composed hosts.
+        _store = store ?? new UiStore();
         _writer = writer;
         _ownsWriter = ownsWriter;
         Context = new AnsiPlainRenderContext(writer, strategy);
     }
+
+    /// <summary>TEA store owning the <see cref="UiState"/> snapshot (test seam).</summary>
+    internal UiStore Store => _store;
 
     /// <summary>The escape-code strategy driving this renderer instance.</summary>
     public IEscapeCodeStrategy Strategy => ((AnsiPlainRenderContext)Context).Strategy;
@@ -57,6 +68,9 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
+        // Issue #77: every chat write lands in the DI-shared UiStore so the
+        // pipeline can restore the snapshot across renderer swaps.
+        _store.Dispatch(@event);
         // Live token streaming is written directly for a smooth character-by-character
         // feed; everything else (status bar, finalized chat history, diff overlay) is
         // rendered through the builtin views in BaseTuiRenderer.

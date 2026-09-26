@@ -2,6 +2,7 @@ namespace Harbor.Tui.AnsiPlain;
 
 using Harbor.Abstractions.Contracts;
 using Harbor.Tui.AnsiPlain.EscapeCodes;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -14,12 +15,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 [TuiRenderer(Backend = "plain")]
 public sealed partial class PlainTuiRenderer : AnsiPlainTuiRenderer
 {
-    public PlainTuiRenderer(TextWriter? writer = null)
+    public PlainTuiRenderer(TextWriter? writer = null, UiStore? store = null)
         : base(
             writer ?? Console.Out,
             ownsWriter: writer is not null,
             NullEscapeStrategy.Instance,
-            NullLogger<PlainTuiRenderer>.Instance)
+            NullLogger<PlainTuiRenderer>.Instance,
+            store)
     {
     }
 }

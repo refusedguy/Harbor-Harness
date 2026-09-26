@@ -215,8 +215,10 @@ public class FullLayerMatrixTests
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
         // renderer-unification Phase 4: Ansi + Plain merged into one assembly;
         // styling flows through IEscapeCodeStrategy (Ansi / Null impls).
+        // Issue #77: chat writes land in the DI-shared UiStore (Presentation→
+        // Presentation edge, same as CellForge.Engine).
         ["Harbor.Tui.AnsiPlain"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
+            ["Harbor.Abstractions", "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State"]),
         // CellForge engine (issue #33 split): input/parsing/capabilities/cell
         // primitives. No Chat vocabulary: wheel ticks surface as UiMsg via
         // the shared KeyEventMapper contract (State), cell styles via
