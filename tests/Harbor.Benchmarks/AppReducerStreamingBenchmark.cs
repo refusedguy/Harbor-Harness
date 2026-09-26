@@ -24,7 +24,7 @@ namespace Harbor.Benchmarks;
 ///     (ChunkedBuffer + materialization) actually costs.
 /// </remarks>
 [MemoryDiagnoser]
-[SimpleJob(warmupCount: 3, iterationCount: 10)]
+[SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class AppReducerStreamingBenchmark
 {
     private AgentEvent[] _events = null!;

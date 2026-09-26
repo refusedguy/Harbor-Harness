@@ -34,7 +34,7 @@ namespace Harbor.Benchmarks;
 ///     <see cref="ISessionContext" /> so accumulated messages do not leak across iterations.
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(warmupCount: 2, iterationCount: 3)]
+[SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class AgentLoopBenchmark
 {
     private AgentDefinition _agent = null!;

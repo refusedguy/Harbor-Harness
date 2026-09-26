@@ -1,8 +1,12 @@
 # Benchmarks — Harbor
 
-> **Latest rerun: 2026-09-09** (AMD EPYC 9V74, .NET 10.0.12, Release, BenchmarkDotNet 0.15.8 — PR `benchmark` job).
-> Registry/permission hot paths below are from that run; older rows stay from 2026-08-22 (i5-8250U, .NET 10.0.10).
-> Suite: `tests/Harbor.Benchmarks` — 24 benchmark classes / 72+ cases, `[MemoryDiagnoser]`, Release, 0 warnings.
+> **Sources.** Numbers below come from two environments — do not compare raw values across them:
+> - **CI-short** — PR `benchmark` job (`.github/workflows/benchmark.yml`, `ubuntu-latest`, `taskset -c 1`,
+>   `--job Short`), latest 2026-09-09 (AMD EPYC 9V74, .NET 10.0.12, BenchmarkDotNet 0.15.8).
+>   Covers `*PermissionRuleset*` + `*Registry*` filters only — marked **[CI-short]** in the tables.
+> - **Local full runs** — 2026-08-22 (i5-8250U, .NET 10.0.10) plus UiStore/streaming rows from 2026-09-10
+>   (machine n/a). Since #46 all classes use unified `[SimpleJob(warmup 3 / iter 5)]`; older rows were
+>   measured with mixed configs (2/3 or 3/10), so absolute values will shift on re-measure.
 > Suite: `tests/Harbor.Benchmarks` — 24 benchmark classes / 72+ cases, `[MemoryDiagnoser]`, Release, 0 warnings.
 > Run: `dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter "*<Category>*" --buildTimeout 600 --keepFiles`
 
@@ -22,7 +26,7 @@
 | P3 | `SessionId` Dictionary key | медленнее string (7.9 vs 6.3 µs), HashSet быстрее — проверить GetHashCode | override hash |
 | P3 | `OpenAiSseParser` | плоские ~10 µs floor на любой чанк | Utf8JsonReader поверх span без ToString() |
 
-## Key numbers (2026-08-22, Release JIT)
+## Key numbers — local full runs (2026-08-22, i5-8250U, Release JIT; UiStore streaming rows 2026-09-10, machine n/a)
 
 | Operation | Mean | Allocated |
 |---|--:|--:|
@@ -39,6 +43,14 @@
 | DefaultUiProjector 5000 lines | 20.8 ms | ~MB |
 | Terminal ANSI vs plain blit | 364 / 330 µs | 12 / 10 KB |
 | PatchTool apply 5000 hunks | 10.1 ms | 9.3 MB |
+| Identifiers: HashSet<SessionId> vs string | 2.1 vs 2.7 µs | 2.3 vs 7.3 KB |
+| SystemPromptBuilder (16 tools, large) | 3.8 µs | 12.1 KB |
+| StateDiff Record.Equals identical | 0.59 ns | 0 |
+
+## Key numbers — CI-short **[CI-short]** (PR `benchmark` job, `--job Short`, ubuntu-latest, 2026-09-09)
+
+| Operation | Mean | Allocated |
+|---|--:|--:|
 | PermissionRuleset.Evaluate (default Allow) | 0.35 µs | 0 |
 | PermissionRuleset.Evaluate (Deny bash rm -rf /) | 0.17 µs | 488 B |
 | ToolRegistry.ResolveTools frozen @4 (no permission) | 0.085 µs | 344 B |
@@ -47,9 +59,6 @@
 | ToolRegistry.GetTool (frozen) | 0.10–0.20 µs | 80–160 B |
 | ProviderRegistry.GetClient frozen | 0.14 µs | 288 B |
 | ProviderRegistry.GetAllModelsAsync frozen @1 / @5 / @20 providers | 9.2 / 12.9 / 24.6 µs | 1112 B / 2776 B / 9016 B |
-| Identifiers: HashSet<SessionId> vs string | 2.1 vs 2.7 µs | 2.3 vs 7.3 KB |
-| SystemPromptBuilder (16 tools, large) | 3.8 µs | 12.1 KB |
-| StateDiff Record.Equals identical | 0.59 ns | 0 |
 
 ---
 
@@ -207,12 +216,14 @@ Located in `tests/Harbor.Benchmarks/`. Run with:
 dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
 ```
 
-> **Note:** registry/permission rows refreshed 2026-09-09 on AMD EPYC 9V74 (.NET 10.0.12, BDN 0.15.8, `Job-NTRUNJ` means).
-> Remaining rows are 2026-08-22 (i5-8250U). Splits since are pure refactorings — expect ±10%.
+> **Note:** CI-short rows (`--job Short`) are quick PR-gate numbers, not full BDN runs —
+> expect wider error bars than the local full-run tables below.
 >
 > Instability watch: `Evaluate (custom ruleset, Allow at end-of-scan)` @64 rules measured 1.3–4.1 µs
 > with ±7 µs error (median/mean diverge) — shared-runner noise or a pathological case; @4 rules is a
 > stable 25 ns, @16 rules ~0.4 µs. Re-measure isolated before optimizing.
+
+### 5.1 CI-short **[CI-short]** — registry + permission (PR `benchmark` job, `--job Short`, 2026-09-09, AMD EPYC 9V74, .NET 10.0.12, BDN 0.15.8)
 
 | Benchmark | Mean | StdDev | Allocations |
 |---|---:|---:|---:|
@@ -228,6 +239,11 @@ dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
 | `PermissionRuleset.Evaluate` (default Allow) | 0.35 µs | 0.002 µs | 0 B |
 | `PermissionRuleset.Evaluate` (Deny bash rm -rf /) | 0.17 µs | 0.001 µs | 488 B |
 | `PermissionRuleset.Evaluate` (custom, Allow at end-of-scan, 4 rules) | 0.025 µs | 0.001 µs | 0 B |
+
+### 5.2 Local full runs (2026-08-22, i5-8250U, .NET 10.0.10)
+
+| Benchmark | Mean | StdDev | Allocations |
+|---|---:|---:|---:|
 | `EventBus.PublishAsync` (1 subscriber) | 0.35 µs | 0.04 µs | 0 B |
 | `EventBus.PublishAsync` (10 subscribers) | 2.80 µs | 0.20 µs | 0 B |
 | `UiStore.Dispatch` (lock-free CAS) | 0.15 µs | 0.02 µs | 0 B |
