@@ -35,6 +35,15 @@ namespace Harbor.Application.Resilience;
 /// </remarks>
 public sealed class RetryPolicy : IRetryPolicy
 {
+    private readonly TimeProvider _time;
+
+    /// <summary>
+    ///     Construct with an explicit clock (#54). Production uses
+    ///     <see cref="TimeProvider.System" />; tests pass a recording fake so
+    ///     no wall-clock assertion can flake on loaded runners.
+    /// </summary>
+    public RetryPolicy(TimeProvider? timeProvider = null) =>
+        _time = timeProvider ?? TimeProvider.System;
     /// <summary>
     ///     Upper bound for the scaled exponential backoff: late attempts stop
     ///     growing past this ceiling regardless of the attempt counter.
@@ -76,7 +85,7 @@ public sealed class RetryPolicy : IRetryPolicy
                 // Prefer the server-provided retry hint when the classifier
                 // surfaced one; otherwise use the exponentially scaled backoff.
                 TimeSpan delay = retryAfter ?? ComputeDelay(options, attempt);
-                await Task.Delay(delay, ct).ConfigureAwait(false);
+                await _time.Delay(delay, ct).ConfigureAwait(false);
             }
         }
     }

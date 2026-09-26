@@ -17,6 +17,24 @@ public class RetryPolicyTests
     private static RetryOptions Opts(int max, int delayMs = 20, bool jitter = false) =>
         new(max, TimeSpan.FromMilliseconds(delayMs), jitter);
 
+    /// <summary>
+    ///     Hermetic clock (#54): records requested delays, completes
+    ///     immediately. No wall-clock is ever observed, so loaded runners
+    ///     cannot perturb assertions. BCL only, no new packages.
+    /// </summary>
+    private sealed class RecordingTimeProvider : TimeProvider
+    {
+        public List<TimeSpan> Delays { get; } = [];
+
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
+
+        public override Task Delay(TimeSpan delay, CancellationToken cancellationToken = default)
+        {
+            Delays.Add(delay);
+            return Task.CompletedTask;
+        }
+    }
+
     // ── classification ──
 
     [Test]
@@ -207,31 +225,20 @@ public class RetryPolicyTests
         await Assert.That(seen[1].Attempt).IsEqualTo(2);
     }
 
-    // Flaky on loaded macOS runners (wall-clock overshoot vs fixed bound).
-    // Tracked in #54; proper fix = fake-time or slack refactor.
+    // Hermetic since #54-fix: delays are recorded by the fake clock, so no
+    // wall-clock bound can overshoot on loaded runners. [Retry] removed.
     [Test]
-    [Retry(2)]
     public async Task ExecuteAsync_Jitter_DelayNeverExceedsBaseDelay()
     {
-        var policy = new RetryPolicy();
+        var time = new RecordingTimeProvider();
+        var policy = new RetryPolicy(time);
         var options = Opts(max: 4, delayMs: 40, jitter: true);
-        var delays = new List<double>();
-        long lastTicks = 0;
 
         try
         {
             await policy.ExecuteAsync<HttpResponseMessage>(
                 _ => throw new HttpRequestException("reset", inner: null, HttpStatusCode.ServiceUnavailable),
                 options,
-                onRetry: (_, _) =>
-                {
-                    long now = Environment.TickCount64;
-                    if (lastTicks != 0)
-                    {
-                        delays.Add(now - lastTicks);
-                    }
-                    lastTicks = now;
-                },
                 CancellationToken.None);
         }
         catch (HttpRequestException)
@@ -239,47 +246,37 @@ public class RetryPolicyTests
             // expected exhaustion
         }
 
-        // Every observed inter-retry gap must stay under baseDelay + slack
-        // (jitter draws from [0, BaseDelay)); scheduling adds a little slack.
-        foreach (double ms in delays)
+        // max=4 attempts → 3 retries; jitter draws from [0, BaseDelay).
+        await Assert.That(time.Delays.Count).IsEqualTo(3);
+        foreach (TimeSpan delay in time.Delays)
         {
-            await Assert.That(ms).IsLessThanOrEqualTo(40 * 2 + 60);
+            await Assert.That(delay).IsGreaterThanOrEqualTo(TimeSpan.Zero);
+            await Assert.That(delay).IsLessThan(TimeSpan.FromMilliseconds(40));
         }
-        await Assert.That(delays.Count).IsGreaterThanOrEqualTo(2);
     }
 
     [Test]
     public async Task ExecuteAsync_NoJitter_DelayApproximatesBaseDelay()
     {
-        var policy = new RetryPolicy();
-        var gaps = new List<long>();
-        long last = 0;
+        var time = new RecordingTimeProvider();
+        var policy = new RetryPolicy(time);
 
         try
         {
             await policy.ExecuteAsync<HttpResponseMessage>(
                 _ => throw new HttpRequestException("timeout", inner: null, HttpStatusCode.RequestTimeout),
                 Opts(max: 3, delayMs: 80),
-                onRetry: (_, _) =>
-                {
-                    long now = Environment.TickCount64;
-                    if (last != 0) gaps.Add(now - last);
-                    last = now;
-                },
                 CancellationToken.None);
         }
         catch (HttpRequestException) { /* exhausted */ }
 
-        // Without jitter the delay is exactly BaseDelay; timer granularity is
-        // coarse but never shorter and rarely more than +50ms.
-        foreach (long g in gaps)
+        // Without jitter every requested delay is exactly BaseDelay.
+        // max=3 attempts → 2 retries.
+        await Assert.That(time.Delays.Count).IsEqualTo(2);
+        foreach (TimeSpan delay in time.Delays)
         {
-            await Assert.That(g).IsGreaterThanOrEqualTo(75);
-            await Assert.That(g).IsLessThan(200);
+            await Assert.That(delay).IsEqualTo(TimeSpan.FromMilliseconds(80));
         }
-        // max=3 attempts → 2 retries → the FIRST callback primes the clock,
-        // only the SECOND yields a measurable gap.
-        await Assert.That(gaps.Count).IsEqualTo(1);
     }
 
     [Test]
