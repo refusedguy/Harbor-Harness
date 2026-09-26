@@ -266,8 +266,11 @@ public class PermissionServiceTests
         public Task<Result> SaveAsync(HarborConfig config, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
 
-        public Task<Result> UpdateAsync(Func<HarborConfig, HarborConfig> updater, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success(updater(_config)));
+        public Task<Result> UpdateAsync(Func<HarborConfig, HarborConfig> updater, CancellationToken ct = default)
+        {
+            updater(_config);
+            return Task.FromResult(Result.Success());
+        }
 
         public Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default) =>
             Task.FromResult(Result.Failure<string>($"No API key for '{providerId}'."));
