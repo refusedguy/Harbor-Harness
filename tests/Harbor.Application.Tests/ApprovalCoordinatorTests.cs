@@ -165,4 +165,59 @@ public class ApprovalCoordinatorTests
             await Assert.That(runner.AbortSource.IsCancellationRequested).IsTrue();
         }
     }
+
+    [Test]
+    public async Task CommitDuplicateGeneration_Rejected()
+    {
+        // #49 PR3: double-approve of the same attempt starts at most once.
+        var coordinator = NewCoordinator();
+        long scope = coordinator.BeginApprovalScope();
+
+        await Assert.That(coordinator.TryCommitApproval(scope, "inv-1", 1)).IsTrue();
+        await Assert.That(coordinator.TryCommitApproval(scope, "inv-1", 1)).IsFalse();
+    }
+
+    [Test]
+    public async Task CommitHigherGeneration_Accepted_StaleRejected()
+    {
+        // A retried attempt commits a NEW generation; replaying the older
+        // one afterwards is stale and touches nothing.
+        var coordinator = NewCoordinator();
+        long scope = coordinator.BeginApprovalScope();
+
+        await Assert.That(coordinator.TryCommitApproval(scope, "inv-1", 1)).IsTrue();
+        await Assert.That(coordinator.TryCommitApproval(scope, "inv-1", 2)).IsTrue();
+        await Assert.That(coordinator.TryCommitApproval(scope, "inv-1", 1)).IsFalse();
+    }
+
+    [Test]
+    public async Task CommitAfterCancel_Rejected()
+    {
+        var coordinator = NewCoordinator();
+        var runner = new FakeRunner();
+        long scope = coordinator.BeginApprovalScope();
+        coordinator.RequestCancel(runner);
+
+        await Assert.That(coordinator.TryCommitApproval(scope, "inv-1", 1)).IsFalse();
+    }
+
+    [Test]
+    public async Task CommitAfterComplete_IsStale()
+    {
+        var coordinator = NewCoordinator();
+        long scope = coordinator.BeginApprovalScope();
+
+        await Assert.That(coordinator.TryCommitApproval(scope, "inv-1", 1)).IsTrue();
+        coordinator.CompleteInvocation("inv-1");
+        await Assert.That(coordinator.TryCommitApproval(scope, "inv-1", 1)).IsFalse();
+    }
+
+    [Test]
+    public async Task CompleteUnknownInvocation_NoThrow()
+    {
+        var coordinator = NewCoordinator();
+        coordinator.CompleteInvocation("nope");
+        coordinator.CompleteInvocation("");
+        await Task.CompletedTask;
+    }
 }

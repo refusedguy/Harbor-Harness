@@ -200,4 +200,36 @@ public class ToolDispatcherCommitTests
         await Assert.That(message.Results[0].IsError).IsTrue();
         await Assert.That(message.Results[0].Output).Contains("cancelled before start");
     }
+
+    [Test]
+    public async Task DuplicateDispatch_SameCallId_ExactlyOneStart()
+    {
+        // #49 PR3: a duplicated dispatch of the same tool call (same id)
+        // commits (invocation, generation) twice — the second commit loses,
+        // so the tool starts at most once regardless of who wins the race.
+        var coordinator = new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance);
+        var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var permissions = new GatedPermissions(gate);
+        var tool = new CountingTool();
+        var dispatcher = NewDispatcher(permissions, tool, coordinator);
+        var session = NewSession();
+        var agent = CodeAgent();
+        var partial = AssistantMessage.Empty("s", "m");
+        var tc = Call();
+
+        var run1 = dispatcher.ExecuteAsync([tc], session, partial, agent, CancellationToken.None);
+        var run2 = dispatcher.ExecuteAsync([tc], session, partial, agent, CancellationToken.None);
+        await WaitForAsync(() => permissions.Checks == 2, "both checks entered");
+        gate.TrySetResult(true);
+
+        var m1 = await run1.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        var m2 = await run2.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+
+        await Assert.That(tool.Executions).IsEqualTo(1);
+        bool firstCancelled = m1.Results[0].IsError;
+        bool secondCancelled = m2.Results[0].IsError;
+        await Assert.That(firstCancelled ^ secondCancelled).IsTrue();
+        string cancelledOutput = firstCancelled ? m1.Results[0].Output : m2.Results[0].Output;
+        await Assert.That(cancelledOutput).Contains("cancelled before start");
+    }
 }
