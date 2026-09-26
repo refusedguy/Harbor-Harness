@@ -164,7 +164,8 @@ public sealed class UiStore
         if (handlers is null)
             return;
         var args = new UiStateChangedEventArgs(next);
-        foreach (EventHandler<UiStateChangedEventArgs> single in handlers.GetInvocationList())
+        foreach (EventHandler<UiStateChangedEventArgs> single in handlers.GetInvocationList()
+                     .Cast<EventHandler<UiStateChangedEventArgs>>())
         {
             try
             {
