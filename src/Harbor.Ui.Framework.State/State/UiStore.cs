@@ -68,7 +68,14 @@ public sealed class UiStore
     /// <summary>The current immutable snapshot. Cheap to read; never mutate.</summary>
     public UiState State => _state;
 
-    /// <summary>Raised after every successful <see cref="Dispatch" />.</summary>
+    /// <summary>
+    ///     Raised after every successful <see cref="Dispatch" />.
+    ///     Delivery is synchronous on the dispatching thread: subscribers must
+    ///     consume <see cref="UiStateChangedEventArgs.State" /> (and drop stale
+    ///     revisions via <see cref="UiStateChangedEventArgs.IsStale" />) — never
+    ///     re-read the store and never mutate state. A throwing subscriber is
+    ///     isolated: remaining subscribers are still notified.
+    /// </summary>
     public event EventHandler<UiStateChangedEventArgs>? Changed;
 
     /// <summary>
@@ -91,7 +98,7 @@ public sealed class UiStore
             next = next with { Revision = original.Revision + 1 };
         } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
-        Changed?.Invoke(this, new UiStateChangedEventArgs(next));
+        Notify(next);
     }
 
     /// <summary>
@@ -115,7 +122,7 @@ public sealed class UiStore
             next = next with { Revision = original.Revision + 1 };
         } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
-        Changed?.Invoke(this, new UiStateChangedEventArgs(next));
+        Notify(next);
         return effect;
     }
 
@@ -139,7 +146,37 @@ public sealed class UiStore
             next = next with { Revision = original.Revision + 1 };
         } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
-        Changed?.Invoke(this, new UiStateChangedEventArgs(next));
+        Notify(next);
+    }
+
+    /// <summary>
+    ///     Fan-out to <see cref="Changed" /> subscribers. The delegate is
+    ///     snapshotted once, so concurrent subscribe/unsubscribe never tears
+    ///     the delivery set; each subscriber runs in its own try/catch so one
+    ///     failing renderer cannot starve the rest or fail the dispatch.
+    ///     Still synchronous on the dispatching thread — the frame loop owns
+    ///     marshaling (consume <c>e.State</c>, drop stale via
+    ///     <see cref="UiStateChangedEventArgs.IsStale" />).
+    /// </summary>
+    private void Notify(UiState next)
+    {
+        var handlers = Changed;
+        if (handlers is null)
+            return;
+        var args = new UiStateChangedEventArgs(next);
+        foreach (EventHandler<UiStateChangedEventArgs> single in handlers.GetInvocationList())
+        {
+            try
+            {
+                single(this, args);
+            }
+            catch
+            {
+                // Isolated per subscriber (issue #81): notification fan-out
+                // must survive a failing renderer. No logging here — the store
+                // is framework-free by design; renderers own error reporting.
+            }
+        }
     }
 
     /// <summary>Bind session chrome (model/provider/agent) into the state.</summary>
