@@ -82,7 +82,7 @@ public abstract record UiMsg
     public sealed record Quit : UiMsg;
 
     /// <summary>A resolved UI action with the originating key (key-input path).</summary>
-    /// <param name="Action">The abstract action (already mapped from a key by the renderer).</param>
+    /// <param name="Action">The abstract action, resolved from the raw key via <see cref="ChatKeyMap" />.</param>
     /// <param name="Pressed">The original key, for any action that needs the character/modifiers.</param>
     public sealed record KeyInput(ChatAction Action, UiKey Pressed) : UiMsg;
 

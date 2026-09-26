@@ -584,7 +584,7 @@ public static class UiReducer
                 return (TogglePanel(state, "logs"), new TuiEffect.None());
             case ChatAction.JumpPalette:
                 // Hosts register a "jump" panel (or overlay) rendering the
-                // WorktreeJumpPaletteModel; noop until one exists (TogglePanel
+                // worktree jump palette; noop until one exists (TogglePanel
                 // ignores unknown ids) so the key is safe on every renderer.
                 return (TogglePanel(state, "jump"), new TuiEffect.None());
 
