@@ -70,14 +70,7 @@ public sealed class JsonElementMemoryPackFormatter : MemoryPackFormatter<JsonEle
         }
     }
 
-    /// <summary>
-    ///     Eager, order-independent registration: runs when the Contracts
-    ///     assembly loads, before any serialization path touches
-    ///     <see cref="ToolCallPart" /> or the other <see cref="JsonElement" />
-    ///     holders. <see cref="EnsureRegistered" /> stays the idempotent
-    ///     explicit entry point (also kept for the
-    ///     <c>ToolCallPart.StaticConstructor</c> hook).
-    /// </summary>
-    [ModuleInitializer]
-    internal static void RegisterOnLoad() => EnsureRegistered();
+    // NOTE: no ModuleInitializer here (CA2255: libraries must not use it).
+    // Eager registration rides on the ToolCallPart static-constructor hook
+    // (see Messages.cs), which runs before any JsonElement holder serializes.
 }
