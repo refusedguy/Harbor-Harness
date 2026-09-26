@@ -319,20 +319,40 @@ internal sealed class ReasoningEffortJsonConverter : JsonStringConverter<Reasoni
 /// <summary>
 ///     Tool choice strategy.
 /// </summary>
-public abstract record ToolChoice
+/// <remarks>
+///     Both serializers carry a discriminator: STJ via <c>$type</c>
+///     (<c>auto</c>/<c>none</c>/<c>required</c>/<c>specific</c>), MemoryPack via
+///     union tags 0–3. Without them a base-typed round-trip silently drops the
+///     case (STJ) or has no formatter at all (MemoryPack) — #87.
+/// </remarks>
+[MemoryPackable]
+[MemoryPackUnion(0, typeof(ToolChoice.Auto))]
+[MemoryPackUnion(1, typeof(ToolChoice.None))]
+[MemoryPackUnion(2, typeof(ToolChoice.Required))]
+[MemoryPackUnion(3, typeof(ToolChoice.Specific))]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(ToolChoice.Auto), "auto")]
+[JsonDerivedType(typeof(ToolChoice.None), "none")]
+[JsonDerivedType(typeof(ToolChoice.Required), "required")]
+[JsonDerivedType(typeof(ToolChoice.Specific), "specific")]
+public abstract partial record ToolChoice
 {
     /// <summary>The model decides whether and which tool to call.</summary>
-    public sealed record Auto : ToolChoice;
+    [MemoryPackable]
+    public sealed partial record Auto : ToolChoice;
 
     /// <summary>The model must not call any tools.</summary>
-    public sealed record None : ToolChoice;
+    [MemoryPackable]
+    public sealed partial record None : ToolChoice;
 
     /// <summary>The model must call at least one tool.</summary>
-    public sealed record Required : ToolChoice;
+    [MemoryPackable]
+    public sealed partial record Required : ToolChoice;
 
     /// <summary>The model must call the named tool.</summary>
     /// <param name="ToolName">The tool the model must call.</param>
-    public sealed record Specific(string ToolName) : ToolChoice;
+    [MemoryPackable]
+    public sealed partial record Specific(string ToolName) : ToolChoice;
 }
 
 /// <summary>
