@@ -37,10 +37,12 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     /// creates a gate the caller can await via <c>DecisionRecorded</c>, and
     /// enqueues it so the frame loop appends it onto the timeline on its next
     /// tick — all list mutation stays on the render thread.
+    /// The PR4 identity rides on the gate view itself (created here off the
+    /// render thread, read after the queue handoff — no shared map needed).
     /// </summary>
-    public ApprovalGateView RequestApprovalGate(string toolName, string detail)
+    public ApprovalGateView RequestApprovalGate(string toolName, string detail, string? invocationId = null, int generation = 1)
     {
-        var gate = new ApprovalGateView(toolName, detail);
+        var gate = new ApprovalGateView(toolName, detail, invocationId, generation);
         _gateQueue.Enqueue(gate);
         status.SignalMascot(MascotReaction.ApprovalWiggle);
         return gate;
@@ -51,9 +53,9 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     /// the pending queue. Every queued gate stays interactable in arrival
     /// order — the front one is answered first; deciding it exposes the next.
     /// </summary>
-    public ApprovalGateView BeginApprovalGate(string toolName, string detail)
+    public ApprovalGateView BeginApprovalGate(string toolName, string detail, string? invocationId = null, int generation = 1)
     {
-        var gate = new ApprovalGateView(toolName, detail);
+        var gate = new ApprovalGateView(toolName, detail, invocationId, generation);
         panel.Timeline.Append(gate);
         EnqueuePendingGate(gate);
         panel.Timeline.MarkLastDirty();
@@ -176,14 +178,32 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     }
 
     /// <summary>
-    ///     Records a view-applied decision in the coordinator (#49 PR1).
+    ///     Records a view-applied decision in the coordinator (#49 PR1; PR4 4-tuple).
+    ///     A bound gate stamps the full <c>(gateId, invocationId, generation)</c>
+    ///     identity the asker registered — a stale view answering the wrong
+    ///     attempt is rejected as <c>StaleGate</c> and touches nothing. A legacy
+    ///     unbound gate keeps the gate-only path (a 4-tuple decide on an unbound
+    ///     gate is <c>StaleGate</c> by contract, so the fallback is required —
+    ///     not a second world: bound gates never take it).
     ///     Best-effort: the asker waiter is already unblocked by either the
     ///     decision or a raced cancel, so a non-Accepted disposition only
     ///     documents the race (cancel won first / duplicate stamp).
     /// </summary>
     private void StampDecision(ApprovalGateView gate)
     {
-        Coordinator?.DecideApproval(gate.Id, MapChoice(gate.Decision));
+        var coordinator = Coordinator;
+        if (coordinator is null)
+        {
+            return;
+        }
+
+        if (gate.InvocationId is null)
+        {
+            coordinator.DecideApproval(gate.Id, MapChoice(gate.Decision));
+            return;
+        }
+
+        coordinator.DecideApproval(gate.Id, gate.InvocationId, gate.Generation, MapChoice(gate.Decision));
     }
 
     private static ApprovalResolution MapChoice(ApprovalChoice choice) => choice switch

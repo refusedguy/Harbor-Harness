@@ -55,11 +55,13 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
     /// </summary>
     internal Rect? LastPaintRect { get; private set; }
 
-    public ApprovalGateView(string toolName, string detail)
+    public ApprovalGateView(string toolName, string detail, string? invocationId = null, int generation = 1)
     {
         ToolName = string.IsNullOrWhiteSpace(toolName) ? "?" : toolName.Trim();
         _detailText = (detail ?? string.Empty).Trim();
         Decision = ApprovalChoice.None;
+        InvocationId = invocationId;
+        Generation = generation;
     }
 
     public string Kind => "approval";
@@ -74,6 +76,17 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
     public bool IsPending => Decision == ApprovalChoice.None;
 
     public ApprovalChoice Decision { get; private set; }
+
+    /// <summary>
+    ///     PR4 identity binding carried from the <c>PermissionRequest</c>: the
+    ///     tool-call id this gate asks approval for. <see langword="null" />
+    ///     marks a legacy gate (e.g. a mid-execution <c>ToolContext.Ask</c>)
+    ///     that resolves via the gate-only path.
+    /// </summary>
+    public string? InvocationId { get; }
+
+    /// <summary>PR4 1-based approval attempt; meaningful only when <see cref="InvocationId" /> is set.</summary>
+    public int Generation { get; }
 
     /// <summary>
     /// Frame tick the pending-state warn glow started from, or -1 when no

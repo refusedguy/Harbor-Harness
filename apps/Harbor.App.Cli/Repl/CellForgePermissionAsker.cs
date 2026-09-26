@@ -20,6 +20,9 @@ namespace Harbor.App.Cli.Repl;
 ///     RPC, session-switch) прилетает как <see langword="null" /> и
 ///     маппится в fail-closed Deny; view-решение штампует роутер через тот же
 ///     координатор, повторные/поздние решения гейт не трогают.
+///     #49 PR4: гейт регистрируется с привязкой (invocationId, generation) из
+///     запроса — роутер штампует тот же 4-tuple; legacy-запросы без invocation
+///     идут по старому gate-only пути.
 /// </remarks>
 internal sealed class CellForgePermissionAsker(
     Func<ChatScreenBridge> bridge,
@@ -29,8 +32,15 @@ internal sealed class CellForgePermissionAsker(
 
     public async Task<PermissionResponse> AskAsync(PermissionRequest request, CancellationToken ct)
     {
-        var gate = bridge().RequestApprovalGate(request.Permission, Describe(request));
-        coordinator.RegisterGate(gate.Id);
+        var gate = bridge().RequestApprovalGate(request.Permission, Describe(request), request.InvocationId, request.Generation);
+        if (request.InvocationId is null)
+        {
+            coordinator.RegisterGate(gate.Id);
+        }
+        else
+        {
+            coordinator.RegisterGate(gate.Id, request.InvocationId, request.Generation);
+        }
 
         var resolution = await coordinator.WaitForDecisionAsync(gate.Id, ct).ConfigureAwait(false);
         if (resolution is null)

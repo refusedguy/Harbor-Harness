@@ -248,8 +248,12 @@ public sealed class ToolDispatcher(
             // landing anywhere in approve→commit invalidates it. Scopes are
             // epoch-scoped (parallel calls share fate), not once-only.
             long commitScope = coordinator?.BeginApprovalScope() ?? 0;
+            // #49 PR4: the invocation is born here (toolCall.Id). Plumb it
+            // into the permission ask so the gate binds to this exact
+            // attempt; approval is viewed once per dispatch (generation 1 —
+            // retries re-enter under the same approval, never re-ask).
             var permResponse = await permissions.CheckAsync(
-                agent.Name.Value, toolCall.ToolName, toolCall.Args, effectiveCt).ConfigureAwait(false);
+                agent.Name.Value, toolCall.ToolName, toolCall.Args, effectiveCt, toolCall.Id, generation: 1).ConfigureAwait(false);
 
             // G3 fail-closed: a permission-SUBSYSTEM failure (agent not in the
             // registry, invalid name) used to fall through to execution — i.e.

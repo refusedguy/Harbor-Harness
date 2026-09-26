@@ -345,7 +345,8 @@ internal sealed class BenchEventBus : IEventBus
 internal sealed class BenchPermissionService : IPermissionService
 {
     public Task<Result<PermissionResponse>> CheckAsync(
-        string agentName, string toolName, JsonElement args, CancellationToken ct = default)
+        string agentName, string toolName, JsonElement args, CancellationToken ct = default,
+        string? invocationId = null, int generation = 1)
         => Task.FromResult(Result.Success(new PermissionResponse(PermissionAction.Allow, false)));
 
     public Task<Result<PermissionResponse>> AskUserAsync(

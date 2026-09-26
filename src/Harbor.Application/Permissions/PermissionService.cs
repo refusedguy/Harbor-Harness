@@ -100,7 +100,9 @@ public sealed class PermissionService : IPermissionService
         string agentName,
         string toolName,
         JsonElement args,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? invocationId = null,
+        int generation = 1)
     {
         // #82: await the background persisted-load so the first check already
         // sees stored decisions. Cancellation propagates (never a verdict).
@@ -113,7 +115,7 @@ public sealed class PermissionService : IPermissionService
         // Result.Failure without any .Value read ever compiling in.
         return await AgentName.TryCreate(agentName)
             .Bind(_agents.GetAgent)
-            .Bind(agent => EvaluateActionAsync(agent, agentName, toolName, args, ct)).ConfigureAwait(false);
+            .Bind(agent => EvaluateActionAsync(agent, agentName, toolName, args, invocationId, generation, ct)).ConfigureAwait(false);
     }
 
     private async Task<Result<PermissionResponse>> EvaluateActionAsync(
@@ -121,6 +123,8 @@ public sealed class PermissionService : IPermissionService
         string agentName,
         string toolName,
         JsonElement args,
+        string? invocationId,
+        int generation,
         CancellationToken ct)
     {
         var extraction = NormalizePathExtraction(toolName, args, _workspaceRoot ?? Environment.CurrentDirectory);
@@ -161,7 +165,9 @@ public sealed class PermissionService : IPermissionService
             toolName,
             extraction.ArgPath,
             args,
-            new[] { "allow", "deny" }), ct).ConfigureAwait(false);
+            new[] { "allow", "deny" },
+            invocationId,
+            generation), ct).ConfigureAwait(false);
 
         // A2: an explicit "always" answer is recorded as a literal-pattern rule so later
         // checks for the same tool + argument skip the prompt and GetRuleset reflects it.
