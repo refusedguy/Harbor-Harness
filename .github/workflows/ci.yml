@@ -9,6 +9,10 @@
 #              that reproduce under a solution-wide `dotnet test`).
 #   test-os  — windows-latest + macOS-latest matrix for the portable core
 #              suites (TUI headless + IPC included).
+#   coverage — report-only coverage collection (issue #99): core + platform
+#              suites under the MTP CodeCoverage extension, per-project line
+#              rates in the job summary + raw cobertura.xml artifacts.
+#              NEVER gates (no thresholds, exit 0 by design).
 #   publish  — self-contained single-file Harbor.App.Cli (linux-x64) upload.
 #
 # NOTE on running tests: do NOT use `dotnet test` in this repo. The
@@ -289,6 +293,165 @@ jobs:
           path: "TestResults/**/*.trx"
           if-no-files-found: ignore
           retention-days: 7
+
+  # Task: coverage collection — REPORT-ONLY (issue #99). Runs the fast unit
+  # suites (core + platform shard lists) under the MTP CodeCoverage extension
+  # (Microsoft.Testing.Extensions.CodeCoverage ships transitively with
+  # Microsoft.NET.Test.Sdk — no new packages) and publishes per-project line
+  # coverage to the job summary + raw cobertura.xml artifacts (30-day
+  # retention feeds the "month of green reports" baseline for a future
+  # diff-threshold).
+  #
+  # Report-only contract (do NOT "fix" into a gate):
+  #   - NO thresholds, NO fail-on-numbers. A global percentage gate is
+  #     explicitly deferred (legacy areas would fail day one — see #99).
+  #   - Per-project test failures are RECORDED, never fatal: the `test` job
+  #     stays the gate. Instrumentation must not block PRs on flakes.
+  # Excluded suites: ui (Avalonia-headless flakes amplify under
+  # instrumentation), e2e/load (slow, need display). Scope is stated in the
+  # summary so numbers are never misread as whole-repo coverage.
+  coverage:
+    needs: [changes, build]
+    if: needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      - name: Download build outputs
+        uses: actions/download-artifact@v7
+        with:
+          name: solution-binaries
+
+      # ubuntu-latest does not ship ripgrep — without it the RipGrepTool
+      # integration tests self-skip (same note as in the `test` job).
+      - name: Ensure ripgrep installed
+        run: |
+          if ! command -v rg &> /dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+          fi
+          rg --version | head -1
+
+      # Per-project failures are recorded in Coverage/status.tsv, never fatal
+      # (final `exit 0` is intentional — report-only, see job comment).
+      - name: Collect coverage (core + platform unit suites)
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p Coverage
+          : > Coverage/status.tsv
+          for p in \
+            Harbor.Abstractions.Tests \
+            Harbor.Config.Tests \
+            Harbor.Domain.Tests \
+            Harbor.Application.Tests \
+            Harbor.Core.Tests \
+            Harbor.Hosting.Tests \
+            Harbor.Architecture.Tests \
+            Harbor.Lsp.Tests \
+            Harbor.Telemetry.Tests \
+            Harbor.Tools.Builtin.Tests \
+            Harbor.Storage.Tests \
+            Harbor.Storage.Jsonl.Tests \
+            Harbor.Providers.Tests \
+            Harbor.Transport.Remote.Tests \
+            Harbor.Plugins.Runtime.Tests \
+            Harbor.Ipc.Tests; do
+            echo "::group::coverage $p"
+            dll="tests/$p/bin/Release/net10.0/$p.dll"
+            if [ ! -f "$dll" ]; then
+              echo "Missing $dll — did build artifact download fail?"
+              printf '%s\tmissing\n' "$p" >> Coverage/status.tsv
+            elif dotnet exec "$dll" --minimum-expected-tests 1 \
+                --coverage \
+                --coverage-output "$GITHUB_WORKSPACE/Coverage/$p.cobertura.xml" \
+                --coverage-output-format cobertura; then
+              printf '%s\tpass\n' "$p" >> Coverage/status.tsv
+            else
+              printf '%s\tFAIL\n' "$p" >> Coverage/status.tsv
+            fi
+            echo "::endgroup::"
+          done
+          exit 0
+
+      # Summarize whatever cobertura files exist (explicit outputs + fallback
+      # sweep of TestResults in case the extension places files elsewhere).
+      # Pure stdlib python — no ReportGenerator/coverlet dependency.
+      # No thresholds here: numbers are informational only (issue #99).
+      - name: Publish coverage summary (report-only, no thresholds)
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob, os, xml.etree.ElementTree as ET
+
+          cov_dir = os.path.join(os.environ["GITHUB_WORKSPACE"], "Coverage")
+          files = {os.path.basename(f): f for f in glob.glob(os.path.join(cov_dir, "*.cobertura.xml"))}
+          for f in glob.glob(os.path.join(os.environ["GITHUB_WORKSPACE"], "TestResults", "**", "*.cobertura.xml"), recursive=True):
+              files.setdefault("TestResults/" + os.path.basename(f), f)
+
+          status = {}
+          try:
+              with open(os.path.join(cov_dir, "status.tsv")) as fh:
+                  for line in fh:
+                      name, _, st = line.rstrip("\n").partition("\t")
+                      status[name.strip()] = st.strip()
+          except OSError:
+              pass
+
+          lines = ["## Coverage (report-only, issue #99)", "",
+                   "_No thresholds — informational only. Scope: core + platform unit",
+                   "suites (ui/e2e excluded, see `coverage` job). Per-suite columns",
+                   "overlap on shared `src/` assemblies, so the TOTAL is indicative,",
+                   "not whole-repo coverage._", "",
+                   "| suite | tests | line coverage | lines |", "|---|---|---|---|"]
+          total_valid = total_covered = 0
+          for name in sorted(files):
+              try:
+                  root = ET.parse(files[name]).getroot()
+                  valid = int(float(root.get("lines-valid", 0)))
+                  covered = int(float(root.get("lines-covered", 0)))
+                  rate = float(root.get("line-rate", 0.0)) * 100.0
+                  cell = f"{rate:.1f}%"
+                  detail = f"{covered}/{valid}"
+                  total_valid += valid
+                  total_covered += covered
+              except Exception as ex:
+                  cell = "n/a (unparsable)"
+                  detail = str(ex)[:60]
+              st = status.get(name.removesuffix(".cobertura.xml"), "?")
+              short = name.removesuffix(".cobertura.xml")
+              lines.append(f"| {short} | {st} | {cell} | {detail} |")
+          if total_valid:
+              lines += ["",
+                        f"**TOTAL (indicative): {100.0 * total_covered / total_valid:.1f}% "
+                        f"({total_covered}/{total_valid} lines)**"]
+          else:
+              lines += ["", "**No cobertura files produced — check the collect step log.**"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("\n".join(lines) + "\n")
+          PY
+
+      - name: Upload cobertura reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-cobertura
+          path: "Coverage/*.cobertura.xml"
+          if-no-files-found: warn
+          retention-days: 30
 
   # Task: matrix builds. Portable suites only — the bash tool, PTY and
   # SpectreTUI suites are Linux-bound; the heavy Avalonia E2E stays on ubuntu.

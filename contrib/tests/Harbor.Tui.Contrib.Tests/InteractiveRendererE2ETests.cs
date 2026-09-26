@@ -389,7 +389,9 @@ public class InteractiveRendererE2ETests
     private sealed class StubAgent(AgentDefinition definition) : IAgent
     {
         public AgentState State { get; } = AgentState.Idle("test-session", definition);
-        public CancellationTokenSource AbortSource { get; } = new();
+        private readonly CancellationTokenSource _abortSource = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
 
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener)
             => new NoopDisposable();
@@ -405,7 +407,7 @@ public class InteractiveRendererE2ETests
         public void ResetAbortSource() { }
         public void Steer(AgentMessage message) { }
         public void FollowUp(AgentMessage message) { }
-        public void Dispose() => AbortSource.Dispose();
+        public void Dispose() => _abortSource.Dispose();
 
         private sealed class NoopDisposable : IDisposable
         {

@@ -80,7 +80,9 @@ public class ToolRetryProjectionTests
             State = AgentState.Idle("s", def) with { IsRunning = true };
         }
 
-        public CancellationTokenSource AbortSource { get; } = new();
+        public CancellationToken AbortToken => _abortSource.Token;
+        public void RequestAbort() => _abortSource.Cancel();
+        private readonly CancellationTokenSource _abortSource = new();
         public AgentState State { get; }
         public void Initialize(Session session, AgentDefinition agent) { }
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new Nop();
@@ -89,7 +91,7 @@ public class ToolRetryProjectionTests
         public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
         public void ResetAbortSource() { }
         public void Steer(AgentMessage message) { }
-        public void Dispose() => AbortSource.Dispose();
+        public void Dispose() => _abortSource.Dispose();
 
         private sealed class Nop : IDisposable
         {

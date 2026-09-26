@@ -2,6 +2,17 @@
 
 > **SUPERSEDED** by [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) + [docs/ARCHITECTURE_LAYERS.md](../docs/ARCHITECTURE_LAYERS.md) and [specs/14-architecture-revised.md](./14-architecture-revised.md) — this v1 layout (single Harbor.sln, SQLite-first storage, `IExtensionHost`) does not match the shipped solution.
 
+> **Drift note (2026-09-26, verified against `origin/dev` HEAD `b0d92c1`; 108 commits since Sep 5).** Key relocations since this spec was frozen — the pipeline/product direction below is unchanged, only the homes moved:
+> - `AgentLoop` — was `src/Harbor.Core/`, now `src/Harbor.Application/Agents/AgentLoop.cs` (`Harbor.Application` = use cases: AgentLoop, CompactionService, SystemPromptBuilder, MessageConverter, PermissionService, OnboardingWizard).
+> - `EventBus` impl — `InMemoryEventBus` now `src/Harbor.Registries/Events/InMemoryEventBus.cs` (`Harbor.Registries` = Agent/Tool/Provider registries + event bus); the `IEventBus` contract stays in `Harbor.Abstractions`.
+> - `Harbor.Core` — now a **deprecated thin facade** (only `FacadeMarker.cs`; forwards via `ProjectReference` to `Harbor.Application` + `Harbor.Registries`). Do not add code there.
+> - `Harbor.Abstractions` split into `Harbor.Abstractions` (base contracts) + `Harbor.Abstractions.Contracts` (models, events, ValueObjects, PermissionRuleset).
+> - Solutions are `.slnx`: `Harbor.slnx` (main) + `Harbor.Samples.slnx` (+ `contrib/Contrib.slnx` for optional components). No plain `.sln`, no `src/Harbor.sln`.
+> - Entry point is `apps/Harbor.App.Cli/` (was `src/Harbor.Cli/`); DI modules live in `src/Harbor.Hosting/Modules/` (`TuiModule`, `StorageModule`, `CoreModule`, …).
+> - Storage is JSONL-first: `Harbor.Storage.Jsonl` (default) + `Harbor.Storage.Memory` + `Harbor.Storage.Sqlite` (was SQLite-first).
+> - Providers: 5 src assemblies (`Anthropic`, `OpenAI`, `Ollama`, `OpenAiCompatible`, `Shared`) + 13 JSON configs in `providers/` (no `Harbor.Providers.Google` assembly).
+> - Builtin tools: 18 `ITool` classes under `src/Harbor.Tools.Builtin/Tools/` in 16 dirs (was 7 files).
+
 > Документ: программная архитектура. Слои, assembly layout, pipeline, DI, lifecycle, threading model. Здесь — структурные решения; детали каждого компонента — в специализированных разделах (`02-plugins.md`, `03-providers.md`, и т.д.).
 
 ## 1. Слои и сборки
