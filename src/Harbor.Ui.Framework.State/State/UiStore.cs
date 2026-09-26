@@ -79,25 +79,15 @@ public sealed class UiStore
 
     /// <summary>
     ///     Apply an agent event through the pure reducer and notify subscribers.
-    ///     Thread-safe; concurrent dispatches are coalesced via CAS retry.
-    ///     The published snapshot carries a monotonic <see cref="UiState.Revision" />
-    ///     (issue #94) so subscribers can drop out-of-order deliveries.
+    ///     Thin wrapper over <c>Dispatch(new UiMsg.Agent(@event))</c> so
+    ///     <see cref="UiReducer.Update(UiState, UiMsg)" /> is the single entry
+    ///     point for every state change. The published snapshot carries a
+    ///     monotonic <see cref="UiState.Revision" /> (issue #94) so subscribers
+    ///     can drop out-of-order deliveries.
     /// </summary>
     public void Dispatch(AgentEvent @event)
     {
-        UiState original;
-        UiState next;
-        do
-        {
-            original = _state; // volatile read
-            next = UiReducer.Reduce(original, @event);
-            // No-op short-circuit: avoid the event if nothing changed.
-            if (ReferenceEquals(original, next))
-                return;
-            next = next with { Revision = original.Revision + 1 };
-        } while (Interlocked.CompareExchange(ref _state, next, original) != original);
-
-        Notify(next);
+        Dispatch(new UiMsg.Agent(@event));
     }
 
     /// <summary>

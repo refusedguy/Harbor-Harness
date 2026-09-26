@@ -99,4 +99,18 @@ public class StoreRevisionTests
         await Assert.That(store.State.Revision).IsEqualTo(1);
         await Assert.That(notifications).IsEqualTo(1);
     }
+
+    [Test]
+    public async Task Dispatch_Event_RoutesThroughUpdate()
+    {
+        // #92: the AgentEvent overload must fold exactly what Update does —
+        // Update is the single entry point, the store only adds the revision.
+        var store = new UiStore();
+        var @event = new AgentStartEvent("s1", Array.Empty<AgentMessage>());
+        store.Dispatch(@event);
+
+        var expected = UiReducer.Update(new UiState(), new UiMsg.Agent(@event)).State;
+        await Assert.That(store.State with { Revision = 0 }).IsEqualTo(expected);
+        await Assert.That(store.State.Revision).IsEqualTo(1);
+    }
 }
