@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
@@ -57,8 +58,11 @@ public sealed class SessionManager : ISessionManager
     ///     id. Used by <c>AppHost</c>'s EventBus subscriber to route agent
     ///     events to the correct store so a background agent in session A
     ///     doesn't leak messages into session B's chat transcript.
+    ///     Concurrent map (issue #81): <see cref="GetContext" /> runs on the
+    ///     EventBus publisher (tool) thread while open/switch/delete run on
+    ///     the UI thread — a plain <c>Dictionary</c> tears under that pairing.
     /// </summary>
-    private readonly Dictionary<string, SessionContext> _contexts = new();
+    private readonly ConcurrentDictionary<string, SessionContext> _contexts = new(StringComparer.Ordinal);
 
     /// <summary>
     ///     Parked (tombstoned) contexts for deleted sessions (#89). A deleted
@@ -69,9 +73,10 @@ public sealed class SessionManager : ISessionManager
     ///     instead of leaking into the newly-active session (via the
     ///     ActiveContext fallback in the event router) or dropping silently.
     ///     Parked contexts are never rebound to the UI — they are pure event
-    ///     sinks, kept for the app lifetime.
+    ///     sinks, kept for the app lifetime. Concurrent map for the same
+    ///     cross-thread reason as <see cref="_contexts" /> (issue #81).
     /// </summary>
-    private readonly Dictionary<string, SessionContext> _tombstones = new();
+    private readonly ConcurrentDictionary<string, SessionContext> _tombstones = new(StringComparer.Ordinal);
     private readonly SessionFactory _factory;
     private readonly SessionGitTracker _gitTracker;
     private readonly ILogger<SessionManager> _logger;
@@ -352,9 +357,13 @@ public sealed class SessionManager : ISessionManager
             return false;
         }
 
-        _contexts.Remove(sessionId, out var removed);
-        if (removed is not null)
-            _tombstones[sessionId] = removed;
+        // Park-before-remove (issue #81): a concurrent GetContext on the
+        // EventBus thread must never observe the gap between live-removal
+        // and tombstoning — it sees the live entry first, then the parked
+        // one, never neither.
+        if (_contexts.TryGetValue(sessionId, out var live))
+            _tombstones[sessionId] = live;
+        _contexts.TryRemove(sessionId, out _);
         _logger.LogInformation("Deleted session {Id}", sessionId);
 
         if (ActiveContext?.Session.Id == sessionId)
@@ -419,14 +428,13 @@ public sealed class SessionManager : ISessionManager
 
     /// <summary>
     ///     Get-or-create the <see cref="SessionContext" /> for a session.
+    ///     Single atomic <c>GetOrAdd</c> (issue #81): two concurrent opens of
+    ///     the same session must observe ONE context — check-then-set could
+    ///     build two <see cref="UiStore" />s and split routed events between
+    ///     them, orphaning one transcript.
     /// </summary>
-    private SessionContext GetOrCreateContext(Session session)
-    {
-        if (_contexts.TryGetValue(session.Id, out var existing)) return existing;
-        var ctx = new SessionContext(session);
-        _contexts[session.Id] = ctx;
-        return ctx;
-    }
+    private SessionContext GetOrCreateContext(Session session) =>
+        _contexts.GetOrAdd(session.Id, static (_, s) => new SessionContext(s), session);
 
     /// <summary>
     ///     Rebind the singleton chat view-model to a different session's
