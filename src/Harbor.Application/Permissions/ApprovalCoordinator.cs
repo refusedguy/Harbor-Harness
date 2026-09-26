@@ -116,10 +116,23 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
     /// <summary>
     ///     Committed invocations (#49 PR3 identity): invocation id →
     ///     highest committed generation. Retired by
-    ///     <see cref="CompleteInvocation" />, so the map holds only
-    ///     in-flight executions.
+    ///     <see cref="CompleteInvocation" /> into <see cref="_retired" />
+    ///     (tombstone, not deletion — a replay after completion must still
+    ///     fail as stale), so both maps hold only live or recent executions.
     /// </summary>
     private readonly Dictionary<string, int> _committed = new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     Recently completed invocation ids (tombstones). A commit for a
+    ///     retired id fails: post-terminal replays never start. Bounded —
+    ///     oldest entries are evicted, so memory stays flat and a replay
+    ///     delayed past the window is treated as fresh (documented residual;
+    ///     realistic duplicates arrive within milliseconds, the window holds
+    ///     thousands).
+    /// </summary>
+    private readonly HashSet<string> _retired = new(StringComparer.Ordinal);
+    private readonly Queue<string> _retiredOrder = new();
+    private const int MaxRetiredInvocations = 1024;
 
     /// <inheritdoc />
     public bool TryCommitApproval(long scope, string invocationId, int generation)
@@ -128,6 +141,11 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
         lock (_gate)
         {
             if (scope != _cancelGeneration)
+            {
+                return false;
+            }
+
+            if (_retired.Contains(invocationId))
             {
                 return false;
             }
@@ -156,6 +174,15 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
         lock (_gate)
         {
             _committed.Remove(invocationId);
+            if (_retired.Add(invocationId))
+            {
+                _retiredOrder.Enqueue(invocationId);
+                while (_retiredOrder.Count > MaxRetiredInvocations
+                    && _retiredOrder.TryDequeue(out string? oldest))
+                {
+                    _retired.Remove(oldest);
+                }
+            }
         }
     }
 

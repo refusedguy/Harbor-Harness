@@ -116,8 +116,9 @@ public interface IApprovalCoordinator
 
     /// <summary>
     ///     Retire an invocation record after its terminal outcome (success,
-    ///     error, or cancellation). Unknown ids are ignored. After completion
-    ///     any late commit for the id fails (stale touches nothing).
+    ///     error, or cancellation) into a bounded tombstone set. Unknown ids
+    ///     are ignored. After retirement any late commit for the id fails
+    ///     (stale touches nothing); oldest tombstones are evicted past a cap.
     /// </summary>
     void CompleteInvocation(string invocationId);
 }
