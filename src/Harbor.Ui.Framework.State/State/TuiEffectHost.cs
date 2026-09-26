@@ -32,6 +32,11 @@ public sealed class TuiEffectHost : ITuiEffectRunner
     private readonly ILogger<TuiEffectHost>? _logger;
     private readonly Func<string, Task>? _slash;
     private readonly IApprovalCoordinator? _coordinator;
+
+    // #91: rebindable mid-flight via RebindStore. Every async effect captures
+    // its store once at entry (a volatile read) and dispatches the whole run
+    // into that snapshot, so a session switch can never redirect an in-flight
+    // run's terminal messages into the new session's store.
     private UiStore _store;
 
     public TuiEffectHost(
@@ -101,7 +106,28 @@ public sealed class TuiEffectHost : ITuiEffectRunner
 
     private async Task PromptAsync(string text)
     {
-        _store.Dispatch(new UiMsg.AgentStarted());
+        // #91: per-run store capture — a RebindStore landing mid-flight must
+        // not redirect this run's dispatches into the new session's store.
+        var store = Volatile.Read(ref _store);
+        store.Dispatch(new UiMsg.AgentStarted());
+
+        // #91: single terminal end. The failure branches used to dispatch
+        // AgentEnded("error", ...) AND fall through into the finally's
+        // AgentEnded() (double end); the success path's finally dispatch
+        // additionally folds on top of the AgentEndEvent-driven update. The
+        // flag makes this method emit exactly one terminal message per run.
+        // (The cancel branch keeps its StatusChanged("idle") shape — the abort
+        // ingress in AbortAsync owns the terminal AgentEnded("idle") there.)
+        var ended = false;
+        void EndOnce(UiMsg.AgentEnded msg)
+        {
+            if (!ended)
+            {
+                ended = true;
+                store.Dispatch(msg);
+            }
+        }
+
         try
         {
             var result = await _agent.PromptAsync(text, _appCt).ConfigureAwait(false);
@@ -111,7 +137,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
             if (result.IsFailure)
             {
                 _logger?.LogError("Agent failed: {Error}", result.Error);
-                _store.Dispatch(new UiMsg.AgentEnded("error", result.Error));
+                EndOnce(new UiMsg.AgentEnded("error", result.Error));
             }
         }
         catch (OperationCanceledException) when (_appCt.IsCancellationRequested)
@@ -122,26 +148,28 @@ public sealed class TuiEffectHost : ITuiEffectRunner
             // catch treated this as an error and set the status bar to
             // "error". The user just wanted to abort — route to a clean
             // "idle" transition instead.
-            _store.Dispatch(new UiMsg.StatusChanged("idle"));
+            store.Dispatch(new UiMsg.StatusChanged("idle"));
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "PromptAsync failed");
-            _store.Dispatch(new UiMsg.AgentEnded("error"));
+            EndOnce(new UiMsg.AgentEnded("error"));
         }
         finally
         {
             // Ensure IsAgentRunning is always reset — even on success path
             // where the agent loop might not have published AgentEndEvent yet.
-            _store.Dispatch(new UiMsg.AgentEnded());
+            EndOnce(new UiMsg.AgentEnded());
         }
     }
 
     private async Task RunSlashAsync(string command)
     {
+        // #91: per-run store capture (see PromptAsync).
+        var store = Volatile.Read(ref _store);
         if (_slash is null)
         {
-            _store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, $"no handler for {command}"));
+            store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, $"no handler for {command}"));
             return;
         }
 
@@ -152,16 +180,20 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         catch (OperationCanceledException) when (_appCt.IsCancellationRequested)
         {
             // §3.4: same rationale as PromptAsync — abort ≠ error.
-            _store.Dispatch(new UiMsg.StatusChanged("idle"));
+            store.Dispatch(new UiMsg.StatusChanged("idle"));
         }
         catch (Exception ex)
         {
-            _store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, ex.Message));
+            store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, ex.Message));
         }
     }
 
     private async Task AbortAsync()
     {
+        // #91: per-run store capture — the terminal AgentEnded("idle") below
+        // belongs to the session that owned the abort, even if a rebind lands
+        // while WaitForIdleAsync is parked.
+        var store = Volatile.Read(ref _store);
         // #49 PR1: single cancellation ingress. Null (tests, contrib hosts
         // without the coordinator) falls back to the direct cancel.
         if (_coordinator is not null)
@@ -189,7 +221,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         }
         catch (Exception ex)
         {
-            _store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, ex.Message));
+            store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, ex.Message));
         }
 
         // Recreate the abort source so the next PromptAsync call observes a
@@ -197,8 +229,11 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         // permanently disable sending — every subsequent prompt would observe
         // IsCancellationRequested=true and immediately throw
         // OperationCanceledException.
+        // #91: the reset is generation-guarded — if the bounded wait above
+        // timed out while the run is still alive, this is a no-op and the next
+        // PromptAsync self-heals once idle instead of orphaning the zombie run.
         _agent.ResetAbortSource();
 
-        _store.Dispatch(new UiMsg.AgentEnded("idle"));
+        store.Dispatch(new UiMsg.AgentEnded("idle"));
     }
 }
