@@ -185,8 +185,8 @@ public static class Program
     /// </summary>
     private static ReplRunner CreateRunner(IServiceProvider services)
     {
-        // Plugin hot-reload: resolve (and thereby start) the FS watcher glue;
-        // disposal rides on the host container teardown.
+        // Plugin hot-reload: resolving the FS watcher glue starts it.
+        // Its disposal rides on the host container teardown.
         _ = services.GetService<Harbor.Hosting.PluginAutoReloader>();
 
         // Deferred CellForge screens (see CellForgeScreens): stdin/screens
@@ -212,8 +212,7 @@ public static class Program
             services.GetRequiredService<IProviderRegistry>(),
             services.GetRequiredService<IToolRegistry>(),
             services.GetRequiredService<Harbor.Abstractions.Permissions.IPermissionService>(),
-            services.GetRequiredService<ILogger<SlashCommandDispatcher>>(),
-            services.GetRequiredService<ILogger<CellForgeReplRunner>>(),
+            services.GetRequiredService<ILoggerFactory>(),
             services.GetService<Harbor.Hosting.PluginReloadService>(),
             services.GetService<Harbor.Hosting.Rendering.IRendererPipeline>(),
             services.GetService<ITokenTracker>(),

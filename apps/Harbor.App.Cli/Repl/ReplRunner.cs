@@ -62,8 +62,7 @@ internal sealed class ReplRunner
         IProviderRegistry providers,
         IToolRegistry tools,
         IPermissionService permissions,
-        ILogger<SlashCommandDispatcher> slashLogger,
-        ILogger<CellForgeReplRunner> cellForgeLogger,
+        ILoggerFactory loggerFactory,
         Harbor.Hosting.PluginReloadService? pluginReload,
         Harbor.Hosting.Rendering.IRendererPipeline? rendererPipeline,
         ITokenTracker? tokens,
@@ -80,9 +79,9 @@ internal sealed class ReplRunner
         _sessionStore = sessionStore;
         _agentRegistry = agentRegistry;
         _providers = providers;
-        _cellForgeLogger = cellForgeLogger;
+        _cellForgeLogger = loggerFactory.CreateLogger<CellForgeReplRunner>();
         _slashes = new SlashCommandDispatcher(
-            slashLogger, tools, sessionStore, wizard, permissions, pluginReload, rendererPipeline);
+            loggerFactory.CreateLogger<SlashCommandDispatcher>(), tools, sessionStore, wizard, permissions, pluginReload, rendererPipeline);
         _rendererPipeline = rendererPipeline;
         _tokens = tokens;
         _cellForgeScreens = cellForgeScreens;
