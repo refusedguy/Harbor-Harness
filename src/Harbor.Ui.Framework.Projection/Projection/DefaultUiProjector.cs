@@ -32,7 +32,9 @@ namespace Harbor.Ui.Framework.Projection;
 ///             <item>
 ///                 Streaming-tail lines (thinking/text) are rebuilt only when
 ///                 the corresponding buffer reference changes; otherwise the
-///                 cached tail is spliced in.
+///                 cached tail is spliced in. Pending (unflushed) deltas are
+///                 deliberately NOT projected (bounded visibility lag) — see
+///                 the Project method note on O(H·N).
 ///             </item>
 ///             <item>
 ///                 Header / status bar / input models are rebuilt only when one
@@ -43,7 +45,10 @@ namespace Harbor.Ui.Framework.Projection;
 ///         Per-row block ids preserve the historical
 ///         <c>Lines.IndexOf(line)</c> first-occurrence semantics via a
 ///         first-occurrence dictionary built once per transcript revision
-///         (O(n) instead of the previous O(n²) scan).
+///         (O(n) instead of the previous O(n²) scan). Lines carrying a
+///         <c>ToolCallId</c> use it as the block id via
+///         <see cref="Harbor.Ui.Framework.State.ToolCallKey"/> — the same key
+///         the tool-card paths join on.
 ///     </para>
 ///     <para>
 ///         <b>Thread-safety:</b> the projector holds mutable cache state and
@@ -67,9 +72,24 @@ public sealed class DefaultUiProjector : IUiProjector
             return cache.Screen;
         }
 
+        // Stale-drop (#94): CAS success and Changed delivery are not atomic
+        // across threads, so notifications can arrive out of order. A state
+        // older than the last projected one reuses the cached screen instead
+        // of rewinding visible output. Revision 0 = hand-built state
+        // (tests/replays without a store): always project those.
+        if (cache is not null && state.Revision != 0 && cache.State.Revision > state.Revision)
+        {
+            return cache.Screen;
+        }
+
         // Streaming-tail buffers normalized: null when not streaming or empty
         // (null-safe like the original IsNullOrEmpty checks), so reference
-        // equality fully identifies tail content.
+        // equality fully identifies tail content. Only the synced prefix is
+        // projected — unflushed pending deltas stay invisible until
+        // ShouldFlush fires (bounded lag, max 2048 chars). Projecting pending
+        // immediately would rebuild the tail AND recompose the whole
+        // transcript (O(history)) on every delta — the O(H·N) the flush
+        // policy exists to prevent (see StreamingFrequencyTests).
         string? thinkRaw = state.Active.ThinkBuffer;
         string? textRaw = state.Active.TextBuffer;
         string? thinkBuf = state.IsStreaming && !string.IsNullOrEmpty(thinkRaw) ? thinkRaw : null;
@@ -153,7 +173,7 @@ public sealed class DefaultUiProjector : IUiProjector
             for (int i = commonPrefix; i < state.Lines.Length; i++)
             {
                 ChatLine line = state.Lines[i];
-                string id = line.ToolCallId ?? BlockId(line.Role, firstIndex[line]);
+                string id = ToolCallKey.TranscriptBlockId(line, firstIndex[line]);
                 var spans = ResolveSpans(line.Role, line.Text);
 
                 renderedBuilder.Add(new UiRenderedLine(
@@ -174,6 +194,8 @@ public sealed class DefaultUiProjector : IUiProjector
         }
 
         // ── Streaming tail (rebuilt only when a buffer reference changed) ──
+        // Reference equality suffices: buffers are immutable strings replaced
+        // wholesale on flush, so a changed reference IS changed content.
         bool tailSame = cache is not null
             && cache.IsStreaming == state.IsStreaming
             && ReferenceEquals(cache.ThinkBuf, thinkBuf)
@@ -188,6 +210,12 @@ public sealed class DefaultUiProjector : IUiProjector
         }
         else
         {
+            // Deterministic tail timestamp (#94): stamping DateTime.UtcNow here
+            // made identical states project different models, so tail
+            // memoization never stabilized. Reuse the newest transcript line
+            // timestamp (falling back to the cached tail stamp, then default)
+            // — a pure function of the projected state.
+            DateTime tailTimestamp = ResolveTailTimestamp(state, cache);
             var renderedBuilder = ImmutableArray.CreateBuilder<UiRenderedLine>(2);
             var blockBuilder = ImmutableArray.CreateBuilder<UiBlock>(2);
 
@@ -199,7 +227,7 @@ public sealed class DefaultUiProjector : IUiProjector
                     Id: thinkId,
                     Spans: thinkSpans,
                     Kind: UiLineKind.Thinking,
-                    TimestampUtc: DateTime.UtcNow));
+                    TimestampUtc: tailTimestamp));
 
                 blockBuilder.Add(new UiMessageBlock(
                     Id: thinkId,
@@ -216,7 +244,7 @@ public sealed class DefaultUiProjector : IUiProjector
                     Id: textId,
                     Spans: textSpans,
                     Kind: UiLineKind.Body,
-                    TimestampUtc: DateTime.UtcNow));
+                    TimestampUtc: tailTimestamp));
 
                 blockBuilder.Add(new UiMessageBlock(
                     Id: textId,
@@ -376,19 +404,35 @@ public sealed class DefaultUiProjector : IUiProjector
         return spans.ToImmutable();
     }
 
-    private static string BlockId(ChatRole role, int index)
+    private static DateTime ResolveTailTimestamp(UiState state, ProjectionCache? cache)
     {
-        return role switch
+        if (state.Lines.Length > 0)
         {
-            ChatRole.Tool => $"tool:{index}",
-            ChatRole.ToolResult => $"tool-result:{index}",
-            _ => $"msg:{index}"
-        };
+            DateTime lineTs = state.Lines[state.Lines.Length - 1].TimestampUtc;
+            if (lineTs != default)
+                return lineTs;
+        }
+
+        if (cache is not null)
+        {
+            foreach (var row in cache.TailRendered)
+            {
+                if (row.TimestampUtc != default)
+                    return row.TimestampUtc;
+            }
+        }
+
+        return default;
     }
 
     private static string ComputeRevision(UiState state)
     {
-        return $"{state.Lines.Length}:{state.IsStreaming}:{state.Active.TextBuffer?.Length ?? 0}:{state.Active.ThinkBuffer?.Length ?? 0}";
+        // Store revision first (stale-drop ordering), then the visible text
+        // lengths INCLUDING unflushed pending deltas (#94) so the revision
+        // string moves as soon as newly arrived text becomes visible.
+        int textLen = state.Active.TextBuffer.Length + state.PendingStreamText.Length;
+        int thinkLen = state.Active.ThinkBuffer.Length + state.PendingStreamThink.Length;
+        return $"{state.Revision}:{state.Lines.Length}:{state.IsStreaming}:{textLen}:{thinkLen}";
     }
 
     /// <summary>

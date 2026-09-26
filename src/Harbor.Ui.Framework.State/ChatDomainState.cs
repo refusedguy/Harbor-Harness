@@ -77,13 +77,19 @@ public sealed record ChatDomainState
     public ChatDomainState AddLine(ChatRole role, string text, string? toolCallId = null) =>
         this with { Lines = Lines.Add(new ChatLine(role, text, toolCallId)) };
 
-    /// <summary>Replace a line at the given index (used only for in-place edits if needed).</summary>
+    /// <summary>
+    ///     Replace a line at the given index (used only for in-place edits if needed).
+    ///     The replaced line's <c>ToolCallId</c>/<c>MessageId</c>/<c>TimestampUtc</c>
+    ///     are preserved (issue #94): they are the single key joining transcript
+    ///     lines with tool cards, and an in-place text edit must not break the join.
+    /// </summary>
     public ChatDomainState SetLine(int index, ChatRole role, string text)
     {
         if (index < 0 || index >= Lines.Length)
             return this;
+        var prev = Lines[index];
         var builder = Lines.ToBuilder();
-        builder[index] = new ChatLine(role, text);
+        builder[index] = new ChatLine(role, text, prev.ToolCallId, prev.MessageId, prev.TimestampUtc);
         return this with { Lines = builder.MoveToImmutable() };
     }
 }

@@ -59,6 +59,18 @@ public sealed record UiState
     /// <summary>Harbor chat-domain state (transcript, streaming, agent, costs, sessions).</summary>
     public ChatDomainState Chat { get; init; } = ChatDomainState.Empty;
 
+    /// <summary>
+    ///     Monotonic store revision, bumped by <see cref="UiStore" /> on every
+    ///     successful transition (issue #94). CAS success and <c>Changed</c>
+    ///     delivery are not atomic across threads, so subscribers must consume
+    ///     <c>e.State</c> (never re-read <c>store.State</c>) and drop any
+    ///     notification with <c>Revision</c> not greater than the last one
+    ///     applied — see <see cref="UiStateChangedEventArgs.IsStale" />.
+    ///     Zero on hand-built states (tests/replays); the projector always
+    ///     projects those and never treats them as stale.
+    /// </summary>
+    public long Revision { get; init; }
+
     // ── Legacy flat forwarding getters (read-only; writes go through Ui/Chat) ──
 
     /// <summary>The full transcript (user/assistant/tool/… lines), oldest first.</summary>

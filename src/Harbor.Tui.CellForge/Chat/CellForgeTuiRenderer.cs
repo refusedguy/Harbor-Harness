@@ -57,6 +57,14 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     private bool _syncingInput;
 
     /// <summary>
+    ///     Revision of the last applied <see cref="UiStore" /> notification
+    ///     (#94 stale-drop: CAS success and <c>Changed</c> delivery are not
+    ///     atomic across threads, so a delayed notification must not rewind
+    ///     the widgets — see <see cref="UiStateChangedEventArgs.IsStale" />).
+    /// </summary>
+    private long _lastProjectedRevision;
+
+    /// <summary>
     /// CF-E-002 wiring (TOP-1 #27): renderer-owned panel registry holding the 7
     /// cell-native builtin providers (see <see cref="RegisterBuiltinPanels"/>).
     /// Registration order is significant — Alt+1..9 hotkey slots follow it.
@@ -158,6 +166,9 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     private void OnStoreChanged(object? sender, UiStateChangedEventArgs e)
     {
+        if (e.IsStale(_lastProjectedRevision))
+            return;
+        _lastProjectedRevision = e.Revision;
         ProjectStateIntoWidgets(e.State);
     }
 
@@ -220,6 +231,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         if (_chatVm is ChatHistoryViewModel chvm)
         {
             chvm.IsStreaming = state.IsStreaming;
+            // Synced prefix only (flush-gated, like the projector tail):
+            // projecting pending here would copy the whole prefix per frame.
             chvm.StreamingText = state.Active.TextBuffer;
             chvm.ThinkingText = state.Active.ThinkBuffer;
             chvm.IsThinking = state.Active.ThinkBuffer.Length != 0;
