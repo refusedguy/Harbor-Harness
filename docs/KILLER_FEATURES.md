@@ -30,7 +30,7 @@ The list below is the **ruthless, ship-first** ranking. Each entry has:
 | 5  | Intra-line word-diff highlighting (not just line)  | 5      | M      | Pi (diff lib) | ⚠️ partial (line-level only) |
 | 6  | Toast notifications with slide-in + auto-dismiss   | 4      | S      | Orca (sonner) | ✅ R28 |
 | 7  | Tab-strip with drag-reorder + close-gesture        | 4      | L      | Orca          | ❌ |
-| 8  | Worktree jump palette (Cmd-J / Ctrl+J)             | 5      | M      | Orca          | ❌ |
+| 8  | Worktree jump palette (Cmd-J / Ctrl+J)             | 5      | M      | Orca          | ⚠️ partial (model + Ctrl+J hotkey + reducer; renderer panel pending) |
 | 9  | Agent pet mascot that reacts to agent state        | 4      | S      | Orca          | ❌ |
 | 10 | Markdown rich editor (TipTap) with code blocks     | 5      | L      | Orca          | ⚠️ partial (renderer, no editor) |
 | 11 | Image preview inline in chat                       | 4      | M      | Opencode, Kilo | ❌ |
@@ -764,6 +764,15 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** M (6 hours — mostly reuse CommandPaletteView)
 - **Priority:** P1
 - **Dependencies:** None
+- **Status:** Slice 1 landed (`feat/jump-palette`): pure `WorktreeJumpPaletteModel`
+  (`Harbor.Ui.Framework.Services/Palettes/`, row = path + branch + short status,
+  fuzzy filter mirroring `CommandPaletteViewModelBase`) with TUnit coverage
+  (`tests/Harbor.Tui.Tests/WorktreeJumpPaletteTests.cs`); `ChatAction.JumpPalette`
+  + Ctrl+J mapping in SpectreTui/RazorConsole/Termina/TerminalGui; reducer toggles
+  the `"jump"` panel (`OverlayIds.JumpPalette`) — noop until a host registers it.
+  Enter-confirm returns the entry; the host switches via
+  `ISessionManager.OpenSessionAsync(entry.SessionId)`. Pending: renderer panel
+  painting `Results`, session-list seeding, Enter/Esc routing while open.
 
 ---
 

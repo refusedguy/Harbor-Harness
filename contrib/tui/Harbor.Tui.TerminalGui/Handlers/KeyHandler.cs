@@ -46,6 +46,8 @@ public sealed class KeyHandler
             action = ChatAction.Clear;
         else if (key.Code == UiKeyCode.Char && key.Character == 'c' && key.Mods.HasFlag(KeyModifierSet.Ctrl))
             action = ChatAction.Abort;
+        else if (key.Code == UiKeyCode.Char && key.Character == 'j' && key.Mods.HasFlag(KeyModifierSet.Ctrl))
+            action = ChatAction.JumpPalette;
         else if (key.Code == UiKeyCode.Char && key.Character == '?')
             action = ChatAction.HelpPanel;
 
