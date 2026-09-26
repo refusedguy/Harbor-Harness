@@ -17,7 +17,7 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class SubAgentRunnerTests
 {
-    private static Session NewSession() => Session.Create("/tmp/harbor-subtest", "code", "test", "test-model");
+    private static Session NewSession() => Session.Create(Harbor.TestKit.TestTempDirs.NewDirectory("harbor-subagent"), "code", "test", "test-model");
 
     private static AgentDefinition SubAgent(string name = "explore") => new(
         AgentName.Create(name),
@@ -343,9 +343,10 @@ public class SubAgentRunnerTests
         var loop = new ScriptedLoop(replies: Assistant("ok"));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
-        await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", WorkingDirectory: "/tmp/harbor-workdir"));
+        string workdir = Harbor.TestKit.TestTempDirs.NewDirectory("harbor-workdir");
+        await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", WorkingDirectory: workdir));
 
-        await Assert.That(store.LastCreatedDirectory).IsEqualTo("/tmp/harbor-workdir");
+        await Assert.That(store.LastCreatedDirectory).IsEqualTo(workdir);
     }
 
     [Test]

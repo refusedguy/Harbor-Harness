@@ -79,7 +79,7 @@ public class DefaultUiProjectorTests
         var screen = _projector.Project(state);
 
         var toolBlocks = screen.Transcript.Blocks.OfType<UiMessageBlock>().Where(b => b.Role is ChatRole.Tool or ChatRole.ToolResult).ToList();
-        await Assert.That(toolBlocks).HasCount(2);
+        await Assert.That(toolBlocks).Count().IsEqualTo(2);
     }
 
     [Test]
@@ -140,6 +140,6 @@ public class DefaultUiProjectorTests
 
         var msgBlock = screen.Transcript.Blocks.OfType<UiMessageBlock>().First();
         await Assert.That(msgBlock.Role).IsEqualTo(ChatRole.User);
-        await Assert.That(msgBlock.Spans).HasCount(1);
+        await Assert.That(msgBlock.Spans).Count().IsEqualTo(1);
     }
 }

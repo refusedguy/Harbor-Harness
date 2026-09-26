@@ -84,8 +84,8 @@ public class LspServerSessionIntegrationTests
     [Test]
     public async Task Open_PublishesDiagnostics_DefinitionResolves()
     {
-        string scriptPath = Path.Combine(Path.GetTempPath(), $"harbor-fake-lsp-{Guid.NewGuid():N}.py");
-        string workspace = Path.Combine(Path.GetTempPath(), $"harbor-lsp-ws-{Guid.NewGuid():N}");
+        string scriptPath = Harbor.TestKit.TestTempDirs.NewFilePath("harbor-fake-lsp", ".py");
+        string workspace = Harbor.TestKit.TestTempDirs.NewDirectory("harbor-lsp-ws");
         Directory.CreateDirectory(workspace);
         string filePath = Path.Combine(workspace, "a.ts");
         await File.WriteAllTextAsync(scriptPath, FakeServerScript);

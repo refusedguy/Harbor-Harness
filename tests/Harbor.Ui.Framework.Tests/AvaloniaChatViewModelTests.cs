@@ -144,7 +144,7 @@ public class AvaloniaChatViewModelHookTests
 
         vm.SimulateStateChange(state);
 
-        await Assert.That(vm.OnAfterSelectorsAppliedStates).HasCount(1);
+        await Assert.That(vm.OnAfterSelectorsAppliedStates).Count().IsEqualTo(1);
         await Assert.That(vm.OnAfterSelectorsAppliedStates[0].Status).IsEqualTo("streaming");
         await Assert.That(vm.OnAfterSelectorsAppliedStates[0].IsAgentRunning).IsTrue();
         await Assert.That(vm.OnAfterSelectorsAppliedStates[0].IsStreaming).IsTrue();

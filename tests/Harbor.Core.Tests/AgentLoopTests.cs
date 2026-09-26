@@ -78,7 +78,7 @@ public class AgentLoopTests
 
     private static Harbor.TestKit.TestSessionContext CreateSession(params AgentMessage[] messages)
     {
-        var session = Session.Create("/tmp", "code", "test", "test-model");
+        var session = Session.Create(Harbor.TestKit.TestTempDirs.NewDirectory("harbor-agent-loop"), "code", "test", "test-model");
         return new Harbor.TestKit.TestSessionContext(session, messages);
     }
 
@@ -107,7 +107,7 @@ public class AgentLoopTests
     /// </summary>
     private static Harbor.TestKit.TestSessionContext CreateSeededSession(int seedCount)
     {
-        var session = Session.Create("/tmp", "code", "test", "test-model");
+        var session = Session.Create(Harbor.TestKit.TestTempDirs.NewDirectory("harbor-agent-loop"), "code", "test", "test-model");
         var messages = new List<AgentMessage>(seedCount);
         for (int i = 0; i < seedCount; i++)
         {

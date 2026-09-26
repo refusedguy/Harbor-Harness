@@ -45,7 +45,7 @@ public class CachingSystemPromptBuilderTests
         Array.Empty<ContextFile>(),
         Array.Empty<SkillDescriptor>(),
         null,
-        "/tmp/harbor-prompt-cache-tests");
+        TestTempDirs.NewDirectory("harbor-prompt-cache-tests"));
 
     [Test]
     public async Task BuildAsync_SameContextTwice_InnerBuilderInvokedOnce()
@@ -93,7 +93,7 @@ public class CachingSystemPromptBuilderTests
             Array.Empty<ContextFile>(),
             Array.Empty<SkillDescriptor>(),
             null,
-            "/tmp/harbor-prompt-cache-tests");
+            TestTempDirs.NewDirectory("harbor-prompt-cache-tests"));
         _ = await caching.BuildAsync(otherContext);
 
         await Assert.That(inner.BuildCalls).IsEqualTo(2);
@@ -132,7 +132,7 @@ public class CachingSystemPromptBuilderTests
             new MessageConverter(),
             NullLogger<AgentLoop>.Instance);
         var session = new TestSessionContext(
-            Session.Create("/tmp/harbor-prompt-cache-loop-tests", "code", "test", "test-model"));
+            Session.Create(TestTempDirs.NewDirectory("harbor-prompt-cache-loop"), "code", "test", "test-model"));
 
         var result = await loop.RunAsync(session, agent);
 

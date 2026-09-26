@@ -110,6 +110,8 @@ public sealed class FakeLspServer : IAsyncDisposable
     private readonly MemPipeStream _clientToServer = new();
     private readonly MemPipeStream _serverToClient = new();
     private readonly CancellationTokenSource _cts = new();
+    private Task? _loopTask;
+    private bool _disposed;
 
     public FakeLspServer()
     {
@@ -135,7 +137,7 @@ public sealed class FakeLspServer : IAsyncDisposable
         }, _serverToClient, ct);
 
     /// <summary>Run the request loop (call once).</summary>
-    public void Run() => _ = LoopAsync(_cts.Token);
+    public void Run() => _loopTask = LoopAsync(_cts.Token);
 
     private async Task LoopAsync(CancellationToken ct)
     {
@@ -250,9 +252,29 @@ public sealed class FakeLspServer : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Idempotent: tests dispose mid-run to simulate server exit and again via await-using.
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         await _cts.CancelAsync().ConfigureAwait(false);
+        if (_loopTask is not null)
+        {
+            try
+            {
+                await _loopTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected: the loop observes cancellation while a pipe read is in flight.
+            }
+        }
+
         _serverToClient.End();
         _clientToServer.End();
+        _cts.Dispose();
         await Client.DisposeAsync().ConfigureAwait(false);
     }
 }

@@ -113,6 +113,7 @@ api/
 ## E2E screenshots / test artifacts
 docs/screenshots/
 tests/**/docs/
+e2e/
 
 ## Build artifacts
 *.binlog

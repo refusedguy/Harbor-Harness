@@ -186,6 +186,7 @@ public class DecoratorTelemetryTests : IDisposable
         {
             await foreach (LlmEvent _ in client.StreamAsync(Request(), CancellationToken.None))
             {
+                // Intentionally empty: iterating to completion is what surfaces the throw.
             }
         }).Throws<InvalidOperationException>();
 
@@ -273,7 +274,7 @@ public class DecoratorTelemetryTests : IDisposable
         []);
 
     private static Session NewSession() =>
-        Session.Create("/tmp/harbor-telemetry-tests", "code", "test", "test-model");
+        Session.Create(Harbor.TestKit.TestTempDirs.NewDirectory("harbor-telemetry"), "code", "test", "test-model");
 
     private static AgentDefinition Definition() => new(
         AgentName.Create("code"),
