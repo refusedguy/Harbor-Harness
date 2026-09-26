@@ -32,5 +32,5 @@ Storage -> Compilation -> Engines -> Bridge -> Hosting
 
 ## See also
 
-- [../../docs/SCRIPTING.md](../../docs/SCRIPTING.md)
-- [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
+- [../../../docs/SCRIPTING.md](../../../docs/SCRIPTING.md)
+- [../../../docs/ARCHITECTURE_LAYERS.md](../../../docs/ARCHITECTURE_LAYERS.md)

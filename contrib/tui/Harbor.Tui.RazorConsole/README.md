@@ -75,7 +75,7 @@ The legacy `ChatBridge` (with its `List<ChatLine>` + `StreamBuffer` + `ThinkBuff
 
 ## See also
 
-- [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
-- [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) — full 4-way TUI/GUI comparison
-- [../../docs/SPECTRE_TUI_DEEP_DIVE.md](../../docs/SPECTRE_TUI_DEEP_DIVE.md)
+- [../../../docs/ARCHITECTURE_LAYERS.md](../../../docs/ARCHITECTURE_LAYERS.md)
+- [../../../docs/ALTERNATIVE_UIS.md](../../../docs/ALTERNATIVE_UIS.md) — full 4-way TUI/GUI comparison
+- [../../../docs/SPECTRE_TUI_DEEP_DIVE.md](../../../docs/SPECTRE_TUI_DEEP_DIVE.md)
 - [PLAN.md](PLAN.md) — what's done, what's TODO

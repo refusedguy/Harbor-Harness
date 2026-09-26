@@ -44,6 +44,6 @@ Windows-native WPF desktop GUI for Harbor. Targets `net10.0-windows10.0.19041`. 
 ## See also
 
 - [README.md](README.md) — full app README
-- [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md)
-- [../../docs/DESKTOP_APP_PLAN.md](../../docs/DESKTOP_APP_PLAN.md)
-- [../Harbor.App.Avalonia/README.md](../Harbor.App.Avalonia/README.md) — cross-platform desktop alternative
+- [../../../docs/ALTERNATIVE_UIS.md](../../../docs/ALTERNATIVE_UIS.md)
+- [../../../docs/DESKTOP_APP_PLAN.md](../../../docs/DESKTOP_APP_PLAN.md)
+- [../../../apps/Harbor.App.Avalonia/README.md](../../../apps/Harbor.App.Avalonia/README.md) — cross-platform desktop alternative

@@ -24,5 +24,5 @@ Tests — depends on the project(s) under test + TUnit (test framework). No prod
 
 ## See also
 
-- [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
-- [../../docs/DEVELOPMENT.md](../../docs/DEVELOPMENT.md)
+- [../../../docs/ARCHITECTURE_LAYERS.md](../../../docs/ARCHITECTURE_LAYERS.md)
+- [../../../docs/DEVELOPMENT.md](../../../docs/DEVELOPMENT.md)
