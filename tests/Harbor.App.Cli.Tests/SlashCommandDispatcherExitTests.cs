@@ -11,6 +11,7 @@ using Harbor.Application.Onboarding;
 using Harbor.Application.Permissions;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.TestKit;
 
