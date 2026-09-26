@@ -60,13 +60,24 @@ public sealed class HarborConfig
     public string Provider
     {
         get => Identity.Provider?.Value ?? IdentityConfig.FallbackProvider;
-        set
-        {
-            var r = ProviderId.TryCreate(value);
-            Identity = r.IsSuccess
-                ? Identity with { Provider = r.Value }
-                : Identity with { Provider = null };
-        }
+        set => _ = TrySetProvider(value);
+    }
+
+    /// <summary>
+    ///     Set the provider with diagnostics (ROP boundary #101). Invalid values
+    ///     still fall back to unset (null → the built-in default) exactly like
+    ///     the <see cref="Provider" /> setter, but the reason comes back as a
+    ///     failure instead of being silently dropped.
+    /// </summary>
+    /// <param name="value">The candidate provider id string (may be null/blank).</param>
+    /// <returns>Success, or failure with the parse reason.</returns>
+    public Result TrySetProvider(string? value)
+    {
+        var r = ProviderId.TryCreate(value);
+        Identity = r.IsSuccess
+            ? Identity with { Provider = r.Value }
+            : Identity with { Provider = null };
+        return r.IsSuccess ? Result.Success() : Result.Failure(r.Error);
     }
 
     /// <summary>Effective model ID (provider/model form).</summary>
@@ -74,13 +85,24 @@ public sealed class HarborConfig
     public string Model
     {
         get => Identity.Model?.ToString() ?? IdentityConfig.FallbackModel;
-        set
-        {
-            var r = ModelRef.TryParse(value);
-            Identity = r.IsSuccess
-                ? Identity with { Model = r.Value }
-                : Identity with { Model = null };
-        }
+        set => _ = TrySetModel(value);
+    }
+
+    /// <summary>
+    ///     Set the model with diagnostics (ROP boundary #101). Invalid values
+    ///     still fall back to unset (null → the built-in default) exactly like
+    ///     the <see cref="Model" /> setter, but the reason comes back as a
+    ///     failure instead of being silently dropped.
+    /// </summary>
+    /// <param name="value">The candidate model string (provider/model form).</param>
+    /// <returns>Success, or failure with the parse reason.</returns>
+    public Result TrySetModel(string? value)
+    {
+        var r = ModelRef.TryParse(value);
+        Identity = r.IsSuccess
+            ? Identity with { Model = r.Value }
+            : Identity with { Model = null };
+        return r.IsSuccess ? Result.Success() : Result.Failure(r.Error);
     }
 
     /// <summary>Effective agent (mode): code, plan, explore.</summary>
@@ -88,13 +110,24 @@ public sealed class HarborConfig
     public string Agent
     {
         get => Identity.Agent?.Value ?? IdentityConfig.FallbackAgent;
-        set
-        {
-            var r = AgentName.TryCreate(value);
-            Identity = r.IsSuccess
-                ? Identity with { Agent = r.Value }
-                : Identity with { Agent = null };
-        }
+        set => _ = TrySetAgent(value);
+    }
+
+    /// <summary>
+    ///     Set the agent with diagnostics (ROP boundary #101). Invalid values
+    ///     still fall back to unset (null → the built-in default) exactly like
+    ///     the <see cref="Agent" /> setter, but the reason comes back as a
+    ///     failure instead of being silently dropped.
+    /// </summary>
+    /// <param name="value">The candidate agent name string (may be null/blank).</param>
+    /// <returns>Success, or failure with the parse reason.</returns>
+    public Result TrySetAgent(string? value)
+    {
+        var r = AgentName.TryCreate(value);
+        Identity = r.IsSuccess
+            ? Identity with { Agent = r.Value }
+            : Identity with { Agent = null };
+        return r.IsSuccess ? Result.Success() : Result.Failure(r.Error);
     }
 
     /// <summary>TUI renderer: ansi, plain, spectre.</summary>

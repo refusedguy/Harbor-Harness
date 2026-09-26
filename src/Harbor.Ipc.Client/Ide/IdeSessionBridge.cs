@@ -107,16 +107,21 @@ public sealed class IdeSessionBridge : IAsyncDisposable
     private async Task<JsonElement?> ListSessionsAsync(CancellationToken requestCt)
     {
         Result<IReadOnlyList<Session>> result = await _client.ListSessionsAsync(requestCt).ConfigureAwait(false);
-        if (result.IsFailure)
-            throw new IdeRpcException(IdeRpcException.HandlerError, result.Error);
+        // ROP boundary #101: single Match inspection instead of IsFailure +
+        // .Value. The failure arm still throws IdeRpcException — the framing
+        // server turns it straight into the RPC error response.
+        return result.Match(
+            sessions =>
+            {
+                var list = new List<IdeSessionInfo>(sessions.Count);
+                foreach (Session s in sessions)
+                {
+                    list.Add(new IdeSessionInfo(s.Id, s.Title, s.Agent, s.ProviderId, s.Model, s.Directory, s.UpdatedAt));
+                }
 
-        var sessions = new List<IdeSessionInfo>(result.Value.Count);
-        foreach (Session s in result.Value)
-        {
-            sessions.Add(new IdeSessionInfo(s.Id, s.Title, s.Agent, s.ProviderId, s.Model, s.Directory, s.UpdatedAt));
-        }
-
-        return JsonSerializer.SerializeToElement(new IdeListSessionsResult(sessions), IdeJsonContext.Default.IdeListSessionsResult);
+                return JsonSerializer.SerializeToElement(new IdeListSessionsResult(list), IdeJsonContext.Default.IdeListSessionsResult);
+            },
+            error => throw new IdeRpcException(IdeRpcException.HandlerError, error));
     }
 
     private JsonElement? InjectPrompt(JsonElement? parameters)

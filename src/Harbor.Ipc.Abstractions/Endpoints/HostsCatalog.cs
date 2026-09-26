@@ -58,15 +58,28 @@ public static class HostsCatalog
             }
 
             var hosts = new Dictionary<string, EndpointDescriptor>(StringComparer.OrdinalIgnoreCase);
+            // ROP boundary #101: collect every bad entry and aggregate via
+            // Result.Combine instead of aborting on the first one, so one typo
+            // no longer hides the rest. A single bad entry reports exactly the
+            // same message as before (Combine of one failure is that failure).
+            var failures = new List<Result>();
             foreach (var entry in doc.RootElement.EnumerateObject())
             {
                 var parsed = ParseEntry(entry.Name, entry.Value);
-                if (parsed.IsFailure)
+                if (parsed.IsSuccess)
                 {
-                    return Result.Failure<IReadOnlyDictionary<string, EndpointDescriptor>>(parsed.Error);
+                    hosts[entry.Name] = parsed.Value;
                 }
+                else
+                {
+                    failures.Add(Result.Failure(parsed.Error));
+                }
+            }
 
-                hosts[entry.Name] = parsed.Value;
+            if (failures.Count > 0)
+            {
+                return Result.Failure<IReadOnlyDictionary<string, EndpointDescriptor>>(
+                    Result.Combine(failures).Error);
             }
 
             return Result.Success<IReadOnlyDictionary<string, EndpointDescriptor>>(hosts);

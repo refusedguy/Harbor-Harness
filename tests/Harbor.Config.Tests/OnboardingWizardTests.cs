@@ -585,4 +585,33 @@ public class OnboardingWizardTests
             Cleanup(path);
         }
     }
+
+    [Test]
+    public async Task RunAsync_NullRegistry_WarnsLikeClientFailure()
+    {
+        // ROP boundary #101: the null-registry channel prints the same
+        // "model list unavailable … manual entry" warning as the
+        // client-failure path instead of degrading silently.
+        (var wizard, _, _, string path) = CreateWizard();
+        var output = new List<string>();
+        Action<string> writer = s => output.Add(s);
+
+        // Pick ollama by id (no API key required), default model, code agent.
+        var responses = new Queue<string>(new[] { "ollama", "", "1" });
+        Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
+
+        Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+        try
+        {
+            var result = await wizard.RunAsync(reader, writer);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(output.Any(l => l.Contains("manual entry"))).IsTrue();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+            Cleanup(path);
+        }
+    }
 }
