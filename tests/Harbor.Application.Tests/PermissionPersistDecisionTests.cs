@@ -163,13 +163,6 @@ public class PermissionPersistDecisionTests
             var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
             var svc = new PermissionService(registry, NullLogger<PermissionService>.Instance, configStore: store);
 
-            int prompts = 0;
-            Task<PermissionResponse> Asker(PermissionRequest req, CancellationToken ct)
-            {
-                prompts++;
-                return Task.FromResult(new PermissionResponse(PermissionAction.Allow, true));
-            }
-
             // Simulate a user decision by directly adding to _persisted via CheckAsync
             // (in real usage, CheckAsync prompts and persists when PersistDecision=true)
             // Here we just verify SaveAsync works:

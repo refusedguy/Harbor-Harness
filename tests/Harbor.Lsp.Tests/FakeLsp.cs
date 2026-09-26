@@ -251,6 +251,7 @@ public sealed class FakeLspServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
         _serverToClient.End();
         _clientToServer.End();
         await Client.DisposeAsync().ConfigureAwait(false);

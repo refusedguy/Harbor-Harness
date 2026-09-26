@@ -207,8 +207,8 @@ public class TurnBehaviorTests
 
         await Assert.That(compaction.Calls).IsEqualTo(1);
         await Assert.That(session.Messages.OfType<AssistantMessage>().Any(m => m.IsSummary)).IsTrue();
-        await Assert.That(bus.Events.OfType<CompactionStartedEvent>()).HasCount(1);
-        await Assert.That(bus.Events.OfType<CompactionCompletedEvent>()).HasCount(1);
+        await Assert.That(bus.Events.OfType<CompactionStartedEvent>()).Count().IsEqualTo(1);
+        await Assert.That(bus.Events.OfType<CompactionCompletedEvent>()).Count().IsEqualTo(1);
         await Assert.That(outcome.TruncationFallback).IsFalse();
         // The compacted view folds the history into [summary]: 3 seeded → 1 summary line.
         await Assert.That(outcome.TurnMessages.Count).IsEqualTo(1);
@@ -226,7 +226,7 @@ public class TurnBehaviorTests
         CompactionOutcome outcome = await behavior.BeforeTurnAsync(
             session, session.Messages, TestModel, truncationFallback: false, CancellationToken.None);
 
-        await Assert.That(bus.Events.OfType<CompactionFailedEvent>()).HasCount(1);
+        await Assert.That(bus.Events.OfType<CompactionFailedEvent>()).Count().IsEqualTo(1);
         await Assert.That(outcome.TruncationFallback).IsTrue();
     }
 
@@ -264,7 +264,7 @@ public class TurnBehaviorTests
         // F17: an Esc during compaction is NOT a summarizer failure — no fallback,
         // no destructive truncation of the session.
         await Assert.That(outcome.TruncationFallback).IsFalse();
-        await Assert.That(bus.Events.OfType<CompactionFailedEvent>()).HasCount(0);
+        await Assert.That(bus.Events.OfType<CompactionFailedEvent>()).Count().IsEqualTo(0);
     }
 
     [Test]

@@ -335,7 +335,7 @@ public class CompactionServiceTests
     public async Task Materialize_TruncatedSummarizedHistory_SurvivesStoreSaveReload()
     {
         var store = new MemorySessionStore();
-        var created = await store.CreateAsync("/tmp", "code", "test", "test-model");
+        var created = await store.CreateAsync(Harbor.TestKit.TestTempDirs.NewDirectory("harbor-compaction"), "code", "test", "test-model");
         await Assert.That(created.IsSuccess).IsTrue();
         string sessionId = created.Value.Id;
 

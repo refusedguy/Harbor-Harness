@@ -7,7 +7,7 @@ public class LspServerCatalogTests
     [Test]
     public async Task BuiltinCatalog_HasElevenServers()
     {
-        await Assert.That(LspServerDefinition.Builtin).HasCount().EqualTo(11);
+        await Assert.That(LspServerDefinition.Builtin).Count().IsEqualTo(11);
         await Assert.That(LspServerDefinition.Builtin.Select(d => d.Id))
             .IsEquivalentTo(["typescript", "python", "go", "rust", "csharp",
                 "clangd", "java", "html", "css", "json", "lua"]);
@@ -37,7 +37,7 @@ public class LspServerCatalogTests
     [Test]
     public async Task FindWorkspaceRoot_NearestGitDirectoryWins()
     {
-        string root = Path.Combine(Path.GetTempPath(), "harbor-lsp-tests", Guid.NewGuid().ToString("N"));
+        string root = Harbor.TestKit.TestTempDirs.NewDirectory("harbor-lsp-tests");
         string nested = Path.Combine(root, "src", "deep");
         Directory.CreateDirectory(nested);
         Directory.CreateDirectory(Path.Combine(root, ".git"));
@@ -56,7 +56,7 @@ public class LspServerCatalogTests
     [Test]
     public async Task FindWorkspaceRoot_NoGit_FallsBackToParentDirectory()
     {
-        string root = Path.Combine(Path.GetTempPath(), "harbor-lsp-tests", Guid.NewGuid().ToString("N"));
+        string root = Harbor.TestKit.TestTempDirs.NewDirectory("harbor-lsp-tests");
         Directory.CreateDirectory(root);
 
         try

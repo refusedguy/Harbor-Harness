@@ -85,7 +85,7 @@ public sealed class TestSessionContext(Session session, IReadOnlyList<AgentMessa
     }
 
     public static TestSessionContext Create(params AgentMessage[] seed) => new(
-        Session.Create(Path.GetTempPath(), "code", "test", "test-model"),
+        Session.Create(TestTempDirs.NewDirectory("harbor-test-session"), "code", "test", "test-model"),
         seed);
 
     public static TestSessionContext Create(string tempDir, params AgentMessage[] seed) => new(
