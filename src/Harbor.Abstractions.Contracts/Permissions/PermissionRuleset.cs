@@ -475,11 +475,25 @@ public enum PermissionAction
 /// <param name="Pattern">The matched pattern (for display only).</param>
 /// <param name="Args">The raw JSON arguments of the tool call.</param>
 /// <param name="AlwaysOptions">Persistent-decision options the user may pick (e.g. <c>"always-allow"</c>).</param>
+/// <param name="InvocationId">
+///     The tool-call id of the requesting execution (#49 PR4). Carried from
+///     <c>ToolDispatcher</c> (where the invocation is born) so the asker can
+///     bind the approval gate to this exact attempt. <see langword="null" />
+///     marks a legacy request (e.g. a mid-execution <c>ToolContext.Ask</c>)
+///     whose gate stays unbound and resolves via the gate-only path.
+/// </param>
+/// <param name="Generation">
+///     The 1-based approval attempt (#49 PR4). The dispatcher asks once per
+///     dispatch, so this is 1 today; a retried attempt re-asked later binds a
+///     new generation and a replayed old one is rejected as stale.
+/// </param>
 public sealed record PermissionRequest(
     string Permission,
     string Pattern,
     JsonElement Args,
-    IReadOnlyList<string> AlwaysOptions)
+    IReadOnlyList<string> AlwaysOptions,
+    string? InvocationId = null,
+    int Generation = 1)
 {
     /// <summary>
     ///     Create a request from possibly short-lived <see cref="JsonElement" />
@@ -490,8 +504,10 @@ public sealed record PermissionRequest(
         string permission,
         string pattern,
         JsonElement args,
-        IReadOnlyList<string> alwaysOptions) =>
-        new(permission, pattern, args.ValueKind == JsonValueKind.Undefined ? args : args.Clone(), alwaysOptions);
+        IReadOnlyList<string> alwaysOptions,
+        string? invocationId = null,
+        int generation = 1) =>
+        new(permission, pattern, args.ValueKind == JsonValueKind.Undefined ? args : args.Clone(), alwaysOptions, invocationId, generation);
 }
 
 /// <summary>
@@ -526,12 +542,20 @@ public interface IPermissionService
     /// <param name="toolName">The tool name (e.g. <c>read</c>, <c>bash</c>).</param>
     /// <param name="args">The raw JSON arguments of the tool call.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="invocationId">
+    ///     The tool-call id of the requesting execution (#49 PR4), forwarded
+    ///     into the <see cref="PermissionRequest" /> so the asker can bind the
+    ///     approval gate. <see langword="null" /> keeps the legacy unbound ask.
+    /// </param>
+    /// <param name="generation">The 1-based approval attempt (#49 PR4).</param>
     /// <returns>The <see cref="PermissionResponse" />, or failure if the agent is not registered.</returns>
     public Task<Result<PermissionResponse>> CheckAsync(
         string agentName,
         string toolName,
         JsonElement args,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? invocationId = null,
+        int generation = 1);
 
     /// <summary>
     ///     Prompt the user for a permission decision. Falls back to <see cref="PermissionAction.Deny" />

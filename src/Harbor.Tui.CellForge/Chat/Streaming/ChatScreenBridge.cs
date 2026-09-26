@@ -741,11 +741,11 @@ public sealed class ChatScreenBridge : IDisposable
 
     /// <summary>Approval gates live in <see cref="ApprovalGateRouter"/> —
     /// the bridge keeps the public surface (tests + permission asker).</summary>
-    public ApprovalGateView RequestApprovalGate(string toolName, string detail) =>
-        _gates.RequestApprovalGate(toolName, detail);
+    public ApprovalGateView RequestApprovalGate(string toolName, string detail, string? invocationId = null, int generation = 1) =>
+        _gates.RequestApprovalGate(toolName, detail, invocationId, generation);
 
-    public ApprovalGateView BeginApprovalGate(string toolName, string detail) =>
-        _gates.BeginApprovalGate(toolName, detail);
+    public ApprovalGateView BeginApprovalGate(string toolName, string detail, string? invocationId = null, int generation = 1) =>
+        _gates.BeginApprovalGate(toolName, detail, invocationId, generation);
 
     public bool TryRouteApprovalKey(in KeyEvent key) => _gates.TryRouteApprovalKey(key);
 

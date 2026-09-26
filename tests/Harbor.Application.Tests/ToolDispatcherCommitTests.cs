@@ -41,7 +41,8 @@ public class ToolDispatcherCommitTests
         public int Checks;
 
         public async Task<Result<PermissionResponse>> CheckAsync(
-            string agentName, string toolName, JsonElement args, CancellationToken ct = default)
+            string agentName, string toolName, JsonElement args, CancellationToken ct = default,
+            string? invocationId = null, int generation = 1)
         {
             Interlocked.Increment(ref Checks);
             if (gate is not null)
