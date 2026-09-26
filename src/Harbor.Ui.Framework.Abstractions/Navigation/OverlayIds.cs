@@ -30,6 +30,9 @@ public static class OverlayIds
     /// <summary>Sessions list flyout.</summary>
     public const string SessionsFlyout = "sessionsFlyout";
 
+    /// <summary>Worktree jump palette (Ctrl+J, KILLER_FEATURES §2.7 Feature 3).</summary>
+    public const string JumpPalette = "jump";
+
     /// <summary>Focus-session overlay.</summary>
     public const string FocusSession = "focusSession";
 }

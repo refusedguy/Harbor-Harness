@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
 using Harbor.Application.Agents;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;

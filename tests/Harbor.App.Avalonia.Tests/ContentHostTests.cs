@@ -192,7 +192,7 @@ public class ContentHostTests
     {
         var host = new FakeContentHost();
 
-        await Assert.That(host.AvailableRoutes).HasCount(7);
+        await Assert.That(host.AvailableRoutes).Count().IsEqualTo(7);
     }
 
     // ── ActiveView default ─────────────────────────────────────────

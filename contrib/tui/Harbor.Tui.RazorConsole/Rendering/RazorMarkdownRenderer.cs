@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Harbor.Terminal.Abstractions.Rendering;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Tui.RazorConsole.Rendering;
 /// <summary>
 ///     Renders markdown into Spectre markup strings for RazorConsole. Mirrors

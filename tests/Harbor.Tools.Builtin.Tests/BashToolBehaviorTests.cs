@@ -11,6 +11,7 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     Skip unless running on Linux: these tests execute real <c>/bin/bash</c>
 ///     processes and (for the orphan check) scan <c>/proc</c>.
 /// </summary>
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
 internal sealed class SkipWhenNotLinuxAttribute : SkipAttribute
 {
     public SkipWhenNotLinuxAttribute() : base(
@@ -152,6 +153,32 @@ public class BashToolBehaviorTests
             try { Directory.Delete(workDir); }
             catch { /* temp dir best-effort cleanup */ }
         }
+    }
+
+    // ── 5. Stdout+stderr capture after handler refactor (#53) ─────────────
+
+    /// <summary>
+    ///     A command writing to both streams must return both, in order, after
+    ///     the #53 handler-detach refactor (guards detach-before-read ordering:
+    ///     detaching too early or reading while callbacks are live would drop
+    ///     content or corrupt the recycled pooled builder).
+    /// </summary>
+    [Test]
+    [SkipWhenNotLinux]
+    public async Task StdoutAndStderr_BothCaptured_AfterHandlerDetach()
+    {
+        var args = JsonDocument.Parse(
+            """{"command":"echo out-marker-1; echo err-marker-1 >&2; echo out-marker-2; echo err-marker-2 >&2","timeout":10}""").RootElement;
+
+        var result = await ExecuteAsync(args).WaitAsync(TimeSpan.FromSeconds(15));
+
+        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result.Output).Contains("out-marker-1");
+        await Assert.That(result.Output).Contains("out-marker-2");
+        await Assert.That(result.Output).Contains("[stderr]");
+        await Assert.That(result.Output).Contains("err-marker-1");
+        await Assert.That(result.Output).Contains("err-marker-2");
+        await Assert.That(result.Output).Contains("[exit code: 0]");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

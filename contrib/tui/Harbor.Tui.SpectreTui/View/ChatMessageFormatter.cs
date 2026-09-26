@@ -1,4 +1,5 @@
 ﻿using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Spectre.Console;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.View;

@@ -9,7 +9,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" PrivateAssets="all"/>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all"/>
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);RS1041;S1944</NoWarn>
+  </PropertyGroup>
 
 </Project>

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Storage.Tests;
 
+[ParallelLimiter<SqliteStoreLimit>]
 public class SqliteDeleteMessagesAfterTests
 {
     private static SqliteSessionStore Create() =>

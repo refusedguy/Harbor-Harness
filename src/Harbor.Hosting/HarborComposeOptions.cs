@@ -133,6 +133,5 @@ public sealed class HarborComposeOptions
         DefaultStorageBackend = "memory",
     };
 
-    private static string DefaultHarborDir() =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".harbor");
+    private static string DefaultHarborDir() => HarborPaths.GetHarborHome();
 }

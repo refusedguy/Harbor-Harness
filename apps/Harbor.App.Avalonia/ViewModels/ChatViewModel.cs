@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using ChatLineViewModel = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.Views.Components;

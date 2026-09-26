@@ -13,7 +13,7 @@ namespace Harbor.Benchmarks;
 ///     splitting and context matching.
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(warmupCount: 2, iterationCount: 3)]
+[SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class PatchToolUnifiedDiffBenchmark
 {
     private PatchTool _tool = null!;
@@ -31,6 +31,15 @@ public class PatchToolUnifiedDiffBenchmark
         _originalFile = BuildOriginalFile(HunkCount * 10);
         _patch = BuildUnifiedDiff(_originalFile, HunkCount);
         _tempFilePath = System.IO.Path.GetTempFileName();
+        System.IO.File.WriteAllText(_tempFilePath, _originalFile);
+    }
+
+    [IterationSetup]
+    public void ResetTargetFile()
+    {
+        // ApplyPatch mutates the target file; restore the original content per
+        // iteration so every iteration applies the same patch to the same input
+        // (IterationCleanup deletes the file, WriteAllText recreates it).
         System.IO.File.WriteAllText(_tempFilePath, _originalFile);
     }
 

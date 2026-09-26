@@ -2,6 +2,7 @@ namespace Harbor.Tui.SpectreTui.State;
 
 using Harbor.Abstractions.Events;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 
 /// <summary>
 ///     Adapter that bridges the legacy <see cref="UiStore" /> / <see cref="UiState" />

@@ -13,11 +13,11 @@ public sealed class ResourceKeyGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var themeFiles = context.AdditionalTextsProvider
-            .Where(static (file, _) =>
+            .Where(static (file) =>
                 file.Path.Contains("Themes/Hds/", StringComparison.OrdinalIgnoreCase)
                 && file.Path.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase));
 
-        var keys = themeFiles.SelectMany(static (file, ct) =>
+        var keys = themeFiles.Select(static (file, ct) =>
         {
             var result = new List<string>();
             try
@@ -27,8 +27,7 @@ public sealed class ResourceKeyGenerator : IIncrementalGenerator
                 {
                     if (reader.NodeType == XmlNodeType.Element)
                     {
-                        var key = reader.GetAttribute("x:Key")
-                            ?? reader.GetAttribute("Key");
+                        string? key = reader.GetAttribute("x:Key") ?? reader.GetAttribute("Key");
                         if (!string.IsNullOrEmpty(key))
                         {
                             result.Add(key);
@@ -38,13 +37,14 @@ public sealed class ResourceKeyGenerator : IIncrementalGenerator
             }
             catch
             {
+                // Malformed XAML is non-critical; skip bad files silently.
             }
-            return result;
+            return result.ToArray();
         });
 
-        context.RegisterSourceOutput(keys, static (spc, keys) =>
+        context.RegisterImplementationSourceOutput(keys, (spc, k) =>
         {
-            var distinct = keys.Distinct().OrderBy(k => k).ToArray();
+            string[] distinct = k.Distinct().OrderBy(x => x).ToArray();
             if (distinct.Length == 0) return;
 
             var sb = new StringBuilder();
@@ -54,10 +54,14 @@ public sealed class ResourceKeyGenerator : IIncrementalGenerator
             sb.AppendLine("public static class R");
             sb.AppendLine("{");
 
-            foreach (var key in distinct)
+            foreach (string key in distinct)
             {
                 var constName = MakeConstName(key);
-                sb.AppendLine($"    internal const string {constName} = \"{key}\";");
+                sb.Append("    internal const string ");
+                sb.Append(constName);
+                sb.Append(" = \"");
+                sb.Append(key);
+                sb.AppendLine("\";");
             }
 
             sb.AppendLine("}");
@@ -79,7 +83,7 @@ public sealed class ResourceKeyGenerator : IIncrementalGenerator
             {
                 sb.Append('_');
             }
-            else if (sb.Length > 0 && sb[^1] != '_')
+            else if (sb.Length > 0 && sb[sb.Length - 1] != '_')
             {
                 sb.Append('_');
             }

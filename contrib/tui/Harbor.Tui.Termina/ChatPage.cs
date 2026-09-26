@@ -1,6 +1,7 @@
 using Harbor.Tui.Termina.Views;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 using R3;
 using Termina.Input;

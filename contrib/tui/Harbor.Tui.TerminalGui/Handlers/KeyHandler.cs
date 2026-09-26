@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.TerminalGui.Handlers;
 /// <summary>
@@ -45,6 +46,8 @@ public sealed class KeyHandler
             action = ChatAction.Clear;
         else if (key.Code == UiKeyCode.Char && key.Character == 'c' && key.Mods.HasFlag(KeyModifierSet.Ctrl))
             action = ChatAction.Abort;
+        else if (key.Code == UiKeyCode.Char && key.Character == 'j' && key.Mods.HasFlag(KeyModifierSet.Ctrl))
+            action = ChatAction.JumpPalette;
         else if (key.Code == UiKeyCode.Char && key.Character == '?')
             action = ChatAction.HelpPanel;
 

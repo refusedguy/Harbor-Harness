@@ -1,4 +1,4 @@
-using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Tests;
 

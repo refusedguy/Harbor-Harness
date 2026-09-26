@@ -1,5 +1,6 @@
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 

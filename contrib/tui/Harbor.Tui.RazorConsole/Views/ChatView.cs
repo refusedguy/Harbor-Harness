@@ -2,7 +2,7 @@ using Harbor.Tui.RazorConsole.Handlers;
 using Harbor.Tui.RazorConsole.Rendering;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
-using UiChatLine = Harbor.Ui.Framework.State.ChatLine;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Tui.RazorConsole.Views;
 /// <summary>

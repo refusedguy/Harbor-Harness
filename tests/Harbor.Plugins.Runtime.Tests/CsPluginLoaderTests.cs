@@ -40,7 +40,7 @@ public sealed class CsPluginLoaderTests
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Count).IsEqualTo(1);
         await Assert.That(result.Value[0].Name).IsEqualTo("hello-world-a");
-        await Assert.That(host.RegisteredTools).HasCount(1);
+        await Assert.That(host.RegisteredTools).Count().IsEqualTo(1);
         await Assert.That(host.RegisteredTools[0].Name.Value).IsEqualTo("hello_a");
     }
 

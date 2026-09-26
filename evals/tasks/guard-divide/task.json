@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "guard-divide",
+  "fixtureVersion": 1,
+  "promptFile": "prompt.md",
+  "sourceDirectory": "repo",
+  "timeoutSeconds": 600,
+  "verifierTimeoutSeconds": 60,
+  "verifier": {
+    "unix": { "file": "bash", "args": ["{verifier}/verify.sh", "{workspace}", "{verificationOutput}"] },
+    "windows": { "file": "", "args": [] }
+  },
+  "constraintsFile": "constraints.json"
+}

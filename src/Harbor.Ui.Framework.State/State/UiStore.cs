@@ -74,6 +74,8 @@ public sealed class UiStore
     /// <summary>
     ///     Apply an agent event through the pure reducer and notify subscribers.
     ///     Thread-safe; concurrent dispatches are coalesced via CAS retry.
+    ///     The published snapshot carries a monotonic <see cref="UiState.Revision" />
+    ///     (issue #94) so subscribers can drop out-of-order deliveries.
     /// </summary>
     public void Dispatch(AgentEvent @event)
     {
@@ -86,6 +88,7 @@ public sealed class UiStore
             // No-op short-circuit: avoid the event if nothing changed.
             if (ReferenceEquals(original, next))
                 return;
+            next = next with { Revision = original.Revision + 1 };
         } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
         Changed?.Invoke(this, new UiStateChangedEventArgs(next));
@@ -109,6 +112,7 @@ public sealed class UiStore
             // No-op short-circuit: state unchanged, no event.
             if (ReferenceEquals(original, next))
                 return effect;
+            next = next with { Revision = original.Revision + 1 };
         } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
         Changed?.Invoke(this, new UiStateChangedEventArgs(next));
@@ -132,6 +136,7 @@ public sealed class UiStore
             next = reducer(original);
             if (ReferenceEquals(original, next))
                 return;
+            next = next with { Revision = original.Revision + 1 };
         } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
         Changed?.Invoke(this, new UiStateChangedEventArgs(next));
@@ -152,6 +157,22 @@ public sealed class UiStateChangedEventArgs : EventArgs
         State = state;
     }
 
-    /// <summary>The new UI snapshot after the transition.</summary>
+    /// <summary>The new UI snapshot after the transition. Consume this — never re-read the store.</summary>
     public UiState State { get; }
+
+    /// <summary>
+    ///     Monotonic revision of <see cref="State" /> (issue #94). Every
+    ///     successful <see cref="UiStore" /> transition bumps it by exactly one.
+    /// </summary>
+    public long Revision => State.Revision;
+
+    /// <summary>
+    ///     Whether this notification is stale relative to an already-applied one.
+    ///     CAS success and event delivery are not atomic across threads, so a
+    ///     subscriber that applied revision N must ignore any notification with
+    ///     <c>Revision &lt;= N</c> instead of rewinding visible state.
+    /// </summary>
+    /// <param name="lastAppliedRevision">Revision of the last applied notification.</param>
+    /// <returns>True when this notification must be dropped.</returns>
+    public bool IsStale(long lastAppliedRevision) => Revision <= lastAppliedRevision;
 }

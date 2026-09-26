@@ -85,24 +85,47 @@ internal static class CellForgeModule
             sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ChatScreen>().Timeline,
             sp.GetRequiredService<StatusViewModel>(),
-            autoSubscribe: false)); // events pumped through the frame loop thread
+            autoSubscribe: false, // events pumped through the frame loop thread
+            coordinator: sp.GetRequiredService<IApprovalCoordinator>()));
 
         // Permission asks вместо молчаливого fail-closed deny: карточка
         // ApprovalGateView в таймлайне + ожидание y/n/a. Ленивое замыкание на
         // мост — резолв в момент первого запроса разрешений, не при сборке DI.
         // Последняя регистрация IPermissionService выигрывает (AddHarbor уже отработал),
         // поэтому оверрайд виден и ToolDispatcher'у внутри агента.
-        services.AddSingleton(sp => new CellForgePermissionAsker(
-            () => sp.GetRequiredService<ChatScreenBridge>()));
-        services.AddSingleton<IPermissionService>(sp => new PermissionService(
-            sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
-            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
-                Harbor.Application.Permissions.PermissionService>>(),
-            sp.GetRequiredService<Repl.CellForgePermissionAsker>().AskAsync,
-            workspaceRoot: Directory.GetCurrentDirectory()));
+        //
+        // #52: one-shot verbs (ask, run task) и headless-контексты никогда не
+        // крутят ChatScreen frame loop — решение гейта не придёт никогда и
+        // Ask-вызовы висят вечно. Без доступного аппрувера оверрайд не
+        // регистрируем: остаётся fail-closed Deny из IntelligenceModule.
+        // #49 PR1: внутри гейта asker идёт через IApprovalCoordinator.
+        if (IsApprovalPromptAvailable())
+        {
+            services.AddSingleton(sp => new CellForgePermissionAsker(
+                () => sp.GetRequiredService<ChatScreenBridge>(),
+                sp.GetRequiredService<IApprovalCoordinator>()));
+            services.AddSingleton<IPermissionService>(sp => new PermissionService(
+                sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                    Harbor.Application.Permissions.PermissionService>>(),
+                sp.GetRequiredService<Repl.CellForgePermissionAsker>().AskAsync,
+                workspaceRoot: Directory.GetCurrentDirectory()));
+        }
 
         return services;
     }
+
+    /// <summary>
+    ///     Есть ли кому отвечать на approval-карточку (#52). Аппрувер — живой
+    ///     человек за TTY в интерактивном REPL: stdin не перенаправлен (есть
+    ///     клавиатура) и процесс не помечен как one-shot
+    ///     (<c>HARBOR_NO_APPROVER=1</c> ставят <c>ask</c>/<c>run task</c> до
+    ///     сборки хоста — frame loop там не крутится при любом TTY).
+    /// </summary>
+    internal static bool IsApprovalPromptAvailable() =>
+        Environment.GetEnvironmentVariable("HARBOR_NO_APPROVER") != "1"
+        && Environment.UserInteractive
+        && !Console.IsInputRedirected;
 
     /// <summary>Viewport probe for the frame pipeline. Never throws.</summary>
     private static (int Cols, int Rows) ReadTerminalSize()

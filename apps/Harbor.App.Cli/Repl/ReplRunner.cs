@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
@@ -210,7 +211,8 @@ internal sealed class ReplRunner
             sp.GetRequiredService<TerminalInputSource>(),
             modeController,
             sp.GetRequiredService<ITerminalBackend>(),
-            sp.GetRequiredService<ILogger<CellForgeReplRunner>>());
+            sp.GetRequiredService<ILogger<CellForgeReplRunner>>(),
+            sp.GetRequiredService<IApprovalCoordinator>());
         int exitCode = await runner.RunAsync(ct).ConfigureAwait(false);
         return Result.Success(exitCode);
     }

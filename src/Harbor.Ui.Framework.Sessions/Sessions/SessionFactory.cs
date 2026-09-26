@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
@@ -104,8 +105,8 @@ public sealed class SessionFactory
     ///     by <see cref="SessionManager.EnsureDefaultSessionAsync" /> /
     ///     <see cref="SessionManager.OpenSessionAsync" />.
     /// </summary>
-    /// <returns>The created session, or null on failure.</returns>
-    public async Task<Session?> CreateDefaultAsync()
+    /// <returns>The created session, or a failure carrying the store error.</returns>
+    public async Task<Result<Session>> CreateDefaultAsync()
     {
         var agents = _services.GetRequiredService<IAgentRegistry>();
         var agentDef = agents.GetAllAgents().FirstOrDefault()
@@ -124,13 +125,13 @@ public sealed class SessionFactory
         if (createResult.IsFailure)
         {
             _logger.LogError("Failed to create default session: {Error}", createResult.Error);
-            return null;
+            return Result.Failure<Session>($"Failed to create default session: {createResult.Error}");
         }
 
         var session = createResult.Value;
         _logger.LogInformation("Default session created: {Id} ({Title}) dir={Dir} provider={Provider} model={Model}",
             session.Id, session.Title, session.Directory, agentDef.ProviderId, agentDef.Model);
-        return session;
+        return Result.Success(session);
     }
 
     /// <summary>
@@ -141,8 +142,8 @@ public sealed class SessionFactory
     /// <param name="providerId">Optional provider id override.</param>
     /// <param name="modelId">Optional model id override.</param>
     /// <param name="workingDirectory">Optional working directory for the session.</param>
-    /// <returns>The new session, or null on failure.</returns>
-    public async Task<Session?> CreateNewAsync(
+    /// <returns>The new session, or a failure carrying the store error.</returns>
+    public async Task<Result<Session>> CreateNewAsync(
         string? agentName = null,
         string? providerId = null,
         string? modelId = null,
@@ -158,12 +159,12 @@ public sealed class SessionFactory
         if (result.IsFailure)
         {
             _logger.LogError("Create session failed: {Error}", result.Error);
-            return null;
+            return Result.Failure<Session>($"Failed to create session: {result.Error}");
         }
 
         var session = result.Value;
         _logger.LogInformation("New session: {Id} ({Title})", session.Id, session.Title);
-        return session;
+        return Result.Success(session);
     }
 
     /// <summary>
@@ -172,31 +173,47 @@ public sealed class SessionFactory
     ///     The caller is responsible for switching to the branch.
     /// </summary>
     /// <param name="source">The session to branch from.</param>
-    /// <returns>The branched session, or null on failure.</returns>
-    public async Task<Session?> CreateBranchAsync(Session source)
+    /// <returns>The branched session, or a failure carrying the store error.</returns>
+    public async Task<Result<Session>> CreateBranchAsync(Session source)
     {
         var branchResult = await _sessionStore.CreateAsync(
             source.Directory, source.Agent, source.ProviderId, source.Model).ConfigureAwait(false);
         if (branchResult.IsFailure)
         {
             _logger.LogError("Branch session {Id} failed: {Error}", source.Id, branchResult.Error);
-            return null;
+            return Result.Failure<Session>($"Failed to branch session '{source.Id}': {branchResult.Error}");
         }
 
         var branch = branchResult.Value with { Title = source.Title + " (branch)" };
         var messagesResult = await _sessionStore.GetMessagesAsync(source.Id).ConfigureAwait(false);
-        if (messagesResult.IsSuccess)
+        if (messagesResult.IsFailure)
         {
-            foreach (var msg in messagesResult.Value)
+            _logger.LogError("Branch session {Id} failed: could not read message history: {Error}",
+                source.Id, messagesResult.Error);
+            return Result.Failure<Session>(
+                $"Failed to branch session '{source.Id}': could not read message history: {messagesResult.Error}");
+        }
+
+        int copied = 0;
+        int total = messagesResult.Value.Count;
+        foreach (var msg in messagesResult.Value)
+        {
+            // Re-parent the message to the new session id and persist it.
+            var reborn = msg with { SessionId = branch.Id, Id = Guid.NewGuid().ToString("N") };
+            var appendResult = await _sessionStore.AppendMessageAsync(branch.Id, reborn).ConfigureAwait(false);
+            if (appendResult.IsFailure)
             {
-                // Re-parent the message to the new session id and persist it.
-                var reborn = msg with { SessionId = branch.Id, Id = Guid.NewGuid().ToString("N") };
-                await _sessionStore.AppendMessageAsync(branch.Id, reborn).ConfigureAwait(false);
+                _logger.LogError(
+                    "Branch session {Id} failed: could not copy message history ({Copied} of {Total} copied): {Error}",
+                    source.Id, copied, total, appendResult.Error);
+                return Result.Failure<Session>(
+                    $"Failed to branch session '{source.Id}': could not copy message history ({copied} of {total} copied): {appendResult.Error}");
             }
+            copied++;
         }
 
         _logger.LogInformation("Branched session {Old} → {New}", source.Id, branch.Id);
-        return branch;
+        return Result.Success(branch);
     }
 
     /// <summary>Convert an <see cref="AgentMessage" /> into a chat-line role + text for the UI store.</summary>

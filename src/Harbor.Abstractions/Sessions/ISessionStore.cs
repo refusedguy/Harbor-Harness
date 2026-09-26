@@ -92,6 +92,13 @@ public interface ISessionStore
     /// <summary>
     ///     Get aggregated stats for a session.
     /// </summary>
+    /// <remarks>
+    ///     Stats semantics diverge by implementation: <c>JsonlSessionStore</c>
+    ///     derives stats from the message history on every call (writes via
+    ///     <see cref="UpdateStatsAsync" /> are accepted but ignored), while
+    ///     <c>SqliteSessionStore</c> and <c>MemorySessionStore</c> return the
+    ///     last stored metadata record.
+    /// </remarks>
     /// <param name="sessionId">The session id.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The current stats, or failure if the session does not exist.</returns>
@@ -100,6 +107,12 @@ public interface ISessionStore
     /// <summary>
     ///     Update aggregated stats for a session.
     /// </summary>
+    /// <remarks>
+    ///     <c>JsonlSessionStore</c> derives stats from messages (see
+    ///     <see cref="GetStatsAsync" />), so this is a no-op success there;
+    ///     the other stores persist the record and fail when the session does
+    ///     not exist.
+    /// </remarks>
     /// <param name="sessionId">The session id.</param>
     /// <param name="metadata">The new stats to persist.</param>
     /// <param name="ct">Cancellation token.</param>

@@ -1,0 +1,5 @@
+{
+  "readOnly": false,
+  "mustRemainUnchanged": ["test_shout.py"],
+  "mustNotCreate": ["*.bak", "__pycache__/**"]
+}

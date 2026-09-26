@@ -1,0 +1,5 @@
+# Golden fixtures must keep LF in every checkout so string comparisons are
+# stable across Windows (CRLF) / Linux (LF) hosts. Test helpers additionally
+# normalize via GoldenFrames.Normalize — this attribute is the belt-and-braces
+# half: regeneration diffs stay clean and checkouts deterministic.
+*.golden.txt text eol=lf

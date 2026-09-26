@@ -16,7 +16,7 @@ namespace Harbor.Benchmarks;
 ///     contaminating later iterations.
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(warmupCount: 2, iterationCount: 3)]
+[SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class JsonlSessionStoreBenchmark
 {
     private AssistantMessage _assistantMessage = null!;

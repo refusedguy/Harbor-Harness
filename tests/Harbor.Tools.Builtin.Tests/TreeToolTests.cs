@@ -25,12 +25,14 @@ public class TreeToolTests
     }
 
     [Test]
-    public async Task ValidateArguments_OutOfRangeMaxDepth_ReturnsFailure()
+    [Arguments("{}", true)]
+    [Arguments("""{"maxDepth":99}""", false)]
+    public async Task ValidateArguments_Theory(string json, bool expectSuccess)
     {
         var tool = new TreeTool(NullLogger<TreeTool>.Instance);
-        var args = JsonDocument.Parse("""{"maxDepth":99}""").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
     }
 
     [Test]

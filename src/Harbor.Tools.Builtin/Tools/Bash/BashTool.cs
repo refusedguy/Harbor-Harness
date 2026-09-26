@@ -111,8 +111,9 @@ public sealed class BashTool : ITool
         long stderrDropped = 0;
         // End-of-stream sentinels: the async output callbacks can still fire
         // AFTER WaitForExitAsync returns (and after a kill). Every code path
-        // below awaits both sentinels before touching (or disposing) the
-        // pooled builders, so no late callback can write into a returned slot.
+        // below drains both sentinels (bounded 2s, non-fatal on timeout) and
+        // detaches the handlers in the finally before the pooled builders are
+        // read or returned, so no late callback can write into a returned slot.
         var stdoutEof = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var stderrEof = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -120,34 +121,8 @@ public sealed class BashTool : ITool
 
         _logger.LogDebug("Executing: {Command} (timeout: {Timeout}s)", command, timeout);
 
-        process.OutputDataReceived += (_, e) =>
-        {
-            if (e.Data is null)
-            {
-                stdoutEof.TrySetResult();
-                return;
-            }
-            if (stdout.Builder.Length >= MaxOutputChars)
-            {
-                stdoutDropped += e.Data.Length + 1;
-                return;
-            }
-            stdout.Builder.Append(e.Data).Append('\n');
-        };
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data is null)
-            {
-                stderrEof.TrySetResult();
-                return;
-            }
-            if (stderr.Builder.Length >= MaxOutputChars)
-            {
-                stderrDropped += e.Data.Length + 1;
-                return;
-            }
-            stderr.Builder.Append(e.Data).Append('\n');
-        };
+        process.OutputDataReceived += OnStdout;
+        process.ErrorDataReceived += OnStderr;
 
         try
         {
@@ -164,8 +139,22 @@ public sealed class BashTool : ITool
 
         // Bounded drain: wait for the reader callbacks to signal end-of-stream
         // so the builders are quiescent before they are read or returned.
-        Task DrainAsync() => Task.WhenAll(stdoutEof.Task, stderrEof.Task)
-            .WaitAsync(TimeSpan.FromSeconds(2), CancellationToken.None);
+        // #53 audit: a drain timeout no longer propagates — throwing out of
+        // here would dispose the pooled builders while callbacks may still be
+        // in flight (use-after-return). Handlers are detached in the finally
+        // below regardless of outcome.
+        async Task DrainAsync()
+        {
+            try
+            {
+                await Task.WhenAll(stdoutEof.Task, stderrEof.Task)
+                    .WaitAsync(TimeSpan.FromSeconds(2), CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (TimeoutException ex)
+            {
+                _logger.LogWarning(ex, "Timed out waiting for process output drains; continuing with output so far");
+            }
+        }
 
         try
         {
@@ -190,6 +179,19 @@ public sealed class BashTool : ITool
                 _logger.LogInformation(ex, "Command cancelled before completion");
                 return ToolResult.Error(
                     $"Command was cancelled.\nStdout so far:\n{stdout}\nStderr:\n{stderr}");
+            }
+        }
+        finally
+        {
+            // Detach BEFORE the pooled builders are read or returned, so no
+            // late process callback can append into a recycled builder.
+            process.OutputDataReceived -= OnStdout;
+            process.ErrorDataReceived -= OnStderr;
+            try { process.CancelOutputRead(); }
+            catch (InvalidOperationException) { /* never started reading */
+            }
+            try { process.CancelErrorRead(); }
+            catch (InvalidOperationException) { /* never started reading */
             }
         }
 
@@ -221,6 +223,42 @@ public sealed class BashTool : ITool
             ? ToolResult.Error(output.ToString(), new { exitCode = process.ExitCode })
             : ToolResult.Success(output.ToString(), new { exitCode = process.ExitCode });
         return result;
+
+        // #53 audit: named locals (not inline lambdas) so they can be
+        // detached in the finally above. The async output callbacks can still
+        // fire AFTER WaitForExitAsync returns, after a kill, or after the 2s
+        // drain gives up — without detach, a late callback would append into
+        // a pooled builder already returned to StringBuilderPool
+        // (use-after-return corrupting another renter's buffer).
+        void OnStdout(object _, DataReceivedEventArgs e)
+        {
+            if (e.Data is null)
+            {
+                stdoutEof.TrySetResult();
+                return;
+            }
+            if (stdout.Builder.Length >= MaxOutputChars)
+            {
+                stdoutDropped += e.Data.Length + 1;
+                return;
+            }
+            stdout.Builder.Append(e.Data).Append('\n');
+        }
+
+        void OnStderr(object _, DataReceivedEventArgs e)
+        {
+            if (e.Data is null)
+            {
+                stderrEof.TrySetResult();
+                return;
+            }
+            if (stderr.Builder.Length >= MaxOutputChars)
+            {
+                stderrDropped += e.Data.Length + 1;
+                return;
+            }
+            stderr.Builder.Append(e.Data).Append('\n');
+        }
     }
 
     private static string GetShell() =>

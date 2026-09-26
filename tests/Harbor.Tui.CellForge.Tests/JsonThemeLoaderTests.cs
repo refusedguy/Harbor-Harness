@@ -1,6 +1,7 @@
 using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Projection;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -9,8 +10,17 @@ namespace Harbor.Tui.CellForge.Tests;
 /// (omitted slots merge over the active theme), error reporting, and file
 /// loading.
 /// </summary>
+// #58-followup: applies themes to the global palette — serialize vs other
+// theme/palette readers like the golden classes do.
+[NotInParallel("pty")]
 public class JsonThemeLoaderTests
 {
+    // Order hygiene (matches HotSwap/Switch/FileWatcher): several tests Apply
+    // themes to the global palette; restore Dark afterwards so later classes
+    // never observe our leftovers regardless of runner parallelism.
+    [After(Test)]
+    public void RestoreDefaultTheme() => TerminalColorPalette.Apply(HarborTheme.HarborDark);
+
     [Test]
     public async Task TryParseHex_AcceptsShortLongAndRejects()
     {

@@ -311,7 +311,7 @@ public sealed class DemoCommand : ICommand
             DemoReply.FromText(
                 "Harbor is a modular .NET 10 AI coding agent harness. Every concern — providers, storage, TUI " +
                 "rendering, tool execution, permissions — lives behind an interface and swaps through DI. It ships " +
-                "4 native LLM clients plus 13 JSON-config providers, 14 builtin tools, JSONL-first session storage, " +
+                "4 native LLM clients plus 13 JSON-config providers, 18 builtin tools, JSONL-first session storage, " +
                 "and a plugin host that compiles C# sources at startup — all performance-first and NativeAOT-ready."),
         ];
 

@@ -11,4 +11,4 @@
 # Bypass in emergencies: git commit --no-verify (use sparingly — CI still gates).
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 1
-exec bash "$REPO_ROOT/.kilo-docs/scripts/harbor-check.sh" --staged
+exec bash "$REPO_ROOT/docs/.kilo-docs/scripts/harbor-check.sh" --staged

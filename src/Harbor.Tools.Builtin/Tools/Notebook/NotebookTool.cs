@@ -220,7 +220,10 @@ public sealed class NotebookTool : ITool
             {
                 if (notes.Count == 0)
                     return ToolResult.Success("(no notes in this session)");
-                using var sb = StringBuilderPool.Rent(notes.Count * 64);
+                // #53 audit: cap the *initial* rent — the builder grows as
+                // needed, but Rent(N * 64) for a large N would pre-size a huge
+                // (possibly LOH) buffer up front. 128 * 64 = 8 KB initial max.
+                using var sb = StringBuilderPool.Rent(Math.Min(notes.Count, 128) * 64);
                 var b = sb.Builder;
                 b.Append(notes.Count).Append(" note(s):");
                 foreach (var kv in notes)

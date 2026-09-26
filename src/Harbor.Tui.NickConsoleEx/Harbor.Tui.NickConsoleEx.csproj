@@ -18,6 +18,9 @@
     <ProjectReference Include="..\..\external\ConsoleEx\SharpConsoleUI\SharpConsoleUI.csproj"/>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.CodeGen\Harbor.CodeGen.csproj">
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>

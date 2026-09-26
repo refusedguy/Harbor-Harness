@@ -55,7 +55,7 @@ public class McpRemoteTransportTests
         using FakeServer server = FakeServer.Start();
         server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
 
-        await using var transport = new McpHttpTransport(server.Url, oauthTokenProvider: static () => "tok-123");
+        await using var transport = new McpHttpTransport(server.Url, oauthTokenProvider: _ => Task.FromResult<string?>("tok-123"));
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
         await transport.RoundTripAsync(request.RootElement.Clone(), 1);
 

@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Harbor.Terminal.Abstractions.Rendering;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Tui.TerminalGui.Rendering;
 /// <summary>
 ///     Renders markdown into Terminal.Gui v2 attribute-ready plain text.

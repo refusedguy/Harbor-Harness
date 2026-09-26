@@ -1,6 +1,7 @@
 ﻿using System.Collections.Immutable;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.View;
 /// <summary>

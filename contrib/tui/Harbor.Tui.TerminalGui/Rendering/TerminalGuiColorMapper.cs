@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using TerminalColor = Terminal.Gui.Drawing.Color;
 
 namespace Harbor.Tui.TerminalGui.Rendering;

@@ -4,3 +4,4 @@ global using Harbor.Ui.Framework.Rendering;
 global using Harbor.Ui.Framework.Rendering.Input;
 global using Harbor.Ui.Framework.Rendering.Markdown;
 global using Harbor.Ui.Framework.Rendering.Widgets;
+global using Harbor.TestKit;

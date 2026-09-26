@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
@@ -24,6 +25,12 @@ internal static class IntelligenceModule
             sp.GetRequiredService<ILogger<PermissionService>>(),
             workspaceRoot: Directory.GetCurrentDirectory(),
             configStore: sp.GetService<IConfigStore>()));
+        // #49 PR1: runtime-owned approval/cancellation coordinator — the single
+        // ingress for run cancellation and the linearization point for gate
+        // decisions vs cancel. Stateless w.r.t. the agent (takes IAgentRunner
+        // per RequestCancel), so no construction-time ordering constraints.
+        services.AddSingleton<IApprovalCoordinator>(sp => new ApprovalCoordinator(
+            sp.GetRequiredService<ILogger<ApprovalCoordinator>>()));
         return services;
     }
 }

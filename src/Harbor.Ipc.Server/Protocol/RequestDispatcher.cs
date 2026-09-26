@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Permissions;
+
 namespace Harbor.Ipc.Protocol;
 /// <summary>
 ///     Server-side dispatcher: takes a <see cref="HarborRequest" /> and
@@ -26,17 +28,26 @@ namespace Harbor.Ipc.Protocol;
 public sealed class RequestDispatcher
 {
     private readonly EventBroadcaster _broadcaster;
+    private readonly IApprovalCoordinator? _coordinator;
     private readonly IServiceProvider _serviceProvider;
     private readonly SessionLeaseRegistry _leases;
 
     /// <summary>
     ///     Construct a dispatcher backed by the host's service provider.
     /// </summary>
-    public RequestDispatcher(IServiceProvider serviceProvider, EventBroadcaster broadcaster, SessionLeaseRegistry? leases = null)
+    public RequestDispatcher(
+        IServiceProvider serviceProvider,
+        EventBroadcaster broadcaster,
+        SessionLeaseRegistry? leases = null,
+        // #49: injected, not service-located (the per-request resolutions
+        // below are a separate cleanup — see #63). Null keeps minimal/test
+        // hosts working with direct cancel.
+        IApprovalCoordinator? coordinator = null)
     {
         _serviceProvider = serviceProvider;
         _broadcaster = broadcaster;
         _leases = leases ?? new SessionLeaseRegistry();
+        _coordinator = coordinator;
     }
 
     /// <summary>
@@ -107,11 +118,8 @@ public sealed class RequestDispatcher
         var agents = _serviceProvider.GetRequiredService<IAgentRegistry>();
         var sessions = _serviceProvider.GetRequiredService<ISessionStore>();
 
-        var nameResult = AgentName.TryCreate(r.AgentName);
-        if (nameResult.IsFailure)
-            return new ErrorResponse { RequestId = r.RequestId, Message = nameResult.Error };
-
-        var agentDefResult = agents.GetAgent(nameResult.Value);
+        // ROP boundary #101: shared TryCreate → GetAgent preamble (same as InProcessHarborClient).
+        var agentDefResult = agents.ResolveAgent(r.AgentName);
         if (agentDefResult.IsFailure)
             return new ErrorResponse { RequestId = r.RequestId, Message = agentDefResult.Error };
 
@@ -137,7 +145,17 @@ public sealed class RequestDispatcher
     private HarborResponse HandleAbortAgent(AbortAgentRequest r)
     {
         var agent = _serviceProvider.GetRequiredService<IAgent>();
-        agent.AbortSource.Cancel();
+        // #49 PR1: single cancellation ingress (null = minimal host without
+        // the coordinator; direct cancel as before).
+        if (_coordinator is not null)
+        {
+            _coordinator.RequestCancel(agent);
+        }
+        else
+        {
+            agent.AbortSource.Cancel();
+        }
+
         return new OkResponse { RequestId = r.RequestId };
     }
 
@@ -217,11 +235,8 @@ public sealed class RequestDispatcher
         }
         else
         {
-            var pidResult = ProviderId.TryCreate(r.ProviderId!);
-            if (pidResult.IsFailure)
-                return new ErrorResponse { RequestId = r.RequestId, Message = pidResult.Error };
-
-            var clientResult = providers.GetClient(pidResult.Value);
+            // ROP boundary #101: shared TryCreate → GetClient preamble (same as InProcessHarborClient).
+            var clientResult = providers.ResolveClient(r.ProviderId!);
             if (clientResult.IsFailure)
                 return new ErrorResponse { RequestId = r.RequestId, Message = clientResult.Error };
 

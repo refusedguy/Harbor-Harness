@@ -64,9 +64,11 @@ CI regenerates the GIFs on TUI changes (`.github/workflows/demo.yml`).
 
 ```bash
 # Install .NET 10, then:
-git clone https://github.com/harbor-sh/harbor
-cd harbor
+git clone --recurse-submodules https://github.com/refusedguy/Harbor-Harness.git
+cd Harbor-Harness
 dotnet build
+# Already cloned without submodules? external/ConsoleEx is a git submodule:
+git submodule update --init --recursive
 
 # Option A — Kilocode free model (recommended, no credit card)
 export KILO_API_KEY=klo_...
