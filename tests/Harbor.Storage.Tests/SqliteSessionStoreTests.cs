@@ -396,8 +396,7 @@ public class SqliteSessionStoreTests
             if (File.Exists(dbPath)) File.Delete(dbPath);
         }
     }
-}
-    {
+
     [Test]
     public async Task AppendMessageAsync_UpdatesSessionTimestamp()
     {
