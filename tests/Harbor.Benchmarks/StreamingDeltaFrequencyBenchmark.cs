@@ -17,7 +17,7 @@ namespace Harbor.Benchmarks;
 ///     (<c>DefaultUiProjector.ResolveSpans</c> styles whole lines, no parser).
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(warmupCount: 2, iterationCount: 3)]
+[SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class StreamingDeltaFrequencyBenchmark
 {
     [Params(1000, 2000)]
