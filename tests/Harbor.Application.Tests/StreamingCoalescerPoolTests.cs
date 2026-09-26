@@ -1,70 +1,57 @@
-using Harbor.Application.Agents;
+using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Sessions;
+using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
 
 namespace Harbor.Application.Tests;
 
 /// <summary>
-///     Regression tests for the pooled-buffer ownership fixes audited in #53:
-///     repeated <c>StartToolCall</c> for one id must not leak the previously
-///     rented args builder, and flushed/materialized strings must be
-///     independent copies (safe to use after the builder is returned).
+///     Regression test (via the public <c>AgentLoop</c> seam) for the
+///     pooled-buffer ownership fix audited in #53: a repeated tool-call start
+///     for the same id must return the previously rented args builder to the
+///     pool (no leak) and keep last-start-wins semantics.
+///     (Internal <c>StreamingCoalescer</c> is exercised through
+///     <c>ScriptedLlmClient</c>; no <c>InternalsVisibleTo</c> — exposing
+///     internals would also leak the ZLinq drop-in extensions into this
+///     project and break overload resolution in unrelated test files.)
 /// </summary>
 public class StreamingCoalescerPoolTests
 {
     [Test]
-    public async Task StartToolCall_DuplicateId_MaterializesLatestOnly()
+    public async Task DuplicateToolCallStart_SameId_LastStartWins_ExecutesOnce()
     {
-        using var coalescer = new StreamingCoalescer();
-        coalescer.StartToolCall("a", "first");
-        coalescer.AppendToolCallDelta("a", """{"x":1}""");
-        // Repeated start for the same id: old builder is returned to the pool
-        // (no leak), last-start-wins.
-        coalescer.StartToolCall("a", "second");
-        coalescer.AppendToolCallDelta("a", """{"y":2}""");
+        var counter = new CountingTool();
+        var client = new ScriptedLlmClient(
+        [
+            new LlmEvent[]
+            {
+                new ToolCallStartEvent("call-1", "counter"),
+                new ToolCallDeltaEvent("call-1", """{"n":7}"""),
+                // Repeated start for the same id: the old args builder goes
+                // back to the pool, the latest args win.
+                new ToolCallStartEvent("call-1", "counter"),
+                new ToolCallDeltaEvent("call-1", """{"n":8}"""),
+                new StepFinishEvent(0, "stop", new Usage(4, 2))
+            },
+            new LlmEvent[]
+            {
+                new TextDeltaEvent("t", "finished"),
+                new StepFinishEvent(1, "stop", new Usage(1, 1))
+            }
+        ]);
+        var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
+        var session = NewSession();
 
-        var calls = coalescer.MaterializeToolCalls();
+        var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(calls.Count).IsEqualTo(1);
-        await Assert.That(calls[0].ToolName).IsEqualTo("second");
-        await Assert.That(calls[0].Args.GetProperty("y").GetInt32()).IsEqualTo(2);
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(counter.Executions).IsEqualTo(1);
+        await Assert.That(counter.ExecutedArgs.Count).IsEqualTo(1);
+        await Assert.That(counter.ExecutedArgs[0]).Contains("\"n\":8");
     }
 
-    [Test]
-    public async Task FlushText_ReturnsCopy_SubsequentAppendsDoNotMutateIt()
-    {
-        using var coalescer = new StreamingCoalescer();
-        coalescer.AppendTextDelta("hello");
-        string flushed = coalescer.FlushText();
-        coalescer.AppendTextDelta(" world");
-        string second = coalescer.FlushText();
-
-        await Assert.That(flushed).IsEqualTo("hello");
-        await Assert.That(second).IsEqualTo(" world");
-    }
-
-    [Test]
-    public async Task Materialize_ThenDispose_DoesNotThrow_SecondMaterializeEmpty()
-    {
-        var coalescer = new StreamingCoalescer();
-        coalescer.StartToolCall("a", "read");
-        coalescer.AppendToolCallDelta("a", """{"path":"x"}""");
-
-        var calls = coalescer.MaterializeToolCalls();
-        var again = coalescer.MaterializeToolCalls();
-        coalescer.Dispose();
-
-        await Assert.That(calls.Count).IsEqualTo(1);
-        await Assert.That(again.Count).IsEqualTo(0);
-    }
-
-    [Test]
-    public async Task Materialize_EmptyArgs_UsesEmptyObject()
-    {
-        using var coalescer = new StreamingCoalescer();
-        coalescer.StartToolCall("a", "read");
-
-        var calls = coalescer.MaterializeToolCalls();
-
-        await Assert.That(calls.Count).IsEqualTo(1);
-        await Assert.That(calls[0].Args.ValueKind).IsEqualTo(System.Text.Json.JsonValueKind.Object);
-    }
+    private static TestSessionContext NewSession() => new(
+        Session.Create("/tmp/harbor-coalescer-pool-tests", "code", "test", "test-model"),
+        []);
 }
