@@ -19,8 +19,11 @@ public class StorePlumbingTests
     private static readonly DateTime FixedTs = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     [Test]
-    public async Task Project_PendingStreamText_IsVisibleImmediately()
+    public async Task Project_PendingStreamText_HiddenUntilFlush()
     {
+        // Flush-gated visibility (#94 vs #46): unflushed pending deltas stay
+        // out of the transcript tail — projecting them would recompose the
+        // whole transcript O(history) per delta. Only the synced prefix shows.
         var projector = new DefaultUiProjector();
         var state = new UiState
         {
@@ -33,11 +36,11 @@ public class StorePlumbingTests
 
         var tail = screen.Transcript.Blocks.OfType<UiMessageBlock>()
             .First(b => b.Phase == MessageRenderPhase.Streaming);
-        await Assert.That(string.Concat(tail.Spans.Select(s => s.Text))).IsEqualTo("hello");
+        await Assert.That(string.Concat(tail.Spans.Select(s => s.Text))).IsEqualTo("he");
     }
 
     [Test]
-    public async Task Project_PendingOnlyDelta_IsVisibleBeforeFlush()
+    public async Task Project_PendingOnlyDelta_NotProjectedBeforeFlush()
     {
         var projector = new DefaultUiProjector();
         var state = new UiState
@@ -49,9 +52,8 @@ public class StorePlumbingTests
 
         var screen = projector.Project(state);
 
-        var tail = screen.Transcript.Blocks.OfType<UiMessageBlock>()
-            .First(b => b.Phase == MessageRenderPhase.Streaming);
-        await Assert.That(string.Concat(tail.Spans.Select(s => s.Text))).IsEqualTo("unflushed");
+        await Assert.That(screen.Transcript.Blocks.OfType<UiMessageBlock>()
+            .Any(b => b.Phase == MessageRenderPhase.Streaming)).IsFalse();
     }
 
     [Test]

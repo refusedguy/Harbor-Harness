@@ -231,11 +231,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         if (_chatVm is ChatHistoryViewModel chvm)
         {
             chvm.IsStreaming = state.IsStreaming;
-            // Visible streaming text includes unflushed pending deltas (#94):
-            // Concat returns the synced prefix itself when nothing is pending.
-            chvm.StreamingText = StreamingSync.Concat(state.Active.TextBuffer, state.PendingStreamText);
-            chvm.ThinkingText = StreamingSync.Concat(state.Active.ThinkBuffer, state.PendingStreamThink);
-            chvm.IsThinking = chvm.ThinkingText.Length != 0;
+            // Synced prefix only (flush-gated, like the projector tail):
+            // projecting pending here would copy the whole prefix per frame.
+            chvm.StreamingText = state.Active.TextBuffer;
+            chvm.ThinkingText = state.Active.ThinkBuffer;
+            chvm.IsThinking = state.Active.ThinkBuffer.Length != 0;
         }
 
         SyncInputFromState(state);

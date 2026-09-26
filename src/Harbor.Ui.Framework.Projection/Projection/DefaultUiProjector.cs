@@ -30,11 +30,11 @@ namespace Harbor.Ui.Framework.Projection;
 ///                 onto the cached prefix — copy-on-write of the row arrays.
 ///             </item>
 ///             <item>
-///                 Streaming-tail lines (thinking/text, synced prefix plus
-///                 unflushed pending deltas) are rebuilt only when the visible
-///                 buffer text changes (ordinal value equality); otherwise the
-///                 cached tail — with its deterministic line-timestamp reuse —
-///                 is spliced in.
+///                 Streaming-tail lines (thinking/text) are rebuilt only when
+///                 the corresponding buffer reference changes; otherwise the
+///                 cached tail is spliced in. Pending (unflushed) deltas are
+///                 deliberately NOT projected (bounded visibility lag) — see
+///                 the Project method note on O(H·N).
 ///             </item>
 ///             <item>
 ///                 Header / status bar / input models are rebuilt only when one
@@ -83,13 +83,15 @@ public sealed class DefaultUiProjector : IUiProjector
         }
 
         // Streaming-tail buffers normalized: null when not streaming or empty
-        // (null-safe like the original IsNullOrEmpty checks), so equality
-        // fully identifies tail content. The visible text is the synced prefix
-        // PLUS not-yet-flushed pending deltas (#94): undrained chunks must be
-        // visible immediately, not only after ShouldFlush fires. Concat returns
-        // the prefix itself when nothing is pending (no allocation).
-        string? thinkRaw = StreamingSync.Concat(state.Active.ThinkBuffer, state.PendingStreamThink);
-        string? textRaw = StreamingSync.Concat(state.Active.TextBuffer, state.PendingStreamText);
+        // (null-safe like the original IsNullOrEmpty checks), so reference
+        // equality fully identifies tail content. Only the synced prefix is
+        // projected — unflushed pending deltas stay invisible until
+        // ShouldFlush fires (bounded lag, max 2048 chars). Projecting pending
+        // immediately would rebuild the tail AND recompose the whole
+        // transcript (O(history)) on every delta — the O(H·N) the flush
+        // policy exists to prevent (see StreamingFrequencyTests).
+        string? thinkRaw = state.Active.ThinkBuffer;
+        string? textRaw = state.Active.TextBuffer;
         string? thinkBuf = state.IsStreaming && !string.IsNullOrEmpty(thinkRaw) ? thinkRaw : null;
         string? textBuf = state.IsStreaming && !string.IsNullOrEmpty(textRaw) ? textRaw : null;
 
@@ -191,15 +193,13 @@ public sealed class DefaultUiProjector : IUiProjector
             baseBlocks = blockBuilder.MoveToImmutable();
         }
 
-        // ── Streaming tail (rebuilt only when the visible buffer text changed) ──
-        // Value-compared (#94): Concat materializes a new string instance per
-        // call while pending deltas sit unflushed, so reference equality alone
-        // would rebuild (and re-stamp) the tail on every frame. Ordinal value
-        // equality keeps the cached tail — and its stable timestamp — instead.
+        // ── Streaming tail (rebuilt only when a buffer reference changed) ──
+        // Reference equality suffices: buffers are immutable strings replaced
+        // wholesale on flush, so a changed reference IS changed content.
         bool tailSame = cache is not null
             && cache.IsStreaming == state.IsStreaming
-            && (ReferenceEquals(cache.ThinkBuf, thinkBuf) || string.Equals(cache.ThinkBuf, thinkBuf, StringComparison.Ordinal))
-            && (ReferenceEquals(cache.TextBuf, textBuf) || string.Equals(cache.TextBuf, textBuf, StringComparison.Ordinal));
+            && ReferenceEquals(cache.ThinkBuf, thinkBuf)
+            && ReferenceEquals(cache.TextBuf, textBuf);
 
         ImmutableArray<UiRenderedLine> tailRendered;
         ImmutableArray<UiBlock> tailBlocks;
