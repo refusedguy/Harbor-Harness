@@ -17,9 +17,11 @@ chmod +x dotnet-install.sh && ./dotnet-install.sh --channel 10.0
 export PATH="$HOME/.dotnet:$PATH"
 
 # 2. Склонируй и собери Harbor
-git clone https://github.com/harbor-sh/harbor
-cd harbor
+git clone --recurse-submodules https://github.com/refusedguy/Harbor-Harness.git
+cd Harbor-Harness
 dotnet build
+# Уже склонировал без сабмодулей (external/ConsoleEx пустой)?
+git submodule update --init --recursive
 
 # 3. Установи API ключ (Kilocode = бесплатно, без кредитки)
 #    Получи ключ на https://kilo.ai
@@ -147,8 +149,8 @@ export PATH="$HOME/.dotnet:$PATH"
 ### 2. Build Harbor
 
 ```bash
-git clone https://github.com/harbor-sh/harbor
-cd harbor
+git clone --recurse-submodules https://github.com/refusedguy/Harbor-Harness.git
+cd Harbor-Harness
 dotnet build
 ```
 
