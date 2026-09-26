@@ -258,11 +258,11 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - Provider/model picker with search + auth status (`ProviderModelPickerViewModel`, `/model` rebind + provider health check from PROD-UI-0)
 - Onboarding wizard with stepper dots (`OnboardingWindow.axaml`: "Progress stepper: 5 dots")
 - Command palette with fuzzy filter + command/session/file sources (`CommandPaletteViewModelBase.FuzzyScore`, re-verified 2026-08-27)
+- Intra-line word-diff highlighting (`DiffBlock` + dependency-free `WordDiff` LCS: word-level emphasis for 1:1 delete→add pairs; replace/insert/delete covered by `WordDiffTests` + paint-level `DiffBlockTests`)
 
 ### ⚠️ Partial
 
 - Markdown rich editor (basic rendering, no TipTap-class editor)
-- Intra-line word-diff highlighting (line-level only; ConsoleEx `DiffBlock` renders unified diffs by line)
 
 ### ❌ Not started
 
