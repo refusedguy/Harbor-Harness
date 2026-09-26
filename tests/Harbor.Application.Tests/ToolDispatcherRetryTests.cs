@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
@@ -45,6 +46,15 @@ public class ToolDispatcherRetryTests
             failedAttempt < Options.MaxAttempts && retryable(error);
     }
 
+    /// <summary>#76: fast no-jitter decider so the projection test never sleeps.</summary>
+    private sealed class FastDecider : IToolRetryDecider
+    {
+        public RetryOptions Options { get; } = new(MaxAttempts: 3, BaseDelay: TimeSpan.FromMilliseconds(1), UseJitter: false);
+
+        public bool ShouldRetry(string toolName, Exception error, int failedAttempt) =>
+            failedAttempt < Options.MaxAttempts && error is IOException;
+    }
+
     private sealed class FlakyTool(Func<int, Exception?> script) : ITool
     {
         private int _executions;
@@ -84,7 +94,11 @@ public class ToolDispatcherRetryTests
         "tc1", "flaky", JsonDocument.Parse("""{}""").RootElement);
 
     private static ToolDispatcher NewDispatcher(IPermissionService permissions, ITool tool, IToolRetryDecider? decider) =>
-        new(new FakeToolRegistry(tool), permissions, new FakeEventBus(),
+        NewDispatcher(permissions, tool, decider, new FakeEventBus());
+
+    private static ToolDispatcher NewDispatcher(
+        IPermissionService permissions, ITool tool, IToolRetryDecider? decider, FakeEventBus bus) =>
+        new(new FakeToolRegistry(tool), permissions, bus,
             NullLogger<ToolDispatcher>.Instance, null, decider);
 
     private static async Task WaitForAsync(Func<bool> condition, string what)
@@ -181,5 +195,28 @@ public class ToolDispatcherRetryTests
         await Assert.That(tool.Executions).IsEqualTo(1);
         await Assert.That(message.Results[0].IsError).IsTrue();
         await Assert.That(message.Results[0].Output).Contains("cancelled");
+    }
+
+    [Test]
+    public async Task RetryScheduled_PublishesUpdateWithAttemptMaxAndBackoff()
+    {
+        // #76: the dispatcher feeds the retry-countdown UI slot — attempt/max
+        // plus the backoff it is about to sleep — render-only, never a trigger.
+        var bus = new FakeEventBus();
+        var tool = new FlakyTool(n => n == 1 ? new IOException("reset") : null);
+        var dispatcher = NewDispatcher(new AllowPermissions(), tool, new FastDecider(), bus);
+
+        var message = await dispatcher
+            .ExecuteAsync([Call()], NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(10))
+            .ConfigureAwait(false);
+
+        await Assert.That(message.Results[0].IsError).IsFalse();
+        var retry = bus.Events.OfType<ToolExecutionUpdateEvent>().Single(e => e.RetryAttempt.HasValue);
+        await Assert.That(retry.ToolCallId).IsEqualTo("tc1");
+        await Assert.That(retry.RetryAttempt).IsEqualTo(1);
+        await Assert.That(retry.RetryMaxAttempts).IsEqualTo(3);
+        await Assert.That(retry.RetryBackoffSeconds!.Value).IsGreaterThanOrEqualTo(0);
+        await Assert.That(retry.RetryBackoffSeconds!.Value).IsLessThanOrEqualTo(1);
     }
 }

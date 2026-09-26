@@ -516,7 +516,16 @@ internal sealed class CellForgeReplRunner(
         // CF-D-002: feed projected state from the view-model snapshot so
         // StatusPanel renders through StatusProjector (glyphs, scroll segment,
         // token/cost formatting) instead of the legacy BuildSegments path.
-        screen.Status.ProjectedRetry = _status.Retry;
+        // #76: the retry slot renders through SetProjectedRetry (structured
+        // attempt/max/remaining from the pipeline mirror); null clears it.
+        if (Pipeline.TryGetRetryProjection(out int retryAttempt, out int retryMax, out int retryRemaining))
+        {
+            screen.Status.SetProjectedRetry(retryAttempt, retryMax, retryRemaining);
+        }
+        else
+        {
+            screen.Status.ProjectedRetry = null;
+        }
         long tokensIn = 0;
         long tokensOut = 0;
         decimal costUsd = 0m;

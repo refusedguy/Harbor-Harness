@@ -5,6 +5,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -422,5 +423,47 @@ public class ChatScreenBridgeTests
         }
 
         return total;
+    }
+
+    [Test]
+    public async Task ToolRetryUpdate_FeedsRetrySlot_AndEndClears_AndPaints()
+    {
+        // #76 regression: a scripted dispatcher retry produces a visible retry
+        // projection through SetProjectedRetry; the settled call clears the slot.
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel { Model = "m" };
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        await bus.PublishAsync(new ToolExecutionUpdateEvent(
+            "tc1", "working…", RetryAttempt: 1, RetryMaxAttempts: 3, RetryBackoffSeconds: 0.2));
+        await Assert.That(status.Retry).IsEqualTo("retry 1/3 in 1s");
+
+        var composer = new ComposerController();
+        var screen = ChatScreen.Build(composer, status, includeSidebar: false);
+        screen.Status.ProjectedState = new UiState
+        {
+            Status = "running",
+            Provider = "prov",
+            Model = "m",
+            AgentName = "code",
+        };
+        screen.Status.SetProjectedRetry(1, 3, 1);
+
+        var buffer = new ScreenBuffer(80, 8);
+        screen.Tree.Solve(80, 8);
+        foreach (var p in screen.Tree.Panels)
+        {
+            p.Paint(buffer);
+        }
+
+        await Assert.That(GridDump.Art(buffer)).Contains("retry 1/3 in 1s");
+
+        // Ordinary progress updates (no retry fields) must not touch the slot.
+        await bus.PublishAsync(new ToolExecutionUpdateEvent("tc1", "still working…"));
+        await Assert.That(status.Retry).IsEqualTo("retry 1/3 in 1s");
+
+        await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("recovered"), IsError: false));
+        await Assert.That(status.Retry).IsNull();
     }
 }

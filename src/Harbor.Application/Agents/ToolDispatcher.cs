@@ -366,6 +366,15 @@ public sealed class ToolDispatcher(
                     TimeSpan backoff = RetryPolicy.ComputeDelay(retryDecider.Options, attempt);
                     logger.LogWarning(ex, "Tool {ToolName} (call {CallId}) attempt {Attempt} transient, retrying in {BackoffMs:0}ms",
                         toolCall.ToolName, toolCall.Id, attempt, backoff.TotalMilliseconds);
+                    // #76: retry-projection feed (render-only). The UI mirrors
+                    // attempt/max/backoff from these fields; the Task.Delay below
+                    // stays the only scheduling authority — the UI never triggers.
+                    await eventBus.PublishAsync(new ToolExecutionUpdateEvent(
+                        toolCall.Id,
+                        $"retry {attempt}/{retryDecider.Options.MaxAttempts} in {backoff.TotalSeconds:0.#}s",
+                        attempt,
+                        retryDecider.Options.MaxAttempts,
+                        backoff.TotalSeconds), ct).ConfigureAwait(false);
                     await Task.Delay(backoff, effectiveCt).ConfigureAwait(false);
                 }
             }
