@@ -66,7 +66,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     private long _lastProjectedRevision;
 
     /// <summary>
-    /// CF-E-002 wiring (TOP-1 #27): renderer-owned panel registry holding the 7
+    /// CF-E-002 wiring (TOP-1 #27): renderer-owned panel registry holding the 9
     /// cell-native builtin providers (see <see cref="RegisterBuiltinPanels"/>).
     /// Registration order is significant — Alt+1..9 hotkey slots follow it.
     /// All visibility / focus / size state lives in <see cref="UiState"/> (seeded
@@ -110,10 +110,10 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     }
 
     /// <summary>
-    /// CF-E-002: registers the 8 cell-native builtin panels. Slot order mirrors
+    /// CF-E-002: registers the 9 cell-native builtin panels. Slot order mirrors
     /// <c>SpectreTuiRenderer.RunInteractiveAsync</c> (Alt+1..9 follow registration
     /// order): help, todo-list, diff-preview, file-tree, token-breakdown,
-    /// diagnostics, logs, session-sidebar.
+    /// diagnostics, logs, session-sidebar, jump.
     /// </summary>
     private static void RegisterBuiltinPanels(CellForgePanelRegistry panels)
     {
@@ -125,6 +125,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         panels.Register(new CellForgeDiagnosticsPanel()); // Alt+6
         panels.Register(new CellForgeLogsPanel()); // Alt+7
         panels.Register(new CellForgeSessionSidebarPanel()); // Alt+8
+        panels.Register(new CellForgeJumpPalettePanel()); // Alt+9
     }
 
     /// <summary>
