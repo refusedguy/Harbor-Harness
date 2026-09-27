@@ -5,8 +5,9 @@ using Harbor.Ui.Framework.State;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Track C contour: raw terminal keys translate to <see cref="UiKey"/> via
-/// <see cref="KeyEventMapper"/>, resolve to <see cref="ChatAction"/> through
+/// Track C contour: raw terminal keys translate to <see cref="UiKeyDto"/> via
+/// <see cref="KeyEventMapper"/>, cross into <see cref="UiKey"/> through
+/// <see cref="KeyEventAdapter"/>, resolve to <see cref="ChatAction"/> through
 /// the central <see cref="ChatKeyMap"/> (no shell-side branches), and the
 /// resulting <see cref="UiMsg.KeyInput"/> drives the store — including wheel,
 /// geometry-measure and scroll-anchor messages.
@@ -16,7 +17,7 @@ public class CellForgeKeymapContourTests
     private static readonly ChatKeyMap Map = new();
 
     private static ChatAction Resolve(KeyEvent key) =>
-        KeyEventMapper.ToUiKey(key) is { } uiKey ? Map.Resolve(uiKey) : ChatAction.None;
+        KeyEventMapper.TryMap(key, out var dto) ? Map.Resolve(KeyEventAdapter.ToUiKey(dto)) : ChatAction.None;
 
     [Test]
     public async Task Resolve_NavigationKeys_MapToScrollActions()
@@ -42,10 +43,10 @@ public class CellForgeKeymapContourTests
     }
 
     [Test]
-    public async Task ToUiKey_Release_CarriesNoKeyMeaning()
+    public async Task TryMap_Release_CarriesNoKeyMeaning()
     {
         var release = new KeyEvent(KeyCode.Char, new Rune('x'), KeyModifiers.None, KeyEventType.Release, false);
-        await Assert.That(KeyEventMapper.ToUiKey(release)).IsNull();
+        await Assert.That(KeyEventMapper.TryMap(release, out _)).IsFalse();
         await Assert.That(Resolve(release)).IsEqualTo(ChatAction.None);
     }
 

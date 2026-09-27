@@ -14,8 +14,12 @@
     <!-- #75: direct reference instead of transitive (CF-A-001 precedent) —
          StatusViewModel consumes the canonical ContextUsage helper. -->
     <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
-    <ProjectReference Include="..\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
-    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+    <!-- #33 T1: leaf over DesignSystem/Animations/Contracts. The key vocabulary
+         is the BCL-only UiKeyDto (Input/IKeyVocabulary.cs) — State consumes it
+         via KeyEventAdapter, so neither State nor Projection is referenced here
+         (State→Rendering plus the old Rendering→Projection→State chain would be
+         an MSBuild circular dependency; the Projection edge was unrealized —
+         no .cs ever used that namespace). -->
     <ProjectReference Include="..\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
     <ProjectReference Include="..\Harbor.Desktop.Animations\Harbor.Desktop.Animations.csproj"/>
   </ItemGroup>

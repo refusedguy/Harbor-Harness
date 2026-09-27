@@ -1032,8 +1032,9 @@ internal sealed class CellForgeReplRunner(
         // executes through Pipeline.SubmitAsync on the composer buffer below,
         // abort through HandleAbortGesture, quit through the Ctrl+C×2 gesture —
         // running them from the store effect too would fire every gesture twice.
-        if (KeyEventMapper.ToUiKey(key) is { } uiKey)
+        if (KeyEventMapper.TryMap(key, out var dto))
         {
+            var uiKey = KeyEventAdapter.ToUiKey(dto);
             var resolved = _keyMap.Resolve(uiKey);
             if (resolved != ChatAction.None)
             {
