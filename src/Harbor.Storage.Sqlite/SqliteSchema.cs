@@ -1,9 +1,4 @@
-// SqliteSchema.cs — database schema + pre-#85 migrations for the SQLite store.
-//
-// Extracted verbatim from SqliteSessionStore.cs (#184 god-object
-// decomposition). The store owns connection lifetime + per-session locking;
-// this file owns DDL: the CREATE TABLE/INDEX statements and the migration
-// that reshapes databases created before #85.
+// Database schema for the SQLite store; split from SqliteSessionStore (#184).
 
 using Microsoft.Data.Sqlite;
 

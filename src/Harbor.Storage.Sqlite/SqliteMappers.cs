@@ -1,10 +1,4 @@
-// SqliteMappers.cs — row ↔ domain mapping for the SQLite store.
-//
-// Extracted verbatim from SqliteSessionStore.cs (#184 god-object
-// decomposition). The store owns connection lifetime + per-session locking;
-// this file owns the mapping component: session-row reads, message-payload
-// decode (role → concrete type), metadata decode, and the JSON options with
-// the polymorphic ContentPart converter.
+// Row/domain mapping for the SQLite store; split from SqliteSessionStore (#184).
 
 using System.Data.Common;
 using System.Text.Json;
