@@ -232,4 +232,75 @@ public class SpanParserTests
         long after = GC.GetAllocatedBytesForCurrentThread();
         await Assert.That(after - before).IsLessThanOrEqualTo(50 * 2048);
     }
+
+    // ── #203: unattached usage + remap diagnostics ───────────────────
+
+    [Test]
+    public async Task OpenAiWire_EmptyChoicesUsageChunk_EmitsStopFinishWithUsage()
+    {
+        // OpenAI include_usage trailing chunk: empty choices + usage, no
+        // finish_reason. Dropping it loses the turn's token stats silently.
+        var events = CompatOpenAiWire.ParseChatChunk(
+            Utf8("""{"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}"""),
+            new Dictionary<int, string>());
+
+        var finish = events.OfType<StepFinishEvent>().Single();
+        await Assert.That(finish.FinishReason).IsEqualTo("stop");
+        await Assert.That(finish.Usage!.InputTokens).IsEqualTo(7);
+        await Assert.That(finish.Usage.OutputTokens).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task OpenAiWire_TrailingUsageAfterBareFinish_ReemitsRememberedReason()
+    {
+        // A compat server splits usage off the finish chunk. The synthesized
+        // finish must reuse the remembered reason — a fresh "stop" after a
+        // tool_calls finish would flip the stop reason and skip execution.
+        var state = new CompatChunkState();
+        var first = CompatOpenAiWire.ParseChatChunk(
+            Utf8("""{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"""),
+            state.IndexToId, state);
+        var second = CompatOpenAiWire.ParseChatChunk(
+            Utf8("""{"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}"""),
+            state.IndexToId, state);
+
+        await Assert.That(first.OfType<StepFinishEvent>().Single().FinishReason).IsEqualTo("tool_calls");
+        var trailing = second.OfType<StepFinishEvent>().Single();
+        await Assert.That(trailing.FinishReason).IsEqualTo("tool_calls");
+        await Assert.That(trailing.Usage!.InputTokens).IsEqualTo(7);
+        await Assert.That(trailing.Usage.OutputTokens).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task OpenAiWire_DuplicateTrailingUsage_AfterDelivery_DroppedAndCounted()
+    {
+        // Usage attached to the finish chunk AND trailed afterwards: the
+        // duplicate carries nothing new — counted, not re-emitted.
+        var state = new CompatChunkState();
+        var first = CompatOpenAiWire.ParseChatChunk(
+            Utf8("""{"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":7,"completion_tokens":3}}"""),
+            state.IndexToId, state);
+        var second = CompatOpenAiWire.ParseChatChunk(
+            Utf8("""{"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}"""),
+            state.IndexToId, state);
+
+        await Assert.That(first.OfType<StepFinishEvent>().Count()).IsEqualTo(1);
+        await Assert.That(second.OfType<StepFinishEvent>().Count()).IsEqualTo(0);
+        await Assert.That(state.DroppedUsageChunks).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task OpenAiWire_MissingWireId_Fallback_CountsRemap()
+    {
+        // B8: the positional tc{index} fallback keeps coalescing but must be
+        // diagnosable — counted on the stream state (warned once per stream
+        // at the TryParse site).
+        var state = new CompatChunkState();
+        var events = CompatOpenAiWire.ParseChatChunk(
+            Utf8("""{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"ls","arguments":"{}"}}]}}]}"""),
+            state.IndexToId, state);
+
+        await Assert.That(events.OfType<ToolCallStartEvent>().Single().Id).IsEqualTo("tc0");
+        await Assert.That(state.RemappedToolCalls).IsEqualTo(1);
+    }
 }

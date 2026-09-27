@@ -89,7 +89,17 @@ public sealed class OllamaLlmClient : ILlmClient
                             Kind: ProviderErrorKind.Network)
                         : new ErrorEvent(
                             $"HTTP request failed: {ex.Message}", ex.ToString(),
-                            ProviderErrors.FromException(ex, token))).ConfigureAwait(false);
+                            ProviderErrors.FromException(ex, token)),
+                    onComplete: () =>
+                    {
+                        // #203: stream-health summary (only when noteworthy).
+                        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0)
+                        {
+                            _logger.LogInformation(
+                                "Ollama stream completed: {Malformed} malformed line(s) skipped, {Remaps} positional tool-call id fallback(s)",
+                                chunkState.MalformedChunks, chunkState.RemappedToolCalls);
+                        }
+                    }).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -97,6 +107,9 @@ public sealed class OllamaLlmClient : ILlmClient
             }
             catch (Exception ex)
             {
+                // #203 E5: fire-and-forget pump task must log inside the
+                // lambda — the ErrorEvent alone is invisible in traces.
+                _logger.LogWarning(ex, "Ollama stream task failed: {Message}", ex.Message);
                 await writer.WriteAsync(new ErrorEvent(
                     $"Stream failed: {ex.Message}", ex.ToString(),
                     ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
@@ -260,17 +273,22 @@ public sealed class OllamaLlmClient : ILlmClient
         List<LlmEvent> events;
         try
         {
+            int remapsBefore = chunkState.RemappedToolCalls;
             int byteCount = Encoding.UTF8.GetByteCount(line);
             byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
             try
             {
                 Encoding.UTF8.GetBytes(line, rented);
-                events = MapNdjsonChunk(rented.AsSpan(0, byteCount), chunkState.IndexToId);
+                events = MapNdjsonChunk(rented.AsSpan(0, byteCount), chunkState.IndexToId, chunkState);
             }
             finally
             {
                 ArrayPool<byte>.Shared.Return(rented);
             }
+
+            // #203 B8: positional id fallback, counted in the parser —
+            // warn once per stream instead of staying silent.
+            SsePump.WarnOnceOnRemap(chunkState, remapsBefore, _logger);
         }
         catch (Exception ex)
         {
@@ -293,8 +311,10 @@ public sealed class OllamaLlmClient : ILlmClient
     ///     instead of failing the line (strictly looser than the DOM walk,
     ///     which threw on e.g. numeric ids); object arguments re-serialize
     ///     through a pooled writer (GetRawText parity).
+    ///     #203: pass the stream <paramref name="state" /> (when available)
+    ///     so positional id fallbacks are counted instead of silent.
     /// </summary>
-    internal static List<LlmEvent> MapNdjsonChunk(ReadOnlySpan<byte> utf8Json, Dictionary<int, string> indexToId)
+    internal static List<LlmEvent> MapNdjsonChunk(ReadOnlySpan<byte> utf8Json, Dictionary<int, string> indexToId, ChunkStreamState? state = null)
     {
         var events = new List<LlmEvent>(capacity: 2);
         var reader = new Utf8JsonReader(utf8Json, isFinalBlock: true, state: default);
@@ -377,7 +397,7 @@ public sealed class OllamaLlmClient : ILlmClient
                     }
                     else if (depth == 4 && inTc)
                     {
-                        EmitToolCall(events, indexToId, tcIndex, tcWireId, tcName, tcArgs);
+                        EmitToolCall(events, indexToId, state, tcIndex, tcWireId, tcName, tcArgs);
                         inTc = false;
                     }
                     else if (depth == 3 && inToolCalls && reader.TokenType == JsonTokenType.EndArray)
@@ -416,13 +436,27 @@ public sealed class OllamaLlmClient : ILlmClient
     }
 
     private static void EmitToolCall(
-        List<LlmEvent> events, Dictionary<int, string> indexToId,
+        List<LlmEvent> events, Dictionary<int, string> indexToId, ChunkStreamState? state,
         int index, string? wireId, string? name, string? args)
     {
         // Stable id (ROP-A ПР.3): wire id → remembered id → positional fallback.
-        string id = !string.IsNullOrEmpty(wireId)
-            ? wireId!
-            : indexToId.GetValueOrDefault(index) ?? $"tc{index}";
+        // #203 B8: the fallback is counted, never silent.
+        string? remembered = indexToId.GetValueOrDefault(index);
+        string id;
+        if (!string.IsNullOrEmpty(wireId))
+        {
+            id = wireId!;
+        }
+        else if (remembered is not null)
+        {
+            id = remembered;
+        }
+        else
+        {
+            id = $"tc{index}";
+            state?.CountRemap();
+        }
+
         indexToId[index] = id;
 
         if (!string.IsNullOrEmpty(name))

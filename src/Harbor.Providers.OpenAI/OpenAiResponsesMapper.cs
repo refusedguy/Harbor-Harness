@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Providers.OpenAI;
@@ -22,32 +23,41 @@ internal static class OpenAiResponsesMapper
     /// <summary>
     ///     Parse one SSE data line and write any emitted events directly into the channel.
     ///     The payload transcodes into a pooled buffer; a malformed line is
-    ///     logged and skipped (same as the former DOM walk).
+    ///     logged, counted and skipped (#203: the counter is new — the
+    ///     former DOM walk only logged).
     /// </summary>
     public static async Task WriteResponsesEventsAsync(
         string data,
         ChannelWriter<LlmEvent> writer,
+        ChunkStreamState state,
         ILogger logger,
         CancellationToken ct)
     {
         List<LlmEvent> events;
         try
         {
+            int remapsBefore = state.RemappedToolCalls;
             int byteCount = Encoding.UTF8.GetByteCount(data);
             byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
             try
             {
                 Encoding.UTF8.GetBytes(data, rented);
-                events = MapResponsesChunk(rented.AsSpan(0, byteCount));
+                events = MapResponsesChunk(rented.AsSpan(0, byteCount), state);
             }
             finally
             {
                 ArrayPool<byte>.Shared.Return(rented);
             }
+
+            // #203 B8: positional id fallback, counted in the parser —
+            // warn once per stream instead of staying silent.
+            SsePump.WarnOnceOnRemap(state, remapsBefore, logger);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to parse OpenAI Responses chunk: {Data}", data);
+            state.CountMalformed();
+            logger.LogWarning(ex, "Failed to parse OpenAI Responses chunk #{Count}: {Data}",
+                state.MalformedChunks, data);
             return;
         }
 
@@ -64,8 +74,14 @@ internal static class OpenAiResponsesMapper
     ///     Tolerance deltas vs the DOM walk (all strictly looser, never
     ///     stricter): a non-string delta is ignored instead of failing the
     ///     chunk; a missing/non-integer output_index falls back to "0".
+    ///     #203 E5: pass the stream <paramref name="state" /> (when available)
+    ///     so function-call argument deltas resolve the call id recorded at
+    ///     <c>output_item.added</c> — without it deltas are keyed by the bare
+    ///     output index while the start carries the wire call id, and the
+    ///     coalescer drops the args. Null state preserves the exact legacy
+    ///     shapes (used by tests).
     /// </summary>
-    internal static List<LlmEvent> MapResponsesChunk(ReadOnlySpan<byte> utf8Json)
+    internal static List<LlmEvent> MapResponsesChunk(ReadOnlySpan<byte> utf8Json, ChunkStreamState? state = null)
     {
         var events = new List<LlmEvent>(capacity: 2);
         var reader = new Utf8JsonReader(utf8Json, isFinalBlock: true, state: default);
@@ -165,7 +181,7 @@ internal static class OpenAiResponsesMapper
         }
 
         Emit(events, kind, deltaText, outputIndex, sawOutputIndex, itemType, callId, itemName,
-            inputTokens, outputTokens, reasoningTokens, sawUsageObject);
+            inputTokens, outputTokens, reasoningTokens, sawUsageObject, state);
         return events;
     }
 
@@ -356,7 +372,8 @@ internal static class OpenAiResponsesMapper
     private static void Emit(
         List<LlmEvent> events, ResponsesChunkKind kind, string? deltaText,
         int outputIndex, bool sawOutputIndex, string? itemType, string? callId, string? itemName,
-        int inputTokens, int outputTokens, int? reasoningTokens, bool sawUsageObject)
+        int inputTokens, int outputTokens, int? reasoningTokens, bool sawUsageObject,
+        ChunkStreamState? state)
     {
         switch (kind)
         {
@@ -376,12 +393,19 @@ internal static class OpenAiResponsesMapper
 
             case ResponsesChunkKind.FunctionCallArgumentsDelta:
                 if (!string.IsNullOrEmpty(deltaText))
-                    events.Add(new ToolCallDeltaEvent(sawOutputIndex ? outputIndex.ToString() : "0", deltaText!));
+                    events.Add(new ToolCallDeltaEvent(ResolveArgumentsDeltaId(state, outputIndex, sawOutputIndex), deltaText!));
                 break;
 
             case ResponsesChunkKind.OutputItemAdded:
                 if (itemType == "function_call" && !string.IsNullOrEmpty(itemName))
+                {
                     events.Add(new ToolCallStartEvent(callId ?? "0", itemName!));
+                    // #203 E5: remember output_index→call_id so argument
+                    // deltas correlate (else they key on the bare index).
+                    if (state is not null && !string.IsNullOrEmpty(callId))
+                        state.IndexToId[outputIndex] = callId!;
+                }
+
                 break;
 
             case ResponsesChunkKind.Completed:
@@ -392,6 +416,25 @@ internal static class OpenAiResponsesMapper
             case ResponsesChunkKind.Unknown:
                 break;
         }
+    }
+
+    /// <summary>
+    ///     Resolve the function-call arguments delta id: the wire call id
+    ///     recorded at <c>output_item.added</c> for this output index; the
+    ///     legacy positional index string when the added event was never
+    ///     seen (counted, #203 B8); "0" when the index itself is missing.
+    /// </summary>
+    private static string ResolveArgumentsDeltaId(ChunkStreamState? state, int outputIndex, bool sawOutputIndex)
+    {
+        if (!sawOutputIndex)
+            return "0";
+        if (state is null)
+            return outputIndex.ToString();
+        string? remembered = state.IndexToId.GetValueOrDefault(outputIndex);
+        if (remembered is not null)
+            return remembered;
+        state.CountRemap();
+        return outputIndex.ToString();
     }
 
     private static void SkipContainer(ref Utf8JsonReader reader)
