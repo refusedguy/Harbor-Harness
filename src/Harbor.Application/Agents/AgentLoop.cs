@@ -22,6 +22,15 @@ namespace Harbor.Application.Agents;
 ///         The loop itself now focuses on turn orchestration, event
 ///         publishing, and compaction checks.
 ///     </para>
+///     <para>
+///         <b>Decomposition ([G4], issue #179):</b> per-turn execution lives in
+///         <see cref="TurnRunner" /> (resolve → prompt → stream → tools →
+///         drains → end-of-run decision), the background-task ping in
+///         <see cref="BackgroundDrain" />, and the tool-definition table in
+///         <see cref="ToolTableBuilder" />. The loop keeps run lifecycle
+///         (activity, start/end events, cancellation) and iterates turns.
+///         Behavior is 1-to-1 with the pre-split loop; public contracts unchanged.
+///     </para>
 /// </summary>
 public sealed class AgentLoop : IAgentLoop
 {
@@ -41,12 +50,11 @@ public sealed class AgentLoop : IAgentLoop
     private readonly AgentPipeline _pipeline;
     private readonly CompactionBehavior _compactionBehavior;
     private readonly SteeringDrainBehavior _steering;
+    private readonly TurnRunner _turnRunner;
+    private readonly BackgroundDrain _backgroundDrain;
     private readonly IMcpRegistry? _mcpRegistry;
     private readonly IMetrics _metrics;
     private readonly ITracer _tracer;
-
-    // C7: bounded retry budget for the LLM streaming call site only.
-    private static readonly RetryOptions StreamRetryOptions = new(MaxAttempts: 3, BaseDelay: TimeSpan.FromSeconds(1), UseJitter: true);
 
     /// <summary>
     ///     Construct an <see cref="AgentLoop" /> wired to the supplied services.
@@ -111,6 +119,14 @@ public sealed class AgentLoop : IAgentLoop
         // Background-task ping: detached runs drain into the session when the
         // loop is composed with a registry; tests without one skip silently.
         _backgroundTasks = backgroundTasks;
+        // [G4]: per-turn execution, background drain and tool-table helpers live
+        // in collaborators; the loop keeps run lifecycle. Collaborators share
+        // the loop's logger so log categories stay identical to pre-extraction.
+        _backgroundDrain = new BackgroundDrain(backgroundTasks, tokenTracker, logger);
+        _turnRunner = new TurnRunner(
+            providers, tools, _promptBuilder, messageConverter, eventBus, logger,
+            _metrics, tokenTracker, retryPolicy, _toolDispatcher, mcpRegistry,
+            _compactionBehavior, _steering, _backgroundDrain);
     }
 
     /// <summary>
@@ -148,7 +164,8 @@ public sealed class AgentLoop : IAgentLoop
             // ROP-C П.1-П.3/П.7: the TryCreate → GetClient → catalog chain rides
             // one Bind railway with a single failure exit; the TTL-cached catalog
             // lives in the shared provider registry, not per-loop.
-            var resolved = await ResolveModelAsync(agent, ct).ConfigureAwait(false);
+            // ([G4]: resolution owned by TurnRunner; the loop keeps the single failure exit.)
+            var resolved = await _turnRunner.ResolveModelAsync(agent, ct).ConfigureAwait(false);
             if (resolved.IsFailure) // §4.6-ok: единственный выход Bind-рельсы setup'а (rop-final-mile L1).
                 return Result.Failure(resolved.Error);
 
@@ -158,179 +175,31 @@ public sealed class AgentLoop : IAgentLoop
 
             // Previous-run background completions land before the first turn
             // so a new run picks up reports that finished while idle.
-            await DrainBackgroundAsync(session, ct).ConfigureAwait(false);
+            await _backgroundDrain.DrainAsync(session, ct).ConfigureAwait(false);
 
             int turn = 0;
             // Set when LLM-based compaction fails; the CURRENT and every
             // subsequent turn then build their request from a strictly
             // reduced tail of the history instead of continuing with a
-            // known-overfull context.
+            // known-overfull context. Owned by the loop; fed back into each turn.
             bool truncationFallback = false;
             while (!ct.IsCancellationRequested)
             {
                 turn++;
-                _logger.LogDebug("Turn {Turn} start: agent={Agent} model={Model}", turn, agent.Name.Value, agent.Model);
-                await _eventBus.PublishAsync(new TurnStartEvent(turn, session.Session.Id), ct).ConfigureAwait(false);
-
-                // The compacted view of the history, not the raw append-only
-                // list: after a summary was produced, ShouldCompact and the
-                // request both see [summary] + kept tail, so compaction does
-                // not re-trigger on every subsequent turn.
-                IReadOnlyList<AgentMessage> turnMessages = CompactionService.MaterializeCompactedView(session.Messages);
-
-                // 2. Compaction check + truncation fallback — the per-turn
-                // CompactionBehavior owns threshold check, summarization,
-                // events/metrics and the fallback decision (§3.5).
-                CompactionOutcome compactionOutcome = await _compactionBehavior
-                    .BeforeTurnAsync(session, turnMessages, model, truncationFallback, ct)
-                    .ConfigureAwait(false);
-                turnMessages = compactionOutcome.TurnMessages;
-                truncationFallback = compactionOutcome.TruncationFallback;
-
-                // A compaction failure — including one earlier in this very
-                // turn — leaves the history known-overfull: derive THIS
-                // request from a strictly reduced recent tail instead.
-                if (truncationFallback)
+                // [G4]: the whole turn (compaction → prompt → stream → tools →
+                // drains → turn-end event → end-of-run decision) runs inside TurnRunner.
+                TurnStepResult step = await _turnRunner.RunTurnAsync(
+                    session, agent, client, model, turn, truncationFallback, ct).ConfigureAwait(false);
+                truncationFallback = step.TruncationFallback;
+                if (step.RunFailure is { } runFailure)
                 {
-                    turnMessages = CompactionService.TruncateToFitStrict(turnMessages, model, _tokenTracker);
-                    _metrics.Histogram(
-                        "session.context.size", _tokenTracker.EstimateTokens(turnMessages),
-                        new KeyValuePair<string, object?>("context.phase", "truncated"),
-                        new KeyValuePair<string, object?>("session.id", session.Session.Id));
+                    // Terminal provider error — same as the pre-extraction inline
+                    // early-return: fail the run without turn/agent end events.
+                    return Result.Failure(runFailure);
                 }
 
-                // 3. Build system prompt
-                var tools = _tools.ResolveTools(agent.Name.Value, agent.Permission);
-                // Cached per-directory: avoids File.Exists/Directory.GetFiles on every turn (50x regression).
-                var (contextFiles, skills) = WorkspaceContextSource.GetOrLoadCached(session.Session.Directory);
-                var promptContext = new SystemPromptContext(
-                    agent,
-                    model,
-                    tools,
-                    contextFiles,
-                    skills,
-                    WorkspaceContextSource.FormatMcpInstructions(_mcpRegistry?.GetInstructions()),
-                    session.Session.Directory);
-                string systemPrompt = await _promptBuilder.BuildAsync(promptContext, ct).ConfigureAwait(false);
-
-                // 4. Convert messages — the truncated view after a compaction
-                // failure, the full history otherwise.
-                var llmMessages = _messageConverter.ToLlmMessages(turnMessages);
-
-                // 5. Build request — size the ToolDefinition array directly instead of LINQ Select().ToList().
-                var toolDefs = BuildToolDefinitions(tools);
-                // Ф6/A1: the system prompt is stable across turns (tools/agent rarely change
-                // mid-run and A2 memoizes rebuilds), so every request is a prefix-cache
-                // candidate — flag it Ephemeral for providers that support cache_control.
-                var request = new LlmRequest(
-                    agent.Model,
-                    llmMessages,
-                    systemPrompt,
-                    toolDefs,
-                    MaxOutputTokens: model.MaxOutputTokens,
-                    Temperature: agent.Temperature,
-                    ReasoningEffort: agent.ReasoningEffort,
-                    CacheStrategy: systemPrompt.Length > 0 ? CacheStrategy.Ephemeral : CacheStrategy.None);
-
-                // 6. Stream LLM — wrapped in the retry policy (C7): transient provider
-                //    failures (HTTP 429/5xx, network errors, timeouts) restart the
-                //    whole stream attempt up to MaxAttempts times; fatal failures
-                //    (auth/quota, caller cancellation) propagate immediately.
-                //    Each attempt rebuilds its accumulators and re-publishes
-                //    MessageStart → MessageUpdate… → MessageEnd for the turn,
-                //    mirroring a fresh streaming pass.
-                TurnStreamResult streamed;
-                try
+                if (step.EndRun)
                 {
-                    streamed = await _retryPolicy.ExecuteAsync(
-                        attemptCt => ConsumeTurnStreamAsync(client, request, session, model, turn, attemptCt),
-                        StreamRetryOptions,
-                        (ex, attempt) => _logger.LogWarning(
-                            ex, "Transient LLM stream failure on attempt {Attempt}; retrying", attempt),
-                        ct).ConfigureAwait(false);
-                }
-                catch (LlmStreamErrorException lex)
-                {
-                    // Terminal provider error event — same outcome as the previous
-                    // inline early-return: fail the run without appending the
-                    // partial message or publishing turn/agent end events.
-                    return Result.Failure(lex.Message);
-                }
-
-                var partial = streamed.Partial;
-                var toolCalls = streamed.ToolCalls;
-                var malformedCalls = streamed.MalformedCalls;
-                Usage? finalUsage = streamed.FinalUsage;
-                var stopReason = streamed.StopReason;
-
-                await session.AppendMessageAsync(partial, ct).ConfigureAwait(false);
-                // B3: feed the running token-estimate cache so ShouldCompact stays O(1).
-                _tokenTracker.RecordAppendedMessage(partial);
-                if (finalUsage != null)
-                {
-                    _tokenTracker.RecordTurnUsage(finalUsage);
-                    await session.UpdateStatsAsync(finalUsage, ct).ConfigureAwait(false);
-                }
-
-                // 7. Turn-end decision. A run ends when the turn produced no
-                // tool activity, or the stream was aborted mid-flight (never
-                // execute tools for a cancelled run).
-                _logger.LogDebug("Turn {Turn}: toolCalls={ToolCalls} malformed={Malformed} stopReason={StopReason}", turn, toolCalls.Count, malformedCalls.Count, stopReason);
-                if ((toolCalls.Count == 0 && malformedCalls.Count == 0) || stopReason == StopReason.Aborted)
-                {
-                    _logger.LogDebug("Turn {Turn} end (no tool calls)", turn);
-                    await _eventBus.PublishAsync(
-                        new TurnEndEvent(partial, Array.Empty<ToolResultMessage>(), session.Session.Id), ct).ConfigureAwait(false);
-                    break;
-                }
-
-                // Some providers report a terminal finish_reason (stop / length)
-                // even when tool calls are present. Dropping them silently loses
-                // model intent — execute them through the normal path, persist
-                // the results, publish the turn end, then finish the run.
-                bool runEndsAfterExecution = stopReason is StopReason.Stop or StopReason.Length;
-
-                // 8. Execute tool calls (+ synthesize error results for malformed ones)
-                var toolResults = await ExecuteTurnToolCallsAsync(
-                    toolCalls, malformedCalls, session, partial, agent, ct).ConfigureAwait(false);
-
-                // Persist the tool results so the next turn can feed them back
-                // to the model (OpenAI requires a `tool` role message after a
-                // tool_call, otherwise the model loops calling the same tool).
-                await session.AppendMessageAsync(toolResults, ct).ConfigureAwait(false);
-                // B3: tool results are pure appends — extend the running estimate.
-                _tokenTracker.RecordAppendedMessage(toolResults);
-
-                // Background-task ping ("boss, I'm done"): finished detached
-                // runs append as tool results so the NEXT turn picks them up.
-                await DrainBackgroundAsync(session, ct).ConfigureAwait(false);
-
-                // Ф2/B2: mid-run steering injection INSIDE the turn. Drained
-                // right AFTER the tool results are persisted (never between
-                // the assistant tool_calls and their results — providers
-                // require that adjacency) so the NEXT LLM request of THIS run
-                // already carries the steering, not just the next turn.
-                await _steering.DrainAsync(session, ct).ConfigureAwait(false);
-
-                _logger.LogDebug("Turn {Turn} end (with tool results)", turn);
-                await _eventBus.PublishAsync(
-                    new TurnEndEvent(partial, new[] { toolResults }, session.Session.Id), ct).ConfigureAwait(false);
-
-                // 9. Boundary steering drain — kept for runs that reach max
-                // steps or a terminal stop reason right after execution; on
-                // the normal path it is a no-op (B2 drained above).
-                await _steering.DrainAsync(session, ct).ConfigureAwait(false);
-
-                // 10. Max steps — also honoured after a terminal stop reason.
-                if (MaxStepsBehavior.IsExhausted(turn, agent))
-                {
-                    _logger.LogInformation("Agent reached max steps ({MaxSteps})", agent.MaxSteps);
-                    break;
-                }
-
-                if (runEndsAfterExecution)
-                {
-                    _logger.LogDebug("Turn {Turn}: terminal stop reason ({StopReason}) with executed tool calls — ending run", turn, stopReason);
                     break;
                 }
             }
@@ -363,378 +232,6 @@ public sealed class AgentLoop : IAgentLoop
             await _eventBus.PublishAsync(new AgentErrorEvent(ex.Message, ex.ToString()), CancellationToken.None).ConfigureAwait(false);
             return Result.Failure(ex.Message);
         }
-    }
-
-    /// <summary>
-    ///     Background-task ping: drain finished detached runs for this session
-    ///     into a tool-result message. No-op when unwired or nothing finished.
-    /// </summary>
-    private async Task DrainBackgroundAsync(ISessionContext session, CancellationToken ct)
-    {
-        var registry = _backgroundTasks;
-        if (registry is null)
-        {
-            return;
-        }
-
-        var done = registry.DrainCompleted(session.Session.Id);
-        if (done.Count == 0)
-        {
-            return;
-        }
-
-        var entries = new List<ToolResultEntry>(done.Count);
-        for (int i = 0; i < done.Count; i++)
-        {
-            var completion = done[i];
-            // ROP boundary #101: single Match inspection — the payload and the
-            // error flag come out of one pass instead of Match + IsFailure.
-            var (output, isError) = completion.Result.Match(
-                run => ($"[background sub-agent '{completion.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s)]\n\n{run.FinalOutput}", false),
-                err => ($"[background sub-agent '{completion.AgentName}' failed: {err}]", true));
-            entries.Add(new ToolResultEntry(completion.Id, "task", output, isError));
-            _logger.LogInformation("Background task drained: id={Id} agent={Agent}", completion.Id, completion.AgentName);
-        }
-
-        var message = new ToolResultMessage(
-            Guid.NewGuid().ToString("N"), session.Session.Id, DateTimeOffset.UtcNow, entries);
-        await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
-        _tokenTracker.RecordAppendedMessage(message);
-    }
-
-    /// <summary>
-    ///     Resolve the provider id, LLM client and concrete model for this run.
-    ///     Errors are routed structurally by a flat Bind chain (parse → client →
-    ///     catalog): any step failing short-circuits to the single Match exit.
-    ///     The "model may be absent" case is expressed as <see cref="Maybe{T}"/>
-    ///     → ToResult rather than a null-check convention.
-    /// </summary>
-    private async Task<Result<(ILlmClient Client, ModelInfo Model)>> ResolveModelAsync(
-        AgentDefinition agent,
-        CancellationToken ct)
-    {
-        // ROP boundary #101: flat Bind railway with one Match exit — no nested
-        // ifs, no IsFailure + .Value double-inspection.
-        Result<(ILlmClient Client, IReadOnlyList<ModelInfo> Catalog)> provider =
-            await ProviderId.TryCreate(agent.ProviderId)
-                .Bind(id => _providers.GetClient(id).Map(client => (id, client)))
-                .Bind(async t => (await _providers.GetModelsCachedAsync(t.id, ct).ConfigureAwait(false))
-                    .Map(models => (t.client, models)))
-                .ConfigureAwait(false);
-
-        return provider.Match(
-            catalog => Maybe.From(FindModel(catalog.Catalog, agent.Model))
-                .ToResult($"Model '{agent.Model}' not found in provider '{agent.ProviderId}'.")
-                .Map(m => (Client: catalog.Client, Model: m)),
-            error => Result.Failure<(ILlmClient Client, ModelInfo Model)>(error));
-    }
-
-    /// <summary>
-    ///     One complete streaming attempt for a turn: publish
-    ///     <see cref="MessageStartEvent" />, consume the provider stream while
-    ///     coalescing deltas, synthesize placeholders for malformed tool calls,
-    ///     and publish <see cref="MessageEndEvent" />.
-    /// </summary>
-    /// <remarks>
-    ///     Invoked through <see cref="IRetryPolicy" /> (C7). A retry re-runs the
-    ///     whole attempt from scratch — fresh accumulators, fresh events — so no
-    ///     state from a failed attempt can leak into the retried one. Cancellation
-    ///     by the caller is converted into a graceful <see cref="StopReason.Aborted" />
-    ///     outcome, exactly as before the extraction.
-    /// </remarks>
-    private async Task<TurnStreamResult> ConsumeTurnStreamAsync(
-        ILlmClient client,
-        LlmRequest request,
-        ISessionContext session,
-        ModelInfo model,
-        int turn,
-        CancellationToken ct)
-    {
-        var partial = AssistantMessage.Empty(session.Session.Id, model.Id);
-        _logger.LogDebug("Message start: turn={Turn}", turn);
-        await _eventBus.PublishAsync(new MessageStartEvent(partial), ct).ConfigureAwait(false);
-
-        // Pre-size to typical tool-call count to avoid List resizes.
-        var toolCalls = new List<ToolCallPart>(capacity: 4);
-        // Tool calls whose streamed args JSON failed to parse (C4) —
-        // reported by the coalescer, converted into error tool results
-        // below instead of being executed with fabricated empty args.
-        var malformedCalls = new List<MalformedToolCall>();
-        Usage? finalUsage = null;
-        var stopReason = StopReason.Stop;
-
-        using var coalescer = new StreamingCoalescer();
-
-        try
-        {
-            await foreach (var evt in client.StreamAsync(request, ct).ConfigureAwait(false))
-            {
-                // LogTrace is the most frequent log call in the hot path (one per
-                // stream event = potentially thousands per turn). Guarding it with
-                // IsEnabled avoids the params object?[] array allocation that
-                // LogTrace incurs even when trace logging is off.
-                if (_logger.IsEnabled(LogLevel.Trace))
-                {
-                    _logger.LogTrace("Stream event: {EventType}", evt.GetType().Name);
-                }
-                switch (evt)
-                {
-                    case TextDeltaEvent td:
-                        // Flush any pending thinking before starting/continuing a text run.
-                        partial = FlushThinking(coalescer, partial);
-                        coalescer.AppendTextDelta(td.Delta);
-                        await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
-                        break;
-
-                    case ThinkingDeltaEvent thd:
-                        // Flush any pending text before starting/continuing a thinking run.
-                        partial = FlushText(coalescer, partial);
-                        coalescer.AppendThinkingDelta(thd.Delta);
-                        await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
-                        break;
-
-                    case ToolCallStartEvent tcs:
-                        partial = FlushAll(coalescer, partial);
-                        coalescer.StartToolCall(tcs.Id, tcs.ToolName);
-                        await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
-                        break;
-
-                    case ToolCallDeltaEvent tcd:
-                        if (_logger.IsEnabled(LogLevel.Trace))
-                        {
-                            _logger.LogTrace("ToolCallDelta id={Id} argsDelta={Args}", tcd.Id, tcd.ArgsDelta);
-                        }
-                        coalescer.AppendToolCallDelta(tcd.Id, tcd.ArgsDelta);
-                        await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
-                        break;
-
-                    case StepFinishEvent sf:
-                    {
-                        StepOutcome outcome = await FinalizeStepAsync(sf, coalescer, partial, malformedCalls, ct).ConfigureAwait(false);
-                        partial = outcome.Partial;
-                        toolCalls.AddRange(outcome.MaterializedCalls);
-                        finalUsage = outcome.FinalUsage;
-                        stopReason = outcome.StopReason;
-                        break;
-                    }
-
-                    case ErrorEvent err:
-                        // Discard any per-tool-call pooled StringBuilders before
-                        // propagating the terminal error (same as the previous
-                        // inline early-return out of RunAsync).
-                        coalescer.DiscardPendingToolCalls();
-                        await _eventBus.PublishAsync(new AgentErrorEvent(err.Message, err.Exception), ct).ConfigureAwait(false);
-                        throw new LlmStreamErrorException(err);
-                }
-            }
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            // Flush pending buffers so nothing is lost, then discard pooled
-            // StringBuilders — cancellation mid-stream would otherwise leak them.
-            partial = FlushAll(coalescer, partial);
-            coalescer.DiscardPendingToolCalls();
-            partial = partial.WithFinish(StopReason.Aborted, finalUsage ?? new Usage(0, 0));
-            // Align the loop state with the aborted finish: previously the
-            // stale stopReason/toolCalls from an earlier StepFinish could
-            // cause tool execution AFTER cancellation.
-            stopReason = StopReason.Aborted;
-            toolCalls.Clear();
-            malformedCalls.Clear();
-        }
-
-        partial = AppendMalformedPlaceholders(partial, malformedCalls);
-
-        _logger.LogDebug("Message end: turn={Turn} stopReason={StopReason}", turn, stopReason);
-        await _eventBus.PublishAsync(new MessageEndEvent(partial), ct).ConfigureAwait(false);
-
-        return new TurnStreamResult(partial, toolCalls, malformedCalls, finalUsage, stopReason);
-    }
-
-    /// <summary>Flush a pending text run into the message (ROP-C flush choreography).</summary>
-    private static AssistantMessage FlushText(StreamingCoalescer coalescer, AssistantMessage partial) =>
-        coalescer.HasPendingText ? partial.AppendText(coalescer.FlushText()) : partial;
-
-    /// <summary>Flush a pending thinking run into the message.</summary>
-    private static AssistantMessage FlushThinking(StreamingCoalescer coalescer, AssistantMessage partial) =>
-        coalescer.HasPendingThinking ? partial.AppendThinking(coalescer.FlushThinking()) : partial;
-
-    /// <summary>
-    ///     Flush both buffer kinds in wire order (text first, then thinking) —
-    ///     the sequence every non-delta arm and the abort path must perform
-    ///     (ROP-C П.3: five copies of this dance collapse to one helper).
-    /// </summary>
-    private static AssistantMessage FlushAll(StreamingCoalescer coalescer, AssistantMessage partial)
-    {
-        AssistantMessage flushedText = FlushText(coalescer, partial);
-        return FlushThinking(coalescer, flushedText);
-    }
-
-    /// <summary>Publish one MessageUpdateEvent for a coalesced stream delta.</summary>
-    private Task PublishUpdateAsync(LlmEvent evt, AssistantMessage partial, CancellationToken ct) =>
-        _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct);
-
-    /// <summary>
-    ///     Finalize one provider step: flush buffers, materialize accumulated
-    ///     tool-call fragments (un-parseable ones are reported via
-    ///     <paramref name="malformedCalls" />), stamp usage + stop reason, and
-    ///     forward the finish to the bus so status bars can tally tokens.
-    /// </summary>
-    private async Task<StepOutcome> FinalizeStepAsync(
-        StepFinishEvent sf,
-        StreamingCoalescer coalescer,
-        AssistantMessage partial,
-        List<MalformedToolCall> malformedCalls,
-        CancellationToken ct)
-    {
-        partial = FlushAll(coalescer, partial);
-
-        var materializedCalls = coalescer.MaterializeToolCalls(malformedCalls);
-        for (int i = 0; i < materializedCalls.Count; i++)
-        {
-            partial = partial.AppendToolCall(materializedCalls[i]);
-        }
-
-        var stopReason = StopReasonJsonConverter.Parse(sf.FinishReason);
-        partial = partial.WithFinish(stopReason, sf.Usage ?? new Usage(0, 0));
-        await PublishUpdateAsync(sf, partial, ct).ConfigureAwait(false);
-        return new StepOutcome(partial, materializedCalls, sf.Usage, stopReason);
-    }
-
-    /// <summary>Per-step finalize result handed back to the stream loop.</summary>
-    private sealed record StepOutcome(
-        AssistantMessage Partial,
-        List<ToolCallPart> MaterializedCalls,
-        Usage? FinalUsage,
-        StopReason StopReason);
-
-    /// <summary>
-    ///     Surface malformed tool calls (C4): keep the assistant message's
-    ///     wire shape consistent by appending a placeholder part per call —
-    ///     every tool_call must be answered by a tool_result — while the
-    ///     error result built by the turn tells the model its args were
-    ///     un-parseable.
-    /// </summary>
-    private AssistantMessage AppendMalformedPlaceholders(AssistantMessage partial, List<MalformedToolCall> malformedCalls)
-    {
-        for (int i = 0; i < malformedCalls.Count; i++)
-        {
-            var malformed = malformedCalls[i];
-            _logger.LogWarning(
-                "Malformed JSON arguments for tool call {CallId} ({ToolName}); raw tail: {ArgsTail}",
-                malformed.Id, malformed.ToolName, malformed.RawArgsTail);
-            partial = partial.AppendToolCall(new ToolCallPart(malformed.Id, malformed.ToolName, EmptyJsonArgs()));
-        }
-
-        return partial;
-    }
-
-    /// <summary>
-    ///     Terminal outcome of one streaming attempt (see
-    ///     <see cref="ConsumeTurnStreamAsync" />).
-    /// </summary>
-    private sealed record TurnStreamResult(
-        AssistantMessage Partial,
-        List<ToolCallPart> ToolCalls,
-        List<MalformedToolCall> MalformedCalls,
-        Usage? FinalUsage,
-        StopReason StopReason);
-
-    /// <summary>
-    ///     Execute the turn's tool calls and synthesize error results for
-    ///     malformed ones. Valid calls go through <see cref="ToolDispatcher" />
-    ///     (permission gating + events); malformed calls never reach a tool —
-    ///     each gets an <c>IsError=true</c> result carrying the raw args tail so
-    ///     the model can retry with well-formed JSON next turn.
-    /// </summary>
-    private async Task<ToolResultMessage> ExecuteTurnToolCallsAsync(
-        List<ToolCallPart> toolCalls,
-        List<MalformedToolCall> malformedCalls,
-        ISessionContext session,
-        AssistantMessage partial,
-        AgentDefinition agent,
-        CancellationToken ct)
-    {
-        var results = new List<ToolResultEntry>(toolCalls.Count + malformedCalls.Count);
-
-        if (toolCalls.Count > 0)
-        {
-            var executed = await _toolDispatcher.ExecuteAsync(
-                toolCalls, session, partial, agent, ct,
-                agent.ToolTimeoutSeconds is { } seconds
-                    ? TimeSpan.FromSeconds(seconds)
-                    : null).ConfigureAwait(false);
-            results.AddRange(executed.Results);
-        }
-
-        for (int i = 0; i < malformedCalls.Count; i++)
-        {
-            var malformed = malformedCalls[i];
-            results.Add(new ToolResultEntry(
-                malformed.Id,
-                malformed.ToolName,
-                $"Malformed JSON arguments for tool '{malformed.ToolName}' — tool was NOT executed. Raw arguments tail: {malformed.RawArgsTail}",
-                true));
-        }
-
-        return new ToolResultMessage(
-            Guid.NewGuid().ToString("N"),
-            session.Session.Id,
-            DateTimeOffset.UtcNow,
-            results);
-    }
-
-    /// <summary>
-    ///     Frozen empty-JSON-object element shared by every malformed-call
-    ///     placeholder. Same convention as <see cref="StreamingCoalescer" />'s
-    ///     zero-delta empty-args element: the backing <see cref="JsonDocument" />
-    ///     is never disposed (process-lifetime state), so the element stays
-    ///     valid for all consumers; concurrent reads are safe because parsed
-    ///     JSON is immutable. Avoids a per-call <c>Parse("{}") + Clone()</c>.
-    /// </summary>
-    private static readonly JsonElement EmptyMalformedArgsElement = JsonDocument.Parse("{}").RootElement;
-
-    /// <summary>
-    ///     Placeholder args for a malformed tool call's assistant-side part.
-    ///     The real arguments were un-parseable; the error tool_result carries
-    ///     the diagnostics, while this keeps the tool_call ↔ tool_result
-    ///     pairing providers require.
-    /// </summary>
-    private static JsonElement EmptyJsonArgs() => EmptyMalformedArgsElement;
-
-    /// <summary>
-    ///     Build the ToolDefinition array directly, avoiding the LINQ Select().ToList() allocation
-    ///     (which allocates a delegate + iterator + List).
-    /// </summary>
-    private static ToolDefinition[] BuildToolDefinitions(IReadOnlyList<ToolDescriptor> tools)
-    {
-        if (tools.Count == 0)
-        {
-            return Array.Empty<ToolDefinition>();
-        }
-
-        var result = new ToolDefinition[tools.Count];
-        for (int i = 0; i < tools.Count; i++)
-        {
-            var t = tools[i];
-            result[i] = new ToolDefinition(t.Name.Value, t.Description, t.Schema);
-        }
-        return result;
-    }
-
-    /// <summary>
-    ///     Linear scan for the requested model — avoids LINQ FirstOrDefault delegate allocation.
-    /// </summary>
-    private static ModelInfo? FindModel(IReadOnlyList<ModelInfo> models, string modelId)
-    {
-        for (int i = 0; i < models.Count; i++)
-        {
-            if (models[i].Id == modelId)
-            {
-                return models[i];
-            }
-        }
-        return null;
     }
 
     /// <summary>
