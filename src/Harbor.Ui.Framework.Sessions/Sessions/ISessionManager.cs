@@ -12,6 +12,14 @@ public interface ISessionManager
     /// <summary>The active session, or null if none.</summary>
     Session? Active { get; }
 
+    /// <summary>
+    ///     The active <see cref="SessionContext" /> (holds the active session
+    ///     + its UiStore + status + git info), or null if none. Renderers
+    ///     bind to <see cref="SessionContext.Store" /> of this context and
+    ///     fall back to their private store when it is null.
+    /// </summary>
+    SessionContext? ActiveContext { get; }
+
     /// <summary>Look up a session context by session id.</summary>
     SessionContext? GetContext(string sessionId);
 

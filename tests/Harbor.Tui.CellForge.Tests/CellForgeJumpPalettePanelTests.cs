@@ -48,7 +48,9 @@ public class CellForgeJumpPalettePanelTests
 
         public void AddContext(Session session) => _contexts[session.Id] = new SessionContext(session);
 
-        public Session? Active => null;
+        public Session? Active => ActiveContext?.Session;
+
+        public SessionContext? ActiveContext { get; set; }
 
         public SessionContext? GetContext(string sessionId) =>
             _contexts.TryGetValue(sessionId, out var ctx) ? ctx : null;
