@@ -78,19 +78,18 @@ public sealed class TaskTool : ITool
 
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("agent", out var agentEl) || agentEl.ValueKind != JsonValueKind.String
-                                                           || string.IsNullOrWhiteSpace(agentEl.GetString()))
-            return Result.Failure("Missing required argument 'agent'.");
+        Result<string> agent = JsonArgValidator.RequiredString(
+            args, "agent", "Missing required argument 'agent'.");
+        if (agent.IsFailure)
+            return agent;
 
-        if (!args.TryGetProperty("prompt", out var promptEl) || promptEl.ValueKind != JsonValueKind.String
-                                                             || string.IsNullOrWhiteSpace(promptEl.GetString()))
-            return Result.Failure("Missing required argument 'prompt'.");
+        Result<string> prompt = JsonArgValidator.RequiredString(
+            args, "prompt", "Missing required argument 'prompt'.");
+        if (prompt.IsFailure)
+            return prompt;
 
-        if (args.TryGetProperty("background", out var bgEl)
-            && bgEl.ValueKind != JsonValueKind.True && bgEl.ValueKind != JsonValueKind.False)
-            return Result.Failure("Optional argument 'background' must be a boolean.");
-
-        return Result.Success();
+        return JsonArgValidator.OptionalBool(
+            args, "background", "Optional argument 'background' must be a boolean.");
     }
 
     /// <inheritdoc />

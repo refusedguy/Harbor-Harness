@@ -58,14 +58,8 @@ public sealed class GlobTool : ITool
                                                                       }
                                                                       """);
 
-    public Result ValidateArguments(JsonElement args)
-    {
-        if (!args.TryGetProperty("pattern", out var p)
-            || p.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(p.GetString()))
-            return Result.Failure("Missing or empty 'pattern'.");
-        return Result.Success();
-    }
+    public Result ValidateArguments(JsonElement args) =>
+        JsonArgValidator.RequiredString(args, "pattern", "Missing or empty 'pattern'.");
 
     public Task<ToolResult> ExecuteAsync(
         JsonElement args,

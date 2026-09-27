@@ -78,17 +78,13 @@ public sealed class TreeTool : ITool
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
     {
-        if (args.TryGetProperty("maxDepth", out var d) && d.ValueKind == JsonValueKind.Number
-                                                       && d.TryGetInt32(out int depth)
-                                                       && (depth < 1 || depth > HardMaxDepth))
-            return Result.Failure($"'maxDepth' must be between 1 and {HardMaxDepth}.");
+        Result depth = JsonArgValidator.OptionalIntInRange(
+            args, "maxDepth", 1, HardMaxDepth, $"'maxDepth' must be between 1 and {HardMaxDepth}.");
+        if (depth.IsFailure)
+            return depth;
 
-        if (args.TryGetProperty("maxEntries", out var m) && m.ValueKind == JsonValueKind.Number
-                                                         && m.TryGetInt32(out int max)
-                                                         && (max < 1 || max > HardMaxEntries))
-            return Result.Failure($"'maxEntries' must be between 1 and {HardMaxEntries}.");
-
-        return Result.Success();
+        return JsonArgValidator.OptionalIntInRange(
+            args, "maxEntries", 1, HardMaxEntries, $"'maxEntries' must be between 1 and {HardMaxEntries}.");
     }
 
     /// <inheritdoc />

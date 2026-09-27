@@ -152,23 +152,18 @@ public sealed class WebFetchTool : ITool
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("url", out var urlEl)
-            || urlEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(urlEl.GetString()))
-            return Result.Failure("Missing or empty 'url'.");
+        Result<string> urlResult = JsonArgValidator.RequiredString(args, "url", "Missing or empty 'url'.");
+        if (urlResult.IsFailure)
+            return urlResult;
 
-        string url = urlEl.GetString()!;
+        string url = urlResult.Value;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
             || uri.Scheme != "http" && uri.Scheme != "https")
         {
             return Result.Failure($"'url' must be an absolute http(s) URL: {url}");
         }
 
-        if (args.TryGetProperty("maxChars", out var mc) && mc.ValueKind == JsonValueKind.Number
-                                                        && mc.TryGetInt32(out int max) && max < 1)
-            return Result.Failure("'maxChars' must be >= 1.");
-
-        return Result.Success();
+        return JsonArgValidator.OptionalIntAtLeast(args, "maxChars", 1, "'maxChars' must be >= 1.");
     }
 
     /// <inheritdoc />

@@ -69,15 +69,8 @@ public sealed class RipGrepTool : ITool
                                                                       """);
 
     /// <inheritdoc />
-    public Result ValidateArguments(JsonElement args)
-    {
-        if (!args.TryGetProperty("pattern", out var pEl)
-            || pEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrEmpty(pEl.GetString()))
-            return Result.Failure("Missing or empty 'pattern'.");
-
-        return Result.Success();
-    }
+    public Result ValidateArguments(JsonElement args) =>
+        JsonArgValidator.RequiredNonEmptyString(args, "pattern", "Missing or empty 'pattern'.");
 
     /// <inheritdoc />
     public async Task<ToolResult> ExecuteAsync(

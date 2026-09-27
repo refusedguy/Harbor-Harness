@@ -80,20 +80,15 @@ public sealed class McpPromptTool : ITool
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("server", out var sEl)
-            || sEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(sEl.GetString()))
-            return Result.Failure("Missing or empty 'server'.");
+        Result<string> server = JsonArgValidator.RequiredString(args, "server", "Missing or empty 'server'.");
+        if (server.IsFailure)
+            return server;
 
-        if (!args.TryGetProperty("name", out var nEl)
-            || nEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(nEl.GetString()))
-            return Result.Failure("Missing or empty 'name'.");
+        Result<string> name = JsonArgValidator.RequiredString(args, "name", "Missing or empty 'name'.");
+        if (name.IsFailure)
+            return name;
 
-        if (args.TryGetProperty("arguments", out var aEl) && aEl.ValueKind != JsonValueKind.Object)
-            return Result.Failure("'arguments' must be a JSON object if present.");
-
-        return Result.Success();
+        return JsonArgValidator.OptionalObject(args, "arguments", "'arguments' must be a JSON object if present.");
     }
 
     /// <inheritdoc />

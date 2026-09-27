@@ -55,15 +55,11 @@ public sealed class LsTool : ITool
 
     public Result ValidateArguments(JsonElement args)
     {
-        if (args.TryGetProperty("depth", out var d) && d.ValueKind == JsonValueKind.Number
-                                                    && d.TryGetInt32(out int depth) && depth < 1)
-            return Result.Failure("depth must be >= 1");
+        Result depth = JsonArgValidator.OptionalIntAtLeast(args, "depth", 1, "depth must be >= 1");
+        if (depth.IsFailure)
+            return depth;
 
-        if (args.TryGetProperty("maxEntries", out var m) && m.ValueKind == JsonValueKind.Number
-                                                         && m.TryGetInt32(out int max) && max < 1)
-            return Result.Failure("maxEntries must be >= 1");
-
-        return Result.Success();
+        return JsonArgValidator.OptionalIntAtLeast(args, "maxEntries", 1, "maxEntries must be >= 1");
     }
 
     public Task<ToolResult> ExecuteAsync(

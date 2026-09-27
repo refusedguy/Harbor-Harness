@@ -78,11 +78,12 @@ public sealed class GrepTool : ITool
 
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("pattern", out var p) || p.ValueKind != JsonValueKind.String
-                                                       || string.IsNullOrEmpty(p.GetString()))
-            return Result.Failure("Missing required argument 'pattern'.");
+        Result<string> pattern = JsonArgValidator.RequiredNonEmptyString(
+            args, "pattern", "Missing required argument 'pattern'.");
+        if (pattern.IsFailure)
+            return pattern;
 
-        return CompileRegex(p.GetString()!, RegexOptions.CultureInvariant);
+        return CompileRegex(pattern.Value, RegexOptions.CultureInvariant);
     }
 
     public Task<ToolResult> ExecuteAsync(

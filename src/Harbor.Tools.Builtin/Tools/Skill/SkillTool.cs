@@ -112,17 +112,14 @@ public sealed class SkillTool : ITool
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("name", out var nEl)
-            || nEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(nEl.GetString()))
-            return Result.Failure("Missing or empty 'name'.");
+        Result<string> name = JsonArgValidator.RequiredString(args, "name", "Missing or empty 'name'.");
+        if (name.IsFailure)
+            return name;
 
-        if (args.TryGetProperty("scope", out var sEl)
-            && sEl.ValueKind == JsonValueKind.String
-            && !IsKnownScope(sEl.GetString()))
-            return Result.Failure("'scope' must be 'project', 'global' or 'any'.");
-
-        return Result.Success();
+        return JsonArgValidator.OptionalEnum(
+            args, "scope", ["project", "global", "any"],
+            "'scope' must be 'project', 'global' or 'any'.",
+            StringComparison.OrdinalIgnoreCase);
     }
 
     /// <inheritdoc />
@@ -168,11 +165,6 @@ public sealed class SkillTool : ITool
         _logger.LogDebug("Skill loaded: name={Name} scope={Scope} chars={Chars}", name, foundScope, body.Length);
         return ToolResult.Success(content, new { name, scope = foundScope, chars = body.Length, truncated });
     }
-
-    private static bool IsKnownScope(string? scope) =>
-        scope is not null && (scope.Equals("project", StringComparison.OrdinalIgnoreCase)
-            || scope.Equals("global", StringComparison.OrdinalIgnoreCase)
-            || scope.Equals("any", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Plain file/dir names only — no separators, no parent traversal.</summary>
     internal static bool IsSafeName(string name)

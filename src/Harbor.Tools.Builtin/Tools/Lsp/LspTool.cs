@@ -81,30 +81,28 @@ public sealed class LspTool : ITool
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("action", out JsonElement actionEl)
-            || actionEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(actionEl.GetString()))
-            return Result.Failure("Missing or empty 'action' (diagnostics | definition | references).");
+        Result<string> actionResult = JsonArgValidator.RequiredEnum(
+            args, "action",
+            "Missing or empty 'action' (diagnostics | definition | references).",
+            ["diagnostics", "definition", "references"],
+            static action => $"Unknown action '{action}' — expected diagnostics, definition or references.");
+        if (actionResult.IsFailure)
+            return actionResult;
+        string action = actionResult.Value;
 
-        string action = actionEl.GetString()!;
-        if (action is not ("diagnostics" or "definition" or "references"))
-            return Result.Failure($"Unknown action '{action}' — expected diagnostics, definition or references.");
-
-        if (!args.TryGetProperty("path", out JsonElement pathEl)
-            || pathEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(pathEl.GetString()))
-            return Result.Failure("Missing or empty 'path'.");
+        Result path = JsonArgValidator.RequiredPath(args);
+        if (path.IsFailure)
+            return path;
 
         if (action is not "diagnostics")
         {
-            if (!args.TryGetProperty("line", out JsonElement lineEl) || lineEl.ValueKind != JsonValueKind.Number)
-                return Result.Failure($"'line' (1-based) is required for action '{action}'.");
+            Result line = JsonArgValidator.RequiredNumber(
+                args, "line", $"'line' (1-based) is required for action '{action}'.");
+            if (line.IsFailure)
+                return line;
         }
 
-        if (args.TryGetProperty("column", out JsonElement columnEl) && columnEl.ValueKind != JsonValueKind.Number)
-            return Result.Failure("'column' must be an integer.");
-
-        return Result.Success();
+        return JsonArgValidator.OptionalNumber(args, "column", "'column' must be an integer.");
     }
 
     /// <inheritdoc />

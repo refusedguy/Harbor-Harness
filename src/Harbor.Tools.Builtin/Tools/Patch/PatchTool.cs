@@ -64,17 +64,11 @@ public sealed class PatchTool : ITool
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("path", out var pathEl)
-            || pathEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(pathEl.GetString()))
-            return Result.Failure("Missing or empty 'path'.");
+        Result path = JsonArgValidator.RequiredPath(args);
+        if (path.IsFailure)
+            return path;
 
-        if (!args.TryGetProperty("patch", out var patchEl)
-            || patchEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(patchEl.GetString()))
-            return Result.Failure("Missing or empty 'patch'.");
-
-        return Result.Success();
+        return JsonArgValidator.RequiredString(args, "patch", "Missing or empty 'patch'.");
     }
 
     /// <inheritdoc />
