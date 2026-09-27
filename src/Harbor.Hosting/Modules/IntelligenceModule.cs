@@ -20,11 +20,17 @@ internal static class IntelligenceModule
             sp.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(),
             sp.GetRequiredService<ILogger<CompactionService>>(),
             ctx.Harbor.SecondaryModel));
+        // #178: path-extraction policies (Strategy) — a new file-based tool
+        // registers an IPathExtractionPolicy instead of editing the permission
+        // core. Order matters: first Handles win, legacy fallback is terminal.
+        services.AddSingleton<IPathExtractionPolicy>(PathArgExtractionPolicy.Instance);
+        services.AddSingleton<IPathExtractionPolicy>(LegacyArgExtractionPolicy.Instance);
         services.AddSingleton<IPermissionService>(sp => new PermissionService(
             sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
             sp.GetRequiredService<ILogger<PermissionService>>(),
             workspaceRoot: Directory.GetCurrentDirectory(),
-            configStore: sp.GetService<IConfigStore>()));
+            configStore: sp.GetService<IConfigStore>(),
+            pathPolicies: sp.GetServices<IPathExtractionPolicy>()));
         // #49 PR1: runtime-owned approval/cancellation coordinator — the single
         // ingress for run cancellation and the linearization point for gate
         // decisions vs cancel. Stateless w.r.t. the agent (takes IAgentRunner
