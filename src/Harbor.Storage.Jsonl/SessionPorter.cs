@@ -122,7 +122,8 @@ public sealed class JsonlSessionPorter : ISessionPorter
             Title = source.Title,
             CreatedAt = source.CreatedAt,
             UpdatedAt = DateTimeOffset.UtcNow,
-            ParentSessionId = source.ParentSessionId
+            ParentSessionId = source.ParentSessionId,
+            Kind = source.Kind
         };
         var linkedResult = await store.UpdateAsync(target, ct).ConfigureAwait(false);
         if (linkedResult.IsFailure)

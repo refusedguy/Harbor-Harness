@@ -15,7 +15,8 @@ namespace Harbor.Ipc.Protocol;
 /// <remarks>
 ///     Field order is a stable contract: both IPC peers ship from the same
 ///     build, but keep append-only discipline anyway so older payloads stay
-///     decodable. <see cref="SessionMetadata" /> has its own formatter;
+///     decodable (<c>kind</c> rides last; 14-field payloads read as
+///     <see cref="SessionKind.User" />). <see cref="SessionMetadata" /> has its own formatter;
 ///     enums encode as their underlying value via StandardResolver.
 /// </remarks>
 public sealed class SessionMessagePackFormatter : IMessagePackFormatter<Session?>
@@ -31,7 +32,7 @@ public sealed class SessionMessagePackFormatter : IMessagePackFormatter<Session?
             return;
         }
 
-        writer.WriteArrayHeader(14);
+        writer.WriteArrayHeader(15);
         options.Resolver.GetFormatterWithVerify<string>().Serialize(ref writer, value.Id, options);
         options.Resolver.GetFormatterWithVerify<string>().Serialize(ref writer, value.ProjectId, options);
         options.Resolver.GetFormatterWithVerify<string>().Serialize(ref writer, value.Directory, options);
@@ -53,6 +54,7 @@ public sealed class SessionMessagePackFormatter : IMessagePackFormatter<Session?
             .Serialize(ref writer, value.Status, options);
         options.Resolver.GetFormatterWithVerify<string?>().Serialize(ref writer, value.GitBranch, options);
         writer.Write(value.GitIsDirty);
+        writer.Write((int)value.Kind);
     }
 
     public Session? Deserialize(
@@ -68,10 +70,10 @@ public sealed class SessionMessagePackFormatter : IMessagePackFormatter<Session?
         try
         {
             int fieldCount = reader.ReadArrayHeader();
-            if (fieldCount != 14)
+            if (fieldCount != 14 && fieldCount != 15)
             {
                 throw new MessagePackSerializationException(
-                    $"Session payload expects 14 fields, found {fieldCount}.");
+                    $"Session payload expects 14 or 15 fields, found {fieldCount}.");
             }
 
             string id = options.Resolver.GetFormatterWithVerify<string>().Deserialize(ref reader, options);
@@ -94,11 +96,13 @@ public sealed class SessionMessagePackFormatter : IMessagePackFormatter<Session?
                 .Deserialize(ref reader, options);
             string? gitBranch = options.Resolver.GetFormatterWithVerify<string?>().Deserialize(ref reader, options);
             bool gitIsDirty = reader.ReadBoolean();
+            // Append-only field: pre-kind peers stop at 14 fields.
+            var kind = fieldCount == 15 ? (SessionKind)reader.ReadInt32() : SessionKind.User;
 
             return new Session(
                 id, projectId, directory, title, agent, model, providerId,
                 createdAt, updatedAt, metadata, parentSessionId, status,
-                gitBranch, gitIsDirty);
+                gitBranch, gitIsDirty, kind);
         }
         finally
         {

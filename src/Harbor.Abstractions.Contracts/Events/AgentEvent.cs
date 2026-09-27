@@ -31,7 +31,8 @@ public abstract record AgentEvent
 public sealed record AgentStartEvent(
     string SessionId,
     IReadOnlyList<AgentMessage> Messages,
-    ModelInfo? Model = null) : AgentEvent;
+    ModelInfo? Model = null,
+    SessionKind Kind = SessionKind.User) : AgentEvent;
 
 /// <summary>
 ///     Emitted at the start of each turn inside a run. <see cref="TurnIndex" /> is 1-based.

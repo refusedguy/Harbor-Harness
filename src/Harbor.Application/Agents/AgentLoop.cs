@@ -154,7 +154,7 @@ public sealed class AgentLoop : IAgentLoop
 
             var (client, model) = resolved.Value;
 
-            await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, SnapshotMessages(session.Messages), model), ct).ConfigureAwait(false);
+            await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, SnapshotMessages(session.Messages), model, session.Session.Kind), ct).ConfigureAwait(false);
 
             // Previous-run background completions land before the first turn
             // so a new run picks up reports that finished while idle.

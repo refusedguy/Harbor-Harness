@@ -126,7 +126,8 @@ public sealed class JsonlSessionStore : ISessionStore
                     session.ParentSessionId,
                     session.Status,
                     session.GitBranch,
-                    session.GitIsDirty);
+                    session.GitIsDirty,
+                    session.Kind);
 
                 File.AppendAllText(sessionFile, JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry) + "\n");
             }
@@ -181,7 +182,8 @@ public sealed class JsonlSessionStore : ISessionStore
                 ParentSessionId = header.ParentSessionId,
                 Status = header.Status,
                 GitBranch = header.GitBranch,
-                GitIsDirty = header.GitIsDirty
+                GitIsDirty = header.GitIsDirty,
+                Kind = header.Kind
             };
         }, ResultErrors.Message).ConfigureAwait(false);
 
@@ -665,7 +667,8 @@ public sealed class JsonlSessionStore : ISessionStore
                     session.ParentSessionId,
                     session.Status,
                     session.GitBranch,
-                    session.GitIsDirty);
+                    session.GitIsDirty,
+                    session.Kind);
 
                 lines[0] = JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry);
                 WriteAllLinesAtomic(sessionFile, lines);
@@ -884,7 +887,7 @@ internal sealed record SessionCacheEntry(
 /// <summary>
 ///     Line-1 header of a session file. Optional trailing fields carry the
 ///     newer <see cref="Harbor.Abstractions.Models.Session"/> attributes — before they
-///     existed, UpdateAsync rewrote the header WITHOUT parent linkage/status/git
+///     existed, UpdateAsync rewrote the header WITHOUT parent linkage/status/git/kind
 ///     fields and silently dropped them on first rename/rebind (V4-bugfix).
 ///     Defaults keep legacy files parseable.
 /// </summary>
@@ -903,7 +906,8 @@ internal sealed record SessionHeaderEntry(
     [property: JsonPropertyName("parentSessionId")] string? ParentSessionId = null,
     [property: JsonPropertyName("status")] SessionStatus Status = SessionStatus.Idle,
     [property: JsonPropertyName("gitBranch")] string? GitBranch = null,
-    [property: JsonPropertyName("gitIsDirty")] bool GitIsDirty = false);
+    [property: JsonPropertyName("gitIsDirty")] bool GitIsDirty = false,
+    [property: JsonPropertyName("kind")] SessionKind Kind = SessionKind.User);
 
 /*
  * DDD-audit 25.08 (ROP-C Z3): <see cref="JsonlSessionStore.GetAsync" /> used to
