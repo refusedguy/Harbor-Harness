@@ -884,6 +884,11 @@ internal sealed class CellForgeReplRunner(
                 {
                     _selection.Clear();
                 }
+                else if (bridge.TryRouteToolCardClick(evt.Mouse))
+                {
+                    _selection.Clear();
+                    _wake.Writer.TryWrite(null);
+                }
                 else if (_selection.OnPress(evt.Mouse.Column, evt.Mouse.Row, evt.Mouse.Button))
                 {
                     _wake.Writer.TryWrite(null);
@@ -1018,6 +1023,15 @@ internal sealed class CellForgeReplRunner(
         // Permission gate outranks the composer while one is pending: y/n/a/
         // Enter/Esc resolve the card and never leak into prompt editing.
         if (bridge.TryRouteApprovalKey(key))
+        {
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
+        // Tool cards: plain Enter on an empty composer toggles the newest
+        // feed card instead of submitting empty input. Non-empty composer
+        // keeps the submit path below.
+        if (_composer.Buffer.AsSpan().IsEmpty && bridge.TryRouteToolCardKey(key))
         {
             _wake.Writer.TryWrite(null);
             return;
