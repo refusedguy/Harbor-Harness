@@ -182,4 +182,28 @@ public sealed class TrustCapabilityTests : IDisposable
         await Assert.That(granted.Contains(PluginCapability.RunProcesses)).IsFalse();
         await Assert.That(granted.Contains(PluginCapability.HttpRequests)).IsFalse();
     }
+
+    [Test]
+    public async Task StoredCapabilities_WithUnknownName_GrantsNothing()
+    {
+        // Issue #202 (B6): hand-crafted store with an unparseable capability
+        // name — the parse failure must fail closed (empty set), never throw
+        // on parse.Value.
+        const string body = "// harbor:capabilities read_files\nclass U { }";
+        string path = WritePlugin("unknown-cap.cs", body);
+        var script = new PluginScript(path, body);
+        File.WriteAllText(_store, $$"""
+            [
+              {
+                "path": "{{JsonSerializer.Serialize(Path.GetFullPath(path)).Trim('"')}}",
+                "hash": "{{script.Hash}}",
+                "capabilities": ["read_files", "nuke_everything"]
+              }
+            ]
+            """);
+
+        var granted = CreatePolicy().GetGrantedCapabilities(script);
+
+        await Assert.That(granted).IsEmpty();
+    }
 }
