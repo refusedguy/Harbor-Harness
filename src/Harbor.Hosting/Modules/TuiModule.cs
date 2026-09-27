@@ -1,6 +1,5 @@
-using Harbor.Abstractions.Tui;
+using System.Collections.Frozen;
 using Harbor.Hosting.Rendering;
-using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,8 +10,12 @@ namespace Harbor.Hosting;
 internal static class TuiModule
 {
     /// <summary>
-    ///     Renderer switch by name. Without the Spectre feature flag only the
-    ///     plain renderer exists; HARBOR_TUI is ignored (as before).
+    ///     Renderer selection by name (issue #175: strategy registry —
+    ///     <see cref="TuiBackendRegistry"/> — instead of per-#if string
+    ///     switches). Without the Spectre feature flag the registry holds
+    ///     only the baseline backends and unknown ids fall back to plain;
+    ///     with the flag they fall back to ansi. Either way there is exactly
+    ///     one fallback rule, and it is logged — never silent.
     /// </summary>
     internal static IServiceCollection AddHarborTui(
         this IServiceCollection services,
@@ -22,110 +25,29 @@ internal static class TuiModule
             ? "spectre-tui"
             : ctx.Options.DefaultTuiRenderer;
         // CellForge lives in src/Harbor.Tui.CellForge (always compiled in) and is not gated by
-        // HARBOR_WITH_SPECTRE_TUI — honor it even when the flag is off. Both the
-        // canonical `cellforge` id and the legacy `consoleex` alias select it.
+        // HARBOR_WITH_SPECTRE_TUI — the registry resolves its canonical
+        // `cellforge` id and the legacy `consoleex` alias on every build.
         string envTui = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(envTui) && envTui.Trim() is "cellforge" or "consoleex")
+        string requested = string.IsNullOrWhiteSpace(envTui) ? defaultTui : envTui.Trim();
+
+        FrozenDictionary<string, ITuiRendererFactory> registry = TuiBackendRegistry.Build();
+        ITuiRendererFactory backend = TuiBackendRegistry.Resolve(registry, requested);
+        string tui = backend.BackendId; // canonical id, aliases normalized for logging
+        if (!registry.ContainsKey(requested.Trim()))
         {
-            string consoleTui = "cellforge"; // canonical id, alias normalized for logging
-            ctx.Logger.LogInformation("TUI renderer: {Tui} (CellForge always enabled)", consoleTui);
-            defaultTui = consoleTui; // fall through to ITuiRenderer switch below
+            ctx.Logger.LogWarning(
+                "Unknown HARBOR_TUI '{Requested}'; falling back to '{Fallback}' (the single fallback rule)",
+                requested,
+                tui);
         }
 #if HARBOR_WITH_SPECTRE_TUI
-        string tui = string.IsNullOrEmpty(envTui) ? defaultTui : envTui.Trim();
-        // env=consoleex already handled above; keep resolved value for logging consistency.
-        if (string.IsNullOrWhiteSpace(tui))
-            tui = defaultTui;
         ctx.Logger.LogInformation("TUI renderer: {Tui}", tui);
 #elif HARBOR_WITH_NICK_CONSOLE_EX
-        string tui;
-        if (!string.IsNullOrWhiteSpace(envTui) && envTui.Trim() is "cellforge" or "consoleex")
-        {
-            tui = "cellforge";
-        }
-        else if (!string.IsNullOrWhiteSpace(envTui) && envTui.Trim() == "nickconsoleex")
-        {
-            tui = "nickconsoleex";
-        }
-        else if (!string.IsNullOrWhiteSpace(defaultTui) && defaultTui is "cellforge" or "consoleex")
-        {
-            tui = "cellforge";
-        }
-        else if (defaultTui == "nickconsoleex")
-        {
-            tui = "nickconsoleex";
-        }
-        else
-        {
-            tui = "plain";
-        }
-
         ctx.Logger.LogInformation("TUI renderer: {Tui} (Spectre off, CellForge always enabled)", tui);
 #else
-        string tui = !string.IsNullOrWhiteSpace(envTui) && envTui.Trim() is "cellforge" or "consoleex"
-            ? "cellforge"
-            : !string.IsNullOrWhiteSpace(defaultTui) && defaultTui is "cellforge" or "consoleex"
-                ? "cellforge"
-                : "plain";
         ctx.Logger.LogInformation("TUI renderer: {Tui} (CellForge always enabled, Spectre off)", tui);
 #endif
-        services.AddSingleton<ITuiRenderer>(sp =>
-        {
-            // CellForge is always available — handle before Spectre fallback.
-            if (tui is "cellforge" or "consoleex")
-            {
-                // Phase 2 adapter: CellForgeTuiRenderer serves the event-driven
-                // path through the AnsiWriter SGR automaton. The interactive
-                // raw-mode entry remains ReplRunner (ScreenSession), which
-                // bypasses ITuiRenderer entirely.
-                // Issue #77: chat writes must land in the DI-shared UiStore so
-                // the pipeline restores them across renderer swaps.
-                return new Harbor.Tui.CellForge.CellForgeTuiRenderer(
-                    sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>(),
-                    store: sp.GetRequiredService<UiStore>());
-            }
-#if HARBOR_WITH_NICK_CONSOLE_EX
-            // Phase 3: ADDITIVE backend — nickprotop/ConsoleEx window system.
-            if (tui == "nickconsoleex")
-            {
-                return new Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer(
-                    sp.GetRequiredService<ILogger<Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer>>());
-            }
-#endif
-
-#if HARBOR_WITH_SPECTRE_TUI
-            return tui.ToLowerInvariant() switch
-            {
-                "plain" => new PlainTuiRenderer(store: sp.GetRequiredService<UiStore>()),
-                "spectre" => new Harbor.Tui.Spectre.SpectreTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Spectre.SpectreTuiRenderer>>()),
-                "fullscreen" => new Harbor.Tui.Spectre.Fullscreen.FullscreenTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Spectre.Fullscreen.FullscreenTuiRenderer>>()),
-                "spectre-tui" => new Harbor.Tui.SpectreTui.SpectreTuiRenderer(
-                    sp.GetRequiredService<ILogger<Harbor.Tui.SpectreTui.SpectreTuiRenderer>>(),
-                    sp.GetService<PanelRegistry>()),
-                "terminal-gui" => new Harbor.Tui.TerminalGui.TerminalGuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.TerminalGui.TerminalGuiRenderer>>()),
-                "termina" => new Harbor.Tui.Termina.TerminaRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Termina.TerminaRenderer>>()),
-                "razor" => new Harbor.Tui.RazorConsole.RazorConsoleRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.RazorConsole.RazorConsoleRenderer>>()),
-                // Issue #77: ansi writes must land in the DI-shared UiStore so
-                // the pipeline restores them across renderer swaps.
-                _ => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(
-                    sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>(),
-                    store: sp.GetRequiredService<UiStore>())
-            };
-#else
-            return tui.ToLowerInvariant() switch
-            {
-                // Issue #77: plain/ansi writes must land in the DI-shared
-                // UiStore so the pipeline restores them across swaps.
-                "plain" => new PlainTuiRenderer(store: sp.GetRequiredService<UiStore>()),
-                "consoleex" or "cellforge" => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
-                    sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>(),
-                    store: sp.GetRequiredService<UiStore>()),
-                _ => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(
-                    sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>(),
-                    store: sp.GetRequiredService<UiStore>())
-            };
-#endif
-        });
+        services.AddSingleton<ITuiRenderer>(sp => backend.Create(sp));
 
         // Issue #77: the pipeline reads its snapshot-restore state from the
         // DI-shared UiStore. It must be registered here (CLI composition
@@ -144,7 +66,7 @@ internal static class TuiModule
         {
             var pipeline = new RendererPipeline(
                 sp.GetRequiredService<ITuiRenderer>(),
-                tui.ToLowerInvariant(),
+                tui,
                 sp.GetRequiredService<UiStore>(),
                 sp.GetRequiredService<ILogger<RendererPipeline>>());
 

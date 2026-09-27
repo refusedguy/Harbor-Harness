@@ -196,7 +196,7 @@ I want to...
 │
 ├── ...add a new TUI renderer (GUI, web, ...)
 │   └─→ docs/EXAMPLES.md §18 (Switch TUI renderer) + AGENTS.md §Add a TUI view
-│      Implement ITuiRenderer, register in src/Harbor.Hosting/Modules/TuiModule.cs.
+│      Implement ITuiRenderer, add an ITuiRendererFactory in src/Harbor.Hosting/Modules/TuiBackendRegistry.cs.
 │
 ├── ...add a TUI view (status panel, file tree, diagnostics, ...)
 │   └─→ docs/EXAMPLES.md §19 (Add a TUI view model) + §20 (Add a TUI view)

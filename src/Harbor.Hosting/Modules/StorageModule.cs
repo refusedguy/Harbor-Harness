@@ -1,6 +1,6 @@
+using System.Collections.Frozen;
 using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Jsonl;
-using Harbor.Storage.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -9,9 +9,13 @@ namespace Harbor.Hosting;
 internal static class StorageModule
 {
     /// <summary>
-    ///     Session-store switch. Default backend comes from the preset
+    ///     Session-store selection (issue #175: strategy registry —
+    ///     <see cref="SessionStoreRegistry"/> — instead of a string switch
+    ///     with a silent jsonl fallback). Default backend comes from the preset
     ///     (jsonl for CLI, memory for desktop), overridden by CommonConfig
-    ///     (StorageBackend) and the HARBOR_STORAGE env var.
+    ///     (StorageBackend) and the HARBOR_STORAGE env var. Unknown ids fail
+    ///     fast at composition time so a typo can no longer silently split
+    ///     the session history across two backends.
     /// </summary>
     internal static IServiceCollection AddHarborStorage(
         this IServiceCollection services,
@@ -23,17 +27,19 @@ internal static class StorageModule
         string defaultStorage = string.IsNullOrEmpty(ctx.Common.StorageBackend)
             ? ctx.Options.DefaultStorageBackend
             : ctx.Common.StorageBackend;
-        string storage = Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? defaultStorage;
-        ctx.Logger.LogInformation("Storage backend: {Storage}", storage);
+        string envStorage = Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? string.Empty;
+        string requested = string.IsNullOrWhiteSpace(envStorage) ? defaultStorage : envStorage.Trim();
 
-        services.AddSingleton<ISessionStore>(sp => storage.ToLowerInvariant() switch
+        FrozenDictionary<string, ISessionStoreFactory> registry = SessionStoreRegistry.Build();
+        if (!SessionStoreRegistry.TryResolve(registry, requested, out ISessionStoreFactory? factory) || factory is null)
         {
-            "memory" => new MemorySessionStore(),
-#if HARBOR_WITH_ALL_PROVIDERS
-            "sqlite" => new Harbor.Storage.Sqlite.SqliteSessionStore(sqlitePath, sp.GetRequiredService<ILogger<Harbor.Storage.Sqlite.SqliteSessionStore>>()),
-#endif
-            _ => new JsonlSessionStore(sessionsDir, sp.GetRequiredService<ILogger<JsonlSessionStore>>())
-        });
+            throw new ArgumentException(
+                $"Unknown HARBOR_STORAGE: '{requested}'. Expected one of: {SessionStoreRegistry.KnownIds}.");
+        }
+
+        ctx.Logger.LogInformation("Storage backend: {Storage}", factory.BackendId);
+
+        services.AddSingleton<ISessionStore>(sp => factory.Create(sp, sessionsDir, sqlitePath));
         // Session import/export works over ANY registered backend: the porter reads via
         // ISessionStore and encodes through the shared JSONL message codec (V4-slice).
         services.AddSingleton<ISessionPorter, JsonlSessionPorter>();
