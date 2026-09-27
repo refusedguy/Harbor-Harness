@@ -515,3 +515,77 @@ public sealed class AgentName : ValueObject
     /// <param name="name">The name to convert.</param>
     public static implicit operator string(AgentName name) => name.Value;
 }
+
+/// <summary>
+///     Strongly-typed identifier for a single agent run (epic #41, slice B1).
+/// </summary>
+/// <remarks>
+///     <para>
+///         One run = one workspace + one agent + one <see cref="RunId" />, from
+///         <c>AgentStartEvent</c> through turns (<c>TurnStartEvent</c> /
+///         <c>TurnEndEvent</c>) to the terminal <c>AgentEndEvent</c> (or
+///         <c>AgentErrorEvent</c>). The id is minted at run start and travels
+///         with the run's messages so any finished run can be reconstructed
+///         from the session store (see <see cref="Harbor.Abstractions.Models.RunOutcome" />).
+///     </para>
+///     <para>See <see cref="SessionId" /> for usage patterns.</para>
+/// </remarks>
+public sealed class RunId : ValueObject
+{
+
+    private RunId(string value)
+    {
+        Value = value;
+    }
+    /// <summary>
+    ///     The underlying string value.
+    /// </summary>
+    public string Value { get; }
+
+    /// <summary>
+    ///     Construct a <see cref="RunId" /> from a non-empty string. Throws if blank.
+    /// </summary>
+    /// <param name="value">The run id string.</param>
+    /// <returns>A new <see cref="RunId" />.</returns>
+    public static RunId Create(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException("Run ID cannot be empty", nameof(value));
+
+        return new RunId(value);
+    }
+
+    /// <summary>
+    ///     Generate a brand-new <see cref="RunId" /> backed by a fresh guid.
+    /// </summary>
+    /// <returns>A new <see cref="RunId" />.</returns>
+    public static RunId New() => Create(Guid.NewGuid().ToString("N"));
+
+    /// <summary>
+    ///     Try to construct a <see cref="RunId" /> without throwing.
+    /// </summary>
+    /// <param name="value">The candidate string (may be null/blank).</param>
+    /// <returns>Success with the new id, or failure with an error message.</returns>
+    public static Result<RunId> TryCreate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Result.Failure<RunId>("Run ID cannot be empty");
+
+        return Result.Success(Create(value));
+    }
+
+    /// <inheritdoc />
+    public override string ToString() => Value;
+
+    /// <inheritdoc />
+    protected override IEnumerable<IComparable> GetEqualityComponents()
+    {
+        yield return Value;
+    }
+
+    /// <summary>
+    ///     Implicit conversion to <see cref="string" /> for storage/serialization convenience.
+    /// </summary>
+    /// <param name="id">The id to convert.</param>
+    public static implicit operator string(RunId id) => id.Value;
+}
