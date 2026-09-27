@@ -11,4 +11,9 @@
     <RootNamespace>Harbor.Terminal.Pty</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- §E2 (#204): ROP start boundary (Result with errno diagnostics). -->
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+  </ItemGroup>
+
 </Project>

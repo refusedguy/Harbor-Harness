@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using CSharpFunctionalExtensions;
 
 namespace Harbor.Terminal.Pty;
 
@@ -112,14 +113,17 @@ internal static class NativeMethods
     [DllImport("libc", SetLastError = true)]
     internal static extern int kill(int pid, int sig);
 
-    /// <summary>Resolves the slave-side device path of a fresh PTY master (<c>ptsname_r(3)</c>).</summary>
-    internal static string GetSlaveName(int masterFd)
+    /// <summary>
+    ///     Resolves the slave-side device path of a fresh PTY master (<c>ptsname_r(3)</c>).
+    ///     ROP boundary (#204): the errno travels the rail instead of throwing.
+    /// </summary>
+    internal static Result<string> TryGetSlaveName(int masterFd)
     {
         var buf = new byte[256];
         int rc = ptsname_r(masterFd, buf, (nuint)buf.Length);
         return rc != 0
-            ? throw new IOException($"ptsname_r({masterFd}) failed with errno {rc}.")
-            : Encoding.UTF8.GetString(buf, 0, buf.IndexOf((byte)0)).TrimEnd('\0');
+            ? Result.Failure<string>($"ptsname_r({masterFd}) failed with errno {rc}.")
+            : Result.Success(Encoding.UTF8.GetString(buf, 0, buf.IndexOf((byte)0)).TrimEnd('\0'));
     }
 
     /// <summary>chdir(2) file action for the spawned child (platform symbol dispatch).</summary>
@@ -134,8 +138,10 @@ internal static class NativeMethods
     ///     Spawn <paramref name="fileName" /> in a fresh session with stdio
     ///     wired to the PTY slave named <paramref name="slavePath" />, with an
     ///     optional working-directory change applied as a spawn file action.
+    ///     ROP boundary (#204): setup failures return the step + rc + errno
+    ///     instead of throwing.
     /// </summary>
-    internal static int SpawnInPty(
+    internal static Result<int> TrySpawnInPty(
         string fileName,
         IReadOnlyList<string> args,
         IReadOnlyDictionary<string, string> environment,
@@ -151,18 +157,25 @@ internal static class NativeMethods
         {
             Zero(attr);
             Zero(actions);
-            Check("posix_spawnattr_init", posix_spawnattr_init(attr));
-            Check("posix_spawn_file_actions_init", posix_spawn_file_actions_init(actions));
-            Check("addopen(stdin)", posix_spawn_file_actions_addopen(
+
+            // Sequential ??=: first failing step wins (the throw-chain order),
+            // later steps never run, and the finally below still releases state.
+            string? error = Check("posix_spawnattr_init", posix_spawnattr_init(attr));
+            error ??= Check("posix_spawn_file_actions_init", posix_spawn_file_actions_init(actions));
+            error ??= Check("addopen(stdin)", posix_spawn_file_actions_addopen(
                 actions, 0, slavePath, O_RDWR | O_NOCTTY, 0));
-            Check("adddup2(stdout)", posix_spawn_file_actions_adddup2(actions, 0, 1));
-            Check("adddup2(stderr)", posix_spawn_file_actions_adddup2(actions, 0, 2));
+            error ??= Check("adddup2(stdout)", posix_spawn_file_actions_adddup2(actions, 0, 1));
+            error ??= Check("adddup2(stderr)", posix_spawn_file_actions_adddup2(actions, 0, 2));
             if (workingDirectory is not null)
             {
-                Check("addchdir", SpawnFileActionsAddChdir(actions, workingDirectory));
+                error ??= Check("addchdir", SpawnFileActionsAddChdir(actions, workingDirectory));
             }
 
-            Check("posix_spawnattr_setflags", posix_spawnattr_setflags(attr, POSIX_SPAWN_SETSID));
+            error ??= Check("posix_spawnattr_setflags", posix_spawnattr_setflags(attr, POSIX_SPAWN_SETSID));
+            if (error is not null)
+            {
+                return Result.Failure<int>(error);
+            }
 
             // argv/envp are built as native NULL-terminated char*[] blocks —
             // the default string[] marshalling produced EFAULT on this host.
@@ -175,14 +188,14 @@ internal static class NativeMethods
                 int pid;
                 if (searchPath)
                 {
-                    Check("posix_spawnp", posix_spawnp(out pid, fileName, actions, attr, argvBlock.Root, envpBlock.Root));
+                    error = Check("posix_spawnp", posix_spawnp(out pid, fileName, actions, attr, argvBlock.Root, envpBlock.Root));
                 }
                 else
                 {
-                    Check("posix_spawn", posix_spawn(out pid, fileName, actions, attr, argvBlock.Root, envpBlock.Root));
+                    error = Check("posix_spawn", posix_spawn(out pid, fileName, actions, attr, argvBlock.Root, envpBlock.Root));
                 }
 
-                return pid;
+                return error is not null ? Result.Failure<int>(error) : Result.Success(pid);
             }
             finally
             {
@@ -200,12 +213,11 @@ internal static class NativeMethods
 
         static void Zero(IntPtr p) => Marshal.Copy(new byte[512], 0, p, 512);
 
-        static void Check(string what, int rc)
+        // Each Check reads the thread errno immediately after its own call —
+        // same sampling point as the old throw-chain.
+        static string? Check(string what, int rc)
         {
-            if (rc != 0)
-            {
-                throw new IOException($"{what} failed: rc={rc} errno={Marshal.GetLastWin32Error()}.");
-            }
+            return rc != 0 ? $"{what} failed: rc={rc} errno={Marshal.GetLastWin32Error()}." : null;
         }
     }
 
