@@ -15,6 +15,7 @@ using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Cli.Repl;
 /// <summary>
@@ -67,7 +68,8 @@ internal sealed class ReplRunner
         Harbor.Hosting.Rendering.IRendererPipeline? rendererPipeline,
         ITokenTracker? tokens,
         Func<CellForgeScreens> cellForgeScreens,
-        IServiceProvider rendererHost)
+        IServiceProvider rendererHost,
+        Func<IReadOnlyList<SkillFreshnessEntry>>? skillRefresh = null)
     {
         _logger = logger;
         _configStore = configStore;
@@ -81,7 +83,7 @@ internal sealed class ReplRunner
         _providers = providers;
         _cellForgeLogger = loggerFactory.CreateLogger<CellForgeReplRunner>();
         _slashes = new SlashCommandDispatcher(
-            loggerFactory.CreateLogger<SlashCommandDispatcher>(), tools, sessionStore, wizard, permissions, pluginReload, rendererPipeline);
+            loggerFactory.CreateLogger<SlashCommandDispatcher>(), tools, sessionStore, wizard, permissions, pluginReload, rendererPipeline, skillRefresh);
         _rendererPipeline = rendererPipeline;
         _tokens = tokens;
         _cellForgeScreens = cellForgeScreens;

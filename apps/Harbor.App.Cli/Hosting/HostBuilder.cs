@@ -5,6 +5,7 @@ using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Hosting;
+using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -41,6 +42,13 @@ internal static partial class HostBuilder
         builder.Services.AddHarbor(CliOptions(harborDir, cliConfig, builder.Configuration));
 
         builder.Services.AddCliCompositeConfig();
+
+        // KILLER_FEATURES §2.7 Feature 10 (issue #23, slice 2): the shared
+        // skill-freshness snapshot. Seeded once at CLI startup and re-seeded
+        // on `/skills refresh` (SkillFreshnessStartup); painted by the opt-in
+        // CellForge panel. Host-owned — never a renderer builtin, so the
+        // Alt+1..9 slot order stays pinned.
+        builder.Services.AddSingleton<SkillFreshnessModel>();
 
         // CE-4: второй путь рендера. Регистрации ленивые — резолв только
         // когда интерактивный REPL выбрал CellForge; legacy-путь не меняется.
