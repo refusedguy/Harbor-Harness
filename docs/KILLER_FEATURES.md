@@ -1073,7 +1073,11 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
   (`SkillFreshnessTests`); `PanelRows.SkillFreshnessRows` shared row builder;
   `CellForgeSkillFreshnessPanel` (`skill-freshness`, Right/40, pure, host opt-in —
   deliberately unregistered so the 9-panel Alt+1..9 slot order stays pinned).
-  Pending: host seeding (installed hashes vs `skills-lock.json`), renderer slot.
+  Slice 2 (`feat/23-skill-seeding`): `SkillFreshnessSeeder`
+  (`Harbor.Application`, BCL-only — sha256 over `SKILL.md`, `skills-lock.json`
+  via `Utf8JsonReader`), CLI-startup seeding of the DI-shared model,
+  `/skills refresh`, opt-in panel registration (`HARBOR_SKILL_FRESHNESS=1`,
+  appends after the 9 builtins). No update dialog — pills only.
 
 ---
 

@@ -12,6 +12,7 @@ using Harbor.App.Cli.Hosting;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Harbor.Terminal.Abstractions;
+using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Cli.Repl;
@@ -42,6 +43,14 @@ internal sealed class SlashCommandDispatcher
     private readonly Harbor.Hosting.PluginReloadService? _pluginReload;
     private readonly Harbor.Hosting.Rendering.IRendererPipeline? _rendererPipeline;
 
+    /// <summary>
+    ///     Refresh delegate for <c>/skills refresh</c> (issue #23 slice 2):
+    ///     reseeds the shared <see cref="SkillFreshnessModel" /> from the
+    ///     workspace and returns the new snapshot. Null on hosts without a
+    ///     model — the handler reports "not available" instead of failing.
+    /// </summary>
+    private readonly Func<IReadOnlyList<SkillFreshnessEntry>>? _skillRefresh;
+
     /// <summary>All registered slash commands (canonical + aliases → single registration).</summary>
     private sealed record SlashCommandRegistration(
         string CanonicalName,
@@ -64,7 +73,8 @@ internal sealed class SlashCommandDispatcher
         OnboardingWizard Wizard,
         IPermissionService Permissions,
         Harbor.Hosting.PluginReloadService? PluginReload = null,
-        Harbor.Hosting.Rendering.IRendererPipeline? RendererPipeline = null);
+        Harbor.Hosting.Rendering.IRendererPipeline? RendererPipeline = null,
+        Func<IReadOnlyList<SkillFreshnessEntry>>? SkillRefresh = null);
 
     public SlashCommandDispatcher(
         ILogger<SlashCommandDispatcher> logger,
@@ -73,7 +83,8 @@ internal sealed class SlashCommandDispatcher
         OnboardingWizard wizard,
         IPermissionService permissions,
         Harbor.Hosting.PluginReloadService? pluginReload = null,
-        Harbor.Hosting.Rendering.IRendererPipeline? rendererPipeline = null)
+        Harbor.Hosting.Rendering.IRendererPipeline? rendererPipeline = null,
+        Func<IReadOnlyList<SkillFreshnessEntry>>? skillRefresh = null)
     {
         _logger = logger;
         _tools = tools;
@@ -82,6 +93,7 @@ internal sealed class SlashCommandDispatcher
         _permissions = permissions;
         _pluginReload = pluginReload;
         _rendererPipeline = rendererPipeline;
+        _skillRefresh = skillRefresh;
         _byName = BuildRegistry();
     }
 
@@ -133,7 +145,7 @@ internal sealed class SlashCommandDispatcher
         }
 
         var ctx = new CommandContext(writer, reader, session, agent, agentRegistry, providers,
-            configStore, authStore, _tools, _sessions, _wizard, _permissions, _pluginReload, _rendererPipeline);
+            configStore, authStore, _tools, _sessions, _wizard, _permissions, _pluginReload, _rendererPipeline, _skillRefresh);
 
         return ExecuteRegisteredAsync(reg, ctx, args);
     }
@@ -211,7 +223,7 @@ internal sealed class SlashCommandDispatcher
 
         Register("help", ["h"], null, (ctx, _) =>
         {
-            ctx.Writer("Commands: /setup /auth /model /agent /config /permissions /providers /sessions /tree /fork /plugins /tui /renderer /storage /exit");
+            ctx.Writer("Commands: /setup /auth /model /agent /config /permissions /providers /sessions /skills /tree /fork /plugins /tui /renderer /storage /exit");
             return Task.FromResult(Result.Success());
         });
 
@@ -357,6 +369,39 @@ internal sealed class SlashCommandDispatcher
 
             ctx.Writer($"Renderer: {pipeline.CurrentBackendId} | available: {string.Join(", ", pipeline.AvailableBackends)}");
             ctx.Writer("Usage: /renderer <backend>");
+            return Task.FromResult(Result.Success());
+        });
+
+        // KILLER_FEATURES §2.7 Feature 10 (issue #23, slice 2): reseed the
+        // shared SkillFreshnessModel from skills-lock.json. Pill-only — there
+        // is deliberately no update dialog; applying updates stays manual.
+        Register("skills", ["skill"], ["refresh"], (ctx, args) =>
+        {
+            if (args.Count != 1 || !args[0].Equals("refresh", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Writer("Usage: /skills refresh — reseed skill freshness from skills-lock.json.");
+                return Task.FromResult(Result.Success());
+            }
+
+            if (ctx.SkillRefresh is null)
+            {
+                ctx.Writer("Skill freshness: not available in this build.");
+                return Task.FromResult(Result.Success());
+            }
+
+            var entries = ctx.SkillRefresh();
+            int stale = 0;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                if (entries[i].IsStale)
+                {
+                    stale++;
+                }
+            }
+
+            ctx.Writer(stale == 0
+                ? $"Skills: {entries.Count} up to date."
+                : $"Skills: {entries.Count} checked, {stale} need attention.");
             return Task.FromResult(Result.Success());
         });
 

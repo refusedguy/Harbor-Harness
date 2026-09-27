@@ -8,8 +8,10 @@ namespace Harbor.Tui.CellForge.Panels;
 
 // NOTE: intentionally NOT registered in CellForgeTuiRenderer.RegisterBuiltinPanels
 // (issue #23 slice 1): the 9-panel Alt+1..9 slot order is pinned by
-// PanelWiringTests, and host seeding (installed hashes vs skills-lock.json)
-// lands in a follow-up. Hosts opt in by registering this provider directly.
+// PanelWiringTests. Slice 2 adds the host opt-in
+// (SkillFreshnessPanelRegistration.RegisterSkillFreshness, CLI env
+// HARBOR_SKILL_FRESHNESS=1) — the panel appends after the builtins and takes
+// no Alt slot.
 
 /// <summary>
 ///     Cell-native skill-freshness panel (KILLER_FEATURES §2.7 Feature 10,
