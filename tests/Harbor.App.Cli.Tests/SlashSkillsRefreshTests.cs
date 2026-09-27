@@ -6,6 +6,7 @@ using Harbor.Application.Onboarding;
 using Harbor.Application.Permissions;
 using Harbor.TestKit;
 using Harbor.Ui.Framework.Projection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
