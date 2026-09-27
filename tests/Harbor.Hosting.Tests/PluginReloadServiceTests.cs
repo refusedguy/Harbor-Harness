@@ -8,6 +8,7 @@ namespace Harbor.Hosting.Tests;
 ///     reload: sample plugin dropped into the global scope, hot-loaded through the
 ///     live composition graph, tool visible in the singleton IToolRegistry.
 /// </summary>
+[NotInParallel("hosting")]
 public class PluginReloadServiceTests
 {
     private static string TempHarborDir() =>
