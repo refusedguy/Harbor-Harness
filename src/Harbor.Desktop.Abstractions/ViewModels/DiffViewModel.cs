@@ -14,9 +14,11 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// <remarks>
 ///     <para>
 ///         <b>vm-dedup canon (audit 27-G):</b> desktop canon unified-diff VM
-///         (<c>Before</c>/<c>After</c>/<c>ComputeDiff</c>/<c>CopyAsync</c>), bound in
-///         Avalonia via <c>ContentHost.Diff</c>. Distinct from the Framework side-by-side
-///         compute VM and the TUI <c>DiffPreviewViewModel</c> — do not merge.
+///         (<c>Before</c>/<c>After</c>/<c>ComputeDiff</c>/<c>CopyAsync</c>).
+///         NOT bound by Avalonia <c>DiffView</c> — that view binds the Framework
+///         side-by-side VM via <c>ContentHost.Diff</c> (issue #160). Distinct from
+///         the Framework side-by-side compute VM and the TUI
+///         <c>DiffPreviewViewModel</c> — do not merge.
 ///     </para>
 /// </remarks>
 public sealed partial class DiffViewModel : ObservableObject
