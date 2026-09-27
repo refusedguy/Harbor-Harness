@@ -50,6 +50,9 @@ public static class PanelExtractors
         @"\bwarning\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    /// <summary>JSON property names probed (in order) for a file path.</summary>
+    private static readonly string[] PathKeys = ["path", "filePath", "file", "filename"];
+
     /// <summary>
     ///     Parse the most recent todo block from the transcript. Scans tail to
     ///     head, collects <c>[ ]</c>/<c>[~]</c>/<c>[x]</c> markers from
@@ -277,11 +280,13 @@ public static class PanelExtractors
         {
             try
             {
-                using JsonDocument doc = JsonDocument.Parse(toolText[brace..]);
+                // Slice the string's memory instead of Substring-copying it:
+                // JsonDocument parses directly from the shared buffer, so no
+                // per-row intermediate string is allocated on this hot path.
+                using JsonDocument doc = JsonDocument.Parse(toolText.AsMemory(brace));
                 if (doc.RootElement.ValueKind == JsonValueKind.Object)
                 {
-                    string[] keys = ["path", "filePath", "file", "filename"];
-                    foreach (string key in keys)
+                    foreach (string key in PathKeys)
                     {
                         if (doc.RootElement.TryGetProperty(key, out JsonElement value) &&
                             value.ValueKind == JsonValueKind.String)
