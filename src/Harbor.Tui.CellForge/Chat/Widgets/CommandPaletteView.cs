@@ -40,7 +40,7 @@ public sealed class CommandPaletteView
     private readonly Stack<PaletteFrame> _frames = new();
     private IReadOnlyList<CommandItem> _commands = [];
     private List<CommandItem> _results = [];
-    private List<(bool IsHeader, string Text)> _flatView = new();
+    private List<(bool IsHeader, string Text, string Detail)> _flatView = new();
     private List<int> _selectableIndices = new();
     private string _query = string.Empty;
     private int _selected;
@@ -272,7 +272,7 @@ public sealed class CommandPaletteView
             });
         }
 
-        _flatView = new List<(bool, string)>(_results.Count + 8);
+        _flatView = new List<(bool, string, string)>(_results.Count + 8);
         _selectableIndices = new List<int>(_results.Count);
 
         string? lastGroup = null;
@@ -281,12 +281,12 @@ public sealed class CommandPaletteView
             string? group = string.IsNullOrEmpty(item.Group) ? null : item.Group;
             if (group is not null && group != lastGroup)
             {
-                _flatView.Add((true, group));
+                _flatView.Add((true, group, string.Empty));
                 lastGroup = group;
             }
 
             _selectableIndices.Add(_flatView.Count);
-            _flatView.Add((false, item.Title));
+            _flatView.Add((false, item.Title, item.Detail));
         }
 
         _selected = 0;
@@ -378,7 +378,7 @@ public sealed class CommandPaletteView
                 continue;
             }
 
-            var (isHeader, text) = _flatView[i];
+            var (isHeader, text, detail) = _flatView[i];
             int y = listTop + painted;
             if (isHeader)
             {
@@ -387,7 +387,18 @@ public sealed class CommandPaletteView
             else
             {
                 bool selected = i == selectedVisualIndex;
-                buffer.SetText(rect.X + 1, y, text.AsSpan(0, Math.Min(text.Length, innerW)), selected ? selectedStyle : titleStyle);
+                int titleLen = Math.Min(text.Length, innerW);
+                buffer.SetText(rect.X + 1, y, text.AsSpan(0, titleLen), selected ? selectedStyle : titleStyle);
+
+                // Second plan: the item detail (short id, status, …) dimmed
+                // after the title when space remains. Empty details paint
+                // exactly as before.
+                if (!string.IsNullOrEmpty(detail) && titleLen < innerW)
+                {
+                    string suffix = "  " + detail;
+                    int suffixLen = Math.Min(suffix.Length, innerW - titleLen);
+                    buffer.SetText(rect.X + 1 + titleLen, y, suffix.AsSpan(0, suffixLen), detailStyle);
+                }
             }
 
             painted++;

@@ -36,6 +36,19 @@ internal interface IReplHost
     ISessionStore? SessionStore { get; }
     IRendererPipeline? RendererPipeline { get; }
 
+    /// <summary>
+    ///     Plugin hot-reload + install listing for the <c>/plugins</c> panel.
+    ///     Null on hosts without the plugin runtime (HARBOR_MINIMAL) — the
+    ///     command falls back to the text line instead of failing.
+    /// </summary>
+    Harbor.Hosting.PluginReloadService? PluginReload { get; }
+
+    /// <summary>
+    ///     Connection probe for the <c>/providers</c> panel (same probe the
+    ///     onboarding wizard runs). Null skips the check silently.
+    /// </summary>
+    IProviderHealthCheck? HealthCheck { get; }
+
     void WakeUp();
     void OpenSlashPalette();
     void ToggleVimMode();
