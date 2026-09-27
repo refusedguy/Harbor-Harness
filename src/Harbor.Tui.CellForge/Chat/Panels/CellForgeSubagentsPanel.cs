@@ -221,11 +221,8 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
                 _loadError = "session store unavailable";
             return;
         }
-        if (!_loaded || _refreshRequested)
-        {
-            KickRefreshLocked(ctx, store);
-        }
-        else if (moved && Environment.TickCount64 - _lastRefreshTicks >= RefreshThrottleMs)
+        if (!_loaded || _refreshRequested
+            || (moved && Environment.TickCount64 - _lastRefreshTicks >= RefreshThrottleMs))
         {
             KickRefreshLocked(ctx, store);
         }
