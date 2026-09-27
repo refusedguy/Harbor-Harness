@@ -470,6 +470,9 @@ public sealed class JsonlSessionStore : ISessionStore
     /// </remarks>
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
     {
+        // §3.4: observe cancellation BEFORE the existence policy — an Esc must
+        // never surface as "session not found".
+        ct.ThrowIfCancellationRequested();
         var resolved = TryResolveSessionFile(sessionId);
         if (resolved.IsFailure)
             return Task.FromResult(Result.Failure(resolved.Error));
@@ -516,6 +519,8 @@ public sealed class JsonlSessionStore : ISessionStore
     /// </summary>
     public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
     {
+        // §3.4: observe cancellation BEFORE the existence policy.
+        ct.ThrowIfCancellationRequested();
         var resolved = TryResolveSessionFile(sessionId);
         if (resolved.IsFailure)
             return Task.FromResult(Result.Failure<int>(resolved.Error));
