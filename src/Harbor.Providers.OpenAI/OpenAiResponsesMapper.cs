@@ -14,7 +14,7 @@ namespace Harbor.Providers.OpenAI;
 ///     <c>Harbor.Providers.Internal.OpenAiWire</c> helpers.)
 ///     Extracted from <see cref="OpenAILlmClient" /> (§ROP god-object split).
 ///     #171: span-based core — Utf8JsonReader over pooled UTF-8, no
-///     JsonDocument per chunk. Dispatch compares via ValueTextEquals; only
+///     JsonDocument per chunk. Dispatch is ordinal name compares; only
 ///     payload strings allocate.
 /// </summary>
 internal static class OpenAiResponsesMapper
@@ -152,9 +152,10 @@ internal static class OpenAiResponsesMapper
                     break;
 
                 case JsonTokenType.PropertyName:
+                    string prop = reader.GetString() ?? string.Empty;
                     if (!reader.Read())
                         throw new JsonException("Truncated chunk: property without value.");
-                    HandleValue(ref reader, depth, inItem, inResponse, inUsage, inReasoningDetails,
+                    HandleValue(ref reader, depth, prop, inItem, inResponse, inUsage, inReasoningDetails,
                         ref kind, ref inItem, ref inResponse, ref inUsage, ref inReasoningDetails, ref depth,
                         ref deltaText, ref outputIndex, ref sawOutputIndex,
                         ref itemType, ref callId, ref itemName,
@@ -180,7 +181,7 @@ internal static class OpenAiResponsesMapper
     }
 
     private static void HandleValue(
-        ref Utf8JsonReader reader, int depth, bool inItem, bool inResponse, bool inUsage, bool inReasoningDetails,
+        ref Utf8JsonReader reader, int depth, string prop, bool inItem, bool inResponse, bool inUsage, bool inReasoningDetails,
         ref ResponsesChunkKind rKind,
         ref bool rInItem, ref bool rInResponse, ref bool rInUsage, ref bool rInReasoningDetails, ref int rDepth,
         ref string? rDeltaText, ref int rOutputIndex, ref bool rSawOutputIndex,
@@ -189,7 +190,7 @@ internal static class OpenAiResponsesMapper
     {
         if (depth == 1)
         {
-            if (reader.ValueTextEquals("type"u8))
+            if (prop == "type")
             {
                 if (reader.TokenType == JsonTokenType.String)
                 {
@@ -210,13 +211,13 @@ internal static class OpenAiResponsesMapper
                 return;
             }
 
-            if (reader.ValueTextEquals("delta"u8))
+            if (prop == "delta")
             {
                 rDeltaText = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
                 return;
             }
 
-            if (reader.ValueTextEquals("output_index"u8))
+            if (prop == "output_index")
             {
                 if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out int oi))
                 {
@@ -227,7 +228,7 @@ internal static class OpenAiResponsesMapper
                 return;
             }
 
-            if (reader.ValueTextEquals("item"u8))
+            if (prop == "item")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -242,7 +243,7 @@ internal static class OpenAiResponsesMapper
                 return;
             }
 
-            if (reader.ValueTextEquals("response"u8))
+            if (prop == "response")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -263,15 +264,15 @@ internal static class OpenAiResponsesMapper
 
         if (depth == 2 && inItem)
         {
-            if (reader.ValueTextEquals("type"u8))
+            if (prop == "type")
             {
                 rItemType = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
-            else if (reader.ValueTextEquals("call_id"u8))
+            else if (prop == "call_id")
             {
                 rCallId = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
-            else if (reader.ValueTextEquals("name"u8))
+            else if (prop == "name")
             {
                 rItemName = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
@@ -285,7 +286,7 @@ internal static class OpenAiResponsesMapper
 
         if (depth == 2 && inResponse)
         {
-            if (reader.ValueTextEquals("usage"u8))
+            if (prop == "usage")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -307,15 +308,15 @@ internal static class OpenAiResponsesMapper
 
         if (depth == 3 && inUsage)
         {
-            if (reader.ValueTextEquals("input_tokens"u8))
+            if (prop == "input_tokens")
             {
                 rInputTokens = ReadTolerantInt(ref reader);
             }
-            else if (reader.ValueTextEquals("output_tokens"u8))
+            else if (prop == "output_tokens")
             {
                 rOutputTokens = ReadTolerantInt(ref reader);
             }
-            else if (reader.ValueTextEquals("output_tokens_details"u8))
+            else if (prop == "output_tokens_details")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -337,7 +338,7 @@ internal static class OpenAiResponsesMapper
 
         if (depth == 4 && inReasoningDetails)
         {
-            if (reader.ValueTextEquals("reasoning_tokens"u8))
+            if (prop == "reasoning_tokens")
             {
                 rReasoningTokens = ReadTolerantNullableInt(ref reader);
             }

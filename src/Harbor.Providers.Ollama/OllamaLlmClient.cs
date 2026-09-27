@@ -394,9 +394,10 @@ public sealed class OllamaLlmClient : ILlmClient
                     break;
 
                 case JsonTokenType.PropertyName:
+                    string prop = reader.GetString() ?? string.Empty;
                     if (!reader.Read())
                         throw new JsonException("Truncated line: property without value.");
-                    HandleValue(ref reader, depth, inMessage, inTc, inFunction,
+                    HandleValue(ref reader, depth, prop, inMessage, inTc, inFunction,
                         events,
                         ref inMessage, ref inToolCalls, ref inFunction, ref depth,
                         ref content, ref tcIndex, ref tcWireId, ref tcName, ref tcArgs,
@@ -431,7 +432,7 @@ public sealed class OllamaLlmClient : ILlmClient
     }
 
     private static void HandleValue(
-        ref Utf8JsonReader reader, int depth, bool inMessage, bool inTc, bool inFunction,
+        ref Utf8JsonReader reader, int depth, string prop, bool inMessage, bool inTc, bool inFunction,
         List<LlmEvent> events,
         ref bool rInMessage, ref bool rInToolCalls, ref bool rInFunction, ref int rDepth,
         ref string? rContent, ref int rTcIndex, ref string? rTcWireId, ref string? rTcName, ref string? rTcArgs,
@@ -442,7 +443,7 @@ public sealed class OllamaLlmClient : ILlmClient
         // then done) regardless of wire order.
         if (depth == 1)
         {
-            if (reader.ValueTextEquals("message"u8))
+            if (prop == "message")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -454,15 +455,15 @@ public sealed class OllamaLlmClient : ILlmClient
                     SkipContainer(ref reader);
                 }
             }
-            else if (reader.ValueTextEquals("done"u8))
+            else if (prop == "done")
             {
                 rDone = reader.TokenType == JsonTokenType.True;
             }
-            else if (reader.ValueTextEquals("prompt_eval_count"u8))
+            else if (prop == "prompt_eval_count")
             {
                 rInputTokens = ReadTolerantInt(ref reader);
             }
-            else if (reader.ValueTextEquals("eval_count"u8))
+            else if (prop == "eval_count")
             {
                 rOutputTokens = ReadTolerantInt(ref reader);
             }
@@ -476,11 +477,11 @@ public sealed class OllamaLlmClient : ILlmClient
 
         if (depth == 2 && inMessage)
         {
-            if (reader.ValueTextEquals("content"u8))
+            if (prop == "content")
             {
                 rContent = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
-            else if (reader.ValueTextEquals("tool_calls"u8))
+            else if (prop == "tool_calls")
             {
                 if (reader.TokenType == JsonTokenType.StartArray)
                 {
@@ -502,18 +503,18 @@ public sealed class OllamaLlmClient : ILlmClient
 
         if (depth == 4 && inTc)
         {
-            if (reader.ValueTextEquals("index"u8))
+            if (prop == "index")
             {
                 // DOM parity: only a JSON number counts (string index → 0).
                 rTcIndex = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out int idx)
                     ? idx
                     : 0;
             }
-            else if (reader.ValueTextEquals("id"u8))
+            else if (prop == "id")
             {
                 rTcWireId = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
-            else if (reader.ValueTextEquals("function"u8))
+            else if (prop == "function")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -535,11 +536,11 @@ public sealed class OllamaLlmClient : ILlmClient
 
         if (depth == 5 && inFunction)
         {
-            if (reader.ValueTextEquals("name"u8))
+            if (prop == "name")
             {
                 rTcName = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
-            else if (reader.ValueTextEquals("arguments"u8))
+            else if (prop == "arguments")
             {
                 rTcArgs = ReadArgsValue(ref reader);
             }

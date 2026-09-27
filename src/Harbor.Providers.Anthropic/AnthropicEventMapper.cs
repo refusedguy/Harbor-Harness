@@ -12,7 +12,7 @@ namespace Harbor.Providers.Anthropic;
 ///     Maps Anthropic Messages-API SSE events to <see cref="LlmEvent" />.
 ///     Extracted from <see cref="AnthropicLlmClient" /> (§ROP god-object split).
 ///     #171: span-based core — Utf8JsonReader over pooled UTF-8, no
-///     JsonDocument per event. Dispatch compares via ValueTextEquals; only
+///     JsonDocument per event. Dispatch is ordinal name compares; only
 ///     payload strings allocate.
 /// </summary>
 internal static class AnthropicEventMapper
@@ -146,9 +146,10 @@ internal static class AnthropicEventMapper
                     break;
 
                 case JsonTokenType.PropertyName:
+                    string prop = reader.GetString() ?? string.Empty;
                     if (!reader.Read())
                         throw new JsonException("Truncated line: property without value.");
-                    HandleValue(ref reader, depth, inDelta, inContentBlock, inUsage,
+                    HandleValue(ref reader, depth, prop, inDelta, inContentBlock, inUsage,
                         ref kind, ref inDelta, ref inContentBlock, ref inUsage, ref depth,
                         ref blockId, ref blockType, ref blockName,
                         ref deltaType, ref deltaText,
@@ -176,7 +177,7 @@ internal static class AnthropicEventMapper
     }
 
     private static void HandleValue(
-        ref Utf8JsonReader reader, int depth, bool inDelta, bool inContentBlock, bool inUsage,
+        ref Utf8JsonReader reader, int depth, string prop, bool inDelta, bool inContentBlock, bool inUsage,
         ref AnthropicEventKind rKind,
         ref bool rInDelta, ref bool rInContentBlock, ref bool rInUsage, ref int rDepth,
         ref string rBlockId, ref string? rBlockType, ref string? rBlockName,
@@ -187,10 +188,12 @@ internal static class AnthropicEventMapper
     {
         if (depth == 1)
         {
-            if (reader.ValueTextEquals("type"u8))
+            if (prop == "type")
             {
                 if (reader.TokenType == JsonTokenType.String)
                 {
+                    // NOTE: the VALUE carries the event type here (prop is
+                    // just "type"), so compare the value span, not the name.
                     if (reader.ValueTextEquals("message_start"u8))
                         rKind = AnthropicEventKind.MessageStart;
                     else if (reader.ValueTextEquals("content_block_start"u8))
@@ -206,7 +209,7 @@ internal static class AnthropicEventMapper
                 return;
             }
 
-            if (reader.ValueTextEquals("delta"u8))
+            if (prop == "delta")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -221,7 +224,7 @@ internal static class AnthropicEventMapper
                 return;
             }
 
-            if (reader.ValueTextEquals("content_block"u8))
+            if (prop == "content_block")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -236,7 +239,7 @@ internal static class AnthropicEventMapper
                 return;
             }
 
-            if (reader.ValueTextEquals("usage"u8))
+            if (prop == "usage")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -257,15 +260,17 @@ internal static class AnthropicEventMapper
 
         if (depth == 2 && inDelta)
         {
-            if (reader.ValueTextEquals("type"u8))
+            if (prop == "type")
             {
                 rDeltaType = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
-            else if (reader.ValueTextEquals("partial_json"u8))
+            else if (prop == "text" ||
+                     prop == "thinking" ||
+                     prop == "partial_json")
             {
                 rDeltaText = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
-            else if (reader.ValueTextEquals("stop_reason"u8))
+            else if (prop == "stop_reason")
             {
                 // message_delta carries its stop reason inside delta; other
                 // delta shapes never set it, so capturing here is exact.
@@ -285,15 +290,15 @@ internal static class AnthropicEventMapper
 
         if (depth == 2 && inContentBlock)
         {
-            if (reader.ValueTextEquals("id"u8))
+            if (prop == "id")
             {
                 rBlockId = reader.TokenType == JsonTokenType.String ? reader.GetString() ?? "0" : "0";
             }
-            else if (reader.ValueTextEquals("type"u8))
+            else if (prop == "type")
             {
                 rBlockType = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
-            else if (reader.ValueTextEquals("name"u8))
+            else if (prop == "name")
             {
                 rBlockName = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
@@ -307,19 +312,19 @@ internal static class AnthropicEventMapper
 
         if (depth == 2 && inUsage)
         {
-            if (reader.ValueTextEquals("input_tokens"u8))
+            if (prop == "input_tokens")
             {
                 rInputTokens = ReadTolerantInt(ref reader);
             }
-            else if (reader.ValueTextEquals("output_tokens"u8))
+            else if (prop == "output_tokens")
             {
                 rOutputTokens = ReadTolerantInt(ref reader);
             }
-            else if (reader.ValueTextEquals("cache_read_input_tokens"u8))
+            else if (prop == "cache_read_input_tokens")
             {
                 rCacheReadTokens = ReadTolerantNullableInt(ref reader);
             }
-            else if (reader.ValueTextEquals("cache_creation_input_tokens"u8))
+            else if (prop == "cache_creation_input_tokens")
             {
                 rCacheWriteTokens = ReadTolerantNullableInt(ref reader);
             }

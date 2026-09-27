@@ -4,8 +4,8 @@
 // adapter, with stable tool-call ids (ROP-A ПР.3).
 //
 // #171: span-based core — Utf8JsonReader over pooled UTF-8, no JsonDocument
-// per chunk. Only payload strings (deltas, names, ids) allocate; dispatch
-// compares via ValueTextEquals and unknown subtrees are skipped.
+// per chunk. Only property-name and payload strings allocate; dispatch is
+// ordinal name compares and unknown subtrees are skipped.
 
 using System.Buffers;
 using System.Text;
@@ -170,9 +170,13 @@ internal static class OpenAiWire
                     break;
 
                 case JsonTokenType.PropertyName:
+                    // Capture the name BEFORE consuming the value: the reader
+                    // forgets it afterwards. One small string per property is
+                    // the only per-chunk dispatch cost (no DOM).
+                    string prop = reader.GetString() ?? string.Empty;
                     if (!reader.Read())
                         throw new JsonException("Truncated chunk: property without value.");
-                    HandleValue(ref reader, depth,
+                    HandleValue(ref reader, depth, prop,
                         inChoice, inDelta, inTc, inFunction, inUsage,
                         events,
                         ref sawChoicesArray, ref inChoicesArray, ref inDelta, ref inToolCalls, ref inFunction, ref inUsage,
@@ -220,7 +224,7 @@ internal static class OpenAiWire
     }
 
     private static void HandleValue(
-        ref Utf8JsonReader reader, int depth,
+        ref Utf8JsonReader reader, int depth, string prop,
         bool inChoice, bool inDelta, bool inTc, bool inFunction, bool inUsage,
         List<LlmEvent> events,
         ref bool rSawChoicesArray, ref bool rInChoicesArray, ref bool rInDelta, ref bool rInToolCalls, ref bool rInFunction, ref bool rInUsage,
@@ -231,7 +235,7 @@ internal static class OpenAiWire
         // Depth-1 root properties.
         if (depth == 1)
         {
-            if (reader.ValueTextEquals("choices"u8))
+            if (prop == "choices")
             {
                 if (reader.TokenType == JsonTokenType.StartArray)
                 {
@@ -244,7 +248,7 @@ internal static class OpenAiWire
                     SkipContainer(ref reader);
                 }
             }
-            else if (reader.ValueTextEquals("usage"u8))
+            else if (prop == "usage")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -267,7 +271,7 @@ internal static class OpenAiWire
         // Depth-3 choice properties (first choice only).
         if (depth == 3 && inChoice)
         {
-            if (reader.ValueTextEquals("delta"u8))
+            if (prop == "delta")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -279,7 +283,7 @@ internal static class OpenAiWire
                     SkipContainer(ref reader);
                 }
             }
-            else if (reader.ValueTextEquals("finish_reason"u8))
+            else if (prop == "finish_reason")
             {
                 // DOM parity: only a string reason counts (null/other → none).
                 rFinishReason = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
@@ -295,19 +299,19 @@ internal static class OpenAiWire
         // Depth-4 delta properties.
         if (depth == 4 && inDelta)
         {
-            if (reader.ValueTextEquals("content"u8))
+            if (prop == "content")
             {
                 string? text = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
                 if (!string.IsNullOrEmpty(text))
                     events.Add(new TextDeltaEvent("0", text!));
             }
-            else if (reader.ValueTextEquals("reasoning_content"u8))
+            else if (prop == "reasoning_content")
             {
                 string? text = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
                 if (!string.IsNullOrEmpty(text))
                     events.Add(new ThinkingDeltaEvent("0", text!));
             }
-            else if (reader.ValueTextEquals("tool_calls"u8))
+            else if (prop == "tool_calls")
             {
                 if (reader.TokenType == JsonTokenType.StartArray)
                 {
@@ -330,15 +334,15 @@ internal static class OpenAiWire
         // Depth-6 tool-call properties.
         if (depth == 6 && inTc)
         {
-            if (reader.ValueTextEquals("index"u8))
+            if (prop == "index")
             {
                 rTcIndex = ReadTolerantInt(ref reader);
             }
-            else if (reader.ValueTextEquals("id"u8))
+            else if (prop == "id")
             {
                 rTcWireId = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
-            else if (reader.ValueTextEquals("function"u8))
+            else if (prop == "function")
             {
                 if (reader.TokenType == JsonTokenType.StartObject)
                 {
@@ -361,11 +365,11 @@ internal static class OpenAiWire
         // Depth-7 function properties.
         if (depth == 7 && inFunction)
         {
-            if (reader.ValueTextEquals("name"u8))
+            if (prop == "name")
             {
                 rTcName = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
-            else if (reader.ValueTextEquals("arguments"u8))
+            else if (prop == "arguments")
             {
                 rTcArgs = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
             }
@@ -380,11 +384,11 @@ internal static class OpenAiWire
         // Depth-2 usage properties.
         if (depth == 2 && inUsage)
         {
-            if (reader.ValueTextEquals("prompt_tokens"u8))
+            if (prop == "prompt_tokens")
             {
                 rPromptTokens = ReadTolerantInt(ref reader);
             }
-            else if (reader.ValueTextEquals("completion_tokens"u8))
+            else if (prop == "completion_tokens")
             {
                 rCompletionTokens = ReadTolerantInt(ref reader);
             }
