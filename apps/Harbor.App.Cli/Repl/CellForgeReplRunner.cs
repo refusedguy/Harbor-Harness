@@ -162,7 +162,8 @@ internal sealed class CellForgeReplRunner(
     internal LegacySlashRunner LegacySlash => legacySlash;
     private PromptPipeline? _pipeline;
     internal PromptPipeline Pipeline => _pipeline ??= new PromptPipeline(
-        this, _catalog, logger, _tokens, new Lazy<LegacySlashRunner>(() => LegacySlash));
+        this, _catalog, logger, Tokens, new Lazy<LegacySlashRunner>(() => LegacySlash));
+    internal void DisposePipeline() => _pipeline?.Dispose();
     private SessionSwitchManager? _sessions;
     internal SessionSwitchManager Sessions => _sessions ??= new SessionSwitchManager(this, Pipeline.ClearQueue);
     private SessionTitleService? _titles;
@@ -193,10 +194,6 @@ internal sealed class CellForgeReplRunner(
     internal IConfigStore ConfigStore => configStore;
     internal IProviderRegistry ProviderRegistry => providerRegistry;
     internal ITokenTracker? Tokens => tokens;
-
-    /// <summary>Token-usage source (null when the host has no tracker —
-    /// feed no-ops, the status bar just stays without token segments).</summary>
-    internal readonly ITokenTracker? _tokens = tokens;
 
     /// <summary>Leader chord hand-off for async slash commands: the chord resolves
     /// into catalog execution on the frame loop (async work can't run inside Bind actions).</summary>

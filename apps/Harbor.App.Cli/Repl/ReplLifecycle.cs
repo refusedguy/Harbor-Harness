@@ -95,7 +95,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         }
         finally
         {
-            host._pipeline?.Dispose();
+            host.DisposePipeline();
             host._themeWatcher?.Dispose();
             try
             {
