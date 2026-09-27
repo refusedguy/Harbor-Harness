@@ -188,24 +188,6 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         return base.RenderAsync(@event, ct);
     }
 
-    private static void RenderLiveToken(LlmEvent evt, ITuiRenderContext ctx)
-    {
-        switch (evt)
-        {
-            case TextDeltaEvent td:
-                ctx.Write(td.Delta);
-                break;
-
-            case ThinkingDeltaEvent thd:
-                ctx.WriteStyled(thd.Delta, TuiStyle.Dim | TuiStyle.Italic);
-                break;
-
-            case ToolCallDeltaEvent tcd:
-                ctx.WriteStyled(tcd.ArgsDelta, TuiStyle.Dim);
-                break;
-        }
-    }
-
     /// <summary>Composer buffer mirrored from <see cref="UiState.Input"/> (test seam).</summary>
     internal PromptBuffer PromptBuffer => _composer.Buffer;
 
