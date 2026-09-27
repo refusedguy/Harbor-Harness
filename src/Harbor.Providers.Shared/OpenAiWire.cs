@@ -1,8 +1,14 @@
 // Shared source: compiled INTO the OpenAI and OpenAiCompatible provider
-// assemblies via <Compile Include> link items (ROP-A ПР.2). One canonical
+// assemblies via <Compile Include> link items (ROP-A ПР.1). One canonical
 // chat-completions chunk parser for both the native client and the generic
 // adapter, with stable tool-call ids (ROP-A ПР.3).
+//
+// #171: span-based core — Utf8JsonReader over pooled UTF-8, no JsonDocument
+// per chunk. Only property-name and payload strings allocate; dispatch is
+// ordinal name compares and unknown subtrees are skipped.
 
+using System.Buffers;
+using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -20,117 +26,407 @@ namespace Harbor.Providers.Internal;
 internal static class OpenAiWire
 {
     /// <summary>
-    ///     Parse one chat-completions chunk. <paramref name="indexToId" /> is
-    ///     per-stream state: first seen id wins for a tool-call index, missing
+    ///     Parse one chat-completions chunk from UTF-8 JSON. <paramref name="indexToId" />
+    ///     is per-stream state: first seen id wins for a tool-call index, missing
     ///     ids fall back to the map, then to <c>tc{index}</c>.
-    ///     Evaluation is eager: the returned list owns no
-    ///     <see cref="JsonElement" /> references, so the caller's
-    ///     <see cref="JsonDocument" /> may be disposed immediately.
+    ///     Evaluation is eager: the returned list owns every string, so the
+    ///     caller's buffer may be returned to the pool immediately.
+    ///     Semantics mirror the former DOM walk 1:1 (first choice only,
+    ///     string-only content/name/args, tolerant counts).
     /// </summary>
-    public static IReadOnlyList<LlmEvent> ParseChatChunk(JsonElement root, Dictionary<int, string> indexToId)
+    public static List<LlmEvent> ParseChatChunk(ReadOnlySpan<byte> utf8Json, Dictionary<int, string> indexToId)
     {
         var events = new List<LlmEvent>(capacity: 2);
-        if (!root.TryGetProperty("choices", out var choicesEl) || choicesEl.ValueKind != JsonValueKind.Array)
-        {
-            Usage? usageOnly = ReadUsage(root);
-            if (usageOnly is not null)
-            {
-                events.Add(new StepFinishEvent(0, "stop", usageOnly));
-            }
+        var reader = new Utf8JsonReader(utf8Json, isFinalBlock: true, state: default);
 
-            return events;
+        int depth = 0;
+        bool sawRoot = false;
+        bool sawChoicesArray = false;
+        bool inChoicesArray = false;
+        bool choiceDone = false;
+        bool inChoice = false;
+        bool inDelta = false;
+        bool inToolCalls = false;
+        bool inUsage = false;
+
+        string? finishReason = null;
+        bool sawUsageObject = false;
+        int promptTokens = 0;
+        int completionTokens = 0;
+
+        // Per-tool-call buffers, emitted at the tc EndObject (id may precede
+        // function in any order on the wire).
+        bool inTc = false;
+        bool inFunction = false;
+        int tcIndex = 0;
+        string? tcWireId = null;
+        string? tcName = null;
+        string? tcArgs = null;
+
+        while (reader.Read())
+        {
+            switch (reader.TokenType)
+            {
+                case JsonTokenType.StartObject:
+                case JsonTokenType.StartArray:
+                    if (depth == 0)
+                    {
+                        // Root must be the single top-level object; a root
+                        // array/scalar parses as valid JSON but carries no
+                        // chunk (DOM parity: empty) — skip it whole.
+                        if (!sawRoot && reader.TokenType == JsonTokenType.StartObject)
+                        {
+                            depth = 1;
+                            sawRoot = true;
+                        }
+                        else
+                        {
+                            reader.Skip();
+                        }
+
+                        break;
+                    }
+
+                    if (reader.TokenType == JsonTokenType.StartArray)
+                    {
+                        // Only a tracked array advances depth; a root-level
+                        // (or otherwise unexpected) array skips whole.
+                        if (depth >= 1)
+                            depth++;
+                        else
+                            reader.Skip();
+
+                        break;
+                    }
+
+                    // StartObject: a tracked scope only in known positions,
+                    // otherwise skip the subtree without materializing it.
+                    if (inChoicesArray && depth == 2)
+                    {
+                        depth++;
+                        if (!choiceDone)
+                        {
+                            choiceDone = true;
+                            inChoice = true;
+                        }
+                        else
+                        {
+                            reader.Skip();
+                            depth--;
+                        }
+                    }
+                    else if (inToolCalls && depth == 5)
+                    {
+                        depth++;
+                        inTc = true;
+                        inFunction = false;
+                        tcIndex = 0;
+                        tcWireId = null;
+                        tcName = null;
+                        tcArgs = null;
+                    }
+                    else
+                    {
+                        reader.Skip();
+                    }
+
+                    break;
+
+                case JsonTokenType.EndObject:
+                case JsonTokenType.EndArray:
+                    if (depth == 7 && inFunction)
+                    {
+                        inFunction = false;
+                    }
+                    else if (depth == 6 && inTc)
+                    {
+                        EmitToolCall(events, indexToId, tcIndex, tcWireId, tcName, tcArgs);
+                        inTc = false;
+                    }
+                    else if (depth == 5 && inToolCalls && reader.TokenType == JsonTokenType.EndArray)
+                    {
+                        inToolCalls = false;
+                    }
+                    else if (depth == 4 && inDelta)
+                    {
+                        inDelta = false;
+                    }
+                    else if (depth == 3 && inChoice)
+                    {
+                        inChoice = false;
+                    }
+                    else if (depth == 2 && inUsage)
+                    {
+                        inUsage = false;
+                        sawUsageObject = true;
+                    }
+                    else if (depth == 2 && inChoicesArray && reader.TokenType == JsonTokenType.EndArray)
+                    {
+                        inChoicesArray = false;
+                    }
+
+                    if (depth > 0)
+                        depth--;
+                    break;
+
+                case JsonTokenType.PropertyName:
+                    // Capture the name BEFORE consuming the value: the reader
+                    // forgets it afterwards. One small string per property is
+                    // the only per-chunk dispatch cost (no DOM).
+                    string prop = reader.GetString() ?? string.Empty;
+                    if (!reader.Read())
+                        throw new JsonException("Truncated chunk: property without value.");
+                    HandleValue(ref reader, depth, prop,
+                        inChoice, inDelta, inTc, inFunction, inUsage,
+                        events,
+                        ref sawChoicesArray, ref inChoicesArray, ref inDelta, ref inToolCalls, ref inFunction, ref inUsage,
+                        ref depth,
+                        ref finishReason, ref promptTokens, ref completionTokens,
+                        ref tcIndex, ref tcWireId, ref tcName, ref tcArgs);
+                    break;
+            }
         }
 
-        // First choice only — OpenAI streams one choice at a time for non-parallel tool calls.
-        using var choicesIter = choicesEl.EnumerateArray();
-        if (!choicesIter.MoveNext()) return events;
-        var choice = choicesIter.Current;
-        var delta = choice.TryGetProperty("delta", out var d) ? d : default;
-        string? finishReason = choice.TryGetProperty("finish_reason", out var fr) && fr.ValueKind == JsonValueKind.String
-            ? fr.GetString()
-            : null;
-
-        if (delta.ValueKind == JsonValueKind.Object)
+        if (!sawChoicesArray)
         {
-            if (delta.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
-            {
-                string? text = content.GetString();
-                if (!string.IsNullOrEmpty(text))
-                    events.Add(new TextDeltaEvent("0", text));
-            }
-
-            if (delta.TryGetProperty("reasoning_content", out var reasoning) && reasoning.ValueKind == JsonValueKind.String)
-            {
-                string? text = reasoning.GetString();
-                if (!string.IsNullOrEmpty(text))
-                    events.Add(new ThinkingDeltaEvent("0", text));
-            }
-
-            if (delta.TryGetProperty("tool_calls", out var tcs) && tcs.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var tc in tcs.EnumerateArray())
-                {
-                    int index = tc.TryGetProperty("index", out var idxEl)
-                        ? ReadTokenCount(idxEl)
-                        : 0;
-
-                    // Stable id (ROP-A ПР.3): wire id → remembered id → positional
-                    // fallback. Never a fresh Guid per chunk — that broke coalescing.
-                    // The ValueKind guard matters: some servers send numeric ids,
-                    // and GetString() throws on non-string values.
-                    string? wireId = tc.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String
-                        ? idEl.GetString()
-                        : null;
-                    string id = !string.IsNullOrEmpty(wireId)
-                        ? wireId!
-                        : indexToId.GetValueOrDefault(index) ?? $"tc{index}";
-                    indexToId[index] = id;
-
-                    var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
-                    if (fn.ValueKind != JsonValueKind.Object) continue;
-
-                    string? name = fn.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String
-                        ? n.GetString()
-                        : null;
-                    if (!string.IsNullOrEmpty(name))
-                        events.Add(new ToolCallStartEvent(id, name!));
-
-                    if (fn.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.String)
-                    {
-                        string? argsStr = args.GetString();
-                        if (!string.IsNullOrEmpty(argsStr))
-                            events.Add(new ToolCallDeltaEvent(id, argsStr));
-                    }
-                }
-            }
+            // No choices array: usage-only chunk (DOM parity).
+            if (sawUsageObject)
+                events.Add(new StepFinishEvent(0, "stop", new Usage(promptTokens, completionTokens)));
+            return events;
         }
 
         if (finishReason is not null)
         {
-            events.Add(new StepFinishEvent(0, finishReason, ReadUsage(root)));
+            events.Add(new StepFinishEvent(0, finishReason,
+                sawUsageObject ? new Usage(promptTokens, completionTokens) : null));
         }
 
         return events;
     }
 
+    private static void EmitToolCall(
+        List<LlmEvent> events, Dictionary<int, string> indexToId,
+        int index, string? wireId, string? name, string? args)
+    {
+        // Stable id (ROP-A ПР.3): wire id → remembered id → positional
+        // fallback. Never a fresh Guid per chunk — that broke coalescing.
+        // Only string wire ids count: servers send numeric ids, and the DOM
+        // walk ignored those (ValueKind guard).
+        string id = !string.IsNullOrEmpty(wireId)
+            ? wireId!
+            : indexToId.GetValueOrDefault(index) ?? $"tc{index}";
+        indexToId[index] = id;
+
+        if (!string.IsNullOrEmpty(name))
+            events.Add(new ToolCallStartEvent(id, name!));
+        if (!string.IsNullOrEmpty(args))
+            events.Add(new ToolCallDeltaEvent(id, args!));
+    }
+
+    private static void HandleValue(
+        ref Utf8JsonReader reader, int depth, string prop,
+        bool inChoice, bool inDelta, bool inTc, bool inFunction, bool inUsage,
+        List<LlmEvent> events,
+        ref bool rSawChoicesArray, ref bool rInChoicesArray, ref bool rInDelta, ref bool rInToolCalls, ref bool rInFunction, ref bool rInUsage,
+        ref int rDepth,
+        ref string? rFinishReason, ref int rPromptTokens, ref int rCompletionTokens,
+        ref int rTcIndex, ref string? rTcWireId, ref string? rTcName, ref string? rTcArgs)
+    {
+        // Depth-1 root properties.
+        if (depth == 1)
+        {
+            if (prop == "choices")
+            {
+                if (reader.TokenType == JsonTokenType.StartArray)
+                {
+                    rSawChoicesArray = true;
+                    rInChoicesArray = true;
+                    rDepth++;
+                }
+                else
+                {
+                    SkipContainer(ref reader);
+                }
+            }
+            else if (prop == "usage")
+            {
+                if (reader.TokenType == JsonTokenType.StartObject)
+                {
+                    rInUsage = true;
+                    rDepth++;
+                }
+                else
+                {
+                    SkipContainer(ref reader);
+                }
+            }
+            else
+            {
+                SkipContainer(ref reader);
+            }
+
+            return;
+        }
+
+        // Depth-3 choice properties (first choice only).
+        if (depth == 3 && inChoice)
+        {
+            if (prop == "delta")
+            {
+                if (reader.TokenType == JsonTokenType.StartObject)
+                {
+                    rInDelta = true;
+                    rDepth++;
+                }
+                else
+                {
+                    SkipContainer(ref reader);
+                }
+            }
+            else if (prop == "finish_reason")
+            {
+                // DOM parity: only a string reason counts (null/other → none).
+                rFinishReason = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+            }
+            else
+            {
+                SkipContainer(ref reader);
+            }
+
+            return;
+        }
+
+        // Depth-4 delta properties.
+        if (depth == 4 && inDelta)
+        {
+            if (prop == "content")
+            {
+                string? text = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+                if (!string.IsNullOrEmpty(text))
+                    events.Add(new TextDeltaEvent("0", text!));
+            }
+            else if (prop == "reasoning_content")
+            {
+                string? text = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+                if (!string.IsNullOrEmpty(text))
+                    events.Add(new ThinkingDeltaEvent("0", text!));
+            }
+            else if (prop == "tool_calls")
+            {
+                if (reader.TokenType == JsonTokenType.StartArray)
+                {
+                    rInToolCalls = true;
+                    rDepth++;
+                }
+                else
+                {
+                    SkipContainer(ref reader);
+                }
+            }
+            else
+            {
+                SkipContainer(ref reader);
+            }
+
+            return;
+        }
+
+        // Depth-6 tool-call properties.
+        if (depth == 6 && inTc)
+        {
+            if (prop == "index")
+            {
+                rTcIndex = ReadTolerantInt(ref reader);
+            }
+            else if (prop == "id")
+            {
+                rTcWireId = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+            }
+            else if (prop == "function")
+            {
+                if (reader.TokenType == JsonTokenType.StartObject)
+                {
+                    rInFunction = true;
+                    rDepth++;
+                }
+                else
+                {
+                    SkipContainer(ref reader);
+                }
+            }
+            else
+            {
+                SkipContainer(ref reader);
+            }
+
+            return;
+        }
+
+        // Depth-7 function properties.
+        if (depth == 7 && inFunction)
+        {
+            if (prop == "name")
+            {
+                rTcName = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+            }
+            else if (prop == "arguments")
+            {
+                rTcArgs = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+            }
+            else
+            {
+                SkipContainer(ref reader);
+            }
+
+            return;
+        }
+
+        // Depth-2 usage properties.
+        if (depth == 2 && inUsage)
+        {
+            if (prop == "prompt_tokens")
+            {
+                rPromptTokens = ReadTolerantInt(ref reader);
+            }
+            else if (prop == "completion_tokens")
+            {
+                rCompletionTokens = ReadTolerantInt(ref reader);
+            }
+            else
+            {
+                SkipContainer(ref reader);
+            }
+
+            return;
+        }
+
+        SkipContainer(ref reader);
+    }
+
+    private static void SkipContainer(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
+            reader.Skip();
+    }
+
     /// <summary>
     ///     Best-effort integer read: some servers send counts as floats
     ///     (<c>7.0</c>) or strings (<c>"7"</c>). Never throws — returns 0
-    ///     when the value is missing or unparseable.
+    ///     when the value is missing or unparseable (DOM parity).
     /// </summary>
-    private static int ReadTokenCount(JsonElement element)
+    private static int ReadTolerantInt(ref Utf8JsonReader reader)
     {
-        if (element.ValueKind == JsonValueKind.Number)
+        if (reader.TokenType == JsonTokenType.Number)
         {
-            if (element.TryGetInt32(out int direct))
+            if (reader.TryGetInt32(out int direct))
                 return direct;
-            if (element.TryGetDouble(out double dbl))
+            if (reader.TryGetDouble(out double dbl))
                 return (int)dbl;
             return 0;
         }
 
-        if (element.ValueKind == JsonValueKind.String &&
-            int.TryParse(element.GetString(), out int parsed))
+        if (reader.TokenType == JsonTokenType.String &&
+            int.TryParse(reader.GetString(), out int parsed))
         {
             return parsed;
         }
@@ -139,33 +435,29 @@ internal static class OpenAiWire
     }
 
     /// <summary>
-    ///     Read prompt_tokens/completion_tokens usage off a chunk root.
-    ///     Never throws: non-integer wire values (float/string) fall back
-    ///     to 0 instead of killing the chunk via InvalidOperationException.
-    /// </summary>
-    public static Usage? ReadUsage(JsonElement root)
-    {
-        if (!root.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object)
-            return null;
-
-        int prompt = usage.TryGetProperty("prompt_tokens", out var pt) ? ReadTokenCount(pt) : 0;
-        int completion = usage.TryGetProperty("completion_tokens", out var ct2) ? ReadTokenCount(ct2) : 0;
-        return new Usage(prompt, completion);
-    }
-
-    /// <summary>
     ///     Unified malformed-chunk policy (ROP-A ПР.4): a chunk that fails to
     ///     parse is logged, counted and SKIPPED — the stream survives a single
     ///     bad line. Terminal error events are reserved for auth/HTTP/network
     ///     failures; they never fire for wire noise.
+    ///     The payload transcodes into a pooled buffer: no intermediate string
+    ///     beyond the SSE line the pump already owns, no JsonDocument.
     /// </summary>
     public static IReadOnlyList<LlmEvent> TryParseChatChunkLine(
         string data, ChunkStreamState state, ILogger logger)
     {
         try
         {
-            using var doc = JsonDocument.Parse(data);
-            return ParseChatChunk(doc.RootElement, state.IndexToId).ToArray();
+            int byteCount = Encoding.UTF8.GetByteCount(data);
+            byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
+            try
+            {
+                Encoding.UTF8.GetBytes(data, rented);
+                return ParseChatChunk(rented.AsSpan(0, byteCount), state.IndexToId);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
         }
         catch (Exception ex)
         {
