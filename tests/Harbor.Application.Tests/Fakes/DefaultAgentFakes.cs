@@ -9,10 +9,23 @@ public sealed class FakeSessionStore(Session session) : ISessionStore
 {
     private readonly object _lock = new();
     private readonly List<AgentMessage> _messages = [];
+    private readonly List<Session> _updated = [];
     private TaskCompletionSource? _gatedAppend;
     private int _appends;
 
     public int Appends => Volatile.Read(ref _appends);
+
+    /// <summary>Sessions passed to <see cref="UpdateAsync" /> in call order.</summary>
+    public IReadOnlyList<Session> UpdatedSessions
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _updated];
+            }
+        }
+    }
 
     /// <summary>Working directory last passed to <see cref="CreateAsync" /> (null = never called).</summary>
     public string? LastCreatedDirectory { get; private set; }
@@ -78,7 +91,14 @@ public sealed class FakeSessionStore(Session session) : ISessionStore
         => Task.FromResult(Result.Failure<int>("DeleteMessagesAfter is not supported by this test fake."));
 
     public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
-        => Task.FromResult(Result.Success());
+    {
+        lock (_lock)
+        {
+            _updated.Add(session);
+        }
+
+        return Task.FromResult(Result.Success());
+    }
 
     public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
         => Task.FromResult(Result.Success(SessionMetadata.Empty));

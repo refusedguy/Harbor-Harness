@@ -141,7 +141,7 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
 
         _ = host.Store.Dispatch(new UiMsg.SyncSessions(
             listed.Value
-                .Select(s => new SessionInfo(SessionId.Create(s.Id), s.Title, s.CreatedAt, s.UpdatedAt, "active"))
+                .Select(s => new SessionInfo(SessionId.Create(s.Id), s.Title, s.CreatedAt, s.UpdatedAt, "active", s.IsSubagent()))
                 .ToImmutableArray(),
             SessionId.Create(host.SessionModel.Id)));
     }

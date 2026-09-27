@@ -33,6 +33,9 @@ public static class OverlayIds
     /// <summary>Worktree jump palette (Ctrl+J / LF, resolved in the core keymap).</summary>
     public const string JumpPalette = "jump";
 
+    /// <summary>Running sub-agents panel (opencode Subagents-overlay equivalent, read-only).</summary>
+    public const string Subagents = "subagents";
+
     /// <summary>Focus-session overlay.</summary>
     public const string FocusSession = "focusSession";
 }

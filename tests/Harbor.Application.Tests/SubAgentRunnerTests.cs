@@ -360,4 +360,46 @@ public class SubAgentRunnerTests
 
         await Assert.That(store.LastCreatedDirectory).IsEqualTo(Environment.CurrentDirectory);
     }
+
+    [Test]
+    public async Task RunAsync_StampsSubagentKindAndWorkingStatus()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var loop = new ScriptedLoop(replies: Assistant("done"));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("task it", "parent-1"));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(loop.LastContext!.Session.Kind).IsEqualTo(SessionKind.Subagent);
+        await Assert.That(loop.LastContext.Session.Status).IsEqualTo(SessionStatus.Working);
+        await Assert.That(loop.LastContext.Session.IsSubagent()).IsTrue();
+        await Assert.That(store.UpdatedSessions[0].Kind).IsEqualTo(SessionKind.Subagent);
+    }
+
+    [Test]
+    public async Task RunAsync_Success_PersistsDoneStatus()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var loop = new ScriptedLoop(replies: Assistant("done"));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go"));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(store.UpdatedSessions[^1].Status).IsEqualTo(SessionStatus.Done);
+    }
+
+    [Test]
+    public async Task RunAsync_LoopFailure_PersistsErrorStatus()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var loop = new ScriptedLoop(outcome: Result.Failure("model exploded"), replies: []);
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go"));
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(store.UpdatedSessions[^1].Status).IsEqualTo(SessionStatus.Error);
+    }
 }

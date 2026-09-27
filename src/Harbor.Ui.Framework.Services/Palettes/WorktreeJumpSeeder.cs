@@ -22,13 +22,15 @@ public sealed record WorktreeInfo(string Path, string? Branch, bool IsBare);
 /// <param name="Branch">Git branch of the session directory, or null when unknown.</param>
 /// <param name="StatusText">Agent status display text (<c>"idle"</c>, <c>"working"</c>, …).</param>
 /// <param name="IsDirty">Whether the working tree has uncommitted changes.</param>
+/// <param name="IsSubagent">Whether this is an isolated sub-agent run (hidden from the palette by default).</param>
 public sealed record SessionSeed(
     string SessionId,
     string Title,
     string Directory,
     string? Branch,
     string StatusText,
-    bool IsDirty);
+    bool IsDirty,
+    bool IsSubagent = false);
 
 /// <summary>
 ///     Pure jump-palette seeding (KILLER_FEATURES §2.7 Feature 3, slice 2):
@@ -114,11 +116,14 @@ public static class WorktreeJumpSeeder
     ///     session are appended (path-sorted) with an empty
     ///     <see cref="WorktreeJumpEntry.SessionId" /> — Enter on those rows only
     ///     closes the palette since there is no session to switch to. Bare
-    ///     records never become rows.
+    ///     records never become rows. Sub-agent sessions are skipped unless
+    ///     <paramref name="includeSubagents" /> is set (they live in the
+    ///     <c>subagents</c> panel instead).
     /// </summary>
     public static IReadOnlyList<WorktreeJumpEntry> BuildEntries(
         IReadOnlyList<SessionSeed> sessions,
-        IReadOnlyList<WorktreeInfo> worktrees)
+        IReadOnlyList<WorktreeInfo> worktrees,
+        bool includeSubagents = false)
     {
         ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(worktrees);
@@ -139,6 +144,8 @@ public static class WorktreeJumpSeeder
         for (int i = 0; i < sessions.Count; i++)
         {
             var seed = sessions[i];
+            if (seed.IsSubagent && !includeSubagents)
+                continue;
             string? branch = seed.Branch;
             if (string.IsNullOrEmpty(branch)
                 && !string.IsNullOrEmpty(seed.Directory)

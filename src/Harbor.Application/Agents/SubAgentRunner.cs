@@ -91,10 +91,17 @@ public sealed class SubAgentRunner(
         if (created.IsFailure) // §4.6-ok: single rail-step; store error already diagnostic.
             return Result.Failure<SubAgentRunResult>(
                 $"Failed to create sub-agent session: {created.Error}");
-        var session = created.Value with { ParentSessionId = request.ParentSessionId, Title = title };
+        var session = created.Value with
+        {
+            ParentSessionId = request.ParentSessionId,
+            Title = title,
+            Kind = SessionKind.Subagent,
+            Status = SessionStatus.Working
+        };
 
         // Best-effort metadata write per the F14 policy: the run itself does not
-        // depend on it, divergence only loses parent linkage and title in listings.
+        // depend on it, divergence only loses parent linkage, kind, status and
+        // title in listings.
         var linked = await store.UpdateAsync(session, ct).ConfigureAwait(false);
         if (linked.IsFailure)
             logger.LogWarning("Failed to persist sub-session metadata {SessionId}: {Error}", session.Id, linked.Error);
@@ -135,6 +142,7 @@ public sealed class SubAgentRunner(
             logger.LogWarning(
                 "Sub-agent run ended abnormally: agent={Agent} session={SessionId} error={Error}",
                 agent.Name.Value, session.Id, run.Error);
+            await MarkStatusAsync(session, SessionStatus.Error, ct).ConfigureAwait(false);
             return Result.Failure<SubAgentRunResult>(
                 $"Sub-agent '{agent.Name.Value}' failed: {run.Error}. Its partial history is preserved in session {session.Id}.");
         }
@@ -157,8 +165,25 @@ public sealed class SubAgentRunner(
         logger.LogInformation(
             "Sub-agent finished: agent={Agent} session={SessionId} messages={Count} outputChars={Length}",
             agent.Name.Value, session.Id, history.Value.Count, finalOutput.Length);
+        await MarkStatusAsync(session, SessionStatus.Done, ct).ConfigureAwait(false);
 
         return new SubAgentRunResult(session.Id, agent.Name.Value, Truncate(finalOutput), history.Value.Count);
+    }
+
+    /// <summary>
+    ///     Best-effort terminal status stamp (same F14 policy as the metadata
+    ///     write above): the run's outcome does not depend on it, divergence
+    ///     only leaves a stale status dot in session listings.
+    /// </summary>
+    private async Task MarkStatusAsync(
+        Harbor.Abstractions.Models.Session session,
+        Harbor.Abstractions.Models.SessionStatus status,
+        CancellationToken ct)
+    {
+        var marked = await store.UpdateAsync(
+            session with { Status = status, UpdatedAt = DateTimeOffset.UtcNow }, ct).ConfigureAwait(false);
+        if (marked.IsFailure)
+            logger.LogWarning("Failed to persist sub-session status {SessionId}: {Error}", session.Id, marked.Error);
     }
 
     /// <summary>

@@ -37,6 +37,7 @@ public enum SessionStatus
 /// <param name="Status">Current agent activity status.</param>
 /// <param name="GitBranch">Git branch name for the session working directory (null if not a git repo).</param>
 /// <param name="GitIsDirty">Whether the git working tree has uncommitted changes.</param>
+/// <param name="Kind">Ownership kind (user conversation vs isolated sub-agent run).</param>
 [MemoryPackable]
 public sealed partial record Session(
     string Id,
@@ -52,7 +53,8 @@ public sealed partial record Session(
     string? ParentSessionId = null,
     SessionStatus Status = SessionStatus.Idle,
     string? GitBranch = null,
-    bool GitIsDirty = false)
+    bool GitIsDirty = false,
+    SessionKind Kind = SessionKind.User)
 {
     /// <summary>
     ///     Factory for a new session: generates a fresh id, derives the project id from the
