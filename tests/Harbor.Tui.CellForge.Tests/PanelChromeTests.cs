@@ -63,7 +63,7 @@ public class PanelChromeTests
         PanelChrome.PaintLeftRule(buffer, new Rect(0, 0, 6, 4));
 
         string art = GridDump.Art(buffer);
-        foreach (var row in art.Split('\n'))
+        foreach (var row in art.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             await Assert.That(row[0]).IsEqualTo('│');
         }
