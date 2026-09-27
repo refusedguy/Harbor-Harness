@@ -21,4 +21,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Providers.Tests"/>
+  </ItemGroup>
+
 </Project>

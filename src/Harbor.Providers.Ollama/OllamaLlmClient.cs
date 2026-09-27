@@ -1,5 +1,7 @@
+using System.Buffers;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
@@ -247,14 +249,27 @@ public sealed class OllamaLlmClient : ILlmClient
     ///     Parse one NDJSON line and write any emitted events directly into the channel.
     ///     Malformed lines follow the unified skip-and-count policy (ROP-A ПР.4).
     /// </summary>
+    /// <summary>
+    ///     Parse one NDJSON line and write any emitted events directly into the channel.
+    ///     Malformed lines follow the unified skip-and-count policy (ROP-A ПР.4).
+    ///     #171: the payload transcodes into a pooled buffer and parses via
+    ///     Utf8JsonReader — no JsonDocument per line.
+    /// </summary>
     private async Task WriteNdjsonEventsAsync(string line, ChannelWriter<LlmEvent> writer, ChunkStreamState chunkState, CancellationToken ct)
     {
+        List<LlmEvent> events;
         try
         {
-            using var doc = JsonDocument.Parse(line);
-            foreach (var evt in MapNdjsonChunkFromDocument(doc.RootElement, chunkState.IndexToId))
+            int byteCount = Encoding.UTF8.GetByteCount(line);
+            byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
+            try
             {
-                await writer.WriteAsync(evt, ct).ConfigureAwait(false);
+                Encoding.UTF8.GetBytes(line, rented);
+                events = MapNdjsonChunk(rented.AsSpan(0, byteCount), chunkState.IndexToId);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(rented);
             }
         }
         catch (Exception ex)
@@ -262,68 +277,379 @@ public sealed class OllamaLlmClient : ILlmClient
             chunkState.CountMalformed();
             _logger.LogWarning(ex, "Skipping malformed Ollama NDJSON line #{Count}: {Line}",
                 chunkState.MalformedChunks, line);
+            return;
+        }
+
+        foreach (var evt in events)
+        {
+            await writer.WriteAsync(evt, ct).ConfigureAwait(false);
         }
     }
 
-    private IEnumerable<LlmEvent> MapNdjsonChunkFromDocument(JsonElement root, Dictionary<int, string> indexToId)
+    /// <summary>
+    ///     Map one Ollama NDJSON line from UTF-8 JSON. Fields buffer across
+    ///     the single pass and tool calls emit at each tc EndObject, so
+    ///     property order never matters. Non-string ids/names fall back
+    ///     instead of failing the line (strictly looser than the DOM walk,
+    ///     which threw on e.g. numeric ids); object arguments re-serialize
+    ///     through a pooled writer (GetRawText parity).
+    /// </summary>
+    internal static List<LlmEvent> MapNdjsonChunk(ReadOnlySpan<byte> utf8Json, Dictionary<int, string> indexToId)
     {
-        var message = root.TryGetProperty("message", out var msgEl) ? msgEl : default;
+        var events = new List<LlmEvent>(capacity: 2);
+        var reader = new Utf8JsonReader(utf8Json, isFinalBlock: true, state: default);
 
-        // Text content
-        if (message.ValueKind == JsonValueKind.Object &&
-            message.TryGetProperty("content", out var content) &&
-            content.ValueKind == JsonValueKind.String)
-        {
-            string? text = content.GetString();
-            if (!string.IsNullOrEmpty(text))
-                yield return new TextDeltaEvent("0", text);
-        }
+        int depth = 0;
+        bool sawRoot = false;
+        bool inMessage = false;
+        bool inToolCalls = false;
+        bool inTc = false;
+        bool inFunction = false;
 
-        // Tool calls
-        if (message.ValueKind == JsonValueKind.Object &&
-            message.TryGetProperty("tool_calls", out var tcs) &&
-            tcs.ValueKind == JsonValueKind.Array)
+        string? content = null;
+        int tcIndex = 0;
+        string? tcWireId = null;
+        string? tcName = null;
+        string? tcArgs = null;
+
+        bool done = false;
+        int inputTokens = 0;
+        int outputTokens = 0;
+
+        while (reader.Read())
         {
-            foreach (var tc in tcs.EnumerateArray())
+            switch (reader.TokenType)
             {
-                // Stable id (ROP-A ПР.3): wire id → remembered id → positional
-                // fallback. Never a fresh Guid per chunk — that broke coalescing.
-                int index = tc.TryGetProperty("index", out var idxEl) && idxEl.ValueKind == JsonValueKind.Number
-                    ? idxEl.GetInt32()
-                    : 0;
-                string id = tc.TryGetProperty("id", out var idEl) && !string.IsNullOrEmpty(idEl.GetString())
-                    ? idEl.GetString()!
-                    : indexToId.GetValueOrDefault(index) ?? $"tc{index}";
-                indexToId[index] = id;
-
-                var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
-
-                if (fn.ValueKind == JsonValueKind.Object)
-                {
-                    string? name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
-                    if (!string.IsNullOrEmpty(name))
-                        yield return new ToolCallStartEvent(id, name!);
-
-                    if (fn.TryGetProperty("arguments", out var args))
+                case JsonTokenType.StartObject:
+                    if (depth == 0)
                     {
-                        string? argsStr = args.ValueKind == JsonValueKind.String
-                            ? args.GetString()
-                            : args.GetRawText();
-                        if (!string.IsNullOrEmpty(argsStr))
-                            yield return new ToolCallDeltaEvent(id, argsStr);
+                        // Single top-level object only (DOM parity) — skip
+                        // anything else whole.
+                        if (!sawRoot)
+                        {
+                            depth = 1;
+                            sawRoot = true;
+                        }
+                        else
+                        {
+                            reader.Skip();
+                        }
+
+                        break;
                     }
-                }
+
+                    if (depth == 1)
+                    {
+                        depth = 2;
+                        break;
+                    }
+
+                    if (inToolCalls && depth == 3)
+                    {
+                        depth = 4;
+                        inTc = true;
+                        tcIndex = 0;
+                        tcWireId = null;
+                        tcName = null;
+                        tcArgs = null;
+                        inFunction = false;
+                        break;
+                    }
+
+                    reader.Skip();
+                    break;
+
+                case JsonTokenType.StartArray:
+                    if (depth <= 1)
+                    {
+                        depth++;
+                        break;
+                    }
+
+                    reader.Skip();
+                    break;
+
+                case JsonTokenType.EndObject:
+                case JsonTokenType.EndArray:
+                    if (depth == 5 && inFunction)
+                    {
+                        inFunction = false;
+                    }
+                    else if (depth == 4 && inTc)
+                    {
+                        EmitToolCall(events, indexToId, tcIndex, tcWireId, tcName, tcArgs);
+                        inTc = false;
+                    }
+                    else if (depth == 3 && inToolCalls && reader.TokenType == JsonTokenType.EndArray)
+                    {
+                        inToolCalls = false;
+                    }
+                    else if (depth == 2 && inMessage)
+                    {
+                        inMessage = false;
+                    }
+
+                    if (depth > 0)
+                        depth--;
+                    break;
+
+                case JsonTokenType.PropertyName:
+                    if (!reader.Read())
+                        throw new JsonException("Truncated line: property without value.");
+                    HandleValue(ref reader, depth, inMessage, inTc, inFunction,
+                        events,
+                        ref inMessage, ref inToolCalls, ref inFunction, ref depth,
+                        ref content, ref tcIndex, ref tcWireId, ref tcName, ref tcArgs,
+                        ref done, ref inputTokens, ref outputTokens);
+                    break;
             }
         }
 
-        // Done flag
-        if (root.TryGetProperty("done", out var doneEl) && doneEl.GetBoolean())
-        {
-            int inputTokens = root.TryGetProperty("prompt_eval_count", out var pe) ? pe.GetInt32() : 0;
-            int outputTokens = root.TryGetProperty("eval_count", out var ec) ? ec.GetInt32() : 0;
+        if (!string.IsNullOrEmpty(content))
+            events.Insert(0, new TextDeltaEvent("0", content!));
 
-            yield return new StepFinishEvent(0, "stop", new Usage(inputTokens, outputTokens));
+        if (done)
+            events.Add(new StepFinishEvent(0, "stop", new Usage(inputTokens, outputTokens)));
+
+        return events;
+    }
+
+    private static void EmitToolCall(
+        List<LlmEvent> events, Dictionary<int, string> indexToId,
+        int index, string? wireId, string? name, string? args)
+    {
+        // Stable id (ROP-A ПР.3): wire id → remembered id → positional fallback.
+        string id = !string.IsNullOrEmpty(wireId)
+            ? wireId!
+            : indexToId.GetValueOrDefault(index) ?? $"tc{index}";
+        indexToId[index] = id;
+
+        if (!string.IsNullOrEmpty(name))
+            events.Add(new ToolCallStartEvent(id, name!));
+        if (!string.IsNullOrEmpty(args))
+            events.Add(new ToolCallDeltaEvent(id, args!));
+    }
+
+    private static void HandleValue(
+        ref Utf8JsonReader reader, int depth, bool inMessage, bool inTc, bool inFunction,
+        List<LlmEvent> events,
+        ref bool rInMessage, ref bool rInToolCalls, ref bool rInFunction, ref int rDepth,
+        ref string? rContent, ref int rTcIndex, ref string? rTcWireId, ref string? rTcName, ref string? rTcArgs,
+        ref bool rDone, ref int rInputTokens, ref int rOutputTokens)
+    {
+        // NOTE: text content emits at the END (after tool calls), matching
+        // the DOM walker's section order (content first, then tool calls,
+        // then done) regardless of wire order.
+        if (depth == 1)
+        {
+            if (reader.ValueTextEquals("message"u8))
+            {
+                if (reader.TokenType == JsonTokenType.StartObject)
+                {
+                    rInMessage = true;
+                    rDepth++;
+                }
+                else
+                {
+                    SkipContainer(ref reader);
+                }
+            }
+            else if (reader.ValueTextEquals("done"u8))
+            {
+                rDone = reader.TokenType == JsonTokenType.True;
+            }
+            else if (reader.ValueTextEquals("prompt_eval_count"u8))
+            {
+                rInputTokens = ReadTolerantInt(ref reader);
+            }
+            else if (reader.ValueTextEquals("eval_count"u8))
+            {
+                rOutputTokens = ReadTolerantInt(ref reader);
+            }
+            else
+            {
+                SkipContainer(ref reader);
+            }
+
+            return;
         }
+
+        if (depth == 2 && inMessage)
+        {
+            if (reader.ValueTextEquals("content"u8))
+            {
+                rContent = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+            }
+            else if (reader.ValueTextEquals("tool_calls"u8))
+            {
+                if (reader.TokenType == JsonTokenType.StartArray)
+                {
+                    rInToolCalls = true;
+                    rDepth++;
+                }
+                else
+                {
+                    SkipContainer(ref reader);
+                }
+            }
+            else
+            {
+                SkipContainer(ref reader);
+            }
+
+            return;
+        }
+
+        if (depth == 4 && inTc)
+        {
+            if (reader.ValueTextEquals("index"u8))
+            {
+                // DOM parity: only a JSON number counts (string index → 0).
+                rTcIndex = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out int idx)
+                    ? idx
+                    : 0;
+            }
+            else if (reader.ValueTextEquals("id"u8))
+            {
+                rTcWireId = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+            }
+            else if (reader.ValueTextEquals("function"u8))
+            {
+                if (reader.TokenType == JsonTokenType.StartObject)
+                {
+                    rInFunction = true;
+                    rDepth++;
+                }
+                else
+                {
+                    SkipContainer(ref reader);
+                }
+            }
+            else
+            {
+                SkipContainer(ref reader);
+            }
+
+            return;
+        }
+
+        if (depth == 5 && inFunction)
+        {
+            if (reader.ValueTextEquals("name"u8))
+            {
+                rTcName = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+            }
+            else if (reader.ValueTextEquals("arguments"u8))
+            {
+                rTcArgs = ReadArgsValue(ref reader);
+            }
+            else
+            {
+                SkipContainer(ref reader);
+            }
+
+            return;
+        }
+
+        SkipContainer(ref reader);
+    }
+
+    /// <summary>
+    ///     Tool arguments: a string passes through, any other JSON value
+    ///     re-serializes canonically (GetRawText parity for the object case).
+    /// </summary>
+    private static string? ReadArgsValue(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+            return reader.GetString();
+
+        if (reader.TokenType is not (JsonTokenType.StartObject or JsonTokenType.StartArray
+                or JsonTokenType.Number or JsonTokenType.True or JsonTokenType.False or JsonTokenType.Null))
+            return null;
+
+        // Rare path (object-shaped arguments): re-serialize canonically.
+        // ArrayBufferWriter pools internally, so this stays off the LOH.
+        using var stream = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            CopyValue(ref reader, writer);
+        }
+
+        return Encoding.UTF8.GetString(stream.WrittenSpan);
+    }
+
+    private static void CopyValue(ref Utf8JsonReader reader, Utf8JsonWriter writer)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.StartObject:
+                writer.WriteStartObject();
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                {
+                    writer.WritePropertyName(reader.GetString()!);
+                    reader.Read();
+                    CopyValue(ref reader, writer);
+                }
+
+                writer.WriteEndObject();
+                break;
+
+            case JsonTokenType.StartArray:
+                writer.WriteStartArray();
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                {
+                    CopyValue(ref reader, writer);
+                }
+
+                writer.WriteEndArray();
+                break;
+
+            case JsonTokenType.String:
+                writer.WriteStringValue(reader.GetString());
+                break;
+
+            case JsonTokenType.Number:
+                writer.WriteRawValue(reader.ValueSpan, skipInputValidation: true);
+                break;
+
+            case JsonTokenType.True:
+                writer.WriteBooleanValue(true);
+                break;
+
+            case JsonTokenType.False:
+                writer.WriteBooleanValue(false);
+                break;
+
+            case JsonTokenType.Null:
+                writer.WriteNullValue();
+                break;
+        }
+    }
+
+    private static void SkipContainer(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
+            reader.Skip();
+    }
+
+    private static int ReadTolerantInt(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType == JsonTokenType.Number)
+        {
+            if (reader.TryGetInt32(out int direct))
+                return direct;
+            if (reader.TryGetDouble(out double dbl))
+                return (int)dbl;
+            return 0;
+        }
+
+        if (reader.TokenType == JsonTokenType.String &&
+            int.TryParse(reader.GetString(), out int parsed))
+        {
+            return parsed;
+        }
+
+        return 0;
     }
 }
 
