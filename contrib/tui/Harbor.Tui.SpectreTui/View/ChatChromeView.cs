@@ -42,9 +42,10 @@ internal sealed class ChatChromeView
             return paragraph;
         }
 
-        var leftSegments = StatusBar.Segments.Where(s => s.Align == Alignment.Left).OrderBy(s => s.Importance).ToList();
-        var centerSegments = StatusBar.Segments.Where(s => s.Align == Alignment.Center).OrderBy(s => s.Importance).ToList();
-        var rightSegments = StatusBar.Segments.Where(s => s.Align == Alignment.Right).OrderByDescending(s => s.Importance).ToList();
+        var ordered = StatusSegmentOrdering.Ordered(StatusBar.Segments);
+        var leftSegments = ordered.Where(s => s.Align == Alignment.Left).ToList();
+        var centerSegments = ordered.Where(s => s.Align == Alignment.Center).ToList();
+        var rightSegments = ordered.Where(s => s.Align == Alignment.Right).ToList();
 
         string routeText = string.Join(" ", leftSegments.Select(s => s.Text));
         string statusText = centerSegments.FirstOrDefault() is { } c ? c.Text : string.Empty;

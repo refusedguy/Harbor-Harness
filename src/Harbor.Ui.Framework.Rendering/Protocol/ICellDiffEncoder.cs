@@ -7,9 +7,13 @@ using System.Collections.Immutable;
 ///     buffers (renderer-unification sprint Phase 6.2).
 /// </summary>
 /// <remarks>
-///     Implementations live in backend adapter assemblies (e.g.
-///     <c>Harbor.Tui.CellForge.Rendering.CellForgeDiffEncoder</c>) so the
-///     backend's own optimizations remain untouched behind the adapter.
+///     The canonical implementation is
+///     <see cref="RowHashDiffEncoder"/> (row-hash fast path + FrameHint
+///     damage rects, emitting portable batches); backend adapters obtain it
+///     through their own thin factories (e.g.
+///     <c>Harbor.Tui.CellForge.Rendering.CellForgeDiffEncoder</c> for the
+///     engine-linked mode) so the backend's own optimizations remain
+///     untouched behind the adapter.
 /// </remarks>
 public interface ICellDiffEncoder
 {

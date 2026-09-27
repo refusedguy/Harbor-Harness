@@ -109,7 +109,10 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         IServiceProvider host,
         CancellationToken ct = default)
     {
-        _store = new UiStore();
+        // Prefer the DI-shared store (issue #77) so interactive writes land
+        // in the same instance the pipeline restores from; private store
+        // keeps tests / non-composed hosts working.
+        _store = host.GetService(typeof(UiStore)) as UiStore ?? new UiStore();
         _effects = new TuiEffectHost(agent, _store, _slashHandler, ct);
         _store.Dispatch(new UiMsg.ConfigureRuntime(
             agent.State.Agent.Model,

@@ -5,6 +5,7 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
 using Harbor.Ui.Framework.Diagnostics;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -51,7 +52,8 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 
     public async Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
     {
-        _teaBridge = new TerminaTeaBridge(agent, _slashHandler, _logger, ct);
+        _teaBridge = new TerminaTeaBridge(
+            agent, _slashHandler, _logger, ct, host?.GetService(typeof(UiStore)) as UiStore);
         _teaBridge.DiagnosticsPanel = host?.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel;
 
         _logger.LogInformation("Starting Termina host with route /chat");

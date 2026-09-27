@@ -13,6 +13,7 @@ using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Rendering;
+using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Capabilities;
@@ -50,6 +51,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     public ChatScreen? Screen { get; set; }
 
     private readonly UiStore _store;
+    private readonly ISessionManager? _sessions;
+    private UiStore? _subscribedStore;
     private readonly StatusBarViewModel _statusVm;
     private readonly ChatHistoryViewModel _chatVm;
     private readonly InputViewModel _inputVm;
@@ -80,7 +83,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         StatusBarViewModel? statusVm = null,
         ChatHistoryViewModel? chatVm = null,
         InputViewModel? inputVm = null,
-        UiStore? store = null)
+        UiStore? store = null,
+        ISessionManager? sessions = null)
         : base(logger)
     {
         // Issue #77: the DI-shared store is injected by the composition root
@@ -88,6 +92,9 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         // RendererPipeline restores from. Null keeps the previous behaviour
         // (private store) for tests and non-composed hosts.
         _store = store ?? new UiStore();
+        // Track D (#27): per-session store from the session manager when a
+        // composed host provides one; otherwise the fallback above.
+        _sessions = sessions;
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
@@ -103,12 +110,14 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         StatusBarViewModel? statusVm = null,
         ChatHistoryViewModel? chatVm = null,
         InputViewModel? inputVm = null,
-        UiStore? store = null)
+        UiStore? store = null,
+        ISessionManager? sessions = null)
         : base(logger)
     {
         // Issue #77: see the primary ctor — injected shared store or a
         // private one when null.
         _store = store ?? new UiStore();
+        _sessions = sessions;
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
@@ -160,11 +169,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     {
         try
         {
-            _store.Changed += OnStoreChanged;
-            // CF-E-002: seed registered panel ids + Hidden states + DefaultSizes
-            // into UiState so the reducer becomes the single source of truth.
-            // Already-known states/sizes survive re-seeding (plugin reload path).
-            _ = Panels.EnsureSeeded(_store);
+            EnsureSubscribedToActiveStore();
             Context.HideCursor();
             return base.InitializeAsync(ct);
         }
@@ -172,6 +177,41 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         {
             return Task.FromResult(Result.Failure(ex.Message));
         }
+    }
+
+    /// <summary>
+    ///     The store this renderer currently reads and writes: the active
+    ///     session's <see cref="SessionContext.Store" /> when a session
+    ///     manager with an active context is present, otherwise the fallback
+    ///     <see cref="_store" /> (injected shared store or private test seam).
+    /// </summary>
+    private UiStore ActiveStore => _sessions?.ActiveContext?.Store ?? _store;
+
+    /// <summary>
+    ///     (Re)binds the <see cref="OnStoreChanged" /> projection to
+    ///     <see cref="ActiveStore" />. On a session switch the old store is
+    ///     unsubscribed, the new one subscribed + panel-seeded, and the
+    ///     current snapshot projected immediately so the shared VMs show the
+    ///     newly-active session without waiting for the next event. No-op
+    ///     when the active store did not change.
+    /// </summary>
+    private void EnsureSubscribedToActiveStore()
+    {
+        UiStore active = ActiveStore;
+        if (ReferenceEquals(_subscribedStore, active))
+            return;
+        if (_subscribedStore is not null)
+            _subscribedStore.Changed -= OnStoreChanged;
+        _subscribedStore = active;
+        active.Changed += OnStoreChanged;
+        // CF-E-002: seed registered panel ids + Hidden states + DefaultSizes
+        // into UiState so the reducer becomes the single source of truth.
+        // Already-known states/sizes survive re-seeding (plugin reload path).
+        _ = Panels.EnsureSeeded(active);
+        // The new store's revision ledger starts over — adopt its revision so
+        // the stale-drop guard does not swallow its first notifications.
+        _lastProjectedRevision = active.State.Revision;
+        ProjectStateIntoWidgets(active.State);
     }
 
     private void OnStoreChanged(object? sender, UiStateChangedEventArgs e)
@@ -184,14 +224,15 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        _store.Dispatch(new UiMsg.Agent(@event));
+        EnsureSubscribedToActiveStore();
+        _ = ActiveStore.Dispatch(new UiMsg.Agent(@event));
         return base.RenderAsync(@event, ct);
     }
 
     /// <summary>Composer buffer mirrored from <see cref="UiState.Input"/> (test seam).</summary>
     internal PromptBuffer PromptBuffer => _composer.Buffer;
 
-    /// <summary>TEA store owning the <see cref="UiState"/> snapshot (test seam for panel-seeding assertions).</summary>
+    /// <summary>Fallback TEA store (test seam for panel-seeding assertions). The live path reads <see cref="ActiveStore"/>.</summary>
     internal UiStore Store => _store;
 
     /// <summary>Last projected session list (test seam; SideBarView/QuickSwitchSlots wiring is CF-B-008).</summary>
@@ -312,7 +353,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     public override void Dispose()
     {
         _inputVm.PropertyChanged -= OnInputVmChanged;
-        _store.Changed -= OnStoreChanged;
+        if (_subscribedStore is not null)
+        {
+            _subscribedStore.Changed -= OnStoreChanged;
+            _subscribedStore = null;
+        }
         Context.ShowCursor();
         base.Dispose();
     }

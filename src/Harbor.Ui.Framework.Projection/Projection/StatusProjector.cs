@@ -75,9 +75,10 @@ public static class StatusProjector
     public static string ProjectFooter(UiState state)
     {
         var statusBar = ProjectStatusBar(state);
-        var left = statusBar.Segments.Where(s => s.Align == Alignment.Left).OrderBy(s => s.Importance);
-        var center = statusBar.Segments.Where(s => s.Align == Alignment.Center).OrderBy(s => s.Importance);
-        var right = statusBar.Segments.Where(s => s.Align == Alignment.Right).OrderByDescending(s => s.Importance);
+        var ordered = StatusSegmentOrdering.Ordered(statusBar.Segments);
+        var left = ordered.Where(s => s.Align == Alignment.Left);
+        var center = ordered.Where(s => s.Align == Alignment.Center);
+        var right = ordered.Where(s => s.Align == Alignment.Right);
 
         return string.Join("  ", left.Select(s => s.Text))
                + (center.Any() ? "  " + string.Join("  ", center.Select(s => s.Text)) : "")

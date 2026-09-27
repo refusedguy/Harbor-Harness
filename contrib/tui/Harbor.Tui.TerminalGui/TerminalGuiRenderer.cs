@@ -68,7 +68,8 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
     {
         _logger.LogInformation("Starting Terminal.Gui app");
         _diagnostics = host?.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel;
-        _bridge = new TerminalGuiTeaBridge(agent, _slashHandler, _logger, ct);
+        _bridge = new TerminalGuiTeaBridge(
+            agent, _slashHandler, _logger, ct, host?.GetService(typeof(UiStore)) as UiStore);
 
         _app = Application.Create().Init("Console");
 

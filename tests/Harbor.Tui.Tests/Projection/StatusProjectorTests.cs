@@ -100,4 +100,24 @@ public class StatusProjectorTests
 
         await Assert.That(footer).IsEqualTo("/  ○ idle  0.0000  live");
     }
+
+    [Test]
+    public async Task Ordered_Left_Center_Right_With_Importance()
+    {
+        var segments = new UiStatusSegment[]
+        {
+            new("r-low", Alignment.Right, 0, UiSpanStyle.Dim),
+            new("c", Alignment.Center, 2, UiSpanStyle.Default),
+            new("r-high", Alignment.Right, 3, UiSpanStyle.Default),
+            new("l", Alignment.Left, 1, UiSpanStyle.Default),
+        };
+
+        var ordered = StatusSegmentOrdering.Ordered(segments);
+
+        await Assert.That(ordered.Count).IsEqualTo(4);
+        await Assert.That(ordered[0].Text).IsEqualTo("l");
+        await Assert.That(ordered[1].Text).IsEqualTo("c");
+        await Assert.That(ordered[2].Text).IsEqualTo("r-high");
+        await Assert.That(ordered[3].Text).IsEqualTo("r-low");
+    }
 }

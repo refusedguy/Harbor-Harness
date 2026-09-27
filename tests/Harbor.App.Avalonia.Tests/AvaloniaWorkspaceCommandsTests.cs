@@ -21,6 +21,7 @@ public class AvaloniaWorkspaceCommandsTests
     private sealed class FakeSessionManager : ISessionManager
     {
         public Session? Active { get; set; }
+        public SessionContext? ActiveContext { get; set; }
         public SessionContext? GetContext(string sessionId) => null;
         public SessionStatus GetStatus(string sessionId) => SessionStatus.Idle;
         public void SetStatus(string sessionId, SessionStatus status) { }
