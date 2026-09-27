@@ -1,4 +1,4 @@
-using Harbor.Registries.Events;
+using Harbor.Abstractions.Events;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;

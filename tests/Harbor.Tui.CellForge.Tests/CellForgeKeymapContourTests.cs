@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.State;
 
@@ -76,9 +75,9 @@ public class CellForgeKeymapContourTests
     [Test]
     public async Task WheelMsg_MapsSignToLineScroll()
     {
-        await Assert.That(VirtualizedChatTimeline.WheelMsg(1) is UiMsg.KeyInput k && k.Action == ChatAction.ScrollUpLine).IsTrue();
-        await Assert.That(VirtualizedChatTimeline.WheelMsg(-1) is UiMsg.KeyInput k && k.Action == ChatAction.ScrollDownLine).IsTrue();
-        await Assert.That(VirtualizedChatTimeline.WheelMsg(0) is UiMsg.KeyInput k && k.Action == ChatAction.None).IsTrue();
+        await Assert.That(VirtualizedChatTimeline.WheelMsg(1) is UiMsg.KeyInput k1 && k1.Action == ChatAction.ScrollUpLine).IsTrue();
+        await Assert.That(VirtualizedChatTimeline.WheelMsg(-1) is UiMsg.KeyInput k2 && k2.Action == ChatAction.ScrollDownLine).IsTrue();
+        await Assert.That(VirtualizedChatTimeline.WheelMsg(0) is UiMsg.KeyInput k3 && k3.Action == ChatAction.None).IsTrue();
     }
 
     [Test]
