@@ -58,4 +58,20 @@ public class SlashPanelsCatalogTests
 
         await Assert.That(catalog.TryResolve("zzz-no-such-command", out _)).IsFalse();
     }
+
+    [Test]
+    public async Task Catalog_ResolvesPanels_AndAlias()
+    {
+        var catalog = ReplCommandCatalog.CreateDefault();
+
+        bool found = catalog.TryResolve("panels", out var command);
+        bool aliasFound = catalog.TryResolve("panel", out var alias);
+
+        await Assert.That(found).IsTrue();
+        await Assert.That(command).IsNotNull();
+        await Assert.That(command!.Id).IsEqualTo("panels");
+        await Assert.That(aliasFound).IsTrue();
+        await Assert.That(alias).IsNotNull();
+        await Assert.That(alias!.Id).IsEqualTo("panels");
+    }
 }

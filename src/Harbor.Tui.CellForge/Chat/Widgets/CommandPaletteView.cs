@@ -408,7 +408,13 @@ public sealed class CommandPaletteView
         }
 
         int selectableCount = _selectableIndices.Count;
-        if (selectableCount > availableRows)
+        if (_flatView.Count == 0 && availableRows > 0)
+        {
+            // Empty filter result: say so instead of a dead blank box.
+            const string empty = "(no matches)";
+            buffer.SetText(rect.X + 1, listTop, empty.AsSpan(0, Math.Min(empty.Length, innerW)), ChatPalette.Dim);
+        }
+        else if (selectableCount > availableRows)
         {
             var more = $"… +{selectableCount - availableRows}";
             buffer.SetText(rect.X + 1, rect.Bottom - 2, more.AsSpan(0, Math.Min(more.Length, innerW)), detailStyle);

@@ -46,6 +46,7 @@ internal sealed class ReplCommandCatalog
         catalog.Register(new InfoCommand());
         catalog.Register(new ProvidersCommand());
         catalog.Register(new PluginsPanelCommand());
+        catalog.Register(new PanelsCommand());
         catalog.Register(new AuthCommand());
         catalog.Register(new ConfigCommand());
         catalog.Register(new RendererCommand());

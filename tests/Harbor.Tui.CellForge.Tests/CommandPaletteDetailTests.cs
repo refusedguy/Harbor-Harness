@@ -65,4 +65,16 @@ public class CommandPaletteDetailTests
         var cell = buffer.Get(pastTitleX, 4);
         await Assert.That(cell.Rune).IsEqualTo((int)' ');
     }
+
+    [Test]
+    public async Task Paint_EmptyResults_ShowsNoMatches()
+    {
+        var palette = new CommandPaletteView();
+        palette.Show([]);
+        var buffer = new ScreenBuffer(60, 10);
+        palette.Paint(buffer, new Rect(2, 1, 56, 8));
+        string art = GridDump.Art(buffer);
+
+        await Assert.That(art).Contains("(no matches)");
+    }
 }

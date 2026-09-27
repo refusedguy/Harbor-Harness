@@ -119,6 +119,7 @@ public class ToolRetryProjectionTests
         public IRendererPipeline? RendererPipeline => null;
         public Harbor.Hosting.PluginReloadService? PluginReload => null;
         public IProviderHealthCheck? HealthCheck => null;
+        public Harbor.Ui.Framework.Panels.IPanelRegistry? PanelRegistry => null;
         public void WakeUp() { }
         public void OpenSlashPalette() { }
         public void ToggleVimMode() { }
