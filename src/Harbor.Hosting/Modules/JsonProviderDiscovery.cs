@@ -100,8 +100,8 @@ internal static class JsonProviderDiscovery
                     }
 
                     var http = new HttpClient { Timeout = TimeSpan.FromSeconds(config.Timeout) };
-                    config.Quirks = Harbor.Providers.OpenAiCompatible.Compat.ProviderCompatFlags.For(config.GetProviderId());
-                    var configRef = config;
+                    // #195: configs are immutable — attach quirks via a sealed copy.
+                    var configRef = config.WithQuirks(Harbor.Providers.OpenAiCompatible.Compat.ProviderCompatFlags.For(config.GetProviderId()));
                     pb.AddProvider(config.Id, () => new Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient(
                         http, configRef, authResolver, modelCatalog,
                         loggerFactory.CreateLogger<Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient>()));
@@ -165,8 +165,8 @@ public static void RegisterJsonProviders(
                 http.Timeout = TimeSpan.FromSeconds(config.Timeout);
                 // §OOP-002 (RESOLVED): attach provider-specific compat flags
                 // (Strategy pattern) so the client can apply them without hardcoding
-                // provider ids.
-                config.Quirks = ProviderCompatFlags.For(config.GetProviderId());
+                // provider ids. #195: via a sealed copy — configs are immutable.
+                config = config.WithQuirks(ProviderCompatFlags.For(config.GetProviderId()));
                 builder.AddProvider(config.Id, () => new OpenAiCompatibleLlmClient(
                     http, config,
                     new ConfigAuthResolver(authStore, config.Id),
@@ -190,15 +190,17 @@ public static void RegisterJsonProviders(
         {
             var config = ProviderConfig.LoadFromFile(file);
             if (config.IsFailure) return; // §4.6-ok: skip-and-log discovery (ранний выход перечисления).
-            if (config.Value.Id is "anthropic" or "openai" or "ollama") return;
-            if (!seenIds.Add(config.Value.Id)) return;
+            var loaded = config.Value;
+            if (loaded.Id is "anthropic" or "openai" or "ollama") return;
+            if (!seenIds.Add(loaded.Id)) return;
 
-            var http = httpClientFactory.CreateClient($"provider:{config.Value.Id}");
-            http.Timeout = TimeSpan.FromSeconds(config.Value.Timeout);
-            config.Value.Quirks = ProviderCompatFlags.For(config.Value.GetProviderId());
-            builder.AddProvider(config.Value.Id, () => new OpenAiCompatibleLlmClient(
-                http, config.Value,
-                new ConfigAuthResolver(authStore, config.Value.Id),
+            var http = httpClientFactory.CreateClient($"provider:{loaded.Id}");
+            http.Timeout = TimeSpan.FromSeconds(loaded.Timeout);
+            // #195: configs are immutable — attach quirks via a sealed copy.
+            var sealedConfig = loaded.WithQuirks(ProviderCompatFlags.For(loaded.GetProviderId()));
+            builder.AddProvider(sealedConfig.Id, () => new OpenAiCompatibleLlmClient(
+                http, sealedConfig,
+                new ConfigAuthResolver(authStore, sealedConfig.Id),
                 modelCatalog,
                 loggerFactory.CreateLogger<OpenAiCompatibleLlmClient>()));
         }

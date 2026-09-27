@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Text.RegularExpressions;
 namespace Harbor.Abstractions.Permissions;
 /// <summary>
 ///     Permission ruleset for an agent or session.
@@ -24,8 +22,8 @@ namespace Harbor.Abstractions.Permissions;
 ///     <para>
 ///         Performance: rules are pre-sorted by specificity (descending) and Deny-first at
 ///         construction time so <see cref="Evaluate" /> can iterate the array directly without
-///         re-sorting on every call. Glob patterns are compiled to <see cref="Regex" /> once and
-///         cached in a process-wide cache keyed by pattern string.
+///         re-sorting on every call. Glob patterns are compiled to a Regex once and
+///         cached in a process-wide bounded cache (LRU-evicted; see PermissionRule.RegexCacheProvider).
 ///     </para>
 /// </remarks>
 public sealed record PermissionRuleset
@@ -405,11 +403,23 @@ public sealed record PermissionRule(
     PermissionAction Action)
 {
     /// <summary>
-    ///     Process-wide cache of compiled glob regexes. Patterns are highly repeated across
+    ///     Shared compiled-glob cache (#195): bounded LRU
+    ///     (<see cref="BoundedPatternRegexCache.DefaultCapacity" /> entries) instead of the
+    ///     former unbounded process-lifetime dictionary. Patterns are highly repeated across
     ///     rulesets (most agents share the same builtin patterns), so caching avoids re-compiling
-    ///     the same regex on every <see cref="MatchesPattern" /> call.
+    ///     the same regex on every <see cref="MatchesPattern" /> call without growing without limit.
     /// </summary>
-    private static readonly ConcurrentDictionary<string, Regex> RegexCache = new();
+    /// <remarks>
+    ///     Replaceable (e.g. with a smaller <see cref="BoundedPatternRegexCache" />) for
+    ///     test isolation; restore the previous instance afterwards.
+    /// </remarks>
+    private static IPatternRegexCache _regexCache = new BoundedPatternRegexCache();
+
+    public static IPatternRegexCache RegexCacheProvider
+    {
+        get => _regexCache;
+        set => _regexCache = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     /// <summary>
     ///     Returns <see langword="true" /> if this rule applies to the given permission name
@@ -438,18 +448,11 @@ public sealed record PermissionRule(
         return GetOrCompileRegex(Pattern.Replace('\\', '/')).IsMatch(argPath.Replace('\\', '/'));
     }
 
-    private static Regex GetOrCompileRegex(string pattern)
+    private static System.Text.RegularExpressions.Regex GetOrCompileRegex(string pattern)
     {
-        // GetOrAdd factory is invoked only on cache miss; the closure allocation is
-        // amortized across all subsequent matches of the same pattern.
-        return RegexCache.GetOrAdd(pattern, static p =>
-        {
-            string regexPattern = "^" +
-                                  Regex.Escape(p)
-                                      .Replace("\\*", ".*")
-                                      .Replace("\\?", ".") + "$";
-            return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(5));
-        });
+        // Delegates to the injectable bounded cache; the closure allocation of
+        // the old GetOrAdd factory is gone — compilation lives in the cache.
+        return RegexCacheProvider.GetOrAdd(pattern);
     }
 }
 

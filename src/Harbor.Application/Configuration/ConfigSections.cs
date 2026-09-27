@@ -13,7 +13,9 @@ public sealed record IdentityConfig(
     public const string FallbackModel = "kilocode/tencent/hy3:free";
     public const string FallbackAgent = "code";
 
-    public static readonly IdentityConfig Default = new(
+    // #195: fresh instance per access — a shared static would turn any
+    // future mutable member into a process-wide global variable.
+    public static IdentityConfig Default => new(
         ProviderId.Create(FallbackProvider),
         ModelRef.Create(ProviderId.Create(FallbackProvider), "tencent/hy3:free".Split('/')[1]),
         AgentName.Create(FallbackAgent));
@@ -47,7 +49,8 @@ public sealed record ToolingConfig(
     IReadOnlyList<string> DisabledTools,
     [property: JsonPropertyName("autoReloadPlugins")] bool AutoReloadPlugins = true)
 {
-    public static readonly ToolingConfig Default = new(
+    // #195: fresh instance per access (see IdentityConfig.Default).
+    public static ToolingConfig Default => new(
         Array.Empty<string>(),
         Array.Empty<string>(),
         AutoReloadPlugins: true);
@@ -65,7 +68,8 @@ public sealed record ToolingConfig(
 /// </summary>
 public sealed record CostConfig(decimal Limit)
 {
-    public static readonly CostConfig Default = new(10m);
+    // #195: fresh instance per access (see IdentityConfig.Default).
+    public static CostConfig Default => new(10m);
 
     public Result<CostConfig> Validate()
     {
@@ -82,7 +86,8 @@ public sealed record CompactionConfig(
     [property: JsonPropertyName("keepRecentTokens")] int KeepRecentTokens,
     [property: JsonPropertyName("tailTurns")] int TailTurns)
 {
-    public static readonly CompactionConfig Default = new(16384, 20000, 2);
+    // #195: fresh instance per access (see IdentityConfig.Default).
+    public static CompactionConfig Default => new(16384, 20000, 2);
 
     public Result<CompactionConfig> Validate()
     {
@@ -116,7 +121,8 @@ public sealed record CellForgeUiConfig(
     [property: JsonPropertyName("enabled")] bool Enabled = true,
     [property: JsonPropertyName("syncUpdates")] bool SyncUpdates = true)
 {
-    public static readonly CellForgeUiConfig Default = new();
+    // #195: fresh instance per access (see IdentityConfig.Default).
+    public static CellForgeUiConfig Default => new();
 }
 
 /// <summary>
@@ -131,7 +137,10 @@ public sealed record PresentationConfig(
     [JsonPropertyName("consoleEx")]
     public CellForgeUiConfig CellForge { get; init; } = CellForgeUiConfig.Default;
 
-    public static readonly PresentationConfig Default = new("ansi", "jsonl", false);
+    // #195: fresh instance per access (see IdentityConfig.Default).
+    // The nested CellForge snapshot is immutable (two bools), so sharing
+    // the value is safe; the outer record is never the same reference twice.
+    public static PresentationConfig Default => new("ansi", "jsonl", false);
 
     public Result<PresentationConfig> Validate()
     {
@@ -150,7 +159,8 @@ public sealed record RunLimitsConfig(
     int MaxSteps,
     int DefaultMaxSteps = 50)
 {
-    public static readonly RunLimitsConfig Default = new(50);
+    // #195: fresh instance per access (see IdentityConfig.Default).
+    public static RunLimitsConfig Default => new(50);
 
     public Result<RunLimitsConfig> Validate()
     {
@@ -168,7 +178,8 @@ public sealed record ProviderConfigEntry(
     [property: JsonPropertyName("apiType")] string ApiType,
     [property: JsonPropertyName("modelsUrl")] string? ModelsUrl)
 {
-    public static readonly ProviderConfigEntry Default = new(string.Empty, "openai-compatible", null);
+    // #195: fresh instance per access (see IdentityConfig.Default).
+    public static ProviderConfigEntry Default => new(string.Empty, "openai-compatible", null);
 
     public Result<ProviderConfigEntry> Validate()
     {
