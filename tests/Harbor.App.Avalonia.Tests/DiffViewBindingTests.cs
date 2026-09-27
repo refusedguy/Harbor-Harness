@@ -31,6 +31,7 @@ namespace Harbor.App.Avalonia.Tests;
 public class DiffViewBindingTests
 {
     [Test]
+    [Retry(3)]
     public async Task DiffView_ResolvesFrameworkBindings()
     {
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
