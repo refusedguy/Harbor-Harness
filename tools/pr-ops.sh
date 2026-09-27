@@ -12,6 +12,7 @@
 #   ./tools/pr-ops.sh pr-fails <run-id> <job-id>        # failed test names
 #   ./tools/pr-ops.sh pr-build-errors <run-id> <job-id> # CS/MSB/analyzer errors
 #   ./tools/pr-ops.sh pr-mergeable [N...]       # mergeable flags
+#   ./tools/pr-ops.sh log <run-id> <job-id>              # full failed-step log to stdout (ANSI stripped)
 #   ./tools/pr-ops.sh job-log <job-id> [outfile]        # download job log
 #   ./tools/pr-ops.sh pr-merge-if-green <N>     # merge only if fully green
 set -euo pipefail
@@ -32,12 +33,17 @@ cmd_sweep() {
   done
 }
 
+# strip ANSI color codes; logs are full of them and they garble grep output
+strip_ansi() {
+  sed -e 's/\x1b\[[0-9;]*[a-zA-Z]//g'
+}
+
 # print failed test names from a completed job log
 cmd_fails() {
   local run_id="${1:?usage: pr-fails <run-id> <job-id>}"
   local job_id="${2:?usage: pr-fails <run-id> <job-id>}"
   gh run view "$run_id" --job "$job_id" --log-failed 2>&1 \
-    | grep -aE "failed.*[0-9]+(ms|s)\)" | head -n 10 || true
+    | strip_ansi | grep -aE "failed.*[0-9]+(ms|s)\)" | head -n 10 || true
 }
 
 # print unique compiler/analyzer errors from a failed build job log
@@ -45,7 +51,14 @@ cmd_build_errors() {
   local run_id="${1:?usage: pr-build-errors <run-id> <job-id>}"
   local job_id="${2:?usage: pr-build-errors <run-id> <job-id>}"
   gh run view "$run_id" --job "$job_id" --log-failed 2>&1 \
-    | grep -aE "error (CS|MSB|[A-Z]+[0-9]+)" | sort -u | head -n 10 || true
+    | strip_ansi | grep -aE "error (CS|MSB|[A-Z]+[0-9]+)" | sort -u | head -n 10 || true
+}
+
+# dump the whole failed-step log of a job to stdout (no truncation, ANSI stripped)
+cmd_log() {
+  local run_id="${1:?usage: log <run-id> <job-id>}"
+  local job_id="${2:?usage: log <run-id> <job-id>}"
+  gh run view "$run_id" --job "$job_id" --log-failed 2>&1 | strip_ansi
 }
 
 cmd_mergeable() {
@@ -91,6 +104,7 @@ if [ "${1:-}" = pr-sweep ]; then shift; cmd_sweep "$@"
 elif [ "${1:-}" = pr-fails ]; then shift; cmd_fails "$@"
 elif [ "${1:-}" = pr-build-errors ]; then shift; cmd_build_errors "$@"
 elif [ "${1:-}" = pr-mergeable ]; then shift; cmd_mergeable "$@"
+elif [ "${1:-}" = log ]; then shift; cmd_log "$@"
 elif [ "${1:-}" = job-log ]; then shift; cmd_job_log "$@"
 elif [ "${1:-}" = pr-merge-if-green ]; then shift; cmd_merge_if_green "$@"
 else echo "unknown command: ${1:-<empty>}" >&2; exit 2
