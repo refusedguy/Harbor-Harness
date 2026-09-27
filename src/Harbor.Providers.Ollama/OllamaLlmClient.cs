@@ -569,7 +569,7 @@ public sealed class OllamaLlmClient : ILlmClient
 
         // Rare path (object-shaped arguments): re-serialize canonically.
         // ArrayBufferWriter pools internally, so this stays off the LOH.
-        using var stream = new ArrayBufferWriter<byte>();
+        var stream = new ArrayBufferWriter<byte>();
         using (var writer = new Utf8JsonWriter(stream))
         {
             CopyValue(ref reader, writer);
