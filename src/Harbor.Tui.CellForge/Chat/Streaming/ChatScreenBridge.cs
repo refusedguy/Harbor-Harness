@@ -751,6 +751,18 @@ public sealed class ChatScreenBridge : IDisposable
 
     public bool TryRouteApprovalClick(in Input.MouseEvent mouse) => _gates.TryRouteApprovalClick(mouse);
 
+    /// <summary>
+    /// Optional TEA store passthrough (epic C contour): when set, the gate
+    /// router steps diff navigation through the store instead of executing
+    /// the diff view-model commands directly. See
+    /// <see cref="ApprovalGateRouter.Store"/>.
+    /// </summary>
+    public UiStore? Store
+    {
+        get => _gates.Store;
+        set => _gates.Store = value;
+    }
+
     public void Dispose() => Subscription.Dispose();
 
     public void RouteDiffNavigation(DiffPreviewViewModel diffVm, ChatAction action) =>

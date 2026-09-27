@@ -33,6 +33,15 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     private readonly ConcurrentQueue<ApprovalGateView> _gateQueue = new();
 
     /// <summary>
+    /// Optional TEA store (epic C contour): when set, diff-navigation steps
+    /// dispatch scroll <see cref="UiMsg.KeyInput"/> through the store instead of
+    /// executing the diff view-model commands directly — the reducer owns the
+    /// meaning, every renderer shares one experience. Null keeps the legacy
+    /// view-only path (tests, hosts without a composed store).
+    /// </summary>
+    public UiStore? Store { get; set; }
+
+    /// <summary>
     /// Thread-safe approval request for the agent-loop side of the seam:
     /// creates a gate the caller can await via <c>DecisionRecorded</c>, and
     /// enqueues it so the frame loop appends it onto the timeline on its next
@@ -148,8 +157,33 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
         return true;
     }
 
+    /// <summary>
+    /// Steps through the diff preview: down/next on
+    /// <see cref="ChatAction.ScrollDownLine"/>, up/previous on
+    /// <see cref="ChatAction.ScrollUpLine"/>. With <see cref="Store"/> set the
+    /// step travels as a store <see cref="UiMsg.KeyInput"/> (the diff
+    /// view-model is untouched); otherwise it falls back to the legacy
+    /// view-model commands. Other actions are ignored.
+    /// </summary>
     public void RouteDiffNavigation(DiffPreviewViewModel diffVm, ChatAction action)
     {
+        if (Store is { } store)
+        {
+            UiMsg? msg = action switch
+            {
+                ChatAction.ScrollDownLine => new UiMsg.KeyInput(
+                    ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down)),
+                ChatAction.ScrollUpLine => new UiMsg.KeyInput(
+                    ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up)),
+                _ => null,
+            };
+            if (msg is not null)
+            {
+                _ = store.Dispatch(msg);
+                return;
+            }
+        }
+
         if (diffVm is null) return;
         switch (action)
         {

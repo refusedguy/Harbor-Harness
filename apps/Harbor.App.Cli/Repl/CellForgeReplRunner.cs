@@ -111,6 +111,7 @@ internal sealed class CellForgeReplRunner(
     private readonly VirtualizedChatTimeline _timeline = screen.Timeline.Timeline;
     private readonly CommandPaletteView _palette = new();
     private readonly LeaderKeyRouter _leader = new();
+    private readonly ChatKeyMap _keyMap = new();
     private readonly VimComposerMode _vim = new();
     private readonly SelectionEngine _selection = new();
     private SlashCommandDispatcher? _dispatcher;
@@ -604,12 +605,16 @@ internal sealed class CellForgeReplRunner(
         // (changed-only, no per-frame alloc). Nothing reads it yet — the
         // timeline keeps local scroll until the golden-backed flip.
         // frameTotal is computed above for the status snapshot; reuse it here.
+        // The trailing ScrollClamp mirrors SpectreTuiRenderer.RenderCore: the
+        // reducer's Viewport/HistoryMeasured arms do not clamp, so a shrunken
+        // viewport would otherwise leave a stale out-of-range offset.
         if (frameTotal != _lastStoreTotal || rows != _lastStoreViewport)
         {
             _lastStoreTotal = frameTotal;
             _lastStoreViewport = rows;
             _ = _replStore.Dispatch(new UiMsg.Viewport(rows));
             _ = _replStore.Dispatch(new UiMsg.HistoryMeasured(frameTotal));
+            _ = _replStore.Dispatch(new UiMsg.ScrollClamp(Math.Max(0, frameTotal - rows)));
         }
         _ = _timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, _timelineViewportH);
 
@@ -854,12 +859,18 @@ internal sealed class CellForgeReplRunner(
 
                 // The sanitized buffer IS the preview — the composer shows the
                 // cleaned text; submit routes exactly what the user sees.
+                // Store mirror (epic C): the TEA input box tracks the same
+                // draft the composer paints (cf. CellForgeTuiRenderer sync).
                 _ = _composer.Buffer.InsertText(sanitized.Text);
+                _ = _replStore.Dispatch(new UiMsg.InputText(_composer.Buffer.SnapshotText()));
                 break;
             }
 
             case InputEventKind.Resize:
                 // Policy lives in ScreenSession: shrink ⇒ erase-in-display next frame.
+                // Geometry (Viewport/HistoryMeasured/ScrollClamp) flows into the
+                // TEA store on the next RenderFrameAsync (changed-only) — the
+                // layout the clamp depends on settles only inside PrepareFrame.
                 int resizeW = Math.Max(1, evt.Resize.Width);
                 screenSession.Resize(resizeW, Math.Max(1, evt.Resize.Height));
                 ApplySidebarResizePolicy(resizeW);
@@ -902,10 +913,22 @@ internal sealed class CellForgeReplRunner(
                 break;
 
             case InputEventKind.Mouse when evt.Mouse.Type == MouseEventType.WheelUp:
+                // Store-first scroll (epic C): one line-msg per row so the TEA
+                // store tracks the same offset the timeline paints locally.
+                for (int i = 0; i < WheelScrollLines; i++)
+                {
+                    _ = _replStore.Dispatch(VirtualizedChatTimeline.LineUpMsg());
+                }
+
                 _timeline.ScrollBy(-WheelScrollLines);
                 break;
 
             case InputEventKind.Mouse when evt.Mouse.Type == MouseEventType.WheelDown:
+                for (int i = 0; i < WheelScrollLines; i++)
+                {
+                    _ = _replStore.Dispatch(VirtualizedChatTimeline.LineDownMsg());
+                }
+
                 _timeline.ScrollBy(WheelScrollLines);
                 break;
         }
@@ -967,8 +990,15 @@ internal sealed class CellForgeReplRunner(
         // Leader chords (ctrl+x …): armed router consumes the leader press and
         // the chord; resolved sync actions run here, slash chords and quick-
         // switch digits hand off to the frame loop for async execution.
+        // Msg-bound chords (scroll anchors) additionally dual-write their UiMsg
+        // into the TEA store — same dual-write as agent events in LoopAsync.
         if (_leader.HandleKey(key, Environment.TickCount64))
         {
+            if (_leader.TakePendingMsg() is { } chordMsg)
+            {
+                _ = _replStore.Dispatch(chordMsg);
+            }
+
             if (_leaderSlash is { } leaderSlash)
             {
                 _leaderSlash = null;
@@ -991,6 +1021,24 @@ internal sealed class CellForgeReplRunner(
         {
             _wake.Writer.TryWrite(null);
             return;
+        }
+
+        // Epic C dual-write: every key that reaches the composer is resolved
+        // through the central ChatKeyMap (char-aware Binding + None-exact
+        // Matches live there — this shell adds no key→action branches) and
+        // dual-written to the TEA store as KeyInput. Intercepts above
+        // (palette/leader/gates) consumed their keys first so they never
+        // pollute store input. The returned effect is sunk on purpose: submit
+        // executes through Pipeline.SubmitAsync on the composer buffer below,
+        // abort through HandleAbortGesture, quit through the Ctrl+C×2 gesture —
+        // running them from the store effect too would fire every gesture twice.
+        if (KeyEventMapper.ToUiKey(key) is { } uiKey)
+        {
+            var resolved = _keyMap.Resolve(uiKey);
+            if (resolved != ChatAction.None)
+            {
+                _ = _replStore.Dispatch(new UiMsg.KeyInput(resolved, uiKey));
+            }
         }
 
         var action = _vim.HandleKey(key, _composer);
@@ -1103,11 +1151,15 @@ internal sealed class CellForgeReplRunner(
 
     /// <summary>Sessions already checked for auto-titling (one check per session lifetime).</summary>
     /// <summary>Leader-chord bindings: scroll anchors, palette, vim, slash
-    /// shortcuts, and quick-switch digits 1..9 (recent sessions, sprint UI-V2 P2.2).</summary>
+    /// shortcuts, and quick-switch digits 1..9 (recent sessions, sprint UI-V2 P2.2).
+    /// Scroll anchors are msg-bound (epic C): resolving them stages a store
+    /// KeyInput the frame loop dispatches — the reducer owns the meaning.</summary>
     private void BindLeaderKeys()
     {
-        _leader.Bind('g', () => { _timeline.ScrollToTop(); _wake.Writer.TryWrite(null); });
-        _leader.Bind('e', () => { _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH)); _wake.Writer.TryWrite(null); });
+        _leader.Bind('g', VirtualizedChatTimeline.ScrollTopMsg(),
+            () => { _timeline.ScrollToTop(); _wake.Writer.TryWrite(null); });
+        _leader.Bind('e', VirtualizedChatTimeline.ScrollBottomMsg(),
+            () => { _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH)); _wake.Writer.TryWrite(null); });
         _leader.Bind('p', () => { OpenCommandPalette(); _wake.Writer.TryWrite(null); });
         _leader.Bind('v', () => { ToggleVimMode(); _wake.Writer.TryWrite(null); });
         _leader.Bind('h', () => _leaderSlash = "help");
