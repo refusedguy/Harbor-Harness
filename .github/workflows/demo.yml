@@ -2,19 +2,11 @@
 # command or the VHS tapes change. Local equivalent:  vhs demo/hero.tape
 # (or HARBOR_DEMO=1 dotnet test tests/Harbor.Tui.E2E.Tests — TuiDemoRecorder).
 #
-# PRs: GIFs are built and uploaded as an artifact for review.
-# Push to dev/master: the regenerated GIFs are committed straight back to
-# assets/demo/ so the README always shows the current renderer output.
+# PRs: NOT run (saves 8-14 min per PR; GIF review artifacts were never
+# inspected — regeneration happens on merge to dev/master instead).
 name: demo-gifs
 
 on:
-  pull_request:
-    paths:
-      - "src/Harbor.Tui.**"
-      - "src/Harbor.Terminal.Abstractions/**"
-      - "apps/Harbor.App.Cli/**"
-      - "demo/*.tape"
-      - ".github/workflows/demo.yml"
   push:
     branches: [dev, master]
     paths:
