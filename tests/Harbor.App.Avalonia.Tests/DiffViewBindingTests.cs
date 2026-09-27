@@ -1,5 +1,7 @@
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.VisualTree;
+using Harbor.App.Avalonia;
 using Harbor.App.Avalonia.Views;
 using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -19,14 +21,11 @@ namespace Harbor.App.Avalonia.Tests;
 ///     against it.
 /// </summary>
 /// <remarks>
-///     Deliberately session-free: the boxes/button/rows are declared directly
-///     in the axaml (no templates/styles needed to realize them), inflation
-///     is dispatcher-free (see <c>ViewInflationTests.DiffView_Inflates</c>)
-///     and plain-property bindings evaluate synchronously on
-///     <c>DataContext</c> set. A previous revision booted a
-///     <c>HeadlessUnitTestSession</c> here and flaked in CI
-///     (<c>EnsureIsolatedApplication</c> racing a foreign UI thread) — the
-///     session bought nothing, so it goes.
+///     Deliberately minimal: no <c>Window.Show</c>, no layout pass, no render
+///     timer — bindings evaluate synchronously when <c>DataContext</c> is set
+///     on the UI thread, so realized containers are not needed. Keeps clear
+///     of the known Avalonia 12 headless flakes (see
+///     <c>ViewInflationTests</c> known-issue notes).
 /// </remarks>
 [NotInParallel("avalonia-headless")]
 public class DiffViewBindingTests
@@ -34,33 +33,37 @@ public class DiffViewBindingTests
     [Test]
     public async Task DiffView_ResolvesFrameworkBindings()
     {
-        var vm = new DiffViewModel(NullLogger<DiffViewModel>.Instance)
+        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
+        await session.Dispatch(async () =>
         {
-            LeftText = "line1\nline-left",
-            RightText = "line1\nline-right",
-        };
-        vm.ComputeCommand.Execute(null);
+            var vm = new DiffViewModel(NullLogger<DiffViewModel>.Instance)
+            {
+                LeftText = "line1\nline-left",
+                RightText = "line1\nline-right",
+            };
+            vm.ComputeCommand.Execute(null);
 
-        var view = new DiffView { DataContext = vm };
+            var view = new DiffView { DataContext = vm };
 
-        // LeftText/RightText → the two input boxes (empty on silent no-resolve).
-        var texts = view.GetVisualDescendants()
-            .OfType<TextBox>()
-            .Select(b => b.Text)
-            .ToList();
-        await Assert.That(texts.Contains(vm.LeftText)).IsTrue();
-        await Assert.That(texts.Contains(vm.RightText)).IsTrue();
+            // LeftText/RightText → the two input boxes (empty on silent no-resolve).
+            var texts = view.GetVisualDescendants()
+                .OfType<TextBox>()
+                .Select(b => b.Text)
+                .ToList();
+            await Assert.That(texts.Contains(vm.LeftText)).IsTrue();
+            await Assert.That(texts.Contains(vm.RightText)).IsTrue();
 
-        // ComputeCommand → Compute button (null on silent no-resolve).
-        var computeButton = view.GetVisualDescendants()
-            .OfType<Button>()
-            .Single(b => Equals(b.Content, "Compute"));
-        await Assert.That(computeButton.Command).IsSameReferenceAs(vm.ComputeCommand);
+            // ComputeCommand → Compute button (null on silent no-resolve).
+            var computeButton = view.GetVisualDescendants()
+                .OfType<Button>()
+                .Single(b => Equals(b.Content, "Compute"));
+            await Assert.That(computeButton.Command).IsSameReferenceAs(vm.ComputeCommand);
 
-        // Rows → row list (null source / zero items on silent no-resolve).
-        var rows = view.GetVisualDescendants().OfType<ItemsControl>().Single();
-        await Assert.That(rows.ItemsSource).IsSameReferenceAs(vm.Rows);
-        await Assert.That(rows.Items.Count).IsEqualTo(vm.Rows.Count);
-        await Assert.That(vm.Rows.Count).IsEqualTo(2);
+            // Rows → row list (null source / zero items on silent no-resolve).
+            var rows = view.GetVisualDescendants().OfType<ItemsControl>().Single();
+            await Assert.That(rows.ItemsSource).IsSameReferenceAs(vm.Rows);
+            await Assert.That(rows.Items.Count).IsEqualTo(vm.Rows.Count);
+            await Assert.That(vm.Rows.Count).IsEqualTo(2);
+        }, CancellationToken.None);
     }
 }
