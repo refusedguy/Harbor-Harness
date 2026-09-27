@@ -77,17 +77,11 @@ public sealed class McpResourceTool : ITool
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("server", out var sEl)
-            || sEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(sEl.GetString()))
-            return Result.Failure("Missing or empty 'server'.");
+        Result<string> server = JsonArgValidator.RequiredString(args, "server", "Missing or empty 'server'.");
+        if (server.IsFailure)
+            return server;
 
-        if (!args.TryGetProperty("uri", out var uEl)
-            || uEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(uEl.GetString()))
-            return Result.Failure("Missing or empty 'uri'.");
-
-        return Result.Success();
+        return JsonArgValidator.RequiredString(args, "uri", "Missing or empty 'uri'.");
     }
 
     /// <inheritdoc />

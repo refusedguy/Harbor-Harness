@@ -52,20 +52,15 @@ public sealed class ReadTool : ITool
 
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("path", out var pathEl)
-            || pathEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(pathEl.GetString()))
-            return Result.Failure("Missing or empty 'path'.");
+        Result path = JsonArgValidator.RequiredPath(args);
+        if (path.IsFailure)
+            return path;
 
-        if (args.TryGetProperty("offset", out var o) && o.ValueKind == JsonValueKind.Number
-                                                     && o.TryGetInt32(out int offset) && offset < 1)
-            return Result.Failure("'offset' must be >= 1.");
+        Result offset = JsonArgValidator.OptionalIntAtLeast(args, "offset", 1, "'offset' must be >= 1.");
+        if (offset.IsFailure)
+            return offset;
 
-        if (args.TryGetProperty("limit", out var l) && l.ValueKind == JsonValueKind.Number
-                                                    && l.TryGetInt32(out int limit) && limit < 1)
-            return Result.Failure("'limit' must be >= 1.");
-
-        return Result.Success();
+        return JsonArgValidator.OptionalIntAtLeast(args, "limit", 1, "'limit' must be >= 1.");
     }
 
     public async Task<ToolResult> ExecuteAsync(

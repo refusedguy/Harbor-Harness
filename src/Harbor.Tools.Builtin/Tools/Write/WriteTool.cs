@@ -42,16 +42,16 @@ public sealed class WriteTool : ITool
 
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("path", out var pathEl)
-            || pathEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(pathEl.GetString()))
-            return Result.Failure("Missing or empty 'path'.");
+        Result path = JsonArgValidator.RequiredPath(args);
+        if (path.IsFailure)
+            return path;
 
-        if (!args.TryGetProperty("content", out var contentEl)
-            || contentEl.ValueKind != JsonValueKind.String)
-            return Result.Failure("Missing required argument 'content'.");
+        Result<string> contentResult = JsonArgValidator.RequiredStringPresent(
+            args, "content", "Missing required argument 'content'.");
+        if (contentResult.IsFailure)
+            return contentResult;
 
-        string content = contentEl.GetString() ?? string.Empty;
+        string content = contentResult.Value;
         if (content.Length > MaxContentChars)
             return Result.Failure(
                 $"content too large ({content.Length} chars; max {MaxContentChars}).");

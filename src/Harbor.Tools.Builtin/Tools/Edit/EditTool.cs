@@ -63,34 +63,32 @@ public sealed class EditTool : ITool
 
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("path", out var pathEl)
-            || pathEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(pathEl.GetString()))
-            return Result.Failure("Missing or empty 'path'.");
+        Result path = JsonArgValidator.RequiredPath(args);
+        if (path.IsFailure)
+            return path;
 
-        bool hasSingle = args.TryGetProperty("oldString", out var os)
-                         && os.ValueKind == JsonValueKind.String
-                         && args.TryGetProperty("newString", out var ns)
-                         && ns.ValueKind == JsonValueKind.String;
-        bool hasMulti = args.TryGetProperty("edits", out var ed)
-                        && ed.ValueKind == JsonValueKind.Array
-                        && ed.GetArrayLength() > 0;
+        bool hasSingle = JsonArgValidator.HasString(args, "oldString")
+                         && JsonArgValidator.HasString(args, "newString");
+        bool hasMulti = JsonArgValidator.HasNonEmptyArray(args, "edits");
 
         if (!hasSingle && !hasMulti)
             return Result.Failure("Provide edits[] or both oldString and newString.");
 
-        if (hasSingle && string.IsNullOrEmpty(os.GetString()))
+        if (hasSingle && string.IsNullOrEmpty(JsonArgs.GetString(args, "oldString")))
             return Result.Failure("oldString must not be empty.");
 
         if (hasMulti)
         {
-            foreach (var e in ed.EnumerateArray())
+            foreach (var e in args.GetProperty("edits").EnumerateArray())
             {
-                if (!e.TryGetProperty("oldString", out var o) || o.ValueKind != JsonValueKind.String
-                                                              || string.IsNullOrEmpty(o.GetString()))
-                    return Result.Failure("Each edit needs non-empty oldString.");
-                if (!e.TryGetProperty("newString", out var n) || n.ValueKind != JsonValueKind.String)
-                    return Result.Failure("Each edit needs newString.");
+                Result oldString = JsonArgValidator.RequiredNonEmptyString(
+                    e, "oldString", "Each edit needs non-empty oldString.");
+                if (oldString.IsFailure)
+                    return oldString;
+                Result newString = JsonArgValidator.RequiredStringPresent(
+                    e, "newString", "Each edit needs newString.");
+                if (newString.IsFailure)
+                    return newString;
             }
         }
 

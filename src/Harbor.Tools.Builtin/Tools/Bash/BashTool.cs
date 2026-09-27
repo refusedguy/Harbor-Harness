@@ -37,14 +37,9 @@ public sealed class BashTool : ITool
                                                                       }
                                                                       """);
 
-    public Result ValidateArguments(JsonElement args)
-    {
-        if (!args.TryGetProperty("command", out var cmdEl) || cmdEl.ValueKind != JsonValueKind.String)
-            return Result.Failure("Missing required argument 'command'.");
-        if (string.IsNullOrWhiteSpace(cmdEl.GetString()))
-            return Result.Failure("'command' cannot be empty.");
-        return Result.Success();
-    }
+    public Result ValidateArguments(JsonElement args) =>
+        JsonArgValidator.RequiredNonBlankString(
+            args, "command", "Missing required argument 'command'.", "'command' cannot be empty.");
 
     public async Task<ToolResult> ExecuteAsync(
         JsonElement args,

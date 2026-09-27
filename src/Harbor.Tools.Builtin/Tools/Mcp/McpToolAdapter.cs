@@ -32,12 +32,8 @@ public sealed class McpToolAdapter : ITool
         }
         """);
 
-    public Result ValidateArguments(JsonElement args)
-    {
-        if (args.TryGetProperty("arguments", out var a) && a.ValueKind != JsonValueKind.Object)
-            return Result.Failure("'arguments' must be a JSON object.");
-        return Result.Success();
-    }
+    public Result ValidateArguments(JsonElement args) =>
+        JsonArgValidator.OptionalObject(args, "arguments", "'arguments' must be a JSON object.");
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
     {

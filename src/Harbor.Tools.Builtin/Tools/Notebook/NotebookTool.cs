@@ -102,12 +102,11 @@ public sealed class NotebookTool : ITool
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
     {
-        if (!args.TryGetProperty("action", out var aEl)
-            || aEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(aEl.GetString()))
-            return Result.Failure("Missing or empty 'action'.");
+        Result<string> actionResult = JsonArgValidator.RequiredString(args, "action", "Missing or empty 'action'.");
+        if (actionResult.IsFailure)
+            return actionResult;
 
-        string action = aEl.GetString()!;
+        string action = actionResult.Value;
         var parsed = ParseAction(action);
         if (parsed is null)
             return Result.Failure($"Unknown action '{action}'. Valid: get, set, add, clear, list.");
@@ -119,19 +118,21 @@ public sealed class NotebookTool : ITool
 
         if (command.RequiresKey)
         {
-            if (!args.TryGetProperty("key", out var kEl)
-                || kEl.ValueKind != JsonValueKind.String
-                || string.IsNullOrWhiteSpace(kEl.GetString()))
-                return Result.Failure($"Action '{action}' requires non-empty 'key'.");
-            if (kEl.GetString()!.Length > NoteLimits.MaxKeyChars)
+            Result<string> keyResult = JsonArgValidator.RequiredString(
+                args, "key", $"Action '{action}' requires non-empty 'key'.");
+            if (keyResult.IsFailure)
+                return keyResult;
+            if (keyResult.Value.Length > NoteLimits.MaxKeyChars)
                 return Result.Failure($"'key' too long (max {NoteLimits.MaxKeyChars} chars).");
         }
 
         if (command.RequiresContent)
         {
-            if (!args.TryGetProperty("content", out var cEl) || cEl.ValueKind != JsonValueKind.String)
-                return Result.Failure($"Action '{action}' requires 'content' string.");
-            if (cEl.GetString()!.Length > NoteLimits.MaxContentChars)
+            Result<string> contentResult = JsonArgValidator.RequiredStringPresent(
+                args, "content", $"Action '{action}' requires 'content' string.");
+            if (contentResult.IsFailure)
+                return contentResult;
+            if (contentResult.Value.Length > NoteLimits.MaxContentChars)
                 return Result.Failure($"'content' too long (max {NoteLimits.MaxContentChars} chars).");
         }
 
