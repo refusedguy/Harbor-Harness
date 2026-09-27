@@ -39,8 +39,7 @@ internal interface IReplHost
 
     /// <summary>
     ///     Panel registry for the <c>/panels</c> picker (list + toggle).
-    ///     Null on hosts without panel UI (tests) — the command falls back
-    ///     to a text line instead of failing.
+    ///     Null in tests — the command stays a silent no-op instead of failing.
     /// </summary>
     IPanelRegistry? PanelRegistry { get; }
 

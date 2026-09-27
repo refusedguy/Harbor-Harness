@@ -29,7 +29,8 @@ internal sealed class PanelsCommand : IReplCommand
         var registry = host.PanelRegistry;
         if (registry is null)
         {
-            host.Bridge.AppendSystemLine("Panels: not available in this build.");
+            // Tests-only path: production hosts always compose a registry.
+            // Stay silent (no Bridge dependency) instead of failing.
             host.WakeUp();
             return Task.CompletedTask;
         }
