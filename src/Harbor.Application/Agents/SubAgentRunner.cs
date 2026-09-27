@@ -125,49 +125,59 @@ public sealed class SubAgentRunner(
 
         var context = new DefaultSessionContext(session, messages.Value, store, steering);
 
-        // Persist the parent's task as the only user turn of this isolated session
-        // (mirrors DefaultAgent.PromptAsync, F14: memory + store in one step).
-        var userMessage = new UserMessage(
-            Guid.NewGuid().ToString("N"),
-            session.Id,
-            DateTimeOffset.UtcNow,
-            request.Prompt,
-            agent.Name.Value,
-            agent.Model);
-        await context.AppendMessageAsync(userMessage, ct).ConfigureAwait(false);
-
-        var run = await loop.RunAsync(context, agent, ct).ConfigureAwait(false);
-        if (run.IsFailure)
+        try
         {
-            logger.LogWarning(
-                "Sub-agent run ended abnormally: agent={Agent} session={SessionId} error={Error}",
-                agent.Name.Value, session.Id, run.Error);
-            await MarkStatusAsync(session, SessionStatus.Error, ct).ConfigureAwait(false);
-            return Result.Failure<SubAgentRunResult>(
-                $"Sub-agent '{agent.Name.Value}' failed: {run.Error}. Its partial history is preserved in session {session.Id}.");
+            // Persist the parent's task as the only user turn of this isolated session
+            // (mirrors DefaultAgent.PromptAsync, F14: memory + store in one step).
+            var userMessage = new UserMessage(
+                Guid.NewGuid().ToString("N"),
+                session.Id,
+                DateTimeOffset.UtcNow,
+                request.Prompt,
+                agent.Name.Value,
+                agent.Model);
+            await context.AppendMessageAsync(userMessage, ct).ConfigureAwait(false);
+
+            var run = await loop.RunAsync(context, agent, ct).ConfigureAwait(false);
+            if (run.IsFailure)
+            {
+                logger.LogWarning(
+                    "Sub-agent run ended abnormally: agent={Agent} session={SessionId} error={Error}",
+                    agent.Name.Value, session.Id, run.Error);
+                await MarkStatusAsync(session, SessionStatus.Error, ct).ConfigureAwait(false);
+                return Result.Failure<SubAgentRunResult>(
+                    $"Sub-agent '{agent.Name.Value}' failed: {run.Error}. Its partial history is preserved in session {session.Id}.");
+            }
+
+            var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
+            // Storage failure vs empty history are distinct diagnoses: the
+            // store's own error travels verbatim, emptiness gets its own text.
+            if (history.IsFailure)
+                return Result.Failure<SubAgentRunResult>(
+                    $"Sub-agent '{agent.Name.Value}' history unreadable: {history.Error} (session {session.Id}).");
+            if (history.Value.Count == 0)
+                return Result.Failure<SubAgentRunResult>(
+                    $"Sub-agent '{agent.Name.Value}' finished without producing a final assistant message (session {session.Id}).");
+
+            var finalOutput = ExtractFinalOutput(history.Value);
+            if (string.IsNullOrWhiteSpace(finalOutput))
+                return Result.Failure<SubAgentRunResult>(
+                    $"Sub-agent '{agent.Name.Value}' finished without producing a final assistant message (session {session.Id}).");
+
+            logger.LogInformation(
+                "Sub-agent finished: agent={Agent} session={SessionId} messages={Count} outputChars={Length}",
+                agent.Name.Value, session.Id, history.Value.Count, finalOutput.Length);
+            await MarkStatusAsync(session, SessionStatus.Done, ct).ConfigureAwait(false);
+
+            return new SubAgentRunResult(session.Id, agent.Name.Value, Truncate(finalOutput), history.Value.Count);
         }
-
-        var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
-        // Storage failure vs empty history are distinct diagnoses: the
-        // store's own error travels verbatim, emptiness gets its own text.
-        if (history.IsFailure)
-            return Result.Failure<SubAgentRunResult>(
-                $"Sub-agent '{agent.Name.Value}' history unreadable: {history.Error} (session {session.Id}).");
-        if (history.Value.Count == 0)
-            return Result.Failure<SubAgentRunResult>(
-                $"Sub-agent '{agent.Name.Value}' finished without producing a final assistant message (session {session.Id}).");
-
-        var finalOutput = ExtractFinalOutput(history.Value);
-        if (string.IsNullOrWhiteSpace(finalOutput))
-            return Result.Failure<SubAgentRunResult>(
-                $"Sub-agent '{agent.Name.Value}' finished without producing a final assistant message (session {session.Id}).");
-
-        logger.LogInformation(
-            "Sub-agent finished: agent={Agent} session={SessionId} messages={Count} outputChars={Length}",
-            agent.Name.Value, session.Id, history.Value.Count, finalOutput.Length);
-        await MarkStatusAsync(session, SessionStatus.Done, ct).ConfigureAwait(false);
-
-        return new SubAgentRunResult(session.Id, agent.Name.Value, Truncate(finalOutput), history.Value.Count);
+        finally
+        {
+            // #201: the producer always completes the writer — a failing run must
+            // never hang a reader. The drain only uses TryRead today, but
+            // completion is the hang-proof contract for any future blocking read.
+            steering.Writer.TryComplete();
+        }
     }
 
     /// <summary>

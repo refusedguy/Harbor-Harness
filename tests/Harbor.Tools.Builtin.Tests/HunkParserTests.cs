@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
@@ -91,5 +92,32 @@ public class HunkParserTests
                 await Task.CompletedTask;
             })
             .Throws<FormatException>();
+    }
+
+    [Test]
+    public async Task TryParse_MalformedHeader_ReturnsFailure()
+    {
+        Result<List<Hunk>> result = HunkParser.TryParse("@@ nope\n line\n");
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("Malformed hunk header");
+    }
+
+    [Test]
+    public async Task TryParse_MalformedRange_ReturnsFailure()
+    {
+        Result<List<Hunk>> result = HunkParser.TryParse("@@ -x,y +1,1 @@\n-a\n+b\n");
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("Malformed hunk range");
+    }
+
+    [Test]
+    public async Task TryParse_ValidPatch_ReturnsSuccess()
+    {
+        Result<List<Hunk>> result = HunkParser.TryParse("@@ -1,1 +1,1 @@\n-a\n+b\n");
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Count).IsEqualTo(1);
     }
 }

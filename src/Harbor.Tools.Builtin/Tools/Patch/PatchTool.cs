@@ -273,12 +273,12 @@ public sealed class PatchTool : ITool
                 targetStart = originalCursor;
 
             // Allow some slack: if exact position doesn't match, search ±N lines.
-            int? resolvedStart = ResolveHunkStart(originalLines, h, targetStart);
-            if (resolvedStart is null)
+            // #201 C3: the drift search rides the Result railway — a miss carries
+            // the hunk line for the ToolResult.Error message instead of a null.
+            Result<int> resolvedStart = TryResolveHunkStart(originalLines, h, targetStart);
+            if (resolvedStart.IsFailure)
             {
-                return Result.Failure<PatchApplyState>(
-                    $"Hunk at line {h.OldStart} did not match (context mismatch). " +
-                    "File left untouched.");
+                return Result.Failure<PatchApplyState>(resolvedStart.Error);
             }
 
             // Copy unchanged lines up to hunk start.
@@ -384,9 +384,8 @@ public sealed class PatchTool : ITool
         if (sized.IsFailure)
             return Result.Failure<PatchInput>(sized.Error);
 
-        Result<List<Hunk>> parsed = Result.Try(
-                () => HunkParser.Parse(patch),
-                ex => $"Failed to parse patch: {ex.Message}");
+        Result<List<Hunk>> parsed = HunkParser.TryParse(patch)
+            .MapError(static e => $"Failed to parse patch: {e}");
         if (parsed.IsFailure)
             return Result.Failure<PatchInput>(parsed.Error);
 
@@ -397,7 +396,7 @@ public sealed class PatchTool : ITool
                 pi => $"Patch has too many hunks ({pi.Hunks.Count}; max {MaxPatchLines}).");
     }
 
-    private static int? ResolveHunkStart(string[] lines, Hunk h, int targetStart)
+    private static Result<int> TryResolveHunkStart(string[] lines, Hunk h, int targetStart)
     {
         // Try the targetStart as-is, then ±1, ±2, ±3 for whitespace/line-number drift.
         for (int delta = 0; delta <= 3; delta++)
@@ -407,10 +406,12 @@ public sealed class PatchTool : ITool
                 int candidate = targetStart + sign * delta;
                 if (candidate < 0 || candidate >= lines.Length) continue;
                 if (ContextMatches(lines, candidate, h))
-                    return candidate;
+                    return Result.Success(candidate);
             }
         }
-        return null;
+        return Result.Failure<int>(
+            $"Hunk at line {h.OldStart} did not match (context mismatch). " +
+            "File left untouched.");
     }
 
     private static bool ContextMatches(string[] lines, int start, Hunk h)

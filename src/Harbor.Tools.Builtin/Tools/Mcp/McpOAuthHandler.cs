@@ -80,32 +80,66 @@ public sealed class McpOAuthHandler
     /// <summary>Null-tolerant variant for transports: null when login is required.</summary>
     public async Task<string?> TryGetAccessTokenAsync(CancellationToken cancellationToken = default)
     {
+        Result<string> result = await TryGetAccessTokenResultAsync(cancellationToken).ConfigureAwait(false);
+        return result.Match(static token => token, _ => null);
+    }
+
+    /// <summary>
+    ///     Result railway for transports (#201 A6): a missing token is
+    ///     <c>Failure("LoginRequired: ...")</c>, a rejected refresh is
+    ///     <c>Failure("RefreshFailed: ...")</c> — transports log/surface the
+    ///     distinction instead of collapsing both into null.
+    /// </summary>
+    public async Task<Result<string>> TryGetAccessTokenResultAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+            var cached = _cache.Load(_server);
+            if (cached is not null && !cached.IsExpired(DateTimeOffset.UtcNow))
+                return Result.Success(cached.AccessToken);
+
+            if (cached?.RefreshToken is { Length: > 0 } refresh)
+            {
+                Result<string> refreshed = await TryRefreshResultAsync(refresh, cancellationToken).ConfigureAwait(false);
+                if (refreshed.IsSuccess)
+                    return refreshed;
+                if (refreshed.Error.StartsWith("RefreshFailed:", StringComparison.Ordinal))
+                    return refreshed;
+                // LoginRequired from the refresh path (no token endpoint) falls
+                // through to the login hint below.
+            }
+
+            return Result.Failure<string>($"LoginRequired: MCP server '{_server}' needs OAuth login. Run: harbor mcp login {_server}");
         }
-        catch (McpOAuthLoginRequiredException)
+        finally
         {
-            return null;
+            _gate.Release();
         }
     }
 
     private async Task<string?> TryRefreshAsync(string refreshToken, CancellationToken ct)
     {
+        Result<string> refreshed = await TryRefreshResultAsync(refreshToken, ct).ConfigureAwait(false);
+        return refreshed.Match(static token => token, _ => null);
+    }
+
+    private async Task<Result<string>> TryRefreshResultAsync(string refreshToken, CancellationToken ct)
+    {
         var endpoints = await McpOAuthFlow.DiscoverAsync(_httpFactory(), _serverUrl, _config, ct).ConfigureAwait(false);
         if (endpoints.TokenEndpoint is null)
-            return null;
+            return Result.Failure<string>($"LoginRequired: MCP server '{_server}' needs OAuth login. Run: harbor mcp login {_server}");
         string clientId = _config.ClientId ?? "harbor-mcp";
         var result = await McpOAuthFlow.RefreshAsync(
             _httpFactory(), endpoints.TokenEndpoint, clientId, _config.ClientSecret, refreshToken, ct).ConfigureAwait(false);
         if (result.IsFailure)
         {
             _logger?.LogWarning("MCP OAuth refresh failed for '{Server}': {Error}", _server, result.Error);
-            return null;
+            return Result.Failure<string>($"RefreshFailed: MCP OAuth refresh failed for '{_server}': {result.Error}");
         }
 
         _cache.Save(_server, result.Value);
-        return result.Value.AccessToken;
+        return Result.Success(result.Value.AccessToken);
     }
 
     /// <summary>
@@ -282,13 +316,22 @@ public sealed class McpLoopbackListener : IAsyncDisposable
         }
     }
 
-    public static string? ParseQuery(string requestLine, string key, string expectedState)
+    public static string? ParseQuery(string requestLine, string key, string expectedState) =>
+        ParseQueryResult(requestLine, key, expectedState).Match(static code => code, _ => null);
+
+    /// <summary>
+    ///     Result railway for the loopback redirect (#201 A7): a well-formed
+    ///     request with a mismatched state is <c>Success(null)</c> (retryable user
+    ///     error — same as before); an unparseable request line is
+    ///     <c>Failure("MalformedCallback: ...")</c> instead of a silent null.
+    /// </summary>
+    public static Result<string?> ParseQueryResult(string requestLine, string key, string expectedState)
     {
         // Request line: GET /callback?code=..&state=.. HTTP/1.1
         int q = requestLine.IndexOf('?');
         int sp = requestLine.IndexOf(' ', q < 0 ? 0 : q);
         if (q < 0 || sp < 0)
-            return null;
+            return Result.Failure<string?>("MalformedCallback: cannot parse the OAuth redirect request line.");
         string? code = null;
         string? state = null;
         foreach (string pair in requestLine.Substring(q + 1, sp - q - 1).Split('&', StringSplitOptions.RemoveEmptyEntries))
@@ -302,7 +345,7 @@ public sealed class McpLoopbackListener : IAsyncDisposable
             else if (k == "state") state = v;
         }
 
-        return state == expectedState ? code : null;
+        return Result.Success<string?>(state == expectedState ? code : null);
     }
 
     public ValueTask DisposeAsync()

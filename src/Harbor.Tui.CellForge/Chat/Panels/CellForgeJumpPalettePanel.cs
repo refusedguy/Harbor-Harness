@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Tools;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
 using Harbor.Ui.Framework.Panels;
@@ -167,11 +168,10 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
         {
             if (ctx.Services?.GetService<ISessionManager>() is ISessionManager manager)
             {
-                // OpenSessionAsync logs switch failures internally and returns
-                // false; OnlyOnFaulted only observes the exception (§FP-006).
-                _ = manager.OpenSessionAsync(selected.SessionId).ContinueWith(
-                    static t => _ = t.Exception,
-                    TaskContinuationOptions.OnlyOnFaulted);
+                // #201: fire-and-forget through the shared helper — the fault is
+                // observed (§FP-006) via OnlyOnFaulted. OpenSessionAsync logs
+                // switch failures internally and returns false.
+                TaskFireAndForget.Forget(manager.OpenSessionAsync(selected.SessionId));
             }
         }
 

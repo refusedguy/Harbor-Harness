@@ -326,11 +326,21 @@ public sealed class ToolDispatcher(
                         logger.LogWarning(ex, "Tool progress publish failed for {ToolCallId}", toolCall.Id);
                     }
                 },
-                // async/await instead of ContinueWith + .Result: the latter allocates a
-                // continuation Task and accesses .Result which (though safe here because
-                // the antecedent is already complete) is a foot-gun. The async state
-                // machine is slightly cheaper and clearer about intent.
-                async (req, c) => (await permissions.AskUserAsync(req, c).ConfigureAwait(false)).Value,
+                // #201 B1: the Ask callback rides the AskUserAsync railway (checked,
+                // never .Value) — a permission-subsystem failure fails closed to
+                // Deny instead of throwing into the tool run (§ROP-002 recurrence).
+                async (req, c) =>
+                {
+                    Result<PermissionResponse> asked = await permissions.AskUserAsync(req, c).ConfigureAwait(false);
+                    if (asked.IsFailure)
+                    {
+                        logger.LogWarning("Permission ask failed for {Permission} (call {CallId}); failing closed to Deny: {Error}",
+                            req.Permission, toolCall.Id, asked.Error);
+                        return new PermissionResponse(PermissionAction.Deny, false);
+                    }
+
+                    return asked.Value;
+                },
                 null!);
 
             // #43: bounded retry of transport-class failures. Only the bare

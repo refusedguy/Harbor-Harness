@@ -62,39 +62,49 @@ public sealed class McpOAuthTokenCache
     }
 
     /// <summary>Load cached tokens, or null when absent/corrupt.</summary>
-    public McpOAuthTokens? Load(string server)
+    public McpOAuthTokens? Load(string server) =>
+        LoadResult(server).Match(static tokens => tokens, _ => null);
+
+    /// <summary>
+    ///     Result railway for the token cache (#201 A6): a missing file is
+    ///     <c>Failure("CacheMiss: ...")</c>, an unreadable file is
+    ///     <c>Failure("CacheUnreadable: ...")</c>, a present-but-unusable file is
+    ///     <c>Failure("CacheCorrupt: ...")</c> — callers that care (transports,
+    ///     login hints) can tell "never logged in" from "cache went bad".
+    /// </summary>
+    public Result<McpOAuthTokens> LoadResult(string server)
     {
+        string path = PathFor(server);
+        if (!File.Exists(path))
+            return Result.Failure<McpOAuthTokens>($"CacheMiss: no cached OAuth tokens for MCP server '{server}'.");
         try
         {
-            string path = PathFor(server);
-            if (!File.Exists(path))
-                return null;
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
             var root = doc.RootElement;
             if (!root.TryGetProperty("access_token", out var at) || at.ValueKind != JsonValueKind.String)
-                return null;
+                return Result.Failure<McpOAuthTokens>($"CacheCorrupt: cached OAuth tokens for MCP server '{server}' have no access_token.");
             string? refresh = root.TryGetProperty("refresh_token", out var rt) && rt.ValueKind == JsonValueKind.String
                 ? rt.GetString()
                 : null;
             if (!root.TryGetProperty("expires_at_utc", out var exp) || exp.ValueKind != JsonValueKind.String
                 || !DateTimeOffset.TryParse(exp.GetString(), out var expires))
-                return null;
-            return new McpOAuthTokens(at.GetString()!, refresh, expires);
+                return Result.Failure<McpOAuthTokens>($"CacheCorrupt: cached OAuth tokens for MCP server '{server}' have no usable expiry.");
+            return Result.Success(new McpOAuthTokens(at.GetString()!, refresh, expires));
         }
-        catch (IOException)
-        {
-            // Best-effort cache — failures fall back to interactive login.
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Best-effort cache — failures fall back to interactive login.
-            return null;
-        }
-        catch (JsonException)
+        catch (JsonException ex)
         {
             // Corrupt cache file reads as empty.
-            return null;
+            return Result.Failure<McpOAuthTokens>($"CacheCorrupt: cached OAuth tokens for MCP server '{server}' are not valid JSON: {ex.Message}");
+        }
+        catch (IOException ex)
+        {
+            // Best-effort cache — failures fall back to interactive login.
+            return Result.Failure<McpOAuthTokens>($"CacheUnreadable: cannot read cached OAuth tokens for MCP server '{server}': {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            // Best-effort cache — failures fall back to interactive login.
+            return Result.Failure<McpOAuthTokens>($"CacheUnreadable: cannot read cached OAuth tokens for MCP server '{server}': {ex.Message}");
         }
     }
 

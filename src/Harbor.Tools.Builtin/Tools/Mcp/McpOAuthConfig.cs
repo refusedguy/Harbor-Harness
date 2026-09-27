@@ -50,12 +50,23 @@ public sealed record McpOAuthConfig
     public int RedirectPort { get; init; }
 
     /// <summary>Parse the <c>auth</c> block of an mcp.json remote entry. Unknown fields ignored.</summary>
-    public static McpOAuthConfig? Parse(JsonElement element)
+    public static McpOAuthConfig? Parse(JsonElement element) =>
+        ParseResult(element).Match(static cfg => cfg, _ => null);
+
+    /// <summary>
+    ///     Result railway for the <c>auth</c> block (#201 A6): a missing
+    ///     <c>auth</c> block is <c>Success(null)</c> (valid no-auth server — same
+    ///     as before); a non-object entry or <c>auth</c> block is a typed
+    ///     <c>Failure</c> instead of an indistinguishable null.
+    /// </summary>
+    public static Result<McpOAuthConfig?> ParseResult(JsonElement element)
     {
         if (element.ValueKind != JsonValueKind.Object)
-            return null;
-        if (!element.TryGetProperty("auth", out var auth) || auth.ValueKind != JsonValueKind.Object)
-            return null;
+            return Result.Failure<McpOAuthConfig?>("InvalidServerEntry: expected an object for the MCP server entry.");
+        if (!element.TryGetProperty("auth", out var auth))
+            return Result.Success<McpOAuthConfig?>(null);
+        if (auth.ValueKind != JsonValueKind.Object)
+            return Result.Failure<McpOAuthConfig?>("InvalidAuthBlock: 'auth' must be an object.");
 
         static string? Str(JsonElement o, string name) =>
             o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
@@ -75,7 +86,7 @@ public sealed record McpOAuthConfig
             && portEl.TryGetInt32(out int p) && p is > 0 and < 65536)
             port = p;
 
-        return new McpOAuthConfig
+        return Result.Success<McpOAuthConfig?>(new McpOAuthConfig
         {
             ClientId = Str(auth, "clientId"),
             ClientSecret = Str(auth, "clientSecret"),
@@ -84,6 +95,6 @@ public sealed record McpOAuthConfig
             TokenEndpoint = Str(auth, "tokenEndpoint"),
             RegistrationEndpoint = Str(auth, "registrationEndpoint"),
             RedirectPort = port,
-        };
+        });
     }
 }
