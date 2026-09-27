@@ -10,8 +10,15 @@ Session orchestration for the Harbor UI Framework — session factory, manager, 
 
 | File | Purpose |
 |------|---------|
-| `Sessions/ISessionManager.cs` | `ISessionManager` — create, open, close, list, switch sessions. |
-| `Sessions/SessionManager.cs` | `SessionManager` — in-memory session lifecycle with status/message-count events. |
+| `Sessions/ISessionManager.cs` | `ISessionManager` — composite of the three narrow contracts below (back-compat facade). |
+| `Sessions/ISessionQueries.cs` | `ISessionQueries` — read-only: `Active`, `ActiveContext`, `GetContext`, `GetGitInfo`. |
+| `Sessions/ISessionLifecycle.cs` | `ISessionLifecycle` — create/open/branch/delete/rename, git refresh, config rebind. |
+| `Sessions/ISessionStatusTracker.cs` | `ISessionStatusTracker` — per-session status + message-count pushes + events. |
+| `Sessions/SessionManager.cs` | `SessionManager` — thin delegation facade over the three services below. |
+| `Sessions/SessionEventRouter.cs` | `SessionEventRouter` — per-session contexts (live + tombstoned) + active pointer. |
+| `Sessions/SessionLifecycleService.cs` | `SessionLifecycleService` — session lifecycle orchestration. |
+| `Sessions/SessionStatusService.cs` | `SessionStatusService` — `ISessionStatusTracker` adapter over `SessionStatusTracker`. |
+| `Sessions/SessionOptionalFactories.cs` | `SessionOptionalFactories` — explicit Func-factories for host-only deps (no Service Locator). |
 | `Sessions/SessionFactory.cs` | `SessionFactory` — creates default, new, or branched sessions; resolves provider/model/agent from config. |
 | `Sessions/SessionSwitcher.cs` | `SessionSwitcher` — opens a session and hydrates its `UiStore` into a target store. |
 | `Sessions/SessionContext.cs` | `SessionContext` — binds a `Session`, `UiStore`, status, git branch, and hydration flag together. |
@@ -21,7 +28,10 @@ Session orchestration for the Harbor UI Framework — session factory, manager, 
 ## Public API summary
 
 - **`SessionFactory`**: `CreateDefaultAsync`, `CreateNewAsync`, `CreateBranchAsync`, `ResolveProviderModelFromConfigAsync`, `ResolveAgentDefinitionAsync`, `MessageToChatLine`.
-- **`SessionManager`**: `Active`, `ActiveContext`, `OpenAsync`, `CloseAsync`, `GetContext`, `GetStatus`, `SetStatus`, `NotifyMessageCount`, events for status/count changes.
+- **`SessionManager`**: thin facade — `Active`, `ActiveContext`, `GetContext`, `GetStatus`, `SetStatus`, `NotifyMessageCount`, `GetGitInfo`, `RefreshGitInfo`, lifecycle ops, events for status/count changes. All logic lives in the services below.
+- **`SessionEventRouter`**: live + tombstoned contexts, `GetOrCreateContext`, `ParkContext`, `ActiveContext`.
+- **`SessionLifecycleService`**: `EnsureDefaultSessionAsync`, `New/Open/Branch/Delete/RenameSessionAsync`, `RebindFromCommonConfigAsync`.
+- **`SessionStatusService`**: `ISessionStatusTracker` over the shared `SessionStatusTracker` singleton.
 - **`SessionSwitcher`**: `OpenAsync(session, targetStore)` — loads session and binds it.
 - **`SessionContext`**: `Session`, `Store`, `Status`, `GitBranch`, `GitIsDirty`, `StoreWasHydrated`, `MetaLine`.
 - **`IChatViewBinder.Rebind(UiStore)`**: reattaches chat view after a session switch.

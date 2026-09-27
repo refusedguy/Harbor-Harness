@@ -1,73 +1,11 @@
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
-using Harbor.Ui.Framework.Services;
 namespace Harbor.Ui.Framework.Sessions;
 /// <summary>
 ///     Facade that owns the active session and delegates creation, switching,
-///     git-tracking, and status-tracking to dedicated services.
+///     git-tracking, and status-tracking to dedicated services. Composite of
+///     <see cref="ISessionQueries" />, <see cref="ISessionLifecycle" />, and
+///     <see cref="ISessionStatusTracker" /> — prefer one of the narrow
+///     interfaces for new dependencies (ISP: issue #189).
 /// </summary>
-public interface ISessionManager
+public interface ISessionManager : ISessionQueries, ISessionLifecycle, ISessionStatusTracker
 {
-    /// <summary>The active session, or null if none.</summary>
-    Session? Active { get; }
-
-    /// <summary>
-    ///     The active <see cref="SessionContext" /> (holds the active session
-    ///     + its UiStore + status + git info), or null if none. Renderers
-    ///     bind to <see cref="SessionContext.Store" /> of this context and
-    ///     fall back to their private store when it is null.
-    /// </summary>
-    SessionContext? ActiveContext { get; }
-
-    /// <summary>Look up a session context by session id.</summary>
-    SessionContext? GetContext(string sessionId);
-
-    /// <summary>Get the status of a session.</summary>
-    SessionStatus GetStatus(string sessionId);
-
-    /// <summary>Set the status of a session.</summary>
-    void SetStatus(string sessionId, SessionStatus status);
-
-    /// <summary>Push a fresh message count for a session.</summary>
-    void NotifyMessageCount(string sessionId, int count);
-
-    /// <summary>Get git info for a session's working directory.</summary>
-    GitSessionInfo GetGitInfo(string sessionId);
-
-    /// <summary>Refresh git info for a session.</summary>
-    void RefreshGitInfo(string sessionId, string directory);
-
-    /// <summary>Create a default session if none exists yet and bind it to the agent.</summary>
-    Task EnsureDefaultSessionAsync();
-
-    /// <summary>Rebind the active session to freshly-loaded CommonConfig values.</summary>
-    Task RebindFromCommonConfigAsync();
-
-    /// <summary>Create a new session and switch to it.</summary>
-    /// <returns>The new active session, or a failure carrying the cause.</returns>
-    Task<Result<Session>> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null);
-
-    /// <summary>Open (switch to) an existing session.</summary>
-    Task<bool> OpenSessionAsync(string sessionId);
-
-    /// <summary>Branch the active session.</summary>
-    /// <returns>The new active branch, or a failure carrying the cause.</returns>
-    Task<Result<Session>> BranchActiveAsync();
-
-    /// <summary>Delete the given session.</summary>
-    Task<bool> DeleteSessionAsync(string sessionId);
-
-    /// <summary>Rename a session.</summary>
-    Task<bool> RenameSessionAsync(string sessionId, string newTitle);
-
-    /// <summary>
-    ///     Raised whenever a session's status changes.
-    /// </summary>
-    event Action<string, SessionStatus>? StatusChanged;
-
-    /// <summary>
-    ///     Raised whenever a session's message count is pushed.
-    /// </summary>
-    event Action<string, int>? MessageCountChanged;
 }
