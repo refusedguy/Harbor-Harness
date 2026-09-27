@@ -14,6 +14,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- #184: shared session-store source, linked like Harbor.Providers.Shared (no ProjectReference). -->
+    <Compile Include="..\Harbor.Storage.Shared\SessionLockStrip.cs" LinkBase="Shared" />
+    <Compile Include="..\Harbor.Storage.Shared\SessionStatsAggregator.cs" LinkBase="Shared" />
+    <Compile Include="..\Harbor.Storage.Shared\SessionStoreErrors.cs" LinkBase="Shared" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Storage.Jsonl.Tests"/>
     <InternalsVisibleTo Include="Harbor.Benchmarks"/>
   </ItemGroup>
