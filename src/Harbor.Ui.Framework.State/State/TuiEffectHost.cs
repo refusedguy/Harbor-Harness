@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
+using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.State;
 /// <summary>
@@ -66,11 +67,11 @@ public sealed class TuiEffectHost : ITuiEffectRunner
 
     public void Run(TuiEffect effect)
     {
-        // §FP-006 (RESOLVED): each fire-and-forget async branch now attaches a
-        // ContinueWith(OnlyOnFaulted) continuation that logs the exception. The
-        // Run contract stays synchronous (per ITuiEffectRunner.Run), so we still
-        // do NOT await — but unobserved-task exceptions are now surfaced via
-        // _logger instead of dying in TaskScheduler.UnobservedTaskException.
+        // §FP-006 (RESOLVED): each fire-and-forget async branch goes through the
+        // shared TaskFireAndForget helper (task tracking + OnlyOnFaulted log).
+        // The Run contract stays synchronous (per ITuiEffectRunner.Run), so we
+        // still do NOT await — but unobserved-task exceptions are now surfaced
+        // via _logger instead of dying in TaskScheduler.UnobservedTaskException.
         // Run synchronously is fine because the continuation just logs.
         //
         // Architecture audit v2 §3.4 (CT-002 RESOLVED): the inner async methods
@@ -83,19 +84,19 @@ public sealed class TuiEffectHost : ITuiEffectRunner
             case TuiEffect.None:
                 break;
             case TuiEffect.PromptAgent p:
-                PromptAsync(p.Text).ContinueWith(
-                    t => _logger?.LogError(t.Exception, "PromptAsync failed"),
-                    TaskContinuationOptions.OnlyOnFaulted);
+                TaskFireAndForget.Forget(
+                    PromptAsync(p.Text),
+                    ex => _logger?.LogError(ex, "PromptAsync failed"));
                 break;
             case TuiEffect.RunSlash s:
-                RunSlashAsync(s.Command).ContinueWith(
-                    t => _logger?.LogError(t.Exception, "RunSlashAsync failed for {Command}", s.Command),
-                    TaskContinuationOptions.OnlyOnFaulted);
+                TaskFireAndForget.Forget(
+                    RunSlashAsync(s.Command),
+                    ex => _logger?.LogError(ex, "RunSlashAsync failed for {Command}", s.Command));
                 break;
             case TuiEffect.AbortAgent:
-                AbortAsync().ContinueWith(
-                    t => _logger?.LogError(t.Exception, "AbortAsync failed"),
-                    TaskContinuationOptions.OnlyOnFaulted);
+                TaskFireAndForget.Forget(
+                    AbortAsync(),
+                    ex => _logger?.LogError(ex, "AbortAsync failed"));
                 break;
             case TuiEffect.QuitApp:
                 _store.Dispatch(new UiMsg.Quit());

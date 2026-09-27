@@ -11,9 +11,10 @@ public static class HunkParser
     /// <summary>
     ///     Parse unified-diff <paramref name="patch" /> into hunks, skipping any
     ///     leading diff-header lines until the first <c>@@ ... @@</c> header.
+    ///     Result railway (#201 C3): LLM-generated hunk headers travel as
+    ///     <c>Failure("Malformed hunk header/range ...")</c> instead of throwing.
     /// </summary>
-    /// <exception cref="FormatException">A hunk header is malformed.</exception>
-    public static List<Hunk> Parse(string patch)
+    public static Result<List<Hunk>> TryParse(string patch)
     {
         var hunks = new List<Hunk>();
         string[] lines = patch.Replace("\r\n", "\n", StringComparison.Ordinal)
@@ -37,7 +38,10 @@ public static class HunkParser
             }
 
             // Parse "@@ -oldStart,oldCount +newStart,newCount @@"
-            var header = ParseHunkHeader(lines[i]);
+            Result<HunkHeader> headerResult = TryParseHunkHeader(lines[i]);
+            if (headerResult.IsFailure)
+                return Result.Failure<List<Hunk>>(headerResult.Error);
+            var header = headerResult.Value;
             i++;
 
             var hunkLines = new List<HunkLine>(header.OldCount + header.NewCount);
@@ -89,10 +93,18 @@ public static class HunkParser
             hunks.Add(new Hunk(header.OldStart, header.OldCount, header.NewStart, header.NewCount, hunkLines));
         }
 
-        return hunks;
+        return Result.Success(hunks);
     }
 
-    private static HunkHeader ParseHunkHeader(string line)
+    /// <summary>
+    ///     Legacy throwing entry point: delegates to <see cref="TryParse" /> so the
+    ///     railway stays single-sourced; kept for existing callers/tests.
+    /// </summary>
+    /// <exception cref="FormatException">A hunk header is malformed.</exception>
+    public static List<Hunk> Parse(string patch) =>
+        TryParse(patch).Match(static h => h, err => throw new FormatException(err));
+
+    private static Result<HunkHeader> TryParseHunkHeader(string line)
     {
         // @@ -10,7 +10,8 @@ context
         int atAt = line.IndexOf("@@", 2, StringComparison.Ordinal);
@@ -101,18 +113,25 @@ public static class HunkParser
         // "-10,7 +10,8"
         int plusIdx = body.IndexOf('+');
         if (plusIdx <= 0)
-            throw new FormatException($"Malformed hunk header: {line}");
+            return Result.Failure<HunkHeader>($"Malformed hunk header: {line}");
 
         string oldPart = body[..plusIdx].Trim();
         string newPart = body[plusIdx..].Trim();
 
-        (int oldStart, int oldCount) = ParseRange(oldPart);
-        (int newStart, int newCount) = ParseRange(newPart);
+        Result<(int start, int count)> oldResult = TryParseRange(oldPart, line);
+        if (oldResult.IsFailure)
+            return Result.Failure<HunkHeader>(oldResult.Error);
+        Result<(int start, int count)> newResult = TryParseRange(newPart, line);
+        if (newResult.IsFailure)
+            return Result.Failure<HunkHeader>(newResult.Error);
 
-        return new HunkHeader(oldStart, oldCount, newStart, newCount);
+        (int oldStart, int oldCount) = oldResult.Value;
+        (int newStart, int newCount) = newResult.Value;
+
+        return Result.Success(new HunkHeader(oldStart, oldCount, newStart, newCount));
     }
 
-    private static (int start, int count) ParseRange(string s)
+    private static Result<(int start, int count)> TryParseRange(string s, string headerLine)
     {
         // s like "-10,7" or "-10"
         if (s.StartsWith('-')) s = s[1..];
@@ -120,11 +139,16 @@ public static class HunkParser
 
         int comma = s.IndexOf(',');
         if (comma < 0)
-            return (int.Parse(s, CultureInfo.InvariantCulture), 1);
+        {
+            if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int only))
+                return Result.Success((only, 1));
+            return Result.Failure<(int start, int count)>($"Malformed hunk range '{s}' in header: {headerLine}");
+        }
 
-        int start = int.Parse(s.AsSpan(0, comma), CultureInfo.InvariantCulture);
-        int count = int.Parse(s.AsSpan(comma + 1), CultureInfo.InvariantCulture);
-        return (start, count);
+        if (int.TryParse(s.AsSpan(0, comma), NumberStyles.Integer, CultureInfo.InvariantCulture, out int start)
+            && int.TryParse(s.AsSpan(comma + 1), NumberStyles.Integer, CultureInfo.InvariantCulture, out int count))
+            return Result.Success((start, count));
+        return Result.Failure<(int start, int count)>($"Malformed hunk range '{s}' in header: {headerLine}");
     }
 
     private readonly record struct HunkHeader(int OldStart, int OldCount, int NewStart, int NewCount);

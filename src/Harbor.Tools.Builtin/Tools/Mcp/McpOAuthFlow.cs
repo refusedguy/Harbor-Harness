@@ -136,8 +136,28 @@ public static class McpOAuthFlow
     /// <summary>
     ///     Dynamic client registration (RFC7591). Returns the assigned client
     ///     id, or null when the server has no registration endpoint or rejects.
+    ///     Compat wrapper over <see cref="RegisterClientResultAsync" />: transport
+    ///     problems map to null (callers fall back to the default client id).
     /// </summary>
     public static async Task<string?> RegisterClientAsync(
+        HttpClient http,
+        string registrationEndpoint,
+        string redirectUri,
+        IReadOnlyList<string> scopes,
+        CancellationToken cancellationToken = default)
+    {
+        Result<string?> registered = await RegisterClientResultAsync(
+            http, registrationEndpoint, redirectUri, scopes, cancellationToken).ConfigureAwait(false);
+        return registered.Match(static id => id, _ => null);
+    }
+
+    /// <summary>
+    ///     Result railway for dynamic client registration (#201 A6): a server
+    ///     rejection stays <c>Success(null)</c> (callers fall back to the default
+    ///     client id — same as before); unreachable/timeout/malformed responses
+    ///     are typed <c>Failure</c>s (<c>Unreachable/Timeout/MalformedRegistrationResponse/…</c>).
+    /// </summary>
+    public static async Task<Result<string?>> RegisterClientResultAsync(
         HttpClient http,
         string registrationEndpoint,
         string redirectUri,
@@ -154,40 +174,40 @@ public static class McpOAuthFlow
             request.Headers.UserAgent.ParseAdd(UserAgent);
             using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
-                return null;
+                return Result.Success<string?>(null);
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-            return doc.RootElement.TryGetProperty("client_id", out var id) && id.ValueKind == JsonValueKind.String
+            return Result.Success(doc.RootElement.TryGetProperty("client_id", out var id) && id.ValueKind == JsonValueKind.String
                 ? id.GetString()
-                : null;
+                : null);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
             // Unreachable server — no client to register.
-            return null;
+            return Result.Failure<string?>($"Unreachable: client registration failed: {ex.Message}");
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException ex)
         {
             // Registration timed out.
-            return null;
+            return Result.Failure<string?>($"Timeout: client registration timed out: {ex.Message}");
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
             // Malformed registration response.
-            return null;
+            return Result.Failure<string?>($"MalformedRegistrationResponse: {ex.Message}");
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
             // Unusable registration URL.
-            return null;
+            return Result.Failure<string?>($"InvalidRegistrationEndpoint: {ex.Message}");
         }
-        catch (IOException)
+        catch (IOException ex)
         {
             // Transport failure.
-            return null;
+            return Result.Failure<string?>($"Transport: client registration failed: {ex.Message}");
         }
     }
 

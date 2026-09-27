@@ -226,6 +226,73 @@ public class McpOAuthTests : IDisposable
     }
 
     [Test]
+    public async Task Flow_RegisterClientResult_Unreachable_ReturnsFailure()
+    {
+        using var http = StubClient(_ => throw new HttpRequestException("down"));
+        var result = await McpOAuthFlow.RegisterClientResultAsync(
+            http, "https://x/register", "http://127.0.0.1:9/callback", ["a"]);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("Unreachable");
+    }
+
+    [Test]
+    public async Task Flow_RegisterClientResult_Reject_ReturnsNullSuccess()
+    {
+        using var http = StubClient(_ => Json(new { error = "rejected" }, HttpStatusCode.BadRequest));
+        var result = await McpOAuthFlow.RegisterClientResultAsync(
+            http, "https://x/register", "http://127.0.0.1:9/callback", ["a"]);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value).IsNull();
+    }
+
+    [Test]
+    public async Task Loopback_ParseQueryResult_Malformed_ReturnsFailure()
+    {
+        var result = McpLoopbackListener.ParseQueryResult("GARBAGE", "code", "s1");
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("MalformedCallback");
+    }
+
+    [Test]
+    public async Task TokenCache_LoadResult_DistinguishesMissAndCorrupt()
+    {
+        var cache = new McpOAuthTokenCache(_root);
+        var miss = cache.LoadResult("nope");
+        await Assert.That(miss.IsFailure).IsTrue();
+        await Assert.That(miss.Error).Contains("CacheMiss");
+
+        File.WriteAllText(Path.Combine(_root, "mcp-oauth-bad2.json"), "{oops");
+        var corrupt = cache.LoadResult("bad2");
+        await Assert.That(corrupt.IsFailure).IsTrue();
+        await Assert.That(corrupt.Error).Contains("CacheCorrupt");
+    }
+
+    [Test]
+    public async Task Handler_TryGetAccessTokenResult_NoToken_ReturnsLoginRequired()
+    {
+        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig(), new McpOAuthTokenCache(_root));
+
+        var result = await handler.TryGetAccessTokenResultAsync();
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("LoginRequired");
+    }
+
+    [Test]
+    public async Task OAuthConfig_ParseResult_MissingAuth_ReturnsNullSuccess()
+    {
+        using var doc = JsonDocument.Parse("""{"url": "https://mcp.example.com/mcp"}""");
+        var result = McpOAuthConfig.ParseResult(doc.RootElement);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value).IsNull();
+    }
+
+    [Test]
     public async Task Loopback_ParseQuery_ValidatesState()
     {
         await Assert.That(

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -51,13 +52,35 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     ///     <c>message</c> frame answering <paramref name="expectedId" /> (caller
     ///     disposes). Returns null when the stream ends without a matching frame
     ///     (callers treat that as a transport failure and may retry).
+    ///     Compat wrapper over <see cref="TryRoundTripAsync" />: terminal transport
+    ///     failures map to null, so this method only throws on user cancellation
+    ///     or disposal.
     /// </summary>
     public async Task<JsonDocument?> RoundTripAsync(
         JsonElement request,
         int? expectedId = null,
         CancellationToken cancellationToken = default)
     {
+        Result<JsonDocument?> roundTrip =
+            await TryRoundTripAsync(request, expectedId, cancellationToken).ConfigureAwait(false);
+        return roundTrip.Match(static doc => doc, _ => null);
+    }
+
+    /// <summary>
+    ///     Result railway for the round-trip (#201 C4): expected network failures
+    ///     (closed SSE stream, message-endpoint errors, client-side timeout)
+    ///     surface as <c>Failure(endpoint + attempts + latency + cause)</c> instead of
+    ///     throwing (<c>IOException</c>/<c>HttpRequestException</c>/<c>TimeoutException</c>
+    ///     no longer escape). Retry/timeout policy stays inside; user cancellation
+    ///     and disposal still throw.
+    /// </summary>
+    public async Task<Result<JsonDocument?>> TryRoundTripAsync(
+        JsonElement request,
+        int? expectedId = null,
+        CancellationToken cancellationToken = default)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        var sw = Stopwatch.StartNew();
         HttpClient client = GetClient();
         string body = request.GetRawText();
         int attempt = 1;
@@ -68,14 +91,26 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             attemptCts.CancelAfter(_requestTimeout);
             try
             {
-                return await RoundTripOnceAsync(client, body, expectedId, attemptCts.Token).ConfigureAwait(false);
+                Result<JsonDocument?> once =
+                    await TryRoundTripOnceAsync(client, body, expectedId, attemptCts.Token).ConfigureAwait(false);
+                if (once.IsFailure)
+                {
+                    if (attempt >= MaxAttempts)
+                        return Fail<JsonDocument?>(sw, attempt, once.Error);
+                    _logger?.LogWarning("MCP SSE round-trip to {Endpoint} failed (attempt {Attempt}/{Max}): {Cause}; reconnecting",
+                        _endpoint, attempt, MaxAttempts, once.Error);
+                    await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
+                    attempt++;
+                    continue;
+                }
+
+                return once;
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
+                string cause = $"MCP SSE endpoint did not respond within {_requestTimeout.TotalSeconds:F0}s.";
                 if (attempt >= MaxAttempts)
-                {
-                    throw new TimeoutException($"MCP SSE endpoint did not respond within {_requestTimeout.TotalSeconds:F0}s.");
-                }
+                    return Fail<JsonDocument?>(sw, attempt, cause);
 
                 await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                 attempt++;
@@ -86,6 +121,16 @@ public sealed class McpSseTransport : IMcpRemoteTransport
                     _endpoint, attempt, MaxAttempts);
                 await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                 attempt++;
+            }
+            catch (Exception ex) when (IsTransient(ex))
+            {
+                return Fail<JsonDocument?>(sw, attempt, ex.Message);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException
+                && ex is not ObjectDisposedException
+                && !cancellationToken.IsCancellationRequested)
+            {
+                return Fail<JsonDocument?>(sw, attempt, ex.Message);
             }
         }
     }
@@ -102,23 +147,32 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         return ValueTask.CompletedTask;
     }
 
-    private async Task<JsonDocument?> RoundTripOnceAsync(
+    /// <summary>
+    ///     Single SSE round-trip on the Result railway: a closed stream or a
+    ///     non-OK endpoint is a <c>Failure</c> (was: <c>IOException</c>/
+    ///     <c>HttpRequestException</c> throws). Mid-stream transport exceptions
+    ///     still propagate to the retry loop above, which owns the policy.
+    /// </summary>
+    private async Task<Result<JsonDocument?>> TryRoundTripOnceAsync(
         HttpClient client,
         string body,
         int? expectedId,
         CancellationToken cancellationToken)
     {
         // 1. GET the SSE channel and wait for the endpoint announcement.
-        string? oauthToken = _oauthTokenProvider is not null
-            ? await _oauthTokenProvider(cancellationToken).ConfigureAwait(false)
-            : null;
+        Result<string?> oauth = await TryGetOAuthTokenAsync(cancellationToken).ConfigureAwait(false);
+        if (oauth.IsFailure)
+            return Result.Failure<JsonDocument?>(oauth.Error);
+        string? oauthToken = oauth.Value;
         using HttpRequestMessage sseRequest = new(HttpMethod.Get, _endpoint);
         sseRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
         ApplyHeaders(sseRequest, oauthToken);
         using HttpResponseMessage sseResponse = await client
             .SendAsync(sseRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
-        EnsureSuccess(sseResponse, "SSE channel");
+        Result getOk = EnsureSuccessResult(sseResponse, "SSE channel");
+        if (getOk.IsFailure)
+            return Result.Failure<JsonDocument?>(getOk.Error);
 
         var reader = new SseEventReader();
         Uri? postEndpoint = null;
@@ -134,7 +188,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             string? line = await streamReader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line is null)
             {
-                throw new IOException("MCP SSE stream closed before announcing an endpoint.");
+                return Result.Failure<JsonDocument?>("MCP SSE stream closed before announcing an endpoint.");
             }
 
             if (reader.Feed(line) is { } ev && ev.Event == "endpoint")
@@ -152,7 +206,9 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         using HttpResponseMessage postResponse = await client
             .SendAsync(postRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
-        EnsureSuccess(postResponse, "message endpoint");
+        Result postOk = EnsureSuccessResult(postResponse, "message endpoint");
+        if (postOk.IsFailure)
+            return Result.Failure<JsonDocument?>(postOk.Error);
 
         // 3. Keep reading the SSE channel for the response frame.
         while (true)
@@ -160,13 +216,13 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             string? line = await streamReader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line is null)
             {
-                throw new IOException("MCP SSE stream closed before a response arrived.");
+                return Result.Failure<JsonDocument?>("MCP SSE stream closed before a response arrived.");
             }
 
             if (reader.Feed(line) is { Event: "message" } ev
                 && McpSse.TryParseResponse(ev.Data, expectedId) is { } doc)
             {
-                return doc;
+                return Result.Success<JsonDocument?>(doc);
             }
         }
     }
@@ -191,14 +247,39 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         }
     }
 
-    private static void EnsureSuccess(HttpResponseMessage response, string what)
+    private static Result EnsureSuccessResult(HttpResponseMessage response, string what)
     {
         if (response.StatusCode == HttpStatusCode.OK || response.StatusCode == HttpStatusCode.Accepted)
         {
-            return;
+            return Result.Success();
         }
 
-        throw new HttpRequestException($"MCP {what} returned {(int)response.StatusCode}.");
+        return Result.Failure($"MCP {what} returned {(int)response.StatusCode}.");
+    }
+
+    private async Task<Result<string?>> TryGetOAuthTokenAsync(CancellationToken cancellationToken)
+    {
+        if (_oauthTokenProvider is null)
+            return Result.Success<string?>(null);
+        try
+        {
+            return Result.Success(await _oauthTokenProvider(cancellationToken).ConfigureAwait(false));
+        }
+        catch (McpOAuthLoginRequiredException ex)
+        {
+            return Result.Failure<string?>(ex.Message);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return Result.Failure<string?>($"MCP OAuth token failed: {ex.Message}");
+        }
+    }
+
+    private Result<T> Fail<T>(Stopwatch sw, int attempts, string cause)
+    {
+        string error = $"MCP SSE round-trip to {_endpoint} failed after {attempts} attempt(s) in {sw.Elapsed.TotalMilliseconds:0}ms: {cause}";
+        _logger?.LogError("MCP SSE transport failure: {Error}", error);
+        return Result.Failure<T>(error);
     }
 
     private static bool IsTransient(Exception ex)

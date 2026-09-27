@@ -36,6 +36,53 @@ public class McpRemoteTransportTests
     }
 
     [Test]
+    public async Task HttpTransport_Persistent500_TryRoundTrip_ReturnsFailureWithStatus()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.QueueStatusCodes.AddRange([500, 500, 500, 500]);
+
+        await using var transport = new McpHttpTransport(server.Url);
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
+        Result<JsonDocument?> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("500");
+        await Assert.That(server.HandledRequests).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task HttpTransport_Persistent500_RoundTrip_ReturnsNullWithoutThrowing()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.QueueStatusCodes.AddRange([500, 500, 500, 500]);
+
+        await using var transport = new McpHttpTransport(server.Url);
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
+        using JsonDocument? response = await transport.RoundTripAsync(request.RootElement.Clone(), 1);
+
+        await Assert.That(response).IsNull();
+        await Assert.That(server.HandledRequests).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task HttpTransport_SseBodyWithoutMatchingFrame_TryRoundTrip_ReturnsFailure()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.SseResponseBody =
+            """
+            event: message
+            data: {"jsonrpc":"2.0","id":999,"result":{"ok":true}}
+
+            """;
+
+        await using var transport = new McpHttpTransport(server.Url);
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{}}""");
+        Result<JsonDocument?> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("no matching JSON-RPC frame");
+    }
+    [Test]
     public async Task HttpTransport_Transient500_IsRetried()
     {
         using FakeServer server = FakeServer.Start();
