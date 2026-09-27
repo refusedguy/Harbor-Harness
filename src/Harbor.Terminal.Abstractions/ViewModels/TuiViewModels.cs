@@ -271,6 +271,14 @@ public sealed partial class InputViewModel : ObservableObject, ITuiViewModel
 /// <summary>
 ///     Diff preview view model — shows file diffs from edit/write tools.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>vm-dedup canon (audit 27-G):</b> TUI canon diff-list VM (<c>ITuiViewModel</c>,
+///         event-driven, Next/Previous navigation), bound by <c>DiffPreviewView</c> and
+///         <c>BaseTuiRenderer</c>. Distinct from the Framework side-by-side compute VM,
+///         the Desktop unified-diff VM and the WPF hunk VM — do not merge.
+///     </para>
+/// </remarks>
 public sealed partial class DiffPreviewViewModel : ObservableObject, ITuiViewModel
 {
     private readonly ObservableCollection<DiffEntry> _diffs = new();

@@ -8,6 +8,14 @@ namespace Harbor.App.Wpf.ViewModels;
 ///     Side-by-side diff view model. Renders a list of hunks; each hunk has
 ///     left (before) and right (after) lines.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>vm-dedup (audit 27-G):</b> WPF-local hunk VM (WPF brushes, Accept/Reject),
+///         pinned by <c>AppDiTests</c> and <c>MainViewModel.Diff</c>. Platform projection
+///         over canonical <c>SharedDataModels</c> (DiffHunk/DiffLineViewModel heirs) —
+///         keep, do not delete.
+///     </para>
+/// </remarks>
 public sealed partial class DiffViewModel : ObservableObject
 {
 

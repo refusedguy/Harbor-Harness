@@ -9,6 +9,13 @@ namespace Harbor.App.Wpf.ViewModels;
 ///     last N turns using native WPF Shapes (no third-party chart library
 ///     required — keeps the build self-contained).
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>vm-dedup (audit 27-G):</b> WPF-local chart VM (WPF brushes, seeded demo bars),
+///         pinned by <c>AppDiTests</c>. Distinct from the Framework TEA-projection token
+///         VM — keep, do not delete.
+///     </para>
+/// </remarks>
 public sealed partial class TokenUsageViewModel : ObservableObject
 {
 

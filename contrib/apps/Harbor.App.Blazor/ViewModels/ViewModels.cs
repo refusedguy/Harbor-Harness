@@ -13,6 +13,12 @@ namespace Harbor.App.Blazor.ViewModels;
 /// </summary>
 /// <remarks>
 ///     <para>
+///         <b>vm-dedup (audit 27-G):</b> Blazor-shell-local projector VM (local demo
+///         transcript + UiStore state), pinned by <c>ProgramDiTests</c>. Distinct from
+///         the Desktop <c>ChatViewModelBase</c> and the TUI <c>ChatHistoryViewModel</c> —
+///         keep, do not delete.
+///     </para>
+///     <para>
 ///         <b>Architecture:</b> the VM is a thin projector. It does not own
 ///         the canonical chat state — that lives in <see cref="UiStore" />
 ///         (driven by <see cref="AgentEvent" /> values from the real agent).
@@ -234,6 +240,14 @@ public sealed partial class SettingsViewModel : ObservableObject
 ///     View-model for the Token Usage page. Builds a small in-memory series
 ///     of token counts (input vs output) for the chart.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>vm-dedup (audit 27-G):</b> Blazor-shell-local demo chart VM
+///         (Series/TokenPoint/AddSample), pinned by <c>ProgramDiTests</c> and the TokenUsage
+///         razor page. Distinct from the Framework TEA-projection token VM — keep, do not
+///         delete.
+///     </para>
+/// </remarks>
 public sealed partial class TokenUsageViewModel : ObservableObject
 {
     /// <summary>Construct the VM with sample data.</summary>

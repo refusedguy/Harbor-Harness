@@ -15,6 +15,15 @@ namespace Harbor.Tui.Termina;
 ///     changes from the TEA store into an observable stream of display lines that
 ///     the page appends to its <c>StreamingTextNode</c>.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>vm-dedup (audit 27-G):</b> Termina-local R3 reactive VM
+///         (<c>TerminaTeaBridge</c> + projector), route-registered in
+///         <c>TerminaRenderer</c>. Distinct from the TUI <c>ChatHistoryViewModel</c>
+///         (MVVM <c>ITuiViewModel</c>) — different reactive framework; do not rename
+///         without a logic refactor.
+///     </para>
+/// </remarks>
 public sealed class ChatViewModel : ReactiveViewModel
 {
     private readonly TerminaTeaBridge _bridge;
