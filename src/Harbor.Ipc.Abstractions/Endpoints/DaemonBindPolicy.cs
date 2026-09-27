@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -6,6 +7,61 @@ using System.Text;
 using CSharpFunctionalExtensions;
 
 namespace Harbor.Ipc.Protocol;
+
+// Issue #175 (OCP — string switch instead of Strategy): listen-address
+// resolution is one strategy per id, resolved via a FrozenDictionary.
+// A new listen target = a new IBindAddressStrategy — the failure text
+// for unknown ids stays in one place.
+
+/// <summary>
+///     Bind-address strategy for one <c>HARBOR_LISTEN</c> id.
+/// </summary>
+public interface IBindAddressStrategy
+{
+    /// <summary>Canonical listen id (lowercase), as spelled in <c>HARBOR_LISTEN</c>.</summary>
+    string ListenId { get; }
+
+    /// <summary>Resolve the TCP bind address for this listen policy.</summary>
+    Result<IPAddress> Resolve();
+}
+
+/// <summary>Loopback-only listener (<c>HARBOR_LISTEN=loopback</c>).</summary>
+public sealed class LoopbackBindAddressStrategy : IBindAddressStrategy
+{
+    /// <inheritdoc />
+    public string ListenId => "loopback";
+
+    /// <inheritdoc />
+    public Result<IPAddress> Resolve() => Result.Success(IPAddress.Loopback);
+}
+
+/// <summary>All-interfaces listener (<c>HARBOR_LISTEN=all</c>).</summary>
+public sealed class AllBindAddressStrategy : IBindAddressStrategy
+{
+    /// <inheritdoc />
+    public string ListenId => "all";
+
+    /// <inheritdoc />
+    public Result<IPAddress> Resolve() => Result.Success(IPAddress.Any);
+}
+
+/// <summary>Tailscale-interface listener (<c>HARBOR_LISTEN=tailscale0</c>).</summary>
+public sealed class TailscaleBindAddressStrategy : IBindAddressStrategy
+{
+    /// <inheritdoc />
+    public string ListenId => "tailscale0";
+
+    /// <inheritdoc />
+    public Result<IPAddress> Resolve()
+    {
+        IPAddress? ts = DaemonBindPolicy.FindTailscaleAddress();
+        return ts is not null
+            ? Result.Success(ts)
+            : Result.Failure<IPAddress>(
+                "listenOn=tailscale0 but no Tailscale interface with a 100.64/10 address was found. " +
+                "Is 'tailscale up' running on this machine?");
+    }
+}
 
 /// <summary>
 ///     Daemon listen policy: which interface(s) the IPC listener binds.
@@ -18,29 +74,28 @@ public static class DaemonBindPolicy
     /// <summary>Default TCP port when a networked listener is configured.</summary>
     public const int DefaultPort = HostsCatalog.DefaultPort;
 
+    private static readonly FrozenDictionary<string, IBindAddressStrategy> BindStrategies =
+        new IBindAddressStrategy[]
+        {
+            new LoopbackBindAddressStrategy(),
+            new AllBindAddressStrategy(),
+            new TailscaleBindAddressStrategy(),
+        }.ToFrozenDictionary(s => s.ListenId, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     ///     Resolve the TCP bind address for a networked listen policy.
     /// </summary>
     /// <param name="listenOn">uds | loopback | tailscale0 | all (case-insensitive).</param>
     public static Result<IPAddress> ResolveBindAddress(string? listenOn)
     {
-        switch (listenOn?.Trim().ToLowerInvariant())
+        string key = listenOn?.Trim() ?? string.Empty;
+        if (BindStrategies.TryGetValue(key, out IBindAddressStrategy? strategy))
         {
-            case "loopback":
-                return Result.Success(IPAddress.Loopback);
-            case "all":
-                return Result.Success(IPAddress.Any);
-            case "tailscale0":
-                var ts = FindTailscaleAddress();
-                return ts is not null
-                    ? Result.Success(ts)
-                    : Result.Failure<IPAddress>(
-                        "listenOn=tailscale0 but no Tailscale interface with a 100.64/10 address was found. " +
-                        "Is 'tailscale up' running on this machine?");
-            default:
-                return Result.Failure<IPAddress>(
-                    $"Unknown HARBOR_LISTEN value '{listenOn}'. Expected: uds | loopback | tailscale0 | all.");
+            return strategy.Resolve();
         }
+
+        return Result.Failure<IPAddress>(
+            $"Unknown HARBOR_LISTEN value '{listenOn}'. Expected: uds | loopback | tailscale0 | all.");
     }
 
     /// <summary>True when the address is inside the Tailscale CGNAT range 100.64.0.0/10.</summary>

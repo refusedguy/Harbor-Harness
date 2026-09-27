@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Harbor.Ipc;
 using Harbor.Ipc.Client;
 using Harbor.Ipc.InProcess;
@@ -11,7 +12,11 @@ namespace Harbor.Hosting;
 
 internal static class IpcModule
 {
-    /// <summary>HARBOR_MODE dispatcher: inprocess / ipc-server / ipc-client.</summary>
+    /// <summary>
+    ///     HARBOR_MODE dispatcher (issue #175: strategy registry —
+    ///     <see cref="HarborModeRegistry"/> — instead of an inline switch):
+    ///     inprocess / ipc-server / ipc-client. Unknown modes fail fast.
+    /// </summary>
     internal static IServiceCollection AddHarborIpc(
         this IServiceCollection services,
         HarborCompositionContext ctx)
@@ -21,23 +26,14 @@ internal static class IpcModule
 
         string pipeName = Environment.GetEnvironmentVariable("HARBOR_IPC_PIPE") ?? "harbor-ipc";
 
-        switch (mode.ToLowerInvariant())
+        FrozenDictionary<string, IHarborModeStrategy> registry = HarborModeRegistry.Build();
+        if (!HarborModeRegistry.TryResolve(registry, mode, out IHarborModeStrategy? strategy) || strategy is null)
         {
-            case "inprocess":
-                services.UseInProcessHarborClient();
-                break;
-            case "ipc-server":
-                services.UseInProcessHarborClient();
-                services.UseHarborIpcServer(pipeName);
-                AddNetworkedListenerIfConfigured(services, ctx);
-                break;
-            case "ipc-client":
-                services.UseIpcHarborClient(pipeName);
-                break;
-            default:
-                throw new ArgumentException(
-                    $"Unknown HARBOR_MODE: '{mode}'. Expected one of: inprocess, ipc-server, ipc-client.");
+            throw new ArgumentException(
+                $"Unknown HARBOR_MODE: '{mode}'. Expected one of: {HarborModeRegistry.KnownIds}.");
         }
+
+        strategy.Apply(new HarborModeContext(services, ctx, pipeName));
         return services;
     }
 
@@ -49,7 +45,7 @@ internal static class IpcModule
     ///     first run), and a <see cref="DaemonPairingInfo"/> is registered so
     ///     the CLI can print the pairing block.
     /// </summary>
-    private static void AddNetworkedListenerIfConfigured(IServiceCollection services, HarborCompositionContext ctx)
+    internal static void AddNetworkedListenerIfConfigured(IServiceCollection services, HarborCompositionContext ctx)
     {
         string? listenOn = Environment.GetEnvironmentVariable("HARBOR_LISTEN");
         if (string.IsNullOrWhiteSpace(listenOn) || listenOn.Equals("uds", StringComparison.OrdinalIgnoreCase))
