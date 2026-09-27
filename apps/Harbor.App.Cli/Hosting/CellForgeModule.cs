@@ -39,7 +39,7 @@ namespace Harbor.App.Cli.Hosting;
 ///         <b>Что НЕ регистрируется отдельно:</b> <see cref="Harbor.Tui.CellForge.Rendering.DiffEngine"/>,
 ///         TimelineRing, CommitTickPacer, SpinnerStrip — внутренние владельцы
 ///         уже перечисленных корней (<c>ScreenSession.Engine</c>,
-///         <c>VirtualizedChatTimeline</c>, <c>ChatScreenBridge._pacer</c>,
+///         <c>VirtualizedChatTimeline</c>, <c>StreamCoalescer</c>,
 ///         статический виджет). Вторая регистрация означала бы два состояния
 ///         одного кадра — запрещено контрактом владения.
 ///     </para>
