@@ -41,11 +41,12 @@ public class ApprovalGateDiffNavStoreTests
     {
         var (router, _, store) = MakeRouterWithStore();
         var vm = TwoDiffs();
+        _ = store.Dispatch(new UiMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up)));
 
         router.RouteDiffNavigation(vm, ChatAction.ScrollDownLine);
 
         await Assert.That(vm.CurrentIndex).IsEqualTo(0);
-        await Assert.That(store.State.ScrollOffset).IsEqualTo(1);
+        await Assert.That(store.State.ScrollOffset).IsEqualTo(0);
     }
 
     [Test]
@@ -96,12 +97,13 @@ public class ApprovalGateDiffNavStoreTests
         var store = new UiStore();
         store.Dispatch(new UiMsg.Viewport(10));
         store.Dispatch(new UiMsg.HistoryMeasured(100));
+        _ = store.Dispatch(new UiMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up)));
         bridge.Store = store;
         var vm = TwoDiffs();
 
         bridge.RouteDiffNavigation(vm, ChatAction.ScrollDownLine);
 
         await Assert.That(vm.CurrentIndex).IsEqualTo(0);
-        await Assert.That(store.State.ScrollOffset).IsEqualTo(1);
+        await Assert.That(store.State.ScrollOffset).IsEqualTo(0);
     }
 }
