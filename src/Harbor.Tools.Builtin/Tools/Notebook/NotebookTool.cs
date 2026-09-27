@@ -1,5 +1,4 @@
-using System.Text;
-using Harbor.Abstractions.Extensions;
+using System.Collections.Frozen;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -12,18 +11,15 @@ namespace Harbor.Tools.Builtin;
 /// </summary>
 public sealed class NotebookTool : ITool
 {
-    private const int MaxContentChars = 16_384;
-    private const int MaxKeyChars = 128;
-    private const int MaxNotesPerSession = 256;
-
     private readonly ILogger<NotebookTool> _logger;
-    private readonly string _notesRoot;
+    private readonly NoteStore _store;
+    private readonly FrozenDictionary<NoteAction, INoteCommand> _commands;
 
     /// <summary>
     ///     Construct a <see cref="NotebookTool" /> rooted at <c>~/.harbor/notes</c>.
     /// </summary>
     /// <param name="logger">Logger for diagnostics.</param>
-    public NotebookTool(ILogger<NotebookTool> logger) : this(logger, GetDefaultNotesRoot())
+    public NotebookTool(ILogger<NotebookTool> logger) : this(logger, NoteStore.GetDefaultNotesRoot())
     {
     }
 
@@ -36,7 +32,15 @@ public sealed class NotebookTool : ITool
     public NotebookTool(ILogger<NotebookTool> logger, string notesRoot)
     {
         _logger = logger;
-        _notesRoot = notesRoot;
+        _store = new NoteStore(notesRoot);
+        _commands = new INoteCommand[]
+        {
+            new GetNoteCommand(),
+            new SetNoteCommand(),
+            new AddNoteCommand(),
+            new ClearNoteCommand(),
+            new ListNoteCommand(),
+        }.ToFrozenDictionary(c => c.Action);
     }
 
     /// <inheritdoc />
@@ -80,12 +84,10 @@ public sealed class NotebookTool : ITool
                                                                       }
                                                                       """);
 
-    private enum NoteAction { Get, Set, Add, Clear, List }
-
     /// <summary>
     ///     ROP-A Z1 п.9: the action string parses into an enum exactly once —
-    ///     validation, dispatch and the requirement matrix below all derive
-    ///     from it, so an unknown action cannot reach the switch.
+    ///     validation, dispatch and the per-command requirement matrix below
+    ///     all derive from it, so an unknown action cannot reach a command.
     /// </summary>
     private static NoteAction? ParseAction(string raw) => raw.ToLowerInvariant() switch
     {
@@ -110,22 +112,27 @@ public sealed class NotebookTool : ITool
         if (parsed is null)
             return Result.Failure($"Unknown action '{action}'. Valid: get, set, add, clear, list.");
 
-        if (parsed is not NoteAction.List)
+        // The requirement matrix lives on the commands (RequiresKey /
+        // RequiresContent), so a new action only adds a command class —
+        // this method never grows another branch.
+        INoteCommand command = _commands[parsed.Value];
+
+        if (command.RequiresKey)
         {
             if (!args.TryGetProperty("key", out var kEl)
                 || kEl.ValueKind != JsonValueKind.String
                 || string.IsNullOrWhiteSpace(kEl.GetString()))
                 return Result.Failure($"Action '{action}' requires non-empty 'key'.");
-            if (kEl.GetString()!.Length > MaxKeyChars)
-                return Result.Failure($"'key' too long (max {MaxKeyChars} chars).");
+            if (kEl.GetString()!.Length > NoteLimits.MaxKeyChars)
+                return Result.Failure($"'key' too long (max {NoteLimits.MaxKeyChars} chars).");
         }
 
-        if (parsed is NoteAction.Set or NoteAction.Add)
+        if (command.RequiresContent)
         {
             if (!args.TryGetProperty("content", out var cEl) || cEl.ValueKind != JsonValueKind.String)
                 return Result.Failure($"Action '{action}' requires 'content' string.");
-            if (cEl.GetString()!.Length > MaxContentChars)
-                return Result.Failure($"'content' too long (max {MaxContentChars} chars).");
+            if (cEl.GetString()!.Length > NoteLimits.MaxContentChars)
+                return Result.Failure($"'content' too long (max {NoteLimits.MaxContentChars} chars).");
         }
 
         return Result.Success();
@@ -138,201 +145,29 @@ public sealed class NotebookTool : ITool
         CancellationToken cancellationToken = default)
     {
         // Validation already pinned the action and its required fields
-        // (fail-closed dispatcher runs ValidateArguments first), so the switch
-        // below is exhaustive over the enum and needs no null re-checks.
+        // (fail-closed dispatcher runs ValidateArguments first), so the
+        // dispatch below is exhaustive over the enum and needs no null re-checks.
         var action = ParseAction(args.GetProperty("action").GetString()!) ?? NoteAction.List;
         string? key = JsonArgs.GetString(args, "key");
         string? content = JsonArgs.GetString(args, "content");
 
-        string sessionId = SanitizeSessionId(context.SessionId);
-        string path = Path.Combine(_notesRoot, sessionId + ".json");
+        string sessionId = NoteStore.SanitizeSessionId(context.SessionId);
+        string path = _store.ResolvePath(context.SessionId);
 
         // ROP-A Z1 п.10: Load and Save are guarded symmetrically now — a write
         // failure surfaces as a tool error instead of escaping the contract.
-        Result<Dictionary<string, NoteEntry>> loaded = await Result.Try(
-                () => LoadAsync(path, cancellationToken),
-                ToolErrors.Handler("notebook", cancellationToken, failurePrefix: "Failed to load notes: "))
+        Result<Dictionary<string, NoteEntry>> loaded = await _store
+            .LoadAsync(path, cancellationToken)
             .ConfigureAwait(false);
         if (loaded.IsFailure)
             return ToolResult.Error(loaded.Error);
         Dictionary<string, NoteEntry> notes = loaded.Value;
 
-        switch (action)
-        {
-            case NoteAction.Get:
-            {
-                if (!notes.TryGetValue(key!, out var entry))
-                    return ToolResult.Error($"No note with key '{key}'.");
-                return ToolResult.Success(
-                    $"# {key}\n\n{entry.Content}",
-                    new { key, content = entry.Content, updatedAt = entry.UpdatedAt });
-            }
-            case NoteAction.Set:
-            {
-                if (notes.Count >= MaxNotesPerSession && !notes.ContainsKey(key!))
-                    return ToolResult.Error($"Too many notes (max {MaxNotesPerSession}).");
-                notes[key!] = new NoteEntry(content!, DateTimeOffset.UtcNow);
-                _logger.LogDebug("Notebook set {Key} ({Chars} chars) for {Session}", key, content!.Length, sessionId);
-                return await SaveNotesAsync(path, notes, cancellationToken,
-                    () => ToolResult.Success(
-                        $"Set note '{key}' ({content.Length} chars).",
-                        new { key, chars = content.Length, totalNotes = notes.Count }))
-                    .ConfigureAwait(false);
-            }
-            case NoteAction.Add:
-            {
-                if (notes.TryGetValue(key!, out var existing))
-                {
-                    string combined = existing.Content + "\n\n" + content;
-                    if (combined.Length > MaxContentChars)
-                        return ToolResult.Error(
-                            $"Combined content would exceed {MaxContentChars} chars " +
-                            $"(currently {existing.Content.Length}, adding {content!.Length}).");
-                    notes[key!] = existing with { Content = combined, UpdatedAt = DateTimeOffset.UtcNow };
-                }
-                else
-                {
-                    notes[key!] = new NoteEntry(content!, DateTimeOffset.UtcNow);
-                }
-                return await SaveNotesAsync(path, notes, cancellationToken,
-                    () => ToolResult.Success(
-                        $"Appended to note '{key}' (now {notes[key!].Content.Length} chars).",
-                        new { key, chars = notes[key!].Content.Length, totalNotes = notes.Count }))
-                    .ConfigureAwait(false);
-            }
-            case NoteAction.Clear:
-            {
-                if (key is null)
-                {
-                    int removed = notes.Count;
-                    notes.Clear();
-                    return await SaveNotesAsync(path, notes, cancellationToken,
-                        () => ToolResult.Success($"Cleared {removed} note(s).", new { removed }))
-                        .ConfigureAwait(false);
-                }
-                if (!notes.Remove(key))
-                    return ToolResult.Error($"No note with key '{key}'.");
-                return await SaveNotesAsync(path, notes, cancellationToken,
-                    () => ToolResult.Success($"Cleared note '{key}'.", new { key, remaining = notes.Count }))
-                    .ConfigureAwait(false);
-            }
-            case NoteAction.List:
-            {
-                if (notes.Count == 0)
-                    return ToolResult.Success("(no notes in this session)");
-                // #53 audit: cap the *initial* rent — the builder grows as
-                // needed, but Rent(N * 64) for a large N would pre-size a huge
-                // (possibly LOH) buffer up front. 128 * 64 = 8 KB initial max.
-                using var sb = StringBuilderPool.Rent(Math.Min(notes.Count, 128) * 64);
-                var b = sb.Builder;
-                b.Append(notes.Count).Append(" note(s):");
-                foreach (var kv in notes)
-                {
-                    string preview = kv.Value.Content;
-                    int nl = preview.IndexOf('\n');
-                    if (nl >= 0) preview = preview[..nl];
-                    if (preview.Length > 80) preview = preview[..80] + "…";
-                    b.Append("\n  • ").Append(kv.Key).Append(" — ").Append(preview);
-                }
-                return ToolResult.Success(
-                    b.ToString(),
-                    new { count = notes.Count, keys = notes.Keys.ToArray() });
-            }
-            default:
-                // Unreachable: ParseAction admits only the five known actions.
-                return ToolResult.Error("Unknown notebook action.");
-        }
+        if (!_commands.TryGetValue(action, out var command))
+            // Unreachable: ParseAction admits only the five known actions.
+            return ToolResult.Error("Unknown notebook action.");
+
+        var invocation = new NoteInvocation(notes, key, content, sessionId, path, _store, _logger);
+        return await command.ExecuteAsync(invocation, cancellationToken).ConfigureAwait(false);
     }
-
-    /// <summary>
-    ///     ROP-A Z1 п.10: Save under the same guard contract as Load; the
-    ///     caller's success payload is built only after a verified save.
-    /// </summary>
-    private async Task<ToolResult> SaveNotesAsync(
-        string path, Dictionary<string, NoteEntry> notes, CancellationToken ct, Func<ToolResult> success)
-    {
-        Result saved = await Result.Try(() => SaveAsync(path, notes, ct),
-                ToolErrors.Handler("notebook", ct, failurePrefix: "Failed to save notes: "))
-            .ConfigureAwait(false);
-
-        return saved.IsSuccess ? success() : ToolResult.Error(saved.Error);
-    }
-
-    private static async Task<Dictionary<string, NoteEntry>> LoadAsync(string path, CancellationToken ct)
-    {
-        if (!File.Exists(path)) return new Dictionary<string, NoteEntry>(StringComparer.Ordinal);
-
-        await using var fs = new FileStream(
-            path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
-            64 * 1024, FileOptions.Asynchronous);
-        var doc = await JsonDocument.ParseAsync(fs, cancellationToken: ct).ConfigureAwait(false);
-        var dict = new Dictionary<string, NoteEntry>(StringComparer.Ordinal);
-        foreach (var prop in doc.RootElement.EnumerateObject())
-        {
-            if (prop.Value.ValueKind != JsonValueKind.Object) continue;
-            string c = prop.Value.TryGetProperty("content", out var cEl) && cEl.ValueKind == JsonValueKind.String
-                ? cEl.GetString() ?? string.Empty
-                : string.Empty;
-            var updated = prop.Value.TryGetProperty("updatedAt", out var uEl)
-                          && uEl.ValueKind == JsonValueKind.String
-                          && DateTimeOffset.TryParse(uEl.GetString(), out var dto)
-                ? dto
-                : DateTimeOffset.UtcNow;
-            dict[prop.Name] = new NoteEntry(c, updated);
-        }
-        return dict;
-    }
-
-    private static async Task SaveAsync(string path, Dictionary<string, NoteEntry> notes, CancellationToken ct)
-    {
-        string? dir = Path.GetDirectoryName(path);
-        if (!string.IsNullOrEmpty(dir))
-            Directory.CreateDirectory(dir);
-
-        // Atomic write — temp file then rename.
-        string tempPath = path + ".tmp";
-
-        await using (var fs = new FileStream(
-                         tempPath, FileMode.Create, FileAccess.Write, FileShare.None,
-                         64 * 1024, FileOptions.Asynchronous))
-        {
-            await using var w = new Utf8JsonWriter(fs, new JsonWriterOptions { Indented = false });
-            w.WriteStartObject();
-            foreach (var kv in notes)
-            {
-                w.WritePropertyName(kv.Key);
-                w.WriteStartObject();
-                w.WriteString("content", kv.Value.Content);
-                w.WriteString("updatedAt", kv.Value.UpdatedAt);
-                w.WriteEndObject();
-            }
-            w.WriteEndObject();
-            await w.FlushAsync(ct).ConfigureAwait(false);
-        }
-
-        File.Move(tempPath, path, true);
-    }
-
-    private static string SanitizeSessionId(string sessionId)
-    {
-        // Allow only safe chars; replace anything else with '_'.
-        if (string.IsNullOrEmpty(sessionId)) return "default";
-        var sb = new StringBuilder(sessionId.Length);
-        foreach (char c in sessionId)
-        {
-            if (char.IsLetterOrDigit(c) || c == '-' || c == '_')
-                sb.Append(c);
-            else
-                sb.Append('_');
-        }
-        return sb.ToString();
-    }
-
-    private static string GetDefaultNotesRoot()
-    {
-        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.Combine(home, ".harbor", "notes");
-    }
-
-    private sealed record NoteEntry(string Content, DateTimeOffset UpdatedAt);
 }
