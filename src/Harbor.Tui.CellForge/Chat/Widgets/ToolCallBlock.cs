@@ -21,6 +21,8 @@ public enum ToolCallStatus : byte
 /// args payload, <c>DiffPreview</c> the 6-line inline preview, <c>DiffFull</c>
 /// the full (≤80-line) diff backing the expand path. All optional so existing
 /// call sites stay source-compatible.
+/// Tool cards: <c>ArgsFull</c> carries the complete single-line args payload
+/// for the expanded view; <c>ArgsSummary</c> stays the ≤48-char header slice.
 /// </summary>
 public readonly record struct ToolCallInfo(
     string Id,
@@ -28,7 +30,8 @@ public readonly record struct ToolCallInfo(
     string ArgsSummary,
     string? FilePath = null,
     string? DiffPreview = null,
-    string? DiffFull = null);
+    string? DiffFull = null,
+    string? ArgsFull = null);
 
 /// <summary>
 /// Final outcome of a tool execution. <see cref="DiffText"/> carries a unified
@@ -147,11 +150,36 @@ public sealed class ToolCallBlock : IChatBlock
     /// <summary>Collapsed-body line budget (continuation marker when exceeded).</summary>
     public int MaxBodyLines { get; set; }
 
+    /// <summary>Expanded result line budget (overflow marker when exceeded).</summary>
+    public const int ExpandedBodyLines = 20;
+
+    /// <summary>
+    /// Whether the card is expanded (feed Enter/click toggles via
+    /// <see cref="ToggleExpanded"/>). Collapsed paint stays byte-identical to
+    /// the pre-card layout (header + <see cref="MaxBodyLines"/> body preview);
+    /// expanded adds the full-args row plus the result up to
+    /// <see cref="ExpandedBodyLines"/> lines with a <c>…</c> overflow marker.
+    /// </summary>
+    public bool IsExpanded { get; private set; }
+
+    /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click path).</summary>
+    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
+    public void SetExpanded(bool expanded) => IsExpanded = expanded;
+
+    /// <summary>Full args text for the expanded row (falls back to the short summary).</summary>
+    public string ArgsFullText => Info.ArgsFull ?? Info.ArgsSummary;
+
+    private Rect? _lastPaintRect;
+    private int _lastSkipRows;
+
     public string Kind => "tool-call";
 
     public bool IsStreamContinuation => false;
 
     public int BudgetBytes => 96 + (Info.ToolName.Length * 2) + (Info.ArgsSummary.Length * 2)
+        + ((Info.ArgsFull?.Length ?? 0) * 2)
         + (_body is null ? 0 : 64 + (_body.Output.Length * 2));
 
     /// <summary>Completes the card; idempotent — first result wins.</summary>
@@ -169,6 +197,11 @@ public sealed class ToolCallBlock : IChatBlock
     public BlockMeasure Measure(int width)
     {
         int lines = 1;
+        if (IsExpanded && !string.IsNullOrEmpty(ArgsFullText))
+        {
+            lines += 1; // full-args row
+        }
+
         if (_body is not null)
         {
             // Mirror Paint: a present DiffText replaces the output body.
@@ -178,7 +211,7 @@ public sealed class ToolCallBlock : IChatBlock
             }
             else
             {
-                lines += BodyLineCount();
+                lines += IsExpanded ? ExpandedBodyLineCount() : BodyLineCount();
             }
         }
 
@@ -188,6 +221,11 @@ public sealed class ToolCallBlock : IChatBlock
     public int CheapEstimate(int width)
     {
         int lines = 1;
+        if (IsExpanded && !string.IsNullOrEmpty(ArgsFullText))
+        {
+            lines += 1;
+        }
+
         if (_body is not null)
         {
             if (_body.DiffText is not null)
@@ -196,25 +234,62 @@ public sealed class ToolCallBlock : IChatBlock
             }
             else
             {
-                lines += BodyLineCount();
+                lines += IsExpanded ? ExpandedBodyLineCount() : BodyLineCount();
             }
         }
 
         return Math.Max(1, lines);
     }
 
+    /// <summary>
+    /// Click hit-test for the card header (mirrors
+    /// <c>ApprovalGateView.TryHitDecision</c>): true when the card has painted
+    /// and (<paramref name="col"/>, <paramref name="row"/>) lands on its
+    /// header row. Coordinates are screen cells (same space as
+    /// <c>MouseEvent.Column</c> / <c>Row</c>).
+    /// </summary>
+    public bool TryHitHeader(int col, int row)
+    {
+        if (_lastPaintRect is not { } rect || _lastSkipRows != 0)
+        {
+            return false;
+        }
+
+        return row == rect.Y && col >= rect.X && col < rect.X + rect.Width;
+    }
+
     public void Paint(in BlockPaintContext ctx)
     {
+        _lastPaintRect = ctx.Rect;
+        _lastSkipRows = ctx.SkipRows;
+
         var buffer = ctx.Buffer;
         int y = ctx.Rect.Y;
         PaintHeader(buffer, ctx.Rect.X, y, ctx.Rect.Width);
 
+        bool showArgs = IsExpanded && !string.IsNullOrEmpty(ArgsFullText);
         if (_body is null)
         {
+            if (showArgs && ctx.Rect.Bottom - (y + 1) > 0)
+            {
+                PaintArgsRow(buffer, ctx.Rect.X, y + 1, ctx.Rect.Width);
+            }
+
             return;
         }
 
         y++;
+        if (showArgs)
+        {
+            if (ctx.Rect.Bottom - y <= 0)
+            {
+                return;
+            }
+
+            PaintArgsRow(buffer, ctx.Rect.X, y, ctx.Rect.Width);
+            y++;
+        }
+
         int rows = ctx.Rect.Bottom - y;
         if (_body.DiffText is not null)
         {
@@ -222,7 +297,7 @@ public sealed class ToolCallBlock : IChatBlock
             return;
         }
 
-        PaintOutputBody(buffer, ctx.Rect.X, y, rows);
+        PaintOutputBody(buffer, ctx.Rect.X, y, rows, IsExpanded ? ExpandedBodyLines : MaxBodyLines);
     }
 
     private void PaintHeader(ScreenBuffer buffer, int x, int y, int width)
@@ -292,7 +367,24 @@ public sealed class ToolCallBlock : IChatBlock
         }
     }
 
-    private void PaintOutputBody(ScreenBuffer buffer, int x, int y, int rows)
+    private void PaintArgsRow(ScreenBuffer buffer, int x, int y, int width)
+    {
+        if (width <= 0 || y >= buffer.Rows)
+        {
+            return;
+        }
+
+        string text = "  args: " + ArgsFullText;
+        int avail = Math.Max(0, buffer.Cols - x);
+        if (text.Length > avail)
+        {
+            text = text[..avail];
+        }
+
+        buffer.SetText(x, y, text, ChatPalette.ToolArgs);
+    }
+
+    private void PaintOutputBody(ScreenBuffer buffer, int x, int y, int rows, int maxLines)
     {
         var output = _body!.Output.AsSpan().TrimEnd('\n');
         if (output.IsEmpty || rows <= 0)
@@ -304,7 +396,7 @@ public sealed class ToolCallBlock : IChatBlock
         int shown = 0;
         int cursorY = y;
         var rest = output;
-        while (!rest.IsEmpty && shown < MaxBodyLines && shown < rows)
+        while (!rest.IsEmpty && shown < maxLines && shown < rows)
         {
             int nl = rest.IndexOf('\n');
             var line = nl < 0 ? rest : rest[..nl];
@@ -354,6 +446,18 @@ public sealed class ToolCallBlock : IChatBlock
 
         int logical = CountLogicalLines(output);
         return Math.Min(logical, MaxBodyLines) + (logical > MaxBodyLines ? 1 : 0);
+    }
+
+    private int ExpandedBodyLineCount()
+    {
+        var output = _body!.Output.AsSpan().TrimEnd('\n');
+        if (output.IsEmpty)
+        {
+            return 0;
+        }
+
+        int logical = CountLogicalLines(output);
+        return Math.Min(logical, ExpandedBodyLines) + (logical > ExpandedBodyLines ? 1 : 0);
     }
 
     private int DiffLineCount() => DiffRenderer.CountLines(_body!.DiffText!);

@@ -221,7 +221,7 @@ public sealed class ChatScreenBridge : IDisposable
 
             case ToolExecutionStartEvent execStart:
                 {
-                    var card = EnsureCard(execStart.ToolCallId, execStart.ToolName, Summarize(execStart.Args));
+                    var card = EnsureCard(execStart.ToolCallId, execStart.ToolName, Summarize(execStart.Args), FullArgs(execStart.Args));
                     card.StartedMs = _nowMs;
                     _status.Phase = AgentPhase.ToolCall;
                     _status.Mode = StatusBarMode.Running;
@@ -630,14 +630,14 @@ public sealed class ChatScreenBridge : IDisposable
     /// gate lands on the timeline and joins the pending queue in arrival order.</summary>
     // ── Tool cards ─────────────────────────────────────────────────────────
 
-    private ToolCard EnsureCard(string id, string toolName, string? argsSummary)
+    private ToolCard EnsureCard(string id, string toolName, string? argsSummary, string? argsFull = null)
     {
         if (_cards.TryGetValue(id, out var existing))
         {
             return existing;
         }
 
-        var block = new ToolCallBlock(new ToolCallInfo(id, toolName, argsSummary ?? string.Empty));
+        var block = new ToolCallBlock(new ToolCallInfo(id, toolName, argsSummary ?? string.Empty, ArgsFull: argsFull));
         _panel.Timeline.Append(block);
         _panel.Timeline.MarkLastDirty();
         var card = new ToolCard { Block = block, StartedMs = _nowMs };
@@ -721,6 +721,19 @@ public sealed class ChatScreenBridge : IDisposable
         return raw.Length <= 48 ? raw : raw[..47] + "…";
     }
 
+    /// <summary>Complete single-line args payload for the expanded card row (bounded for eviction accounting).</summary>
+    internal static string FullArgs(JsonElement args)
+    {
+        if (args.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
+        {
+            return string.Empty;
+        }
+
+        var raw = args.GetRawText().Replace("\n", " ", StringComparison.Ordinal);
+        const int cap = 2000;
+        return raw.Length <= cap ? raw : raw[..(cap - 1)] + "…";
+    }
+
     /// <summary>Host-driven notice into the timeline (slash-command output,
     /// submit errors). Rendered as a system line and flagged dirty.</summary>
     public void AppendSystemLine(string text)
@@ -750,6 +763,90 @@ public sealed class ChatScreenBridge : IDisposable
     public bool TryRouteApprovalKey(in KeyEvent key) => _gates.TryRouteApprovalKey(key);
 
     public bool TryRouteApprovalClick(in Input.MouseEvent mouse) => _gates.TryRouteApprovalClick(mouse);
+
+    /// <summary>
+    /// Toggles the expanded state of one tool card by id (feed Enter path).
+    /// Returns false when no card carries <paramref name="toolCallId"/>.
+    /// </summary>
+    public bool ToggleToolCard(string toolCallId)
+    {
+        if (string.IsNullOrEmpty(toolCallId))
+        {
+            return false;
+        }
+
+        var tl = _panel.Timeline;
+        for (int i = 0; i < tl.Count; i++)
+        {
+            if (tl.BlockAt(i) is ToolCallBlock card
+                && string.Equals(card.Info.Id, toolCallId, StringComparison.Ordinal))
+            {
+                card.ToggleExpanded();
+                tl.MarkLastDirty();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Routes a plain Enter press to the newest tool card on the feed (toggles
+    /// expand/collapse). Hosts call this after approval routing and before the
+    /// composer so feed-Enter expands cards while composer-Enter still submits
+    /// — ordering stays host-side. Returns false when the key is not a plain
+    /// Enter press or the feed holds no tool card.
+    /// </summary>
+    public bool TryRouteToolCardKey(in KeyEvent key)
+    {
+        if (key.EventType is not (KeyEventType.Press or KeyEventType.Repeat)
+            || key.Key != KeyCode.Enter
+            || key.Modifiers != KeyModifiers.None)
+        {
+            return false;
+        }
+
+        var tl = _panel.Timeline;
+        for (int i = tl.Count - 1; i >= 0; i--)
+        {
+            if (tl.BlockAt(i) is ToolCallBlock card)
+            {
+                card.ToggleExpanded();
+                tl.MarkLastDirty();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Routes a left-button press/click on a tool-card header to
+    /// expand/collapse (mirrors <see cref="TryRouteApprovalClick"/>).
+    /// Returns false when the click lands outside every card header —
+    /// callers keep normal scroll/selection behavior.
+    /// </summary>
+    public bool TryRouteToolCardClick(in Input.MouseEvent mouse)
+    {
+        if (mouse.Type is not (Input.MouseEventType.Press or Input.MouseEventType.Click)
+            || mouse.Button != Input.MouseButton.Left)
+        {
+            return false;
+        }
+
+        var tl = _panel.Timeline;
+        for (int i = tl.Count - 1; i >= 0; i--)
+        {
+            if (tl.BlockAt(i) is ToolCallBlock card && card.TryHitHeader(mouse.Column, mouse.Row))
+            {
+                card.ToggleExpanded();
+                tl.MarkLastDirty();
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Optional TEA store passthrough (epic C contour): when set, the gate
