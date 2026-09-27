@@ -233,21 +233,20 @@ public sealed class LspServerSession : IAsyncDisposable
         }
     }
 
-    // ── Location normalization (ROP boundary, §A2) ─────────────────────────
-    //
-    // Definition returns Location | Location[] | LocationLink[] | null;
-    // references return Location[] | null. Foreign servers send garbage, so
-    // every shape violation carries a machine-readable reason instead of
-    // null: Success(Some) = usable location, Success(None) = legitimately
-    // absent (JSON null / [] / skippable array items), Failure(reason) =
-    // malformed payload (not-object-or-array, missing-uri, missing-range,
-    // missing-target-selection-range, uri-not-string). Callers map failures
-    // to degrade-warnings; the ILspService surface itself stays null/[]-typed.
-
     /// <summary>
     ///     Normalize a definition payload: the first usable location wins,
     ///     garbage fails with a reason instead of vanishing into <c>null</c>.
     /// </summary>
+    /// <remarks>
+    ///     Location normalization (ROP boundary): definition returns
+    ///     Location | Location[] | LocationLink[] | null, references return
+    ///     Location[] | null. Foreign servers send garbage, so every shape
+    ///     violation carries a machine-readable reason: Success(Some) = usable
+    ///     location, Success(None) = legitimately absent (JSON null / [] /
+    ///     skippable array items), Failure(reason) = malformed payload.
+    ///     Callers map failures to degrade-warnings; the ILspService surface
+    ///     itself stays null/[]-typed.
+    /// </remarks>
     internal static Result<Maybe<LspLocation>> TryNormalizeFirstLocation(JsonElement? element, string fallbackPath)
     {
         if (element is not { } e || e.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)

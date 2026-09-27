@@ -173,9 +173,10 @@ public sealed class LspManager : ILspService
         {
             return await resolved.Value.FindDefinitionAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
             _logger.LogWarning(
+                ex,
                 "LSP: definition lookup for {File} timed out after {Timeout} (lookup-timed-out) — degraded to no-result",
                 filePath, RequestTimeout);
             return null;
@@ -208,9 +209,10 @@ public sealed class LspManager : ILspService
         {
             return await resolved.Value.FindReferencesAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
             _logger.LogWarning(
+                ex,
                 "LSP: references lookup for {File} timed out after {Timeout} (lookup-timed-out) — degraded to empty",
                 filePath, RequestTimeout);
             return [];
