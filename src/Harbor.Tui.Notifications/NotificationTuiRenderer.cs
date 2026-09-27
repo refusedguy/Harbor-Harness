@@ -37,6 +37,10 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
         _logger = logger;
         Context = new NotificationRenderContext();
         _backend = DetectBackend();
+        RegisterHandler(new AgentErrorNotificationHandler(_backend));
+        RegisterHandler(new AgentEndNotificationHandler(_backend));
+        RegisterHandler(new CompactionNotificationHandler(_backend));
+        RegisterHandler(new ToolErrorNotificationHandler(_backend));
     }
 
     /// <inheritdoc />
@@ -56,38 +60,78 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
 
         try
         {
-            switch (@event)
-            {
-                case AgentErrorEvent err:
-                    _backend.Notify("Harbor — error", err.Message, true);
-                    break;
-
-                case AgentEndEvent:
-                    // Fire a "done" notification. Skip if the agent ended in error
-                    // (AgentErrorEvent already fired) — note both events arrive in
-                    // sequence on errors; this is a heuristic to avoid double-fire.
-                    _backend.Notify("Harbor — done", "Agent finished.", false);
-                    break;
-
-                case CompactionCompletedEvent cc:
-                    _backend.Notify("Harbor — compacted",
-                        $"Pruned {cc.PrunedMessageCount} messages, saved ~{cc.TokensSaved} tokens.",
-                        false);
-                    break;
-
-                case ToolExecutionEndEvent tee when tee.IsError:
-                    // Only notify on tool errors — successful tool calls are too noisy.
-                    // ToolExecutionEndEvent carries ToolCallId (not the friendly ToolName — that's
-                    // on ToolExecutionStartEvent). Use the call id as the identifier.
-                    string preview = tee.Result.Output ?? string.Empty;
-                    if (preview.Length > 200) preview = preview[..200] + "…";
-                    _backend.Notify($"Harbor — tool {tee.ToolCallId} failed", preview, true);
-                    break;
-            }
+            // Desktop alerts are fired by the registered IAgentEventHandlers
+            // (issue #185 visitor registry) — no per-renderer switch here.
+            await DispatchToHandlersAsync(@event, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to fire notification for {EventType}", @event.GetType().Name);
+        }
+    }
+
+    /// <summary>Error notification on unrecoverable agent failures.</summary>
+    private sealed class AgentErrorNotificationHandler(INotificationBackend backend) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) => @event is AgentErrorEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            var err = (AgentErrorEvent)@event;
+            backend.Notify("Harbor — error", err.Message, true);
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Done notification when the run completes.</summary>
+    /// <remarks>
+    ///     Skips nothing by itself: on errors both AgentErrorEvent and
+    ///     AgentEndEvent arrive in sequence, so an error run may double-fire —
+    ///     the same heuristic trade-off as before the visitor refactor.
+    /// </remarks>
+    private sealed class AgentEndNotificationHandler(INotificationBackend backend) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) => @event is AgentEndEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            backend.Notify("Harbor — done", "Agent finished.", false);
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Notification when compaction reclaims context.</summary>
+    private sealed class CompactionNotificationHandler(INotificationBackend backend) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) => @event is CompactionCompletedEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            var cc = (CompactionCompletedEvent)@event;
+            backend.Notify("Harbor — compacted",
+                $"Pruned {cc.PrunedMessageCount} messages, saved ~{cc.TokensSaved} tokens.",
+                false);
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Error notification on failed tool calls (successes are too noisy).</summary>
+    /// <remarks>
+    ///     ToolExecutionEndEvent carries ToolCallId (not the friendly ToolName —
+    ///     that's on ToolExecutionStartEvent). The call id is the identifier.
+    /// </remarks>
+    private sealed class ToolErrorNotificationHandler(INotificationBackend backend) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is ToolExecutionEndEvent { IsError: true };
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            var tee = (ToolExecutionEndEvent)@event;
+            string preview = tee.Result.Output ?? string.Empty;
+            if (preview.Length > 200) preview = preview[..200] + "…";
+            backend.Notify($"Harbor — tool {tee.ToolCallId} failed", preview, true);
+            return Task.CompletedTask;
         }
     }
 

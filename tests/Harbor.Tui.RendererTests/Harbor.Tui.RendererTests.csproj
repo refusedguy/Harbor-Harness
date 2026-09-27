@@ -19,6 +19,7 @@
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Engine\Harbor.Tui.CellForge.Engine.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.NickConsoleEx\Harbor.Tui.NickConsoleEx.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Notifications\Harbor.Tui.Notifications.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
