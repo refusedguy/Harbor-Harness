@@ -8,9 +8,8 @@ namespace Harbor.Tui.CellForge.Panels;
 // host opt-in for `CellForgeSkillFreshnessPanel`. The panel is deliberately NOT
 // a renderer builtin — `RegisterBuiltinPanels` keeps exactly the 9 panels in
 // Spectre Alt+1..9 slot order (pinned by `PanelWiringTests`), and this 10th
-// panel takes no Alt slot. Hosts opt in explicitly:
-//
-//   panels.RegisterSkillFreshness(sharedModel);
+// panel takes no Alt slot. Hosts opt in explicitly through the registration
+// extension below taking a shared model.
 //
 // The CLI wires it when `HARBOR_SKILL_FRESHNESS=1` (see
 // `SkillFreshnessStartup.TryRegisterPanel`); tests and other hosts call the
