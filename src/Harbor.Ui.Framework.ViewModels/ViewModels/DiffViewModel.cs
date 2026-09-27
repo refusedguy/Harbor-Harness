@@ -9,6 +9,16 @@ namespace Harbor.Ui.Framework.ViewModels;
 ///     algorithm (Myers) — this implementation is intentionally simple: same lines are
 ///     "unchanged", differing lines are "modified", and length differences are "added"/"removed".
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>vm-dedup canon (audit 27-G):</b> canonical TEA-projection side-by-side
+///         diff VM (<c>LeftText</c>/<c>RightText</c>/<c>Compute</c>/<c>Rows</c>), bound by
+///         Avalonia <c>DiffView.axaml</c>. Not the same as the TUI
+///         <c>DiffPreviewViewModel</c> (event-driven diff list), the Desktop
+///         <c>DiffViewModel</c> (Before/After unified text) or the WPF hunk VM —
+///         same name, different logic; do not merge without a logic refactor.
+///     </para>
+/// </remarks>
 public sealed partial class DiffViewModel : ObservableObject
 {
     private readonly ILogger<DiffViewModel> _logger;

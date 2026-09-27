@@ -6,6 +6,9 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 // view-models in apps/Harbor.App.Wpf/ViewModels/*.
 // These are the canonical shapes shared by every desktop shell (WPF,
 // Avalonia, MAUI, Blazor). They intentionally carry NO WPF-specific types.
+// vm-dedup canon (audit 27-G): platform VMs inherit/project these shapes
+// (WPF DiffLine/DiffHunk/TokenBar heirs); Desktop *Base VMs + TuiViewModels
+// own behavior, Framework hosts TEA-projection VMs.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Chat

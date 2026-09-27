@@ -3,6 +3,12 @@ using Harbor.Abstractions.Models;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
+/// <summary>
+///     Desktop canon base for token-usage VMs: UiState selectors for totals; platform
+///     VMs project rows/bars. Distinct from the Framework TEA-projection
+///     <c>TokenUsageViewModel</c> (Avalonia) and the shell-local WPF/Blazor chart VMs
+///     (vm-dedup audit 27-G — do not merge).
+/// </summary>
 public abstract partial class TokenUsageViewModelBase : StoreSubscriberViewModel
 {
 

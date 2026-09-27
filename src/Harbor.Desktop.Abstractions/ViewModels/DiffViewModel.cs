@@ -11,6 +11,14 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 ///     itself never references Blazor, JSInterop, or any clipboard API, so it
 ///     can be reused across every desktop/web target.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>vm-dedup canon (audit 27-G):</b> desktop canon unified-diff VM
+///         (<c>Before</c>/<c>After</c>/<c>ComputeDiff</c>/<c>CopyAsync</c>), bound in
+///         Avalonia via <c>ContentHost.Diff</c>. Distinct from the Framework side-by-side
+///         compute VM and the TUI <c>DiffPreviewViewModel</c> — do not merge.
+///     </para>
+/// </remarks>
 public sealed partial class DiffViewModel : ObservableObject
 {
     /// <summary>The original (left) text.</summary>
