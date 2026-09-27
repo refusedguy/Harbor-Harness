@@ -147,18 +147,19 @@ public static class PanelRows
                     _ => "·",
                 };
                 string ok = change.IsError ? "✗" : "✓";
-                string path = PanelText.ShortenTail(change.FilePath, Math.Max(4, width - 12));
+                string path = ShortenPath(change.FilePath, Math.Max(4, width - 12));
                 rows.Add($"{icon} {ok} {path}");
                 if (!string.IsNullOrEmpty(change.DiffBody))
                 {
                     string body = change.DiffBody;
                     int start = 0;
+                    int bodyBudget = Math.Max(1, width - 2);
                     for (int shown = 0; shown < 4 && start < body.Length; shown++)
                     {
                         int nl = body.IndexOf('\n', start);
                         string line = nl < 0 ? body[start..] : body[start..nl];
                         start = nl < 0 ? body.Length : nl + 1;
-                        rows.Add("  " + line.TrimEnd('\r'));
+                        rows.Add("  " + PanelText.Truncate(line.TrimEnd('\r'), bodyBudget));
                     }
                 }
             }
@@ -324,6 +325,30 @@ public static class PanelRows
         }
 
         return rows;
+    }
+
+    private static string ShortenPath(string path, int max)
+    {
+        if (string.IsNullOrEmpty(path) || path.Length <= max)
+        {
+            return path;
+        }
+
+        // Keep the file name + a hint of the directory (mirrors the Spectre DiffPreviewPanel).
+        int slash = Math.Max(path.LastIndexOf('/'), path.LastIndexOf('\\'));
+        if (slash < 0 || path.Length - slash > max - 3)
+        {
+            return path[^(max - 1)] + "…" + path[^1];
+        }
+
+        string file = path[slash..];
+        string dir = path[..slash];
+        if (dir.Length > max - file.Length - 3)
+        {
+            dir = "…" + dir[^(max - file.Length - 4)..];
+        }
+
+        return dir + file;
     }
 
     private static string ShortenCategory(string category)

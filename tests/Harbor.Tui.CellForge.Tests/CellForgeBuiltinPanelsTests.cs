@@ -227,6 +227,32 @@ public class CellForgeBuiltinPanelsTests
     }
 
     [Test]
+    public async Task Diff_LongPath_KeepsFileNameWithEllipsis()
+    {
+        const string file = "very-long-file-name.cs";
+        var state = StateWithLines(
+            new ChatLine(ChatRole.Tool, "→ edit {\"path\": \"src/a/very/deep/dir/" + file + "\"}", "tc1"),
+            new ChatLine(ChatRole.ToolResult, "✓ ok", "tc1"));
+        string text = Joined(new CellForgeDiffPreviewPanel().Build(Ctx(state, width: 40, height: 24)));
+        await Assert.That(text).Contains(file);
+        await Assert.That(text).Contains("…");
+    }
+
+    [Test]
+    public async Task Diff_LongBodyLine_TruncatedToWidth()
+    {
+        var state = StateWithLines(
+            new ChatLine(ChatRole.Tool, "→ edit {\"path\": \"src/a.cs\"}", "tc1"),
+            new ChatLine(ChatRole.ToolResult, "✓ " + new string('b', 100), "tc1"));
+        var rows = Rows(new CellForgeDiffPreviewPanel().Build(Ctx(state, width: 40, height: 24)));
+        await Assert.That(string.Join("\n", rows)).Contains("…");
+        foreach (string line in rows)
+        {
+            await Assert.That(line.Length <= 40).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task Diagnostics_Empty_RendersPlaceholder()
     {
         string text = Joined(new CellForgeDiagnosticsPanel().Build(Ctx(new UiState())));
