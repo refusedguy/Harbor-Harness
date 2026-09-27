@@ -181,4 +181,42 @@ public class JsonlSessionPorterTests
             if (Directory.Exists(source.GetRootDirectory())) Directory.Delete(source.GetRootDirectory(), true);
         }
     }
+
+    [Test]
+    public async Task Import_LegacyPascalCaseToolResult_StillDecodes()
+    {
+        var source = await CreateStoreWithFixtureAsync();
+        try
+        {
+            Session fixture = (await source.ListAsync()).Value[0];
+            var porter = CreatePorter();
+            var target = CreateMemoryStore();
+
+            var payload = new StringWriter();
+            await porter.ExportAsync(source, fixture.Id, payload);
+            // Pre-V4 payloads stored result entries PascalCase; the import
+            // rail tolerates both casings (the store span fast path
+            // deliberately does not — see DecodeMessageLine remarks — so
+            // this fidelity requirement is locked here, not by accident).
+            string legacy = payload.ToString()
+                .Replace("\"toolCallId\"", "\"ToolCallId\"")
+                .Replace("\"toolName\"", "\"ToolName\"")
+                .Replace("\"output\"", "\"Output\"")
+                .Replace("\"isError\"", "\"IsError\"")
+                .Replace("\"results\"", "\"Results\"");
+
+            var import = await porter.ImportAsync(target, new StringReader(legacy));
+            await Assert.That(import.IsSuccess).IsTrue();
+
+            var messages = await target.GetMessagesAsync(import.Value);
+            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages.Value.Count).IsEqualTo(3);
+            await Assert.That((messages.Value[2] as ToolResultMessage)!.Results[0].Output)
+                .IsEqualTo("a.txt\nb.txt");
+        }
+        finally
+        {
+            if (Directory.Exists(source.GetRootDirectory())) Directory.Delete(source.GetRootDirectory(), true);
+        }
+    }
 }

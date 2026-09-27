@@ -242,8 +242,10 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         int? expectedId,
         CancellationToken cancellationToken)
     {
-        string payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(payload))
+        // #180: read bytes and parse from UTF-8 directly — the JSON branch
+        // never materializes the body as a string.
+        byte[] payload = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        if (IsBlank(payload))
         {
             return Result.Success<JsonDocument?>(null);
         }
@@ -262,8 +264,9 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         }
 
         // SSE-bodied response: pick the first message frame answering expectedId.
+        string text = Encoding.UTF8.GetString(payload);
         var reader = new SseEventReader();
-        foreach (string line in payload.Split('\n'))
+        foreach (string line in text.Split('\n'))
         {
             if (reader.Feed(line) is { Event: "message" } ev
                 && McpSse.TryParseResponse(ev.Data, expectedId) is { } doc)
@@ -273,6 +276,22 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         }
 
         return Result.Failure<JsonDocument?>("MCP SSE response carried no matching JSON-RPC frame.");
+    }
+
+    /// <summary>
+    /// Empty-or-ASCII-whitespace body — mirrors the old
+    /// <c>string.IsNullOrWhiteSpace</c> check for every payload JSON admits
+    /// (JSON whitespace is space/tab/CR/LF only).
+    /// </summary>
+    private static bool IsBlank(ReadOnlySpan<byte> payload)
+    {
+        foreach (byte b in payload)
+        {
+            if (b != (byte)' ' && b != (byte)'\t' && b != (byte)'\r' && b != (byte)'\n')
+                return false;
+        }
+
+        return true;
     }
 
     private async Task<Result<string?>> TryGetOAuthTokenAsync(CancellationToken cancellationToken)

@@ -1,3 +1,4 @@
+using Harbor.Tools.Mcp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text;
@@ -99,9 +100,11 @@ public sealed class McpPromptTool : ITool
     {
         string server = args.GetProperty("server").GetString()!;
         string name = args.GetProperty("name").GetString()!;
-        string argumentsJson = args.TryGetProperty("arguments", out var a) && a.ValueKind == JsonValueKind.Object
-            ? a.GetRawText()
-            : "{}";
+        // #180: writer-built params over a pooled buffer. Absent arguments
+        // default to {} exactly as before (previously via the "{}" fallback).
+        JsonElement arguments = args.TryGetProperty("arguments", out var a) && a.ValueKind == JsonValueKind.Object
+            ? a
+            : default;
 
         var registry = _registry;
         // #63 legitimate: ctor-injected primary with a per-call context
@@ -121,8 +124,8 @@ public sealed class McpPromptTool : ITool
 
         _logger.LogDebug("MCP prompt render: server={Server} name={Name}", server, name);
 
-        using var paramsDoc = JsonDocument.Parse($"{{\"name\":{JsonSerializer.Serialize(name)},\"arguments\":{argumentsJson}}}");
-        var invoked = await registry.InvokeAsync(server, "prompts/get", paramsDoc.RootElement.Clone(), cancellationToken)
+        using var paramsDoc = McpJsonRpc.BuildPromptGetParams(name, arguments);
+        var invoked = await registry.InvokeAsync(server, "prompts/get", paramsDoc.RootElement, cancellationToken)
             .ConfigureAwait(false);
         if (invoked.IsFailure)
         {

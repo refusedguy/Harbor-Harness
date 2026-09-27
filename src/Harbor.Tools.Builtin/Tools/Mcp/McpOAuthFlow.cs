@@ -166,7 +166,9 @@ public static class McpOAuthFlow
     {
         try
         {
-            using var body = JsonDocument.Parse($"{{\"redirect_uris\":[{JsonSerializer.Serialize(redirectUri)}],\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"scope\":{JsonSerializer.Serialize(string.Join(" ", scopes))}}}");
+            // #180: writer-built body (no Serialize-inside-interpolation).
+            // (Cold path; fixed on touch per the issue.)
+            using var body = McpJsonRpc.BuildRegisterClientBody(redirectUri, string.Join(" ", scopes));
             using var request = new HttpRequestMessage(HttpMethod.Post, registrationEndpoint)
             {
                 Content = new StringContent(body.RootElement.GetRawText(), Encoding.UTF8, "application/json")

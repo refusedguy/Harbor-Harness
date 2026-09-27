@@ -151,6 +151,17 @@ public class IdeBridgeTests
     }
 
     [Test]
+    public async Task NonObject_Json_Responds_With_InvalidRequest()
+    {
+        await using var harness = new IdeHarness(sessionId: "s1");
+
+        harness.Input.PushLine("[1,2]");
+
+        string line = await harness.WaitOutputAsync("\"error\"", timeout: TimeSpan.FromSeconds(5));
+        await Assert.That(line).Contains("must be a JSON object");
+    }
+
+    [Test]
     public async Task Editor_Notifications_Are_Acknowledged_By_Silence()
     {
         await using var harness = new IdeHarness(sessionId: "s1");

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
@@ -19,6 +20,16 @@ internal sealed class McpStdioServer
     private const string ProtocolVersion = "2024-11-05";
     private const string ServerName = "harbor-csharp-plugins";
     private const string ServerVersion = "0.4.0-alpha";
+
+    /// <summary>
+    /// Frozen empty-JSON-object element for argument-less <c>tools/call</c>
+    /// invocations — same convention as <c>AgentLoop.EmptyMalformedArgsElement</c>:
+    /// the backing <see cref="JsonDocument"/> is never disposed
+    /// (process-lifetime state), so the element stays valid; concurrent reads
+    /// are safe because parsed JSON is immutable. Avoids a per-call
+    /// <c>Parse("{}") + Clone()</c> (#180).
+    /// </summary>
+    private static readonly JsonElement EmptyArgs = JsonDocument.Parse("{}").RootElement;
 
     private readonly McpPluginLoadHost _loadHost;
     private readonly ILogger<McpStdioServer> _logger;
@@ -53,6 +64,18 @@ internal sealed class McpStdioServer
 
     private async Task HandleAsync(string line, StreamWriter stdout, CancellationToken ct)
     {
+        // #180: envelope pre-scan over pooled UTF-8 bytes. Lines without a
+        // string "method" (ignored frames) and the notifications/initialized
+        // no-op return before any JsonDocument exists; addressed calls and
+        // malformed lines (which RunAsync logs) take the DOM path below.
+        if (TryScanMethod(line, out string? scanned))
+        {
+            if (scanned is null)
+                return;
+            if (scanned == "notifications/initialized")
+                return;
+        }
+
         using var doc = JsonDocument.Parse(line);
         var root = doc.RootElement;
         if (!root.TryGetProperty("method", out var methodEl) || methodEl.ValueKind != JsonValueKind.String)
@@ -86,6 +109,66 @@ internal sealed class McpStdioServer
             default:
                 if (hasId) await WriteErrorAsync(stdout, idEl, -32601, $"Method not found: {method}", ct).ConfigureAwait(false);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Scan one NDJSON line for a top-level string <c>"method"</c> without
+    /// building a DOM. Returns false (defer to the DOM path) on malformed or
+    /// trailing-dirty input so error/log behavior is unchanged; otherwise the
+    /// method name, or null when the frame carries none. Last-wins on
+    /// duplicates, mirroring <c>TryGetProperty</c>.
+    /// </summary>
+    private static bool TryScanMethod(string line, out string? method)
+    {
+        method = null;
+        int byteCount = Encoding.UTF8.GetByteCount(line);
+        byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
+        try
+        {
+            Encoding.UTF8.GetBytes(line, rented);
+            var reader = new Utf8JsonReader(rented.AsSpan(0, byteCount));
+            try
+            {
+                if (!reader.Read())
+                    return false; // empty — the DOM path throws, as before
+                if (reader.TokenType != JsonTokenType.StartObject)
+                    return false; // non-object root: the DOM path's TryGetProperty
+                                  // throws and RunAsync logs — preserved verbatim
+
+                bool closed = false;
+                while (reader.Read())
+                {
+                    if (reader.TokenType == JsonTokenType.EndObject)
+                    {
+                        closed = true;
+                        break;
+                    }
+
+                    if (reader.TokenType != JsonTokenType.PropertyName)
+                        continue;
+                    bool isMethod = reader.ValueSpan.SequenceEqual("method"u8);
+                    if (!reader.Read())
+                        return false; // truncated frame
+                    if (isMethod)
+                        method = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+                    reader.Skip();
+                }
+
+                if (!closed)
+                    return false; // truncated object — the DOM path throws, as before
+                return !reader.Read(); // trailing garbage likewise defers
+            }
+            catch (Exception)
+            {
+                // Best-effort fast path: anything the scanner does not
+                // understand defers to the DOM path, which owns the verdict.
+                return false;
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rented);
         }
     }
 
@@ -143,7 +226,7 @@ internal sealed class McpStdioServer
 
         JsonElement args = paramsEl.Value.TryGetProperty("arguments", out var argsEl) && argsEl.ValueKind == JsonValueKind.Object
             ? argsEl.Clone()
-            : JsonDocument.Parse("{}").RootElement.Clone();
+            : EmptyArgs;
 
         var context = BuildContext();
         try
