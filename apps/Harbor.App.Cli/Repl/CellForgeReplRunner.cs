@@ -317,6 +317,10 @@ internal sealed class CellForgeReplRunner(
         _replStore.Dispatch(new UiMsg.ConfigureRuntime(sessionModel.Model, sessionModel.ProviderId, sessionModel.Agent));
         ArmThemeWatcher();
 
+        // #170: the heartbeat must outlive Idle while a mascot reaction/latch
+        // still owes motion — the bridge polls both directors every frame.
+        bridge.TrackMascot(screen.Mascot, screen.Status);
+
         var inputTask = inputSource.RunAsync(ct);
         BindLeaderKeys();
 
@@ -517,9 +521,17 @@ internal sealed class CellForgeReplRunner(
     /// <summary>80 ms heartbeat only while an animation is on screen.</summary>
     private void ArmSpinner(Timer spinnerTimer)
     {
-        bool animating = _status.Mode is StatusBarMode.Running or StatusBarMode.Compacting;
-        spinnerTimer.Change(animating ? 80 : Timeout.Infinite, Timeout.Infinite);
+        spinnerTimer.Change(ShouldKeepHeartbeat(_status.Mode, bridge.IsMascotAnimating) ? 80 : Timeout.Infinite, Timeout.Infinite);
     }
+
+    /// <summary>
+    /// Heartbeat condition (#170): the Running/Compacting spinner plus any
+    /// mascot reaction/latch still playing out in Idle — the error/success face
+    /// revives by itself once the latch expires instead of freezing mid-sequence
+    /// forever. Internal for the heartbeat unit tests (InternalsVisibleTo).
+    /// </summary>
+    internal static bool ShouldKeepHeartbeat(StatusBarMode mode, bool mascotAnimating) =>
+        mode is StatusBarMode.Running or StatusBarMode.Compacting || mascotAnimating;
 
     private async ValueTask RenderFrameAsync(CancellationToken ct)
     {

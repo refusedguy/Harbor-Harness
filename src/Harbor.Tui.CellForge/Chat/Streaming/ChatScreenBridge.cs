@@ -890,6 +890,30 @@ public sealed class ChatScreenBridge : IDisposable
         set => _gates.Store = value;
     }
 
+    private MascotPanel? _mascotPanel;
+    private StatusPanel? _statusPanel;
+
+    /// <summary>
+    /// Wires the mascot hosts for <see cref="IsMascotAnimating"/> (#170): the
+    /// panel cat and the footer cat each own a <c>MascotDirector</c>, and the
+    /// heartbeat must outlive Idle while either still owes motion. Called once
+    /// by the frame-loop owner (the runner); the bridge never paints from them.
+    /// </summary>
+    public void TrackMascot(MascotPanel? panel, StatusPanel? status)
+    {
+        _mascotPanel = panel;
+        _statusPanel = status;
+    }
+
+    /// <summary>
+    /// True while either mascot director still owes motion (a reaction is armed
+    /// or the mood latch is live). The runner keeps the 80 ms heartbeat on Idle
+    /// frames while this holds, so the error/success sequence plays out and the
+    /// mascot revives by itself. Allocation-free.
+    /// </summary>
+    public bool IsMascotAnimating =>
+        (_mascotPanel?.IsMascotAnimating ?? false) || (_statusPanel?.IsMascotAnimating ?? false);
+
     public void Dispose() => Subscription.Dispose();
 
     public void RouteDiffNavigation(DiffPreviewViewModel diffVm, ChatAction action) =>

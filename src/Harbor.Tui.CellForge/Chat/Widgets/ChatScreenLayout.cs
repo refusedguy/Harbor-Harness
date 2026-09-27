@@ -400,6 +400,13 @@ public sealed class StatusPanel : Panel
     public long Tick { get; private set; }
 
     /// <summary>
+    /// Animation debt for the frame-loop heartbeat (#170): a reaction is armed
+    /// or the mood latch is live. The bridge polls this (same assembly).
+    /// A footer that never paints stays quiet — its director never arms.
+    /// </summary>
+    internal bool IsMascotAnimating => _director.HasActiveAnimation;
+
+    /// <summary>
     /// Panel chrome (input⇄status zone separation): when true, the row sits on
     /// the theme Panel surface so the footer reads as its own zone against the
     /// default-background feed. False by default — legacy paint is

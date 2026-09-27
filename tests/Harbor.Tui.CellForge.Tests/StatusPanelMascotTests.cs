@@ -96,7 +96,7 @@ public class StatusPanelMascotTests
     }
 
     [Test]
-    public async Task ErroredPhase_LatchesErrorMood_ThenRevertsToIdle()
+    public async Task ErroredPhase_Latch_IsTimeBased_HoldsAcrossFastFrames()
     {
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle, Phase = AgentPhase.Errored };
@@ -107,16 +107,15 @@ public class StatusPanelMascotTests
         string first = PaintLastFrame(screen, buffer, 1);
         await Assert.That(first).Contains(AmbientMascot.ErrorFrames[1]);
 
-        // Latch expires after MoodLatchFrames ticks from its start (tick 1):
-        // the last of the 150 warm-up paints lands on tick 151 → derived mood.
-        string after = PaintLastFrame(screen, buffer, MascotDirector.MoodLatchFrames);
-        await Assert.That(after).Contains(AmbientMascot.IdleFrames[(1 + MascotDirector.MoodLatchFrames) % AmbientMascot.IdleFrames.Length]);
-        await Assert.That(after).DoesNotContain(AmbientMascot.ErrorFrames[0]);
-        await Assert.That(after).DoesNotContain(AmbientMascot.ErrorFrames[1]);
+        // Wall-clock latch (#170): 150 rapid paints take milliseconds, far
+        // below the ~12 s latch — the dead face holds. Time expiry itself is
+        // covered by MascotReviveTests with an injected millisecond latch.
+        string fast = PaintLastFrame(screen, buffer, MascotDirector.MoodLatchFrames);
+        await Assert.That(fast).Contains(AmbientMascot.ErrorFrames[(1 + MascotDirector.MoodLatchFrames) % AmbientMascot.ErrorFrames.Length]);
     }
 
     [Test]
-    public async Task SucceededPhase_LatchesSuccessMood_ThenRevertsToIdle()
+    public async Task SucceededPhase_Latch_IsTimeBased_HoldsAcrossFastFrames()
     {
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle, Phase = AgentPhase.Succeeded };
@@ -127,9 +126,8 @@ public class StatusPanelMascotTests
         string first = PaintLastFrame(screen, buffer, 1);
         await Assert.That(first).Contains(AmbientMascot.SuccessFrames[1]);
 
-        string after = PaintLastFrame(screen, buffer, MascotDirector.MoodLatchFrames);
-        await Assert.That(after).DoesNotContain(AmbientMascot.SuccessFrames[0]);
-        await Assert.That(after).DoesNotContain(AmbientMascot.SuccessFrames[1]);
+        string fast = PaintLastFrame(screen, buffer, MascotDirector.MoodLatchFrames);
+        await Assert.That(fast).Contains(AmbientMascot.SuccessFrames[(1 + MascotDirector.MoodLatchFrames) % AmbientMascot.SuccessFrames.Length]);
     }
 
     /// <summary>Paints all panels <paramref name="frames" /> times, returning the concatenated art.</summary>

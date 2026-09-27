@@ -24,6 +24,12 @@ public sealed class MascotPanel : Panel
 
     public long Tick { get; private set; }
 
+    /// <summary>
+    /// Animation debt for the frame-loop heartbeat (#170): a reaction is armed
+    /// or the mood latch is live. The bridge polls this (same assembly).
+    /// </summary>
+    internal bool IsMascotAnimating => _director.HasActiveAnimation;
+
     public override void Paint(ScreenBuffer buffer)
     {
         Tick++;

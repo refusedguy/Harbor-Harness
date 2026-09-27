@@ -6,17 +6,37 @@ namespace Harbor.Tui.CellForge.Widgets;
 
 public sealed class MascotDirector
 {
+    /// <summary>
+    /// Legacy tick alias: 150 frames at the 80 ms heartbeat ≈ 12 s.
+    /// Kept for compatibility (tests, warm-up counts); the latch itself
+    /// expires by wall-clock (<see cref="MoodLatchMs"/>), not by ticks (#170).
+    /// </summary>
     public const int MoodLatchFrames = 150;
+
+    /// <summary>
+    /// Wall-clock mood latch: 150 frames × 80 ms heartbeat ≈ 12 s. A tick
+    /// counter froze forever in Idle (no repaints → no ticks); wall-clock
+    /// expiry revives the mascot once frames flow again (#170).
+    /// </summary>
+    public const int MoodLatchMs = 12_000;
 
     private const byte NoMood = 0xFF;
 
+    private readonly int _moodLatchMs;
     private long _lastActiveMs = Environment.TickCount64;
     private byte _mood = NoMood;
     private long _moodFlipTick = long.MinValue;
     private byte _latched = NoMood;
-    private long _latchEndTick;
+    private long _latchEndMs;
     private byte _lastPhase;
     private readonly SpringFx _crossfadeSpring = new(1.0);
+
+    /// <summary>Creates a director with an optional latch-lifetime override.</summary>
+    /// <param name="moodLatchMs">Latch lifetime override (tests inject milliseconds).</param>
+    public MascotDirector(int moodLatchMs = MoodLatchMs)
+    {
+        _moodLatchMs = moodLatchMs;
+    }
 
     public MascotMood Advance(StatusViewModel vm, long tick)
     {
@@ -25,14 +45,20 @@ public sealed class MascotDirector
             return MascotMood.Idle;
         }
 
+        long now = Environment.TickCount64;
         byte phase = (byte)vm.Phase;
-        bool eventPhase = phase is (byte)AgentPhase.Errored or (byte)AgentPhase.Succeeded;
-        if (eventPhase && _lastPhase != phase)
+        if (phase == (byte)AgentPhase.Auto)
+        {
+            // Run boundary (AgentStart): a stale Error/Success latch from the
+            // previous run must not leak into the new one (#170).
+            _latched = NoMood;
+        }
+        else if (phase is (byte)AgentPhase.Errored or (byte)AgentPhase.Succeeded && _lastPhase != phase)
         {
             _latched = phase == (byte)AgentPhase.Errored ? (byte)MascotMood.Error : (byte)MascotMood.Success;
-            _latchEndTick = tick + MoodLatchFrames;
+            _latchEndMs = now + _moodLatchMs;
         }
-        else if (eventPhase && _latched != NoMood && tick >= _latchEndTick)
+        else if (_latched != NoMood && now >= _latchEndMs)
         {
             _latched = NoMood;
         }
@@ -59,6 +85,31 @@ public sealed class MascotDirector
         }
 
         return mood;
+    }
+
+    /// <summary>
+    /// True while the mascot still owes the user motion: a one-shot reaction
+    /// is armed or the mood latch is live by wall-clock (#170). The frame loop
+    /// keeps its 80 ms heartbeat while this holds so reactions play out and
+    /// the latch can expire in Idle; it goes quiet by itself afterwards.
+    /// False when the mascot is off. Allocation-free.
+    /// </summary>
+    public bool HasActiveAnimation
+    {
+        get
+        {
+            if (MascotModeEnv.Value == MascotMode.Off)
+            {
+                return false;
+            }
+
+            if (_reaction != 0)
+            {
+                return true;
+            }
+
+            return _latched != NoMood && Environment.TickCount64 < _latchEndMs;
+        }
     }
 
     public bool BlendMoodCrossfade(ScreenBuffer buffer, Rect region, long tick)
