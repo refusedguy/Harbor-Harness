@@ -95,6 +95,100 @@ public sealed class DefaultUiProjector : IUiProjector
         string? thinkBuf = state.IsStreaming && !string.IsNullOrEmpty(thinkRaw) ? thinkRaw : null;
         string? textBuf = state.IsStreaming && !string.IsNullOrEmpty(textRaw) ? textRaw : null;
 
+        ChromeModels chrome = ProjectChrome(state, cache);
+
+        HistoryModels history = ProjectHistory(state, cache);
+
+        TailModels tail = ProjectTail(state, cache, thinkBuf, textBuf);
+
+        // ── Compose the transcript (copy-on-write: only changed frames copy) ──
+        string? streamingBlockId = state.IsStreaming ? "streaming" : null;
+        bool transcriptSame = history.Unchanged
+            && tail.Unchanged
+            && cache is not null;
+        UiTranscriptModel transcript;
+        if (transcriptSame)
+        {
+            transcript = cache!.Transcript;
+        }
+        else
+        {
+            var blockBuilder = ImmutableArray.CreateBuilder<UiBlock>(history.Blocks.Length + tail.Blocks.Length);
+            var renderedBuilder = ImmutableArray.CreateBuilder<UiRenderedLine>(history.Rendered.Length + tail.Rendered.Length);
+            blockBuilder.AddRange(history.Blocks.AsSpan());
+            blockBuilder.AddRange(tail.Blocks.AsSpan());
+            renderedBuilder.AddRange(history.Rendered.AsSpan());
+            renderedBuilder.AddRange(tail.Rendered.AsSpan());
+
+            transcript = new UiTranscriptModel(
+                Blocks: blockBuilder.ToImmutable(),
+                RenderedLines: renderedBuilder.ToImmutable(),
+                StreamingBlockId: streamingBlockId);
+        }
+
+        // ── Screen assembly ──
+        UiScreenModel screen;
+        if (transcriptSame && chrome.Unchanged)
+        {
+            // Nothing observable changed — reuse the entire screen record.
+            screen = cache!.Screen;
+        }
+        else
+        {
+            screen = new UiScreenModel(
+                Header: chrome.Header,
+                Transcript: transcript,
+                StatusBar: chrome.StatusBar,
+                Input: chrome.Input,
+                Focus: state.Focus,
+                StateRevision: ComputeRevision(state));
+        }
+
+        _cache = new ProjectionCache
+        {
+            State = state,
+            Screen = screen,
+            Transcript = transcript,
+            Lines = state.Lines,
+            BaseRendered = history.Rendered,
+            BaseBlocks = history.Blocks,
+            IsStreaming = state.IsStreaming,
+            ThinkBuf = thinkBuf,
+            TextBuf = textBuf,
+            TailRendered = tail.Rendered,
+            TailBlocks = tail.Blocks,
+            Model = state.Model,
+            Provider = state.Provider,
+            AgentName = state.AgentName,
+            Status = state.Status,
+            InputText = state.Input.Text,
+            IsAgentRunning = state.IsAgentRunning,
+            ShouldQuit = state.ShouldQuit,
+            Focus = state.Focus,
+            Cost = state.Cost,
+            TotalLines = state.TotalLines,
+            ViewportLines = state.ViewportLines,
+            ScrollOffset = state.ScrollOffset,
+            Header = chrome.Header,
+            StatusBar = chrome.StatusBar,
+            Input = chrome.Input
+        };
+
+        return screen;
+    }
+
+    /// <summary>Projected chrome models plus whether the cached ones were reused.</summary>
+    private readonly record struct ChromeModels(UiHeaderModel Header, UiStatusBarModel StatusBar, UiInputModel Input, bool Unchanged);
+
+    /// <summary>Projected history rows plus whether the cached ones were reused.</summary>
+    private readonly record struct HistoryModels(ImmutableArray<UiRenderedLine> Rendered, ImmutableArray<UiBlock> Blocks, bool Unchanged);
+
+    /// <summary>Projected streaming tail plus whether the cached one was reused.</summary>
+    private readonly record struct TailModels(ImmutableArray<UiRenderedLine> Rendered, ImmutableArray<UiBlock> Blocks, bool Unchanged);
+
+    /// <summary>Projects header / status bar / input, reusing cached models when the chrome fingerprint matches.</summary>
+    private static ChromeModels ProjectChrome(UiState state, ProjectionCache? cache)
+    {
         // ── Chrome fingerprint (header / status bar / input) ──
         bool chromeSame = cache is not null
             && ReferenceEquals(cache.Model, state.Model)
@@ -129,6 +223,12 @@ public sealed class DefaultUiProjector : IUiProjector
             IsEnabled: !state.IsAgentRunning,
             Placeholder: state.IsAgentRunning ? "Agent is running…" : "Type a message…");
 
+        return new ChromeModels(header, statusBar, input, chromeSame);
+    }
+
+    /// <summary>Projects history rows, reusing the cached prefix on append-only transcript growth.</summary>
+    private static HistoryModels ProjectHistory(UiState state, ProjectionCache? cache)
+    {
         // ── History rows ──
         bool linesSame = cache is not null && state.Lines.Equals(cache.Lines);
         ImmutableArray<UiRenderedLine> baseRendered;
@@ -193,6 +293,12 @@ public sealed class DefaultUiProjector : IUiProjector
             baseBlocks = blockBuilder.MoveToImmutable();
         }
 
+        return new HistoryModels(baseRendered, baseBlocks, linesSame);
+    }
+
+    /// <summary>Projects the streaming tail, rebuilding only when a buffer reference changed.</summary>
+    private static TailModels ProjectTail(UiState state, ProjectionCache? cache, string? thinkBuf, string? textBuf)
+    {
         // ── Streaming tail (rebuilt only when a buffer reference changed) ──
         // Reference equality suffices: buffers are immutable strings replaced
         // wholesale on flush, so a changed reference IS changed content.
@@ -260,80 +366,7 @@ public sealed class DefaultUiProjector : IUiProjector
             tailBlocks = blockBuilder.ToImmutable();
         }
 
-        // ── Compose the transcript (copy-on-write: only changed frames copy) ──
-        string? streamingBlockId = state.IsStreaming ? "streaming" : null;
-        bool transcriptSame = linesSame
-            && tailSame
-            && cache is not null;
-        UiTranscriptModel transcript;
-        if (transcriptSame)
-        {
-            transcript = cache!.Transcript;
-        }
-        else
-        {
-            var blockBuilder = ImmutableArray.CreateBuilder<UiBlock>(baseBlocks.Length + tailBlocks.Length);
-            var renderedBuilder = ImmutableArray.CreateBuilder<UiRenderedLine>(baseRendered.Length + tailRendered.Length);
-            blockBuilder.AddRange(baseBlocks.AsSpan());
-            blockBuilder.AddRange(tailBlocks.AsSpan());
-            renderedBuilder.AddRange(baseRendered.AsSpan());
-            renderedBuilder.AddRange(tailRendered.AsSpan());
-
-            transcript = new UiTranscriptModel(
-                Blocks: blockBuilder.ToImmutable(),
-                RenderedLines: renderedBuilder.ToImmutable(),
-                StreamingBlockId: streamingBlockId);
-        }
-
-        // ── Screen assembly ──
-        UiScreenModel screen;
-        if (transcriptSame && chromeSame)
-        {
-            // Nothing observable changed — reuse the entire screen record.
-            screen = cache!.Screen;
-        }
-        else
-        {
-            screen = new UiScreenModel(
-                Header: header,
-                Transcript: transcript,
-                StatusBar: statusBar,
-                Input: input,
-                Focus: state.Focus,
-                StateRevision: ComputeRevision(state));
-        }
-
-        _cache = new ProjectionCache
-        {
-            State = state,
-            Screen = screen,
-            Transcript = transcript,
-            Lines = state.Lines,
-            BaseRendered = baseRendered,
-            BaseBlocks = baseBlocks,
-            IsStreaming = state.IsStreaming,
-            ThinkBuf = thinkBuf,
-            TextBuf = textBuf,
-            TailRendered = tailRendered,
-            TailBlocks = tailBlocks,
-            Model = state.Model,
-            Provider = state.Provider,
-            AgentName = state.AgentName,
-            Status = state.Status,
-            InputText = state.Input.Text,
-            IsAgentRunning = state.IsAgentRunning,
-            ShouldQuit = state.ShouldQuit,
-            Focus = state.Focus,
-            Cost = state.Cost,
-            TotalLines = state.TotalLines,
-            ViewportLines = state.ViewportLines,
-            ScrollOffset = state.ScrollOffset,
-            Header = header,
-            StatusBar = statusBar,
-            Input = input
-        };
-
-        return screen;
+        return new TailModels(tailRendered, tailBlocks, tailSame);
     }
 
     /// <summary>Immutable snapshot of the last projection and its cache keys.</summary>

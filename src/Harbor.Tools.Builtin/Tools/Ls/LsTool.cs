@@ -195,18 +195,10 @@ public sealed class LsTool : ITool
             if (entry is DirectoryInfo dir)
             {
                 // Always show the dir row; prune children of heavy folders when recursive.
-                if (!state.TryAdd())
+                if (!AppendDirectoryEntry(sb, indent, relativePrefix, name, state))
                 {
-                    AppendTruncationNote(sb);
                     return;
                 }
-
-                sb.Append(indent)
-                    .Append("[dir]  ")
-                    .Append(relativePrefix)
-                    .Append(name)
-                    .Append('/')
-                    .Append('\n');
 
                 if (!recursive)
                     continue;
@@ -237,36 +229,74 @@ public sealed class LsTool : ITool
             }
             else if (entry is FileInfo file)
             {
-                if (!state.TryAdd())
+                if (!AppendFileEntry(sb, indent, relativePrefix, file, state))
                 {
-                    AppendTruncationNote(sb);
                     return;
                 }
-
-                long length;
-                DateTime mtime;
-                try
-                {
-                    length = file.Length;
-                    mtime = file.LastWriteTime;
-                }
-                catch
-                {
-                    length = 0;
-                    mtime = DateTime.MinValue;
-                }
-
-                sb.Append(indent)
-                    .Append("[file] ")
-                    .Append(FormatSize(length).PadLeft(10))
-                    .Append(' ')
-                    .Append(mtime.ToString("yyyy-MM-dd HH:mm"))
-                    .Append(' ')
-                    .Append(relativePrefix)
-                    .Append(name)
-                    .Append('\n');
             }
         }
+    }
+
+    /// <summary>Appends one directory row; returns false when the entry budget is exhausted.</summary>
+    private static bool AppendDirectoryEntry(
+        StringBuilder sb,
+        string indent,
+        string relativePrefix,
+        string name,
+        WalkState state)
+    {
+        if (!state.TryAdd())
+        {
+            AppendTruncationNote(sb);
+            return false;
+        }
+
+        sb.Append(indent)
+            .Append("[dir]  ")
+            .Append(relativePrefix)
+            .Append(name)
+            .Append('/')
+            .Append('\n');
+        return true;
+    }
+
+    /// <summary>Appends one file row with size + mtime; returns false when the entry budget is exhausted.</summary>
+    private static bool AppendFileEntry(
+        StringBuilder sb,
+        string indent,
+        string relativePrefix,
+        FileInfo file,
+        WalkState state)
+    {
+        if (!state.TryAdd())
+        {
+            AppendTruncationNote(sb);
+            return false;
+        }
+
+        long length;
+        DateTime mtime;
+        try
+        {
+            length = file.Length;
+            mtime = file.LastWriteTime;
+        }
+        catch
+        {
+            length = 0;
+            mtime = DateTime.MinValue;
+        }
+
+        sb.Append(indent)
+            .Append("[file] ")
+            .Append(FormatSize(length).PadLeft(10))
+            .Append(' ')
+            .Append(mtime.ToString("yyyy-MM-dd HH:mm"))
+            .Append(' ')
+            .Append(relativePrefix)
+            .Append(file.Name)
+            .Append('\n');
+        return true;
     }
 
     private static void AppendTruncationNote(StringBuilder sb)

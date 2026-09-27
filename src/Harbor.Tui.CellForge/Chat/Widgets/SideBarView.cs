@@ -104,152 +104,213 @@ public static class SideBarView
             return;
         }
 
-        // ── Session ────────────────────────────────────────────────────────
-        y = Section(buffer, rect, labelX, y, "SESSION", headingStyle);
-        y = ValueLine(buffer, rect, labelX, y, innerW, (state.SessionTitle ?? "(no session)").AsSpan(), valueStyle);
-        y = ValueLine(buffer, rect, labelX, y, innerW, ShortId(state.SessionId), labelStyle);
-        if (state.MessageCount > 0)
-        {
-            Span<char> msgBuf = stackalloc char[16];
-            int msgLen = FormatWithSuffix(state.MessageCount, " msgs", msgBuf);
-            y = ValueLine(buffer, rect, labelX, y, innerW, msgBuf[..msgLen], labelStyle);
-        }
+        var painter = new SidebarPainter(buffer, rect, labelX, innerW, labelStyle, valueStyle, headingStyle) { Y = y };
 
-        // ── Model ──────────────────────────────────────────────────────────
-        y = Section(buffer, rect, labelX, y, "MODEL", headingStyle);
-        y = ValueLine(buffer, rect, labelX, y, innerW, (state.Model ?? "—").AsSpan(), valueStyle);
+        painter.PaintSession(state);
 
-        // ── Agent ──────────────────────────────────────────────────────────
-        if (!string.IsNullOrEmpty(state.Agent))
-        {
-            y = Section(buffer, rect, labelX, y, "AGENT", headingStyle);
-            y = ValueLine(buffer, rect, labelX, y, innerW, state.Agent.AsSpan(), valueStyle);
-        }
+        painter.PaintModel(state);
 
-        // ── Tokens ─────────────────────────────────────────────────────────
-        y = Section(buffer, rect, labelX, y, "TOKENS", headingStyle);
-        var tokenStyle = new CellStyle(ChatPalette.Muted);
-        Span<char> tokenBuf = stackalloc char[24];
-        int tokenLen = FormatTokensLine(state.TokensIn, state.TokensOut, tokenBuf);
-        y = ValueLine(buffer, rect, labelX, y, innerW, tokenBuf[..tokenLen], tokenStyle);
-        if (state.CostUsd > 0)
-        {
-            Span<char> costBuf = stackalloc char[16];
-            int costLen = FormatCostUsd(state.CostUsd, costBuf);
-            y = ValueLine(buffer, rect, labelX, y, innerW, costBuf[..costLen], tokenStyle);
-        }
+        painter.PaintAgent(state);
 
-        if (state.ContextWindow > 0)
+        painter.PaintTokens(state);
+
+        painter.PaintModifiedFiles(state);
+
+        painter.PaintDiagnostics(state);
+
+        painter.PaintMcp(state);
+
+        painter.PaintSessions(sessions);
+
+        painter.PaintPluginSlots(state, extraSlots);
+    }
+
+    /// <summary>Stateful section painter threading the row cursor through sidebar sections.</summary>
+    private sealed class SidebarPainter(
+        ScreenBuffer buffer,
+        Rect rect,
+        int labelX,
+        int innerW,
+        CellStyle labelStyle,
+        CellStyle valueStyle,
+        CellStyle headingStyle)
+    {
+        public int Y;
+
+        public void PaintSession(SideBarState state)
         {
-            // Canonical #75 definition: accumulated input+output over the window.
-            int pct = ContextUsage.PercentUsed(state.TokensIn, state.TokensOut, state.ContextWindow);
-            Span<char> ctxBuf = stackalloc char[16];
-            int ctxLen = 0;
-            "ctx ".AsSpan().CopyTo(ctxBuf);
-            ctxLen += 4;
-            ctxLen += AppendDigits(pct, ctxBuf[ctxLen..]);
-            if (ctxLen < ctxBuf.Length)
+            // ── Session ────────────────────────────────────────────────────────
+            Y = Section(buffer, rect, labelX, Y, "SESSION", headingStyle);
+            Y = ValueLine(buffer, rect, labelX, Y, innerW, (state.SessionTitle ?? "(no session)").AsSpan(), valueStyle);
+            Y = ValueLine(buffer, rect, labelX, Y, innerW, ShortId(state.SessionId), labelStyle);
+            if (state.MessageCount > 0)
             {
-                ctxBuf[ctxLen++] = '%';
-            }
-
-            y = ValueLine(buffer, rect, labelX, y, innerW, ctxBuf[..ctxLen], tokenStyle);
-        }
-
-        // ── Modified files ─────────────────────────────────────────────────
-        var files = state.ModifiedFiles;
-        if (files is { Count: > 0 })
-        {
-            Span<char> modBuf = stackalloc char[32];
-            int modLen = FormatSectionTitle("MODIFIED (", files.Count, ')', modBuf);
-            y = SectionSpan(buffer, rect, labelX, y, modBuf[..modLen], headingStyle);
-            int fileRows = Math.Min(files.Count, Math.Max(0, rect.Bottom - 2 - y));
-            for (int i = 0; i < fileRows; i++)
-            {
-                y = ValueLine(buffer, rect, labelX, y, innerW, files[i].AsSpan(), valueStyle);
+                Span<char> msgBuf = stackalloc char[16];
+                int msgLen = FormatWithSuffix(state.MessageCount, " msgs", msgBuf);
+                Y = ValueLine(buffer, rect, labelX, Y, innerW, msgBuf[..msgLen], labelStyle);
             }
         }
 
-        // ── LSP ────────────────────────────────────────────────────────────
-        if (state.LspErrors > 0 || state.LspWarnings > 0)
+        public void PaintModel(SideBarState state)
         {
-            y = Section(buffer, rect, labelX, y, "DIAGNOSTICS", headingStyle);
-            var errStyle = new CellStyle(state.LspErrors > 0 ? ChatPalette.Error : ChatPalette.Muted);
-            var warnStyle = new CellStyle(state.LspWarnings > 0 ? ChatPalette.Warning : ChatPalette.Muted);
-            Span<char> diagBuf = stackalloc char[24];
-            int errLen = FormatWithSuffix(state.LspErrors, " errors", diagBuf);
-            y = ValueLine(buffer, rect, labelX, y, innerW, diagBuf[..errLen], errStyle);
-            int warnLen = FormatWithSuffix(state.LspWarnings, " warnings", diagBuf);
-            y = ValueLine(buffer, rect, labelX, y, innerW, diagBuf[..warnLen], warnStyle);
+            // ── Model ──────────────────────────────────────────────────────────
+            Y = Section(buffer, rect, labelX, Y, "MODEL", headingStyle);
+            Y = ValueLine(buffer, rect, labelX, Y, innerW, (state.Model ?? "—").AsSpan(), valueStyle);
         }
 
-        // ── MCP ────────────────────────────────────────────────────────────
-        var servers = state.McpServers;
-        if (servers is { Count: > 0 })
+        public void PaintAgent(SideBarState state)
         {
-            y = Section(buffer, rect, labelX, y, "MCP", headingStyle);
-            int serverRows = Math.Min(servers.Count, Math.Max(0, rect.Bottom - 2 - y));
-            Span<char> glyphBuf = stackalloc char[2];
-            for (int i = 0; i < serverRows; i++)
+            // ── Agent ──────────────────────────────────────────────────────────
+            if (!string.IsNullOrEmpty(state.Agent))
             {
-                var server = servers[i];
-                (char glyph, PackedColor color) = server.State switch
+                Y = Section(buffer, rect, labelX, Y, "AGENT", headingStyle);
+                Y = ValueLine(buffer, rect, labelX, Y, innerW, state.Agent.AsSpan(), valueStyle);
+            }
+        }
+
+        public void PaintTokens(SideBarState state)
+        {
+            // ── Tokens ─────────────────────────────────────────────────────────
+            Y = Section(buffer, rect, labelX, Y, "TOKENS", headingStyle);
+            var tokenStyle = new CellStyle(ChatPalette.Muted);
+            Span<char> tokenBuf = stackalloc char[24];
+            int tokenLen = FormatTokensLine(state.TokensIn, state.TokensOut, tokenBuf);
+            Y = ValueLine(buffer, rect, labelX, Y, innerW, tokenBuf[..tokenLen], tokenStyle);
+            if (state.CostUsd > 0)
+            {
+                Span<char> costBuf = stackalloc char[16];
+                int costLen = FormatCostUsd(state.CostUsd, costBuf);
+                Y = ValueLine(buffer, rect, labelX, Y, innerW, costBuf[..costLen], tokenStyle);
+            }
+
+            if (state.ContextWindow > 0)
+            {
+                // Canonical #75 definition: accumulated input+output over the window.
+                int pct = ContextUsage.PercentUsed(state.TokensIn, state.TokensOut, state.ContextWindow);
+                Span<char> ctxBuf = stackalloc char[16];
+                int ctxLen = 0;
+                "ctx ".AsSpan().CopyTo(ctxBuf);
+                ctxLen += 4;
+                ctxLen += AppendDigits(pct, ctxBuf[ctxLen..]);
+                if (ctxLen < ctxBuf.Length)
                 {
-                    McpServerState.Connected => (ServerConnected, ChatPalette.Success),
-                    McpServerState.Connecting => (ServerConnecting, ChatPalette.Warning),
-                    _ => (ServerError, ChatPalette.Error),
-                };
-                var style = new CellStyle(color);
-                if (y < rect.Bottom - 1)
-                {
-                    glyphBuf[0] = glyph;
-                    glyphBuf[1] = ' ';
-                    buffer.SetText(labelX + 1, y, glyphBuf, style);
-                    ValueLine(buffer, rect, labelX + 3, y, innerW - 3, server.Name.AsSpan(), style);
+                    ctxBuf[ctxLen++] = '%';
                 }
 
-                y++;
+                Y = ValueLine(buffer, rect, labelX, Y, innerW, ctxBuf[..ctxLen], tokenStyle);
             }
         }
 
-        // ── Sessions ────────────────────────────────────────────────────────────
-        if (sessions is { Count: > 0 })
+        public void PaintModifiedFiles(SideBarState state)
         {
-            y = Section(buffer, rect, labelX, y, "SESSIONS", headingStyle);
-            int sessionRows = Math.Min(sessions.Count, Math.Max(0, rect.Bottom - 2 - y));
-            for (int i = 0; i < sessionRows; i++)
+            // ── Modified files ─────────────────────────────────────────────────
+            var files = state.ModifiedFiles;
+            if (files is { Count: > 0 })
             {
-                var session = sessions[i];
-                string marker = session.IsActive ? "▸" : " ";
-                string display = marker + " " + session.Title;
-                var rowStyle = session.IsActive ? valueStyle : labelStyle;
-                y = ValueLine(buffer, rect, labelX, y, innerW, display.AsSpan(), rowStyle);
-                if (y < rect.Bottom - 1 && !string.IsNullOrEmpty(session.MetaLine))
+                Span<char> modBuf = stackalloc char[32];
+                int modLen = FormatSectionTitle("MODIFIED (", files.Count, ')', modBuf);
+                Y = SectionSpan(buffer, rect, labelX, Y, modBuf[..modLen], headingStyle);
+                int fileRows = Math.Min(files.Count, Math.Max(0, rect.Bottom - 2 - Y));
+                for (int i = 0; i < fileRows; i++)
                 {
-                    y = ValueLine(buffer, rect, labelX + 2, y, innerW - 2, session.MetaLine.AsSpan(), labelStyle);
+                    Y = ValueLine(buffer, rect, labelX, Y, innerW, files[i].AsSpan(), valueStyle);
                 }
             }
         }
-        // ── Plugin slots ───────────────────────────────────────────────────
-        if (extraSlots is not null)
-        {
-            for (int s = 0; s < extraSlots.Count; s++)
-            {
-                var slot = extraSlots[s];
-                if (slot is null || string.IsNullOrWhiteSpace(slot.Title) || slot.Lines is null)
-                {
-                    continue;
-                }
 
-                y = Section(buffer, rect, labelX, y, slot.Title, headingStyle);
-                var lines = slot.Lines(state);
-                int lineRows = Math.Min(lines.Count, Math.Max(0, rect.Bottom - 2 - y));
-                for (int i = 0; i < lineRows; i++)
+        public void PaintDiagnostics(SideBarState state)
+        {
+            // ── LSP ────────────────────────────────────────────────────────────
+            if (state.LspErrors > 0 || state.LspWarnings > 0)
+            {
+                Y = Section(buffer, rect, labelX, Y, "DIAGNOSTICS", headingStyle);
+                var errStyle = new CellStyle(state.LspErrors > 0 ? ChatPalette.Error : ChatPalette.Muted);
+                var warnStyle = new CellStyle(state.LspWarnings > 0 ? ChatPalette.Warning : ChatPalette.Muted);
+                Span<char> diagBuf = stackalloc char[24];
+                int errLen = FormatWithSuffix(state.LspErrors, " errors", diagBuf);
+                Y = ValueLine(buffer, rect, labelX, Y, innerW, diagBuf[..errLen], errStyle);
+                int warnLen = FormatWithSuffix(state.LspWarnings, " warnings", diagBuf);
+                Y = ValueLine(buffer, rect, labelX, Y, innerW, diagBuf[..warnLen], warnStyle);
+            }
+        }
+
+        public void PaintMcp(SideBarState state)
+        {
+            // ── MCP ────────────────────────────────────────────────────────────
+            var servers = state.McpServers;
+            if (servers is { Count: > 0 })
+            {
+                Y = Section(buffer, rect, labelX, Y, "MCP", headingStyle);
+                int serverRows = Math.Min(servers.Count, Math.Max(0, rect.Bottom - 2 - Y));
+                Span<char> glyphBuf = stackalloc char[2];
+                for (int i = 0; i < serverRows; i++)
                 {
-                    var line = lines[i];
-                    y = ValueLine(buffer, rect, labelX, y, innerW, line.Title, valueStyle);
-                    ValueLine(buffer, rect, labelX, y, innerW, line.Value, labelStyle);
-                    y++;
+                    var server = servers[i];
+                    (char glyph, PackedColor color) = server.State switch
+                    {
+                        McpServerState.Connected => (ServerConnected, ChatPalette.Success),
+                        McpServerState.Connecting => (ServerConnecting, ChatPalette.Warning),
+                        _ => (ServerError, ChatPalette.Error),
+                    };
+                    var style = new CellStyle(color);
+                    if (Y < rect.Bottom - 1)
+                    {
+                        glyphBuf[0] = glyph;
+                        glyphBuf[1] = ' ';
+                        buffer.SetText(labelX + 1, Y, glyphBuf, style);
+                        ValueLine(buffer, rect, labelX + 3, Y, innerW - 3, server.Name.AsSpan(), style);
+                    }
+
+                    Y++;
+                }
+            }
+        }
+
+        public void PaintSessions(IReadOnlyList<SessionRowViewModel>? sessions)
+        {
+            // ── Sessions ────────────────────────────────────────────────────────────
+            if (sessions is { Count: > 0 })
+            {
+                Y = Section(buffer, rect, labelX, Y, "SESSIONS", headingStyle);
+                int sessionRows = Math.Min(sessions.Count, Math.Max(0, rect.Bottom - 2 - Y));
+                for (int i = 0; i < sessionRows; i++)
+                {
+                    var session = sessions[i];
+                    string marker = session.IsActive ? "▸" : " ";
+                    string display = marker + " " + session.Title;
+                    var rowStyle = session.IsActive ? valueStyle : labelStyle;
+                    Y = ValueLine(buffer, rect, labelX, Y, innerW, display.AsSpan(), rowStyle);
+                    if (Y < rect.Bottom - 1 && !string.IsNullOrEmpty(session.MetaLine))
+                    {
+                        Y = ValueLine(buffer, rect, labelX + 2, Y, innerW - 2, session.MetaLine.AsSpan(), labelStyle);
+                    }
+                }
+            }
+        }
+
+        public void PaintPluginSlots(SideBarState state, IReadOnlyList<SideBarSlot>? extraSlots)
+        {
+            // ── Plugin slots ───────────────────────────────────────────────────
+            if (extraSlots is not null)
+            {
+                for (int s = 0; s < extraSlots.Count; s++)
+                {
+                    var slot = extraSlots[s];
+                    if (slot is null || string.IsNullOrWhiteSpace(slot.Title) || slot.Lines is null)
+                    {
+                        continue;
+                    }
+
+                    Y = Section(buffer, rect, labelX, Y, slot.Title, headingStyle);
+                    var lines = slot.Lines(state);
+                    int lineRows = Math.Min(lines.Count, Math.Max(0, rect.Bottom - 2 - Y));
+                    for (int i = 0; i < lineRows; i++)
+                    {
+                        var line = lines[i];
+                        Y = ValueLine(buffer, rect, labelX, Y, innerW, line.Title, valueStyle);
+                        ValueLine(buffer, rect, labelX, Y, innerW, line.Value, labelStyle);
+                        Y++;
+                    }
                 }
             }
         }

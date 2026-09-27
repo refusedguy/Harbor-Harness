@@ -234,35 +234,13 @@ public sealed class InMemoryEventBus : IEventBus
 
             // ── Middleware pipeline (BEFORE scrollback + fan-out) ──
             // Dropped events never reach scrollback or subscribers.
-            if (_middlewares.Count > 0)
+            var (continued, current) = await RunMiddlewareAsync(@event, ct).ConfigureAwait(false);
+            if (!continued)
             {
-                foreach (var mw in _middlewares)
-                {
-                    try
-                    {
-                        bool continuePipeline = await mw.ProcessAsync(ref @event, ct).ConfigureAwait(false);
-                        if (!continuePipeline)
-                        {
-                            // IsEnabled guard (#47): the drop path is cold, but
-                            // the params array + GetType().Name evaluate eagerly
-                            // even when Trace is off — the same pitfall as the
-                            // #97 Debug log above.
-                            if (_logger.IsEnabled(LogLevel.Trace))
-                            {
-                                _logger.LogTrace("Event {EventType} dropped by middleware {Middleware}",
-                                    @event.GetType().Name, mw.Name);
-                            }
-
-                            return;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Middleware {Middleware} threw — event dropped", mw.Name);
-                        return;
-                    }
-                }
+                return;
             }
+
+            @event = current;
 
             // 1. Append to scrollback ring buffer (in-place overwrite, short lock).
             AppendScrollback(@event);
@@ -297,144 +275,7 @@ public sealed class InMemoryEventBus : IEventBus
             //    MaxSlowStrikes consecutive strikes the subscriber is evicted.
             //    Fast handlers — the overwhelmingly common case — complete
             //    synchronously and keep the exact publish-then-observe contract.
-            Subscription[]? dead = null;
-            int deadCount = 0;
-            try
-            {
-                int snapshotLength = snapshot.Length;
-                bool budgetEnabled = _handlerBudget > TimeSpan.Zero;
-                // No linked registration when the outer token can never fire:
-                // a fresh CTS behaves identically (CancelAfter still applies)
-                // and skips the linked-cancellation allocation (#47).
-                using CancellationTokenSource? budgetCts = budgetEnabled
-                    ? (ct.CanBeCanceled
-                        ? CancellationTokenSource.CreateLinkedTokenSource(ct)
-                        : new CancellationTokenSource())
-                    : null;
-
-                void MarkDead(Subscription sub)
-                {
-                    if (dead is null)
-                    {
-                        dead = ArrayPool<Subscription>.Shared.Rent(snapshotLength);
-                    }
-
-                    dead[deadCount++] = sub;
-                }
-
-                async ValueTask RecordSlowStrikeAsync(Subscription sub, Task handlerTask)
-                {
-                    int strikes = sub.Strike();
-                    _logger.LogWarning(
-                        "Subscriber exceeded its {Budget}ms dispatch budget ({Strikes}/{Max} strikes) — continuing without it",
-                        _handlerBudget.TotalMilliseconds, strikes, MaxSlowStrikes);
-                    if (strikes >= MaxSlowStrikes)
-                    {
-                        MarkDead(sub);
-                    }
-
-                    // Keep the orphaned handler observed so late faults are never
-                    // lost (it may still be running against a stale event).
-                    try { await handlerTask.ConfigureAwait(false); }
-                    catch (OperationCanceledException oce)
-                    {
-                        _logger.LogDebug(oce, "Orphaned slow-subscriber handler cancelled with its slice");
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogDebug(ex, "Orphaned slow-subscriber handler faulted");
-                    }
-                }
-
-                for (int i = 0; i < snapshotLength; i++)
-                {
-                    var sub = snapshot[i];
-                    try
-                    {
-                        if (!budgetEnabled)
-                        {
-                            await sub.Handler(@event, ct).ConfigureAwait(false);
-                            sub.ResetSlowStrikes();
-                            continue;
-                        }
-
-                        budgetCts!.CancelAfter(_handlerBudget);
-                        ValueTask dispatch = sub.Handler(@event, budgetCts.Token);
-                        if (dispatch.IsCompletedSuccessfully)
-                        {
-                            sub.ResetSlowStrikes();
-                            continue;
-                        }
-
-                        Task handlerTask = dispatch.AsTask();
-                        if (!ct.CanBeCanceled)
-                        {
-                            // The infinite-delay branch below could never win this
-                            // race (its only completion source is ct), so awaiting
-                            // the handler directly is exactly equivalent — and
-                            // skips a Timer + Task allocation per async-incomplete
-                            // dispatch (#47).
-                            try
-                            {
-                                await handlerTask.ConfigureAwait(false);
-                                sub.ResetSlowStrikes();
-                            }
-                            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-                            {
-                                // The handler hit the budget cancellation from INSIDE
-                                // its own body — an over-budget strike, not a death.
-                                await RecordSlowStrikeAsync(sub, Task.CompletedTask).ConfigureAwait(false);
-                            }
-
-                            continue;
-                        }
-
-                        Task winner = await Task.WhenAny(handlerTask, Task.Delay(Timeout.InfiniteTimeSpan, ct))
-                            .ConfigureAwait(false);
-                        if (winner != handlerTask)
-                        {
-                            // Publisher slice elapsed while the handler still runs:
-                            // leave it behind (observed), count the strike.
-                            await RecordSlowStrikeAsync(sub, handlerTask).ConfigureAwait(false);
-                            continue;
-                        }
-
-                        try
-                        {
-                            await handlerTask.ConfigureAwait(false);
-                            sub.ResetSlowStrikes();
-                        }
-                        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-                        {
-                            // The handler hit the budget cancellation from INSIDE
-                            // its own body — an over-budget strike, not a death.
-                            await RecordSlowStrikeAsync(sub, Task.CompletedTask).ConfigureAwait(false);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Subscriber threw exception — removing dead subscriber");
-                        MarkDead(sub);
-                    }
-                }
-
-                if (deadCount > 0)
-                {
-                    // dead is guaranteed non-null here: it's assigned the first time
-                    // any subscriber throws (which is the only way deadCount can exceed 0).
-                    RemoveDeadSubscriptions(dead!, deadCount);
-                }
-            }
-            finally
-            {
-                if (dead is not null)
-                {
-                    // Clear references so the pooled array doesn't keep the Subscription
-                    // (and indirectly the handler delegate) alive after return.
-                    Array.Clear(dead, 0, deadCount);
-                    ArrayPool<Subscription>.Shared.Return(dead);
-                }
-            }
+            await DispatchToSubscribersAsync(snapshot, @event, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -656,6 +497,225 @@ public sealed class InMemoryEventBus : IEventBus
         }
 
         return TimeSpan.FromTicks(stopwatchTicks * TimeSpan.TicksPerSecond / Stopwatch.Frequency);
+    }
+
+    /// <summary>
+    ///     Run the middleware pipeline. Returns whether the event continues
+    ///     to scrollback + fan-out, plus the (possibly replaced) event.
+    ///     Dropped events never reach scrollback or subscribers.
+    /// </summary>
+    private async Task<(bool Continue, AgentEvent Event)> RunMiddlewareAsync(AgentEvent @event, CancellationToken ct)
+    {
+        if (_middlewares.Count > 0)
+        {
+            foreach (var mw in _middlewares)
+            {
+                try
+                {
+                    bool continuePipeline = await mw.ProcessAsync(ref @event, ct).ConfigureAwait(false);
+                    if (!continuePipeline)
+                    {
+                        // IsEnabled guard (#47): the drop path is cold, but
+                        // the params array + GetType().Name evaluate eagerly
+                        // even when Trace is off — the same pitfall as the
+                        // #97 Debug log above.
+                        if (_logger.IsEnabled(LogLevel.Trace))
+                        {
+                            _logger.LogTrace("Event {EventType} dropped by middleware {Middleware}",
+                                @event.GetType().Name, mw.Name);
+                        }
+
+                        return (false, @event);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Middleware {Middleware} threw — event dropped", mw.Name);
+                    return (false, @event);
+                }
+            }
+        }
+
+        return (true, @event);
+    }
+
+    /// <summary>How one subscriber dispatch resolved.</summary>
+    private enum DispatchOutcome : byte
+    {
+        Completed,
+        Slow,
+    }
+
+    /// <summary>
+    ///     Fan-out to subscribers under the A4 per-handler budget. Dead
+    ///     subscribers are collected into a pooled buffer and evicted after
+    ///     the loop.
+    /// </summary>
+    private async Task DispatchToSubscribersAsync(
+        ImmutableArray<Subscription> snapshot, AgentEvent @event, CancellationToken ct)
+    {
+        Subscription[]? dead = null;
+        int deadCount = 0;
+        try
+        {
+            int snapshotLength = snapshot.Length;
+            bool budgetEnabled = _handlerBudget > TimeSpan.Zero;
+            // No linked registration when the outer token can never fire:
+            // a fresh CTS behaves identically (CancelAfter still applies)
+            // and skips the linked-cancellation allocation (#47).
+            using CancellationTokenSource? budgetCts = budgetEnabled
+                ? (ct.CanBeCanceled
+                    ? CancellationTokenSource.CreateLinkedTokenSource(ct)
+                    : new CancellationTokenSource())
+                : null;
+
+            void MarkDead(Subscription sub)
+            {
+                if (dead is null)
+                {
+                    dead = ArrayPool<Subscription>.Shared.Rent(snapshotLength);
+                }
+
+                dead[deadCount++] = sub;
+            }
+
+            async ValueTask RecordSlowStrikeAsync(Subscription sub, Task handlerTask)
+            {
+                int strikes = sub.Strike();
+                _logger.LogWarning(
+                    "Subscriber exceeded its {Budget}ms dispatch budget ({Strikes}/{Max} strikes) — continuing without it",
+                    _handlerBudget.TotalMilliseconds, strikes, MaxSlowStrikes);
+                if (strikes >= MaxSlowStrikes)
+                {
+                    MarkDead(sub);
+                }
+
+                // Keep the orphaned handler observed so late faults are never
+                // lost (it may still be running against a stale event).
+                await ObserveOrphanAsync(handlerTask).ConfigureAwait(false);
+            }
+
+            for (int i = 0; i < snapshotLength; i++)
+            {
+                var sub = snapshot[i];
+                try
+                {
+                    var (outcome, orphan) = await DispatchToOneAsync(sub, @event, ct, budgetCts, budgetEnabled)
+                        .ConfigureAwait(false);
+                    if (outcome == DispatchOutcome.Slow)
+                    {
+                        await RecordSlowStrikeAsync(sub, orphan!).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        sub.ResetSlowStrikes();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Subscriber threw exception — removing dead subscriber");
+                    MarkDead(sub);
+                }
+            }
+
+            if (deadCount > 0)
+            {
+                // dead is guaranteed non-null here: it's assigned the first time
+                // any subscriber throws (which is the only way deadCount can exceed 0).
+                RemoveDeadSubscriptions(dead!, deadCount);
+            }
+        }
+        finally
+        {
+            if (dead is not null)
+            {
+                // Clear references so the pooled array doesn't keep the Subscription
+                // (and indirectly the handler delegate) alive after return.
+                Array.Clear(dead, 0, deadCount);
+                ArrayPool<Subscription>.Shared.Return(dead);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Dispatch one event to one subscriber under the budget. Returns the
+    ///     outcome plus the orphaned handler task when over budget (to observe).
+    /// </summary>
+    private async Task<(DispatchOutcome Outcome, Task? Orphan)> DispatchToOneAsync(
+        Subscription sub,
+        AgentEvent @event,
+        CancellationToken ct,
+        CancellationTokenSource? budgetCts,
+        bool budgetEnabled)
+    {
+        if (!budgetEnabled)
+        {
+            await sub.Handler(@event, ct).ConfigureAwait(false);
+            return (DispatchOutcome.Completed, null);
+        }
+
+        budgetCts!.CancelAfter(_handlerBudget);
+        ValueTask dispatch = sub.Handler(@event, budgetCts.Token);
+        if (dispatch.IsCompletedSuccessfully)
+        {
+            return (DispatchOutcome.Completed, null);
+        }
+
+        Task handlerTask = dispatch.AsTask();
+        if (!ct.CanBeCanceled)
+        {
+            // The infinite-delay branch below could never win this
+            // race (its only completion source is ct), so awaiting
+            // the handler directly is exactly equivalent — and
+            // skips a Timer + Task allocation per async-incomplete
+            // dispatch (#47).
+            try
+            {
+                await handlerTask.ConfigureAwait(false);
+                return (DispatchOutcome.Completed, null);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // The handler hit the budget cancellation from INSIDE
+                // its own body — an over-budget strike, not a death.
+                return (DispatchOutcome.Slow, Task.CompletedTask);
+            }
+        }
+
+        Task winner = await Task.WhenAny(handlerTask, Task.Delay(Timeout.InfiniteTimeSpan, ct))
+            .ConfigureAwait(false);
+        if (winner != handlerTask)
+        {
+            // Publisher slice elapsed while the handler still runs:
+            // leave it behind (observed), count the strike.
+            return (DispatchOutcome.Slow, handlerTask);
+        }
+
+        try
+        {
+            await handlerTask.ConfigureAwait(false);
+            return (DispatchOutcome.Completed, null);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // The handler hit the budget cancellation from INSIDE
+            // its own body — an over-budget strike, not a death.
+            return (DispatchOutcome.Slow, Task.CompletedTask);
+        }
+    }
+
+    /// <summary>Keep an orphaned slow-subscriber handler observed so late faults are never lost.</summary>
+    private async Task ObserveOrphanAsync(Task handlerTask)
+    {
+        try { await handlerTask.ConfigureAwait(false); }
+        catch (OperationCanceledException oce)
+        {
+            _logger.LogDebug(oce, "Orphaned slow-subscriber handler cancelled with its slice");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Orphaned slow-subscriber handler faulted");
+        }
     }
 
     /// <summary>

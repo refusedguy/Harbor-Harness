@@ -140,150 +140,49 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
 
     private async Task HandleClientAsync(Stream stream, CancellationToken ct)
     {
-        // Per-connection identity for addressed delivery + session leases (A3).
-        int connectionNumber = Interlocked.Increment(ref _connectionSequence);
-        var clientId = $"c-{connectionNumber:x8}";
-
-        // Per-stream write lock so dispatcher responses and broadcaster
-        // events never interleave half-frames on the wire.
-        var writeLock = new SemaphoreSlim(1, 1);
-
-        // PSK gate: connections to a gated listener are unauthenticated
-        // until a valid PskAuthRequest passes; everything before that gets
-        // the structured PSK_REQUIRED error and nothing else.
-        bool authenticated = _expectedPsk is null;
-
-        // D1: one frame reader per connection — it owns that connection's
-        // frame-size / outstanding-bytes budgets.
-        var frameReader = new ResilientFrameReader();
-
-        // D1: registry of in-flight prompt runs on this connection, plus a
-        // connection-scoped token that tears the whole handler down when the
-        // server stops or a fatal write failure occurs.
         using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        CancellationToken connectionCt = connectionCts.Token;
-        var runs = new Dictionary<Guid, PromptRun>();
-        var runsLock = new Lock();
+        var session = new ClientSession(
+            stream,
+            new SemaphoreSlim(1, 1),
+            connectionCts,
+            $"c-{Interlocked.Increment(ref _connectionSequence):x8}",
+            _expectedPsk is null);
 
         try
         {
             _logger.LogInformation("Client connected");
-            while (!connectionCt.IsCancellationRequested)
+            while (!session.ConnectionCts.IsCancellationRequested)
             {
-                FrameReadResult read;
-                try
+                FrameReadResult? read = await ReadRequestAsync(session).ConfigureAwait(false);
+                if (read is null)
                 {
-                    read = await frameReader.ReadRequestAsync(stream, connectionCt).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) { return; }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Stream read failed; closing client connection");
                     return;
                 }
 
-                switch (read.Outcome)
+                FrameDecision frame = HandleFrameOutcome(read);
+                if (frame == FrameDecision.Close)
                 {
-                    case FrameReadOutcome.Request:
-                        break;
-                    case FrameReadOutcome.StreamEnded:
-                        _logger.LogDebug("Client stream ended");
-                        return;
-                    case FrameReadOutcome.EmptyFrame:
-                        _logger.LogDebug("Skipping zero-length frame; keeping connection alive");
-                        continue;
-                    case FrameReadOutcome.UndecodableFrame:
-                        _logger.LogWarning(read.Error, "Skipping undecodable frame; keeping connection alive");
-                        continue;
-                    case FrameReadOutcome.OversizedFrame:
-                        _logger.LogWarning(
-                            read.Error, "Incoming frame violates the size/buffer budget; closing client connection");
-                        return;
-                    default:
-                        _logger.LogWarning("Unknown frame outcome {Outcome}; closing client connection", read.Outcome);
-                        return;
+                    return;
+                }
+                if (frame == FrameDecision.Skip)
+                {
+                    continue;
                 }
 
                 var request = read.Request!;
 
-                // PSK gate (fail-closed): before authentication the only
-                // request honored is PskAuthRequest. A wrong key closes the
-                // connection immediately; a missing key gets the structured
-                // error and another chance to authenticate.
-                if (!authenticated)
+                switch (await ApplyPskGateAsync(session, request).ConfigureAwait(false))
                 {
-                    if (request is PskAuthRequest pskRequest)
-                    {
-                        if (!PskStore.Matches(pskRequest.Psk, _expectedPsk!))
-                        {
-                            _logger.LogWarning("PSK auth failed; closing connection");
-                            await TryWriteErrorResponse(
-                                stream, writeLock, pskRequest.RequestId, "PSK_AUTH_FAILED", connectionCt)
-                                .ConfigureAwait(false);
-                            return;
-                        }
-
-                        authenticated = true;
-                        _logger.LogInformation("PSK auth succeeded");
-                        await WriteResponseAsync(
-                            stream, writeLock, new OkResponse { RequestId = pskRequest.RequestId }, connectionCt)
-                            .ConfigureAwait(false);
+                    case GateDecision.Close:
+                        return;
+                    case GateDecision.Consumed:
                         continue;
-                    }
-
-                    await TryWriteErrorResponse(
-                        stream, writeLock, request.RequestId,
-                        "PSK_REQUIRED: this listener requires pre-shared-key authentication first",
-                        connectionCt).ConfigureAwait(false);
-                    continue;
+                    default:
+                        break;
                 }
 
-                // D1: prompts run as tracked background tasks so the read loop
-                // keeps reading — this is what keeps AbortAgentRequest reachable
-                // during an in-flight run.
-                if (request is SendPromptRequest promptRequest)
+                if (!await DispatchRequestAsync(session, request).ConfigureAwait(false))
                 {
-                    StartPromptRun(promptRequest, stream, writeLock, runs, runsLock, connectionCts, connectionCt, clientId);
-                    continue;
-                }
-
-                try
-                {
-                    // D1: an abort must cancel THIS connection's registered runs
-                    // directly (the wire request carries no session id), then flow
-                    // through the dispatcher so the agent's global abort source
-                    // fires as well. Handled inline — abort latency must not depend
-                    // on anything else in flight.
-                    if (request is AbortAgentRequest abortRequest)
-                    {
-                        CancelRegisteredRuns(runs, runsLock);
-
-                        var abortResponse = await _dispatcher
-                            .DispatchAsync(abortRequest, null, null, connectionCt, clientId)
-                            .ConfigureAwait(false);
-                        await WriteResponseAsync(stream, writeLock, abortResponse, connectionCt).ConfigureAwait(false);
-                        continue;
-                    }
-
-                    // SubscribeToEventsRequest needs the reply stream AND the
-                    // per-client write lock so the broadcaster can push
-                    // out-of-band frames to this client without interleaving
-                    // with our direct response frames. Everything else is quick
-                    // and order-sensitive (CreateSession before SendPrompt, etc.)
-                    // — handled inline to preserve strict per-connection order.
-                    var replyStream = request is SubscribeToEventsRequest ? stream : null;
-                    var replyWriteLock = request is SubscribeToEventsRequest ? writeLock : null;
-
-                    var response = await _dispatcher
-                        .DispatchAsync(request, replyStream, replyWriteLock, connectionCt, clientId)
-                        .ConfigureAwait(false);
-
-                    await WriteResponseAsync(stream, writeLock, response, connectionCt).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) { return; }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Request processing failed; closing client connection");
                     return;
                 }
             }
@@ -298,42 +197,238 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         }
         finally
         {
-            // D1: orderly shutdown — cancel every in-flight run, then await its
-            // task so nothing outlives the connection.
-            Task[] pendingTasks;
-            lock (runsLock)
-            {
-                foreach (var pair in runs)
-                {
-                    pair.Value.Cts.Cancel();
-                }
-                pendingTasks = new Task[runs.Count];
-                int i = 0;
-                foreach (var pair in runs)
-                {
-                    pendingTasks[i++] = pair.Value.Worker;
-                }
-            }
-
-            foreach (var pending in pendingTasks)
-            {
-                try { await pending.ConfigureAwait(false); }
-                catch (OperationCanceledException) { /* cancelled by the drain above */ }
-                catch (Exception drainEx)
-                {
-                    _logger.LogDebug(drainEx, "Suppressed fault from prompt task during connection drain");
-                }
-            }
-
-            // A3 teardown: this connection's session leases die with it, so a
-            // disconnected owner cannot wedge a session busy forever.
-            _dispatcher.ReleaseClientLeases(clientId);
-            await _broadcaster.UnregisterAsync(stream).ConfigureAwait(false);
-            try { await stream.DisposeAsync().ConfigureAwait(false); }
-            catch (Exception disposeEx) { _logger.LogDebug(disposeEx, "Suppress stream dispose error"); }
-            writeLock.Dispose();
-            _logger.LogInformation("Client disconnected");
+            await TeardownAsync(session).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Per-connection handler state: stream, write lock, prompt-run registry, identity, auth.</summary>
+    private sealed class ClientSession(
+        Stream stream,
+        SemaphoreSlim writeLock,
+        CancellationTokenSource connectionCts,
+        string clientId,
+        bool authenticated)
+    {
+        public readonly Stream Stream = stream;
+        public readonly SemaphoreSlim WriteLock = writeLock;
+        public readonly CancellationTokenSource ConnectionCts = connectionCts;
+        public readonly string ClientId = clientId;
+
+        // PSK gate: connections to a gated listener are unauthenticated
+        // until a valid PskAuthRequest passes; everything before that gets
+        // the structured PSK_REQUIRED error and nothing else.
+        public bool Authenticated = authenticated;
+
+        // D1: one frame reader per connection — it owns that connection's
+        // frame-size / outstanding-bytes budgets.
+        public readonly ResilientFrameReader FrameReader = new();
+
+        // D1: registry of in-flight prompt runs on this connection.
+        public readonly Dictionary<Guid, PromptRun> Runs = new();
+        public readonly Lock RunsLock = new();
+
+        public CancellationToken ConnectionCt => ConnectionCts.Token;
+    }
+
+    /// <summary>How the read loop should proceed after inspecting a frame.</summary>
+    private enum FrameDecision : byte
+    {
+        Dispatch,
+        Skip,
+        Close,
+    }
+
+    /// <summary>How the read loop should proceed after the PSK gate.</summary>
+    private enum GateDecision : byte
+    {
+        Proceed,
+        Consumed,
+        Close,
+    }
+
+    /// <summary>Reads one frame; returns <see langword="null" /> when the connection must close.</summary>
+    private async Task<FrameReadResult?> ReadRequestAsync(ClientSession session)
+    {
+        try
+        {
+            return await session.FrameReader.ReadRequestAsync(session.Stream, session.ConnectionCt).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { return null; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Stream read failed; closing client connection");
+            return null;
+        }
+    }
+
+    /// <summary>Classifies a frame read: dispatch the request, skip the frame, or close the connection.</summary>
+    private FrameDecision HandleFrameOutcome(FrameReadResult read)
+    {
+        switch (read.Outcome)
+        {
+            case FrameReadOutcome.Request:
+                return FrameDecision.Dispatch;
+            case FrameReadOutcome.StreamEnded:
+                _logger.LogDebug("Client stream ended");
+                return FrameDecision.Close;
+            case FrameReadOutcome.EmptyFrame:
+                _logger.LogDebug("Skipping zero-length frame; keeping connection alive");
+                return FrameDecision.Skip;
+            case FrameReadOutcome.UndecodableFrame:
+                _logger.LogWarning(read.Error, "Skipping undecodable frame; keeping connection alive");
+                return FrameDecision.Skip;
+            case FrameReadOutcome.OversizedFrame:
+                _logger.LogWarning(
+                    read.Error, "Incoming frame violates the size/buffer budget; closing client connection");
+                return FrameDecision.Close;
+            default:
+                _logger.LogWarning("Unknown frame outcome {Outcome}; closing client connection", read.Outcome);
+                return FrameDecision.Close;
+        }
+    }
+
+    /// <summary>
+    ///     PSK gate (fail-closed): before authentication the only request
+    ///     honored is <see cref="PskAuthRequest" />. A wrong key closes the
+    ///     connection immediately; a missing key gets the structured error
+    ///     and another chance to authenticate.
+    /// </summary>
+    private async Task<GateDecision> ApplyPskGateAsync(ClientSession session, HarborRequest request)
+    {
+        if (session.Authenticated)
+        {
+            return GateDecision.Proceed;
+        }
+
+        if (request is PskAuthRequest pskRequest)
+        {
+            if (!PskStore.Matches(pskRequest.Psk, _expectedPsk!))
+            {
+                _logger.LogWarning("PSK auth failed; closing connection");
+                await TryWriteErrorResponse(
+                    session.Stream, session.WriteLock, pskRequest.RequestId, "PSK_AUTH_FAILED", session.ConnectionCt)
+                    .ConfigureAwait(false);
+                return GateDecision.Close;
+            }
+
+            session.Authenticated = true;
+            _logger.LogInformation("PSK auth succeeded");
+            await WriteResponseAsync(
+                session.Stream, session.WriteLock, new OkResponse { RequestId = pskRequest.RequestId }, session.ConnectionCt)
+                .ConfigureAwait(false);
+            return GateDecision.Consumed;
+        }
+
+        await TryWriteErrorResponse(
+            session.Stream, session.WriteLock, request.RequestId,
+            "PSK_REQUIRED: this listener requires pre-shared-key authentication first",
+            session.ConnectionCt).ConfigureAwait(false);
+        return GateDecision.Consumed;
+    }
+
+    /// <summary>
+    ///     Routes one request: prompts run as tracked background tasks,
+    ///     aborts cancel local runs then flow through the dispatcher,
+    ///     everything else dispatches inline. Returns false when the
+    ///     connection must close.
+    /// </summary>
+    private async Task<bool> DispatchRequestAsync(ClientSession session, HarborRequest request)
+    {
+        // D1: prompts run as tracked background tasks so the read loop
+        // keeps reading — this is what keeps AbortAgentRequest reachable
+        // during an in-flight run.
+        if (request is SendPromptRequest promptRequest)
+        {
+            StartPromptRun(
+                promptRequest, session.Stream, session.WriteLock, session.Runs, session.RunsLock,
+                session.ConnectionCts, session.ConnectionCt, session.ClientId);
+            return true;
+        }
+
+        try
+        {
+            // D1: an abort must cancel THIS connection's registered runs
+            // directly (the wire request carries no session id), then flow
+            // through the dispatcher so the agent's global abort source
+            // fires as well. Handled inline — abort latency must not depend
+            // on anything else in flight.
+            if (request is AbortAgentRequest abortRequest)
+            {
+                CancelRegisteredRuns(session.Runs, session.RunsLock);
+
+                var abortResponse = await _dispatcher
+                    .DispatchAsync(abortRequest, null, null, session.ConnectionCt, session.ClientId)
+                    .ConfigureAwait(false);
+                await WriteResponseAsync(session.Stream, session.WriteLock, abortResponse, session.ConnectionCt).ConfigureAwait(false);
+                return true;
+            }
+
+            // SubscribeToEventsRequest needs the reply stream AND the
+            // per-client write lock so the broadcaster can push
+            // out-of-band frames to this client without interleaving
+            // with our direct response frames. Everything else is quick
+            // and order-sensitive (CreateSession before SendPrompt, etc.)
+            // — handled inline to preserve strict per-connection order.
+            var replyStream = request is SubscribeToEventsRequest ? session.Stream : null;
+            var replyWriteLock = request is SubscribeToEventsRequest ? session.WriteLock : null;
+
+            var response = await _dispatcher
+                .DispatchAsync(request, replyStream, replyWriteLock, session.ConnectionCt, session.ClientId)
+                .ConfigureAwait(false);
+
+            await WriteResponseAsync(session.Stream, session.WriteLock, response, session.ConnectionCt).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException) { return false; }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Request processing failed; closing client connection");
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Orderly connection teardown: cancel every in-flight run, await
+    ///     them, release session leases, unregister from the broadcaster,
+    ///     and dispose the stream + write lock.
+    /// </summary>
+    private async Task TeardownAsync(ClientSession session)
+    {
+        // D1: orderly shutdown — cancel every in-flight run, then await its
+        // task so nothing outlives the connection.
+        Task[] pendingTasks;
+        lock (session.RunsLock)
+        {
+            foreach (var pair in session.Runs)
+            {
+                pair.Value.Cts.Cancel();
+            }
+            pendingTasks = new Task[session.Runs.Count];
+            int i = 0;
+            foreach (var pair in session.Runs)
+            {
+                pendingTasks[i++] = pair.Value.Worker;
+            }
+        }
+
+        foreach (var pending in pendingTasks)
+        {
+            try { await pending.ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* cancelled by the drain above */ }
+            catch (Exception drainEx)
+            {
+                _logger.LogDebug(drainEx, "Suppressed fault from prompt task during connection drain");
+            }
+        }
+
+        // A3 teardown: this connection's session leases die with it, so a
+        // disconnected owner cannot wedge a session busy forever.
+        _dispatcher.ReleaseClientLeases(session.ClientId);
+        await _broadcaster.UnregisterAsync(session.Stream).ConfigureAwait(false);
+        try { await session.Stream.DisposeAsync().ConfigureAwait(false); }
+        catch (Exception disposeEx) { _logger.LogDebug(disposeEx, "Suppress stream dispose error"); }
+        session.WriteLock.Dispose();
+        _logger.LogInformation("Client disconnected");
     }
 
     // ── Background prompt dispatch (D1) ────────────────────────────────────
