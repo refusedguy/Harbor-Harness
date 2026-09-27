@@ -16,6 +16,7 @@ using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Projection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Cli.Repl;
 /// <summary>
@@ -278,7 +279,8 @@ internal sealed class ReplRunner
             _cellForgeLogger,
             screens.Coordinator,
             _pluginReload,
-            _healthCheck);
+            _healthCheck,
+            _rendererHost.GetService<Harbor.Ui.Framework.Panels.IPanelRegistry>());
         int exitCode = await runner.RunAsync(ct).ConfigureAwait(false);
         return Result.Success(exitCode);
     }

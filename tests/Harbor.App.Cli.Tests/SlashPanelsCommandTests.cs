@@ -13,7 +13,9 @@ using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering.Widgets;
+using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
+using System.Collections.Immutable;
 using TUnit.Assertions;
 
 namespace Harbor.App.Cli.Tests;
@@ -63,11 +65,12 @@ public class SlashPanelsCommandTests
 
     private sealed class FakeHost : IReplHost
     {
-        public FakeHost(Session session, FakeStore store, AuthStore auth)
+        public FakeHost(Session session, FakeStore store, AuthStore auth, UiState? initialState = null)
         {
             SessionModel = session;
             SessionStore = store;
             AuthStore = auth;
+            Store = new UiStore(initialState);
         }
 
         public List<string> Switched { get; } = [];
@@ -75,7 +78,7 @@ public class SlashPanelsCommandTests
         public IAgent Agent => null!;
         public Session SessionModel { get; set; }
         public ChatScreenBridge Bridge => null!;
-        public UiStore Store { get; } = new();
+        public UiStore Store { get; }
         public CommandPaletteView Palette { get; } = new();
         public StatusViewModel Status { get; } = new();
         public ChatScreen Screen => null!;
@@ -90,6 +93,7 @@ public class SlashPanelsCommandTests
         public IRendererPipeline? RendererPipeline => null;
         public Harbor.Hosting.PluginReloadService? PluginReload => null;
         public IProviderHealthCheck? HealthCheck => null;
+        public Harbor.Ui.Framework.Panels.IPanelRegistry? PanelRegistry { get; set; }
         public void WakeUp() { }
         public void OpenSlashPalette() { }
         public void ToggleVimMode() { }
@@ -149,6 +153,97 @@ public class SlashPanelsCommandTests
         await pending!.Value.Handler(pending.Value.Item, CancellationToken.None);
 
         await Assert.That(host.Switched).Contains("ccc33333dddd4444");
+        await Assert.That(host.Palette.Visible).IsFalse();
+    }
+
+    private sealed class StubPanel(string id, string title) : IPanelProvider
+    {
+        public string Id => id;
+        public string Title => title;
+        public TuiPanelPlacement DefaultPlacement => TuiPanelPlacement.Right;
+        public int DefaultSize => 10;
+        public object? Build(PanelContext ctx) => "stub";
+        public bool OnKey(UiKey key, PanelContext ctx) => false;
+    }
+
+    private static PanelRegistry RegistryWith(params IPanelProvider[] panels)
+    {
+        var registry = new PanelRegistry();
+        foreach (var p in panels)
+        {
+            _ = registry.Register(p);
+        }
+
+        return registry;
+    }
+
+    private static UiState SeededPanelsState() => new()
+    {
+        RegisteredPanelIds = ["todo", "logs"],
+        PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty
+            .SetItem("todo", TuiPanelState.Visible)
+            .SetItem("logs", TuiPanelState.Hidden),
+    };
+
+    private static FakeHost PanelsHost(FakeStore store, Session current)
+    {
+        var host = new FakeHost(current, store, new AuthStore(new JsonConfigStore()), SeededPanelsState())
+        {
+            PanelRegistry = RegistryWith(new StubPanel("todo", "Todo"), new StubPanel("logs", "Logs")),
+        };
+        return host;
+    }
+
+    [Test]
+    public async Task Panels_ListsRegistryRows_WithLiveState()
+    {
+        var store = new FakeStore();
+        var current = Make("cur00003", "current", DateTimeOffset.UtcNow);
+        store.Add(current);
+        var host = PanelsHost(store, current);
+
+        await new PanelsCommand().ExecuteAsync(new ReplCommandContext(host, "panels"), CancellationToken.None);
+
+        await Assert.That(host.Palette.Visible).IsTrue();
+        await Assert.That(host.Palette.Results.Count).IsEqualTo(2);
+        // Empty-query palette sorts by title: Logs before Todo.
+        await Assert.That(host.Palette.Results[0].Title).IsEqualTo("Logs");
+        await Assert.That(host.Palette.Results[0].Detail).Contains("hidden");
+        await Assert.That(host.Palette.Results[1].Title).IsEqualTo("Todo");
+        await Assert.That(host.Palette.Results[1].Detail).Contains("visible");
+    }
+
+    [Test]
+    public async Task Panels_Enter_TogglesVisibilityAndCloses()
+    {
+        var store = new FakeStore();
+        var current = Make("cur00004", "current", DateTimeOffset.UtcNow);
+        store.Add(current);
+        var host = PanelsHost(store, current);
+
+        await new PanelsCommand().ExecuteAsync(new ReplCommandContext(host, "panels"), CancellationToken.None);
+
+        string firstId = host.Palette.Results[0].Id;
+        var before = host.Store.State.PanelStates[firstId];
+        _ = host.Palette.HandleKey(KeyEvent.Simple(KeyCode.Enter));
+        var pending = host.Palette.TakePendingCommit();
+        await Assert.That(pending).IsNotNull();
+        await pending!.Value.Handler(pending.Value.Item, CancellationToken.None);
+
+        await Assert.That(host.Store.State.PanelStates[firstId]).IsNotEqualTo(before);
+        await Assert.That(host.Palette.Visible).IsFalse();
+    }
+
+    [Test]
+    public async Task Panels_NoRegistry_FallsBackToText()
+    {
+        var store = new FakeStore();
+        var current = Make("cur00005", "current", DateTimeOffset.UtcNow);
+        store.Add(current);
+        var host = new FakeHost(current, store, new AuthStore(new JsonConfigStore()));
+
+        await new PanelsCommand().ExecuteAsync(new ReplCommandContext(host, "panels"), CancellationToken.None);
+
         await Assert.That(host.Palette.Visible).IsFalse();
     }
 

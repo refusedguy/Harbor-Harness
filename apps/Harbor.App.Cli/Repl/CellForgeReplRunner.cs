@@ -75,7 +75,8 @@ internal sealed class CellForgeReplRunner(
     // via ctor; resolving per abort gesture was a step back.
     IApprovalCoordinator coordinator,
     Harbor.Hosting.PluginReloadService? pluginReload = null,
-    IProviderHealthCheck? healthCheck = null)
+    IProviderHealthCheck? healthCheck = null,
+    Harbor.Ui.Framework.Panels.IPanelRegistry? panelRegistry = null)
     : IReplHost
 {
     /// <summary>
@@ -164,6 +165,7 @@ internal sealed class CellForgeReplRunner(
     IRendererPipeline? IReplHost.RendererPipeline => rendererPipeline;
     Harbor.Hosting.PluginReloadService? IReplHost.PluginReload => pluginReload;
     IProviderHealthCheck? IReplHost.HealthCheck => healthCheck;
+    Harbor.Ui.Framework.Panels.IPanelRegistry? IReplHost.PanelRegistry => panelRegistry;
 
     private readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
 

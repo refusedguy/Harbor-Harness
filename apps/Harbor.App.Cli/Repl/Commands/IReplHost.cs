@@ -7,6 +7,7 @@ using Harbor.Hosting.Rendering;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Ui.Framework.State;
 
@@ -35,6 +36,12 @@ internal interface IReplHost
     AuthStore AuthStore { get; }
     ISessionStore? SessionStore { get; }
     IRendererPipeline? RendererPipeline { get; }
+
+    /// <summary>
+    ///     Panel registry for the <c>/panels</c> picker (list + toggle).
+    ///     Null in tests — the command stays a silent no-op instead of failing.
+    /// </summary>
+    IPanelRegistry? PanelRegistry { get; }
 
     /// <summary>
     ///     Plugin hot-reload + install listing for the <c>/plugins</c> panel.
