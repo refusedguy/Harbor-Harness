@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Sessions;
+using Harbor.Application.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Cli.Commands;
 /// <summary>
@@ -77,6 +78,23 @@ public static class TaskRunRunner
                 $"Agent '{agentName}' is not a sub-agent. Only agents with IsSubAgent=true can be run via task.").ConfigureAwait(false);
             return 1;
         }
+
+        // S1 (#42): pin and print the workspace contract before any agent work.
+        // Dirty tracked state or any git failure rejects the run — never pinned
+        // silently. S1 stamps the Copy intent; worktree materialization lands in S2.
+        var contractResult = await WorkspaceInspector.InspectAsync(Directory.GetCurrentDirectory()).ConfigureAwait(false);
+        if (contractResult.IsFailure)
+        {
+            await stderr.WriteLineAsync($"workspace contract rejected: {contractResult.Error}").ConfigureAwait(false);
+            return 1;
+        }
+
+        var contract = contractResult.Value;
+        await stdout.WriteLineAsync(
+            $"[workspace] root={contract.RepoRoot} rev={contract.BaseRevision} " +
+            $"branch={contract.BaseBranch ?? "(detached)"} isolation={contract.Isolation} " +
+            $"untracked={(contract.UntrackedPresent ? "yes" : "no")} " +
+            $"limits={contract.Limits.TimeoutSeconds}s/{contract.Limits.MaxSteps}steps").ConfigureAwait(false);
 
         var result = await runner.RunAsync(
             definition,
