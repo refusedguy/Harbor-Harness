@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Ui.Framework.State;
@@ -72,6 +73,21 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
 
         if (host.Screen.Sidebar is { } sidebar)
         {
+            // Token totals belong to the target session: recompute from its
+            // persisted history instead of keeping the previous session's.
+            long tokensIn = 0, tokensOut = 0;
+            if (history.IsSuccess)
+            {
+                foreach (var message in history.Value)
+                {
+                    if (message is AssistantMessage assistant)
+                    {
+                        tokensIn += assistant.Usage.InputTokens;
+                        tokensOut += assistant.Usage.OutputTokens;
+                    }
+                }
+            }
+
             int window = await host.ResolveContextWindowAsync(
                 loaded.Value.ProviderId, loaded.Value.Model, ct).ConfigureAwait(false);
             sidebar.State = sidebar.State with
@@ -82,6 +98,8 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
                 Agent = loaded.Value.Agent,
                 MessageCount = host.Timeline.Count,
                 ContextWindow = window,
+                TokensIn = tokensIn,
+                TokensOut = tokensOut,
             };
         }
 

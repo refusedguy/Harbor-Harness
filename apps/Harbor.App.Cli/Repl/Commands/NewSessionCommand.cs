@@ -72,6 +72,11 @@ internal sealed class NewSessionCommand : IReplCommand
                 Agent = newSession.Value.Agent,
                 MessageCount = 0,
                 ContextWindow = await host.ResolveContextWindowAsync(provider, model, ct).ConfigureAwait(false),
+                // Fresh session starts counting from zero — otherwise the
+                // previous session's totals linger in the sidebar.
+                TokensIn = 0,
+                TokensOut = 0,
+                CostUsd = 0,
             };
         }
 
