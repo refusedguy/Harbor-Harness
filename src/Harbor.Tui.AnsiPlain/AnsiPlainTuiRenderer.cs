@@ -47,6 +47,7 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
         _writer = writer;
         _ownsWriter = ownsWriter;
         Context = new AnsiPlainRenderContext(writer, strategy);
+        RegisterEventHandlers();
     }
 
     /// <summary>TEA store owning the <see cref="UiState"/> snapshot (test seam).</summary>
@@ -66,61 +67,114 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
         return base.ShouldRenderPlacement(placement, @event);
     }
 
-    public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
+    public override async Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
         // Issue #77: every chat write lands in the DI-shared UiStore so the
         // pipeline can restore the snapshot across renderer swaps.
         _store.Dispatch(new UiMsg.Agent(@event));
-        // Live token streaming is written directly for a smooth character-by-character
-        // feed; everything else (status bar, finalized chat history, diff overlay) is
-        // rendered through the builtin views in BaseTuiRenderer.
-        switch (@event)
+        // Live output is painted by the registered IAgentEventHandlers (issue
+        // #185 visitor registry); everything else (status bar, finalized chat
+        // history, diff overlay) renders through the builtin views in
+        // BaseTuiRenderer.
+        await DispatchToHandlersAsync(@event, ct).ConfigureAwait(false);
+        await base.RenderAsync(@event, ct).ConfigureAwait(false);
+    }
+
+    private void RegisterEventHandlers()
+    {
+        RegisterHandler(new AssistantStreamHandler());
+        RegisterHandler(new ToolStartHandler());
+        RegisterHandler(new CompactionHandler());
+        RegisterHandler(new AgentErrorHandler());
+    }
+
+    /// <summary>Live assistant stream: start banner, token deltas, end newline.</summary>
+    private sealed class AssistantStreamHandler : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is MessageStartEvent or MessageUpdateEvent or MessageEndEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
         {
-            case MessageStartEvent:
-                Context.WriteColored("[assistant] ", TuiColor.Cyan);
-                break;
+            switch (@event)
+            {
+                case MessageStartEvent:
+                    context.WriteColored("[assistant] ", TuiColor.Cyan);
+                    break;
 
-            case MessageUpdateEvent mu:
-                RenderLiveToken(mu.LlmEvent, Context);
-                break;
+                case MessageUpdateEvent mu:
+                    RenderLiveToken(mu.LlmEvent, context);
+                    break;
 
-            case MessageEndEvent:
-                Context.WriteLine();
-                break;
+                case MessageEndEvent:
+                    context.WriteLine();
+                    break;
+            }
 
-            // The following are emitted as live lines (not accumulated in the chat
-            // history view) so they appear inline without repainting the whole log.
-            case ToolExecutionStartEvent tes:
-                Context.WriteLine();
-                Context.WriteColored($"→ {tes.ToolName}", TuiColor.Blue);
-                string args = tes.Args.GetRawText();
-                if (!string.IsNullOrEmpty(args) && args != "{}")
-                {
-                    Context.WriteStyled($" {args}", TuiStyle.Dim);
-                }
-
-                Context.WriteLine();
-                break;
-
-            case CompactionStartedEvent:
-                Context.WriteLine();
-                Context.WriteStyled("[compacting context...]", TuiStyle.Dim);
-                Context.WriteLine();
-                break;
-
-            case CompactionCompletedEvent cc:
-                Context.WriteStyled($"[compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s]", TuiStyle.Dim);
-                Context.WriteLine();
-                break;
-
-            case AgentErrorEvent err:
-                Context.WriteLine();
-                Context.WriteColored($"[error] {err.Message}", TuiColor.Red);
-                Context.WriteLine();
-                break;
+            return Task.CompletedTask;
         }
+    }
 
-        return base.RenderAsync(@event, ct);
+    /// <summary>Tool-call start line (emitted live, not accumulated in chat history).</summary>
+    private sealed class ToolStartHandler : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) => @event is ToolExecutionStartEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        {
+            var tes = (ToolExecutionStartEvent)@event;
+            context.WriteLine();
+            context.WriteColored($"→ {tes.ToolName}", TuiColor.Blue);
+            string args = tes.Args.GetRawText();
+            if (!string.IsNullOrEmpty(args) && args != "{}")
+            {
+                context.WriteStyled($" {args}", TuiStyle.Dim);
+            }
+
+            context.WriteLine();
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Compaction lifecycle lines.</summary>
+    private sealed class CompactionHandler : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is CompactionStartedEvent or CompactionCompletedEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        {
+            switch (@event)
+            {
+                case CompactionStartedEvent:
+                    context.WriteLine();
+                    context.WriteStyled("[compacting context...]", TuiStyle.Dim);
+                    context.WriteLine();
+                    break;
+
+                case CompactionCompletedEvent cc:
+                    context.WriteStyled($"[compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s]", TuiStyle.Dim);
+                    context.WriteLine();
+                    break;
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Agent error line.</summary>
+    private sealed class AgentErrorHandler : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) => @event is AgentErrorEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        {
+            var err = (AgentErrorEvent)@event;
+            context.WriteLine();
+            context.WriteColored($"[error] {err.Message}", TuiColor.Red);
+            context.WriteLine();
+            return Task.CompletedTask;
+        }
     }
 
     private static void RenderLiveToken(LlmEvent evt, ITuiRenderContext ctx)

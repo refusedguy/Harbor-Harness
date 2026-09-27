@@ -41,6 +41,7 @@ namespace Harbor.Terminal.Abstractions;
 public abstract class BaseTuiRenderer : ITuiRenderer
 {
     protected readonly ILogger Logger;
+    private readonly List<IAgentEventHandler> _eventHandlers = new();
 
     /// <summary>
     ///     Construct a <see cref="BaseTuiRenderer" /> with the supplied logger.
@@ -62,6 +63,13 @@ public abstract class BaseTuiRenderer : ITuiRenderer
     public ViewRegistry Views { get; }
     public ViewModelRegistry ViewModels { get; }
     public abstract ITuiRenderContext Context { get; }
+
+    /// <summary>
+    ///     Registered <see cref="AgentEvent"/> handlers (issue #185 visitor registry).
+    ///     Renderers register one handler per event group in their constructor;
+    ///     <see cref="DispatchToHandlersAsync"/> fans each event out to them.
+    /// </summary>
+    protected IReadOnlyList<IAgentEventHandler> EventHandlers => _eventHandlers;
 
     /// <summary>
     ///     Registers the four builtin views (unless already overridden by a plugin) and binds
@@ -179,6 +187,53 @@ public abstract class BaseTuiRenderer : ITuiRenderer
             if (vm is not null)
             {
                 view.ViewModel = vm;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Registers one <see cref="AgentEvent"/> handler (issue #185). Called by
+    ///     subclass constructors — one call per event group the renderer paints.
+    /// </summary>
+    protected void RegisterHandler(IAgentEventHandler handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        _eventHandlers.Add(handler);
+    }
+
+    /// <summary>
+    ///     Fans the event out to every registered handler whose
+    ///     <see cref="IAgentEventHandler.CanHandle"/> matches. Per-handler
+    ///     failures are logged and isolated — one bad handler never blocks the
+    ///     rest (same contract as the view-model / view fan-out above).
+    /// </summary>
+    protected async Task DispatchToHandlersAsync(AgentEvent @event, CancellationToken ct = default)
+    {
+        foreach (var handler in _eventHandlers)
+        {
+            bool handles;
+            try
+            {
+                handles = handler.CanHandle(@event);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Event handler {Handler} CanHandle failed", handler.GetType().Name);
+                continue;
+            }
+
+            if (!handles)
+            {
+                continue;
+            }
+
+            try
+            {
+                await handler.HandleAsync(@event, Context, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Event handler {Handler} failed for {EventType}", handler.GetType().Name, @event.GetType().Name);
             }
         }
     }

@@ -50,6 +50,10 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
     {
         _maxLines = maxLines;
         _driverOverride = driverOverride;
+        RegisterHandler(new AssistantStreamHandler(this));
+        RegisterHandler(new ToolLifecycleHandler(this));
+        RegisterHandler(new CompactionHandler(this));
+        RegisterHandler(new AgentErrorHandler(this));
     }
 
     private readonly IConsoleDriver? _driverOverride;
@@ -77,67 +81,131 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
         return false;
     }
 
-    public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
+    public override async Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        switch (@event)
+        // Live chat surface is painted by the registered IAgentEventHandlers
+        // (issue #185 visitor registry); builtin views stay registered for the
+        // plugin contract but never repaint (see ShouldRenderPlacement).
+        await DispatchToHandlersAsync(@event, ct).ConfigureAwait(false);
+        await base.RenderAsync(@event, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Live assistant stream: start banner, token deltas, end break.</summary>
+    private sealed class AssistantStreamHandler(NickConsoleExTuiRenderer owner) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is MessageStartEvent or MessageUpdateEvent or MessageEndEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
         {
-            case MessageStartEvent:
-                Append("[bold cyan]assistant[/] ");
-                break;
+            switch (@event)
+            {
+                case MessageStartEvent:
+                    owner.Append("[bold cyan]assistant[/] ");
+                    break;
 
-            case MessageUpdateEvent mu:
-                AppendToken(mu.LlmEvent);
-                break;
+                case MessageUpdateEvent mu:
+                    owner.AppendToken(mu.LlmEvent);
+                    break;
 
-            case MessageEndEvent:
-                CommitTokenLine();
-                Append(string.Empty);
-                break;
+                case MessageEndEvent:
+                    owner.CommitTokenLine();
+                    owner.Append(string.Empty);
+                    break;
+            }
 
-            case ToolExecutionStartEvent tes:
-                CommitTokenLine();
-                lock (_gate)
-                {
-                    _toolNames[tes.ToolCallId] = tes.ToolName;
-                }
+            return Task.CompletedTask;
+        }
+    }
 
-                string args = tes.Args.GetRawText();
-                Append(string.IsNullOrEmpty(args) || args == "{}"
-                    ? $"[blue]→ {tes.ToolName}[/]"
-                    : $"[blue]→ {tes.ToolName}[/] [dim]{Escape(args)}[/]");
-                break;
+    /// <summary>Tool-call lifecycle lines (start arrow, end check/cross).</summary>
+    private sealed class ToolLifecycleHandler(NickConsoleExTuiRenderer owner) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is ToolExecutionStartEvent or ToolExecutionEndEvent;
 
-            case ToolExecutionEndEvent tee:
-                CommitTokenLine();
-                string toolName = "tool";
-                lock (_gate)
-                {
-                    if (_toolNames.Remove(tee.ToolCallId, out var found))
-                    {
-                        toolName = found;
-                    }
-                }
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        {
+            switch (@event)
+            {
+                case ToolExecutionStartEvent tes:
+                    owner.NoteToolStart(tes);
+                    string args = tes.Args.GetRawText();
+                    owner.Append(string.IsNullOrEmpty(args) || args == "{}"
+                        ? $"[blue]→ {tes.ToolName}[/]"
+                        : $"[blue]→ {tes.ToolName}[/] [dim]{Escape(args)}[/]");
+                    break;
 
-                Append(tee.IsError
-                    ? $"[red]✗ {Escape(toolName)} — {Escape(tee.Result.Output)}[/]"
-                    : $"[green]✓ {Escape(toolName)}[/]");
-                break;
+                case ToolExecutionEndEvent tee:
+                    string toolName = owner.TakeToolName(tee);
+                    owner.Append(tee.IsError
+                        ? $"[red]✗ {Escape(toolName)} — {Escape(tee.Result.Output)}[/]"
+                        : $"[green]✓ {Escape(toolName)}[/]");
+                    break;
+            }
 
-            case CompactionStartedEvent:
-                Append("[dim]compacting context...[/]");
-                break;
+            return Task.CompletedTask;
+        }
+    }
 
-            case CompactionCompletedEvent cc:
-                Append($"[dim]compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens[/]");
-                break;
+    /// <summary>Compaction lifecycle lines.</summary>
+    private sealed class CompactionHandler(NickConsoleExTuiRenderer owner) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is CompactionStartedEvent or CompactionCompletedEvent;
 
-            case AgentErrorEvent err:
-                CommitTokenLine();
-                Append($"[bold red]error[/] {Escape(err.Message)}");
-                break;
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        {
+            switch (@event)
+            {
+                case CompactionStartedEvent:
+                    owner.Append("[dim]compacting context...[/]");
+                    break;
+
+                case CompactionCompletedEvent cc:
+                    owner.Append($"[dim]compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens[/]");
+                    break;
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Agent error line.</summary>
+    private sealed class AgentErrorHandler(NickConsoleExTuiRenderer owner) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) => @event is AgentErrorEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        {
+            var err = (AgentErrorEvent)@event;
+            owner.CommitTokenLine();
+            owner.Append($"[bold red]error[/] {Escape(err.Message)}");
+            return Task.CompletedTask;
+        }
+    }
+
+    private void NoteToolStart(ToolExecutionStartEvent tes)
+    {
+        CommitTokenLine();
+        lock (_gate)
+        {
+            _toolNames[tes.ToolCallId] = tes.ToolName;
+        }
+    }
+
+    private string TakeToolName(ToolExecutionEndEvent tee)
+    {
+        CommitTokenLine();
+        lock (_gate)
+        {
+            if (_toolNames.Remove(tee.ToolCallId, out var found))
+            {
+                return found;
+            }
         }
 
-        return base.RenderAsync(@event, ct);
+        return "tool";
     }
 
     public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
