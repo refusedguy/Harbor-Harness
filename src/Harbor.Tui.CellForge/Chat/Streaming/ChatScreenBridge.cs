@@ -189,7 +189,8 @@ public sealed class ChatScreenBridge : IDisposable
                 _status.Mode = StatusBarMode.Running;
                 break;
 
-            case MessageStartEvent:
+            case MessageStartEvent started:
+                MarkSeen(started.Message);
                 StartStream();
                 break;
 
@@ -248,8 +249,18 @@ public sealed class ChatScreenBridge : IDisposable
 
                 break;
 
-            case MessageEndEvent:
+            case MessageEndEvent ended:
+                MarkSeen(ended.Message);
                 FinishStream();
+                break;
+
+            case TurnEndEvent turnEnd:
+                MarkSeen(turnEnd.AssistantMessage);
+                foreach (var toolResults in turnEnd.ToolResults)
+                {
+                    MarkSeen(toolResults);
+                }
+
                 break;
 
             case CompactionStartedEvent:
@@ -278,7 +289,12 @@ public sealed class ChatScreenBridge : IDisposable
                 _status.Mode = StatusBarMode.Idle;
                 break;
 
-            case AgentEndEvent:
+            case AgentEndEvent agentEnd:
+                foreach (var message in agentEnd.NewMessages)
+                {
+                    MarkSeen(message);
+                }
+
                 FlushStreamNow();
                 _status.Phase = _runHadError ? AgentPhase.Errored : AgentPhase.Succeeded;
                 if (!_runHadError)
@@ -339,6 +355,20 @@ public sealed class ChatScreenBridge : IDisposable
     }
 
     public void ResetMessageTracking() => _displayedMessageIds.Clear();
+
+    /// <summary>Settled-message marker: every message that already owns a
+    /// timeline block (live stream slot or committed form) is recorded, so a
+    /// later <see cref="AgentStartEvent"/> replay never re-appends it — each
+    /// message paints exactly once per timeline lifetime.
+    /// <see cref="ResetMessageTracking"/> re-arms on session switch/new
+    /// session, where the timeline is cleared alongside.</summary>
+    private void MarkSeen(AgentMessage message)
+    {
+        if (message.Id is not null)
+        {
+            _displayedMessageIds.Add(message.Id);
+        }
+    }
 
     private void AppendHistoryMessage(AgentMessage message)
     {
