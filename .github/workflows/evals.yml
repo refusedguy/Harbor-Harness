@@ -70,9 +70,9 @@ jobs:
           cache: true
           cache-dependency-path: "Directory.Packages.props"
 
-      - name: Build CLI (Release)
+      - name: Build CLI + evals runner (Release)
         if: steps.key.outputs.available == 'true'
-        run: dotnet build apps/Harbor.App.Cli -c Release --nologo -v q
+        run: dotnet build apps/Harbor.App.Cli tools/Harbor.Evals -c Release --nologo -v q
 
       - name: Run evals v0
         if: steps.key.outputs.available == 'true'
