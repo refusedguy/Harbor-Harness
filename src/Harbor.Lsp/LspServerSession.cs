@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Lsp;
 using Microsoft.Extensions.Logging;
 
@@ -131,7 +132,11 @@ public sealed class LspServerSession : IAsyncDisposable
             ct).ConfigureAwait(false);
     }
 
-    /// <summary>Resolve definition at the position (normalized to a file path).</summary>
+    /// <summary>
+    ///     Resolve definition at the position (normalized to a file path).
+    ///     Malformed foreign-server payloads degrade to <c>null</c> with the
+    ///     reason in the log — never a throw (§A2).
+    /// </summary>
     public async Task<LspLocation?> FindDefinitionAsync(string filePath, int line, int column, CancellationToken ct)
     {
         JsonElement? result = await _client.SendRequestAsync(
@@ -140,10 +145,23 @@ public sealed class LspServerSession : IAsyncDisposable
                 new LspWire.TextDocumentIdentifier(FileUri(filePath)),
                 new LspWire.LspPosition(line, column)),
             ct).ConfigureAwait(false);
-        return NormalizeFirstLocation(result, filePath);
+        Result<Maybe<LspLocation>> normalized = TryNormalizeFirstLocation(result, filePath);
+        if (normalized.IsFailure)
+        {
+            _logger.LogWarning(
+                "LSP: {Language} server returned a malformed definition payload ({Reason}) — degraded to no-result",
+                _definition.Language, normalized.Error);
+            return null;
+        }
+
+        Maybe<LspLocation> location = normalized.Value;
+        return location.HasValue ? location.Value : null;
     }
 
-    /// <summary>Resolve references to the symbol at the position.</summary>
+    /// <summary>
+    ///     Resolve references to the symbol at the position.
+    ///     Malformed items are skipped leniently (count in the log).
+    /// </summary>
     public async Task<IReadOnlyList<LspLocation>> FindReferencesAsync(string filePath, int line, int column, CancellationToken ct)
     {
         JsonElement? result = await _client.SendRequestAsync(
@@ -153,7 +171,15 @@ public sealed class LspServerSession : IAsyncDisposable
                 new LspWire.LspPosition(line, column),
                 new LspWire.ReferenceContext(IncludeDeclaration: true)),
             ct).ConfigureAwait(false);
-        return NormalizeAllLocations(result, filePath);
+        IReadOnlyList<LspLocation> locations = NormalizeAllLocations(result, filePath, out string? skippedReason);
+        if (skippedReason is not null)
+        {
+            _logger.LogDebug(
+                "LSP: {Language} server returned malformed references payloads ({Reason})",
+                _definition.Language, skippedReason);
+        }
+
+        return locations;
     }
 
     /// <summary>Diagnostics last published for the file.</summary>
@@ -207,74 +233,138 @@ public sealed class LspServerSession : IAsyncDisposable
         }
     }
 
-    // ── Location normalization ─────────────────────────────────────────────
+    // ── Location normalization (ROP boundary, §A2) ─────────────────────────
+    //
+    // Definition returns Location | Location[] | LocationLink[] | null;
+    // references return Location[] | null. Foreign servers send garbage, so
+    // every shape violation carries a machine-readable reason instead of
+    // null: Success(Some) = usable location, Success(None) = legitimately
+    // absent (JSON null / [] / skippable array items), Failure(reason) =
+    // malformed payload (not-object-or-array, missing-uri, missing-range,
+    // missing-target-selection-range, uri-not-string). Callers map failures
+    // to degrade-warnings; the ILspService surface itself stays null/[]-typed.
 
     /// <summary>
-    ///     Definition returns Location | Location[] | LocationLink[] | null;
-    ///     references return Location[] | null. Normalize both leniently.
+    ///     Normalize a definition payload: the first usable location wins,
+    ///     garbage fails with a reason instead of vanishing into <c>null</c>.
     /// </summary>
-    private static LspLocation? NormalizeFirstLocation(JsonElement? element, string fallbackPath)
+    internal static Result<Maybe<LspLocation>> TryNormalizeFirstLocation(JsonElement? element, string fallbackPath)
     {
-        if (element is not { ValueKind: JsonValueKind.Object or JsonValueKind.Array } e) return null;
-
-        if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty("targetUri", out JsonElement linkUri))
+        if (element is not { } e || e.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
         {
-            return FromLocationLike(linkUri, e.GetProperty("targetSelectionRange").GetProperty("start"), fallbackPath);
+            return Result.Success(Maybe<LspLocation>.None);
         }
 
         if (e.ValueKind == JsonValueKind.Array)
         {
+            string? firstFailure = null;
             foreach (JsonElement item in e.EnumerateArray())
             {
-                LspLocation? location = NormalizeSingle(item, fallbackPath);
-                if (location is not null) return location;
+                Result<Maybe<LspLocation>> normalized = TryNormalizeSingle(item, fallbackPath);
+                if (normalized.IsFailure)
+                {
+                    firstFailure ??= normalized.Error;
+                    continue;
+                }
+
+                if (normalized.Value.HasValue) return normalized;
             }
 
-            return null;
+            return firstFailure is null
+                ? Result.Success(Maybe<LspLocation>.None)
+                : Result.Failure<Maybe<LspLocation>>(firstFailure);
         }
 
-        return NormalizeSingle(e, fallbackPath);
+        if (e.ValueKind != JsonValueKind.Object)
+        {
+            return Result.Failure<Maybe<LspLocation>>($"not-object-or-array (got {e.ValueKind})");
+        }
+
+        return TryNormalizeSingle(e, fallbackPath);
     }
 
-    private static IReadOnlyList<LspLocation> NormalizeAllLocations(JsonElement? element, string fallbackPath)
+    private static IReadOnlyList<LspLocation> NormalizeAllLocations(
+        JsonElement? element, string fallbackPath, out string? skippedReason)
     {
+        skippedReason = null;
         if (element is not { ValueKind: JsonValueKind.Array } e) return [];
         var list = new List<LspLocation>();
+        int skipped = 0;
         foreach (JsonElement item in e.EnumerateArray())
         {
-            LspLocation? location = NormalizeSingle(item, fallbackPath);
-            if (location is not null) list.Add(location);
+            Result<Maybe<LspLocation>> normalized = TryNormalizeSingle(item, fallbackPath);
+            if (normalized.IsFailure)
+            {
+                skipped++;
+                skippedReason ??= normalized.Error;
+                continue;
+            }
+
+            // Success(None) (e.g. null array items) skips silently — lenient by design.
+            if (normalized.Value.HasValue) list.Add(normalized.Value.Value);
         }
 
+        if (skipped > 0) skippedReason = $"{skipped} malformed location(s) skipped ({skippedReason})";
         return list;
     }
 
-    private static LspLocation? NormalizeSingle(JsonElement item, string fallbackPath)
+    /// <summary>
+    ///     Normalize one Location | LocationLink. Non-objects (e.g. null array
+    ///     items) skip leniently as <c>None</c>; misshapen objects fail with a reason.
+    /// </summary>
+    internal static Result<Maybe<LspLocation>> TryNormalizeSingle(JsonElement item, string fallbackPath)
     {
-        if (item.ValueKind != JsonValueKind.Object) return null;
+        if (item.ValueKind != JsonValueKind.Object)
+        {
+            return Result.Success(Maybe<LspLocation>.None);
+        }
+
         if (item.TryGetProperty("uri", out JsonElement uri))
         {
-            JsonElement start = item.GetProperty("range").GetProperty("start");
-            return FromLocationLike(uri, start, fallbackPath);
+            if (!item.TryGetProperty("range", out JsonElement range)
+                || range.ValueKind != JsonValueKind.Object
+                || !range.TryGetProperty("start", out JsonElement start)
+                || start.ValueKind != JsonValueKind.Object)
+            {
+                return Result.Failure<Maybe<LspLocation>>("missing-range");
+            }
+
+            return MapBuilt(TryBuildLocation(uri, start, fallbackPath));
         }
 
         if (item.TryGetProperty("targetUri", out JsonElement targetUri))
         {
-            JsonElement start = item.GetProperty("targetSelectionRange").GetProperty("start");
-            return FromLocationLike(targetUri, start, fallbackPath);
+            if (!item.TryGetProperty("targetSelectionRange", out JsonElement selection)
+                || selection.ValueKind != JsonValueKind.Object
+                || !selection.TryGetProperty("start", out JsonElement start)
+                || start.ValueKind != JsonValueKind.Object)
+            {
+                return Result.Failure<Maybe<LspLocation>>("missing-target-selection-range");
+            }
+
+            return MapBuilt(TryBuildLocation(targetUri, start, fallbackPath));
         }
 
-        return null;
+        return Result.Failure<Maybe<LspLocation>>("missing-uri");
     }
 
-    private static LspLocation? FromLocationLike(JsonElement uriElement, JsonElement start, string fallbackPath)
+    private static Result<Maybe<LspLocation>> MapBuilt(Result<LspLocation> built) =>
+        built.IsFailure
+            ? Result.Failure<Maybe<LspLocation>>(built.Error)
+            : Result.Success(Maybe.From(built.Value));
+
+    internal static Result<LspLocation> TryBuildLocation(JsonElement uriElement, JsonElement start, string fallbackPath)
     {
-        if (uriElement.ValueKind != JsonValueKind.String) return null;
+        if (uriElement.ValueKind != JsonValueKind.String)
+        {
+            return Result.Failure<LspLocation>("uri-not-string");
+        }
+
         string path = FromUri(uriElement.GetString() ?? string.Empty);
         if (string.IsNullOrEmpty(path)) path = fallbackPath;
         int line = start.TryGetProperty("line", out JsonElement l) && l.ValueKind == JsonValueKind.Number ? l.GetInt32() : 0;
         int character = start.TryGetProperty("character", out JsonElement c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : 0;
-        return new LspLocation(path, line, character);
+        return Result.Success(new LspLocation(path, line, character));
     }
 
     // ── URI helpers ────────────────────────────────────────────────────────

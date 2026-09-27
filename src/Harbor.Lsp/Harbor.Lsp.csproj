@@ -10,6 +10,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <!-- §E1 (#200): ROP boundaries (Result/Maybe) over foreign-server JSON-RPC payloads. -->
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ROP normalizer unit tests (Result reasons) without spawning processes. -->
+    <InternalsVisibleTo Include="Harbor.Lsp.Tests"/>
   </ItemGroup>
 
   <ItemGroup>

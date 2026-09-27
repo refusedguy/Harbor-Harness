@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Lsp;
 using Microsoft.Extensions.Logging;
 
@@ -14,9 +15,13 @@ namespace Harbor.Lsp;
 ///         the file's workspace (nearest <c>.git</c>, else the file's directory).
 ///     </para>
 ///     <para>
-///         <b>Graceful degradation:</b> a missing server binary logs once and
+///         <b>Graceful degradation with reasons (§A8):</b> a missing server binary logs once and
 ///         marks the language unavailable — subsequent calls are cheap no-ops.
-///         The agent loop and the editor never fail because of LSP.
+///         Every degradation carries a machine-readable reason (<c>no-server-for-language</c>,
+///         <c>session-not-started</c>, <c>server-unavailable</c>, <c>server-start-failed</c>,
+///         <c>request-failed</c>, <c>lookup-timed-out</c>, plus the session normalizer reasons)
+///         surfaced in the log, so "no server for language" is distinguishable from
+///         "server crashed". The agent loop and the editor never fail because of LSP.
 ///     </para>
 /// </remarks>
 public sealed class LspManager : ILspService
@@ -51,11 +56,32 @@ public sealed class LspManager : ILspService
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = await GetOrCreateSessionAsync(filePath, ct).ConfigureAwait(false);
-        if (session is null) return;
+        Result<LspServerSession> resolved = await GetOrCreateSessionAsync(filePath, ct).ConfigureAwait(false);
+        if (resolved.IsFailure)
+        {
+            _logger.LogDebug("LSP: open of {File} degraded ({Reason})", filePath, resolved.Error);
+            return;
+        }
 
+        LspServerSession session = resolved.Value;
         string fullPath = Path.GetFullPath(filePath);
-        await session.OpenAsync(fullPath, text, LanguageIdFor(session.Definition), ct).ConfigureAwait(false);
+        try
+        {
+            await session.OpenAsync(fullPath, text, LanguageIdFor(session.Definition), ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "LSP: open of {File} on {Language} server failed ({Reason}) — degraded",
+                fullPath, session.Definition.Language, ex.Message);
+            return;
+        }
+
         _logger.LogDebug("LSP: opened {File} on {Language} server", fullPath, session.Definition.Language);
     }
 
@@ -64,9 +90,28 @@ public sealed class LspManager : ILspService
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = GetSessionFor(filePath);
-        if (session is null) return;
-        await session.ChangeAsync(Path.GetFullPath(filePath), newText, ct).ConfigureAwait(false);
+        Result<LspServerSession> resolved = ResolveSession(filePath);
+        if (resolved.IsFailure)
+        {
+            _logger.LogDebug("LSP: change of {File} degraded ({Reason})", filePath, resolved.Error);
+            return;
+        }
+
+        try
+        {
+            await resolved.Value.ChangeAsync(Path.GetFullPath(filePath), newText, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "LSP: change of {File} failed ({Reason}) — degraded",
+                filePath, ex.Message);
+        }
     }
 
     /// <inheritdoc />
@@ -74,9 +119,24 @@ public sealed class LspManager : ILspService
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = GetSessionFor(filePath);
-        if (session is null) return;
-        await session.CloseAsync(Path.GetFullPath(filePath)).ConfigureAwait(false);
+        Result<LspServerSession> resolved = ResolveSession(filePath);
+        if (resolved.IsFailure)
+        {
+            _logger.LogDebug("LSP: close of {File} degraded ({Reason})", filePath, resolved.Error);
+            return;
+        }
+
+        try
+        {
+            await resolved.Value.CloseAsync(Path.GetFullPath(filePath)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "LSP: close of {File} failed ({Reason}) — degraded",
+                filePath, ex.Message);
+        }
     }
 
     /// <inheritdoc />
@@ -84,8 +144,14 @@ public sealed class LspManager : ILspService
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = GetSessionFor(filePath);
-        IReadOnlyList<LspDiagnostic> diagnostics = session?.GetDiagnostics(Path.GetFullPath(filePath)) ?? [];
+        Result<LspServerSession> resolved = ResolveSession(filePath);
+        if (resolved.IsFailure)
+        {
+            _logger.LogDebug("LSP: diagnostics of {File} degraded ({Reason})", filePath, resolved.Error);
+            return ValueTask.FromResult<IReadOnlyList<LspDiagnostic>>([]);
+        }
+
+        IReadOnlyList<LspDiagnostic> diagnostics = resolved.Value.GetDiagnostics(Path.GetFullPath(filePath));
         return ValueTask.FromResult(diagnostics);
     }
 
@@ -94,11 +160,34 @@ public sealed class LspManager : ILspService
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = GetSessionFor(filePath);
-        if (session is null) return null;
+        Result<LspServerSession> resolved = ResolveSession(filePath);
+        if (resolved.IsFailure)
+        {
+            _logger.LogDebug("LSP: definition lookup for {File} degraded ({Reason})", filePath, resolved.Error);
+            return null;
+        }
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(RequestTimeout);
-        return await session.FindDefinitionAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
+        try
+        {
+            return await resolved.Value.FindDefinitionAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "LSP: definition lookup for {File} timed out after {Timeout} (lookup-timed-out) — degraded to no-result",
+                filePath, RequestTimeout);
+            return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex,
+                "LSP: definition lookup for {File} failed (request-failed: {Reason}) — degraded to no-result",
+                filePath, ex.Message);
+            return null;
+        }
     }
 
     /// <inheritdoc />
@@ -106,35 +195,85 @@ public sealed class LspManager : ILspService
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        LspServerSession? session = GetSessionFor(filePath);
-        if (session is null) return [];
+        Result<LspServerSession> resolved = ResolveSession(filePath);
+        if (resolved.IsFailure)
+        {
+            _logger.LogDebug("LSP: references lookup for {File} degraded ({Reason})", filePath, resolved.Error);
+            return [];
+        }
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(RequestTimeout);
-        return await session.FindReferencesAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
-    }
-
-    // ── Session management ─────────────────────────────────────────────────
-
-    private LspServerSession? GetSessionFor(string filePath)
-    {
-        LspServerDefinition? definition = _definitions.FirstOrDefault(d => d.Handles(filePath));
-        if (definition is null) return null;
-
-        lock (_sync)
+        try
         {
-            return _sessions.TryGetValue(definition.Id, out LspServerSession? session) ? session : null;
+            return await resolved.Value.FindReferencesAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "LSP: references lookup for {File} timed out after {Timeout} (lookup-timed-out) — degraded to empty",
+                filePath, RequestTimeout);
+            return [];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex,
+                "LSP: references lookup for {File} failed (request-failed: {Reason}) — degraded to empty",
+                filePath, ex.Message);
+            return [];
         }
     }
 
-    private async ValueTask<LspServerSession?> GetOrCreateSessionAsync(string filePath, CancellationToken ct)
+    // ── Session management (ROP boundary, §A8) ───────────────────────────────
+    //
+    // Every degradation returns a Failure with a machine-readable reason instead
+    // of null, so callers can log "no server for language" vs "server crashed"
+    // instead of degrading silently. The public ILspService surface maps these
+    // to its null/[] contract (reasons survive in the log).
+
+    private Result<LspServerSession> ResolveSession(string filePath)
     {
         LspServerDefinition? definition = _definitions.FirstOrDefault(d => d.Handles(filePath));
-        if (definition is null) return null;
+        if (definition is null)
+        {
+            return Result.Failure<LspServerSession>(
+                $"no-server-for-language (extension '{Path.GetExtension(filePath)}')");
+        }
 
         lock (_sync)
         {
-            if (_sessions.TryGetValue(definition.Id, out LspServerSession? existing)) return existing;
-            if (_unavailable.Contains(definition.Id)) return null; // logged once, degrade silently
+            if (_sessions.TryGetValue(definition.Id, out LspServerSession? session) && session is not null)
+            {
+                return Result.Success(session);
+            }
+        }
+
+        return Result.Failure<LspServerSession>(
+            $"session-not-started ('{definition.Id}' — open the file first so the server spawns)");
+    }
+
+    private async Task<Result<LspServerSession>> GetOrCreateSessionAsync(string filePath, CancellationToken ct)
+    {
+        LspServerDefinition? definition = _definitions.FirstOrDefault(d => d.Handles(filePath));
+        if (definition is null)
+        {
+            return Result.Failure<LspServerSession>(
+                $"no-server-for-language (extension '{Path.GetExtension(filePath)}')");
+        }
+
+        lock (_sync)
+        {
+            if (_sessions.TryGetValue(definition.Id, out LspServerSession? existing) && existing is not null)
+            {
+                return Result.Success(existing);
+            }
+
+            // Start failure is logged once below; repeat opens stay cheap no-ops.
+            if (_unavailable.Contains(definition.Id))
+            {
+                return Result.Failure<LspServerSession>($"server-unavailable ('{definition.Id}')");
+            }
         }
 
         string workspaceRoot = FindWorkspaceRoot(filePath);
@@ -154,7 +293,7 @@ public sealed class LspManager : ILspService
                 ex,
                 "LSP: {Language} server '{Command}' unavailable — diagnostics/definition disabled for this language",
                 definition.Language, definition.Command);
-            return null;
+            return Result.Failure<LspServerSession>($"server-start-failed ('{definition.Id}': {ex.Message})");
         }
 
         session.DiagnosticsChanged += (_, args) => DiagnosticsChanged?.Invoke(this, args);
@@ -162,14 +301,27 @@ public sealed class LspManager : ILspService
         lock (_sync)
         {
             // Two opens racing the same language: keep the winner, dispose the loser.
-            if (_sessions.TryGetValue(definition.Id, out LspServerSession? winner))
+            if (_sessions.TryGetValue(definition.Id, out LspServerSession? winner) && winner is not null)
             {
-                _ = session.DisposeAsync().AsTask();
-                return winner;
+                // §D4: best-effort by design, but never unobserved — log the loser fault.
+                _ = session.DisposeAsync().AsTask().ContinueWith(
+                    static (t, state) =>
+                    {
+                        var (logger, language) = ((ILogger<LspManager>, string))state!;
+                        logger.LogWarning(
+                            t.Exception,
+                            "LSP: dispose of superseded {Language} session failed",
+                            language);
+                    },
+                    (_logger, definition.Language),
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted,
+                    TaskScheduler.Default);
+                return Result.Success(winner);
             }
 
             _sessions[definition.Id] = session;
-            return session;
+            return Result.Success(session);
         }
     }
 
