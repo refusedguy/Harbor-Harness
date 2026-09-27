@@ -177,14 +177,34 @@ public class CellForgeBuiltinPanelsTests
     }
 
     [Test]
-    public async Task Todo_WithItems_RendersMarkerAndContent()
+    public async Task Todo_WithItems_RendersSpectreParityIconsAndContent()
     {
         var state = StateWithLines(new ChatLine(
             ChatRole.ToolResult, "[ ] Write code\n[x] Done thing\n[~] Doing other"));
         string text = Joined(new CellForgeTodoListPanel().Build(Ctx(state)));
-        await Assert.That(text).Contains("[ ] Write code");
-        await Assert.That(text).Contains("[x] Done thing");
-        await Assert.That(text).Contains("[~] Doing other");
+        await Assert.That(text).Contains("○");
+        await Assert.That(text).Contains("Write code");
+        await Assert.That(text).Contains("✓");
+        await Assert.That(text).Contains("Done thing");
+        await Assert.That(text).Contains("→");
+        await Assert.That(text).Contains("Doing other");
+        await Assert.That(text).Contains("✓ 1  → 1  ○ 1");
+        await Assert.That(text).DoesNotContain("[ ]");
+        await Assert.That(text).DoesNotContain("[x]");
+        await Assert.That(text).DoesNotContain("[~]");
+    }
+
+    [Test]
+    public async Task Todo_LongContent_TruncatedToWidth()
+    {
+        var state = StateWithLines(new ChatLine(
+            ChatRole.ToolResult, "[ ] " + new string('a', 60)));
+        var rows = Rows(new CellForgeTodoListPanel().Build(Ctx(state, width: 30, height: 24)));
+        await Assert.That(string.Join("\n", rows)).Contains("…");
+        foreach (string line in rows)
+        {
+            await Assert.That(line.Length <= 30).IsTrue();
+        }
     }
 
     [Test]

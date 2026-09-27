@@ -50,7 +50,7 @@ public sealed class CellForgeTodoListPanel : IPanelProvider
     {
         ArgumentNullException.ThrowIfNull(ctx);
         return PanelText.Clip(
-            PanelRows.TodoRows(PanelExtractors.ExtractTodos(ctx.State)),
+            PanelRows.TodoRows(PanelExtractors.ExtractTodos(ctx.State), ctx.Width),
             ctx.Width,
             ctx.Height);
     }

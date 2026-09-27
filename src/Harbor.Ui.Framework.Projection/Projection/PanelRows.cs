@@ -20,8 +20,8 @@ namespace Harbor.Ui.Framework.Projection;
 /// </summary>
 public static class PanelRows
 {
-    /// <summary>Todo-list rows: header, items, done/active/pending summary.</summary>
-    public static List<string> TodoRows(IReadOnlyList<TodoItem> todos)
+    /// <summary>Todo-list rows: header, Spectre-parity icons, done/active/pending summary.</summary>
+    public static List<string> TodoRows(IReadOnlyList<TodoItem> todos, int width)
     {
         ArgumentNullException.ThrowIfNull(todos);
         var rows = new List<string>(todos.Count + 4);
@@ -37,8 +37,16 @@ public static class PanelRows
             int done = 0;
             int active = 0;
             int pending = 0;
+            int contentBudget = Math.Max(1, width - 6);
             for (int i = 0; i < todos.Count; i++)
             {
+                string icon = todos[i].Marker switch
+                {
+                    "[x]" or "[X]" => "✓",
+                    "[~]" => "→",
+                    "[ ]" => "○",
+                    _ => "?",
+                };
                 switch (todos[i].Marker)
                 {
                     case "[x]":
@@ -53,11 +61,11 @@ public static class PanelRows
                         break;
                 }
 
-                rows.Add($"{todos[i].Marker} {todos[i].Content}");
+                rows.Add($"  {icon}  {PanelText.Truncate(todos[i].Content, contentBudget)}");
             }
 
             rows.Add(PanelText.Separator);
-            rows.Add($"Done {done} · active {active} · pending {pending}");
+            rows.Add($"✓ {done}  → {active}  ○ {pending}");
         }
 
         return rows;
