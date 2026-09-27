@@ -11,8 +11,7 @@ public sealed class DefaultAgent : IAgent
     private readonly IAgentLoop _agentLoop;
     private readonly IEventBus _eventBus;
     private readonly IDisposable _eventBusSubscription;
-    private readonly List<Func<AgentEvent, CancellationToken, ValueTask>> _listeners = new();
-    private readonly object _listenersLock = new();
+    private readonly ListenerRegistry _listeners = new();
     private readonly ILogger<DefaultAgent> _logger;
     /// <summary>
     ///     Mutual exclusion for <see cref="PromptAsync" /> entry. The previous
@@ -24,7 +23,7 @@ public sealed class DefaultAgent : IAgent
     /// </summary>
     private readonly SemaphoreSlim _runGate = new(1, 1);
     private readonly ISessionStore _sessionStore;
-    private readonly Channel<AgentMessage> _steeringQueue;
+    private readonly AgentSteeringQueue _steering = new();
 
     /// <summary>
     ///     Backing field for <see cref="AbortToken" />. Replaced wholesale by
@@ -106,40 +105,11 @@ public sealed class DefaultAgent : IAgent
         _eventBus = eventBus;
         _logger = logger;
 
-        _steeringQueue = Channel.CreateUnbounded<AgentMessage>(new UnboundedChannelOptions
-        {
-            SingleReader = true,
-            SingleWriter = false
-        });
-
+        // [G4]: listener fan-out lives in ListenerRegistry; snapshot + invoked
+        // outside the lock exactly as before, failures logged per listener.
         _eventBusSubscription = _eventBus.Subscribe(async (evt, ct) =>
         {
-            // Snapshot listeners under the lock, then iterate the snapshot outside the lock.
-            // Previously this allocated a fresh List<T> via ToList() on every published event,
-            // which is significant for high-frequency events like MessageUpdateEvent.
-            Func<AgentEvent, CancellationToken, ValueTask>[] snapshot;
-            lock (_listenersLock)
-            {
-                int count = _listeners.Count;
-                if (count == 0) return;
-                snapshot = new Func<AgentEvent, CancellationToken, ValueTask>[count];
-                for (int i = 0; i < count; i++)
-                {
-                    snapshot[i] = _listeners[i];
-                }
-            }
-
-            for (int i = 0; i < snapshot.Length; i++)
-            {
-                try
-                {
-                    await snapshot[i](evt, ct).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Listener failed: session={SessionId}", State?.SessionId ?? "unbound");
-                }
-            }
+            await _listeners.DispatchAsync(evt, ct, _logger, State?.SessionId).ConfigureAwait(false);
         });
     }
 
@@ -217,21 +187,8 @@ public sealed class DefaultAgent : IAgent
     /// </summary>
     /// <param name="listener">Async callback.</param>
     /// <returns>A disposable that unsubscribes on dispose.</returns>
-    public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener)
-    {
-        lock (_listenersLock)
-        {
-            _listeners.Add(listener);
-        }
-
-        return new Unsubscriber(() =>
-        {
-            lock (_listenersLock)
-            {
-                _listeners.Remove(listener);
-            }
-        });
-    }
+    public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) =>
+        _listeners.Subscribe(listener);
 
     /// <summary>
     ///     Submit a plain-text prompt and run the agent loop to completion.
@@ -414,7 +371,7 @@ public sealed class DefaultAgent : IAgent
     ///     safe boundary (mid-turn after tool results, or between turns — Ф2/B2).
     /// </summary>
     /// <param name="message">The message to inject.</param>
-    public void Steer(AgentMessage message) => _steeringQueue.Writer.TryWrite(message);
+    public void Steer(AgentMessage message) => _steering.Enqueue(message);
 
     /// <summary>
     ///     Wait for the agent to become idle (no <see cref="PromptAsync" /> in flight).
@@ -459,11 +416,9 @@ public sealed class DefaultAgent : IAgent
         // first run. Same-session rebind keeps queued steering intact.
         if (State is not null && !string.Equals(State.SessionId, session.Id, StringComparison.Ordinal))
         {
-            int dropped = 0;
-            while (_steeringQueue.Reader.TryRead(out _))
-            {
-                dropped++;
-            }
+            // [G4]: the steering inbox outlives rebinds; stale messages authored
+            // for the previous session are dropped, never drained into the new one.
+            int dropped = _steering.DrainStale();
 
             if (dropped > 0)
             {
@@ -485,7 +440,7 @@ public sealed class DefaultAgent : IAgent
         _eventBusSubscription?.Dispose();
         _abortSource.Dispose();
         _runGate.Dispose();
-        _steeringQueue.Writer.TryComplete();
+        _steering.Complete();
     }
 
     /// <summary>
@@ -514,21 +469,8 @@ public sealed class DefaultAgent : IAgent
         => _sessionStore.GetAsync(sessionId, ct)
             .Bind(session => _sessionStore.GetMessagesAsync(sessionId, ct)
                 .Map(messages => (ISessionContext)new DefaultSessionContext(
-                    session, messages, _sessionStore, _steeringQueue)));
+                    session, messages, _sessionStore, _steering.Channel)));
 
-    private sealed class Unsubscriber : IDisposable
-    {
-        private Action? _action;
-        public Unsubscriber(Action action)
-        {
-            _action = action;
-        }
-        public void Dispose()
-        {
-            _action?.Invoke();
-            _action = null;
-        }
-    }
 }
 
 /// <summary>
