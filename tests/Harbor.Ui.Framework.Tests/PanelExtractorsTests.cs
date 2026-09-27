@@ -159,6 +159,70 @@ public class PanelExtractorsTests
     }
 
     [Test]
+    public async Task ExtractRecentChanges_ToolTextWithTrailingWhitespace_ParsesPath()
+    {
+        // #173: ExtractPath slices the string's memory (AsMemory) instead of
+        // Substring-copying; trailing whitespace must still parse to a path.
+        var lines = new List<ChatLine>
+        {
+            Tool("→ edit  {\"path\":\"a.cs\"}  ", "t1"),
+            ToolResult("✓ ok", "t1"),
+        };
+
+        var changes = PanelExtractors.ExtractRecentChanges(lines, 8);
+
+        await Assert.That(changes.Count).IsEqualTo(1);
+        await Assert.That(changes[0].FilePath).IsEqualTo("a.cs");
+    }
+
+    [Test]
+    public async Task ExtractRecentChanges_NonObjectJson_FallsBackToUnknown()
+    {
+        // #173: args that parse but carry no path key skip the DOM probe and
+        // fall through to the regex fallback, which finds no path — same as
+        // the old Substring path. Exercises the AsMemory slice (no copy).
+        var lines = new List<ChatLine>
+        {
+            Tool("→ edit  {\"items\":[1,2]}", "t1"),
+            ToolResult("✓ ok", "t1"),
+        };
+
+        var changes = PanelExtractors.ExtractRecentChanges(lines, 8);
+
+        await Assert.That(changes.Count).IsEqualTo(1);
+        await Assert.That(changes[0].ToolName).IsEqualTo("edit");
+        await Assert.That(changes[0].FilePath).IsEqualTo("<unknown>");
+    }
+
+    [Test]
+    public async Task ExtractRecentChanges_PerRowParse_StaysBounded()
+    {
+        // #173 coarse tripwire: the per-row args parse must not allocate an
+        // intermediate args substring anymore. Bound carries multi-x headroom
+        // over steady state; tighten only with fresh measurements.
+        var lines = new List<ChatLine>();
+        for (int i = 0; i < 20; i++)
+        {
+            lines.Add(Tool("→ edit  {\"path\":\"src/file" + i + ".cs\"}", "t" + i));
+            lines.Add(ToolResult("✓ ok", "t" + i));
+        }
+
+        for (int i = 0; i < 20; i++)
+            _ = PanelExtractors.ExtractRecentChanges(lines, 20);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 50; i++)
+            _ = PanelExtractors.ExtractRecentChanges(lines, 20);
+        long after = GC.GetAllocatedBytesForCurrentThread();
+
+        await Assert.That(after - before).IsLessThanOrEqualTo(50 * 64 * 1024);
+    }
+
+    [Test]
     public async Task CollectDiagnostics_DetectsCSharpError()
     {
         var lines = new List<ChatLine>

@@ -44,22 +44,35 @@ public static class DiffPreview
         if (toolName != "edit" && toolName != "write" && toolName != "patch")
             return (false, null, null, null);
 
-        string? filePath = ExtractFilePath(argsJson);
+        // Single parse pass: the file path and every payload field any branch
+        // may need are extracted from one JsonDocument. (Previously each
+        // branch re-parsed argsJson and ExtractFilePath parsed it a 4th time —
+        // 3-4x DOM work per render frame.)
+        string filePath = UnknownPath;
+        string? oldString = null;
+        string? newString = null;
+        string? content = null;
+        string? patch = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(argsJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return (false, null, null, null);
+            JsonElement root = doc.RootElement;
+            filePath = FindFilePath(root);
+            if (root.TryGetProperty("oldString", out var osEl) && osEl.ValueKind == JsonValueKind.String)
+                oldString = osEl.GetString();
+            if (root.TryGetProperty("newString", out var nsEl) && nsEl.ValueKind == JsonValueKind.String)
+                newString = nsEl.GetString();
+            if (root.TryGetProperty("content", out var cEl) && cEl.ValueKind == JsonValueKind.String)
+                content = cEl.GetString();
+            if (root.TryGetProperty("patch", out var pEl) && pEl.ValueKind == JsonValueKind.String)
+                patch = pEl.GetString();
+        }
+        catch (JsonException) { return (false, null, null, null); }
 
         if (toolName == "edit")
         {
-            string? oldString = null;
-            string? newString = null;
-            try
-            {
-                using var doc = JsonDocument.Parse(argsJson);
-                if (doc.RootElement.TryGetProperty("oldString", out var osEl) && osEl.ValueKind == JsonValueKind.String)
-                    oldString = osEl.GetString();
-                if (doc.RootElement.TryGetProperty("newString", out var nsEl) && nsEl.ValueKind == JsonValueKind.String)
-                    newString = nsEl.GetString();
-            }
-            catch (JsonException) { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */ }
-
             if (!string.IsNullOrEmpty(oldString) && newString != null)
             {
                 string fullDiff = GenerateContextDiff(oldString, newString, MaxFullDiffLines);
@@ -69,15 +82,6 @@ public static class DiffPreview
         }
         else if (toolName == "write")
         {
-            string? content = null;
-            try
-            {
-                using var doc = JsonDocument.Parse(argsJson);
-                if (doc.RootElement.TryGetProperty("content", out var cEl) && cEl.ValueKind == JsonValueKind.String)
-                    content = cEl.GetString();
-            }
-            catch (JsonException) { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */ }
-
             if (!string.IsNullOrEmpty(content))
             {
                 string fullDiff = GenerateContentDiff(content, MaxFullDiffLines);
@@ -87,15 +91,6 @@ public static class DiffPreview
         }
         else if (toolName == "patch")
         {
-            string? patch = null;
-            try
-            {
-                using var doc = JsonDocument.Parse(argsJson);
-                if (doc.RootElement.TryGetProperty("patch", out var pEl) && pEl.ValueKind == JsonValueKind.String)
-                    patch = pEl.GetString();
-            }
-            catch (JsonException) { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */ }
-
             if (!string.IsNullOrEmpty(patch))
             {
                 string fullDiff = patch;
@@ -121,17 +116,31 @@ public static class DiffPreview
         try
         {
             using var doc = JsonDocument.Parse(argsJson);
-            foreach (var prop in doc.RootElement.EnumerateObject())
-            {
-                if (prop.Value.ValueKind == JsonValueKind.String &&
-                    (prop.Name.Contains("file", StringComparison.OrdinalIgnoreCase)
-                     || prop.Name.Contains("path", StringComparison.OrdinalIgnoreCase)))
-                {
-                    return prop.Value.GetString() ?? UnknownPath;
-                }
-            }
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return UnknownPath;
+            return FindFilePath(doc.RootElement);
         }
         catch (JsonException) { /* Malformed JSON payload — diff preview gracefully degrades to raw text. */ }
+        return UnknownPath;
+    }
+
+    /// <summary>
+    /// Scans an already-parsed args object for the first string-valued field
+    /// whose name contains <c>file</c> or <c>path</c> (case-insensitive).
+    /// Shared by <see cref="ExtractDiff"/> (single-parse path) and
+    /// <see cref="ExtractFilePath"/>.
+    /// </summary>
+    private static string FindFilePath(JsonElement root)
+    {
+        foreach (var prop in root.EnumerateObject())
+        {
+            if (prop.Value.ValueKind == JsonValueKind.String &&
+                (prop.Name.Contains("file", StringComparison.OrdinalIgnoreCase)
+                 || prop.Name.Contains("path", StringComparison.OrdinalIgnoreCase)))
+            {
+                return prop.Value.GetString() ?? UnknownPath;
+            }
+        }
         return UnknownPath;
     }
 

@@ -157,11 +157,11 @@ internal sealed class StreamingCoalescer : IDisposable
     ///     Materialize all accumulated tool calls into <see cref="ToolCallPart" />
     ///     list. Args JSON is parsed EXACTLY ONCE per call, at materialization
     ///     (deltas are only appended to the pooled builder — never parsed
-    ///     per-delta). The parse reads the builder's buffer DIRECTLY when it is
-    ///     a single chunk (<see cref="JsonElement.ParseValue(ReadOnlyMemory{char})"/>),
-    ///     eliminating the intermediate <c>ToString()</c> copy AND the old
-    ///     <c>Parse + RootElement.Clone()</c> double copy
-    ///     (<see cref="JsonElement.ParseValue"/> returns a self-rooted element).
+    ///     per-delta). Single-chunk builders (the common case) are parsed
+    ///     straight from the chunk's buffer, eliminating the intermediate
+    ///     <c>ToString()</c> copy; the parsed element is
+    ///     <see cref="JsonElement.Clone" />-rooted so it survives after the
+    ///     pooled builder is returned to the pool.
     ///     Pooled StringBuilders are returned to the pool afterwards.
     ///     <para>
     ///         Tool calls whose args JSON fails to parse are NOT materialized
@@ -233,18 +233,30 @@ internal sealed class StreamingCoalescer : IDisposable
     /// <summary>
     ///     Parse accumulated args JSON. Single-chunk builders (the common case —
     ///     tool-call args rarely exceed one StringBuilder chunk) are parsed
-    ///     straight from the builder's buffer with zero intermediate string;
+    ///     straight from the chunk's buffer with zero intermediate string;
     ///     multi-chunk builders fall back to one <c>ToString()</c> copy.
-    ///     <see cref="JsonElement.ParseValue" /> roots the backing document in
-    ///     the returned element, so no <see cref="JsonDocument.Dispose" /> /
-    ///     <see cref="JsonElement.Clone" /> dance is needed.
+    ///     The parsed element is <see cref="JsonElement.Clone" />-rooted so it
+    ///     stays valid after the pooled builder is returned to the pool.
     /// </summary>
     private static bool TryParseArgs(StringBuilder builder, out JsonElement parsedArgs)
     {
-        // Single parse at materialization; Clone roots the element so it
-        // survives after the pooled builder (and its chunks) is returned.
         try
         {
+            // Fast path: one chunk — parse directly from the chunk memory,
+            // skipping the intermediate ToString() string allocation.
+            // (ChunkEnumerator is a struct: no allocation here.)
+            var chunks = builder.GetChunks().GetEnumerator();
+            if (chunks.MoveNext())
+            {
+                ReadOnlyMemory<char> first = chunks.Current;
+                if (!chunks.MoveNext())
+                {
+                    using var single = JsonDocument.Parse(first);
+                    parsedArgs = single.RootElement.Clone();
+                    return true;
+                }
+            }
+
             using var doc = JsonDocument.Parse(builder.ToString());
             parsedArgs = doc.RootElement.Clone();
             return true;

@@ -238,4 +238,63 @@ public class DiffPreviewTests
         await Assert.That(art).Contains("+ fresh");
         await Assert.That(art.Contains(DiffPreview.DiffTruncatedSentinel)).IsFalse();
     }
+
+    [Test]
+    public async Task ExtractDiff_NonObjectJson_Returns_NotDiff()
+    {
+        // #173: the single-parse path guards ValueKind, so non-object args
+        // degrade gracefully instead of throwing InvalidOperationException
+        // out of EnumerateObject/TryGetProperty (the old multi-parse code).
+        var array = DiffPreview.ExtractDiff("edit", "[1,2]", resultText: null);
+        await Assert.That(array.IsDiffTool).IsFalse();
+
+        var scalar = DiffPreview.ExtractDiff("write", "\"hi\"", resultText: null);
+        await Assert.That(scalar.IsDiffTool).IsFalse();
+
+        await Assert.That(DiffPreview.ExtractFilePath("[1,2]")).IsEqualTo(DiffPreview.UnknownPath);
+    }
+
+    // ── Allocation tripwires (#173) ──────────────────────────────────
+    // Coarse budgets: they pin order-of-magnitude regressions (e.g. a
+    // revert to 3-4 parses per ExtractDiff, or a per-frame re-parse loop),
+    // not exact byte counts. Bounds carry multi-x headroom over the
+    // measured steady state; tighten only with fresh measurements.
+
+    [Test]
+    public async Task ExtractFilePath_SingleParse_StaysBounded()
+    {
+        const string args = """{"command":"ls","filePath":"a/b.cs"}""";
+        for (int i = 0; i < 20; i++)
+            _ = DiffPreview.ExtractFilePath(args);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 100; i++)
+            _ = DiffPreview.ExtractFilePath(args);
+        long after = GC.GetAllocatedBytesForCurrentThread();
+
+        await Assert.That(after - before).IsLessThanOrEqualTo(100 * 2048);
+    }
+
+    [Test]
+    public async Task ExtractDiff_SingleParse_StaysBounded()
+    {
+        const string args = """{"path":"src/a.cs","oldString":"a\nb\nc","newString":"a\nB\nc"}""";
+        for (int i = 0; i < 20; i++)
+            _ = DiffPreview.ExtractDiff("edit", args, resultText: null);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 100; i++)
+            _ = DiffPreview.ExtractDiff("edit", args, resultText: null);
+        long after = GC.GetAllocatedBytesForCurrentThread();
+
+        await Assert.That(after - before).IsLessThanOrEqualTo(100 * 8192);
+    }
 }
