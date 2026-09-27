@@ -88,7 +88,12 @@ public sealed class JsonlSessionPorter : ISessionPorter
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(input);
 
-        string? headerLine = await ReadNonEmptyLineAsync(input).ConfigureAwait(false);
+        // #199: the header read is a Result step — an empty payload is a
+        // failure, and an I/O error travels the rail instead of throwing.
+        var headerLineResult = await TryReadNonEmptyLineAsync(input).ConfigureAwait(false);
+        if (headerLineResult.IsFailure)
+            return Result.Failure<string>($"Import failed while reading header: {headerLineResult.Error}");
+        string? headerLine = headerLineResult.Value; // guarded: returned above on failure.
         if (headerLine is null)
             return Result.Failure<string>("Import failed: payload is empty.");
 
@@ -131,7 +136,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
                 target.Id, linkedResult.Error);
 
         int imported = 0, skipped = 0;
-        string? line = await ReadNonEmptyLineAsync(input).ConfigureAwait(false);
+        string? line = await ReadBodyLineAsync(input).ConfigureAwait(false);
         while (line is not null)
         {
             ct.ThrowIfCancellationRequested();
@@ -157,7 +162,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
                 }
             }
 
-            line = await ReadNonEmptyLineAsync(input).ConfigureAwait(false);
+            line = await ReadBodyLineAsync(input).ConfigureAwait(false);
         }
 
         if (envelope.Metadata is { } metadata)
@@ -179,16 +184,42 @@ public sealed class JsonlSessionPorter : ISessionPorter
                 ex => $"malformed JSON line: {ex.Message}")
             .Bind(element => JsonlMessageCodec.DeserializeMessage(sessionId, element));
 
-    private static async Task<string?> ReadNonEmptyLineAsync(TextReader reader)
+    /// <summary>
+    ///     Next non-blank line of an import payload. EOF is a successful
+    ///     <c>null</c> (normal end of the message section); only a genuine
+    ///     I/O error is a failure (#199: null-on-EOF stays, but it now rides
+    ///     the <see cref="Result" /> rail instead of a bare nullable).
+    /// </summary>
+    private static async Task<Result<string?>> TryReadNonEmptyLineAsync(TextReader reader)
     {
-        while (true)
+        try
         {
-            string? line = await reader.ReadLineAsync().ConfigureAwait(false);
-            if (line is null)
-                return null;
-            if (line.Trim().Length > 0)
-                return line;
+            while (true)
+            {
+                string? line = await reader.ReadLineAsync().ConfigureAwait(false);
+                if (line is null)
+                    return Result.Success<string?>(null);
+                if (line.Trim().Length > 0)
+                    return Result.Success<string?>(line);
+            }
         }
+        catch (Exception ex)
+        {
+            return Result.Failure<string?>(ex.Message);
+        }
+    }
+
+    /// <summary>
+    ///     Body-line read for the import loop: EOF ends the import, a mid-stream
+    ///     I/O error is logged and likewise ends it (best-effort, consistent
+    ///     with the malformed-line skip below — the session built so far is kept).
+    /// </summary>
+    private async Task<string?> ReadBodyLineAsync(TextReader reader)
+    {
+        var result = await TryReadNonEmptyLineAsync(reader).ConfigureAwait(false);
+        if (result.IsFailure)
+            _logger.LogWarning("Import stopped early: message section unreadable: {Error}", result.Error);
+        return result.IsSuccess ? result.Value : null; // .Value guarded by the IsSuccess check.
     }
 }
 

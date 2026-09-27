@@ -148,6 +148,8 @@ public sealed class JsonlSessionStore : ISessionStore
     ///     cancellation propagates instead of being masked as a store failure.
     ///     The expected "not found" outcome stays a plain <see cref="Result.Failure{T}" />
     ///     (no exception, no error log); only unexpected I/O failures are converted.
+    ///     A missing/unparseable header is likewise a failure naming the session,
+    ///     the reason, and the file path (see <see cref="TryReadHeaderAsync" />).
     /// </summary>
     public async Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
     {
@@ -156,15 +158,20 @@ public sealed class JsonlSessionStore : ISessionStore
         var resolved = TryResolveSessionFile(sessionId);
         if (resolved.IsFailure)
             return Result.Failure<Session>(resolved.Error);
-        string sessionFile = resolved.Value;
+        string sessionFile = resolved.Value; // guarded: returned above on failure.
         if (!File.Exists(sessionFile))
             return Result.Failure<Session>($"Session '{sessionId}' not found.");
+
+        // #199: header decode is its own Result step — corrupt/empty files
+        // surface as failures (session + reason + path), never throws.
+        var headerResult = await TryReadHeaderAsync(sessionFile, sessionId, ct).ConfigureAwait(false);
+        if (headerResult.IsFailure)
+            return Result.Failure<Session>(headerResult.Error);
+        SessionHeaderEntry header = headerResult.Value; // guarded: returned above on failure.
 
         Result<Session> loaded = await Result.Try(async () =>
         {
             ct.ThrowIfCancellationRequested();
-            var header = await ReadHeaderAsync(sessionFile, ct).ConfigureAwait(false)
-                ?? throw new InvalidOperationException($"Session '{sessionId}' is corrupt (no header).");
 
             var metadata = await GetStatsAsync(sessionId, ct).ConfigureAwait(false);
             return new Session(
@@ -311,11 +318,10 @@ public sealed class JsonlSessionStore : ISessionStore
                     kept.Add(line);
                 }
 
+                // #199: absence is a Result outcome, not a throw — the Bind
+                // below maps it to "not found" with the session + message ids.
                 if (!found)
-                {
-                    throw new InvalidOperationException(
-                        $"Message '{message.Id}' not found in session '{sessionId}'.");
-                }
+                    return false;
 
                 var entry = new MessageEntry(
                     "message",
@@ -327,14 +333,17 @@ public sealed class JsonlSessionStore : ISessionStore
 
                 kept.Add(JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry));
                 WriteAllLinesAtomic(sessionFile, kept);
+                return true;
             }
             finally
             {
                 semaphore.Release();
             }
-
-            _messageCache.TryRemove(sessionId, out _);
         }, ResultErrors.Message)
+            .Bind(wrote => wrote
+                ? Result.Success()
+                : Result.Failure($"Message '{message.Id}' not found in session '{sessionId}'."))
+            .Tap(() => _messageCache.TryRemove(sessionId, out _))
             .TapError(e => _logger.LogError("Failed to update message in session {SessionId}: {Error}", sessionId, e));
     }
 
@@ -426,22 +435,27 @@ public sealed class JsonlSessionStore : ISessionStore
             if (_messageCache.TryGetValue(sessionId, out var cached) && cached.FileLastWriteUtc == fileMtime)
             {
                 // Cache hit — return the cached list directly. Zero allocations.
-                return cached.Messages;
+                return Result.Success(cached.Messages);
             }
 
             // Cache miss (or stale) — parse from disk.
+            // #199: the parse outcome is itself a Result; a failure (e.g. an
+            // unbounded file) travels the rail via the Bind below instead of
+            // crashing on an unguarded .Value.
             var parseResult = await ParseMessagesFromDiskAsync(sessionFile, sessionId, ct).ConfigureAwait(false);
-            if (parseResult.IsSuccess)
-            {
-                // Publish the freshly parsed list to the cache. The
-                // ConcurrentDictionary slot is updated atomically and the
-                // cache value is an immutable record, so concurrent readers
-                // see either the old entry or the new entry but never a
-                // half-built one.
-                _messageCache[sessionId] = new SessionCacheEntry(fileMtime, parseResult.Value);
-            }
-            return parseResult.Value;
+            if (parseResult.IsFailure)
+                return parseResult;
+
+            // Publish the freshly parsed list to the cache. The
+            // ConcurrentDictionary slot is updated atomically and the
+            // cache value is an immutable record, so concurrent readers
+            // see either the old entry or the new entry but never a
+            // half-built one.
+            // (parseResult.Value is guarded by the failure check above.)
+            _messageCache[sessionId] = new SessionCacheEntry(fileMtime, parseResult.Value);
+            return parseResult;
         }, ResultErrors.Message)
+            .Bind(x => x)
             .TapError(e => _logger.LogError("Failed to read messages of session {SessionId}: {Error}", sessionId, e));
     }
 
@@ -459,21 +473,25 @@ public sealed class JsonlSessionStore : ISessionStore
         var resolved = TryResolveSessionFile(sessionId);
         if (resolved.IsFailure)
             return Task.FromResult(Result.Failure(resolved.Error));
+        string sessionFile = resolved.Value; // guarded: returned above on failure.
+        // #199: the expected "not found" outcome is decided before the try
+        // boundary so it stays a plain failure (no throw, no error log).
+        if (!File.Exists(sessionFile))
+        {
+            _messageCache.TryRemove(sessionId, out _);
+            return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
+        }
         return Result.Try(async () =>
         {
             ct.ThrowIfCancellationRequested();
             _messageCache.TryRemove(sessionId, out _);
 
-            string sessionFile = resolved.Value;
-            if (!File.Exists(sessionFile))
-            {
-                throw new InvalidOperationException($"Session '{sessionId}' not found.");
-            }
-
             var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
             await semaphore.WaitAsync(ct).ConfigureAwait(false);
             try
             {
+                // Re-checked under the lock: a concurrent delete winning the
+                // race already achieved the goal, so that is success, not loss.
                 if (File.Exists(sessionFile))
                 {
                     File.Delete(sessionFile);
@@ -501,16 +519,22 @@ public sealed class JsonlSessionStore : ISessionStore
         var resolved = TryResolveSessionFile(sessionId);
         if (resolved.IsFailure)
             return Task.FromResult(Result.Failure<int>(resolved.Error));
+        string sessionFile = resolved.Value; // guarded: returned above on failure.
+        // #199: the expected "not found" outcome is decided before the try
+        // boundary so it stays a plain failure (no throw, no error log).
+        if (!File.Exists(sessionFile))
+        {
+            _messageCache.TryRemove(sessionId, out _);
+            return Task.FromResult(Result.Failure<int>($"Session '{sessionId}' not found."));
+        }
         return Result.Try(async () =>
         {
             ct.ThrowIfCancellationRequested();
 
-            int removed = 0;
             var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
             await semaphore.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                string sessionFile = resolved.Value;
                 string[] lines = File.ReadAllLines(sessionFile);
 
                 int anchorLine = -1;
@@ -525,11 +549,10 @@ public sealed class JsonlSessionStore : ISessionStore
                     }
                 }
 
+                // #199: absence is a Result outcome, not a throw — the Bind
+                // below maps it to "not found" with the session + message ids.
                 if (anchorLine < 0)
-                {
-                    throw new InvalidOperationException(
-                        $"Message '{messageId}' not found in session '{sessionId}'.");
-                }
+                    return (Found: false, Removed: 0);
 
                 // Messages append chronologically and rewrites keep relative
                 // order, so file order IS insertion order — dropping every
@@ -541,6 +564,7 @@ public sealed class JsonlSessionStore : ISessionStore
                     kept.Add(lines[i]);
                 }
 
+                int removed = 0;
                 for (int i = anchorLine + 1; i < lines.Length; i++)
                 {
                     if (IsAnyMessageEntry(lines[i]))
@@ -556,17 +580,19 @@ public sealed class JsonlSessionStore : ISessionStore
                 {
                     WriteAllLinesAtomic(sessionFile, kept);
                 }
+
+                return (Found: true, Removed: removed);
             }
             finally
             {
                 semaphore.Release();
             }
-
-            // Always drop the parse cache — cheap and immune to mtime quirks.
-            _messageCache.TryRemove(sessionId, out _);
-
-            return removed;
         }, ResultErrors.Message)
+            .Bind(t => t.Found
+                ? Result.Success(t.Removed)
+                : Result.Failure<int>($"Message '{messageId}' not found in session '{sessionId}'."))
+            // Always drop the parse cache on success — cheap and immune to mtime quirks.
+            .Tap(() => _messageCache.TryRemove(sessionId, out _))
             .TapError(e => _logger.LogError(
                 "Failed to truncate messages after {MessageId} in session {SessionId}: {Error}", messageId, sessionId, e));
     }
@@ -649,8 +675,10 @@ public sealed class JsonlSessionStore : ISessionStore
             {
                 ct.ThrowIfCancellationRequested();
                 var lines = File.ReadAllLines(sessionFile).ToList();
+                // #199: an empty file is a Result outcome, not a throw — the
+                // Bind below maps it to a failure naming the session + path.
                 if (lines.Count == 0)
-                    throw new InvalidOperationException($"Session '{session.Id}' is empty.");
+                    return false;
 
                 var header = new SessionHeaderEntry(
                     "session",
@@ -672,14 +700,17 @@ public sealed class JsonlSessionStore : ISessionStore
 
                 lines[0] = JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry);
                 WriteAllLinesAtomic(sessionFile, lines);
+                return true;
             }
             finally
             {
                 semaphore.Release();
             }
-
-            _messageCache.TryRemove(session.Id, out _);
         }, ResultErrors.Message)
+            .Bind(wrote => wrote
+                ? Result.Success()
+                : Result.Failure($"Session '{session.Id}' is empty: {sessionFile}."))
+            .Tap(() => _messageCache.TryRemove(session.Id, out _))
             .TapError(e => _logger.LogError("Failed to update session {SessionId}: {Error}", session.Id, e));
     }
 
@@ -858,20 +889,43 @@ public sealed class JsonlSessionStore : ISessionStore
     private static DateTimeOffset ResolveUpdatedAt(SessionHeaderEntry header, string sessionFile) =>
         header.UpdatedAt != default ? header.UpdatedAt : File.GetLastWriteTimeUtc(sessionFile);
 
-    private async Task<SessionHeaderEntry?> ReadHeaderAsync(string path, CancellationToken ct)
+    /// <summary>
+    ///     Decode the line-1 session header. Every expected bad state (empty
+    ///     file, blank first line, unparseable JSON, null record) is a
+    ///     <see cref="Result.Failure{T}" /> naming the session, the reason, and
+    ///     the file path (#199) — never a null that the caller must remember
+    ///     to check. Cancellation still propagates via
+    ///     <see cref="Harbor.Abstractions.Results.ResultErrors.Message" />.
+    /// </summary>
+    private async Task<Result<SessionHeaderEntry>> TryReadHeaderAsync(
+        string path, string sessionId, CancellationToken ct)
     {
-        using var reader = new StreamReader(path);
-        string? firstLine = await reader.ReadLineAsync(ct).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(firstLine)) return null;
-
+        string? firstLine;
         try
         {
-            return JsonSerializer.Deserialize<SessionHeaderEntry>(firstLine, JsonlCodecContext.Default.SessionHeaderEntry);
+            using var reader = new StreamReader(path);
+            firstLine = await reader.ReadLineAsync(ct).ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            return Result.Failure<SessionHeaderEntry>(
+                $"Session '{sessionId}' header unreadable ({ResultErrors.Message(ex)}): {path}.");
         }
+
+        if (firstLine is null)
+            return Result.Failure<SessionHeaderEntry>($"Session '{sessionId}' is empty: {path}.");
+        if (string.IsNullOrWhiteSpace(firstLine))
+            return Result.Failure<SessionHeaderEntry>(
+                $"Session '{sessionId}' is corrupt (blank header line): {path}.");
+
+        return Result.Try(
+                () => JsonSerializer.Deserialize<SessionHeaderEntry>(
+                    firstLine, JsonlCodecContext.Default.SessionHeaderEntry),
+                ex => $"Session '{sessionId}' is corrupt (header parse failed: {ex.Message}): {path}.")
+            .Bind(header => header is not null
+                ? Result.Success(header)
+                : Result.Failure<SessionHeaderEntry>(
+                    $"Session '{sessionId}' is corrupt (header deserialized to null): {path}."));
     }
 }
 
