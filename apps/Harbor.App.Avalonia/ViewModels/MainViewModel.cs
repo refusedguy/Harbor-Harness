@@ -291,7 +291,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     public ChatViewModel Chat => _contentHost.Chat;
     public SessionListViewModel Sessions => _contentHost.Sessions;
     public CodeEditorViewModel CodeEditor => _contentHost.CodeEditor;
-    public Harbor.Desktop.Abstractions.ViewModels.DiffViewModel Diff => _contentHost.Diff;
+    public Harbor.Ui.Framework.ViewModels.DiffViewModel Diff => _contentHost.Diff;
     public TokenUsageViewModel TokenUsage => _contentHost.TokenUsage;
     public FocusSessionViewModel FocusSession => _contentHost.FocusSession;
     public BoardViewModel Board => _contentHost.Board;
