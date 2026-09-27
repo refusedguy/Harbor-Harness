@@ -81,7 +81,7 @@ public sealed class McpOAuthHandler
     public async Task<string?> TryGetAccessTokenAsync(CancellationToken cancellationToken = default)
     {
         Result<string> result = await TryGetAccessTokenResultAsync(cancellationToken).ConfigureAwait(false);
-        return result.Match(static token => token, _ => null);
+        return result.IsSuccess ? result.Value : null;
     }
 
     /// <summary>
@@ -121,7 +121,7 @@ public sealed class McpOAuthHandler
     private async Task<string?> TryRefreshAsync(string refreshToken, CancellationToken ct)
     {
         Result<string> refreshed = await TryRefreshResultAsync(refreshToken, ct).ConfigureAwait(false);
-        return refreshed.Match(static token => token, _ => null);
+        return refreshed.IsSuccess ? refreshed.Value : null;
     }
 
     private async Task<Result<string>> TryRefreshResultAsync(string refreshToken, CancellationToken ct)

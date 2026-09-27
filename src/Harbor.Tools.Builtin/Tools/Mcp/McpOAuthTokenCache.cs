@@ -62,8 +62,11 @@ public sealed class McpOAuthTokenCache
     }
 
     /// <summary>Load cached tokens, or null when absent/corrupt.</summary>
-    public McpOAuthTokens? Load(string server) =>
-        LoadResult(server).Match(static tokens => tokens, _ => null);
+    public McpOAuthTokens? Load(string server)
+    {
+        Result<McpOAuthTokens> loaded = LoadResult(server);
+        return loaded.IsSuccess ? loaded.Value : null;
+    }
 
     /// <summary>
     ///     Result railway for the token cache (#201 A6): a missing file is
