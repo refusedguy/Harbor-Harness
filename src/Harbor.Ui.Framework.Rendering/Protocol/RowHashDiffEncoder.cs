@@ -20,8 +20,8 @@ using System.Collections.Immutable;
 /// </remarks>
 public sealed class RowHashDiffEncoder : ICellDiffEncoder
 {
-    /// <summary>Hints above this share of the screen fall back to full scan (matches DiffEngine).</summary>
-    public const double HintAreaThreshold = 0.25;
+    /// <summary>Hints above this share of the screen fall back to full scan (canonical value: <see cref="CellDiffHints.HintAreaThreshold"/>).</summary>
+    public const double HintAreaThreshold = CellDiffHints.HintAreaThreshold;
 
     private CellDiffMessage[] _staging = [];
 

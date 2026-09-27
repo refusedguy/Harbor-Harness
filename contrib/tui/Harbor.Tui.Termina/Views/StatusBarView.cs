@@ -39,15 +39,5 @@ public sealed class StatusBarView
     };
 
     private static IReadOnlyList<UiStatusSegment> OrderedSegments(IReadOnlyList<UiStatusSegment> segments)
-    {
-        var left = segments.Where(s => s.Align == Alignment.Left).OrderBy(s => s.Importance).ToList();
-        var center = segments.Where(s => s.Align == Alignment.Center).OrderBy(s => s.Importance).ToList();
-        var right = segments.Where(s => s.Align == Alignment.Right).OrderByDescending(s => s.Importance).ToList();
-
-        var result = new List<UiStatusSegment>();
-        result.AddRange(left);
-        result.AddRange(center);
-        result.AddRange(right);
-        return result;
-    }
+        => StatusSegmentOrdering.Ordered(segments);
 }
