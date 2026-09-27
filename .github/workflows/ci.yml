@@ -28,7 +28,9 @@ name: ci
 on:
   push:
     branches: [dev, master]
+    paths-ignore: ['**.md', 'docs/**', 'evals/tasks/**', 'assets/demo/**']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'evals/tasks/**', 'assets/demo/**']
   workflow_dispatch:
 
 permissions: {}

@@ -165,6 +165,11 @@ public static class Program
         _logger.LogInformation("Starting interactive mode");
         using var host = HostBuilder.Build(args);
         await StartIpcAsync(host.Services).ConfigureAwait(false);
+        // Issue #23 slice 2: seed skill freshness once (best-effort) and
+        // register the opt-in CellForge panel before the renderer initializes.
+        int seeded = SkillFreshnessStartup.SeedFromServices(host.Services);
+        _logger.LogDebug("Skill freshness seeded: {Count} entries", seeded);
+        SkillFreshnessStartup.TryRegisterPanel(host.Services);
         var scriptResult = await RunStartupScriptAsync(host.Services, scriptPath).ConfigureAwait(false);
         if (scriptResult.IsFailure)
         {
@@ -217,7 +222,8 @@ public static class Program
             services.GetService<Harbor.Hosting.Rendering.IRendererPipeline>(),
             services.GetService<ITokenTracker>(),
             Screens,
-            services);
+            services,
+            SkillFreshnessStartup.RefreshCommand(services));
     }
 
     /// <summary>
@@ -335,6 +341,9 @@ public static class Program
         MarkApproverless(); // #52: one-shot, frame loop не крутится
         using var host = HostBuilder.Build(args);
         await StartIpcAsync(host.Services).ConfigureAwait(false);
+        // Issue #23 slice 2: one-shot commands get the same best-effort
+        // freshness snapshot (the opt-in panel only matters interactively).
+        _ = SkillFreshnessStartup.SeedFromServices(host.Services);
         var scriptResult = await RunStartupScriptAsync(host.Services, scriptPath).ConfigureAwait(false);
         if (scriptResult.IsFailure)
         {
