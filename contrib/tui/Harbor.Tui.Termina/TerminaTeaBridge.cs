@@ -22,10 +22,10 @@ public sealed class TerminaTeaBridge : IDisposable
     private readonly ConcurrentQueue<string> _toastQueue = new();
 
     public TerminaTeaBridge(IAgent agent, Func<string, Task>? slash, ILogger logger,
-        CancellationToken appCt = default)
+        CancellationToken appCt = default, UiStore? store = null)
     {
         _logger = logger;
-        Store = new UiStore();
+        Store = store ?? new UiStore();
         Effects = new TuiEffectHost(agent, Store, slash, appCt);
         Keys = new KeyHandler(Store, logger);
         Store.BindSession(agent.State.Agent.Model, agent.State.Agent.ProviderId, agent.State.Agent.Name.Value);
