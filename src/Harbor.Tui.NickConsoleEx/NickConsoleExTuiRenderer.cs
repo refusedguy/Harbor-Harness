@@ -96,7 +96,7 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
         public bool CanHandle(AgentEvent @event) =>
             @event is MessageStartEvent or MessageUpdateEvent or MessageEndEvent;
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             switch (@event)
             {
@@ -124,7 +124,7 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
         public bool CanHandle(AgentEvent @event) =>
             @event is ToolExecutionStartEvent or ToolExecutionEndEvent;
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             switch (@event)
             {
@@ -154,7 +154,7 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
         public bool CanHandle(AgentEvent @event) =>
             @event is CompactionStartedEvent or CompactionCompletedEvent;
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             switch (@event)
             {
@@ -176,7 +176,7 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
     {
         public bool CanHandle(AgentEvent @event) => @event is AgentErrorEvent;
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             var err = (AgentErrorEvent)@event;
             owner.CommitTokenLine();

@@ -94,7 +94,7 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
         public bool CanHandle(AgentEvent @event) =>
             @event is MessageStartEvent or MessageUpdateEvent or MessageEndEvent;
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             switch (@event)
             {
@@ -120,7 +120,7 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
     {
         public bool CanHandle(AgentEvent @event) => @event is ToolExecutionStartEvent;
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             var tes = (ToolExecutionStartEvent)@event;
             context.WriteLine();
@@ -142,7 +142,7 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
         public bool CanHandle(AgentEvent @event) =>
             @event is CompactionStartedEvent or CompactionCompletedEvent;
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             switch (@event)
             {
@@ -167,7 +167,7 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
     {
         public bool CanHandle(AgentEvent @event) => @event is AgentErrorEvent;
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             var err = (AgentErrorEvent)@event;
             context.WriteLine();

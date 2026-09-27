@@ -75,7 +75,7 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
     {
         public bool CanHandle(AgentEvent @event) => @event is AgentErrorEvent;
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             var err = (AgentErrorEvent)@event;
             backend.Notify("Harbor — error", err.Message, true);
@@ -93,7 +93,7 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
     {
         public bool CanHandle(AgentEvent @event) => @event is AgentEndEvent;
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             backend.Notify("Harbor — done", "Agent finished.", false);
             return Task.CompletedTask;
@@ -105,7 +105,7 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
     {
         public bool CanHandle(AgentEvent @event) => @event is CompactionCompletedEvent;
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             var cc = (CompactionCompletedEvent)@event;
             backend.Notify("Harbor — compacted",
@@ -125,7 +125,7 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
         public bool CanHandle(AgentEvent @event) =>
             @event is ToolExecutionEndEvent { IsError: true };
 
-        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct)
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             var tee = (ToolExecutionEndEvent)@event;
             string preview = tee.Result.Output ?? string.Empty;
