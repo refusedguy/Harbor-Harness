@@ -31,6 +31,7 @@ public sealed class MascotDirector
     private byte _lastPhase;
     private readonly SpringFx _crossfadeSpring = new(1.0);
 
+    /// <summary>Creates a director with an optional latch-lifetime override.</summary>
     /// <param name="moodLatchMs">Latch lifetime override (tests inject milliseconds).</param>
     public MascotDirector(int moodLatchMs = MoodLatchMs)
     {
