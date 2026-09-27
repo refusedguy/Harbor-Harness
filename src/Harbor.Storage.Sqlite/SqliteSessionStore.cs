@@ -249,15 +249,20 @@ public sealed class SqliteSessionStore : ISessionStore
 
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
     {
+        // #199: the expected "not found" outcome is decided before the try
+        // boundary so it stays a plain failure (no throw). Absence (None) is
+        // not a storage error — it keeps its own message shape, identical to
+        // the other stores.
+        var row = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
+        if (row.IsFailure)
+            return Result.Failure<IReadOnlyList<AgentMessage>>(row.Error);
+        if (row.Value.HasNoValue) // guarded: .Value only read after the failure check.
+            return Result.Failure<IReadOnlyList<AgentMessage>>($"Session '{sessionId}' not found.");
+
         return await Result.Try(async () =>
         {
             EnsureInitialized();
             using var conn = OpenConnection();
-            using var exists = conn.CreateCommand();
-            exists.CommandText = "SELECT 1 FROM sessions WHERE id = @sid";
-            exists.Parameters.AddWithValue("@sid", sessionId);
-            if (await exists.ExecuteScalarAsync(ct).ConfigureAwait(false) is null)
-                throw new InvalidOperationException($"Session '{sessionId}' not found.");
 
             using var cmd = conn.CreateCommand();
             // Chronological by instant (Unix-ms stamp, same semantics as
@@ -268,16 +273,25 @@ public sealed class SqliteSessionStore : ISessionStore
             cmd.Parameters.AddWithValue("@sid", sessionId);
 
             var result = new List<AgentMessage>();
+            var skipped = new List<string>();
             using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
             {
                 string role = reader.GetString(0);
                 string payload = reader.GetString(1);
-                // AgentMessage is abstract and has no [JsonDerivedType] discriminator,
-                // so we have to pick the concrete type from the role column ourselves.
-                var msg = DeserializeMessage(role, payload);
-                if (msg is not null) result.Add(msg);
+                // #199: one unreadable row must not fail the whole history —
+                // same warn-and-skip semantics as JsonlSessionStore's
+                // per-line parse (see ParseMessagesFromDiskAsync).
+                var msg = TryDeserializeMessage(role, payload);
+                if (msg.IsSuccess)
+                    result.Add(msg.Value); // guarded by the IsSuccess check.
+                else
+                    skipped.Add(msg.Error);
             }
+
+            if (skipped.Count > 0)
+                _logger.LogWarning("Skipped {Count} unreadable message(s) in session {SessionId}: {Errors}",
+                    skipped.Count, sessionId, string.Join("; ", skipped));
 
             return (IReadOnlyList<AgentMessage>)result;
         }, ResultErrors.Message).ConfigureAwait(false);
@@ -316,6 +330,10 @@ public sealed class SqliteSessionStore : ISessionStore
     /// </summary>
     public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
     {
+        // #199: the whole body (including the expected "message not found"
+        // outcome) rides one Result rail — the anchor miss returns a failure
+        // carrying the session + message ids instead of throwing, and the
+        // outer Bind flattens the nested Result.
         return Task.FromResult(Result.Try(() =>
         {
             EnsureInitialized();
@@ -335,19 +353,22 @@ public sealed class SqliteSessionStore : ISessionStore
                     cmd.Parameters.AddWithValue("@sid", sessionId);
                     cmd.Parameters.AddWithValue("@mid", messageId);
 
-                    long anchorMs;
-                    long anchorRowId;
+                    bool found;
+                    long anchorMs = 0;
+                    long anchorRowId = 0;
                     using (var reader = cmd.ExecuteReader())
                     {
-                        if (!reader.Read())
+                        found = reader.Read();
+                        if (found)
                         {
-                            throw new InvalidOperationException(
-                                $"Message '{messageId}' not found in session '{sessionId}'.");
+                            anchorMs = reader.GetInt64(0);
+                            anchorRowId = reader.GetInt64(1);
                         }
-
-                        anchorMs = reader.GetInt64(0);
-                        anchorRowId = reader.GetInt64(1);
                     }
+
+                    if (!found)
+                        return Result.Failure<int>(
+                            $"Message '{messageId}' not found in session '{sessionId}'.");
 
                     cmd.CommandText = """
                         DELETE FROM messages
@@ -368,9 +389,9 @@ public sealed class SqliteSessionStore : ISessionStore
                     scope.Commit();
                 }
 
-                return deleted;
+                return Result.Success(deleted);
             }
-        }, ResultErrors.Message));
+        }, ResultErrors.Message).Bind(x => x));
     }
 
     public async Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
@@ -387,9 +408,7 @@ public sealed class SqliteSessionStore : ISessionStore
             }, ResultErrors.Message)
             .Bind(meta => meta is null or DBNull
                 ? Result.Failure<SessionMetadata>($"Session '{sessionId}' not found.")
-                : Result.Success(
-                    JsonSerializer.Deserialize<SessionMetadata>((string)meta, JsonOptions)
-                    ?? SessionMetadata.Empty))
+                : TryDeserializeMetadata((string)meta, sessionId))
             .ConfigureAwait(false);
     }
 
@@ -659,6 +678,37 @@ public sealed class SqliteSessionStore : ISessionStore
 
         return conn;
     }
+
+    /// <summary>
+    ///     Decode one message row. A corrupt payload or an unknown role is a
+    ///     <see cref="Result.Failure{T}" /> so the caller can log + skip the
+    ///     row without failing the whole history (#199: same warn-and-skip
+    ///     semantics as <c>JsonlSessionStore</c>'s per-line parse).
+    /// </summary>
+    private static Result<AgentMessage> TryDeserializeMessage(string role, string payload)
+    {
+        // AgentMessage is abstract and has no [JsonDerivedType] discriminator,
+        // so we have to pick the concrete type from the role column ourselves.
+        return Result.Try(
+                () => DeserializeMessage(role, payload),
+                ex => $"Message payload parse failed (role '{role}'): {ex.Message}")
+            .Bind(m => m is not null
+                ? Result.Success<AgentMessage>(m)
+                : Result.Failure<AgentMessage>($"Unknown message role '{role}'; row skipped."));
+    }
+
+    /// <summary>
+    ///     Decode the stored metadata JSON. Unlike the previous
+    ///     <c>?? SessionMetadata.Empty</c> fallback, a corrupt document is an
+    ///     honest failure naming the session (#199) instead of a silent empty.
+    /// </summary>
+    private static Result<SessionMetadata> TryDeserializeMetadata(string json, string sessionId) =>
+        Result.Try(
+                () => JsonSerializer.Deserialize<SessionMetadata>(json, JsonOptions),
+                ex => $"Session '{sessionId}' metadata is corrupt: {ex.Message}")
+            .Bind(m => m is not null
+                ? Result.Success<SessionMetadata>(m)
+                : Result.Failure<SessionMetadata>($"Session '{sessionId}' metadata is corrupt (null document)."));
 
     private static AgentMessage? DeserializeMessage(string role, string payload)
     {

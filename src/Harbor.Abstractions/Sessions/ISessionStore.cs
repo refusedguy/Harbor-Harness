@@ -17,6 +17,19 @@ namespace Harbor.Abstractions.Sessions;
 ///         Implementations MUST be thread-safe and MUST persist data across process restarts
 ///         (except for <c>MemorySessionStore</c> which is for tests only).
 ///     </para>
+///     <para>
+///         <b>Failure contract (#199, shared by all three stores):</b> expected
+///         states travel the <see cref="Result" /> rail — nothing here throws
+///         except <see cref="OperationCanceledException" /> (cancellation
+///         propagates, it is never a store failure). Shapes:
+///         <list type="bullet">
+///             <item>missing session → <c>Session '{id}' not found.</c></item>
+///             <item>missing message → <c>Message '{mid}' not found in session '{id}'.</c></item>
+///             <item>corrupt/empty file-backed state → names the session, the reason, and the path.</item>
+///         </list>
+///         Unreadable message rows/lines are skipped with a warning, never a
+///         whole-history failure.
+///     </para>
 /// </remarks>
 public interface ISessionStore
 {
