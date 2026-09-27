@@ -11,6 +11,7 @@ using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
