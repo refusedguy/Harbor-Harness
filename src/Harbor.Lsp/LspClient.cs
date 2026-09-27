@@ -25,6 +25,12 @@ namespace Harbor.Lsp;
 ///         source generation; responses are read as raw
 ///         <see cref="JsonElement"/>s and normalized by callers.
 ///     </para>
+///     <para>
+///         <b>Errors (§C7):</b> framing throws (<c>EndOfStreamException</c>,
+///         <c>FormatException</c>) stay inside as the session-abort mechanism — the read loop
+///         logs and raises <see cref="Disconnected"/>. The <c>LspManager</c> boundary maps every
+///         such failure to a degrade-with-reason log, so the cause survives instead of vanishing.
+///     </para>
 /// </remarks>
 public sealed class LspClient : IAsyncDisposable
 {
@@ -35,6 +41,7 @@ public sealed class LspClient : IAsyncDisposable
     private readonly Dictionary<int, TaskCompletionSource<JsonElement>> _pending = [];
     private readonly Lock _pendingLock = new();
     private readonly CancellationTokenSource _lifetimeCts = new();
+    private Task? _readLoopTask;
     private int _nextId;
     private int _disposed;
 
@@ -51,8 +58,21 @@ public sealed class LspClient : IAsyncDisposable
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    /// <summary>Starts the background read loop.</summary>
-    public void Start() => _ = ReadLoopAsync(_lifetimeCts.Token);
+    /// <summary>
+    ///     Starts the background read loop. The loop task is held (never fire-and-forget, §D1)
+    ///     with an <c>OnlyOnFaulted</c> continuation so a fault — e.g. a throwing
+    ///     <see cref="Disconnected"/> subscriber — is always logged.
+    /// </summary>
+    public void Start()
+    {
+        _readLoopTask = ReadLoopAsync(_lifetimeCts.Token);
+        _ = _readLoopTask.ContinueWith(
+            static (t, state) => ((ILogger)state!).LogWarning(t.Exception, "LSP read loop faulted"),
+            _logger,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
+    }
 
     /// <summary>
     ///     Sends a request and awaits the server's result. The returned
@@ -193,6 +213,7 @@ public sealed class LspClient : IAsyncDisposable
             _logger.LogDebug(ex, "LSP read loop ended");
         }
 
+        _logger.LogDebug("LSP read loop exited");
         Disconnected?.Invoke(this, EventArgs.Empty);
     }
 
