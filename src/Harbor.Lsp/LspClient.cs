@@ -265,6 +265,18 @@ public sealed class LspClient : IAsyncDisposable
         }
     }
 
+    /// <summary>ASCII whitespace trim for header spans (no byte-span Trim() in BCL).</summary>
+    private static ReadOnlySpan<byte> TrimAsciiWhiteSpace(ReadOnlySpan<byte> span)
+    {
+        int start = 0;
+        while (start < span.Length && (span[start] == (byte)' ' || span[start] == (byte)'\t'))
+            start++;
+        int end = span.Length;
+        while (end > start && (span[end - 1] == (byte)' ' || span[end - 1] == (byte)'\t'))
+            end--;
+        return span[start..end];
+    }
+
     private async Task<JsonDocument?> ReadFrameAsync(CancellationToken ct)
     {
         int contentLength = await ReadHeadersAsync(ct).ConfigureAwait(false);
@@ -345,7 +357,7 @@ public sealed class LspClient : IAsyncDisposable
             {
                 // int.TryParse accepted an explicit '+' sign; Utf8Parser may
                 // not, so strip it after the whitespace trim it also needed.
-                ReadOnlySpan<byte> value = line["Content-Length:".Length..].Trim();
+                ReadOnlySpan<byte> value = TrimAsciiWhiteSpace(line["Content-Length:".Length..]);
                 if (value.StartsWith("+"u8))
                     value = value[1..];
                 if (Utf8Parser.TryParse(value, out int length, out int consumed) && consumed == value.Length)
