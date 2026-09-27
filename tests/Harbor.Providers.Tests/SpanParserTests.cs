@@ -1,12 +1,15 @@
+extern alias CompatWire;
+
 using System.Text;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Providers.Anthropic;
-using Harbor.Providers.Internal;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+using CompatOpenAiWire = CompatWire::Harbor.Providers.Internal.OpenAiWire;
+using CompatChunkState = CompatWire::Harbor.Providers.Internal.ChunkStreamState;
 
 namespace Harbor.Providers.Tests;
 
@@ -27,7 +30,7 @@ public class SpanParserTests
     [Test]
     public async Task OpenAiWire_TextDelta_Parses()
     {
-        var events = OpenAiWire.ParseChatChunk(
+        var events = CompatOpenAiWire.ParseChatChunk(
             Utf8("""{"choices":[{"delta":{"content":"hello"}}]}"""),
             new Dictionary<int, string>());
 
@@ -40,22 +43,23 @@ public class SpanParserTests
     public async Task OpenAiWire_ToolCall_KeepsStableIdAcrossChunks()
     {
         var map = new Dictionary<int, string>();
-        var first = OpenAiWire.ParseChatChunk(
+        var first = CompatOpenAiWire.ParseChatChunk(
             Utf8("""{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_X","function":{"name":"read","arguments":"{\"pa"}}]}}]}"""),
             map);
-        var second = OpenAiWire.ParseChatChunk(
+        var second = CompatOpenAiWire.ParseChatChunk(
             Utf8("""{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th"}}]}}]}"""),
             map);
 
         await Assert.That(first.OfType<ToolCallStartEvent>().Single().Id).IsEqualTo("call_X");
-        await Assert.That(second.OfType<ToolCallDeltaEvent>().Select(d => d.Id).Distinct().ToList())
-            .IsEquivalentTo(["call_X"]);
+        var stableIds = second.OfType<ToolCallDeltaEvent>().Select(d => d.Id).Distinct().ToList();
+        await Assert.That(stableIds.Count).IsEqualTo(1);
+        await Assert.That(stableIds[0]).IsEqualTo("call_X");
     }
 
     [Test]
     public async Task OpenAiWire_UsageOnlyChunk_EmitsStopFinish()
     {
-        var events = OpenAiWire.ParseChatChunk(
+        var events = CompatOpenAiWire.ParseChatChunk(
             Utf8("""{"usage":{"prompt_tokens":7,"completion_tokens":3}}"""),
             new Dictionary<int, string>());
 
@@ -69,7 +73,7 @@ public class SpanParserTests
     public async Task OpenAiWire_FloatAndStringCounts_DoNotKillChunk()
     {
         // DOM parity (issue #86): counts arrive as 7.0 or "7" in the wild.
-        var events = OpenAiWire.ParseChatChunk(
+        var events = CompatOpenAiWire.ParseChatChunk(
             Utf8("""{"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":7.0,"completion_tokens":"3"}}"""),
             new Dictionary<int, string>());
 
@@ -81,8 +85,8 @@ public class SpanParserTests
     [Test]
     public async Task OpenAiWire_MalformedLine_SkippedAndCounted()
     {
-        var state = new ChunkStreamState();
-        var events = OpenAiWire.TryParseChatChunkLine("{not json", state, NullLogger.Instance);
+        var state = new CompatChunkState();
+        var events = CompatOpenAiWire.TryParseChatChunkLine("{not json", state, NullLogger.Instance);
 
         await Assert.That(events.Count).IsEqualTo(0);
         await Assert.That(state.MalformedChunks).IsEqualTo(1);
@@ -211,7 +215,7 @@ public class SpanParserTests
         for (int i = 0; i < 20; i++)
         {
             map.Clear();
-            _ = OpenAiWire.ParseChatChunk(utf8, map);
+            _ = CompatOpenAiWire.ParseChatChunk(utf8, map);
         }
 
         GC.Collect();
@@ -222,7 +226,7 @@ public class SpanParserTests
         for (int i = 0; i < 50; i++)
         {
             map.Clear();
-            _ = OpenAiWire.ParseChatChunk(utf8, map);
+            _ = CompatOpenAiWire.ParseChatChunk(utf8, map);
         }
 
         long after = GC.GetAllocatedBytesForCurrentThread();
