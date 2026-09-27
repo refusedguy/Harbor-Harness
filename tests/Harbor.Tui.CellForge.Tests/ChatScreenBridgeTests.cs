@@ -558,4 +558,67 @@ public class ChatScreenBridgeTests
         await Assert.That(panel.Timeline.BlockAt(0).Kind).IsEqualTo("user");
         await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Running);
     }
+
+    [Test]
+    public async Task SecondTurn_DoesNotRepaint_FirstAssistantAnswer()
+    {
+        // Prod dup-answer bug: the user sends a second message and the first
+        // assistant answer renders twice. The streamed-then-committed message
+        // was never recorded in the painted-id set, so the next AgentStart
+        // replay re-appended it. Each message must paint exactly once.
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        const string sid = "s1";
+        var now = DateTimeOffset.UtcNow;
+        var u1 = new UserMessage("u1", sid, now, "first question", "code", "m");
+        var a1 = new AssistantMessage(
+            "a1", sid, now, [new TextPart("first answer")],
+            StopReason.Stop, new Usage(0, 0), "m");
+        var u2 = new UserMessage("u2", sid, now, "second question", "code", "m");
+        var a2 = new AssistantMessage(
+            "a2", sid, now, [new TextPart("second answer")],
+            StopReason.Stop, new Usage(0, 0), "m");
+
+        // ── Turn 1: user → assistant ──
+        await bus.PublishAsync(new AgentStartEvent(sid, [u1]));
+        await bus.PublishAsync(new MessageStartEvent(a1));
+        await bus.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("t1", "first answer\n"), a1));
+        await bus.PublishAsync(new MessageEndEvent(a1));
+        await bus.PublishAsync(new TurnEndEvent(a1, [], sid));
+        await bus.PublishAsync(new AgentEndEvent([u1, a1]));
+
+        await Assert.That(panel.Timeline.Count).IsEqualTo(2); // u1 + committed a1
+
+        // ── Turn 2: AgentStart replays the full history incl. settled a1 ──
+        await bus.PublishAsync(new AgentStartEvent(sid, [u1, a1, u2]));
+        await bus.PublishAsync(new MessageStartEvent(a2));
+        await bus.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("t2", "second answer\n"), a2));
+        await bus.PublishAsync(new MessageEndEvent(a2));
+        await bus.PublishAsync(new TurnEndEvent(a2, [], sid));
+        await bus.PublishAsync(new AgentEndEvent([u1, a1, u2, a2]));
+
+        var tl = panel.Timeline;
+        await Assert.That(tl.Count).IsEqualTo(4); // u1, a1, u2, a2 — no repaint
+
+        int firstAnswerBlocks = 0;
+        int secondAnswerBlocks = 0;
+        for (int i = 0; i < tl.Count; i++)
+        {
+            string text = tl.BlockAt(i).RawText();
+            if (text.Contains("first answer", StringComparison.Ordinal))
+            {
+                firstAnswerBlocks++;
+            }
+
+            if (text.Contains("second answer", StringComparison.Ordinal))
+            {
+                secondAnswerBlocks++;
+            }
+        }
+
+        await Assert.That(firstAnswerBlocks).IsEqualTo(1);
+        await Assert.That(secondAnswerBlocks).IsEqualTo(1);
+    }
 }

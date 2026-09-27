@@ -45,6 +45,43 @@ public sealed class SubmitScenarioTests : CellForgePtyScenarioBase
         await Assert.That(settled.Any(x => x.Contains("привет", StringComparison.Ordinal))).IsTrue();
     }
 
+    [Test]
+    [Timeout(60_000)]
+    public async Task SecondSubmit_FirstResponse_ShownOnce()
+    {
+        // Prod dup-answer regression (CellForge PTY end-to-end): two submits
+        // in one session — the first answer must survive the second turn
+        // exactly once. The bridge replays full history on every AgentStart,
+        // so a settled answer without a painted-marker is re-appended.
+        // Echo mode gives each turn a distinct deterministic reply; marker
+        // asserts only (streaming cadence is nondeterministic — celldiff §8).
+        Server.SetEchoResponse("test-model");
+        await StartAppAsync(100, 30).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
+
+        SubmitLine("first question");
+        _ = await WaitForScreenAsync(
+            l => l.Count(x => x.Contains("echo-", StringComparison.Ordinal)) >= 1,
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+
+        SubmitLine("second question");
+        _ = await WaitForScreenAsync(
+            l => l.Count(x => x.Contains("echo-", StringComparison.Ordinal)) >= 2,
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+
+        string[] settled = NormalizedLines();
+        int echoLines = settled.Count(x => x.Contains("echo-", StringComparison.Ordinal));
+        await Assert.That(echoLines).IsEqualTo(2); // one committed block per turn — no replay repaint
+        await Assert.That(Server.ReceivedRequests.Count).IsGreaterThanOrEqualTo(2);
+    }
+
     /// <summary>Last user-message content of a chat-completions body. JSON-aware:
     /// non-ASCII text is \uXXXX-escaped on the wire, so raw Contains() cannot match.</summary>
     private static string LastUserContent(string rawBody)
