@@ -89,16 +89,17 @@ public sealed class OpenAILlmClient : ILlmClient
                 await SsePump.RunSseAsync(
                     writer, _http, httpRequest,
                     (data, token) => useResponsesApi
-                        ? OpenAiResponsesMapper.WriteResponsesEventsAsync(data, writer, _logger, token)
+                        ? OpenAiResponsesMapper.WriteResponsesEventsAsync(data, writer, chunkState, _logger, token)
                         : WriteChatChunkEventsAsync(data, writer, chunkState, token),
                     "OpenAI API", _logger, cancellationToken,
                     onComplete: () =>
                     {
-                        if (chunkState.MalformedChunks > 0)
+                        // #203: stream-health summary (only when noteworthy).
+                        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0 || chunkState.DroppedUsageChunks > 0)
                         {
                             _logger.LogInformation(
-                                "OpenAI stream completed with {Count} malformed chunk(s) skipped",
-                                chunkState.MalformedChunks);
+                                "OpenAI stream completed: {Malformed} malformed chunk(s) skipped, {Remaps} positional tool-call id fallback(s), {Dropped} duplicate usage chunk(s) dropped",
+                                chunkState.MalformedChunks, chunkState.RemappedToolCalls, chunkState.DroppedUsageChunks);
                         }
                     }).ConfigureAwait(false);
             }
@@ -108,6 +109,9 @@ public sealed class OpenAILlmClient : ILlmClient
             }
             catch (Exception ex)
             {
+                // #203 E5: fire-and-forget pump task must log inside the
+                // lambda — the ErrorEvent alone is invisible in traces.
+                _logger.LogWarning(ex, "OpenAI stream task failed: {Message}", ex.Message);
                 await writer.WriteAsync(new ErrorEvent(
                     $"Stream failed: {ex.Message}", ex.ToString(),
                     ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);

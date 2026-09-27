@@ -76,12 +76,25 @@ public sealed class AnthropicLlmClient : ILlmClient
                 var httpRequest = AnthropicRequestBuilder.BuildRequest(
                     request, _baseUrl, apiKeyResult.Value, _config.ApiVersion, _config.BetaFeatures);
 
+                // ROP-A ПР.3/ПР.4: per-stream tool-call id map + malformed counter (#203).
+                var chunkState = new ChunkStreamState();
+
                 // Shared pump (ROP-A ПР.1): exactly one FinishEvent on graceful
                 // end-of-stream; parsers never emit FinishEvent themselves.
                 await SsePump.RunSseAsync(
                     writer, _http, httpRequest,
-                    (data, token) => AnthropicEventMapper.WriteAnthropicEventsAsync(data, writer, _logger, token),
-                    "Anthropic API", _logger, cancellationToken).ConfigureAwait(false);
+                    (data, token) => AnthropicEventMapper.WriteAnthropicEventsAsync(data, writer, chunkState, _logger, token),
+                    "Anthropic API", _logger, cancellationToken,
+                    onComplete: () =>
+                    {
+                        // #203: stream-health summary (only when noteworthy).
+                        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0)
+                        {
+                            _logger.LogInformation(
+                                "Anthropic stream completed: {Malformed} malformed event(s) skipped, {Remaps} positional tool-call id fallback(s)",
+                                chunkState.MalformedChunks, chunkState.RemappedToolCalls);
+                        }
+                    }).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -89,6 +102,9 @@ public sealed class AnthropicLlmClient : ILlmClient
             }
             catch (Exception ex)
             {
+                // #203 E5: fire-and-forget pump task must log inside the
+                // lambda — the ErrorEvent alone is invisible in traces.
+                _logger.LogWarning(ex, "Anthropic stream task failed: {Message}", ex.Message);
                 await writer.WriteAsync(new ErrorEvent(
                     $"Stream failed: {ex.Message}", ex.ToString(),
                     ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);

@@ -33,8 +33,14 @@ internal static class OpenAiWire
     ///     caller's buffer may be returned to the pool immediately.
     ///     Semantics mirror the former DOM walk 1:1 (first choice only,
     ///     string-only content/name/args, tolerant counts).
+    ///     #203: pass the stream <paramref name="state" /> (when available) so
+    ///     positional id fallbacks are counted instead of silent, and a usage
+    ///     object that arrives without a finish reason (e.g. the trailing
+    ///     <c>include_usage</c> chunk with empty choices) still delivers its
+    ///     token stats via a synthesized step finish instead of being dropped.
+    ///     Null state preserves the exact legacy event shapes (used by tests).
     /// </summary>
-    public static List<LlmEvent> ParseChatChunk(ReadOnlySpan<byte> utf8Json, Dictionary<int, string> indexToId)
+    public static List<LlmEvent> ParseChatChunk(ReadOnlySpan<byte> utf8Json, Dictionary<int, string> indexToId, ChunkStreamState? state = null)
     {
         var events = new List<LlmEvent>(capacity: 2);
         var reader = new Utf8JsonReader(utf8Json, isFinalBlock: true, state: default);
@@ -140,7 +146,7 @@ internal static class OpenAiWire
                     }
                     else if (depth == 6 && inTc)
                     {
-                        EmitToolCall(events, indexToId, tcIndex, tcWireId, tcName, tcArgs);
+                        EmitToolCall(events, indexToId, state, tcIndex, tcWireId, tcName, tcArgs);
                         inTc = false;
                     }
                     else if (depth == 5 && inToolCalls && reader.TokenType == JsonTokenType.EndArray)
@@ -191,7 +197,11 @@ internal static class OpenAiWire
         {
             // No choices array: usage-only chunk (DOM parity).
             if (sawUsageObject)
+            {
                 events.Add(new StepFinishEvent(0, "stop", new Usage(promptTokens, completionTokens)));
+                state?.MarkStepFinish("stop", hasUsage: true);
+            }
+
             return events;
         }
 
@@ -199,22 +209,59 @@ internal static class OpenAiWire
         {
             events.Add(new StepFinishEvent(0, finishReason,
                 sawUsageObject ? new Usage(promptTokens, completionTokens) : null));
+            state?.MarkStepFinish(finishReason, sawUsageObject);
+        }
+        else if (sawUsageObject && state?.UsageDelivered != true)
+        {
+            // #203 E3: usage arrived without a finish reason — the trailing
+            // include_usage chunk (empty choices array) or a compat server
+            // that splits usage off the finish chunk. Dropping it loses the
+            // turn's token stats silently, so synthesize the step finish.
+            // The remembered reason is reused (never a fresh "stop") so a
+            // trailing chunk after a tool_calls finish cannot flip the stop
+            // reason and skip tool execution; the coalescer already drained,
+            // so re-finalizing only stamps usage.
+            string reason = state?.LastFinishReason ?? "stop";
+            events.Add(new StepFinishEvent(0, reason, new Usage(promptTokens, completionTokens)));
+            state?.MarkStepFinish(reason, hasUsage: true);
+        }
+        else if (sawUsageObject)
+        {
+            // Usage was already delivered earlier this stream — this trailing
+            // duplicate carries nothing new. Counted, not re-emitted (#203).
+            state?.CountDroppedUsage();
         }
 
         return events;
     }
 
     private static void EmitToolCall(
-        List<LlmEvent> events, Dictionary<int, string> indexToId,
+        List<LlmEvent> events, Dictionary<int, string> indexToId, ChunkStreamState? state,
         int index, string? wireId, string? name, string? args)
     {
         // Stable id (ROP-A ПР.3): wire id → remembered id → positional
         // fallback. Never a fresh Guid per chunk — that broke coalescing.
         // Only string wire ids count: servers send numeric ids, and the DOM
         // walk ignored those (ValueKind guard).
-        string id = !string.IsNullOrEmpty(wireId)
-            ? wireId!
-            : indexToId.GetValueOrDefault(index) ?? $"tc{index}";
+        // #203 B8: the positional fallback is diagnosable, not silent — the
+        // parse site counts it and warns once per stream, because an
+        // agent/store tool_call_id mismatch otherwise hides behind it.
+        string? remembered = indexToId.GetValueOrDefault(index);
+        string id;
+        if (!string.IsNullOrEmpty(wireId))
+        {
+            id = wireId!;
+        }
+        else if (remembered is not null)
+        {
+            id = remembered;
+        }
+        else
+        {
+            id = $"tc{index}";
+            state?.CountRemap();
+        }
+
         indexToId[index] = id;
 
         if (!string.IsNullOrEmpty(name))
@@ -447,12 +494,15 @@ internal static class OpenAiWire
     {
         try
         {
+            int remapsBefore = state.RemappedToolCalls;
             int byteCount = Encoding.UTF8.GetByteCount(data);
             byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
             try
             {
                 Encoding.UTF8.GetBytes(data, rented);
-                return ParseChatChunk(rented.AsSpan(0, byteCount), state.IndexToId);
+                var parsed = ParseChatChunk(rented.AsSpan(0, byteCount), state.IndexToId, state);
+                SsePump.WarnOnceOnRemap(state, remapsBefore, logger);
+                return parsed;
             }
             finally
             {

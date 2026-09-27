@@ -107,11 +107,12 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                     onComplete: () =>
                     {
                         activity?.SetStatus(ActivityStatusCode.Ok);
-                        if (chunkState.MalformedChunks > 0)
+                        // #203: stream-health summary (only when noteworthy).
+                        if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0 || chunkState.DroppedUsageChunks > 0)
                         {
                             _logger.LogInformation(
-                                "Stream for {Provider} completed with {Count} malformed chunk(s) skipped",
-                                ProviderId.Value, chunkState.MalformedChunks);
+                                "Stream for {Provider} completed: {Malformed} malformed chunk(s) skipped, {Remaps} positional tool-call id fallback(s), {Dropped} duplicate usage chunk(s) dropped",
+                                ProviderId.Value, chunkState.MalformedChunks, chunkState.RemappedToolCalls, chunkState.DroppedUsageChunks);
                         }
                     }).ConfigureAwait(false);
             }
@@ -123,6 +124,9 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 activity?.AddException(ex);
+                // #203 E5: fire-and-forget pump task must log inside the
+                // lambda — the ErrorEvent alone is invisible in traces.
+                _logger.LogWarning(ex, "Stream task for {Provider} failed: {Message}", ProviderId.Value, ex.Message);
                 await writer.WriteAsync(new ErrorEvent(
                     $"Stream failed: {ex.Message}", ex.ToString(),
                     ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);

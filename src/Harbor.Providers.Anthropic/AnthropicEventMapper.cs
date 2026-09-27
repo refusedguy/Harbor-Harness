@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Providers.Anthropic;
@@ -20,33 +21,41 @@ internal static class AnthropicEventMapper
     /// <summary>
     ///     Parse one SSE data line and write any emitted events directly into the
     ///     channel. The payload transcodes into a pooled buffer; a malformed
-    ///     line is logged and skipped (no malformed counter on this path —
-    ///     same as the former DOM walk).
+    ///     line is logged, counted and skipped (#203: the counter is new —
+    ///     the former DOM walk only logged).
     /// </summary>
     public static async Task WriteAnthropicEventsAsync(
         string data,
         ChannelWriter<LlmEvent> writer,
+        ChunkStreamState state,
         ILogger logger,
         CancellationToken ct)
     {
         List<LlmEvent> events;
         try
         {
+            int remapsBefore = state.RemappedToolCalls;
             int byteCount = Encoding.UTF8.GetByteCount(data);
             byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
             try
             {
                 Encoding.UTF8.GetBytes(data, rented);
-                events = MapAnthropicEvents(rented.AsSpan(0, byteCount));
+                events = MapAnthropicEvents(rented.AsSpan(0, byteCount), state);
             }
             finally
             {
                 ArrayPool<byte>.Shared.Return(rented);
             }
+
+            // #203 B8: positional id fallback, counted in the parser —
+            // warn once per stream instead of staying silent.
+            SsePump.WarnOnceOnRemap(state, remapsBefore, logger);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to parse Anthropic event: {Data}", data);
+            state.CountMalformed();
+            logger.LogWarning(ex, "Failed to parse Anthropic event #{Count}: {Data}",
+                state.MalformedChunks, data);
             return;
         }
 
@@ -61,8 +70,14 @@ internal static class AnthropicEventMapper
     ///     the single pass and emit at the end, so property order on the wire
     ///     never matters (DOM parity). Unknown event types and shapes yield
     ///     no events.
+    ///     #203 E5: pass the stream <paramref name="state" /> (when available)
+    ///     so <c>input_json_delta</c> chunks resolve the block id recorded at
+    ///     <c>content_block_start</c> — without it every tool-args delta is
+    ///     emitted under the fixed "0" id and the coalescer drops the args
+    ///     (start carries the wire block id). Null state preserves the exact
+    ///     legacy shapes (used by tests).
     /// </summary>
-    internal static List<LlmEvent> MapAnthropicEvents(ReadOnlySpan<byte> utf8Json)
+    internal static List<LlmEvent> MapAnthropicEvents(ReadOnlySpan<byte> utf8Json, ChunkStreamState? state = null)
     {
         var events = new List<LlmEvent>(capacity: 2);
         var reader = new Utf8JsonReader(utf8Json, isFinalBlock: true, state: default);
@@ -74,6 +89,9 @@ internal static class AnthropicEventMapper
         bool inContentBlock = false;
         bool inUsage = false;
 
+        // Top-level block index (content_block_start/_delta): the key that
+        // correlates deltas with the wire block id recorded at start (#203).
+        int blockIndex = 0;
         string blockId = "0";
         string? blockType = null;
         string? blockName = null;
@@ -151,7 +169,7 @@ internal static class AnthropicEventMapper
                         throw new JsonException("Truncated line: property without value.");
                     HandleValue(ref reader, depth, prop, inDelta, inContentBlock, inUsage,
                         ref kind, ref inDelta, ref inContentBlock, ref inUsage, ref depth,
-                        ref blockId, ref blockType, ref blockName,
+                        ref blockIndex, ref blockId, ref blockType, ref blockName,
                         ref deltaType, ref deltaText,
                         ref stopReason, ref sawStopReason,
                         ref inputTokens, ref outputTokens,
@@ -160,9 +178,9 @@ internal static class AnthropicEventMapper
             }
         }
 
-        Emit(events, kind, blockId, blockType, blockName, deltaType, deltaText,
+        Emit(events, kind, blockIndex, blockId, blockType, blockName, deltaType, deltaText,
             stopReason, sawStopReason, inputTokens, outputTokens,
-            cacheReadTokens, cacheWriteTokens, sawUsageObject);
+            cacheReadTokens, cacheWriteTokens, sawUsageObject, state);
         return events;
     }
 
@@ -180,7 +198,7 @@ internal static class AnthropicEventMapper
         ref Utf8JsonReader reader, int depth, string prop, bool inDelta, bool inContentBlock, bool inUsage,
         ref AnthropicEventKind rKind,
         ref bool rInDelta, ref bool rInContentBlock, ref bool rInUsage, ref int rDepth,
-        ref string rBlockId, ref string? rBlockType, ref string? rBlockName,
+        ref int rBlockIndex, ref string rBlockId, ref string? rBlockType, ref string? rBlockName,
         ref string? rDeltaType, ref string? rDeltaText,
         ref string? rStopReason, ref bool rSawStopReason,
         ref int rInputTokens, ref int rOutputTokens,
@@ -251,6 +269,14 @@ internal static class AnthropicEventMapper
                     SkipContainer(ref reader);
                 }
 
+                return;
+            }
+
+            if (prop == "index")
+            {
+                // content_block_start/_delta carry the block index at top
+                // level — the correlation key for tool-arg deltas (#203 E5).
+                rBlockIndex = ReadTolerantInt(ref reader);
                 return;
             }
 
@@ -341,11 +367,12 @@ internal static class AnthropicEventMapper
 
     private static void Emit(
         List<LlmEvent> events, AnthropicEventKind kind,
-        string blockId, string? blockType, string? blockName,
+        int blockIndex, string blockId, string? blockType, string? blockName,
         string? deltaType, string? deltaText,
         string? stopReason, bool sawStopReason,
         int inputTokens, int outputTokens,
-        int? cacheReadTokens, int? cacheWriteTokens, bool sawUsageObject)
+        int? cacheReadTokens, int? cacheWriteTokens, bool sawUsageObject,
+        ChunkStreamState? state)
     {
         switch (kind)
         {
@@ -359,7 +386,15 @@ internal static class AnthropicEventMapper
                 else if (blockType == "thinking")
                     events.Add(new ThinkingStartEvent(blockId));
                 else if (blockType == "tool_use")
+                {
                     events.Add(new ToolCallStartEvent(blockId, blockName ?? ""));
+                    // #203 E5: remember index→wire-id so the following
+                    // input_json deltas correlate (else they fall back to
+                    // "0" and the coalescer drops the args).
+                    if (state is not null && !string.IsNullOrEmpty(blockId))
+                        state.IndexToId[blockIndex] = blockId;
+                }
+
                 break;
 
             case AnthropicEventKind.ContentBlockDelta:
@@ -370,7 +405,7 @@ internal static class AnthropicEventMapper
                 else if (deltaType == "thinking_delta" && !string.IsNullOrEmpty(deltaText))
                     events.Add(new ThinkingDeltaEvent("0", deltaText!));
                 else if (deltaType == "input_json_delta" && !string.IsNullOrEmpty(deltaText))
-                    events.Add(new ToolCallDeltaEvent("0", deltaText!));
+                    events.Add(new ToolCallDeltaEvent(ResolveToolDeltaId(state, blockIndex), deltaText!));
                 break;
 
             case AnthropicEventKind.MessageDelta:
@@ -389,6 +424,23 @@ internal static class AnthropicEventMapper
             case AnthropicEventKind.Unknown:
                 break;
         }
+    }
+
+    /// <summary>
+    ///     Resolve the tool-args delta id: the wire block id recorded at
+    ///     <c>content_block_start</c> for this index; a positional fallback
+    ///     when the start was never seen (counted, #203 B8); the legacy
+    ///     fixed "0" on the stateless path (tests).
+    /// </summary>
+    private static string ResolveToolDeltaId(ChunkStreamState? state, int blockIndex)
+    {
+        if (state is null)
+            return "0";
+        string? remembered = state.IndexToId.GetValueOrDefault(blockIndex);
+        if (remembered is not null)
+            return remembered;
+        state.CountRemap();
+        return $"tc{blockIndex}";
     }
 
     private static void SkipContainer(ref Utf8JsonReader reader)

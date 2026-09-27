@@ -50,6 +50,13 @@ internal static class ProviderPayload
 /// <summary>
 ///     Per-stream chunk-parsing state: the tool-call index→id map (ROP-A ПР.3)
 ///     plus the malformed-chunk counter (ROP-A ПР.4).
+///     Issue #203: the index→id fallback (<c>tc{index}</c>) and usage chunks
+///     that arrive without a finish reason are diagnosable through this
+///     state instead of silent — remapped tool calls are counted (warned
+///     once per stream at the parse site), the last finish reason is
+///     remembered so a trailing usage-only chunk can complete the step
+///     without flipping the stop reason, and already-delivered usage
+///     duplicates are counted instead of re-emitted.
 /// </summary>
 internal sealed class ChunkStreamState
 {
@@ -61,6 +68,52 @@ internal sealed class ChunkStreamState
 
     /// <summary>Record one skipped chunk.</summary>
     public void CountMalformed() => MalformedChunks++;
+
+    /// <summary>
+    ///     How many tool-call chunks fell back to the positional
+    ///     <c>tc{index}</c> id (no wire id and nothing remembered).
+    ///     The fallback keeps the stream coalescing, but an agent/store
+    ///     <c>tool_call_id</c> mismatch is a real risk when the server
+    ///     reorders deltas — hence counted, never silent (#203 B8).
+    /// </summary>
+    public int RemappedToolCalls { get; private set; }
+
+    /// <summary>Record one positional id fallback.</summary>
+    public void CountRemap() => RemappedToolCalls++;
+
+    /// <summary>Whether the once-per-stream remap warning was already logged.</summary>
+    public bool RemapWarned { get; private set; }
+
+    /// <summary>Mark the once-per-stream remap warning as logged.</summary>
+    public void MarkRemapWarned() => RemapWarned = true;
+
+    /// <summary>
+    ///     Finish reason of the last <c>StepFinish</c> emitted this stream
+    ///     (null when none yet). A trailing usage-only chunk re-emits with
+    ///     this reason so it can deliver token stats without changing the
+    ///     step outcome (#203 E3).
+    /// </summary>
+    public string? LastFinishReason { get; private set; }
+
+    /// <summary>Whether a <c>StepFinish</c> with non-null usage was emitted this stream.</summary>
+    public bool UsageDelivered { get; private set; }
+
+    /// <summary>Record an emitted step finish (and usage delivery, when present).</summary>
+    public void MarkStepFinish(string? finishReason, bool hasUsage)
+    {
+        LastFinishReason = finishReason;
+        if (hasUsage)
+            UsageDelivered = true;
+    }
+
+    /// <summary>
+    ///     Trailing usage chunks dropped because usage was already delivered
+    ///     earlier this stream (same numbers, nothing new to report).
+    /// </summary>
+    public int DroppedUsageChunks { get; private set; }
+
+    /// <summary>Record one dropped duplicate usage chunk.</summary>
+    public void CountDroppedUsage() => DroppedUsageChunks++;
 }
 
 /// <summary>
@@ -70,9 +123,29 @@ internal sealed class ChunkStreamState
 ///     contract "exactly one <see cref="FinishEvent" /> after a graceful
 ///     end-of-stream, none on error or cancellation". Parsers downstream must
 ///     never emit <see cref="FinishEvent" /> themselves.
+///     Also hosts the shared #203 diagnostics helper (<see cref="WarnOnceOnRemap" />)
+///     so every provider assembly (each links this file) warns identically.
 /// </summary>
 internal static class SsePump
 {
+    /// <summary>
+    ///     #203 B8: a positional tool-call id fallback means the server
+    ///     omitted the wire id — agent/store <c>tool_call_id</c> sync then
+    ///     relies on index order alone. Warn once per stream (count every
+    ///     occurrence) instead of staying silent.
+    /// </summary>
+    internal static void WarnOnceOnRemap(ChunkStreamState state, int remapsBefore, ILogger logger)
+    {
+        if (state.RemappedToolCalls > remapsBefore && !state.RemapWarned)
+        {
+            state.MarkRemapWarned();
+            logger.LogWarning(
+                "Tool-call chunk(s) arrived without a wire id; fell back to positional ids " +
+                "(remaps={Remaps}). Out-of-order deltas may desync agent/store tool_call_id.",
+                state.RemappedToolCalls);
+        }
+    }
+
     /// <summary>
     ///     Runs the raw-line pump: send → status → line loop → single
     ///     FinishEvent on graceful end-of-stream.
@@ -177,6 +250,10 @@ internal static class SsePump
         catch (Exception ex)
         {
             onTransportError?.Invoke(ex);
+            // #203 E5: the pump task is fire-and-forget from the client's
+            // perspective — the terminal ErrorEvent reaches the consumer,
+            // but without a log line the failure is invisible in traces.
+            logger.LogWarning(ex, "{Label} stream failed: {Message}", apiErrorLabel, ex.Message);
             await writer.WriteAsync(new ErrorEvent(
                 $"Stream failed: {ex.Message}", ex.ToString(),
                 ProviderErrors.FromException(ex, ct)), ct).ConfigureAwait(false);
