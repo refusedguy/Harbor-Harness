@@ -20,8 +20,8 @@ namespace Harbor.Ui.Framework.Projection;
 /// </summary>
 public static class PanelRows
 {
-    /// <summary>Todo-list rows: header, items, done/active/pending summary.</summary>
-    public static List<string> TodoRows(IReadOnlyList<TodoItem> todos)
+    /// <summary>Todo-list rows: header, Spectre-parity icons, done/active/pending summary.</summary>
+    public static List<string> TodoRows(IReadOnlyList<TodoItem> todos, int width)
     {
         ArgumentNullException.ThrowIfNull(todos);
         var rows = new List<string>(todos.Count + 4);
@@ -37,8 +37,16 @@ public static class PanelRows
             int done = 0;
             int active = 0;
             int pending = 0;
+            int contentBudget = Math.Max(1, width - 6);
             for (int i = 0; i < todos.Count; i++)
             {
+                string icon = todos[i].Marker switch
+                {
+                    "[x]" or "[X]" => "✓",
+                    "[~]" => "→",
+                    "[ ]" => "○",
+                    _ => "?",
+                };
                 switch (todos[i].Marker)
                 {
                     case "[x]":
@@ -53,11 +61,11 @@ public static class PanelRows
                         break;
                 }
 
-                rows.Add($"{todos[i].Marker} {todos[i].Content}");
+                rows.Add($"  {icon}  {PanelText.Truncate(todos[i].Content, contentBudget)}");
             }
 
             rows.Add(PanelText.Separator);
-            rows.Add($"Done {done} · active {active} · pending {pending}");
+            rows.Add($"✓ {done}  → {active}  ○ {pending}");
         }
 
         return rows;
@@ -79,8 +87,8 @@ public static class PanelRows
         return rows;
     }
 
-    /// <summary>Diagnostics rows: one row per issue (read-only window).</summary>
-    public static List<string> DiagnosticsRows(IReadOnlyList<PanelDiagnostic> diagnostics, int height)
+    /// <summary>Diagnostics rows: cursor window over issues, j/k navigation.</summary>
+    public static List<string> DiagnosticsRows(IReadOnlyList<PanelDiagnostic> diagnostics, int cursor, int width, int height)
     {
         ArgumentNullException.ThrowIfNull(diagnostics);
         var rows = new List<string>(diagnostics.Count + 4);
@@ -93,17 +101,21 @@ public static class PanelRows
         }
         else
         {
+            int selected = Math.Clamp(cursor, 0, diagnostics.Count - 1);
             int maxVisible = Math.Max(2, height - 4);
-            int end = Math.Min(diagnostics.Count, maxVisible);
-            for (int i = 0; i < end; i++)
+            int start = Math.Max(0, selected - maxVisible + 1);
+            int end = Math.Min(diagnostics.Count, start + maxVisible);
+            int messageBudget = Math.Max(1, width - 4);
+            for (int i = start; i < end; i++)
             {
                 var diagnostic = diagnostics[i];
+                string marker = i == selected ? ">" : " ";
                 string icon = diagnostic.Severity == PanelDiagnosticSeverity.Warning ? "▲" : "✗";
-                rows.Add($"{icon} {diagnostic.Message}");
+                rows.Add($"{marker} {icon} {PanelText.Truncate(diagnostic.Message, messageBudget)}");
             }
 
             rows.Add(PanelText.Separator);
-            rows.Add("read-only · cursor navigation lands in a follow-up");
+            rows.Add("j/k move");
         }
 
         return rows;
@@ -135,18 +147,19 @@ public static class PanelRows
                     _ => "·",
                 };
                 string ok = change.IsError ? "✗" : "✓";
-                string path = PanelText.ShortenTail(change.FilePath, Math.Max(4, width - 12));
+                string path = ShortenPath(change.FilePath, Math.Max(4, width - 12));
                 rows.Add($"{icon} {ok} {path}");
                 if (!string.IsNullOrEmpty(change.DiffBody))
                 {
                     string body = change.DiffBody;
                     int start = 0;
+                    int bodyBudget = Math.Max(1, width - 2);
                     for (int shown = 0; shown < 4 && start < body.Length; shown++)
                     {
                         int nl = body.IndexOf('\n', start);
                         string line = nl < 0 ? body[start..] : body[start..nl];
                         start = nl < 0 ? body.Length : nl + 1;
-                        rows.Add("  " + line.TrimEnd('\r'));
+                        rows.Add("  " + PanelText.Truncate(line.TrimEnd('\r'), bodyBudget));
                     }
                 }
             }
@@ -312,6 +325,30 @@ public static class PanelRows
         }
 
         return rows;
+    }
+
+    private static string ShortenPath(string path, int max)
+    {
+        if (string.IsNullOrEmpty(path) || path.Length <= max)
+        {
+            return path;
+        }
+
+        // Keep the file name + a hint of the directory (mirrors the Spectre DiffPreviewPanel).
+        int slash = Math.Max(path.LastIndexOf('/'), path.LastIndexOf('\\'));
+        if (slash < 0 || path.Length - slash > max - 3)
+        {
+            return path[^(max - 1)] + "…" + path[^1];
+        }
+
+        string file = path[slash..];
+        string dir = path[..slash];
+        if (dir.Length > max - file.Length - 3)
+        {
+            dir = "…" + dir[^(max - file.Length - 4)..];
+        }
+
+        return dir + file;
     }
 
     private static string ShortenCategory(string category)

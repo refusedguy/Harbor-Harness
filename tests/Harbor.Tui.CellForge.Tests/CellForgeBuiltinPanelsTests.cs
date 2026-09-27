@@ -177,14 +177,34 @@ public class CellForgeBuiltinPanelsTests
     }
 
     [Test]
-    public async Task Todo_WithItems_RendersMarkerAndContent()
+    public async Task Todo_WithItems_RendersSpectreParityIconsAndContent()
     {
         var state = StateWithLines(new ChatLine(
             ChatRole.ToolResult, "[ ] Write code\n[x] Done thing\n[~] Doing other"));
         string text = Joined(new CellForgeTodoListPanel().Build(Ctx(state)));
-        await Assert.That(text).Contains("[ ] Write code");
-        await Assert.That(text).Contains("[x] Done thing");
-        await Assert.That(text).Contains("[~] Doing other");
+        await Assert.That(text).Contains("○");
+        await Assert.That(text).Contains("Write code");
+        await Assert.That(text).Contains("✓");
+        await Assert.That(text).Contains("Done thing");
+        await Assert.That(text).Contains("→");
+        await Assert.That(text).Contains("Doing other");
+        await Assert.That(text).Contains("✓ 1  → 1  ○ 1");
+        await Assert.That(text).DoesNotContain("[ ]");
+        await Assert.That(text).DoesNotContain("[x]");
+        await Assert.That(text).DoesNotContain("[~]");
+    }
+
+    [Test]
+    public async Task Todo_LongContent_TruncatedToWidth()
+    {
+        var state = StateWithLines(new ChatLine(
+            ChatRole.ToolResult, "[ ] " + new string('a', 60)));
+        var rows = Rows(new CellForgeTodoListPanel().Build(Ctx(state, width: 30, height: 24)));
+        await Assert.That(string.Join("\n", rows)).Contains("…");
+        foreach (string line in rows)
+        {
+            await Assert.That(line.Length <= 30).IsTrue();
+        }
     }
 
     [Test]
@@ -204,6 +224,32 @@ public class CellForgeBuiltinPanelsTests
         await Assert.That(text).Contains("src/a.cs");
         await Assert.That(text).Contains("✓");
         await Assert.That(text).Contains("+added line");
+    }
+
+    [Test]
+    public async Task Diff_LongPath_KeepsFileNameWithEllipsis()
+    {
+        const string file = "very-long-file-name.cs";
+        var state = StateWithLines(
+            new ChatLine(ChatRole.Tool, "→ edit {\"path\": \"src/a/very/deep/dir/" + file + "\"}", "tc1"),
+            new ChatLine(ChatRole.ToolResult, "✓ ok", "tc1"));
+        string text = Joined(new CellForgeDiffPreviewPanel().Build(Ctx(state, width: 40, height: 24)));
+        await Assert.That(text).Contains(file);
+        await Assert.That(text).Contains("…");
+    }
+
+    [Test]
+    public async Task Diff_LongBodyLine_TruncatedToWidth()
+    {
+        var state = StateWithLines(
+            new ChatLine(ChatRole.Tool, "→ edit {\"path\": \"src/a.cs\"}", "tc1"),
+            new ChatLine(ChatRole.ToolResult, "✓ " + new string('b', 100), "tc1"));
+        var rows = Rows(new CellForgeDiffPreviewPanel().Build(Ctx(state, width: 40, height: 24)));
+        await Assert.That(string.Join("\n", rows)).Contains("…");
+        foreach (string line in rows)
+        {
+            await Assert.That(line.Length <= 40).IsTrue();
+        }
     }
 
     [Test]
@@ -228,6 +274,54 @@ public class CellForgeBuiltinPanelsTests
         var state = StateWithLines(new ChatLine(ChatRole.ToolResult, "✓ warning: deprecated API used"));
         string text = Joined(new CellForgeDiagnosticsPanel().Build(Ctx(state)));
         await Assert.That(text).Contains("▲");
+    }
+
+    [Test]
+    public async Task Diagnostics_OnKey_JK_MovesCursor()
+    {
+        var state = StateWithLines(
+            new ChatLine(ChatRole.Error, "error CS0001: first broke"),
+            new ChatLine(ChatRole.Error, "error CS0002: second broke"),
+            new ChatLine(ChatRole.Error, "error CS0003: third broke"));
+        var panel = new CellForgeDiagnosticsPanel();
+        var ctx = Ctx(state);
+
+        IReadOnlyList<string> initial = Rows(panel.Build(ctx));
+        await Assert.That(initial[2]).StartsWith(">");
+
+        await Assert.That(panel.OnKey(UiKey.ForChar('j'), ctx)).IsTrue();
+        IReadOnlyList<string> moved = Rows(panel.Build(ctx));
+        await Assert.That(moved[2]).StartsWith(" ");
+        await Assert.That(moved[3]).StartsWith(">");
+        await Assert.That(moved[3]).Contains("CS0002");
+
+        await Assert.That(panel.OnKey(UiKey.ForChar('k'), ctx)).IsTrue();
+        IReadOnlyList<string> back = Rows(panel.Build(ctx));
+        await Assert.That(back[2]).StartsWith(">");
+    }
+
+    [Test]
+    public async Task Diagnostics_OnKey_CursorClampsAtEnds()
+    {
+        var state = StateWithLines(new ChatLine(ChatRole.Error, "error CS0001: only"));
+        var panel = new CellForgeDiagnosticsPanel();
+        var ctx = Ctx(state);
+
+        await Assert.That(panel.OnKey(UiKey.ForChar('k'), ctx)).IsTrue();
+        await Assert.That(panel.OnKey(UiKey.ForChar('j'), ctx)).IsTrue();
+        await Assert.That(panel.OnKey(UiKey.ForChar('j'), ctx)).IsTrue();
+        await Assert.That(panel.OnKey(UiKey.ForChar('J'), ctx)).IsTrue();
+        IReadOnlyList<string> rows = Rows(panel.Build(ctx));
+        await Assert.That(rows[2]).StartsWith(">");
+        await Assert.That(rows[2]).Contains("CS0001");
+    }
+
+    [Test]
+    public async Task Diagnostics_OnKey_UnknownKey_NotConsumed()
+    {
+        var panel = new CellForgeDiagnosticsPanel();
+        await Assert.That(panel.OnKey(UiKey.ForChar('z'), Ctx(new UiState()))).IsFalse();
+        await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Enter), Ctx(new UiState()))).IsFalse();
     }
 
     [Test]
@@ -257,6 +351,30 @@ public class CellForgeBuiltinPanelsTests
         await Assert.That(text).Contains("F12");
         await Assert.That(text).Contains("/help");
         await Assert.That(text).Contains("(no panels)");
+    }
+
+    [Test]
+    public async Task Help_RendersEverySharedKeymapRow()
+    {
+        string text = Joined(new CellForgeHelpPanel().Build(Ctx(new UiState(), services: null)));
+        foreach (HelpKeymap.Entry hotkey in HelpKeymap.Rows)
+        {
+            await Assert.That(text).Contains(hotkey.Key);
+            await Assert.That(text).Contains(hotkey.Description);
+        }
+    }
+
+    [Test]
+    public async Task HelpKeymap_HasTenUniqueKeys()
+    {
+        await Assert.That(HelpKeymap.Rows.Count).IsEqualTo(10);
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (HelpKeymap.Entry hotkey in HelpKeymap.Rows)
+        {
+            await Assert.That(hotkey.Key.Length).IsGreaterThan(0);
+            await Assert.That(hotkey.Description.Length).IsGreaterThan(0);
+            await Assert.That(keys.Add(hotkey.Key)).IsTrue();
+        }
     }
 
     [Test]
@@ -345,7 +463,6 @@ public class CellForgeBuiltinPanelsTests
         [
             new CellForgeTodoListPanel(),
             new CellForgeDiffPreviewPanel(),
-            new CellForgeDiagnosticsPanel(),
             new CellForgeTokenBreakdownPanel(),
         ];
         foreach (var panel in pure)

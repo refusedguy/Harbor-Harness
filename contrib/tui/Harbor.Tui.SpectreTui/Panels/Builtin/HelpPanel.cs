@@ -11,8 +11,9 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 /// <remarks>
 ///     Reads the active <see cref="ChatKeyMap" /> from the supplied
 ///     <see cref="PanelContext.Services" /> if present (the host registers a singleton
-///     <c>ChatKeyMap</c> per interactive renderer). When no keymap is available, falls
-///     back to a built-in table matching <see cref="ChatKeyMap" />'s default entries.
+///     <c>ChatKeyMap</c> per interactive renderer). Hotkey rows come from the shared
+///     <see cref="HelpKeyMap" /> table (matching <see cref="ChatKeyMap" />'s default
+///     entries) so the Spectre and CellForge help panels cannot drift apart.
 /// </remarks>
 public sealed class HelpPanel : IPanelProvider
 {
@@ -35,16 +36,12 @@ public sealed class HelpPanel : IPanelProvider
         p.Lines.Add(TextLine.FromMarkup("[bold cyan]Harbor — keymap & panels[/]"));
         p.Lines.Add(TextLine.FromMarkup("[grey]─────────────────────────────[/]"));
         p.Lines.Add(TextLine.FromMarkup("[bold]Hotkeys[/]"));
-        p.Lines.Add(TextLine.FromMarkup("  [grey]Alt+1..9[/]   toggle Nth panel"));
-        p.Lines.Add(TextLine.FromMarkup("  [grey]Ctrl+Tab[/]   cycle panel focus"));
-        p.Lines.Add(TextLine.FromMarkup("  [grey]Ctrl+↑/↓[/]   grow / shrink focused panel"));
-        p.Lines.Add(TextLine.FromMarkup("  [grey]q / Esc[/]    return focus to chat"));
-        p.Lines.Add(TextLine.FromMarkup("  [grey]?[/]          toggle this help panel"));
-        p.Lines.Add(TextLine.FromMarkup("  [grey]F2[/]         toggle input/chat focus"));
-        p.Lines.Add(TextLine.FromMarkup("  [grey]F12[/]        toggle logs panel (live ILogger output)"));
-        p.Lines.Add(TextLine.FromMarkup("  [grey]Ctrl+L[/]     clear transcript"));
-        p.Lines.Add(TextLine.FromMarkup("  [grey]Ctrl+C[/]     abort running agent"));
-        p.Lines.Add(TextLine.FromMarkup("  [grey]Esc[/]        quit"));
+        foreach (HelpKeymap.Entry hotkey in HelpKeymap.Rows)
+        {
+            p.Lines.Add(TextLine.FromMarkup(
+                $"  [grey]{ChatMarkup.Escape(hotkey.Key)}[/]   {hotkey.Description}"));
+        }
+
         p.Lines.Add(TextLine.FromMarkup(string.Empty));
 
         // Registered panels section.

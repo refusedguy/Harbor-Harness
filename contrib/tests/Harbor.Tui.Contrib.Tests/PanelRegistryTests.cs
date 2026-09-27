@@ -530,7 +530,7 @@ public class TeaComplianceTests
             ViewportLines = 10
         };
 
-        var next = UiReducer.Reduce(state, new AgentStartEvent("s1", Array.Empty<AgentMessage>()));
+        var next = UiReducer.Update(state, new UiMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>()))).State;
 
         await Assert.That(next.IsAgentRunning).IsTrue();
         await Assert.That(next.WasRunning).IsFalse(); // prior IsAgentRunning
@@ -551,7 +551,7 @@ public class TeaComplianceTests
             WasRunning = false
         };
 
-        var next = UiReducer.Reduce(state, new AgentEndEvent(Array.Empty<AgentMessage>()));
+        var next = UiReducer.Update(state, new UiMsg.Agent(new AgentEndEvent(Array.Empty<AgentMessage>()))).State;
 
         await Assert.That(next.IsAgentRunning).IsFalse();
         await Assert.That(next.WasRunning).IsTrue(); // prior IsAgentRunning

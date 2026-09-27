@@ -25,7 +25,7 @@ public sealed class TerminalGuiTeaBridge : IDisposable
         Store = store ?? new UiStore();
         Effects = new TuiEffectHost(agent, Store, slash, appCt);
         Keys = new KeyHandler(Store, logger);
-        Store.BindSession(agent.State.Agent.Model, agent.State.Agent.ProviderId, agent.State.Agent.Name.Value);
+        Store.Dispatch(new UiMsg.ConfigureRuntime(agent.State.Agent.Model, agent.State.Agent.ProviderId, agent.State.Agent.Name.Value));
     }
 
     /// <summary>The single source of truth for the UI.</summary>
@@ -53,7 +53,7 @@ public sealed class TerminalGuiTeaBridge : IDisposable
     }
 
     /// <summary>Dispatch an agent event into the store (data path).</summary>
-    public void Push(AgentEvent @event) => Store.Dispatch(@event);
+    public void Push(AgentEvent @event) => Store.Dispatch(new UiMsg.Agent(@event));
 
     /// <summary>Dispatch a synthesized system line.</summary>
     public void PushLine(string text) =>

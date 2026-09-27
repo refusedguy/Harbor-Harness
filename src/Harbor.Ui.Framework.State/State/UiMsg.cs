@@ -156,7 +156,7 @@ public abstract record UiMsg
     ///     sizes into <see cref="UiState" />. Dispatched once at startup by
     ///     <c>SpectreTuiRenderer.SeedPanelRegistryIntoState</c> (and on plugin reload).
     ///     Not for renderer-time use — this is a host initialization message, the TEA
-    ///     equivalent of <see cref="UiStore.BindSession" />.
+    ///     equivalent of dispatching <see cref="UiMsg.ConfigureRuntime" />.
     /// </summary>
     /// <param name="Ids">Registered panel ids in registration order.</param>
     /// <param name="States">Per-panel default state (Hidden unless re-registering).</param>

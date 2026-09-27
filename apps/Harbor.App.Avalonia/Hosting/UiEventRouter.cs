@@ -71,7 +71,7 @@ internal static class UiEventRouter
                 targetStore ??= sessionManager.ActiveContext?.Store
                                 ?? dispatcherAdapter.BoundStore
                                 ?? uiStore;
-                targetStore.Dispatch(evt);
+                targetStore.Dispatch(new UiMsg.Agent(evt));
             }
             catch (Exception ex)
             {

@@ -50,7 +50,7 @@ public sealed class CellForgeTodoListPanel : IPanelProvider
     {
         ArgumentNullException.ThrowIfNull(ctx);
         return PanelText.Clip(
-            PanelRows.TodoRows(PanelExtractors.ExtractTodos(ctx.State)),
+            PanelRows.TodoRows(PanelExtractors.ExtractTodos(ctx.State), ctx.Width),
             ctx.Width,
             ctx.Height);
     }
@@ -96,17 +96,26 @@ public sealed class CellForgeDiffPreviewPanel : IPanelProvider
     public bool OnKey(UiKey key, PanelContext ctx) => false;
 }
 
-// ── diagnostics (Bottom/10, pure — cursor navigation lands later) ──────────
+// ── diagnostics (Bottom/10, j/k navigates) ───────────────────────────────────
 
 /// <summary>
 ///     Cell-native diagnostics panel: transcript errors classified via
 ///     <see cref="PanelExtractors.CollectDiagnostics(UiState)"/>, one row per issue
 ///     (<c>✗ message</c> for errors, <c>▲ message</c> for warnings).
-///     Deliberately cursor-free (pure <c>Build</c>, <c>OnKey</c> returns
-///     <see langword="false"/>); j/k navigation lands in a follow-up.
+///     <c>j</c> / <c>k</c> move the cursor (same provider-local compromise as
+///     <see cref="CellForgeFileTreePanel"/>); scroll-to-source stays host-side.
 /// </summary>
+/// <remarks>
+///     TODO(principles)[FP-005, TEA]: cursor is provider-local mutable state
+///     instead of living in <see cref="UiState"/> keyed by panel id. Guarded by
+///     a small lock so <c>Build</c> (render thread) and <c>OnKey</c> (input
+///     thread) stay thread-safe; moving the cursor into the store is follow-up work.
+/// </remarks>
 public sealed class CellForgeDiagnosticsPanel : IPanelProvider
 {
+    private readonly object _gate = new();
+    private int _cursor;
+
     /// <inheritdoc />
     public string Id => "diagnostics";
 
@@ -123,14 +132,51 @@ public sealed class CellForgeDiagnosticsPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
+        var diagnostics = PanelExtractors.CollectDiagnostics(ctx.State);
+        int cursor;
+        lock (_gate)
+        {
+            _cursor = diagnostics.Count == 0 ? 0 : Math.Clamp(_cursor, 0, diagnostics.Count - 1);
+            cursor = _cursor;
+        }
+
         return PanelText.Clip(
-            PanelRows.DiagnosticsRows(PanelExtractors.CollectDiagnostics(ctx.State), ctx.Height),
+            PanelRows.DiagnosticsRows(diagnostics, cursor, ctx.Width, ctx.Height),
             ctx.Width,
             ctx.Height);
     }
 
     /// <inheritdoc />
-    public bool OnKey(UiKey key, PanelContext ctx) => false;
+    public bool OnKey(UiKey key, PanelContext ctx)
+    {
+        if (key.Code != UiKeyCode.Char || key.Character is null)
+        {
+            return false;
+        }
+
+        switch (key.Character)
+        {
+            case 'j':
+            case 'J':
+                lock (_gate)
+                {
+                    int max = PanelExtractors.CollectDiagnostics(ctx.State).Count - 1;
+                    _cursor = max < 0 ? 0 : Math.Min(max, _cursor + 1);
+                }
+
+                return true;
+            case 'k':
+            case 'K':
+                lock (_gate)
+                {
+                    _cursor = Math.Max(0, _cursor - 1);
+                }
+
+                return true;
+            default:
+                return false;
+        }
+    }
 }
 
 // ── token-breakdown (Bottom/10, pure) ──────────────────────────────────────
@@ -171,10 +217,10 @@ public sealed class CellForgeTokenBreakdownPanel : IPanelProvider
 // ── help (Right/48, '?' toggles) ───────────────────────────────────────────
 
 /// <summary>
-///     Cell-native help panel: static hotkey text plus one row per registered panel
-///     (from <see cref="IPanelRegistry"/> in <c>ctx.Services</c>) plus the slash
-///     command list. <c>?</c> while focused dispatches
-///     <c>UiMsg.TogglePanel("help")</c>.
+///     Cell-native help panel: shared <see cref="HelpKeymap"/> hotkey rows plus one
+///     row per registered panel (from <see cref="IPanelRegistry"/> in
+///     <c>ctx.Services</c>) plus the slash command list. <c>?</c> while focused
+///     dispatches <c>UiMsg.TogglePanel("help")</c>.
 /// </summary>
 public sealed class CellForgeHelpPanel : IPanelProvider
 {
@@ -198,16 +244,11 @@ public sealed class CellForgeHelpPanel : IPanelProvider
         rows.Add("Harbor — keymap & panels");
         rows.Add(PanelText.Separator);
         rows.Add("Hotkeys");
-        rows.Add("  Alt+1..9   toggle Nth panel");
-        rows.Add("  Ctrl+Tab   cycle panel focus");
-        rows.Add("  Ctrl+Up/Down  grow / shrink focused panel");
-        rows.Add("  q / Esc    return focus to chat");
-        rows.Add("  ?          toggle this help panel");
-        rows.Add("  F2         toggle input/chat focus");
-        rows.Add("  F12        toggle logs panel (live ILogger output)");
-        rows.Add("  Ctrl+L     clear transcript");
-        rows.Add("  Ctrl+C     abort running agent");
-        rows.Add("  Esc        quit");
+        foreach (HelpKeymap.Entry hotkey in HelpKeymap.Rows)
+        {
+            rows.Add($"  {hotkey.Key,-12} {hotkey.Description}");
+        }
+
         rows.Add(string.Empty);
         rows.Add("Panels");
         // #63 legitimate: framework-created panels cannot take DI — the

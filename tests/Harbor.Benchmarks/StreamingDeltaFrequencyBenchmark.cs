@@ -30,7 +30,7 @@ public class StreamingDeltaFrequencyBenchmark
         var projector = new DefaultUiProjector();
         var partial = AssistantMessage.Empty("sess", "m");
 
-        store.Dispatch(new MessageStartEvent(partial));
+        store.Dispatch(new UiMsg.Agent(new MessageStartEvent(partial)));
         int dispatches = 1;
 
         int projects = 0;
@@ -44,7 +44,7 @@ public class StreamingDeltaFrequencyBenchmark
 
         for (int i = 0; i < DeltaCount; i++)
         {
-            store.Dispatch(new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial));
+            store.Dispatch(new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial)));
             dispatches++;
 
             var state = store.State;
@@ -72,7 +72,7 @@ public class StreamingDeltaFrequencyBenchmark
             prevScreen = screen;
         }
 
-        store.Dispatch(new MessageEndEvent(partial));
+        store.Dispatch(new UiMsg.Agent(new MessageEndEvent(partial)));
         dispatches++;
         var endScreen = projector.Project(store.State);
         projects++;
