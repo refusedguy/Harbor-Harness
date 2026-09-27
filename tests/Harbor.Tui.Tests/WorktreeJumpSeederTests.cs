@@ -101,4 +101,40 @@ public class WorktreeJumpSeederTests
         await Assert.That(entries[0].SessionId).IsEqualTo("s2");
         await Assert.That(entries[1].SessionId).IsEqualTo("s1");
     }
+
+    /// <summary>
+    ///     Sub-agent seeds are hidden from the jump palette by default — they
+    ///     live in the <c>subagents</c> panel instead.
+    /// </summary>
+    [Test]
+    public async Task BuildEntries_HidesSubagentSeeds_ByDefault()
+    {
+        var sessions = new List<SessionSeed>
+        {
+            new("s1", "User Work", "/repo", "main", "idle", false),
+            new("s2", "task(explore): dig", "/repo", "main", "working", false, true),
+        };
+
+        var entries = WorktreeJumpSeeder.BuildEntries(sessions, Array.Empty<WorktreeInfo>());
+
+        await Assert.That(entries.Count).IsEqualTo(1);
+        await Assert.That(entries[0].SessionId).IsEqualTo("s1");
+    }
+
+    /// <summary>Opt-in flag keeps sub-agent seeds (order preserved).</summary>
+    [Test]
+    public async Task BuildEntries_IncludeSubagents_ShowsThem()
+    {
+        var sessions = new List<SessionSeed>
+        {
+            new("s1", "User Work", "/repo", "main", "idle", false),
+            new("s2", "task(explore): dig", "/repo", "main", "working", false, true),
+        };
+
+        var entries = WorktreeJumpSeeder.BuildEntries(sessions, Array.Empty<WorktreeInfo>(), includeSubagents: true);
+
+        await Assert.That(entries.Count).IsEqualTo(2);
+        await Assert.That(entries[0].SessionId).IsEqualTo("s1");
+        await Assert.That(entries[1].SessionId).IsEqualTo("s2");
+    }
 }
