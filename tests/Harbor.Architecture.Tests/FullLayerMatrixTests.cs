@@ -320,6 +320,7 @@ public class FullLayerMatrixTests
             "Harbor.Core", "Harbor.Application", "Harbor.Registries",
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
+            "Harbor.Ui.Framework.Sessions",
             "Harbor.Storage.Jsonl", "Harbor.Storage.Memory", "Harbor.Storage.Sqlite",
             "Harbor.Tui.AnsiPlain",
             "Harbor.Tui.CellForge",
