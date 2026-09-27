@@ -57,6 +57,14 @@ public sealed class AssistantMarkdownBlock : IChatBlock
             int contentIdx = lineIdx - headerRows;
             if (contentIdx >= _lines.Count)
             {
+                // Panel chrome: with separators enabled the trailing gap row
+                // becomes a thin dim divider between answers (off by default —
+                // direct block paints stay byte-identical, goldens unaffected).
+                if (ctx.ShowSeparators)
+                {
+                    PanelChrome.PaintMessageSeparator(buffer, ctx.Rect.X, ctx.Rect.Y + i, ctx.Rect.Width);
+                }
+
                 continue; // trailing gap row: breathing room between bubbles
             }
 

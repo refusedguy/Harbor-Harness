@@ -28,6 +28,18 @@ public sealed class ComposerPanel : Panel
 
     public string? Placeholder { get; set; }
 
+    /// <summary>
+    /// Panel chrome (feed/input/status zone separation): when true and the
+    /// rect is tall enough to keep at least 2 text rows, row 0 becomes a
+    /// titled top rule (<c>─ INPUT ──…</c>, doubling as the feed⇄input
+    /// divider) and the last row a bottom rule (the input⇄status divider);
+    /// chrome rows sit on the theme Panel surface. Text and caret shift into
+    /// the inset content area. False by default — legacy layout paints
+    /// byte-identically (goldens). The interactive host enables it; see
+    /// CellForgeModule.
+    /// </summary>
+    public bool ShowChrome { get; set; }
+
     public override void Paint(ScreenBuffer buffer)
     {
         if (Rect.Width <= 0 || Rect.Height <= 0)
@@ -35,11 +47,27 @@ public sealed class ComposerPanel : Panel
             return;
         }
 
+        // Chrome reserves the outer rows; rects too short to keep 2 text
+        // rows fall back to legacy (a 3-row composer would otherwise show
+        // only 1 text row and hide multiline input — KittyShiftEnter etc).
+        int topPad = ShowChrome && Rect.Height >= 4 ? 1 : 0;
+        int bottomPad = topPad;
+
+        if (topPad > 0)
+        {
+            PanelChrome.FillPanelBackground(buffer, new Rect(Rect.X, Rect.Y, Rect.Width, 1));
+            PanelChrome.PaintTitleRow(buffer, Rect.X, Rect.Y, Rect.Width, PanelChrome.ComposerTitle);
+            PanelChrome.FillPanelBackground(buffer, new Rect(Rect.X, Rect.Bottom - 1, Rect.Width, 1));
+            PanelChrome.PaintBottomRule(buffer, Rect);
+        }
+
         // Zero-alloc steady-state paint (renderer-moat): iterate the live
         // buffer span instead of SnapshotText()+Split, which allocated a
         // string plus an array every frame.
         ReadOnlySpan<char> snapshot = Composer.Buffer.AsSpan();
         int caret = Composer.Buffer.Cursor;
+
+        int textRows = Rect.Height - topPad - bottomPad;
 
         // Locate the caret row/col inside the logical lines.
         int caretRow = 0, caretCol = 0, seen = 0;
@@ -60,7 +88,7 @@ public sealed class ComposerPanel : Panel
             }
 
             seen += newline + 1; // '\n'
-            caretRow = Math.Min(caretRow + 1, Rect.Height - 1);
+            caretRow = Math.Min(caretRow + 1, textRows - 1);
             caretCol = 0;
         }
 
@@ -68,19 +96,19 @@ public sealed class ComposerPanel : Panel
         // persists across frames and SetText("") is a no-op, so any shrink
         // (Ctrl+C clear, Ctrl+U/K kill, backspace, shorter history recall)
         // would otherwise leave ghost characters on the emulated grid.
-        buffer.Fill(Rect, Cell.Blank);
+        buffer.Fill(new Rect(Rect.X, Rect.Y + topPad, Rect.Width, Math.Max(0, textRows)), Cell.Blank);
 
         int rowStart = 0;
-        for (int row = 0; row < Rect.Height; row++)
+        for (int row = 0; row < textRows; row++)
         {
             int newline = snapshot[rowStart..].IndexOf('\n');
             int lineLen = newline < 0 ? snapshot.Length - rowStart : newline;
             var text = snapshot.Slice(rowStart, lineLen);
-            buffer.SetText(Rect.X, Rect.Y + row, text, CellStyle.Plain);
+            buffer.SetText(Rect.X, Rect.Y + topPad + row, text, CellStyle.Plain);
 
             if (text.Length == 0 && snapshot.Length == 0 && !string.IsNullOrEmpty(Placeholder))
             {
-                buffer.SetText(Rect.X, Rect.Y, Placeholder, PlaceholderStyle);
+                buffer.SetText(Rect.X, Rect.Y + topPad, Placeholder, PlaceholderStyle);
             }
 
             if (newline < 0)
@@ -91,9 +119,9 @@ public sealed class ComposerPanel : Panel
             rowStart += newline + 1;
         }
 
-        if (caretRow < Rect.Height && caretCol <= Rect.Width)
+        if (caretRow < textRows && textRows > 0 && caretCol <= Rect.Width)
         {
-            buffer.SetStyleAt(Math.Min(Rect.X + caretCol, Rect.Right - 1), Rect.Y + caretRow, CaretStyle);
+            buffer.SetStyleAt(Math.Min(Rect.X + caretCol, Rect.Right - 1), Rect.Y + topPad + caretRow, CaretStyle);
         }
     }
 }
@@ -371,12 +399,25 @@ public sealed class StatusPanel : Panel
     /// <summary>Frame tick source — incremented once per paint by the pipeline.</summary>
     public long Tick { get; private set; }
 
+    /// <summary>
+    /// Panel chrome (input⇄status zone separation): when true, the row sits on
+    /// the theme Panel surface so the footer reads as its own zone against the
+    /// default-background feed. False by default — legacy paint is
+    /// byte-identical (goldens). The interactive host enables it; see CellForgeModule.
+    /// </summary>
+    public bool ShowChrome { get; set; }
+
     public override void Paint(ScreenBuffer buffer)
     {
         Tick++;
         if (Rect.Width <= 2 || Rect.Height <= 0)
         {
             return;
+        }
+
+        if (ShowChrome)
+        {
+            PanelChrome.FillPanelBackground(buffer, new Rect(Rect.X, Rect.Y, Rect.Width, 1));
         }
 
         // Smooth state transition: on a mode flip (running ⇄ approval-wait ⇄

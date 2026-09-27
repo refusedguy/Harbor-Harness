@@ -24,12 +24,13 @@ public readonly record struct BlockMeasure(int MinLines, int MaxLines, bool IsEx
 /// </summary>
 public readonly struct BlockPaintContext
 {
-    public BlockPaintContext(ScreenBuffer buffer, Rect rect, long tick, int skipRows = 0)
+    public BlockPaintContext(ScreenBuffer buffer, Rect rect, long tick, int skipRows = 0, bool showSeparators = false)
     {
         Buffer = buffer;
         Rect = rect;
         Tick = tick;
         SkipRows = Math.Max(0, skipRows);
+        ShowSeparators = showSeparators;
     }
 
     public ScreenBuffer Buffer { get; }
@@ -42,6 +43,16 @@ public readonly struct BlockPaintContext
 
     /// <summary>Rows to skip from the top of the block before painting (partial scroll).</summary>
     public int SkipRows { get; }
+
+    /// <summary>
+    /// Panel-chrome switch (feed zone separation): when true, message blocks
+    /// with a trailing gap row paint a thin dim separator line in it instead
+    /// of leaving it blank, so consecutive answers stop blending into each
+    /// other. False by default — block-level goldens paint blocks directly
+    /// and stay byte-identical; the host enables it per timeline (see
+    /// <c>VirtualizedChatTimeline.ShowSeparators</c>).
+    /// </summary>
+    public bool ShowSeparators { get; }
 }
 
 /// <summary>

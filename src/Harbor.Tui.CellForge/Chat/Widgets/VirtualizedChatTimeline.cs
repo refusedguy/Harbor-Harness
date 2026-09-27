@@ -90,6 +90,16 @@ public sealed class VirtualizedChatTimeline
     /// <summary>True while stuck to the bottom (default).</summary>
     public bool FollowTail { get; private set; } = true;
 
+    /// <summary>
+    /// Panel chrome — inter-message separators in the feed: when true, message
+    /// blocks with a trailing gap row (user / assistant bubbles) paint a thin
+    /// dim separator line in it instead of a blank row. False by default, so
+    /// existing timeline goldens stay byte-identical; the interactive host
+    /// (CellForge REPL) enables it. Threading: set before/without concurrent
+    /// paints, like the other render flags.
+    /// </summary>
+    public bool ShowSeparators { get; set; }
+
     /// <summary>Frame tick handed to block painters.</summary>
     public long CurrentTick { get; set; }
 
@@ -551,7 +561,7 @@ public sealed class VirtualizedChatTimeline
                 }
             }
 
-            var ctx = new BlockPaintContext(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), CurrentTick, skipRows);
+            var ctx = new BlockPaintContext(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), CurrentTick, skipRows, ShowSeparators);
             block.Paint(ctx);
 
             // Narrow (per-widget) damage bookkeeping: entrance fades and
