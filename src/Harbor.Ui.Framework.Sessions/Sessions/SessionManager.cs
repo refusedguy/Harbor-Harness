@@ -241,7 +241,7 @@ public sealed class SessionManager : ISessionManager
         var session = ActiveContext.Session with { ProviderId = providerId, Model = modelId };
         ActiveContext.Session = session;
         _agent.Initialize(session, agentDef);
-        ActiveContext.Store.BindSession(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value);
+        ActiveContext.Store.Dispatch(new UiMsg.ConfigureRuntime(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value));
         _logger.LogInformation("Rebound session {Id} to provider={Provider} model={Model}",
             session.Id, providerId, modelId);
     }

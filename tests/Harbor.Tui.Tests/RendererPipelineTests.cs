@@ -106,9 +106,9 @@ public class RendererPipelineTests
     private static void StreamAssistantLine(UiStore store, string text)
     {
         var partial = AssistantMessage.Empty("s1", $"stub-{store.State.Lines.Length}");
-        store.Dispatch(new MessageStartEvent(partial));
-        store.Dispatch(new MessageUpdateEvent(new TextDeltaEvent("0", text), partial));
-        store.Dispatch(new MessageEndEvent(partial));
+        store.Dispatch(new UiMsg.Agent(new MessageStartEvent(partial)));
+        store.Dispatch(new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("0", text), partial)));
+        store.Dispatch(new UiMsg.Agent(new MessageEndEvent(partial)));
     }
 
     /// <summary>Minimal renderer double recording WriteLineAsync traffic.</summary>

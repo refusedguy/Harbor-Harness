@@ -202,7 +202,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     [RelayCommand]
     private void Clear()
     {
-        _store.Reset();
+        _store.Dispatch(new UiMsg.Reset());
         ResetRendering();
     }
 

@@ -111,10 +111,10 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
     {
         _store = new UiStore();
         _effects = new TuiEffectHost(agent, _store, _slashHandler, ct);
-        _store.BindSession(
+        _store.Dispatch(new UiMsg.ConfigureRuntime(
             agent.State.Agent.Model,
             agent.State.Agent.ProviderId,
-            agent.State.Agent.Name.Value);
+            agent.State.Agent.Name.Value));
 
         // Register builtin panels if the user hasn't suppressed them
         // (env var HARBOR_TUI_NO_BUILTIN_PANELS=1 → opt-out for tests).

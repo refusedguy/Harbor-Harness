@@ -307,7 +307,7 @@ public sealed class LoadSignals
         {
             try
             {
-                store.Dispatch(evt);
+                store.Dispatch(new UiMsg.Agent(evt));
             }
             catch (Exception ex)
             {

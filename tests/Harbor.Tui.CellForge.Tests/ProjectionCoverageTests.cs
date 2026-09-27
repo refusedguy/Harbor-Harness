@@ -51,7 +51,7 @@ public class ProjectionCoverageTests
     {
         var field = typeof(CellForgeTuiRenderer).GetField("_store", BindingFlags.Instance | BindingFlags.NonPublic)!;
         var store = (UiStore)field.GetValue(harness.Renderer)!;
-        store.BindSession(model, provider, agent);
+        store.Dispatch(new UiMsg.ConfigureRuntime(model, provider, agent));
     }
 
     [Test]
@@ -169,10 +169,10 @@ public class ProjectionCoverageTests
         }
 
         var expected = new UiStore();
-        expected.BindSession("m-9", "prov-9", "code");
+        expected.Dispatch(new UiMsg.ConfigureRuntime("m-9", "prov-9", "code"));
         foreach (var evt in stream)
         {
-            expected.Dispatch(evt);
+            expected.Dispatch(new UiMsg.Agent(evt));
         }
 
         var want = expected.State;
