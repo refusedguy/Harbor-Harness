@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
 using Harbor.Ui.Framework.Panels;
@@ -218,7 +219,8 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
             bool dirty = (git?.IsDirty ?? false)
                 || (context?.GitIsDirty ?? false)
                 || (context?.Session.GitIsDirty ?? false);
-            seeds.Add(new SessionSeed(id, info.Title, directory, branch, status, dirty));
+            bool isSubagent = info.IsSubagent || context?.Session.IsSubagent() == true;
+            seeds.Add(new SessionSeed(id, info.Title, directory, branch, status, dirty, isSubagent));
         }
 
         return seeds;

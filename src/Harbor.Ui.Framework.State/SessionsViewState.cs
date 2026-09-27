@@ -38,9 +38,11 @@ public sealed record SessionsViewState
 /// <param name="CreatedAt">UTC timestamp when the session was created.</param>
 /// <param name="LastActivityAt">UTC timestamp of the last activity in the session.</param>
 /// <param name="Status">Current status: "active", "archived", etc.</param>
+/// <param name="IsSubagent">Whether this is an isolated sub-agent run (hidden from the jump palette).</param>
 public sealed record SessionInfo(
     SessionId SessionId,
     string Title,
     DateTimeOffset CreatedAt,
     DateTimeOffset LastActivityAt,
-    string Status);
+    string Status,
+    bool IsSubagent = false);

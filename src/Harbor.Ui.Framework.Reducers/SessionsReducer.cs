@@ -42,7 +42,8 @@ public static partial class SessionsReducer
             title,
             ase.Timestamp,
             ase.Timestamp,
-            "active");
+            "active",
+            ase.Kind == SessionKind.Subagent);
 
         var builder = state.Sessions.ToBuilder();
         int existing = -1;
