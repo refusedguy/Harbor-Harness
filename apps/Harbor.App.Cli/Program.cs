@@ -223,7 +223,8 @@ public static class Program
             services.GetService<ITokenTracker>(),
             Screens,
             services,
-            SkillFreshnessStartup.RefreshCommand(services));
+            SkillFreshnessStartup.RefreshCommand(services),
+            services.GetService<Harbor.Abstractions.Providers.IProviderHealthCheck>());
     }
 
     /// <summary>

@@ -41,13 +41,17 @@ internal sealed class ReplCommandCatalog
         catalog.Register(new AgentCommand());
         catalog.Register(new SessionsCommand());
         catalog.Register(new SessionTreeCommand());
+        // Legacy text fallback registers BEFORE the panel commands so the
+        // panels win "providers"/"plugins" while "permissions" stays textual.
+        catalog.Register(new InfoCommand());
+        catalog.Register(new ProvidersCommand());
+        catalog.Register(new PluginsPanelCommand());
         catalog.Register(new AuthCommand());
         catalog.Register(new ConfigCommand());
         catalog.Register(new RendererCommand());
         catalog.Register(new TuiCommand());
         catalog.Register(new StorageCommand());
         catalog.Register(new NewSessionCommand());
-        catalog.Register(new InfoCommand());
         return catalog;
     }
 }

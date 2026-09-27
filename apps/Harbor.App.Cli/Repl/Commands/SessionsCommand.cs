@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Sessions;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Overlays;
 
 namespace Harbor.App.Cli.Repl.Commands;
 
@@ -103,28 +104,9 @@ internal sealed class SessionsCommand : IReplCommand
     }
 
     // Numbered prefixes keep ascending-group sort chronological (the palette
-    // sorts empty-query results by group, then title).
-    private static string DateBucket(DateTimeOffset ts)
-    {
-        var local = ts.ToLocalTime().Date;
-        var today = DateTime.Today;
-        if (local == today)
-        {
-            return "1 · Today";
-        }
-
-        if (local == today.AddDays(-1))
-        {
-            return "2 · Yesterday";
-        }
-
-        if (local >= today.AddDays(-7))
-        {
-            return "3 · Previous 7 days";
-        }
-
-        return "4 · Older";
-    }
+    // sorts empty-query results by group, then title). Single source of truth
+    // lives in SessionTreeModel so the tree panel groups identically.
+    private static string DateBucket(DateTimeOffset ts) => SessionTreeModel.DateBucket(ts);
 
     private static async Task SwitchAsync(IReplHost host, CommandItem sessionItem, CancellationToken ct)
     {

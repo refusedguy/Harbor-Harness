@@ -73,7 +73,9 @@ internal sealed class CellForgeReplRunner(
     ILogger<CellForgeReplRunner> logger,
     // #49: injected, not service-located — the class already takes its deps
     // via ctor; resolving per abort gesture was a step back.
-    IApprovalCoordinator coordinator)
+    IApprovalCoordinator coordinator,
+    Harbor.Hosting.PluginReloadService? pluginReload = null,
+    IProviderHealthCheck? healthCheck = null)
     : IReplHost
 {
     /// <summary>
@@ -160,6 +162,8 @@ internal sealed class CellForgeReplRunner(
     AuthStore IReplHost.AuthStore => authStore;
     ISessionStore? IReplHost.SessionStore => sessionStore;
     IRendererPipeline? IReplHost.RendererPipeline => rendererPipeline;
+    Harbor.Hosting.PluginReloadService? IReplHost.PluginReload => pluginReload;
+    IProviderHealthCheck? IReplHost.HealthCheck => healthCheck;
 
     private readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
 

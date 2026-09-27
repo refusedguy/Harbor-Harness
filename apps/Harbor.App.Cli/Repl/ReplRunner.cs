@@ -39,6 +39,8 @@ internal sealed class ReplRunner
     private readonly ILogger<CellForgeReplRunner> _cellForgeLogger;
     private readonly SlashCommandDispatcher _slashes;
     private readonly Harbor.Hosting.Rendering.IRendererPipeline? _rendererPipeline;
+    private readonly Harbor.Hosting.PluginReloadService? _pluginReload;
+    private readonly IProviderHealthCheck? _healthCheck;
     private readonly ITokenTracker? _tokens;
     private readonly Func<CellForgeScreens> _cellForgeScreens;
 
@@ -69,7 +71,8 @@ internal sealed class ReplRunner
         ITokenTracker? tokens,
         Func<CellForgeScreens> cellForgeScreens,
         IServiceProvider rendererHost,
-        Func<IReadOnlyList<SkillFreshnessEntry>>? skillRefresh = null)
+        Func<IReadOnlyList<SkillFreshnessEntry>>? skillRefresh = null,
+        IProviderHealthCheck? healthCheck = null)
     {
         _logger = logger;
         _configStore = configStore;
@@ -85,6 +88,8 @@ internal sealed class ReplRunner
         _slashes = new SlashCommandDispatcher(
             loggerFactory.CreateLogger<SlashCommandDispatcher>(), tools, sessionStore, wizard, permissions, pluginReload, rendererPipeline, skillRefresh);
         _rendererPipeline = rendererPipeline;
+        _pluginReload = pluginReload;
+        _healthCheck = healthCheck;
         _tokens = tokens;
         _cellForgeScreens = cellForgeScreens;
         _rendererHost = rendererHost;
@@ -271,7 +276,9 @@ internal sealed class ReplRunner
             modeController,
             screens.Backend,
             _cellForgeLogger,
-            screens.Coordinator);
+            screens.Coordinator,
+            _pluginReload,
+            _healthCheck);
         int exitCode = await runner.RunAsync(ct).ConfigureAwait(false);
         return Result.Success(exitCode);
     }

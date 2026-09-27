@@ -67,7 +67,9 @@ internal static class RegistriesModule
         var panelRegistry = new PanelRegistry(ctx.LoggerFactory.CreateLogger<PanelRegistry>());
 
 #if HARBOR_WITH_PLUGINS
-        LoadPlugins(services, ctx, eventBus, toolRegistry, providerRegistry, agentRegistry, panelRegistry);
+        IReadOnlyList<LoadedPlugin>? startupLoaded = null;
+        LoadPlugins(services, ctx, eventBus, toolRegistry, providerRegistry, agentRegistry, panelRegistry,
+            loaded => startupLoaded = loaded);
 #else
         ctx.Logger.LogInformation("Plugin runtime disabled (HarborWithPlugins=false)");
 #endif
@@ -93,16 +95,26 @@ internal static class RegistriesModule
         ctx.Registries.Panels = panelRegistry;
 
 #if HARBOR_WITH_PLUGINS
-        services.AddSingleton(sp => new PluginReloadService(
-            sp.GetRequiredService<IToolRegistry>(),
-            sp.GetRequiredService<IProviderRegistry>(),
-            sp.GetRequiredService<IAgentRegistry>(),
-            sp.GetRequiredService<PanelRegistry>(),
-            sp.GetRequiredService<IEventBus>(),
-            sp.GetRequiredService<ILoggerFactory>(),
-            ctx.Options.HarborDir,
-            ctx.Options.Configuration ?? new ConfigurationBuilder().Build(),
-            sp.GetRequiredService<ILoggerFactory>().CreateLogger<PluginReloadService>()));
+        services.AddSingleton(sp =>
+        {
+            var reload = new PluginReloadService(
+                sp.GetRequiredService<IToolRegistry>(),
+                sp.GetRequiredService<IProviderRegistry>(),
+                sp.GetRequiredService<IAgentRegistry>(),
+                sp.GetRequiredService<PanelRegistry>(),
+                sp.GetRequiredService<IEventBus>(),
+                sp.GetRequiredService<ILoggerFactory>(),
+                ctx.Options.HarborDir,
+                ctx.Options.Configuration ?? new ConfigurationBuilder().Build(),
+                sp.GetRequiredService<ILoggerFactory>().CreateLogger<PluginReloadService>());
+            // Startup-bound plugins report as loaded in the /plugins panel.
+            if (startupLoaded is not null)
+            {
+                reload.NoteLoaded(startupLoaded);
+            }
+
+            return reload;
+        });
         services.AddSingleton(sp => new PluginAutoReloader(
             sp.GetRequiredService<PluginReloadService>(),
             ctx.Options.HarborDir,
@@ -121,7 +133,8 @@ internal static class RegistriesModule
         IToolRegistry toolRegistry,
         IProviderRegistry providerRegistry,
         IAgentRegistry agentRegistry,
-        PanelRegistry panelRegistry)
+        PanelRegistry panelRegistry,
+        Action<IReadOnlyList<LoadedPlugin>>? onLoaded = null)
     {
         string harborDir = ctx.Options.HarborDir;
         string globalPluginsDir = Path.Combine(harborDir, "plugins");
@@ -158,6 +171,8 @@ internal static class RegistriesModule
             {
                 ctx.Logger.LogInformation("  - {DisplayName} (from cache: {FromCache})", p.DisplayName, p.LoadedFromCache);
             }
+
+            onLoaded?.Invoke(pluginResult.Value);
         }
         else
         {

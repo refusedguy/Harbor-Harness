@@ -117,6 +117,8 @@ public class ToolRetryProjectionTests
         public AuthStore AuthStore => null!;
         public ISessionStore? SessionStore => null;
         public IRendererPipeline? RendererPipeline => null;
+        public Harbor.Hosting.PluginReloadService? PluginReload => null;
+        public IProviderHealthCheck? HealthCheck => null;
         public void WakeUp() { }
         public void OpenSlashPalette() { }
         public void ToggleVimMode() { }
