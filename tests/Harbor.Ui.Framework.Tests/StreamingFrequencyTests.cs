@@ -19,7 +19,7 @@ public class StreamingFrequencyTests
         var store = new UiStore();
         var projector = new DefaultUiProjector();
         var partial = AssistantMessage.Empty("s", "m");
-        store.Dispatch(new MessageStartEvent(partial));
+        store.Dispatch(new UiMsg.Agent(new MessageStartEvent(partial)));
 
         int projects = 0;
         int fast = 0;
@@ -32,7 +32,7 @@ public class StreamingFrequencyTests
 
         for (int i = 0; i < deltaCount; i++)
         {
-            store.Dispatch(new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial));
+            store.Dispatch(new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial)));
             var state = store.State;
             var screen = projector.Project(state);
             projects++;
@@ -57,7 +57,7 @@ public class StreamingFrequencyTests
             prevScreen = screen;
         }
 
-        store.Dispatch(new MessageEndEvent(partial));
+        store.Dispatch(new UiMsg.Agent(new MessageEndEvent(partial)));
         var endScreen = projector.Project(store.State);
         projects++;
         if (ReferenceEquals(endScreen, prevScreen))

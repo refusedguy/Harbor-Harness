@@ -1,4 +1,3 @@
-using Harbor.Abstractions.Events;
 namespace Harbor.Ui.Framework.State;
 /// <summary>
 ///     Declarative UI-driven side-effect. Renderers never call <c>IAgent</c>
@@ -51,7 +50,7 @@ public sealed class UiStore
     // provides a full barrier on success).
     //
     // §FP-007 (RESOLVED): the old `Transition(Func<UiState,UiState>)` escape
-    // hatch is gone — every fold (BindSession, Reset, agent events, host
+    // hatch is gone — every fold (session chrome, resets, agent events, host
     // messages) rides the same CAS + UiReducer.Update path via
     // Dispatch(UiMsg). Concurrent agents therefore cannot corrupt each
     // other's state via shared mutation.
@@ -78,20 +77,8 @@ public sealed class UiStore
     public event EventHandler<UiStateChangedEventArgs>? Changed;
 
     /// <summary>
-    ///     Apply an agent event through the pure reducer and notify subscribers.
-    ///     Thin wrapper over <c>Dispatch(new UiMsg.Agent(@event))</c> so
-    ///     <see cref="UiReducer.Update(UiState, UiMsg)" /> is the single entry
-    ///     point for every state change. The published snapshot carries a
-    ///     monotonic <see cref="UiState.Revision" /> (issue #94) so subscribers
-    ///     can drop out-of-order deliveries.
-    /// </summary>
-    public void Dispatch(AgentEvent @event)
-    {
-        Dispatch(new UiMsg.Agent(@event));
-    }
-
-    /// <summary>
-    ///     The unified TEA dispatch: route any <see cref="UiMsg" /> through the single
+    ///     The unified TEA dispatch — the single entry point for every state
+    ///     change: route any <see cref="UiMsg" /> through the single
     ///     <see cref="UiReducer.Update(UiState, UiMsg)" />, apply the resulting state,
     ///     and return the effect for the host to run. Renderers call this and run the
     ///     returned effect — they never mutate state or call <c>IAgent</c> themselves.
@@ -113,16 +100,6 @@ public sealed class UiStore
 
         Notify(next);
         return effect;
-    }
-
-    /// <summary>
-    ///     Bind session chrome (model/provider/agent) into the state.
-    ///     Convenience wrapper over <c>Dispatch(new UiMsg.ConfigureRuntime(...))</c>
-    ///     so hosts keep a stable call site while the fold rides the pure reducer.
-    /// </summary>
-    public void BindSession(string model, string provider, string agentName)
-    {
-        Dispatch(new UiMsg.ConfigureRuntime(model, provider, agentName));
     }
 
     /// <summary>
@@ -154,12 +131,6 @@ public sealed class UiStore
                 // is framework-free by design; renderers own error reporting.
             }
         }
-    }
-
-    /// <summary>Reset to a fresh empty state (e.g. on clear-screen).</summary>
-    public void Reset()
-    {
-        Dispatch(new UiMsg.Reset());
     }
 }
 

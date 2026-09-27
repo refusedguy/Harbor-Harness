@@ -80,7 +80,7 @@ public class InteractiveRendererE2ETests
         var store = new UiStore();
 
         foreach (var evt in BuildHelloStream())
-            store.Dispatch(evt);
+            store.Dispatch(new UiMsg.Agent(evt));
 
         var state = store.State;
         await Assert.That(state.IsAgentRunning).IsFalse();
@@ -96,7 +96,7 @@ public class InteractiveRendererE2ETests
         var store = new UiStore();
 
         foreach (var evt in BuildToolCallStream())
-            store.Dispatch(evt);
+            store.Dispatch(new UiMsg.Agent(evt));
 
         var state = store.State;
         await Assert.That(state.IsAgentRunning).IsFalse();
@@ -112,7 +112,7 @@ public class InteractiveRendererE2ETests
         var store = new UiStore();
 
         foreach (var evt in BuildErrorStream())
-            store.Dispatch(evt);
+            store.Dispatch(new UiMsg.Agent(evt));
 
         var state = store.State;
         await Assert.That(state.IsAgentRunning).IsFalse();
@@ -126,16 +126,16 @@ public class InteractiveRendererE2ETests
         var store = new UiStore();
         var partial = AssistantMessage.Empty("s1", "stub-1");
 
-        store.Dispatch(new AgentStartEvent("s1", Array.Empty<AgentMessage>()));
+        store.Dispatch(new UiMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>())));
         await Assert.That(store.State.IsAgentRunning).IsTrue();
 
-        store.Dispatch(new MessageStartEvent(partial));
+        store.Dispatch(new UiMsg.Agent(new MessageStartEvent(partial)));
         await Assert.That(store.State.IsStreaming).IsTrue();
 
-        store.Dispatch(new MessageUpdateEvent(new TextDeltaEvent("0", "tok"), partial));
+        store.Dispatch(new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("0", "tok"), partial)));
         await Assert.That(store.State.Active.TextBuffer).Contains("tok");
 
-        store.Dispatch(new MessageEndEvent(partial));
+        store.Dispatch(new UiMsg.Agent(new MessageEndEvent(partial)));
         await Assert.That(store.State.IsStreaming).IsFalse();
     }
 
@@ -242,7 +242,7 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildHelloStream())
-            store.Dispatch(evt);
+            store.Dispatch(new UiMsg.Agent(evt));
 
         var state = store.State;
         await Assert.That(state.Status).IsEqualTo("idle");
@@ -256,7 +256,7 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildToolCallStream())
-            store.Dispatch(evt);
+            store.Dispatch(new UiMsg.Agent(evt));
 
         var state = store.State;
         var allText = string.Join("", state.Lines.Select(l => l.Text));
@@ -269,7 +269,7 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildErrorStream())
-            store.Dispatch(evt);
+            store.Dispatch(new UiMsg.Agent(evt));
 
         var state = store.State;
         var allText = string.Join("", state.Lines.Select(l => l.Text));
@@ -312,7 +312,7 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildHelloStream())
-            store.Dispatch(evt);
+            store.Dispatch(new UiMsg.Agent(evt));
 
         var state = store.State;
         await Assert.That(state.Status).IsEqualTo("idle");
@@ -326,7 +326,7 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildToolCallStream())
-            store.Dispatch(evt);
+            store.Dispatch(new UiMsg.Agent(evt));
 
         var state = store.State;
         var allText = string.Join("", state.Lines.Select(l => l.Text));
@@ -339,7 +339,7 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildErrorStream())
-            store.Dispatch(evt);
+            store.Dispatch(new UiMsg.Agent(evt));
 
         var state = store.State;
         var allText = string.Join("", state.Lines.Select(l => l.Text));
@@ -352,16 +352,16 @@ public class InteractiveRendererE2ETests
         var store = new UiStore();
         var partial = AssistantMessage.Empty("s1", "stub-1");
 
-        store.Dispatch(new AgentStartEvent("s1", Array.Empty<AgentMessage>()));
+        store.Dispatch(new UiMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>())));
         await Assert.That(store.State.Status).IsEqualTo("running");
 
-        store.Dispatch(new MessageStartEvent(partial));
+        store.Dispatch(new UiMsg.Agent(new MessageStartEvent(partial)));
         await Assert.That(store.State.IsStreaming).IsTrue();
 
-        store.Dispatch(new MessageUpdateEvent(new TextDeltaEvent("0", "partial"), partial));
+        store.Dispatch(new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("0", "partial"), partial)));
         await Assert.That(store.State.Active.TextBuffer).IsEqualTo("partial");
 
-        store.Dispatch(new MessageEndEvent(partial));
+        store.Dispatch(new UiMsg.Agent(new MessageEndEvent(partial)));
         await Assert.That(store.State.IsStreaming).IsFalse();
     }
 

@@ -84,8 +84,8 @@ public class StorePlumbingTests
     {
         var store = new UiStore();
         using var args = JsonDocument.Parse("{\"path\":\"f.txt\"}");
-        store.Dispatch(new ToolExecutionStartEvent("tc_1", "read", args.RootElement));
-        store.Dispatch(new ToolExecutionEndEvent("tc_1", ToolResult.Success("contents"), false));
+        store.Dispatch(new UiMsg.Agent(new ToolExecutionStartEvent("tc_1", "read", args.RootElement)));
+        store.Dispatch(new UiMsg.Agent(new ToolExecutionEndEvent("tc_1", ToolResult.Success("contents"), false)));
 
         var lines = ToolCallKey.FindLines(store.State, "tc_1");
         await Assert.That(lines.Count).IsEqualTo(2);
@@ -108,7 +108,7 @@ public class StorePlumbingTests
     {
         var store = new UiStore();
         using var args = JsonDocument.Parse("{}");
-        store.Dispatch(new ToolExecutionStartEvent("tc_9", "bash", args.RootElement));
+        store.Dispatch(new UiMsg.Agent(new ToolExecutionStartEvent("tc_9", "bash", args.RootElement)));
 
         var edited = store.State.SetLine(0, ChatRole.Tool, "edited text");
 

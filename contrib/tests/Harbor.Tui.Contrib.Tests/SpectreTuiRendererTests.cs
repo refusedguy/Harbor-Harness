@@ -24,7 +24,7 @@ public class UiReducerTests
             new UserMessage("u1", "s1", default, "hi", "code", "m1")
         });
 
-        var next = UiReducer.Reduce(state, ev);
+        var next = UiReducer.Update(state, new UiMsg.Agent(ev)).State;
 
         await Assert.That(next.Status).IsEqualTo("running");
         await Assert.That(next.IsAgentRunning).IsTrue();
@@ -37,13 +37,13 @@ public class UiReducerTests
     public async Task TextDeltas_Accumulate_ThenFlushOnMessageEnd()
     {
         var s = new UiState();
-        s = UiReducer.Reduce(s, new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
-        s = UiReducer.Reduce(s, new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), AssistantMessage.Empty("s1", "m")));
-        s = UiReducer.Reduce(s, new MessageUpdateEvent(new TextDeltaEvent("0", " world"), AssistantMessage.Empty("s1", "m")));
+        s = UiReducer.Update(s, new UiMsg.Agent(new MessageStartEvent(AssistantMessage.Empty("s1", "m")))).State;
+        s = UiReducer.Update(s, new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), AssistantMessage.Empty("s1", "m")))).State;
+        s = UiReducer.Update(s, new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("0", " world"), AssistantMessage.Empty("s1", "m")))).State;
         await Assert.That(s.Active.TextBuffer).IsEqualTo("Hello world");
         await Assert.That(s.IsStreaming).IsTrue();
 
-        s = UiReducer.Reduce(s, new MessageEndEvent(AssistantMessage.Empty("s1", "m")));
+        s = UiReducer.Update(s, new UiMsg.Agent(new MessageEndEvent(AssistantMessage.Empty("s1", "m")))).State;
         await Assert.That(s.Lines.Length).IsEqualTo(1);
         await Assert.That(s.Lines[0].Role).IsEqualTo(ChatRole.Assistant);
         await Assert.That(s.Lines[0].Text).IsEqualTo("Hello world");
@@ -55,9 +55,9 @@ public class UiReducerTests
     public async Task ThinkingDelta_FlushesToThinkingLine()
     {
         var s = new UiState();
-        s = UiReducer.Reduce(s, new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
-        s = UiReducer.Reduce(s, new MessageUpdateEvent(new ThinkingDeltaEvent("0", "hmm"), AssistantMessage.Empty("s1", "m")));
-        s = UiReducer.Reduce(s, new MessageEndEvent(AssistantMessage.Empty("s1", "m")));
+        s = UiReducer.Update(s, new UiMsg.Agent(new MessageStartEvent(AssistantMessage.Empty("s1", "m")))).State;
+        s = UiReducer.Update(s, new UiMsg.Agent(new MessageUpdateEvent(new ThinkingDeltaEvent("0", "hmm"), AssistantMessage.Empty("s1", "m")))).State;
+        s = UiReducer.Update(s, new UiMsg.Agent(new MessageEndEvent(AssistantMessage.Empty("s1", "m")))).State;
         await Assert.That(s.Lines.Length).IsEqualTo(1);
         await Assert.That(s.Lines[0].Role).IsEqualTo(ChatRole.Thinking);
         await Assert.That(s.Lines[0].Text).IsEqualTo("hmm");
@@ -67,9 +67,9 @@ public class UiReducerTests
     public async Task StepFinish_AccumulatesCost()
     {
         var s = new UiState();
-        s = UiReducer.Reduce(s, new MessageUpdateEvent(
+        s = UiReducer.Update(s, new UiMsg.Agent(new MessageUpdateEvent(
             new StepFinishEvent(0, "stop", new Usage(1_000_000, 2_000_000)),
-            AssistantMessage.Empty("s1", "m")));
+            AssistantMessage.Empty("s1", "m")))).State;
 
         await Assert.That(s.Cost.TokensIn).IsEqualTo(1_000_000);
         await Assert.That(s.Cost.TokensOut).IsEqualTo(2_000_000);
@@ -80,7 +80,7 @@ public class UiReducerTests
     public async Task AgentEnd_ResetsRunningState()
     {
         var s = new UiState { IsAgentRunning = true, IsStreaming = true, Status = "running" };
-        var next = UiReducer.Reduce(s, new AgentEndEvent(Array.Empty<AgentMessage>()));
+        var next = UiReducer.Update(s, new UiMsg.Agent(new AgentEndEvent(Array.Empty<AgentMessage>()))).State;
         await Assert.That(next.IsAgentRunning).IsFalse();
         await Assert.That(next.IsStreaming).IsFalse();
         await Assert.That(next.Status).IsEqualTo("idle");
@@ -90,8 +90,8 @@ public class UiReducerTests
     public async Task ToolEvents_AppendToolLines()
     {
         var s = new UiState();
-        s = UiReducer.Reduce(s, new ToolExecutionStartEvent("tc1", "read", JsonDocument.Parse("{}").RootElement));
-        s = UiReducer.Reduce(s, new ToolExecutionEndEvent("tc1", new ToolResult("ok", false), false));
+        s = UiReducer.Update(s, new UiMsg.Agent(new ToolExecutionStartEvent("tc1", "read", JsonDocument.Parse("{}").RootElement))).State;
+        s = UiReducer.Update(s, new UiMsg.Agent(new ToolExecutionEndEvent("tc1", new ToolResult("ok", false), false))).State;
         await Assert.That(s.Lines.Length).IsEqualTo(2);
         await Assert.That(s.Lines[0].Role).IsEqualTo(ChatRole.Tool);
         await Assert.That(s.Lines[1].Role).IsEqualTo(ChatRole.ToolResult);
@@ -176,7 +176,7 @@ public class UiStoreTests
         UiState? seen = null;
         store.Changed += (_, e) => seen = e.State;
 
-        store.Dispatch(new AgentStartEvent("s1", Array.Empty<AgentMessage>()));
+        store.Dispatch(new UiMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>())));
 
         await Assert.That(seen).IsNotNull();
         await Assert.That(seen!.Status).IsEqualTo("running");
@@ -184,10 +184,10 @@ public class UiStoreTests
     }
 
     [Test]
-    public async Task BindSession_SetsChrome()
+    public async Task ConfigureRuntime_SetsChrome()
     {
         var store = new UiStore();
-        store.BindSession("m", "p", "agent");
+        store.Dispatch(new UiMsg.ConfigureRuntime("m", "p", "agent"));
         await Assert.That(store.State.Model).IsEqualTo("m");
         await Assert.That(store.State.Provider).IsEqualTo("p");
         await Assert.That(store.State.AgentName).IsEqualTo("agent");
@@ -197,10 +197,10 @@ public class UiStoreTests
     public async Task Reset_ClearsLines()
     {
         var store = new UiStore();
-        store.Dispatch(new AgentStartEvent("s1",
-            new AgentMessage[] { new UserMessage("u1", "s1", default, "hi", "code", "m") }));
+        store.Dispatch(new UiMsg.Agent(new AgentStartEvent("s1",
+            new AgentMessage[] { new UserMessage("u1", "s1", default, "hi", "code", "m") })));
         await Assert.That(store.State.Lines.Length).IsEqualTo(1);
-        store.Reset();
+        store.Dispatch(new UiMsg.Reset());
         await Assert.That(store.State.Lines.Length).IsEqualTo(0);
     }
 }

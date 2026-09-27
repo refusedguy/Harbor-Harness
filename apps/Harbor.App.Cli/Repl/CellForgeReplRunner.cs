@@ -408,7 +408,7 @@ internal sealed class CellForgeReplRunner(
             {
                 Pipeline.ObserveEvent(agentEvt);
                 _selection.Clear();
-                _replStore.Dispatch(agentEvt);
+                _replStore.Dispatch(new UiMsg.Agent(agentEvt));
                 await bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
                 if (agentEvt is AgentEndEvent)
                 {

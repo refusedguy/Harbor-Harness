@@ -70,7 +70,7 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
     {
         // Issue #77: every chat write lands in the DI-shared UiStore so the
         // pipeline can restore the snapshot across renderer swaps.
-        _store.Dispatch(@event);
+        _store.Dispatch(new UiMsg.Agent(@event));
         // Live token streaming is written directly for a smooth character-by-character
         // feed; everything else (status bar, finalized chat history, diff overlay) is
         // rendered through the builtin views in BaseTuiRenderer.

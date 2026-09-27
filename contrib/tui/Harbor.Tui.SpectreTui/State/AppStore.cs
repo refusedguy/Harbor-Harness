@@ -39,7 +39,7 @@ public sealed class AppStore
     /// <summary>Dispatch an agent event through the underlying store.</summary>
     public void Dispatch(AgentEvent @event)
     {
-        _uiStore.Dispatch(@event);
+        _uiStore.Dispatch(new UiMsg.Agent(@event));
     }
 
     /// <summary>Map <see cref="UiState" /> → <see cref="AppState" />.</summary>

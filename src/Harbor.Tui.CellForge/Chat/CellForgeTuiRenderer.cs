@@ -184,7 +184,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        _store.Dispatch(@event);
+        _store.Dispatch(new UiMsg.Agent(@event));
         return base.RenderAsync(@event, ct);
     }
 
