@@ -68,6 +68,8 @@ jobs:
             dotnet:
               - 'src/**'
               - 'tests/**'
+              - 'apps/**'
+              - 'contrib/**'
               - 'Directory.*'
               - 'Harbor.slnx'
               - 'global.json'
@@ -77,6 +79,7 @@ jobs:
               - 'src/Harbor.Ui.Framework.**'
               - 'src/Harbor.Terminal.Abstractions/**'
               - 'src/Harbor.App.Avalonia/**'
+              - 'apps/Harbor.App.Avalonia/**'
               - 'tests/Harbor.Tui.**'
               - 'tests/Harbor.App.Avalonia.Tests/**'
 
