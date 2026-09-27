@@ -60,7 +60,7 @@ public class StreamingCoalescerPoolTests
         // args must be byte-identical to the concatenated deltas regardless
         // of which parse path was taken (chunk-direct vs fallback).
         string pad = new('x', 20_000);
-        string argsJson = """{"n":7,"pad":"""" + pad + "\"}";
+        string argsJson = "{\"n\":7,\"pad\":\"" + pad + "\"}";
         var deltas = new List<LlmEvent> { new ToolCallStartEvent("call-1", "counter") };
         for (int i = 0; i < argsJson.Length; i += 100)
         {
