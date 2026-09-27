@@ -10,11 +10,12 @@ namespace Harbor.Application.Agents;
 /// </summary>
 internal sealed class AgentSteeringQueue
 {
-    private readonly Channel<AgentMessage> _channel = Channel.CreateUnbounded<AgentMessage>(new UnboundedChannelOptions
-    {
-        SingleReader = true,
-        SingleWriter = false
-    });
+    private readonly Channel<AgentMessage> _channel =
+        System.Threading.Channels.Channel.CreateUnbounded<AgentMessage>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false
+        });
 
     /// <summary>The live channel shared with the session context and the loop drain.</summary>
     internal Channel<AgentMessage> Channel => _channel;
