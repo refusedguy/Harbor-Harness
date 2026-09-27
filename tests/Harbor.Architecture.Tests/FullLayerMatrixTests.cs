@@ -167,7 +167,11 @@ public class FullLayerMatrixTests
             "Harbor.Ui.Framework.Projection", "Harbor.Ui.Framework.Sessions",
         ]),
         ["Harbor.Ui.Framework.State"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.Abstractions"]),
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.Abstractions",
+                // #33 T1: KeyEventAdapter consumes the BCL-only UiKeyDto key
+                // vocabulary (Rendering.Input) — the reversed edge replacing the
+                // old Rendering→State one; Presentation→Presentation conforms.
+                "Harbor.Ui.Framework.Rendering"]),
         ["Harbor.Ui.Framework.Reducers"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State"]),
         ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
@@ -181,14 +185,17 @@ public class FullLayerMatrixTests
              "Harbor.DesignSystem"]),
         // Renderer-agnostic shared layer: cell/screen primitives, input
         // vocabulary and chat widgets consumed by every renderer backend.
-        // Leaf Presentation library over the projection primitives; the HDS
-        // token catalog (DesignSystem) and motion tokens (Desktop.Animations)
-        // back ChatPalette/PanelFx (ChatPalette + the cell-style primitives
-        // physically live in the DesignSystem package assembly now).
-        // KeyEventMapper (Input/) translates raw keys to the State UiKey
-        // vocabulary so every renderer shares one key meaning — hence State.
+        // Leaf Presentation library over the HDS token catalog (DesignSystem)
+        // and motion tokens (Desktop.Animations) backing ChatPalette/PanelFx
+        // (ChatPalette + the cell-style primitives physically live in the
+        // DesignSystem package assembly now).
+        // #33 T1: KeyEventMapper (Input/) translates raw keys to the BCL-only
+        // UiKeyDto vocabulary (IKeyVocabulary) so every renderer shares one key
+        // meaning — State consumes it via KeyEventAdapter, hence NO State edge
+        // (and no Projection edge: unrealized, and State→Rendering plus
+        // Rendering→Projection→State would be an MSBuild cycle).
         ["Harbor.Ui.Framework.Rendering"] = new(Layer.Presentation,
-            ["Harbor.Ui.Framework.Projection", "Harbor.Ui.Framework.State", "Harbor.DesignSystem", "Harbor.Desktop.Animations",
+            ["Harbor.DesignSystem", "Harbor.Desktop.Animations",
                 // #75: canonical ctx% helper (ContextUsage) — Presentation → Domain is rule-conforming.
                 "Harbor.Abstractions.Contracts"]),
         // HDS v1 token catalog — standalone leaf: ZERO Harbor references. The
@@ -221,8 +228,8 @@ public class FullLayerMatrixTests
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State"]),
         // CellForge engine (issue #33 split): input/parsing/capabilities/cell
         // primitives. No Chat vocabulary: wheel ticks surface as UiMsg via
-        // the shared KeyEventMapper contract (State), cell styles via
-        // DesignSystem tokens, shared blocks via Ui.Framework.Rendering.
+        // the State KeyEventAdapter over the shared UiKeyDto vocabulary, cell
+        // styles via DesignSystem tokens, shared blocks via Ui.Framework.Rendering.
         ["Harbor.Tui.CellForge.Engine"] = new(Layer.Presentation,
             [
                 "Harbor.Abstractions",

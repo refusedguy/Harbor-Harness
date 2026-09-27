@@ -11,6 +11,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
+    <!-- #33 T1: KeyEventAdapter consumes the BCL-only UiKeyDto vocabulary
+         (Rendering.Input) — the reversed edge (State→Rendering) replaces the
+         old Rendering→State one; Presentation→Presentation is rule-conforming. -->
+    <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
