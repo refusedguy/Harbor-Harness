@@ -30,12 +30,13 @@ public sealed class ComposerPanel : Panel
 
     /// <summary>
     /// Panel chrome (feed/input/status zone separation): when true and the
-    /// rect is at least 3 rows tall, row 0 becomes a titled top rule
-    /// (<c>─ INPUT ──…</c>, doubling as the feed⇄input divider) and the last
-    /// row a bottom rule (the input⇄status divider); chrome rows sit on the
-    /// theme Panel surface. Text and caret shift into the inset content area.
-    /// False by default — legacy layout paints byte-identically (goldens).
-    /// The interactive host enables it; see CellForgeModule.
+    /// rect is tall enough to keep at least 2 text rows, row 0 becomes a
+    /// titled top rule (<c>─ INPUT ──…</c>, doubling as the feed⇄input
+    /// divider) and the last row a bottom rule (the input⇄status divider);
+    /// chrome rows sit on the theme Panel surface. Text and caret shift into
+    /// the inset content area. False by default — legacy layout paints
+    /// byte-identically (goldens). The interactive host enables it; see
+    /// CellForgeModule.
     /// </summary>
     public bool ShowChrome { get; set; }
 
@@ -46,8 +47,10 @@ public sealed class ComposerPanel : Panel
             return;
         }
 
-        // Chrome reserves the outer rows; narrow rects fall back to legacy.
-        int topPad = ShowChrome && Rect.Height >= 3 ? 1 : 0;
+        // Chrome reserves the outer rows; rects too short to keep 2 text
+        // rows fall back to legacy (a 3-row composer would otherwise show
+        // only 1 text row and hide multiline input — KittyShiftEnter etc).
+        int topPad = ShowChrome && Rect.Height >= 4 ? 1 : 0;
         int bottomPad = topPad;
 
         if (topPad > 0)
