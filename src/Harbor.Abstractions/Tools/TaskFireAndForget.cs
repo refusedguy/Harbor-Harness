@@ -4,8 +4,8 @@ namespace Harbor.Abstractions.Tools;
 ///     Single fire-and-forget helper for tool-adjacent paths (#201).
 ///     Attaches an <c>OnlyOnFaulted</c> continuation that observes the exception
 ///     (§FP-006: no unobserved-task deaths) and routes it to
-///     <paramref name="onError" />. An <see cref="OperationCanceledException" />
-///     racing a cancelled <paramref name="cancellationToken" /> is an expected
+///     <c>onError</c>. An <see cref="OperationCanceledException" />
+///     racing a cancelled <c>cancellationToken</c> is an expected
 ///     abort (CT-002: abort ≠ error), not a failure — it is swallowed.
 /// </summary>
 /// <remarks>
