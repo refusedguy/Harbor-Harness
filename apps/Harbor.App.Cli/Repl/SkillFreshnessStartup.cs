@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Tui;
 using Harbor.Application.Skills;
+using Harbor.Terminal.Abstractions;
 using Harbor.Tui.CellForge;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Ui.Framework.Projection;
