@@ -9,6 +9,8 @@ namespace Harbor.Tui.CellForge.Widgets;
 public sealed record CommandItem(string Id, string Title, string Detail = "", string Shortcut = "", string Group = "");
 
 /// <summary>Navigation frame for hierarchical drill-down palettes.</summary>
+/// <param name="PreserveOrder">When true, the empty-query list keeps seed
+/// order (tree hierarchies) instead of the default Group/Title sort.</param>
 public sealed record PaletteFrame(
     string Title,
     string Breadcrumb,
@@ -18,7 +20,8 @@ public sealed record PaletteFrame(
     string InputPlaceholder = "",
     Action<string>? OnInputSubmit = null,
     Func<CommandItem, CancellationToken, Task>? OnCommitAsync = null,
-    Func<string, CancellationToken, Task>? OnInputSubmitAsync = null);
+    Func<string, CancellationToken, Task>? OnInputSubmitAsync = null,
+    bool PreserveOrder = false);
 
 /// <summary>
 /// Command palette overlay (ctrl+p pattern): fuzzy-filtered command list
@@ -262,7 +265,7 @@ public sealed class CommandPaletteView
     {
         _results = FuzzyMatcher.Filter(_query, _commands, static c => c.Title + " " + c.Detail);
 
-        if (_query.Length == 0)
+        if (_query.Length == 0 && !(_frames.TryPeek(out var top) && top.PreserveOrder))
         {
             _results.Sort((a, b) =>
             {

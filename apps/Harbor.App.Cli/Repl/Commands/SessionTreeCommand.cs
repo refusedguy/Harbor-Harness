@@ -71,7 +71,8 @@ internal sealed class SessionTreeCommand : IReplCommand
 
         host.Palette.PushFrame(new PaletteFrame(
             "Session Tree", "sessions / tree", items,
-            OnCommitAsync: (selected, frameCt) => SwitchAsync(host, selected, frameCt)));
+            OnCommitAsync: (selected, frameCt) => SwitchAsync(host, selected, frameCt),
+            PreserveOrder: true));
         host.WakeUp();
     }
 

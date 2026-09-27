@@ -46,7 +46,7 @@ public class CommandPaletteDetailTests
         int titleStartX = 3;
         int detailX = titleStartX + "Fix login bug".Length + 2;
         var detailCell = buffer.Get(detailX, 3);
-        await Assert.That(detailCell.Style.Fg).IsEqualTo(ChatPalette.Dim);
+        await Assert.That(detailCell.Style.Fg).IsEqualTo(ChatPalette.Dim.Fg);
     }
 
     [Test]
