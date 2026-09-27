@@ -152,4 +152,35 @@ public class IdentifiersTests
         var name = AgentName.Create("Code");
         await Assert.That(name.Value).IsEqualTo("code");
     }
+
+    [Test]
+    public async Task RunId_Create_Valid_Value()
+    {
+        var id = RunId.Create("run123");
+        await Assert.That(id.Value).IsEqualTo("run123");
+    }
+
+    [Test]
+    public async Task RunId_New_Generates_NonEmpty()
+    {
+        var id = RunId.New();
+        await Assert.That(string.IsNullOrEmpty(id.Value)).IsFalse();
+    }
+
+    [Test]
+    public async Task RunId_TryCreate_Empty_ReturnsFailure()
+    {
+        var result = RunId.TryCreate("");
+        await Assert.That(result.IsSuccess).IsFalse();
+    }
+
+    [Test]
+    public async Task RunId_Equality()
+    {
+        var a = RunId.Create("test");
+        var b = RunId.Create("test");
+        var c = RunId.Create("other");
+        await Assert.That(a.Equals(b)).IsTrue();
+        await Assert.That(a.Equals(c)).IsFalse();
+    }
 }
