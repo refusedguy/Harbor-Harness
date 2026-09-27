@@ -326,7 +326,7 @@ public class CellForgeSubagentsPanelTests
         string text = Joined(panel.Build(Ctx(StateWithActive("parent"), services)));
 
         await Assert.That(text).Contains("Subagents (1)");
-        await Assert.That(text).Contains("▸ task(explore): dig  explore  running");
+        await Assert.That(text).Contains("▸ task(explore): dig  explore  working");
         await Assert.That(store.Appends).IsEqualTo(0);
         await Assert.That(store.Updates).IsEqualTo(0);
     }

@@ -45,6 +45,7 @@ public class PanelWiringTests
         "logs",
         "session-sidebar",
         "jump",
+        "subagents",
     ];
 
     private static CellForgeTuiRenderer Create(RecordingBackend backend) =>
@@ -75,7 +76,7 @@ public class PanelWiringTests
     }
 
     [Test]
-    public async Task Registry_Has_Nine_Builtins_In_Spectre_Slot_Order()
+    public async Task Registry_Has_Ten_Builtins_In_Spectre_Slot_Order()
     {
         var backend = new RecordingBackend();
         using var renderer = Create(backend);

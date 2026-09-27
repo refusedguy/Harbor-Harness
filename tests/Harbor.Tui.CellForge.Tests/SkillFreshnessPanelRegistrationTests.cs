@@ -7,32 +7,32 @@ namespace Harbor.Tui.CellForge.Tests;
 /// <summary>
 ///     Contract tests for the skill-freshness opt-in (issue #23 slice 2):
 ///     <see cref="SkillFreshnessPanelRegistration.RegisterSkillFreshness" />
-///     appends the panel after the 9 builtins (Alt+1..9 slot order pinned by
+///     appends the panel after the 10 builtins (Alt+1..9 slot order pinned by
 ///     <see cref="PanelWiringTests" /> stays intact), and the
 ///     <c>HARBOR_SKILL_FRESHNESS</c> flag gates the CLI wiring.
 /// </summary>
 public class SkillFreshnessPanelRegistrationTests
 {
     [Test]
-    public async Task RegisterSkillFreshness_AppendsAfterNineBuiltins_PreservingAltSlots()
+    public async Task RegisterSkillFreshness_AppendsAfterTenBuiltins_PreservingAltSlots()
     {
         var backend = new RecordingBackend();
         using var renderer = new CellForgeTuiRenderer(
             NullLogger<CellForgeTuiRenderer>.Instance, backend);
 
         var before = renderer.Panels.Registry.All;
-        await Assert.That(before.Count).IsEqualTo(9);
+        await Assert.That(before.Count).IsEqualTo(10);
 
         renderer.Panels.RegisterSkillFreshness(new SkillFreshnessModel());
 
         var all = renderer.Panels.Registry.All;
-        await Assert.That(all.Count).IsEqualTo(10);
+        await Assert.That(all.Count).IsEqualTo(11);
         for (int i = 0; i < before.Count; i++)
         {
             await Assert.That(all[i].Id).IsEqualTo(before[i].Id);
         }
 
-        await Assert.That(all[9].Id).IsEqualTo("skill-freshness");
+        await Assert.That(all[10].Id).IsEqualTo("skill-freshness");
     }
 
     [Test]
