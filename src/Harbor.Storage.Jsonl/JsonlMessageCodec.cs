@@ -220,7 +220,8 @@ internal static class JsonlMessageCodec
     private static Result<AgentMessage> DecodeToolResult(
         string sessionId, string id, DateTimeOffset createdAt, string? parentId, JsonElement payload)
     {
-        if (!payload.TryGetProperty("results", out var resultsEl) || resultsEl.ValueKind != JsonValueKind.Array)
+        if ((!payload.TryGetProperty("results", out var resultsEl) && !payload.TryGetProperty("Results", out resultsEl))
+            || resultsEl.ValueKind != JsonValueKind.Array)
             return Result.Failure<AgentMessage>($"tool_result message {id}: missing 'results'");
 
         var results = new List<ToolResultEntry>();
