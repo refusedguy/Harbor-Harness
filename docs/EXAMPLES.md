@@ -321,8 +321,8 @@ public sealed class RedisSessionStore : ISessionStore
 }
 ```
 
-Register in `StorageModule` (`src/Harbor.Hosting/Modules/StorageModule.cs`) —
-the `HARBOR_STORAGE` env var (`jsonl` / `memory` / `sqlite`) selects the backend.
+Register an `ISessionStoreFactory` in `SessionStoreRegistry` (`src/Harbor.Hosting/Modules/SessionStoreRegistry.cs`) —
+the `HARBOR_STORAGE` env var (`jsonl` / `memory` / `sqlite`) selects the backend (unknown ids fail fast).
 
 ---
 
