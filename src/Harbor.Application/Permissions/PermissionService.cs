@@ -14,6 +14,7 @@ public sealed class PermissionService : IPermissionService
     private readonly Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? _userAsker;
     private readonly string? _workspaceRoot;
     private readonly IConfigStore? _configStore;
+    private readonly IPathExtractionPolicy[] _pathPolicies;
 
     /// <summary>
     ///     Persisted user decisions (A2): agent name → rule key ("toolName:argPath") → the
@@ -42,18 +43,28 @@ public sealed class PermissionService : IPermissionService
     ///     When <see langword="null" />, relative paths resolve against the process working directory.
     /// </param>
     /// <param name="configStore">Optional config store for persisting permission decisions across sessions.</param>
+    /// <param name="pathPolicies">
+    ///     Optional path-extraction policy registry (Strategy, issue #178). Consulted in
+    ///     order; the first policy whose <see cref="IPathExtractionPolicy.Handles" />
+    ///     accepts the tool name extracts the rule-matching argument. When
+    ///     <see langword="null" />, <see cref="DefaultPathExtractionPolicies.Defaults" />
+    ///     is used. <see cref="LegacyArgExtractionPolicy" /> is appended as the terminal
+    ///     fallback when absent, so dispatch is total.
+    /// </param>
     public PermissionService(
         IAgentRegistry agents,
         ILogger<PermissionService> logger,
         Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? userAsker = null,
         string? workspaceRoot = null,
-        IConfigStore? configStore = null)
+        IConfigStore? configStore = null,
+        IEnumerable<IPathExtractionPolicy>? pathPolicies = null)
     {
         _agents = agents;
         _logger = logger;
         _userAsker = userAsker;
         _workspaceRoot = workspaceRoot;
         _configStore = configStore;
+        _pathPolicies = ResolvePolicies(pathPolicies);
 
         // #82: never block the ctor on IO (sync-over-async deadlocks under any
         // SynchronizationContext). The persisted-permissions load runs in the
@@ -77,9 +88,10 @@ public sealed class PermissionService : IPermissionService
         Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? userAsker = null,
         string? workspaceRoot = null,
         IConfigStore? configStore = null,
+        IEnumerable<IPathExtractionPolicy>? pathPolicies = null,
         CancellationToken ct = default)
     {
-        var service = new PermissionService(agents, logger, userAsker, workspaceRoot, configStore);
+        var service = new PermissionService(agents, logger, userAsker, workspaceRoot, configStore, pathPolicies);
         await service.EnsureLoadedAsync(ct).ConfigureAwait(false);
         return service;
     }
@@ -315,99 +327,50 @@ public sealed class PermissionService : IPermissionService
         return updateResult;
     }
 
-    /// <summary>Raw argument extraction (legacy, un-normalized). Kept for compatibility.</summary>
-    private static string ExtractArgPath(string toolName, JsonElement args)
+    /// <summary>
+    ///     Resolves the effective policy list: defaults when none is supplied,
+    ///     otherwise the supplied policies with the terminal legacy fallback
+    ///     appended when absent (dispatch stays total).
+    /// </summary>
+    private static IPathExtractionPolicy[] ResolvePolicies(IEnumerable<IPathExtractionPolicy>? policies)
     {
-        try
-        {
-            return toolName switch
-            {
-                "read" or "write" or "edit" => args.TryGetProperty("path", out var p) ? p.GetString() ?? "*" : "*",
-                "bash" => args.TryGetProperty("command", out var c) ? c.GetString() ?? "*" : "*",
-                "glob" => args.TryGetProperty("pattern", out var p) ? p.GetString() ?? "*" : "*",
-                "grep" => args.TryGetProperty("pattern", out var p) ? p.GetString() ?? "*" : "*",
-                "ls" => args.TryGetProperty("path", out var p) ? p.GetString() ?? "*" : "*",
-                _ => "*"
-            };
-        }
-        catch
-        {
-            return "*";
-        }
-    }
+        if (policies is null)
+            return DefaultPathExtractionPolicies.Defaults;
 
-    private readonly record struct PathExtraction(string ArgPath, bool IsOutsideWorkspace);
+        IPathExtractionPolicy[] list = policies as IPathExtractionPolicy[]
+            ?? new List<IPathExtractionPolicy>(policies).ToArray();
+        for (int i = 0; i < list.Length; i++)
+        {
+            if (ReferenceEquals(list[i], LegacyArgExtractionPolicy.Instance))
+                return list;
+        }
+
+        var withFallback = new IPathExtractionPolicy[list.Length + 1];
+        Array.Copy(list, withFallback, list.Length);
+        withFallback[list.Length] = LegacyArgExtractionPolicy.Instance;
+        return withFallback;
+    }
 
     /// <summary>
-    ///     Extracts the rule-matching string for a tool call, normalizing file paths before
-    ///     rule evaluation so traversal sequences cannot smuggle a path past anchored Allow
-    ///     rules (A1). Relative paths resolve against <paramref name="workspaceRoot" />; the
-    ///     normalized path is expressed relative to the workspace root when it stays inside
-    ///     it, and as an absolute path otherwise.
+    ///     Extracts the rule-matching string for a tool call by dispatching to the
+    ///     first registered <see cref="IPathExtractionPolicy" /> handling the tool
+    ///     (Strategy, issue #178 — the former tool-name <c>switch</c> lives in the
+    ///     policy classes now). Relative paths resolve against
+    ///     <paramref name="workspaceRoot" />; the normalized path is expressed
+    ///     relative to the workspace root when it stays inside it, and as an
+    ///     absolute path otherwise.
     /// </summary>
-    private static PathExtraction NormalizePathExtraction(string toolName, JsonElement args, string workspaceRoot)
+    private PathExtraction NormalizePathExtraction(string toolName, JsonElement args, string workspaceRoot)
     {
-        switch (toolName)
+        var policies = _pathPolicies;
+        for (int i = 0; i < policies.Length; i++)
         {
-            case "read" or "write" or "edit" or "ls"
-                or "patch" or "tree" or "ripgrep" or "notebook" or "mcp":
-                try
-                {
-                    return NormalizePath(
-                        args.TryGetProperty("path", out var p) ? p.GetString() : null,
-                        workspaceRoot);
-                }
-                catch
-                {
-                    return new PathExtraction("*", true);
-                }
-            default:
-                return new PathExtraction(ExtractArgPath(toolName, args), false);
-        }
-    }
-
-    private static PathExtraction NormalizePath(string? raw, string workspaceRoot)
-    {
-        // No usable path argument: fall back to the legacy wildcard (rule matching decides).
-        if (string.IsNullOrWhiteSpace(raw) || raw == "*")
-            return new PathExtraction("*", false);
-
-        string full;
-        try
-        {
-            full = Path.GetFullPath(Path.IsPathRooted(raw)
-                ? raw
-                : Path.Combine(workspaceRoot, raw));
-        }
-        catch
-        {
-            // Unresolvable path: do not match path-anchored rules; force user decision.
-            return new PathExtraction("*", true);
+            if (policies[i].Handles(toolName))
+                return policies[i].Extract(toolName, args, workspaceRoot);
         }
 
-        if (IsInsideWorkspace(full, workspaceRoot))
-            return new PathExtraction(RelativeToWorkspace(full, workspaceRoot), false);
-
-        return new PathExtraction(full, true);
-    }
-
-    private static bool IsInsideWorkspace(string full, string root)
-    {
-        if (string.Equals(full, root, StringComparison.Ordinal))
-            return true;
-        string prefix = root.EndsWith(Path.DirectorySeparatorChar)
-            ? root
-            : root + Path.DirectorySeparatorChar;
-        return full.StartsWith(prefix, StringComparison.Ordinal);
-    }
-
-    private static string RelativeToWorkspace(string full, string root)
-    {
-        if (full.Length == root.Length)
-            return string.Empty;
-        int start = root.Length;
-        if (full[start] == Path.DirectorySeparatorChar || full[start] == Path.AltDirectorySeparatorChar)
-            start++;
-        return full[start..];
+        // Unreachable with the terminal legacy fallback present; degrades to the
+        // legacy wildcard for hand-composed lists without it.
+        return new PathExtraction("*", false);
     }
 }
