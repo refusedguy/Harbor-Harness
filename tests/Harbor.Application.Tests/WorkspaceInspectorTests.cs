@@ -9,17 +9,12 @@ namespace Harbor.Application.Tests;
 ///     HEAD succeeds with the pinned revision, tracked dirt or any git failure
 ///     rejects the run, and untracked-only state succeeds with the presence flag.
 /// </summary>
+[SkipWhenGitMissing]
 public class WorkspaceInspectorTests
 {
     [Test]
     public async Task Inspect_CleanHead_SuccessWithPinnedRevision()
     {
-        if (!GitAvailable())
-        {
-            await Assert.Skip("git is not available on PATH");
-            return;
-        }
-
         string dir = InitRepo();
         try
         {
@@ -48,12 +43,6 @@ public class WorkspaceInspectorTests
     [Test]
     public async Task Inspect_TrackedModification_FailsWithReason()
     {
-        if (!GitAvailable())
-        {
-            await Assert.Skip("git is not available on PATH");
-            return;
-        }
-
         string dir = InitRepo();
         try
         {
@@ -74,12 +63,6 @@ public class WorkspaceInspectorTests
     [Test]
     public async Task Inspect_NotARepository_FailsWithReason()
     {
-        if (!GitAvailable())
-        {
-            await Assert.Skip("git is not available on PATH");
-            return;
-        }
-
         string dir = NewTempDir();
         try
         {
@@ -97,12 +80,6 @@ public class WorkspaceInspectorTests
     [Test]
     public async Task Inspect_UntrackedOnly_SuccessWithFlag()
     {
-        if (!GitAvailable())
-        {
-            await Assert.Skip("git is not available on PATH");
-            return;
-        }
-
         string dir = InitRepo();
         try
         {
@@ -157,7 +134,7 @@ public class WorkspaceInspectorTests
         }
     }
 
-    private static bool GitAvailable()
+    internal static bool GitAvailable()
     {
         try
         {
@@ -218,4 +195,15 @@ public class WorkspaceInspectorTests
             throw new InvalidOperationException($"git {arguments} failed ({proc.ExitCode}): {stderr}");
         return stdout;
     }
+}
+
+/// <summary>Skip the suite when <c>git</c> is not on PATH (mirrors SkipWhenRgMissing).</summary>
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
+internal sealed class SkipWhenGitMissingAttribute : SkipAttribute
+{
+    public SkipWhenGitMissingAttribute() : base("git is not available on PATH") { }
+
+    /// <inheritdoc />
+    public override Task<bool> ShouldSkip(TestRegisteredContext context)
+        => Task.FromResult(!WorkspaceInspectorTests.GitAvailable());
 }
