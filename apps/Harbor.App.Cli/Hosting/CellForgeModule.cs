@@ -69,9 +69,21 @@ internal static class CellForgeModule
         services.AddSingleton<ComposerController>();
         services.AddSingleton<StatusViewModel>();
 
-        services.AddSingleton(sp => ChatScreen.Build(
-            sp.GetRequiredService<ComposerController>(),
-            sp.GetRequiredService<StatusViewModel>()));
+        services.AddSingleton(sp =>
+        {
+            var screen = ChatScreen.Build(
+                sp.GetRequiredService<ComposerController>(),
+                sp.GetRequiredService<StatusViewModel>());
+
+            // Panel chrome (zone separation: feed⇄input⇄status borders, panel
+            // titles, chrome surfaces, inter-message separators). Enabled here
+            // — the interactive composition root — so block/panel goldens that
+            // build their own screens keep painting byte-identically.
+            screen.Timeline.Timeline.ShowSeparators = true;
+            screen.Composer.ShowChrome = true;
+            screen.Status.ShowChrome = true;
+            return screen;
+        });
 
         services.AddSingleton(_ => new TerminalInputSource(
             TerminalInputStream.Open(),

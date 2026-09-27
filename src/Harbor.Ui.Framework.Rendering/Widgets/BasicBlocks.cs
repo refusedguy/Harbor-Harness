@@ -117,6 +117,17 @@ public sealed class UserBlock : IChatBlock
             int paintY = y + i;
             if (row == totalRows - 1)
             {
+                buffer.Fill(new Rect(ctx.Rect.X, paintY, ctx.Rect.Width, 1), in bgCell);
+
+                // Panel chrome: with separators enabled this breathing room
+                // becomes a thin dim divider between answers (same tone as
+                // the CellForge PanelChrome separator — ChatPalette.Dim).
+                // Off by default: direct block paints stay byte-identical.
+                if (ctx.ShowSeparators)
+                {
+                    PaintSeparator(buffer, ctx.Rect.X, paintY, ctx.Rect.Width);
+                }
+
                 continue; // trailing gap row: breathing room between bubbles
             }
 
@@ -135,6 +146,28 @@ public sealed class UserBlock : IChatBlock
     public string RawText() => Prefix + _text.Source;
 
     private static int BodyWidth(int rectWidth) => rectWidth - Gutter;
+
+    /// <summary>
+    /// Thin dim inter-message divider (panel chrome): a <c>─</c> hairline in
+    /// <see cref="ChatPalette.Dim"/> — the same tone
+    /// <c>Harbor.Tui.CellForge.Widgets.PanelChrome.SeparatorStyle</c> exposes
+    /// (named here, not referenced: this assembly must not depend on CellForge).
+    /// Bounds-safe: clips to the buffer, no-op on non-positive widths.
+    /// </summary>
+    internal static void PaintSeparator(ScreenBuffer buffer, int x, int y, int width)
+    {
+        if (width <= 0)
+        {
+            return;
+        }
+
+        var style = ChatPalette.Dim;
+        var glyph = new Rune('─');
+        for (int i = 0; i < width; i++)
+        {
+            buffer.SetRune(x + i, y, glyph, in style);
+        }
+    }
 }
 
 /// <summary>Dim italic system notice (session events, compaction, errors).</summary>

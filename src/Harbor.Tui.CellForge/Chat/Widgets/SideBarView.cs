@@ -94,6 +94,10 @@ public static class SideBarView
         var valueStyle = ChatPalette.ToolArgs;
         var headingStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
 
+        // Panel title row (chrome pattern: thin title + rule, same as INPUT):
+        // row 0 was blank padding — sections still start at rect.Y + 1.
+        PanelChrome.PaintTitleRow(buffer, labelX, rect.Y, innerW, PanelChrome.SidebarTitle);
+
         int y = rect.Y + 1;
         if (y >= rect.Bottom)
         {
