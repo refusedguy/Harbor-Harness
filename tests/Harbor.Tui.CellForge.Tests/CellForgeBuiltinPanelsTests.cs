@@ -231,6 +231,54 @@ public class CellForgeBuiltinPanelsTests
     }
 
     [Test]
+    public async Task Diagnostics_OnKey_JK_MovesCursor()
+    {
+        var state = StateWithLines(
+            new ChatLine(ChatRole.Error, "error CS0001: first broke"),
+            new ChatLine(ChatRole.Error, "error CS0002: second broke"),
+            new ChatLine(ChatRole.Error, "error CS0003: third broke"));
+        var panel = new CellForgeDiagnosticsPanel();
+        var ctx = Ctx(state);
+
+        IReadOnlyList<string> initial = Rows(panel.Build(ctx));
+        await Assert.That(initial[2]).StartsWith(">");
+
+        await Assert.That(panel.OnKey(UiKey.ForChar('j'), ctx)).IsTrue();
+        IReadOnlyList<string> moved = Rows(panel.Build(ctx));
+        await Assert.That(moved[2]).StartsWith(" ");
+        await Assert.That(moved[3]).StartsWith(">");
+        await Assert.That(moved[3]).Contains("CS0002");
+
+        await Assert.That(panel.OnKey(UiKey.ForChar('k'), ctx)).IsTrue();
+        IReadOnlyList<string> back = Rows(panel.Build(ctx));
+        await Assert.That(back[2]).StartsWith(">");
+    }
+
+    [Test]
+    public async Task Diagnostics_OnKey_CursorClampsAtEnds()
+    {
+        var state = StateWithLines(new ChatLine(ChatRole.Error, "error CS0001: only"));
+        var panel = new CellForgeDiagnosticsPanel();
+        var ctx = Ctx(state);
+
+        await Assert.That(panel.OnKey(UiKey.ForChar('k'), ctx)).IsTrue();
+        await Assert.That(panel.OnKey(UiKey.ForChar('j'), ctx)).IsTrue();
+        await Assert.That(panel.OnKey(UiKey.ForChar('j'), ctx)).IsTrue();
+        await Assert.That(panel.OnKey(UiKey.ForChar('J'), ctx)).IsTrue();
+        IReadOnlyList<string> rows = Rows(panel.Build(ctx));
+        await Assert.That(rows[2]).StartsWith(">");
+        await Assert.That(rows[2]).Contains("CS0001");
+    }
+
+    [Test]
+    public async Task Diagnostics_OnKey_UnknownKey_NotConsumed()
+    {
+        var panel = new CellForgeDiagnosticsPanel();
+        await Assert.That(panel.OnKey(UiKey.ForChar('z'), Ctx(new UiState()))).IsFalse();
+        await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Enter), Ctx(new UiState()))).IsFalse();
+    }
+
+    [Test]
     public async Task TokenBreakdown_RendersBarsAndTotals()
     {
         var state = new UiState { Cost = new CostSnapshot(1500, 300, 0.0042m) };
@@ -345,7 +393,6 @@ public class CellForgeBuiltinPanelsTests
         [
             new CellForgeTodoListPanel(),
             new CellForgeDiffPreviewPanel(),
-            new CellForgeDiagnosticsPanel(),
             new CellForgeTokenBreakdownPanel(),
         ];
         foreach (var panel in pure)

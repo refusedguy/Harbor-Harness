@@ -79,8 +79,8 @@ public static class PanelRows
         return rows;
     }
 
-    /// <summary>Diagnostics rows: one row per issue (read-only window).</summary>
-    public static List<string> DiagnosticsRows(IReadOnlyList<PanelDiagnostic> diagnostics, int height)
+    /// <summary>Diagnostics rows: cursor window over issues, j/k navigation.</summary>
+    public static List<string> DiagnosticsRows(IReadOnlyList<PanelDiagnostic> diagnostics, int cursor, int width, int height)
     {
         ArgumentNullException.ThrowIfNull(diagnostics);
         var rows = new List<string>(diagnostics.Count + 4);
@@ -93,17 +93,21 @@ public static class PanelRows
         }
         else
         {
+            int selected = Math.Clamp(cursor, 0, diagnostics.Count - 1);
             int maxVisible = Math.Max(2, height - 4);
-            int end = Math.Min(diagnostics.Count, maxVisible);
-            for (int i = 0; i < end; i++)
+            int start = Math.Max(0, selected - maxVisible + 1);
+            int end = Math.Min(diagnostics.Count, start + maxVisible);
+            int messageBudget = Math.Max(1, width - 4);
+            for (int i = start; i < end; i++)
             {
                 var diagnostic = diagnostics[i];
+                string marker = i == selected ? ">" : " ";
                 string icon = diagnostic.Severity == PanelDiagnosticSeverity.Warning ? "▲" : "✗";
-                rows.Add($"{icon} {diagnostic.Message}");
+                rows.Add($"{marker} {icon} {PanelText.Truncate(diagnostic.Message, messageBudget)}");
             }
 
             rows.Add(PanelText.Separator);
-            rows.Add("read-only · cursor navigation lands in a follow-up");
+            rows.Add("j/k move");
         }
 
         return rows;
