@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using CSharpFunctionalExtensions;
 
 namespace Harbor.Terminal.Pty;
 
@@ -77,29 +78,58 @@ public sealed class PtyProcess : IAsyncDisposable
     /// <summary>Exit code (throws before exit; negative when SIGKILLed).</summary>
     public Task<int> WaitForExitAsync(CancellationToken ct = default) => _exitTask.WaitAsync(ct);
 
-    /// <summary>Spawn <paramref name="spec" /> inside a fresh PTY.</summary>
-    public static PtyProcess Start(PtyStartSpec spec)
+    /// <summary>
+    ///     Spawn <paramref name="spec" /> inside a fresh PTY.
+    ///     ROP boundary (#204): every expected failure (unsupported platform,
+    ///     empty executable, PTY setup, spawn) returns a <c>Failure</c> carrying
+    ///     the step + errno diagnostic instead of throwing.
+    /// </summary>
+    public static Result<PtyProcess> TryStart(PtyStartSpec spec)
     {
+        if (string.IsNullOrWhiteSpace(spec.FileName))
+        {
+            return Result.Failure<PtyProcess>(
+                "empty-file-name: PtyStartSpec.FileName must be a non-empty executable path.");
+        }
+
         if (!IsSupported)
         {
-            throw new PlatformNotSupportedException("PtyProcess requires a POSIX PTY platform (Windows ConPTY follow-up).");
+            return Result.Failure<PtyProcess>(
+                "unsupported-platform: PtyProcess requires a POSIX PTY platform (Windows ConPTY follow-up).");
         }
 
         int master = NativeMethods.posix_openpt(NativeMethods.O_RDWR | NativeMethods.O_NOCTTY | NativeMethods.O_CLOEXEC);
         if (master < 0)
         {
-            throw new IOException($"posix_openpt failed: errno={Marshal.GetLastWin32Error()}.");
+            return Result.Failure<PtyProcess>($"posix_openpt failed: errno={Marshal.GetLastWin32Error()}.");
         }
 
-        try
+        Result<PtyProcess> result = TryStartCore(master, spec);
+        if (result.IsFailure)
+        {
+            _ = NativeMethods.close(master);
+        }
+
+        return result;
+
+        static Result<PtyProcess> TryStartCore(int master, PtyStartSpec spec)
         {
             if (NativeMethods.grantpt(master) != 0 || NativeMethods.unlockpt(master) != 0)
             {
-                throw new IOException($"grantpt/unlockpt failed: errno={Marshal.GetLastWin32Error()}.");
+                return Result.Failure<PtyProcess>($"grantpt/unlockpt failed: errno={Marshal.GetLastWin32Error()}.");
             }
 
-            string slavePath = NativeMethods.GetSlaveName(master);
-            Resize(master, spec.Cols, spec.Rows);
+            Result<string> slave = NativeMethods.TryGetSlaveName(master);
+            if (slave.IsFailure)
+            {
+                return Result.Failure<PtyProcess>(slave.Error);
+            }
+
+            Result resize = TryResize(master, spec.Cols, spec.Rows);
+            if (resize.IsFailure)
+            {
+                return Result.Failure<PtyProcess>(resize.Error);
+            }
 
             var env = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
@@ -115,15 +145,32 @@ public sealed class PtyProcess : IAsyncDisposable
                 }
             }
 
-            int pid = NativeMethods.SpawnInPty(
-                spec.FileName, spec.Args ?? [], env, slavePath, spec.WorkingDirectory, spec.SearchPath);
-            return new PtyProcess(master, pid);
+            Result<int> spawn = NativeMethods.TrySpawnInPty(
+                spec.FileName, spec.Args ?? [], env, slave.Value, spec.WorkingDirectory, spec.SearchPath);
+            return spawn.IsFailure
+                ? Result.Failure<PtyProcess>(spawn.Error)
+                : Result.Success(new PtyProcess(master, spawn.Value));
         }
-        catch
+    }
+
+    /// <summary>
+    ///     Spawn <paramref name="spec" /> inside a fresh PTY.
+    ///     Throwing compat wrapper over <see cref="TryStart" /> (same wave
+    ///     convention as the tool-border <c>TryParse/Parse</c> pair): unsupported
+    ///     platform throws <see cref="PlatformNotSupportedException" />, every
+    ///     other failure throws <see cref="IOException" /> with the errno detail.
+    /// </summary>
+    public static PtyProcess Start(PtyStartSpec spec)
+    {
+        Result<PtyProcess> result = TryStart(spec);
+        if (result.IsSuccess)
         {
-            _ = NativeMethods.close(master);
-            throw;
+            return result.Value;
         }
+
+        throw result.Error.StartsWith("unsupported-platform", StringComparison.Ordinal)
+            ? new PlatformNotSupportedException(result.Error)
+            : new IOException(result.Error);
     }
 
     // ── Input side ─────────────────────────────────────────────────────────
@@ -202,15 +249,24 @@ public sealed class PtyProcess : IAsyncDisposable
 
     private static void Resize(int fd, int cols, int rows)
     {
+        Result result = TryResize(fd, cols, rows);
+        if (result.IsFailure)
+        {
+            throw new IOException(result.Error);
+        }
+    }
+
+    /// <summary>Apply TIOCSWINSZ; the errno travels the rail (#204).</summary>
+    private static Result TryResize(int fd, int cols, int rows)
+    {
         var size = new NativeMethods.WinSize
         {
             Cols = (ushort)Math.Clamp(cols, 2, ushort.MaxValue),
             Rows = (ushort)Math.Clamp(rows, 2, ushort.MaxValue),
         };
-        if (NativeMethods.ioctl(fd, NativeMethods.TIOCSWINSZ, ref size) != 0)
-        {
-            throw new IOException($"TIOCSWINSZ failed: errno={Marshal.GetLastWin32Error()}.");
-        }
+        return NativeMethods.ioctl(fd, NativeMethods.TIOCSWINSZ, ref size) != 0
+            ? Result.Failure($"TIOCSWINSZ failed: errno={Marshal.GetLastWin32Error()}.")
+            : Result.Success();
     }
 
     private static int DecodeStatus(int status)

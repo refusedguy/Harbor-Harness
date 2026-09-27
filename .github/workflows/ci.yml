@@ -187,6 +187,7 @@ jobs:
               Harbor.Hosting.Tests
               Harbor.Architecture.Tests
               Harbor.Lsp.Tests
+              Harbor.Terminal.Pty.Tests
               Harbor.Telemetry.Tests
           - shard: platform
             guard: true
