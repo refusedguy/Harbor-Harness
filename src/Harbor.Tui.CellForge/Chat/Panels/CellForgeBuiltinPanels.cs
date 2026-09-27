@@ -217,10 +217,10 @@ public sealed class CellForgeTokenBreakdownPanel : IPanelProvider
 // ── help (Right/48, '?' toggles) ───────────────────────────────────────────
 
 /// <summary>
-///     Cell-native help panel: static hotkey text plus one row per registered panel
-///     (from <see cref="IPanelRegistry"/> in <c>ctx.Services</c>) plus the slash
-///     command list. <c>?</c> while focused dispatches
-///     <c>UiMsg.TogglePanel("help")</c>.
+///     Cell-native help panel: shared <see cref="HelpKeymap"/> hotkey rows plus one
+///     row per registered panel (from <see cref="IPanelRegistry"/> in
+///     <c>ctx.Services</c>) plus the slash command list. <c>?</c> while focused
+///     dispatches <c>UiMsg.TogglePanel("help")</c>.
 /// </summary>
 public sealed class CellForgeHelpPanel : IPanelProvider
 {
@@ -244,16 +244,11 @@ public sealed class CellForgeHelpPanel : IPanelProvider
         rows.Add("Harbor — keymap & panels");
         rows.Add(PanelText.Separator);
         rows.Add("Hotkeys");
-        rows.Add("  Alt+1..9   toggle Nth panel");
-        rows.Add("  Ctrl+Tab   cycle panel focus");
-        rows.Add("  Ctrl+Up/Down  grow / shrink focused panel");
-        rows.Add("  q / Esc    return focus to chat");
-        rows.Add("  ?          toggle this help panel");
-        rows.Add("  F2         toggle input/chat focus");
-        rows.Add("  F12        toggle logs panel (live ILogger output)");
-        rows.Add("  Ctrl+L     clear transcript");
-        rows.Add("  Ctrl+C     abort running agent");
-        rows.Add("  Esc        quit");
+        foreach (HelpKeymap.Entry hotkey in HelpKeymap.Rows)
+        {
+            rows.Add($"  {hotkey.Key,-12} {hotkey.Description}");
+        }
+
         rows.Add(string.Empty);
         rows.Add("Panels");
         // #63 legitimate: framework-created panels cannot take DI — the

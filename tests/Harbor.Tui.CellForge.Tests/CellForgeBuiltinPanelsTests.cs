@@ -354,6 +354,30 @@ public class CellForgeBuiltinPanelsTests
     }
 
     [Test]
+    public async Task Help_RendersEverySharedKeymapRow()
+    {
+        string text = Joined(new CellForgeHelpPanel().Build(Ctx(new UiState(), services: null)));
+        foreach (HelpKeymap.Entry hotkey in HelpKeymap.Rows)
+        {
+            await Assert.That(text).Contains(hotkey.Key);
+            await Assert.That(text).Contains(hotkey.Description);
+        }
+    }
+
+    [Test]
+    public async Task HelpKeymap_HasTenUniqueKeys()
+    {
+        await Assert.That(HelpKeymap.Rows.Count).IsEqualTo(10);
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (HelpKeymap.Entry hotkey in HelpKeymap.Rows)
+        {
+            await Assert.That(hotkey.Key.Length).IsGreaterThan(0);
+            await Assert.That(hotkey.Description.Length).IsGreaterThan(0);
+            await Assert.That(keys.Add(hotkey.Key)).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task Help_WithRegistry_ListsPanels()
     {
         var registry = new PanelRegistry();
