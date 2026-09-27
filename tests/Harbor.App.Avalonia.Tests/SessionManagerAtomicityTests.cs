@@ -114,10 +114,14 @@ public class SessionManagerAtomicityTests
         var agent = new FakeAgent(AgentState.Idle("none", agentDef));
         var factory = new SessionFactory(services, agents, agent, store, new NopLogger<SessionFactory>());
         var switcher = new SessionSwitcher(agent, store, agents, new NopLogger<SessionSwitcher>());
-        return new SessionManager(
-            services, agents, agent, store, new UiStore(), factory, switcher,
-            new SessionGitTracker(), new SessionStatusTracker(),
-            new NopBinder(), new NopLogger<SessionManager>());
+        var router = new SessionEventRouter();
+        var status = new SessionStatusService(new SessionStatusTracker());
+        var git = new SessionGitTracker();
+        var factories = new SessionOptionalFactories(() => null, () => null, () => { });
+        var lifecycle = new SessionLifecycleService(
+            router, factory, switcher, store, agent, agents, status, git,
+            new NopBinder(), factories, new NopLogger<SessionLifecycleService>());
+        return new SessionManager(router, lifecycle, status, git);
     }
 
     private static (TestSessionStore Store, Session Session) SeededStore(AgentDefinition agentDef, int messageCount = 3)

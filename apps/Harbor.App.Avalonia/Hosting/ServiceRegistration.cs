@@ -77,8 +77,18 @@ internal static class ServiceRegistration
         services.AddSingleton<IDialogService>(sp => sp.GetRequiredService<DialogService>());
         services.AddSingleton<AvaloniaFilePicker>();
         services.AddSingleton<IFilePicker>(sp => sp.GetRequiredService<AvaloniaFilePicker>());
+        services.AddSingleton<SessionEventRouter>();
+        services.AddSingleton<SessionStatusService>();
+        services.AddSingleton<SessionOptionalFactories>(sp => new SessionOptionalFactories(
+            () => sp.GetService<GitService>(),
+            () => sp.GetService<IApprovalCoordinator>(),
+            () => sp.GetService<TokenUsageViewModel>()?.Clear()));
+        services.AddSingleton<SessionLifecycleService>();
         services.AddSingleton<SessionManager>();
         services.AddSingleton<ISessionManager>(sp => sp.GetRequiredService<SessionManager>());
+        services.AddSingleton<ISessionQueries>(sp => sp.GetRequiredService<SessionManager>());
+        services.AddSingleton<ISessionLifecycle>(sp => sp.GetRequiredService<SessionManager>());
+        services.AddSingleton<ISessionStatusTracker>(sp => sp.GetRequiredService<SessionManager>());
         services.AddSingleton<GitService>();
         services.AddSingleton<ToastService>();
         services.AddSingleton<IToastService>(sp => sp.GetRequiredService<ToastService>());

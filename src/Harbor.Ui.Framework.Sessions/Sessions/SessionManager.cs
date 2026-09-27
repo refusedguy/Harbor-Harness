@@ -1,16 +1,6 @@
-using System.Collections.Concurrent;
-using System.Collections.Immutable;
 using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Services;
-using Harbor.Ui.Framework.Sessions;
-using Harbor.Ui.Framework.State;
-using Harbor.Ui.Framework.ViewModels;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Sessions;
 /// <summary>
 ///     Facade that owns the active session and delegates creation, switching,
@@ -20,109 +10,49 @@ namespace Harbor.Ui.Framework.Sessions;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Per-session UiStore (concurrent agents):</b> each open session
-///         has its own <see cref="SessionContext" /> / <see cref="UiStore" />
-///         held in <see cref="_contexts" />. When the user switches sessions,
-///         the agent in the previous session is <b>not</b> aborted — its
-///         events keep flowing into the OLD session's UiStore (routed by
-///         <c>AppHost</c>'s EventBus subscriber using
-///         <see cref="AgentStartEvent.SessionId" />). The UI rebinds to the
-///         NEW session's UiStore via <see cref="ChatViewModel.RebindToStore" />.
-///         This is the user-visible fix for
-///         <c>
-///             "я хочу чтобы агенты не останавливались а я мог их в разных
-///             сессиях останавливать работающими"
-///         </c>
-///         .
+///         Thin delegation only (issue #189) — all orchestration lives in
+///         <see cref="SessionLifecycleService" />, all context routing in
+///         <see cref="SessionEventRouter" />, all status tracking in
+///         <see cref="SessionStatusService" />. No Service Locator: optional
+///         host-only collaborators arrive as Func-factories via
+///         <see cref="SessionOptionalFactories" />.
 ///     </para>
 ///     <para>
-///         <b>Decomposition:</b>
-///         <list type="bullet">
-///             <item><see cref="SessionFactory" /> — creates sessions.</item>
-///             <item><see cref="SessionSwitcher" /> — bind agent + replay history into the per-session UiStore.</item>
-///             <item><see cref="SessionGitTracker" /> — per-session git status cache.</item>
-///             <item><see cref="SessionStatusTracker" /> — per-session status + event sink.</item>
-///         </list>
-///         Each subordinate service is DI-registered so it can be mocked in
-///         tests; this facade is just orchestration.
+///         <b>Per-session UiStore (concurrent agents):</b> each open session
+///         has its own <see cref="SessionContext" /> / <see cref="UiStore" />
+///         held by the <see cref="SessionEventRouter" />. See
+///         <see cref="SessionLifecycleService" /> for the full decomposition.
 ///     </para>
 /// </remarks>
 public sealed class SessionManager : ISessionManager
 {
-    private readonly IAgent _agent;
-    private readonly IChatViewBinder _chatViewBinder;
-
-    /// <summary>
-    ///     Per-session contexts — one <see cref="SessionContext" /> per open
-    ///     session, each with its own <see cref="UiStore" />. Keyed by session
-    ///     id. Used by <c>AppHost</c>'s EventBus subscriber to route agent
-    ///     events to the correct store so a background agent in session A
-    ///     doesn't leak messages into session B's chat transcript.
-    ///     Concurrent map (issue #81): <see cref="GetContext" /> runs on the
-    ///     EventBus publisher (tool) thread while open/switch/delete run on
-    ///     the UI thread — a plain <c>Dictionary</c> tears under that pairing.
-    /// </summary>
-    private readonly ConcurrentDictionary<string, SessionContext> _contexts = new(StringComparer.Ordinal);
-
-    /// <summary>
-    ///     Parked (tombstoned) contexts for deleted sessions (#89). A deleted
-    ///     session's background agent may still emit events while
-    ///     <see cref="DeleteSessionAsync" /> awaits the switch to the next
-    ///     session; <see cref="GetContext" /> falls back to the parked store
-    ///     so those late events land in the dead session's own transcript
-    ///     instead of leaking into the newly-active session (via the
-    ///     ActiveContext fallback in the event router) or dropping silently.
-    ///     Parked contexts are never rebound to the UI — they are pure event
-    ///     sinks, kept for the app lifetime. Concurrent map for the same
-    ///     cross-thread reason as <see cref="_contexts" /> (issue #81).
-    /// </summary>
-    private readonly ConcurrentDictionary<string, SessionContext> _tombstones = new(StringComparer.Ordinal);
-    private readonly IAgentRegistry _agents;
-    private readonly SessionFactory _factory;
     private readonly SessionGitTracker _gitTracker;
-    private readonly ILogger<SessionManager> _logger;
-    private readonly IServiceProvider _services;
-    private readonly ISessionStore _sessionStore;
-    private readonly SessionStatusTracker _statusTracker;
-    private readonly UiStore _store;
-    private readonly SessionSwitcher _switcher;
+    private readonly SessionLifecycleService _lifecycle;
+    private readonly SessionEventRouter _router;
+    private readonly SessionStatusService _status;
 
     /// <summary>Construct a <see cref="SessionManager" /> facade.</summary>
     public SessionManager(
-        IServiceProvider services,
-        IAgentRegistry agents,
-        IAgent agent,
-        ISessionStore sessionStore,
-        UiStore store,
-        SessionFactory factory,
-        SessionSwitcher switcher,
-        SessionGitTracker gitTracker,
-        SessionStatusTracker statusTracker,
-        IChatViewBinder chatViewBinder,
-        ILogger<SessionManager> logger)
+        SessionEventRouter router,
+        SessionLifecycleService lifecycle,
+        SessionStatusService status,
+        SessionGitTracker gitTracker)
     {
-        _services = services;
-        _agents = agents;
-        _agent = agent;
-        _sessionStore = sessionStore;
-        _store = store;
-        _factory = factory;
-        _switcher = switcher;
+        _router = router;
+        _lifecycle = lifecycle;
+        _status = status;
         _gitTracker = gitTracker;
-        _statusTracker = statusTracker;
-        _chatViewBinder = chatViewBinder;
-        _logger = logger;
     }
 
     /// <summary>The active session, or null if none.</summary>
-    public Session? Active => ActiveContext?.Session;
+    public Session? Active => _router.Active;
 
     /// <summary>
     ///     The active <see cref="SessionContext" /> (holds the active session
     ///     + its UiStore + status + git info), or null if none. The ChatViewModel
     ///     is bound to <see cref="SessionContext.Store" /> of this context.
     /// </summary>
-    public SessionContext? ActiveContext { get; private set; }
+    public SessionContext? ActiveContext => _router.ActiveContext;
 
     /// <summary>
     ///     Raised whenever a session's status changes. Forwards from
@@ -131,8 +61,8 @@ public sealed class SessionManager : ISessionManager
     /// </summary>
     public event Action<string, SessionStatus>? StatusChanged
     {
-        add => _statusTracker.StatusChanged += value;
-        remove => _statusTracker.StatusChanged -= value;
+        add => _status.StatusChanged += value;
+        remove => _status.StatusChanged -= value;
     }
 
     /// <summary>
@@ -141,362 +71,79 @@ public sealed class SessionManager : ISessionManager
     /// </summary>
     public event Action<string, int>? MessageCountChanged
     {
-        add => _statusTracker.MessageCountChanged += value;
-        remove => _statusTracker.MessageCountChanged -= value;
+        add => _status.MessageCountChanged += value;
+        remove => _status.MessageCountChanged -= value;
     }
 
     /// <summary>
-    ///     Look up a <see cref="SessionContext" /> by session id. Returns null
-    ///     if no context has been created for this session (e.g. the session
-    ///     exists in the store but has never been opened in this app run).
-    ///     Used by <c>AppHost</c>'s EventBus subscriber to route agent events
-    ///     to the correct per-session UiStore.
-    ///     Falls back to the parked (tombstoned) context of a deleted session
-    ///     (#89) so late background events still have a home and never leak
-    ///     into the active session's transcript.
+    ///     Look up a <see cref="SessionContext" /> by session id. Forwards to
+    ///     <see cref="SessionEventRouter.GetContext" /> (live context with
+    ///     tombstoned fallback for late background events, #89).
     /// </summary>
     /// <param name="sessionId">The session id to look up.</param>
     /// <returns>The <see cref="SessionContext" />, or null.</returns>
-    public SessionContext? GetContext(string sessionId)
-    {
-        if (_contexts.TryGetValue(sessionId, out var ctx)) return ctx;
-        _tombstones.TryGetValue(sessionId, out var parked);
-        return parked;
-    }
+    public SessionContext? GetContext(string sessionId) => _router.GetContext(sessionId);
 
     /// <summary>Get the status of a session.</summary>
-    public SessionStatus GetStatus(string sessionId) => _statusTracker.Get(sessionId);
+    public SessionStatus GetStatus(string sessionId) => _status.GetStatus(sessionId);
 
-    /// <summary>Set the status of a session (forwards to <see cref="SessionStatusTracker" />).</summary>
+    /// <summary>Set the status of a session (forwards to <see cref="SessionStatusService" />).</summary>
     public void SetStatus(string sessionId, SessionStatus status) =>
-        _statusTracker.Set(sessionId, status);
+        _status.SetStatus(sessionId, status);
 
-    /// <summary>Push a fresh message count for a session (forwards to <see cref="SessionStatusTracker" />).</summary>
+    /// <summary>Push a fresh message count for a session (forwards to <see cref="SessionStatusService" />).</summary>
     /// <param name="sessionId">The session id.</param>
     /// <param name="count">The new message count.</param>
     public void NotifyMessageCount(string sessionId, int count) =>
-        _statusTracker.NotifyMessageCount(sessionId, count);
+        _status.NotifyMessageCount(sessionId, count);
 
     /// <summary>Get git info for a session's working directory (forwards to <see cref="SessionGitTracker" />).</summary>
     public GitSessionInfo GetGitInfo(string sessionId) =>
         _gitTracker.Get(sessionId);
 
-    /// <summary>Refresh git info for a session (forwards to <see cref="SessionGitTracker" />).</summary>
+    /// <summary>Refresh git info for a session (forwards to <see cref="SessionLifecycleService" />).</summary>
     public void RefreshGitInfo(string sessionId, string directory) =>
-        // #63 legitimate: optional dependency — GitService is host-only
-        // (desktop); headless/test hosts refresh without git enrichment.
-        _gitTracker.Refresh(sessionId, directory, _services.GetService<GitService>());
+        _lifecycle.RefreshGitInfo(sessionId, directory);
 
     /// <summary>
     ///     Create a default session if none exists yet and bind it to the agent.
-    ///     Called once at app startup. Reads the fresh <see cref="CommonConfig" />
-    ///     from disk so the wizard's saved provider/model take effect.
+    ///     Called once at app startup. Forwards to <see cref="SessionLifecycleService" />.
     /// </summary>
-    public async Task EnsureDefaultSessionAsync()
-    {
-        if (ActiveContext is not null) return;
-
-        var createResult = await _factory.CreateDefaultAsync().ConfigureAwait(false);
-        if (createResult.IsFailure) return;
-
-        var session = createResult.Value;
-
-        var ctx = GetOrCreateContext(session);
-        ActiveContext = ctx;
-        RefreshGitInfo(session.Id, session.Directory);
-        SetStatus(session.Id, SessionStatus.Idle);
-        RebindChatViewModel(ctx);
-
-        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return;
-        ctx.StoreWasHydrated = true;
-    }
+    public Task EnsureDefaultSessionAsync() => _lifecycle.EnsureDefaultSessionAsync();
 
     /// <summary>
     ///     Rebind the active session to the freshly-loaded
-    ///     <see cref="CommonConfig" /> values. Called by <c>App.axaml.cs</c>
-    ///     after the onboarding wizard saves a new config.
+    ///     <see cref="CommonConfig" /> values. Forwards to <see cref="SessionLifecycleService" />.
     /// </summary>
-    public async Task RebindFromCommonConfigAsync()
-    {
-        if (ActiveContext is null)
-        {
-            await EnsureDefaultSessionAsync().ConfigureAwait(false);
-            return;
-        }
-
-        await AbortRunningAgentAsync().ConfigureAwait(false);
-
-        var agentDef = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == "code")
-                       ?? _agents.GetAllAgents().FirstOrDefault()
-                       ?? throw new InvalidOperationException("No agents registered.");
-
-        (string? providerId, string? modelId) = await _factory.ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
-        if (string.IsNullOrEmpty(providerId) || string.IsNullOrEmpty(modelId))
-        {
-            _logger.LogInformation("RebindFromCommonConfig: no provider/model in config, keeping current agent");
-            return;
-        }
-
-        agentDef = agentDef.WithModel(modelId, providerId);
-        var session = ActiveContext.Session with { ProviderId = providerId, Model = modelId };
-        ActiveContext.Session = session;
-        _agent.Initialize(session, agentDef);
-        ActiveContext.Store.Dispatch(new UiMsg.ConfigureRuntime(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value));
-        _logger.LogInformation("Rebound session {Id} to provider={Provider} model={Model}",
-            session.Id, providerId, modelId);
-    }
+    public Task RebindFromCommonConfigAsync() => _lifecycle.RebindFromCommonConfigAsync();
 
     /// <summary>
     ///     Create a new session with the given agent/model and switch to it.
-    ///     The previously-active session's agent is <b>not</b> aborted —
-    ///     it continues running in the background and its events keep
-    ///     flowing into its own UiStore.
+    ///     Forwards to <see cref="SessionLifecycleService" />.
     /// </summary>
     /// <returns>The new active session, or a failure carrying the cause.</returns>
-    public async Task<Result<Session>> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null)
-    {
-        var createResult = await _factory.CreateNewAsync(agentName, providerId, modelId, workingDirectory).ConfigureAwait(false);
-        if (createResult.IsFailure) return createResult;
-
-        var session = createResult.Value;
-        var ctx = GetOrCreateContext(session);
-        ActiveContext = ctx;
-        ClearTokenUsageForActiveSession();
-        RebindChatViewModel(ctx);
-
-        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false))
-        {
-            SetStatus(session.Id, SessionStatus.Error);
-            return Result.Failure<Session>($"Session '{session.Id}' was created but could not be opened.");
-        }
-        ctx.StoreWasHydrated = true;
-        return Result.Success(session);
-    }
+    public Task<Result<Session>> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null) =>
+        _lifecycle.NewSessionAsync(agentName, providerId, modelId, workingDirectory);
 
     /// <summary>
-    ///     Open (switch to) an existing session. The currently-active
-    ///     session's agent is <b>not</b> aborted — it keeps running in the
-    ///     background and its events keep flowing into its own UiStore.
-    ///     The ChatViewModel rebinds to the target session's UiStore.
+    ///     Open (switch to) an existing session. Forwards to <see cref="SessionLifecycleService" />.
     /// </summary>
-    public async Task<bool> OpenSessionAsync(string sessionId)
-    {
-        var sessionResult = await _sessionStore.GetAsync(sessionId).ConfigureAwait(false);
-        if (sessionResult.IsFailure)
-        {
-            _logger.LogError("Open session {Id} failed: {Error}", sessionId, sessionResult.Error);
-            return false;
-        }
-
-        var session = sessionResult.Value;
-        var ctx = GetOrCreateContext(session);
-
-        if (!ctx.StoreWasHydrated)
-        {
-            if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return false;
-            ctx.StoreWasHydrated = true;
-        }
-        else
-        {
-            var agentDef = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
-                           ?? _agents.GetAllAgents().First()
-                           ?? throw new InvalidOperationException("No agents registered.");
-            _agent.Initialize(session, agentDef);
-            // #89: hydrate-then-swap — same single-UiMsg atomic replay as
-            // SessionSwitcher.OpenAsync (see comment there).
-            var messages = await _sessionStore.GetMessagesAsync(session.Id).ConfigureAwait(false);
-            var lines = ImmutableArray.CreateBuilder<ChatLine>();
-            if (messages.IsSuccess)
-            {
-                foreach (var msg in messages.Value)
-                {
-                    (var role, string text) = SessionFactory.MessageToChatLine(msg);
-                    lines.Add(new ChatLine(role, text));
-                }
-            }
-
-            ctx.Store.Dispatch(new UiMsg.HydrateSession(
-                session.Model, session.ProviderId, session.Agent, lines.ToImmutable()));
-        }
-
-        RefreshGitInfo(session.Id, session.Directory);
-        ActiveContext = ctx;
-        ClearTokenUsageForActiveSession();
-        RebindChatViewModel(ctx);
-
-        return true;
-    }
+    public Task<bool> OpenSessionAsync(string sessionId) => _lifecycle.OpenSessionAsync(sessionId);
 
     /// <summary>
-    ///     Branch the active session — create a new session with the same
-    ///     messages and metadata but a new id, then switch to the branch.
+    ///     Branch the active session. Forwards to <see cref="SessionLifecycleService" />.
     /// </summary>
     /// <returns>The new active branch, or a failure carrying the cause.</returns>
-    public async Task<Result<Session>> BranchActiveAsync()
-    {
-        if (ActiveContext is null) return Result.Failure<Session>("No active session to branch.");
-        var branchResult = await _factory.CreateBranchAsync(ActiveContext.Session).ConfigureAwait(false);
-        if (branchResult.IsFailure) return branchResult;
-        var branch = branchResult.Value;
-        if (!await OpenSessionAsync(branch.Id).ConfigureAwait(false))
-        {
-            SetStatus(branch.Id, SessionStatus.Error);
-            return Result.Failure<Session>($"Branch '{branch.Id}' was created but could not be opened.");
-        }
-        return Result.Success(branch);
-    }
+    public Task<Result<Session>> BranchActiveAsync() => _lifecycle.BranchActiveAsync();
 
     /// <summary>
-    ///     Delete the given session. If it is the active session, switches to
-    ///     any remaining session (or creates a fresh default). Also removes
-    ///     the per-session <see cref="SessionContext" /> from <see cref="_contexts" />.
+    ///     Delete the given session. Forwards to <see cref="SessionLifecycleService" />.
     /// </summary>
-    public async Task<bool> DeleteSessionAsync(string sessionId)
-    {
-        var result = await _sessionStore.DeleteAsync(sessionId).ConfigureAwait(false);
-        if (result.IsFailure)
-        {
-            _logger.LogError("Delete session {Id} failed: {Error}", sessionId, result.Error);
-            return false;
-        }
-
-        // Park-before-remove (issue #81): a concurrent GetContext on the
-        // EventBus thread must never observe the gap between live-removal
-        // and tombstoning — it sees the live entry first, then the parked
-        // one, never neither.
-        if (_contexts.TryGetValue(sessionId, out var live))
-            _tombstones[sessionId] = live;
-        _contexts.TryRemove(sessionId, out _);
-        _logger.LogInformation("Deleted session {Id}", sessionId);
-
-        if (ActiveContext?.Session.Id == sessionId)
-        {
-            ActiveContext = null;
-            var list = await _sessionStore.ListAsync().ConfigureAwait(false);
-            if (list.IsSuccess && list.Value.Count > 0)
-            {
-                await OpenSessionAsync(list.Value[0].Id).ConfigureAwait(false);
-            }
-            else
-            {
-                await EnsureDefaultSessionAsync().ConfigureAwait(false);
-            }
-        }
-        return true;
-    }
+    public Task<bool> DeleteSessionAsync(string sessionId) => _lifecycle.DeleteSessionAsync(sessionId);
 
     /// <summary>
-    ///     Rename a session by updating its title in the store and
-    ///     refreshing the in-memory session record.
+    ///     Rename a session. Forwards to <see cref="SessionLifecycleService" />.
     /// </summary>
-    public async Task<bool> RenameSessionAsync(string sessionId, string newTitle)
-    {
-        if (string.IsNullOrWhiteSpace(newTitle))
-            return false;
-
-        var sessionResult = await _sessionStore.GetAsync(sessionId).ConfigureAwait(false);
-        if (sessionResult.IsFailure)
-        {
-            _logger.LogWarning("Rename session {Id} failed: {Error}", sessionId, sessionResult.Error);
-            return false;
-        }
-
-        var updated = sessionResult.Value with { Title = newTitle.Trim(), UpdatedAt = DateTimeOffset.UtcNow };
-        var saveResult = await _sessionStore.UpdateAsync(updated).ConfigureAwait(false);
-        if (saveResult.IsFailure)
-        {
-            _logger.LogWarning("Rename session {Id} failed: {Error}", sessionId, saveResult.Error);
-            return false;
-        }
-
-        _logger.LogInformation("Renamed session {Id} → '{Title}'", sessionId, updated.Title);
-
-        // #89: the store write above is durable, but the live Session records
-        // held by this manager would keep serving the stale title — update
-        // every in-memory copy with the same value just persisted.
-        if (_contexts.TryGetValue(sessionId, out var ctx))
-            ctx.Session = updated;
-        if (ActiveContext?.Session.Id == sessionId)
-            ActiveContext.Session = updated;
-        return true;
-    }
-
-    /// <summary>
-    ///     Resolve the singleton <see cref="TokenUsageViewModel" /> from the
-    ///     DI container and clear its bars + sparkline + baseline. Called
-    ///     on every session switch (open + new) so the chart tracks only
-    ///     the active session's tokens.
-    ///     #63 legitimate: optional UI-only dependency — headless hosts never
-    ///     register it, so a missing registration is a no-op, not an error.
-    /// </summary>
-    private void ClearTokenUsageForActiveSession() => _services.GetService<TokenUsageViewModel>()?.Clear();
-
-    /// <summary>
-    ///     Get-or-create the <see cref="SessionContext" /> for a session.
-    ///     Single atomic <c>GetOrAdd</c> (issue #81): two concurrent opens of
-    ///     the same session must observe ONE context — check-then-set could
-    ///     build two <see cref="UiStore" />s and split routed events between
-    ///     them, orphaning one transcript.
-    /// </summary>
-    private SessionContext GetOrCreateContext(Session session) =>
-        _contexts.GetOrAdd(session.Id, static (_, s) => new SessionContext(s), session);
-
-    /// <summary>
-    ///     Rebind the singleton chat view-model to a different session's
-    ///     <see cref="UiStore" />. Delegates to <see cref="IChatViewBinder" />.
-    /// </summary>
-    private void RebindChatViewModel(SessionContext ctx)
-    {
-        _chatViewBinder.Rebind(ctx.Store);
-        _logger.LogInformation(
-            "RebindChatViewModel → session {Id}",
-            ctx.Session.Id);
-    }
-
-    /// <summary>
-    ///     Abort any in-flight <see cref="IAgent.PromptAsync" /> call and wait
-    ///     (bounded) for the agent to return to idle.
-    /// </summary>
-    private async Task AbortRunningAgentAsync()
-    {
-        if (_agent.State?.IsRunning != true)
-        {
-            _agent.ResetAbortSource();
-            return;
-        }
-
-        _logger.LogInformation("Aborting in-flight agent before rebind (session={OldSession})",
-            _agent.State.SessionId);
-
-        // #49 PR1: single cancellation ingress (null-safe: hosts/tests without
-        // the coordinator registered keep the direct cancel).
-        // #63 legitimate: optional dependency — plain GetService (never the
-        // throwing variant), so coordinator-less hosts keep working.
-        var coordinator = _services.GetService<IApprovalCoordinator>();
-        if (coordinator is not null)
-        {
-            coordinator.RequestCancel(_agent);
-        }
-        else
-        {
-            _agent.RequestAbort();
-        }
-
-        try
-        {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            await _agent.WaitForIdleAsync(timeout.Token).ConfigureAwait(false);
-            _logger.LogInformation("Agent went idle after abort");
-        }
-        catch (OperationCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Agent did not go idle within 3s after abort — force-continuing");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error waiting for agent idle after abort");
-        }
-
-        _agent.ResetAbortSource();
-    }
+    public Task<bool> RenameSessionAsync(string sessionId, string newTitle) =>
+        _lifecycle.RenameSessionAsync(sessionId, newTitle);
 }
