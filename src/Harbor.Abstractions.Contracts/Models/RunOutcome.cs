@@ -159,9 +159,9 @@ public sealed record RunOutcome(
             stopReason = RunStopReason.Stopped;
         else if (errorMessage is not null)
             stopReason = RunStopReason.Failed;
-        else if (lastAssistant is not null && lastAssistant.StopReason == StopReason.Aborted)
+        else if (lastAssistant is not null && lastAssistant.StopReason == global::Harbor.Abstractions.Models.StopReason.Aborted)
             stopReason = RunStopReason.Stopped;
-        else if (lastAssistant is not null && lastAssistant.StopReason == StopReason.Error)
+        else if (lastAssistant is not null && lastAssistant.StopReason == global::Harbor.Abstractions.Models.StopReason.Error)
             stopReason = RunStopReason.Failed;
         else
             stopReason = RunStopReason.Succeeded;
