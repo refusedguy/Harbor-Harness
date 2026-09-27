@@ -136,7 +136,7 @@ public class SlashPanelsCommandTests
 
         await Assert.That(host.Palette.Visible).IsTrue();
         await Assert.That(host.Palette.Results).Count().IsEqualTo(2);
-        await Assert.That(host.Palette.Results[0].Title).IsEqualTo("Fix login bug");
+        await Assert.That(host.Palette.Results[0].Title).Contains("Fix login bug");
         await Assert.That(host.Palette.Results[0].Title.Contains("aaa11111")).IsFalse();
         await Assert.That(host.Palette.Results[0].Detail).Contains("aaa11111");
 

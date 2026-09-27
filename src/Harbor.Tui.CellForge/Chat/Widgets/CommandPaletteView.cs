@@ -8,9 +8,9 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// <summary>One actionable entry of the command palette.</summary>
 public sealed record CommandItem(string Id, string Title, string Detail = "", string Shortcut = "", string Group = "");
 
-/// <summary>Navigation frame for hierarchical drill-down palettes.</summary>
-/// <param name="PreserveOrder">When true, the empty-query list keeps seed
-/// order (tree hierarchies) instead of the default Group/Title sort.</param>
+/// <summary>Navigation frame for hierarchical drill-down palettes.
+/// When <c>PreserveOrder</c> is true, the empty-query list keeps seed
+/// order (tree hierarchies) instead of the default Group/Title sort.</summary>
 public sealed record PaletteFrame(
     string Title,
     string Breadcrumb,
