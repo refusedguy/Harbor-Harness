@@ -169,7 +169,7 @@ public class ImageBlockTests
         await Assert.That(GridDump.Art(buffer)).Contains("640×480");
         // The graphic rows are blanked so no stale card text shows through.
         string topRow = GridDump.Art(buffer).Split('\n')[0];
-        await Assert.That(topRow.Trim()).IsEmpty();
+        await Assert.That(topRow.Trim()).IsEqualTo(string.Empty);
         // ...while the caption row itself is still text.
         await Assert.That(GridDump.Art(buffer).Split('\n')[H - 1]).Contains("640×480");
     }

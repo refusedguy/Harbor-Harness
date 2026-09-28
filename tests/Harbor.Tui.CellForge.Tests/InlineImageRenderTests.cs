@@ -205,7 +205,7 @@ public class InlineImageRenderTests
         layer.Emit(writer);
         writer.EndFrame();
         long first = backend.TotalBytes;
-        await Assert.That(first).BeGreaterThan(0);
+        await Assert.That(first).IsGreaterThan(0);
 
         // Frame 2: identical placement, identical payload instance → silence.
         backend.ResetForTests();
@@ -213,7 +213,7 @@ public class InlineImageRenderTests
         layer.Place(new Rect(2, 0, 10, 4), payload);
         layer.Emit(writer);
         writer.EndFrame();
-        await Assert.That(backend.TotalBytes).BeEqualTo(0);
+        await Assert.That(backend.TotalBytes).IsEqualTo(0);
 
         // Frame 3: the block scrolled, so the rect moved → resend.
         backend.ResetForTests();
@@ -221,7 +221,7 @@ public class InlineImageRenderTests
         layer.Place(new Rect(2, 3, 10, 4), payload);
         layer.Emit(writer);
         writer.EndFrame();
-        await Assert.That(backend.TotalBytes).BeGreaterThan(0);
+        await Assert.That(backend.TotalBytes).IsGreaterThan(0);
     }
 
     [Test]
@@ -245,7 +245,7 @@ public class InlineImageRenderTests
         layer.Place(new Rect(2, 0, 10, 4), payload);
         layer.Emit(writer);
         writer.EndFrame();
-        await Assert.That(backend.TotalBytes).BeGreaterThan(0);
+        await Assert.That(backend.TotalBytes).IsGreaterThan(0);
 
         // Explicit invalidation (alt-screen re-entry, hot buffer swap) does the
         // same without a geometry change.
@@ -255,7 +255,7 @@ public class InlineImageRenderTests
         layer.Place(new Rect(2, 0, 10, 4), payload);
         layer.Emit(writer);
         writer.EndFrame();
-        await Assert.That(backend.TotalBytes).BeGreaterThan(0);
+        await Assert.That(backend.TotalBytes).IsGreaterThan(0);
     }
 
     [Test]
@@ -287,7 +287,7 @@ public class InlineImageRenderTests
         layer.Place(new Rect(2, 0, 10, 4), payload);
         layer.Emit(writer);
         writer.EndFrame();
-        await Assert.That(backend.TotalBytes).BeGreaterThan(0);
+        await Assert.That(backend.TotalBytes).IsGreaterThan(0);
     }
 
     [Test]
@@ -401,7 +401,7 @@ public class InlineImageRenderTests
         await Assert.That(art).Contains("shot.png");
         await Assert.That(art).Contains("zoom 100%");
         await Assert.That(art).Contains("+/- zoom | esc close");
-        await Assert.That(art).Contains('┌');
+        await Assert.That(art.Contains('┌')).IsTrue();
 
         await Assert.That(layer.Count).IsEqualTo(1);
         var placement = layer.PlacementAt(0);
@@ -486,7 +486,7 @@ public class InlineImageRenderTests
         viewer.Hide();
         var buffer = new ScreenBuffer(60, 20);
         viewer.Paint(buffer, new Rect(0, 0, 60, 20));
-        await Assert.That(GridDump.Art(buffer).Trim()).IsEmpty();
+        await Assert.That(GridDump.Art(buffer).Trim()).IsEqualTo(string.Empty);
     }
 
     [Test]

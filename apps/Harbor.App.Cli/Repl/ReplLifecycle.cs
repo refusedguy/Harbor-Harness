@@ -67,10 +67,11 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         host._replStore.Dispatch(new UiMsg.ConfigureRuntime(host.SessionModel.Model, host.SessionModel.ProviderId, host.SessionModel.Agent));
         ArmThemeWatcher();
 
-        // Inline-image capability (issue #387): the probe ran once at startup;
-        // hand its verdict to the session's image layer and to the timeline so
-        // image blocks can place their bytes. Both stay inert when the probe
-        // said None — pipes, CI, tmux/screen keep the text card, byte for byte.
+        // Inline-image capability (issue #387): the probe ran once at startup,
+        // so hand its verdict to the session's image layer and to the timeline
+        // and image blocks can place their bytes. Both stay inert when the
+        // probe said None — pipes, CI, tmux/screen keep the text card, byte
+        // for byte.
         host.ScreenSession.Images.Kind = host._inlineImage;
         host.Screen.Timeline.Timeline.InlineImages = host.ScreenSession.Images;
         host.Log.LogInformation(
