@@ -24,7 +24,7 @@ public class TabStripKeyBindingTests
 
     /// <summary>
     ///     Store with <paramref name="count" /> open tabs and focus on the first.
-    ///     <see cref="AppMsg.OpenTab" /> focuses whatever it opens, so the
+    ///     <see cref="ChatAppMsg.OpenTab" /> focuses whatever it opens, so the
     ///     activation has to be explicit — otherwise "focus" would silently mean
     ///     "last opened" and every direction assertion below would be ambiguous.
     /// </summary>
@@ -32,10 +32,10 @@ public class TabStripKeyBindingTests
     {
         var store = new UiStore();
         for (int i = 0; i < count; i++)
-            _ = store.Dispatch(new AppMsg.OpenTab(new SessionTab(Sid($"s{i}"), $"session {i}")));
+            _ = store.Dispatch(new ChatAppMsg.OpenTab(new SessionTab(Sid($"s{i}"), $"session {i}")));
 
         if (count > 0)
-            _ = store.Dispatch(new AppMsg.ActivateTab(Sid("s0")));
+            _ = store.Dispatch(new ChatAppMsg.ActivateTab(Sid("s0")));
 
         return store;
     }
@@ -109,7 +109,7 @@ public class TabStripKeyBindingTests
 
         // The distinction the whole binding exists for: a tab, not the app.
         await Assert.That(effect is TuiEffect.QuitApp).IsFalse();
-        await Assert.That(store.State.ShouldQuit).IsFalse();
+        await Assert.That(store.State.Ui.ShouldQuit).IsFalse();
         await Assert.That(store.State.Chat.TabStrip.Tabs.Length).IsEqualTo(1);
     }
 
@@ -120,7 +120,7 @@ public class TabStripKeyBindingTests
         var effect = Press(store, Ctrl('w'));
 
         await Assert.That(effect is TuiEffect.QuitApp).IsFalse();
-        await Assert.That(store.State.ShouldQuit).IsFalse();
+        await Assert.That(store.State.Ui.ShouldQuit).IsFalse();
         await Assert.That(store.State.Chat.TabStrip.Tabs.Length).IsEqualTo(0);
     }
 
@@ -131,7 +131,7 @@ public class TabStripKeyBindingTests
         var effect = Press(store, Ctrl('w'));
 
         await Assert.That(effect).IsTypeOf<TuiEffect.None>();
-        await Assert.That(store.State.ShouldQuit).IsFalse();
+        await Assert.That(store.State.Ui.ShouldQuit).IsFalse();
     }
 
     [Test]
@@ -174,26 +174,26 @@ public class TabStripKeyBindingTests
         // The strip itself lives in the host store — tabs are workspace chrome,
         // not transcript. Transcripts live in the router's per-session stores.
         var host = new UiStore();
-        _ = host.Dispatch(new AppMsg.OpenTab(new SessionTab(Sid(a.Session.Id), "alpha")));
-        _ = host.Dispatch(new AppMsg.OpenTab(new SessionTab(Sid(b.Session.Id), "beta")));
+        _ = host.Dispatch(new ChatAppMsg.OpenTab(new SessionTab(Sid(a.Session.Id), "alpha")));
+        _ = host.Dispatch(new ChatAppMsg.OpenTab(new SessionTab(Sid(b.Session.Id), "beta")));
 
-        _ = host.Dispatch(new AppMsg.ActivateTab(Sid(a.Session.Id)));
+        _ = host.Dispatch(new ChatAppMsg.ActivateTab(Sid(a.Session.Id)));
         router.ActiveContext = a;
-        _ = a.Store.Dispatch(new AppMsg.AppendLine(ChatRole.User, "for alpha only"));
+        _ = a.Store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.User, "for alpha only"));
 
         // The tab-switch path: the reducer resolves the target and asks; it never
         // moves messages itself.
-        var effect = host.Dispatch(new AppMsg.ActivateTab(Sid(b.Session.Id)));
+        var effect = host.Dispatch(new ChatAppMsg.ActivateTab(Sid(b.Session.Id)));
         await Assert.That(effect).IsTypeOf<TuiEffect.ActivateSession>();
         await Assert.That(((TuiEffect.ActivateSession)effect).SessionId.Value).IsEqualTo("s1");
 
         // The host performs the switch by rebinding the active context.
         router.ActiveContext = b;
-        _ = b.Store.Dispatch(new AppMsg.AppendLine(ChatRole.User, "for beta only"));
+        _ = b.Store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.User, "for beta only"));
 
         // A late event for the tab we just left must still land in ITS store.
         _ = router.GetContext("s0")!.Store
-            .Dispatch(new AppMsg.AppendLine(ChatRole.Assistant, "late alpha event"));
+            .Dispatch(new ChatAppMsg.AppendLine(ChatRole.Assistant, "late alpha event"));
 
         await Assert.That(Text(a)).Contains("for alpha only");
         await Assert.That(Text(a)).Contains("late alpha event");
@@ -214,7 +214,7 @@ public class TabStripKeyBindingTests
         var b = router.GetOrCreateContext(MakeSession("s1", "beta"));
 
         _ = router.GetContext("s0")!.Store
-            .Dispatch(new AppMsg.AppendLine(ChatRole.Assistant, "late event for alpha"));
+            .Dispatch(new ChatAppMsg.AppendLine(ChatRole.Assistant, "late event for alpha"));
         router.ActiveContext = b;
 
         await Assert.That(Text(a)).Contains("late event for alpha");
@@ -226,7 +226,7 @@ public class TabStripKeyBindingTests
     {
         var store = StoreWithTabs(3);
         _ = Press(store, CtrlTab); // focus s1
-        _ = store.Dispatch(new AppMsg.CloseTab(Sid("s1")));
+        _ = store.Dispatch(new ChatAppMsg.CloseTab(Sid("s1")));
 
         await Assert.That(store.State.Chat.TabStrip.ActiveTabId!.Value).IsEqualTo("s2");
         await Assert.That(store.State.Chat.TabStrip.Tabs.Length).IsEqualTo(2);
@@ -239,7 +239,7 @@ public class TabStripKeyBindingTests
         // the user's tabs (pinned in #388, re-asserted here because #389 makes
         // the strip visible enough to notice).
         var store = StoreWithTabs(2);
-        _ = store.Dispatch(new AppMsg.Reset());
+        _ = store.Dispatch(new AppMsg.Reset);
 
         await Assert.That(store.State.Chat.TabStrip.Tabs.Length).IsEqualTo(2);
     }
@@ -261,5 +261,5 @@ public class TabStripKeyBindingTests
             Metadata: SessionMetadata.Empty);
 
     private static string Text(SessionContext ctx) =>
-        string.Join("|", ctx.Store.State.Lines.Select(l => l.Text));
+        string.Join("|", ctx.Store.State.Chat.Lines.Select(l => l.Text));
 }

@@ -80,7 +80,7 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
         // Issue #389 — a session switch is what opens a tab. Idempotent by
         // construction, since OpenTab activates an already-open session instead
         // of appending a duplicate, so this is safe on every switch.
-        _ = host.Store.Dispatch(new AppMsg.OpenTab(
+        _ = host.Store.Dispatch(new ChatAppMsg.OpenTab(
             new SessionTab(SessionId.Create(loaded.Id), loaded.Title)));
         onSwitched();
         host.WakeUp();

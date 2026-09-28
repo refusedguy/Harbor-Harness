@@ -353,15 +353,15 @@ public class SessionTabStripPanelTests
     {
         var strip = Strip(0, Tab("a", "alpha"), Tab("b", "beta"));
         var store = new UiStore();
-        store.Dispatch(new AppMsg.OpenTab(strip.Tabs[0]));
-        store.Dispatch(new AppMsg.OpenTab(strip.Tabs[1]));
+        store.Dispatch(new ChatAppMsg.OpenTab(strip.Tabs[0]));
+        store.Dispatch(new ChatAppMsg.OpenTab(strip.Tabs[1]));
 
         // OpenTab focuses what it opens, so the projected strip is on the
         // SECOND tab — snapshot it here so the final assertion can prove the
         // interactions below moved the store and not the panel's own copy.
         var projected = store.State.Chat.TabStrip;
         var panel = StripPanel(projected);
-        var seen = new List<AppMsg>();
+        var seen = new List<ChatAppMsg>();
         panel.Dispatch = seen.Add;
 
         var buffer = Painted(panel, 60, 2);
@@ -370,19 +370,19 @@ public class SessionTabStripPanelTests
         // A click on the first tab asks the reducer; the panel keeps nothing.
         await Assert.That(panel.ActivateAt(panel.LastPlan.Cells[0].X + 1)).IsTrue();
         await Assert.That(seen.Count).IsEqualTo(1);
-        await Assert.That(seen[0]).IsTypeOf<AppMsg.ActivateTab>();
+        await Assert.That(seen[0]).IsTypeOf<ChatAppMsg.ActivateTab>();
 
         seen.Clear();
         await Assert.That(panel.CloseAt(panel.LastPlan.Cells[1].X + 1)).IsTrue();
-        await Assert.That(seen[0]).IsTypeOf<AppMsg.CloseTab>();
+        await Assert.That(seen[0]).IsTypeOf<ChatAppMsg.CloseTab>();
 
         seen.Clear();
         await Assert.That(panel.Next()).IsTrue();
-        await Assert.That(seen[0]).IsTypeOf<AppMsg.CycleNextTab>();
+        await Assert.That(seen[0]).IsTypeOf<ChatAppMsg.CycleNextTab>();
 
         seen.Clear();
         await Assert.That(panel.Previous()).IsTrue();
-        await Assert.That(seen[0]).IsTypeOf<AppMsg.CyclePreviousTab>();
+        await Assert.That(seen[0]).IsTypeOf<ChatAppMsg.CyclePreviousTab>();
 
         // Nothing moved the panel's own copy: it is still the projected state.
         await Assert.That(panel.Strip.ActiveTabId!.Value).IsEqualTo(projected.ActiveTabId!.Value);

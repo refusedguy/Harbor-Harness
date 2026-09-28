@@ -444,10 +444,10 @@ public sealed class SessionTabStripPanel : Panel
     public bool CloseAt(int x) => Send(CloseTabOf(x));
 
     /// <summary>Dispatch <c>CycleNextTab</c>.</summary>
-    public bool Next() => Send(new AppMsg.CycleNextTab());
+    public bool Next() => Send(new ChatAppMsg.CycleNextTab());
 
     /// <summary>Dispatch <c>CyclePreviousTab</c>.</summary>
-    public bool Previous() => Send(new AppMsg.CyclePreviousTab());
+    public bool Previous() => Send(new ChatAppMsg.CyclePreviousTab());
 
     /// <summary>
     ///     Hands <paramref name="msg" /> to the sink, if one is wired. Named
@@ -464,12 +464,12 @@ public sealed class SessionTabStripPanel : Panel
 
     private AppMsg? ActiveTabOf(int x) =>
         HitTest(x) is var index && index >= 0 && index < Strip.Tabs.Length
-            ? new AppMsg.ActivateTab(Strip.Tabs[index].SessionId)
+            ? new ChatAppMsg.ActivateTab(Strip.Tabs[index].SessionId)
             : null;
 
     private AppMsg? CloseTabOf(int x) =>
         HitTest(x) is var index && index >= 0 && index < Strip.Tabs.Length
-            ? new AppMsg.CloseTab(Strip.Tabs[index].SessionId)
+            ? new ChatAppMsg.CloseTab(Strip.Tabs[index].SessionId)
             : null;
 
     // ── painting helpers ────────────────────────────────────────────────────
