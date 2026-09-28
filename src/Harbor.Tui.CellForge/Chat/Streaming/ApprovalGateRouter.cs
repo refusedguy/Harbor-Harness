@@ -43,6 +43,23 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     public UiStore? Store { get; set; }
 
     /// <summary>
+    /// Reject reasons attached to modal Deny commits, keyed by gate id
+    /// ([UX7] #267 audit trail — the coordinator resolution carries no free
+    /// text, so the host reads the reason here for the Deny stamp or the
+    /// tool-result note). Bounded; oldest entries are evicted past the cap.
+    /// </summary>
+    private readonly Dictionary<string, string> _rejectReasons = new(StringComparer.Ordinal);
+
+    private const int MaxRejectReasons = 32;
+
+    /// <summary>
+    /// Reject reason recorded for <paramref name="gateId"/> (empty when the
+    /// gate was not denied through the modal path or carried no reason).
+    /// </summary>
+    public string GetRejectReason(string? gateId) =>
+        gateId is not null && _rejectReasons.TryGetValue(gateId, out string? reason) ? reason : string.Empty;
+
+    /// <summary>
     /// Thread-safe approval request for the agent-loop side of the seam:
     /// creates a gate the caller can await via <c>DecisionRecorded</c>, and
     /// enqueues it so the frame loop appends it onto the timeline on its next
@@ -154,6 +171,48 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
             StampDecision(gate);
         }
 
+        panel.Timeline.MarkLastDirty();
+        return true;
+    }
+
+    /// <summary>
+    /// Commits the [UX7] approval modal's choice to the OLDEST pending gate
+    /// ([UX7] #267 — the host shows <c>DialogOverlay.ShowApproval</c>, routes
+    /// keys through the dialog, and calls this when Enter commits; Escape or
+    /// dismissal commits <see cref="ApprovalChoice.Deny"/>, fail closed).
+    /// Session-allow rides the existing stamp (<c>AlwaysAllow</c> maps to a
+    /// persisted decision); a Deny reason is retained for
+    /// <see cref="GetRejectReason"/>. Returns false when no gate is pending.
+    /// </summary>
+    public bool CommitModalDecision(ApprovalChoice choice, string? rejectReason = null)
+    {
+        PruneResolvedGates();
+        if (_pendingGates.Count == 0)
+        {
+            return false;
+        }
+
+        var gate = _pendingGates.Dequeue();
+        ApprovalChoice effective = choice is ApprovalChoice.Approve or ApprovalChoice.AlwaysAllow
+            ? choice
+            : ApprovalChoice.Deny;
+        if (!gate.TryDecide(effective))
+        {
+            return false;
+        }
+
+        // Only an explicit Deny carries a reason — fail-closed coercions
+        // (None / unknown) stamp Deny without audit text.
+        if (choice == ApprovalChoice.Deny && !string.IsNullOrWhiteSpace(rejectReason))
+        {
+            if (_rejectReasons.Count >= MaxRejectReasons)
+            {
+                _rejectReasons.Remove(_rejectReasons.Keys.First());
+            }
+            _rejectReasons[gate.Id] = rejectReason.Trim();
+        }
+
+        StampDecision(gate);
         panel.Timeline.MarkLastDirty();
         return true;
     }
