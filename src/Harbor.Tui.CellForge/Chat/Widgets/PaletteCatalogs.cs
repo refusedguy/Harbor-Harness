@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Rendering;
+using Harbor.Ui.Framework.Commands;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Rendering;
 
@@ -73,40 +74,37 @@ public static class PaletteIconMap
 }
 
 /// <summary>
-/// CF-E-017: cell-local mirror of the desktop command catalogs.
-/// Literals are kept 1:1 with
-/// <c>src/Harbor.Desktop.Shared/Commands/SlashCommands.cs</c> (<c>All</c>, 10 entries)
-/// and <c>src/Harbor.Desktop.Shared/Commands/BuiltInCommands.cs</c> (<c>Templates()</c>, 10 entries).
-/// No project reference to <c>Harbor.Desktop.Shared</c> is taken on purpose:
-/// the architecture matrix forbids a <c>Harbor.Tui.CellForge → Harbor.Desktop.Shared</c> edge,
-/// so the palette owns a literal copy and documents the source.
-/// Existing palette behavior (fuzzy via <see cref="FuzzyMatcher" />, groups,
-/// navigation, <see cref="CommandPaletteView.OnCommit" />) is untouched — only item sources are added.
+/// CF-E-017: catalog feeding the CellForge command palette.
+/// <para>
+/// The slash half is projected from <c>Harbor.Ui.Framework.Commands.SlashCommandCatalog</c>
+/// (#462) — the same registry the CLI slash dispatcher binds handlers to. It used to be a
+/// 15-entry literal that had drifted: the palette advertised <c>/tokens</c>, <c>/theme</c>,
+/// <c>/editor</c>, <c>/diff</c> and <c>/branch</c>, none of which the dispatcher can run, so
+/// picking them produced "Unknown command", while omitting <c>/new</c>, <c>/permissions</c>,
+/// <c>/plugins</c>, <c>/skills</c>, <c>/tree</c>, <c>/fork</c> and <c>/renderer</c>, which it can.
+/// </para>
+/// <para>
+/// The builtin half keeps its literal copy of <c>BuiltInCommands.Templates()</c>: those are
+/// palette <i>actions</i> (overlay ids, not slash text), so they are a different vocabulary and
+/// are not part of the slash registry. No project reference to <c>Harbor.Desktop.Shared</c>
+/// is taken on purpose — the architecture matrix forbids a
+/// <c>Harbor.Tui.CellForge → Harbor.Desktop.Shared</c> edge. Existing palette behavior
+/// (fuzzy via <see cref="FuzzyMatcher" />, groups, navigation,
+/// <see cref="CommandPaletteView.OnCommit" />) is untouched — only item sources change.
+/// </para>
 /// </summary>
 public static class CommandPaletteCatalog
 {
-    private sealed record SlashDef(string Name, string Description, string[] Aliases);
+    private sealed record SlashDef(string Name, string Description, IReadOnlyList<string> Aliases);
 
     private sealed record BuiltinDef(string Title, string Subtitle, string IconKey, string Id);
 
-    private static readonly SlashDef[] SlashDefs =
-    [
-        new("/help", "Show this help screen", []),
-        new("/clear", "Clear the current chat transcript", ["cls"]),
-        new("/quit", "Exit Harbor", ["exit"]),
-        new("/sessions", "List recent sessions", []),
-        new("/branch", "Branch the current session at the last assistant message", []),
-        new("/providers", "List configured providers", []),
-        new("/tokens", "Show token usage for the current session", []),
-        new("/theme", "Toggle between dark and light theme", []),
-        new("/editor", "Open the code editor", []),
-        new("/diff", "Open the diff viewer", []),
-        new("/new", "Create a new session", ["new-session"]),
-        new("/model", "Switch the active LLM model", []),
-        new("/agent", "Switch the active agent", []),
-        new("/config", "Open the configuration editor", []),
-        new("/setup", "Run the setup wizard", []),
-    ];
+    /// <summary>Slash half, projected from the single registry (#462).</summary>
+    private static readonly SlashDef[] SlashDefs = BuildSlashDefs();
+
+    private static readonly CommandItem[] SlashItems = BuildSlashItems();
+
+    private static readonly Dictionary<string, CommandItem> SlashByName = BuildSlashLookup();
 
     private static readonly BuiltinDef[] BuiltinDefs =
     [
@@ -122,10 +120,22 @@ public static class CommandPaletteCatalog
         new("Quit", "Exit Harbor", "QuitIcon", "quit"),
     ];
 
-    /// <summary>Slash catalog (10 items, group "Slash"). Mirrors <c>SlashCommands.All</c>.</summary>
-    public static IReadOnlyList<CommandItem> SlashCatalog { get; } = BuildSlashCatalog();
+    private static SlashDef[] BuildSlashDefs()
+    {
+        var defs = new SlashDef[SlashCommandCatalog.All.Count];
+        int i = 0;
+        foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
+        {
+            defs[i++] = new SlashDef(def.Invocation, def.Description, def.Aliases);
+        }
 
-    /// <summary>Builds the slash catalog (10 items, group "Slash").</summary>
+        return defs;
+    }
+
+    /// <summary>Slash catalog (group "Slash"). Derived from <c>SlashCommandCatalog</c>.</summary>
+    public static IReadOnlyList<CommandItem> SlashCatalog { get; } = SlashItems;
+
+    /// <summary>Builds the slash catalog (group "Slash").</summary>
     public static IReadOnlyList<CommandItem> GetSlashCatalog() => SlashCatalog;
 
     /// <summary>
@@ -145,8 +155,8 @@ public static class CommandPaletteCatalog
     }
 
     /// <summary>
-    /// Combined default catalog: slash (10) + builtin (10), in that order.
-    /// Empty query lists all 20 via the unchanged fuzzy path.
+    /// Combined default catalog: slash (from <c>SlashCommandCatalog</c>) + builtin, in that order.
+    /// Empty query lists them all via the unchanged fuzzy path.
     /// </summary>
     /// <param name="useNerdFont">Glyph set for the builtin half.</param>
     public static IReadOnlyList<CommandItem> GetDefaultCatalog(bool useNerdFont = false)
@@ -160,37 +170,15 @@ public static class CommandPaletteCatalog
     }
 
     /// <summary>
-    /// Exact lookup mirroring <c>SlashCommands.Find</c>: strips leading slashes,
-    /// case-insensitive, alias-aware (<c>cls → /clear</c>, <c>exit → /quit</c>).
+    /// Exact slash lookup, mirroring <c>SlashCommands.Find</c>: strips leading slashes,
+    /// case-insensitive, alias-aware (<c>quit → /exit</c>, <c>h → /help</c>).
     /// </summary>
     /// <param name="command">User-typed command (e.g. <c>/help</c>, <c>help</c>, <c>cls</c>).</param>
     /// <returns>The matching slash item, or null.</returns>
     public static CommandItem? FindSlash(string? command)
     {
-        if (string.IsNullOrWhiteSpace(command))
-        {
-            return null;
-        }
-
-        string trimmed = command.Trim().TrimStart('/');
-        for (int i = 0; i < SlashDefs.Length; i++)
-        {
-            var def = SlashDefs[i];
-            if (def.Name.TrimStart('/').Equals(trimmed, StringComparison.OrdinalIgnoreCase))
-            {
-                return SlashCatalog[i];
-            }
-
-            foreach (string alias in def.Aliases)
-            {
-                if (alias.Equals(trimmed, StringComparison.OrdinalIgnoreCase))
-                {
-                    return SlashCatalog[i];
-                }
-            }
-        }
-
-        return null;
+        SlashCommandDefinition? def = SlashCommandCatalog.Find(command);
+        return def is null ? null : SlashByName[def.Name];
     }
 
     /// <summary>
@@ -227,19 +215,31 @@ public static class CommandPaletteCatalog
         return FindSlash(query) ?? FindBuiltin(query, useNerdFont);
     }
 
-    private static IReadOnlyList<CommandItem> BuildSlashCatalog()
+    private static CommandItem[] BuildSlashItems()
     {
-        var list = new List<CommandItem>(SlashDefs.Length);
-        foreach (var def in SlashDefs)
+        var items = new CommandItem[SlashDefs.Length];
+        for (int i = 0; i < SlashDefs.Length; i++)
         {
+            SlashDef def = SlashDefs[i];
             string id = def.Name.TrimStart('/');
-            string detail = def.Aliases.Length == 0
+            string detail = def.Aliases.Count == 0
                 ? def.Description
                 : $"{def.Description} (alias: {string.Join(", ", def.Aliases)})";
-            list.Add(new CommandItem(id, def.Name, detail, string.Empty, "Slash"));
+            items[i] = new CommandItem(id, def.Name, detail, string.Empty, "Slash");
         }
 
-        return list;
+        return items;
+    }
+
+    private static Dictionary<string, CommandItem> BuildSlashLookup()
+    {
+        var lookup = new Dictionary<string, CommandItem>(SlashDefs.Length, StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < SlashDefs.Length; i++)
+        {
+            lookup[SlashDefs[i].Name] = SlashItems[i];
+        }
+
+        return lookup;
     }
 
     private static CommandItem MakeBuiltinItem(BuiltinDef def, bool useNerdFont)

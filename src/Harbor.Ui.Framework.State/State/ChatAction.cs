@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Harbor.Ui.Framework.Commands;
 namespace Harbor.Ui.Framework.State;
 /// <summary>
 ///     All interactive actions the chat UI understands, decoupled from the raw key
@@ -73,10 +74,14 @@ public enum FocusMode
 /// </summary>
 public static class ChatCommands
 {
-    /// <summary>Slash commands offered by autocomplete and accepted as input.</summary>
-    public static readonly ImmutableArray<string> Slash = ImmutableArray.Create(
-        "/help", "/exit", "/setup", "/auth", "/model", "/agent", "/config",
-        "/providers", "/sessions", "/tui", "/storage", "/clear");
+    /// <summary>
+    ///     Slash commands offered by autocomplete and accepted as input.
+    ///     Derived from <see cref="SlashCommandCatalog" /> (#462) — the same
+    ///     registry the CLI dispatcher binds handlers to, so autocomplete
+    ///     cannot offer a command the dispatcher does not implement.
+    /// </summary>
+    public static readonly ImmutableArray<string> Slash =
+        [.. SlashCommandCatalog.Invocations];
 
     /// <summary>Words that quit the interactive loop when submitted as input.</summary>
     public static readonly ImmutableHashSet<string> ExitWords =

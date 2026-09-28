@@ -1,5 +1,6 @@
 using Harbor.App.Avalonia.Services;
 using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Ui.Framework.Commands;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
@@ -53,19 +54,19 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
             new("command", "Stop agent", "AgentStop", StopAgent),
             new("command", "Clear chat (Ctrl+L)", "ChatClear", ClearChat),
             new("command", "Refresh session list", "SessionRefresh", RefreshSessions),
-            new("slash", "/help", "Slash command", () => RunSlash("/help")),
-            new("slash", "/exit", "Slash command", () => RunSlash("/exit")),
-            new("slash", "/setup", "Slash command", () => RunSlash("/setup")),
-            new("slash", "/auth", "Slash command", () => RunSlash("/auth")),
-            new("slash", "/model", "Slash command", () => RunSlash("/model")),
-            new("slash", "/agent", "Slash command", () => RunSlash("/agent")),
-            new("slash", "/config", "Slash command", () => RunSlash("/config")),
-            new("slash", "/providers", "Slash command", () => RunSlash("/providers")),
-            new("slash", "/sessions", "Slash command", () => RunSlash("/sessions")),
-            new("slash", "/tui", "Slash command", () => RunSlash("/tui")),
-            new("slash", "/storage", "Slash command", () => RunSlash("/storage")),
-            new("slash", "/clear", "Slash command", () => RunSlash("/clear"))
         });
+
+        // #462: the slash half is projected from the single registry the CLI
+        // dispatcher binds handlers to. This used to be a 12-entry literal that
+        // had drifted (it omitted /new, /permissions, /plugins, /skills,
+        // /tree, /fork and /renderer while offering /clear, which the
+        // dispatcher cannot run).
+        foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
+        {
+            AllCommands.Add(new CommandResultViewModel(
+                "slash", def.Invocation, def.Description, () => RunSlash(def.Invocation)));
+        }
+
         Refilter(string.Empty);
     }
 

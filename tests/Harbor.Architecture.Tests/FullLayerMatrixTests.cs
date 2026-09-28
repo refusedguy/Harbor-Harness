@@ -209,7 +209,9 @@ public class FullLayerMatrixTests
             "Harbor.Ui.Framework.Sessions",
         ]),
         ["Harbor.Desktop.Shared"] = new(Layer.Presentation,
-            ["Harbor.Desktop.Abstractions", "Harbor.Ui.Framework"]),
+            // #462: Commands/SlashCommands projects the shared SlashCommandCatalog
+            // (Ui.Framework.Abstractions, Domain) rather than a private literal copy.
+            ["Harbor.Desktop.Abstractions", "Harbor.Ui.Framework", "Harbor.Ui.Framework.Abstractions"]),
         // RgbColor is defined in Harbor.DesignSystem (standalone package); the
         // token types come through that same reference.
         ["Harbor.Desktop.Animations"] = new(Layer.Presentation,

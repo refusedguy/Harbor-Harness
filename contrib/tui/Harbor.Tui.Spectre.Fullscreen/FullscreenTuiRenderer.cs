@@ -7,6 +7,7 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Tui.Spectre.Fullscreen.Components;
 using Harbor.Tui.Spectre.Fullscreen.Helpers;
+using Harbor.Ui.Framework.Commands;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 namespace Harbor.Tui.Spectre.Fullscreen;
@@ -18,11 +19,12 @@ namespace Harbor.Tui.Spectre.Fullscreen;
 public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 {
 
-    private static readonly string[] BuiltinCommands =
-    {
-        "/help", "/exit", "/setup", "/auth", "/model", "/agent", "/config",
-        "/providers", "/sessions", "/tui", "/storage", "/clear"
-    };
+    /// <summary>
+    ///     #462: derived from <see cref="SlashCommandCatalog" />, the single registry the
+    ///     CLI slash dispatcher binds handlers to. This duplicated the hint list in
+    ///     <c>LayoutBuilder</c> and had drifted from both it and the dispatcher.
+    /// </summary>
+    private static readonly string[] BuiltinCommands = [.. SlashCommandCatalog.Invocations];
     private readonly ChatState _chat = new();
     private readonly InputState _input = new();
     private readonly LayoutBuilder _layout;

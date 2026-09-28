@@ -2,6 +2,7 @@ using System.Linq;
 using System.Text;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Commands;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Cli.Repl;
@@ -50,10 +51,9 @@ internal sealed class ReplCommandHost(CellForgeReplRunner host)
             Title: cmd.Name,
             Detail: cmd.Description,
             Shortcut: cmd.Usage,
-            Group: cmd.Name is "help" or "exit" or "quit" ? "General"
-                : cmd.Name is "setup" or "auth" ? "Config"
-                : cmd.Name is "model" or "agent" or "tui" or "renderer" or "storage" ? "Runtime"
-                : "Other"
+            // #462: the group comes from the shared registry, so this list cannot
+            // drift from the commands it groups.
+            Group: SlashCommandCatalog.Find(cmd.Name)?.Group ?? SlashCommandCatalog.GroupOther
         )).ToArray();
         host._palette.PushFrame(new PaletteFrame(
             "Commands",
@@ -179,7 +179,7 @@ internal sealed class ReplCommandHost(CellForgeReplRunner host)
         string slash = '/' + item.Id;
         try
         {
-            await host.LegacySlash.RunAsync(
+            SlashCommandOutcome outcome = await host.LegacySlash.RunAsync(
                 slash,
                 line => { host.Bridge.AppendSystemLine(line); host._wake.Writer.TryWrite(null); },
                 prompt =>
@@ -189,6 +189,16 @@ internal sealed class ReplCommandHost(CellForgeReplRunner host)
                     return Task.FromResult(string.Empty);
                 },
                 host.Agent, host.SessionModel).ConfigureAwait(false);
+
+            // #462: the slash palette now lists every registry entry, which
+            // includes /exit. Mirror the composer submit path (PromptPipeline)
+            // so committing it from the palette actually quits instead of
+            // silently doing nothing. RequestQuit is an explicit IReplHost
+            // implementation, hence the interface-typed call.
+            if (outcome.ShouldQuit)
+            {
+                ((IReplHost)host).RequestQuit(outcome.ExitCode);
+            }
         }
         catch (Exception ex)
         {
