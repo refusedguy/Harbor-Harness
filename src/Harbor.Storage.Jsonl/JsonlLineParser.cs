@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Storage.Jsonl;
 
@@ -507,26 +508,14 @@ internal static class JsonlLineParser
     };
 
     /// <summary>
-    ///     Span fast path covering every casing/variant
-    ///     <see cref="StopReasonJsonConverter.Parse"/> handles; unknown values
-    ///     fall back to the converter via a one-off string (error path only).
+    ///     Span fast path over the single <see cref="StopReasonTable" /> (#197);
+    ///     unknown values fall back to the converter via a one-off string
+    ///     (error path only).
     /// </summary>
     private static StopReason ParseStopReason(ReadOnlySpan<byte> p)
     {
-        if (p.SequenceEqual("stop"u8) || p.SequenceEqual("end_turn"u8) || p.SequenceEqual("finish"u8))
-            return StopReason.Stop;
-        if (p.SequenceEqual("length"u8) || p.SequenceEqual("max_tokens"u8) || p.SequenceEqual("max_tokens_length"u8))
-            return StopReason.Length;
-        if (p.SequenceEqual("tool_use"u8) || p.SequenceEqual("tool_calls"u8)
-            || p.SequenceEqual("function_call"u8) || p.SequenceEqual("tooluse"u8))
-            return StopReason.ToolUse;
-        if (p.SequenceEqual("content_filter"u8) || p.SequenceEqual("content_filtering"u8)
-            || p.SequenceEqual("contentfilter"u8))
-            return StopReason.ContentFilter;
-        if (p.SequenceEqual("error"u8) || p.SequenceEqual("failed"u8))
-            return StopReason.Error;
-        if (p.SequenceEqual("aborted"u8) || p.SequenceEqual("abort"u8) || p.SequenceEqual("cancelled"u8))
-            return StopReason.Aborted;
+        if (StopReasonTable.TryParseSpan(p, out var reason))
+            return reason;
 
         return StopReasonJsonConverter.Parse(System.Text.Encoding.UTF8.GetString(p));
     }

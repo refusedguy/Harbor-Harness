@@ -117,33 +117,96 @@ public sealed class RetryPolicy : IRetryPolicy
     /// <summary>
     ///     Classify an exception as transient (<see langword="true" />, may be
     ///     retried) or fatal (<see langword="false" />, propagate immediately).
+    ///     Dispatch is a strategy chain (<see cref="IExceptionClassifier" />):
+    ///     a new transient failure type adds a classifier, never an edit here.
     /// </summary>
     public static bool IsTransient(Exception ex, out TimeSpan? retryAfter)
     {
         retryAfter = null;
 
-        switch (ex)
+        foreach (var classifier in Classifiers)
         {
-            case OperationCanceledException oce:
-                // Caller cancellation is handled by the catch filter. A timeout
-                // surfaces as TaskCanceledException without the caller's token
-                // being cancelled — that class of cancellation IS transient.
-                return oce is TaskCanceledException;
+            if (classifier.TryClassify(ex, out bool transient, out retryAfter))
+            {
+                return transient;
+            }
+        }
 
-            case HttpRequestException hre:
-                return IsTransientStatus(hre.StatusCode, ref retryAfter);
+        return false;
+    }
 
-            case LlmStreamErrorException streamError:
-                // ROP-A ПР.5: provider streams surface transport failures as
-                // typed error events, not exceptions. The classification made
-                // at the wire (429 / 5xx / timeout / network) rides on the
-                // exception so retries promised by this policy actually fire.
-                return IsTransient(streamError.Kind);
+    /// <summary>
+    ///     Strategy contract for one transient-failure family. Returns
+    ///     <see langword="true" /> when the exception belongs to the family
+    ///     (verdict in <paramref name="transient" />); <see langword="false" />
+    ///     declines so the next classifier is consulted.
+    /// </summary>
+    internal interface IExceptionClassifier
+    {
+        bool TryClassify(Exception ex, out bool transient, out TimeSpan? retryAfter);
+    }
 
-            default:
+    private sealed class CancellationClassifier : IExceptionClassifier
+    {
+        public bool TryClassify(Exception ex, out bool transient, out TimeSpan? retryAfter)
+        {
+            retryAfter = null;
+            if (ex is not OperationCanceledException oce)
+            {
+                transient = false;
                 return false;
+            }
+
+            // Caller cancellation is handled by the catch filter. A timeout
+            // surfaces as TaskCanceledException without the caller's token
+            // being cancelled — that class of cancellation IS transient.
+            transient = oce is TaskCanceledException;
+            return true;
         }
     }
+
+    private sealed class HttpClassifier : IExceptionClassifier
+    {
+        public bool TryClassify(Exception ex, out bool transient, out TimeSpan? retryAfter)
+        {
+            retryAfter = null;
+            if (ex is not HttpRequestException hre)
+            {
+                transient = false;
+                return false;
+            }
+
+            transient = IsTransientStatus(hre.StatusCode, ref retryAfter);
+            return true;
+        }
+    }
+
+    private sealed class StreamErrorClassifier : IExceptionClassifier
+    {
+        public bool TryClassify(Exception ex, out bool transient, out TimeSpan? retryAfter)
+        {
+            retryAfter = null;
+            if (ex is not LlmStreamErrorException streamError)
+            {
+                transient = false;
+                return false;
+            }
+
+            // ROP-A ПР.5: provider streams surface transport failures as
+            // typed error events, not exceptions. The classification made
+            // at the wire (429 / 5xx / timeout / network) rides on the
+            // exception so retries promised by this policy actually fire.
+            transient = IsTransient(streamError.Kind);
+            return true;
+        }
+    }
+
+    private static readonly IExceptionClassifier[] Classifiers =
+    [
+        new CancellationClassifier(),
+        new HttpClassifier(),
+        new StreamErrorClassifier(),
+    ];
 
     /// <summary>
     ///     Retry verdict for a transport error kind classified at the provider

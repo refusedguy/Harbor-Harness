@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using Harbor.Abstractions.Permissions;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Widgets;
@@ -164,37 +165,44 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     /// step travels as a store <see cref="UiMsg.KeyInput"/> (the diff
     /// view-model is untouched); otherwise it falls back to the legacy
     /// view-model commands. Other actions are ignored.
+    /// A single <see cref="DiffNavigationStep"/> table owns the decision (#197) —
+    /// a new navigable action adds one row, never a second switch.
     /// </summary>
     public void RouteDiffNavigation(DiffPreviewViewModel diffVm, ChatAction action)
     {
+        if (!DiffNavigationSteps.TryGetValue(action, out var step))
+        {
+            return;
+        }
+
         if (Store is { } store)
         {
-            UiMsg? msg = action switch
-            {
-                ChatAction.ScrollDownLine => new UiMsg.KeyInput(
-                    ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down)),
-                ChatAction.ScrollUpLine => new UiMsg.KeyInput(
-                    ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up)),
-                _ => null,
-            };
-            if (msg is not null)
-            {
-                _ = store.Dispatch(msg);
-                return;
-            }
+            _ = store.Dispatch(step.ToStoreMessage());
+            return;
         }
 
         if (diffVm is null) return;
-        switch (action)
-        {
-            case ChatAction.ScrollDownLine:
-                diffVm.NextDiffCommand.Execute(null);
-                break;
-            case ChatAction.ScrollUpLine:
-                diffVm.PreviousDiffCommand.Execute(null);
-                break;
-        }
+        step.ApplyLegacy(diffVm);
     }
+
+    /// <summary>
+    ///     One diff-navigation row: the store message and the legacy
+    ///     view-model command for the same <see cref="ChatAction" />.
+    /// </summary>
+    private sealed record DiffNavigationStep(
+        Func<UiMsg> ToStoreMessage,
+        Action<DiffPreviewViewModel> ApplyLegacy);
+
+    private static readonly FrozenDictionary<ChatAction, DiffNavigationStep> DiffNavigationSteps =
+        new Dictionary<ChatAction, DiffNavigationStep>
+        {
+            [ChatAction.ScrollDownLine] = new(
+                () => new UiMsg.KeyInput(ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down)),
+                diffVm => diffVm.NextDiffCommand.Execute(null)),
+            [ChatAction.ScrollUpLine] = new(
+                () => new UiMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up)),
+                diffVm => diffVm.PreviousDiffCommand.Execute(null)),
+        }.ToFrozenDictionary();
 
     /// <summary>Appends to the pending queue, auto-denying the oldest gate on
     /// overflow (the bound keeps both the queue and host-side waiters finite).</summary>
