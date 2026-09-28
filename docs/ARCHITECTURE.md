@@ -148,6 +148,21 @@ AgentLoop → IEventBus.PublishAsync(event) → subscribers
                                             └── Plugin handlers
 ```
 
+**Queue-age instrumentation (#47).** Queue length alone lies — 100 events that
+drain instantly are fine, 3 events behind a 200 ms handler are not. The bus
+therefore keeps, for the slow path only, the monotonic (never wall-clock)
+submission→fan-out-complete duration of every completed publish: a fixed-capacity
+256-sample ring (O(1) retained), exposed through the `IEventBusQueueMetrics` port
+in `Harbor.Abstractions` — published count, inflight count, oldest-pending age,
+max, and p50/p95/p99. `EventBusQueueAgeReporter` (in `Harbor.Telemetry.Core`,
+wired in the composition root) polls that port and exports
+`eventbus.dispatch.duration.ms` / `eventbus.queue.oldest.pending.age.ms` /
+`eventbus.publish.inflight` / `eventbus.publish.count` on the canonical
+`Harbor.Telemetry` Meter, plus one Debug line per report so
+`harbor logs --last` shows the distribution with no debugger attached. Metric
+names are listed in
+[src/Harbor.Telemetry.Core/README.md](../src/Harbor.Telemetry.Core/README.md#metric-names-stable).
+
 ### 3. Strategy pattern everywhere
 
 Every swappable component is an interface:

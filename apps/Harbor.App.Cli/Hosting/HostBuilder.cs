@@ -5,6 +5,7 @@ using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Hosting;
+using Harbor.Telemetry;
 using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -122,6 +123,9 @@ internal static partial class HostBuilder
         HarborDir = harborDir,
         DefaultStorageBackend = "jsonl",
         EventBusScrollback = 1000,
+        // #47/S2: export the event-bus queue-age percentiles to telemetry and
+        // to the per-run log (harbor logs --last) every 30s.
+        EventBusQueueAgeReportInterval = EventBusQueueAgeReporter.DefaultReportInterval,
         EventBusMiddlewares = lf =>
             new IEventBusMiddleware[] { new TypeFilterMiddleware(lf.CreateLogger<TypeFilterMiddleware>()) },
         DefaultTuiRenderer = cliConfig.DefaultTuiRenderer,

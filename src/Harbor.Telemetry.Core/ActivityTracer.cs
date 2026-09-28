@@ -98,4 +98,13 @@ public static class TelemetryTagNames
     public const string TurnDurationMs = "turn.duration.ms";
     public const string ContextSize = "session.context.size";
     public const string ContextPhase = "context.phase";
+
+    // Event-bus publish envelope (#47/S2). Named for what they actually measure:
+    // the submission → fan-out-complete duration of ONE publish (the per-queue
+    // envelope), never an ambiguous "queue latency" of something else.
+    public const string EventBusDispatchDurationMs = "eventbus.dispatch.duration.ms";
+    public const string EventBusOldestPendingAgeMs = "eventbus.queue.oldest.pending.age.ms";
+    public const string EventBusPublishInflight = "eventbus.publish.inflight";
+    public const string EventBusPublishCount = "eventbus.publish.count";
+    public const string DispatchQuantile = "dispatch.quantile";
 }
