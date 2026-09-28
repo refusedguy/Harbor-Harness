@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Harbor.Ui.Framework.Projection;
 
 // KILLER_FEATURES §2.7 Feature 10 (Orca `SkillFreshnessStatusPill.tsx`),
@@ -7,7 +9,8 @@ namespace Harbor.Ui.Framework.Projection;
 // missing lock entry surfaces as a pill so the user knows an update (or a
 // lockfile sync) is due. BCL-only, zero Harbor dependencies, zero rendering
 // — any host (CellForge panel, Spectre overlay, Avalonia flyout) drives the
-// model and paints from `PanelRows.SkillFreshnessRows`.
+// model and paints from `PanelRows.SkillFreshnessRows` (per-skill rows) or
+// `SkillFreshnessAggregate` (one status-line pill, issue #384).
 
 /// <summary>Freshness of one installed skill against the lockfile snapshot.</summary>
 public enum SkillFreshnessStatus
@@ -106,6 +109,17 @@ public sealed class SkillFreshnessModel
         }
     }
 
+    /// <summary>
+    ///     Monotonic snapshot counter (#384): bumped on every
+    ///     <see cref="SetSkills" /> / <see cref="Clear" /> so a renderer can
+    ///     re-derive the aggregate pill only when the snapshot actually moved
+    ///     instead of rebuilding it on every frame. Read lock-free (volatile)
+    ///     — a torn read only costs one frame of lag, never a wrong pill.
+    /// </summary>
+    public int Revision => Volatile.Read(ref _revision);
+
+    private int _revision;
+
     /// <summary>Replace the snapshot (resets counts).</summary>
     public void SetSkills(IReadOnlyList<SkillFreshnessEntry> entries)
     {
@@ -113,6 +127,7 @@ public sealed class SkillFreshnessModel
         lock (_gate)
         {
             _entries = new List<SkillFreshnessEntry>(entries);
+            _ = Interlocked.Increment(ref _revision);
         }
     }
 
@@ -122,6 +137,112 @@ public sealed class SkillFreshnessModel
         lock (_gate)
         {
             _entries = new();
+            _ = Interlocked.Increment(ref _revision);
         }
+    }
+}
+
+/// <summary>
+///     One aggregate freshness pill for chrome/status-line surfaces (issue
+///     #384): the count of skills asking for action, collapsed into a single
+///     segment. Carries the style hint instead of a renderer-specific accent
+///     so the Projection layer stays UI-vocabulary free — each renderer maps
+///     <see cref="Style" /> to its own accent.
+/// </summary>
+/// <param name="Text">Compact label, e.g. <c>"skills ●2 changed"</c>.</param>
+/// <param name="Style">Style hint for the label (Danger ⇒ something is missing).</param>
+/// <param name="Changed">Skills whose installed hash differs from the lockfile.</param>
+/// <param name="Missing">Locked skills that are not installed.</param>
+/// <param name="Untracked">Installed skills with no lockfile entry.</param>
+public sealed record SkillFreshnessSummary(
+    string Text,
+    UiSpanStyle Style,
+    int Changed,
+    int Missing,
+    int Untracked)
+{
+    /// <summary>Total number of skills asking for action.</summary>
+    public int Stale => Changed + Missing + Untracked;
+}
+
+/// <summary>
+///     Builds the aggregate <see cref="SkillFreshnessSummary" /> from a
+///     snapshot (issue #384). <b>Nothing stale ⇒ no pill at all</b> (returns
+///     <see langword="null" />), matching the status line's no-data-means-no-
+///     segment contract: a clean workspace never loses a single cell of the
+///     footer. Text is <c>skills</c> followed by the non-zero buckets in a
+///     fixed order — <c>skills ●2 changed ✗1 missing ?3 untracked</c>.
+/// </summary>
+public static class SkillFreshnessAggregate
+{
+    /// <summary>Label prefix of the aggregate pill.</summary>
+    public const string Label = "skills";
+
+    /// <summary>
+    ///     Aggregate over <paramref name="entries" />, or <see langword="null" />
+    ///     when every entry is <see cref="SkillFreshnessStatus.Current" />.
+    /// </summary>
+    public static SkillFreshnessSummary? Of(IReadOnlyList<SkillFreshnessEntry> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+
+        int changed = 0;
+        int missing = 0;
+        int untracked = 0;
+        for (int i = 0; i < entries.Count; i++)
+        {
+            switch (entries[i].Status)
+            {
+                case SkillFreshnessStatus.Changed:
+                    changed++;
+                    break;
+                case SkillFreshnessStatus.Missing:
+                    missing++;
+                    break;
+                case SkillFreshnessStatus.Untracked:
+                    untracked++;
+                    break;
+                case SkillFreshnessStatus.Current:
+                default:
+                    // Current skills never contribute to the pill — that is what
+                    // makes a clean snapshot render nothing at all.
+                    break;
+            }
+        }
+
+        if (changed + missing + untracked == 0)
+        {
+            return null;
+        }
+
+        var text = new StringBuilder(Label, 32);
+        Append(text, "●", changed, "changed");
+        Append(text, "✗", missing, "missing");
+        Append(text, "?", untracked, "untracked");
+
+        // Missing wins the accent (a locked-but-absent skill is the strongest
+        // "your workspace is broken" signal), then changed, then untracked.
+        var style = missing > 0
+            ? UiSpanStyle.Danger
+            : changed > 0
+                ? UiSpanStyle.Accent
+                : UiSpanStyle.Dim;
+
+        return new SkillFreshnessSummary(text.ToString(), style, changed, missing, untracked);
+    }
+
+    private static void Append(StringBuilder sb, string glyph, int count, string bucket)
+    {
+        if (count <= 0)
+        {
+            return;
+        }
+
+        if (sb.Length > Label.Length)
+        {
+            sb.Append(' ');
+        }
+
+        sb.Append(glyph).Append(count).Append(' ').Append(bucket);
     }
 }

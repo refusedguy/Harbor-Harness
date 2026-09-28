@@ -9,6 +9,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
+using Harbor.Application.Skills;
 using Harbor.App.Cli.Hosting;
 using Harbor.Terminal.Abstractions;
 using Harbor.Tui.CellForge.Input;
@@ -73,6 +74,7 @@ internal sealed class ReplRunner
         Func<CellForgeScreens> cellForgeScreens,
         IServiceProvider rendererHost,
         Func<IReadOnlyList<SkillFreshnessEntry>>? skillRefresh = null,
+        Func<IReadOnlyList<string>, Task<SkillUpdateReport>>? skillUpdate = null,
         IProviderHealthCheck? healthCheck = null)
     {
         _logger = logger;
@@ -87,7 +89,7 @@ internal sealed class ReplRunner
         _providers = providers;
         _cellForgeLogger = loggerFactory.CreateLogger<CellForgeReplRunner>();
         _slashes = new SlashCommandDispatcher(
-            loggerFactory.CreateLogger<SlashCommandDispatcher>(), tools, sessionStore, wizard, permissions, pluginReload, rendererPipeline, skillRefresh);
+            loggerFactory.CreateLogger<SlashCommandDispatcher>(), tools, sessionStore, wizard, permissions, pluginReload, rendererPipeline, skillRefresh, skillUpdate);
         _rendererPipeline = rendererPipeline;
         _pluginReload = pluginReload;
         _healthCheck = healthCheck;

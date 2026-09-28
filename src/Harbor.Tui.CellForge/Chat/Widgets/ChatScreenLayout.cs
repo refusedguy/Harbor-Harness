@@ -138,11 +138,14 @@ public sealed class ComposerPanel : Panel
 /// no segment, never <c>$0.0000</c>). The spinner (<see cref="SpinnerStrip"/>)
 /// and retry (<see cref="RetryCountdown"/>) slots stay tick-/host-driven —
 /// this projector only owns their segment placement, not their clocks.
+/// #384: the default-on <c>skills ●N changed</c> freshness pill is a fixed
+/// segment between the retry warning and the scroll percentage; a clean
+/// snapshot passes <see langword="null" /> and costs the row nothing.
 /// </summary>
 public static class StatusProjectorPanel
 {
-    /// <summary>Capacity: chrome, status, agent, retry, scroll, elapsed, tokens, cost.</summary>
-    public const int MaxSegments = 8;
+    /// <summary>Capacity: chrome, status, agent, retry, skills, scroll, elapsed, tokens, cost.</summary>
+    public const int MaxSegments = 9;
 
     /// <summary>Maps <see cref="UiState.Status"/> text to the footer machine mode.</summary>
     public static StatusBarMode MapMode(string? status) => status switch
@@ -174,13 +177,24 @@ public static class StatusProjectorPanel
     /// Fills <paramref name="workspace"/> left-to-right from
     /// <see cref="StatusProjector.ProjectStatusBar"/>; returns segment count.
     /// Order keeps the documented truncation contract (tokens/cost rightmost,
-    /// die first): chrome, status, agent, retry, scroll, elapsed, tokens, cost.
+    /// die first): chrome, status, agent, retry, skills, scroll, elapsed,
+    /// tokens, cost.
     /// </summary>
     /// <param name="state">Projected UI snapshot (source of truth).</param>
     /// <param name="workspace">Target span (at least <see cref="MaxSegments"/> cells).</param>
     /// <param name="retryLine">Precomputed <see cref="RetryCountdown.Line"/> text; null when no retry is pending.</param>
     /// <param name="elapsed">Optional run duration, formatted via <c>DurationToText</c> (sub-ms hides).</param>
-    public static int BuildSegments(UiState state, Span<StatusSeg> workspace, string? retryLine = null, TimeSpan? elapsed = null)
+    /// <param name="skills">
+    ///   Aggregate skill-freshness pill (#384) from
+    ///   <see cref="SkillFreshnessAggregate.Of"/>; null when every installed
+    ///   skill is <c>current</c> (no segment is emitted at all).
+    /// </param>
+    public static int BuildSegments(
+        UiState state,
+        Span<StatusSeg> workspace,
+        string? retryLine = null,
+        TimeSpan? elapsed = null,
+        SkillFreshnessSummary? skills = null)
     {
         var bar = StatusProjector.ProjectStatusBar(state);
 
@@ -266,6 +280,13 @@ public static class StatusProjectorPanel
         if (!string.IsNullOrEmpty(retryLine) && n < workspace.Length)
         {
             workspace[n++] = new StatusSeg(retryLine!, StatusAccent.Warning, FixedPriority: true);
+        }
+
+        // #384: the freshness pill is a warning-class signal — fixed priority so
+        // truncation drops scroll/tokens/cost before it (same rule as retry).
+        if (skills is not null && n < workspace.Length)
+        {
+            workspace[n++] = new StatusSeg(skills.Text, MapAccent(skills.Style), FixedPriority: true);
         }
 
         if (scroll is not null && n < workspace.Length)
@@ -363,6 +384,31 @@ public sealed class StatusPanel : Panel
     /// </summary>
     public TimeSpan? ProjectedElapsed { get; set; }
 
+    /// <summary>
+    /// Default-on skill-freshness pill source (#384). When set, the footer
+    /// appends the aggregate <c>skills ●N changed</c> segment, re-derived only
+    /// when the model's <see cref="SkillFreshnessModel.Revision" /> moves — so
+    /// <c>/skills refresh</c> / <c>/skills update</c> update the pill in place
+    /// and a clean snapshot costs the row zero cells. Null (default) on hosts
+    /// that do not seed skills — the row is byte-identical to before.
+    /// </summary>
+    public SkillFreshnessModel? ProjectedSkills
+    {
+        get => _projectedSkills;
+        set
+        {
+            if (!ReferenceEquals(_projectedSkills, value))
+            {
+                _projectedSkills = value;
+                _skillsRevision = -1;
+            }
+        }
+    }
+
+    private SkillFreshnessModel? _projectedSkills;
+    private SkillFreshnessSummary? _skillsSummary;
+    private int _skillsRevision = -1;
+
     /// <summary>Feeds the projected retry slot from attempt counters.</summary>
     public void SetProjectedRetry(int attempt, int maxAttempts, int secondsRemaining) =>
         ProjectedRetry = RetryCountdown.Line(attempt, maxAttempts, secondsRemaining);
@@ -370,26 +416,54 @@ public sealed class StatusPanel : Panel
     private UiState? _projectedCacheState;
     private string? _projectedCacheRetry;
     private TimeSpan? _projectedCacheElapsed;
+    private SkillFreshnessSummary? _projectedCacheSkills;
     private readonly StatusSeg[] _projectedCache = new StatusSeg[StatusProjectorPanel.MaxSegments];
     private int _projectedCacheCount;
 
     /// <summary>
+    /// Aggregate freshness pill for the current model revision — recomputed
+    /// only on a revision bump, never per frame (the footer is the hottest
+    /// paint path; ENG5/ENG12 keep it allocation-free on steady frames).
+    /// </summary>
+    private SkillFreshnessSummary? SkillsSummary()
+    {
+        var model = _projectedSkills;
+        if (model is null)
+        {
+            return null;
+        }
+
+        int revision = model.Revision;
+        if (revision != _skillsRevision)
+        {
+            _skillsSummary = SkillFreshnessAggregate.Of(model.GetEntries());
+            _skillsRevision = revision;
+        }
+
+        return _skillsSummary;
+    }
+
+    /// <summary>
     /// Cached projection: <see cref="UiState"/> snapshots are immutable, so a
     /// steady frame reuses the last row (zero-alloc); only the spinner slot
-    /// above it is tick-dependent. Invalidated on snapshot/retry/elapsed change.
+    /// above it is tick-dependent. Invalidated on snapshot/retry/elapsed/skills
+    /// change.
     /// </summary>
     private int ProjectProjected(UiState state, Span<StatusSeg> target)
     {
         string? retry = ProjectedRetry;
         TimeSpan? elapsed = ProjectedElapsed;
+        var skills = SkillsSummary();
         if (!ReferenceEquals(_projectedCacheState, state)
             || _projectedCacheRetry != retry
-            || _projectedCacheElapsed != elapsed)
+            || _projectedCacheElapsed != elapsed
+            || !ReferenceEquals(_projectedCacheSkills, skills))
         {
-            _projectedCacheCount = StatusProjectorPanel.BuildSegments(state, _projectedCache, retry, elapsed);
+            _projectedCacheCount = StatusProjectorPanel.BuildSegments(state, _projectedCache, retry, elapsed, skills);
             _projectedCacheState = state;
             _projectedCacheRetry = retry;
             _projectedCacheElapsed = elapsed;
+            _projectedCacheSkills = skills;
         }
 
         _projectedCache.AsSpan(0, _projectedCacheCount).CopyTo(target);
