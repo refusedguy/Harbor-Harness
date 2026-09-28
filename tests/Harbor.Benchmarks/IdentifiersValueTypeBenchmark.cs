@@ -8,6 +8,23 @@ namespace Harbor.Benchmarks;
 ///     <see cref=\"ProviderId\" />) to verify they do not box when used in
 ///     dictionaries, hash-sets, and serialization paths.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> build + probe one <c>Dictionary</c>/<c>HashSet</c> of
+///          <c>Count</c> entries, or one <c>ProviderId.TryCreate</c>, or <c>Count</c>
+///          <c>ToolName</c> create/to-string roundtrips.</item>
+///          <item><c>Payload:</c> <c>Count</c> pre-built identifiers ("session-000000",
+///          "tool_0", …) created once in <c>Setup</c>.</item>
+///          <item><c>StateReset:</c> per invocation — every collection row allocates its own
+///          container, so nothing is retained or reused between iterations.</item>
+///          <item><c>Drain:</c> none — all rows are synchronous.</item>
+///          <item><c>RetainedState:</c> only the pre-built identifier arrays from
+///          <c>Setup</c>; they are read-only.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
+///          <item><c>AllocAttribution:</c> the container (buckets + entries) dominates; the
+///          value-type rows allocate nothing beyond it, which is the "no boxing" claim under
+///          test. Parsing rows allocate the parsed identifier.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class IdentifiersValueTypeBenchmark

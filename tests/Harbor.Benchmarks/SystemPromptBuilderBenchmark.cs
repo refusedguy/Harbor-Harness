@@ -15,6 +15,27 @@ namespace Harbor.Benchmarks;
 ///     The benchmark varies the number of tools and context files to measure
 ///     how the prompt size scales with input complexity.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one <c>SystemPromptBuilder.BuildAsync</c> over a small, a
+///          large, and a skills+context-files prompt context.</item>
+///          <item><c>Payload:</c> <c>ToolCount</c> stub tool descriptors (each with a
+///          <c>{}</c> schema, a prompt snippet and two guidelines) plus 0/2/4 context files
+///          and 0/5 skills.</item>
+///          <item><c>StateReset:</c> per invocation — the builder is stateless across calls,
+///          so every op assembles the prompt from scratch (there is no memoisation layer here;
+///          that is <see cref="CachingPromptBenchmark" />'s job).</item>
+///          <item><c>Drain:</c> none — assembly is synchronous.</item>
+///          <item><c>RetainedState:</c> only the immutable context objects built in
+///          <c>Setup</c>; the pooled <c>StringBuilder</c> is returned before the op
+///          ends.</item>
+///          <item><c>AwaitSemantics:</c> every row awaits <c>BuildAsync</c>; on these contexts
+///          it completes synchronously, so the number is the assembly cost with no scheduling
+///          noise.</item>
+///          <item><c>AllocAttribution:</c> the final prompt string dominates; the builder
+///          itself rides a pooled <c>StringBuilder</c>, so the growth-triggered re-allocation
+///          is the only extra.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class SystemPromptBuilderBenchmark

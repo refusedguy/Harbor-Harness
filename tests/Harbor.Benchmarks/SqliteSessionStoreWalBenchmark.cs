@@ -10,6 +10,27 @@ namespace Harbor.Benchmarks;
 ///     read-back latency, and transaction commit cost with the recommended
 ///     PRAGMAs (<c>journal_mode=WAL</c>, <c>synchronous=NORMAL</c>).
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> 2 × <c>MessageCount</c> <c>AppendMessageAsync</c> calls,
+///          optionally followed by a <c>GetMessagesAsync</c> or a <c>ListAsync</c>.</item>
+///          <item><c>Payload:</c> one user and one short assistant message, rebuilt per
+///          iteration and re-appended <c>MessageCount</c> times (the store dedups by message
+///          id).</item>
+///          <item><c>StateReset:</c> per iteration — <c>IterationSetup</c> creates a fresh .db
+///          file in the temp directory and a fresh store; <c>IterationCleanup</c> deletes the
+///          file, so WAL pages never carry over.</item>
+///          <item><c>Drain:</c> none — writes are committed inside the awaited append (WAL,
+///          <c>synchronous=NORMAL</c>); no background flusher is involved.</item>
+///          <item><c>RetainedState:</c> the store's connection pool, discarded with the
+///          per-iteration instance.</item>
+///          <item><c>AwaitSemantics:</c> every row awaits each append, so the
+///          transaction-commit cost is inside the measurement — which is the point of this
+///          class.</item>
+///          <item><c>AllocAttribution:</c> the serialized message per append; the read-back
+///          rows add the materialized message list. SQLite's own page cache is native memory
+///          and does not show in the BDN allocation column.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class SqliteSessionStoreWalBenchmark

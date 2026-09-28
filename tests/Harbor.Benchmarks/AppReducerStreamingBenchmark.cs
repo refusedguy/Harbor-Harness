@@ -23,6 +23,25 @@ namespace Harbor.Benchmarks;
 ///     benchmark and this floor is what the streaming concat machinery
 ///     (ChunkedBuffer + materialization) actually costs.
 /// </remarks>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one pass of <c>MessageStart + DeltaCount × TextDelta +
+///          MessageEnd</c> through the pure <c>AppReducer</c> (or <c>DeltaCount</c> state
+///          clones for the floor row).</item>
+///          <item><c>Payload:</c> <c>DeltaCount</c> deltas of ~19 chars each ("Token 00000 —
+///          "), pre-built once in <c>Setup</c>; no session ids, no tool args.</item>
+///          <item><c>StateReset:</c> per invocation — both rows start from a freshly
+///          constructed <c>AppState</c>, so the streaming buffer never carries over between
+///          iterations.</item>
+///          <item><c>Drain:</c> none — the reducer is synchronous and the whole stream is
+///          folded in one call.</item>
+///          <item><c>RetainedState:</c> none between iterations; the <c>ChunkedBuffer</c> is
+///          owned by the state instance the row creates.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in either row.</item>
+///          <item><c>AllocAttribution:</c> the per-event immutable snapshot
+///          (<c>with</c>-clone) plus the delta buffer. The floor row isolates the snapshot
+///          cost: <c>full-stream − floor</c> is what the streaming machinery costs.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class AppReducerStreamingBenchmark

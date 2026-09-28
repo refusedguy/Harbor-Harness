@@ -18,6 +18,31 @@ namespace Harbor.Benchmarks;
 ///     - <see cref="ReadFrame_FromPipe" />: raw frame-header parsing from a
 ///       <see cref="PipeReader" />.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one <c>WireCodec</c> roundtrip (write + read, MessagePack
+///          or raw frame), or one raw frame-header parse from a <see cref="PipeReader"
+///          />.</item>
+///          <item><c>Payload:</c> a random <c>PayloadSize</c>-byte payload (64 B / 4 KB / 64
+///          KB), pre-built once in <c>Setup</c>.</item>
+///          <item><c>StateReset:</c> none per iteration — the <see cref="Pipe" />/<see
+///          cref="PipeStream" />/<see cref="PipeReader" /> trio persists across iterations
+///          (connection setup is deliberately excluded). <c>DrainPipe</c> returns the pipe to
+///          empty between iterations so bytes left by a previous op cannot back-pressure the
+///          next one.</item>
+///          <item><c>Drain:</c> <c>DrainPipe</c> (<c>[IterationCleanup]</c>) — every op is
+///          write-then-read on the same pipe, so the pipe must start each iteration empty for
+///          the numbers to mean "one frame", not "one frame plus residue".</item>
+///          <item><c>RetainedState:</c> the pipe's pooled segments between drains; the
+///          preformed frame and the stub response are read-only fixtures.</item>
+///          <item><c>AwaitSemantics:</c> every row awaits both the write and the read; the
+///          frame-only row additionally advances the reader past the consumed frame before
+///          returning.</item>
+///          <item><c>AllocAttribution:</c> the roundtrip row allocates the MessagePack payload
+///          and the response object graph; the frame-only rows stay at the codec's
+///          pooled-buffer floor (0 B steady state). Compare them to price framing against
+///          serialization.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class IpcFramingBenchmark
@@ -51,6 +76,18 @@ public class IpcFramingBenchmark
         // format used by WireCodec itself).
         BinaryPrimitives.WriteInt32LittleEndian(_preformedFrame, PayloadSize);
         Random.Shared.NextBytes(_preformedFrame.AsSpan(4));
+    }
+
+    [IterationCleanup]
+    public void DrainPipe()
+    {
+        // Every row is write-then-read on the SAME pipe, so any byte an op left
+        // behind (short read, incomplete frame, early return) would otherwise be
+        // charged to the next iteration. Return the pipe to empty between them.
+        while (_pipe.Reader.TryRead(out var result))
+        {
+            _pipe.Reader.AdvanceTo(result.Buffer.End);
+        }
     }
 
     [GlobalCleanup]

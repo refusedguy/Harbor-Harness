@@ -12,6 +12,23 @@ namespace Harbor.Benchmarks;
 ///     what the UI should render. Measures the cost of scanning immutable
 ///     arrays, computing aggregates, and cloning sub-snapshots.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> a derived-data extraction over <see cref="AppState" />,
+///          repeated 100× (or 1000× for the O(1) selectors) inside one op.</item>
+///          <item><c>Payload:</c> a <c>LineCount</c>-line transcript with three interleaved
+///          roles, built once in <c>Setup</c>.</item>
+///          <item><c>StateReset:</c> none — the state is immutable and read-only, so every op
+///          sees exactly the same input.</item>
+///          <item><c>Drain:</c> none — the selectors are synchronous.</item>
+///          <item><c>RetainedState:</c> none; the immutable arrays are shared but never
+///          mutated.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
+///          <item><c>AllocAttribution:</c> the scan rows (<c>Filter_AssistantLines</c>,
+///          <c>Compute_TotalTextLength</c>) allocate nothing; the field-copy rows copy a
+///          record by value. The inner-loop multiplier means the reported mean is per
+///          extraction, not per op.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class SelectorMemoizationBenchmark

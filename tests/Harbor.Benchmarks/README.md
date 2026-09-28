@@ -1,28 +1,50 @@
 # Harbor.Benchmarks
 
-Tests for **Harbor.Core + Harbor.Storage.Jsonl**.
+BenchmarkDotNet micro-benchmarks for the Harbor hot paths — event bus, IPC
+framing/broadcast, JSONL + SQLite stores, registries, streaming coalescer,
+prompt building, projection and cell-diff rendering.
 
 ## What's covered
 
-BenchmarkDotNet micro-benchmarks - AgentLoop iteration, JSONL serialization, registry lookups
+- ~39 benchmark classes / 120+ rows, all `[MemoryDiagnoser]`, Release, zero warnings.
+- Every class carries its own **7-field measurement contract** in its doc comment
+  (#408): `Operation` / `Payload` / `StateReset` / `Drain` / `RetainedState` /
+  `AwaitSemantics` / `AllocAttribution`. Read it before quoting a number — it says
+  what the row includes (e.g. whether a consumer drain is folded in).
+  The contract is enforced by `BenchmarkContractTests` in
+  `tests/Harbor.Architecture.Tests`.
+- The three event-bus/IPC files report **enqueue-only**, **enqueue + consumer
+  drain** and **steady state** as separate rows, so no single "bus throughput"
+  number silently mixes delivery in.
 
 ## Run
 
 ```bash
-dotnet test tests/Harbor.Benchmarks
+# whole suite
+dotnet run -c Release --project tests/Harbor.Benchmarks
+
+# one class
+dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*ToolRegistry*'
+
+# list what is available
+dotnet run -c Release --project tests/Harbor.Benchmarks -- --list flat
 ```
 
-Or filter to a single test class:
+This project is **not** a test project — it is a console app that BenchmarkDotNet
+drives, so `dotnet test` does nothing here (and discovers zero tests across the
+repo in general). Results land in `BenchmarkDotNet.Artifacts/` under the process
+working directory.
 
-```bash
-dotnet test tests/Harbor.Benchmarks --filter "FullyQualifiedName~Benchmark"
-```
+Numbers are tracked in [../../docs/BENCHMARKS.md](../../docs/BENCHMARKS.md),
+which records machine + date (or `[CI-short]`) for every row it quotes.
 
 ## Layer
 
-Tests — depends on the project(s) under test + TUnit (test framework). No production code.
+Benchmarks — depends on the projects under test + BenchmarkDotNet. No production
+code lives here; this project references `src/` projects but is referenced by none.
 
 ## See also
 
+- [../../docs/BENCHMARKS.md](../../docs/BENCHMARKS.md)
 - [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
 - [../../docs/DEVELOPMENT.md](../../docs/DEVELOPMENT.md)

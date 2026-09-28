@@ -11,6 +11,24 @@ namespace Harbor.Benchmarks;
 ///     on immutable record trees of varying depth, plus manual field-by-field
 ///     comparison for early-exit scenarios.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one structural equality check between two <see
+///          cref="AppState" /> snapshots (identical reference, changed value), one hand-rolled
+///          early-exit field comparison, or one line-count delta.</item>
+///          <item><c>Payload:</c> a <c>LineCount</c>-line transcript; the "changed" snapshot
+///          differs in <c>Status</c>, <c>IsStreaming</c>, <c>StreamingBuffer</c> and one usage
+///          counter.</item>
+///          <item><c>StateReset:</c> none — the three snapshots are immutable and built once
+///          in <c>Setup</c>; no equality call mutates them.</item>
+///          <item><c>Drain:</c> none — comparison is synchronous.</item>
+///          <item><c>RetainedState:</c> none.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
+///          <item><c>AllocAttribution:</c> zero for every row — a value-shape change is
+///          exactly what must not allocate. The <c>ManualCompare_EarlyExit</c> row prices the
+///          alternative (three scalar compares) that renderers use to skip a full
+///          repaint.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class StateDiffingBenchmark

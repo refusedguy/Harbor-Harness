@@ -21,6 +21,28 @@ namespace Harbor.Benchmarks;
 ///     Each iteration uses a fresh temp directory so file growth does not
 ///     contaminate later iterations.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one <c>AppendMessageAsync</c> (serialize one message to a
+///          JSONL line), one <c>GetMessagesAsync</c> through a fresh store, or
+///          append-all-then-reload of <c>MessageCount</c> messages.</item>
+///          <item><c>Payload:</c> small / medium / large assistant messages (up to ~3 code
+///          blocks plus a serialized tool-call argument) plus one user and one tool-result
+///          message.</item>
+///          <item><c>StateReset:</c> per iteration — <c>IterationSetup</c> builds a fresh temp
+///          directory, store and session; <c>IterationCleanup</c> deletes the directory, so
+///          the .jsonl file never grows across iterations.</item>
+///          <item><c>Drain:</c> none — appends go straight to the file; no background writer
+///          exists.</item>
+///          <item><c>RetainedState:</c> the store instance and its parse cache, both
+///          per-iteration; the deserialize row deliberately constructs a <b>second</b> store
+///          per call so the cache is always cold.</item>
+///          <item><c>AwaitSemantics:</c> every row blocks on the append/reload (file I/O
+///          included); the sync bridge over <c>GetAwaiter().GetResult()</c> is intentional and
+///          documented at the call site.</item>
+///          <item><c>AllocAttribution:</c> serialization buffers for the append rows; the
+///          deserialize rows additionally allocate the full materialized message list.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class MessageConverterBenchmark

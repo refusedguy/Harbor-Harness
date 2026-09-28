@@ -21,6 +21,29 @@ namespace Harbor.Benchmarks;
 ///         are scaled via <c>MessageCount</c> (10 / 100 / 1000) against a realistic token window.
 ///     </para>
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> <c>ShouldCompact</c> called 100× (full token scan over the
+///          history), or one <c>CompactAsync</c> against a stub client that returns a canned
+///          summary.</item>
+///          <item><c>Payload:</c> <c>MessageCount</c> × 4 messages (user / assistant+tool_call
+///          / tool_result / assistant) against a 200 000-token window — the same synthetic
+///          history for every row.</item>
+///          <item><c>StateReset:</c> none — the history, model and service are built once in
+///          <c>Setup</c> and are not mutated by either row (<c>CompactAsync</c> returns a new
+///          result; the input list is untouched).</item>
+///          <item><c>Drain:</c> none — the summarization LLM round-trip is replaced by an
+///          instant stub, so no queue is involved.</item>
+///          <item><c>RetainedState:</c> the <see cref="TokenTracker" /> inside the service
+///          (accumulates nothing on this path — <c>CompactAsync</c> accounts the summary, it
+///          does not log turns).</item>
+///          <item><c>AwaitSemantics:</c> the compaction row awaits the full
+///          <c>CompactAsync</c>; the decision row is synchronous (100 calls inside one op, so
+///          the reported mean is per-call ÷ 100).</item>
+///          <item><c>AllocAttribution:</c> the decision row is allocation-free (integer scan);
+///          the compaction row allocates the cut point, the summarization prompt string and
+///          the summary message.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class CompactionServiceBenchmark

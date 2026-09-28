@@ -9,6 +9,27 @@ using Harbor.Application.Sessions;
 
 namespace Harbor.Benchmarks;
 
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one workspace scan — <c>LoadContextFiles</c>,
+///          <c>LoadSkills</c>, or a <c>GetOrLoadCached</c> hit/miss — over a prepared
+///          directory.</item>
+///          <item><c>Payload:</c> prepared temp trees: empty, 25 KB of context files, and a
+///          5-skill <c>.harbor/skills</c> tree, built once in <c>Setup</c>.</item>
+///          <item><c>StateReset:</c> once per class, not per iteration — the trees are created
+///          in <c>Setup</c> and the caches are pre-warmed there; <c>Cleanup</c> invalidates
+///          every cache entry and deletes the root.</item>
+///          <item><c>Drain:</c> none — loading is synchronous directory I/O.</item>
+///          <item><c>RetainedState:</c> <b>the process-wide <c>WorkspaceContextSource</c>
+///          cache</b> is the thing under test: <c>GetOrLoadCached_Hit</c> only hits because it
+///          is left warm, so it is deliberately not invalidated between iterations.
+///          <c>GetOrLoadCached_Miss</c> invalidates its own directory inside the measured
+///          op.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
+///          <item><c>AllocAttribution:</c> the parsed
+///          <c>ContextFile</c>/<c>SkillDescriptor</c> lists on the load rows; the cache-hit
+///          row allocates nothing but the returned references.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class WorkspaceContextSourceBenchmark
@@ -131,6 +152,28 @@ public class WorkspaceContextSourceBenchmark
     }
 }
 
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one <c>CachingSystemPromptBuilder.BuildAsync</c> that hits
+///          the cache, or one that misses on a freshly minted context.</item>
+///          <item><c>Payload:</c> <c>ToolCount</c> (4 / 16) stub tool descriptors plus two
+///          context files and two skills, all sharing one pre-built <c>JsonDocument</c> so the
+///          static schema-text cache stays at one entry.</item>
+///          <item><c>StateReset:</c> per iteration — <c>ResetBuilder</c>
+///          (<c>[IterationSetup]</c>) drops the previous cache dictionary and rebuilds the hit
+///          context, then re-warms the hit key. Without it the miss row's unique keys would
+///          grow the cache without bound across iterations.</item>
+///          <item><c>Drain:</c> none — prompt assembly is synchronous (no MCP, no tool
+///          execution).</item>
+///          <item><c>RetainedState:</c> the per-instance prompt cache, re-created per
+///          iteration on purpose so every iteration measures the same cache size; the hit key
+///          is re-warmed inside the iteration.</item>
+///          <item><c>AwaitSemantics:</c> every row awaits <c>BuildAsync</c>; on these contexts
+///          it completes synchronously.</item>
+///          <item><c>AllocAttribution:</c> the key computation (a 512-char
+///          <c>StringBuilder</c> + SHA-256) dominates the hit row; the miss row adds the
+///          assembled prompt.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class CachingPromptBenchmark
@@ -147,11 +190,29 @@ public class CachingPromptBenchmark
     [GlobalSetup]
     public void Setup()
     {
-        _caching = new CachingSystemPromptBuilder(new SystemPromptBuilder());
         _hitContext = CreateContext(ToolCount, "/tmp/harbor-bench-hit");
-        // warm the hit key
-        _caching.BuildAsync(_hitContext).GetAwaiter().GetResult();
         _missCounter = 0;
+        ResetBuilder();
+    }
+
+    [IterationSetup]
+    public void ResetBuilder()
+    {
+        // Build_Miss mints a unique context key on every call, so a long-lived
+        // cache dictionary would grow one entry per invocation and the later
+        // iterations would not measure the same cache size as the earlier ones.
+        // Drop it per iteration and re-warm the hit key inside the same step.
+        _caching = new CachingSystemPromptBuilder(new SystemPromptBuilder());
+        _caching.BuildAsync(_hitContext).GetAwaiter().GetResult();
+    }
+
+    [IterationCleanup]
+    public void ReleaseBuilder()
+    {
+        // Nothing disposable here — the point is to make the "no cache entry
+        // survives an iteration" contract explicit at the cleanup hook instead
+        // of implied by the reset above.
+        _caching = null!;
     }
 
     [Benchmark(Description = "Build_Hit", Baseline = true)]
