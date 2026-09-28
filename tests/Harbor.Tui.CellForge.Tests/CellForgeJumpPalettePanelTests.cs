@@ -334,8 +334,8 @@ public class CellForgeJumpPalettePanelTests
         }
 
         await Assert.That(model.Query).IsEqualTo("dif");
-        await Assert.That(store.State.Input.Text).IsEmpty();
-        await Assert.That(store.State.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Visible);
+        await Assert.That(store.State.Ui.Input.Text).IsEmpty();
+        await Assert.That(store.State.Ui.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Visible);
 
         // Modified chords stay unconsumed so Ctrl+J can still toggle the palette
         // closed and Alt+N can still switch panel slots from under it.
@@ -368,7 +368,7 @@ public class CellForgeJumpPalettePanelTests
         await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Escape), ctx)).IsTrue();
         await Assert.That(model.Visible).IsFalse();
         await Assert.That(model.Query).IsEmpty();
-        await Assert.That(store.State.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Hidden);
+        await Assert.That(store.State.Ui.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Hidden);
 
         // Reopening re-seeds and starts with an empty query and the top hit
         // selected (current Show semantics preserved).

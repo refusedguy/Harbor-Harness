@@ -18,11 +18,14 @@ public class SkillFreshnessStatusPillTests
 {
     private static UiState MockState(string status = "idle") => new()
     {
-        Status = status,
-        Provider = "prov",
-        Model = "m",
-        AgentName = "code",
-        Cost = new CostSnapshot(0, 0, 0m),
+        Chat = ChatDomainState.Empty with
+        {
+            Status = status,
+            Provider = "prov",
+            Model = "m",
+            AgentName = "code",
+            Cost = new CostSnapshot(0, 0, 0m)
+        }
     };
 
     private static SkillFreshnessModel Model(params SkillFreshnessEntry[] entries)
@@ -94,14 +97,20 @@ public class SkillFreshnessStatusPillTests
         var ws = new StatusSeg[StatusProjectorPanel.MaxSegments];
         var state = new UiState
         {
-            Status = "idle",
-            Provider = "prov",
-            Model = "m",
-            AgentName = "code",
-            Cost = new CostSnapshot(0, 0, 0m),
-            ScrollOffset = 5,
-            ViewportLines = 10,
-            TotalLines = 20,
+            Ui = TerminalUiState.Empty with
+            {
+                ScrollOffset = 5,
+                ViewportLines = 10,
+                TotalLines = 20
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "idle",
+                Provider = "prov",
+                Model = "m",
+                AgentName = "code",
+                Cost = new CostSnapshot(0, 0, 0m)
+            }
         };
         int n = StatusProjectorPanel.BuildSegments(
             state, ws, "retry 1/3 in 4s", skills: Stale(new SkillFreshnessEntry("a", "aa", "bb")));
