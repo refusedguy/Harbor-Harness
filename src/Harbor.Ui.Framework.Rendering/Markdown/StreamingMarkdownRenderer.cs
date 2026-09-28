@@ -25,6 +25,7 @@ public sealed class StreamingMarkdownRenderer
     private readonly List<MdLine> _frozenLines = [];
     private readonly List<MdLine> _tailLines = [];
     private int _frozenSourceChars;
+    private int _lastPaintedChars = -1;
     private int _width = -1;
     private bool _complete;
 
@@ -63,7 +64,13 @@ public sealed class StreamingMarkdownRenderer
     public MdLine LineAt(int index) =>
         index < _frozenLines.Count ? _frozenLines[index] : _tailLines[index - _frozenLines.Count];
 
-    /// <summary>Freezes newly-complete blocks, re-renders the open tail. True when output may have changed.</summary>
+    /// <summary>
+    /// Freezes newly-complete blocks, re-renders the open tail. True when the
+    /// painted output may have changed. ENG11 #283: deltas confined to a
+    /// held-back structural region (open fence / growing table / unclosed
+    /// math) report false — the painted prefix is byte-identical, so the
+    /// frame loop can skip the repaint entirely.
+    /// </summary>
     public bool RenderTail(int width)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
@@ -74,6 +81,7 @@ public sealed class StreamingMarkdownRenderer
             _width = width;
             _frozenLines.Clear();
             _frozenSourceChars = 0;
+            _lastPaintedChars = -1;
             rebuiltAll = true;
         }
 
@@ -81,7 +89,7 @@ public sealed class StreamingMarkdownRenderer
         {
             if (rebuiltAll)
             {
-                RenderFreshTail(string.Empty, 0);
+                RenderFreshTail(string.Empty, 0, 0);
             }
 
             return rebuiltAll;
@@ -100,7 +108,11 @@ public sealed class StreamingMarkdownRenderer
             }
 
             _frozenLines.AddRange(RenderRange(tail, b.Start, b.End, _width));
-            if ((b.Kind == MdBlockKind.Paragraph || b.Kind == MdBlockKind.ListItem) && HasBlankTerminator(tail, b.End))
+            // Math/fence closers never absorb the separator blank (unlike
+            // paragraphs), so Math also peeks at the following line — keeps
+            // final output identical to the old paragraph treatment.
+            if ((b.Kind is MdBlockKind.Paragraph or MdBlockKind.ListItem or MdBlockKind.Table or MdBlockKind.Math)
+                && (HasBlankTerminator(tail, b.End) || (b.Kind == MdBlockKind.Math && StartsBlankLine(tail, b.End))))
             {
                 _frozenLines.Add(MdLine.Empty); // breathing room between blocks
             }
@@ -126,19 +138,72 @@ public sealed class StreamingMarkdownRenderer
             frozenInThisTail = tail.Length;
         }
 
-        RenderFreshTail(tail, frozenInThisTail);
-        return rebuiltAll || frozeAny || _complete;
+        // ENG11 #283 holdback: an incomplete structural block runs to EOF, so
+        // only its stable prefix (fence/math opener; nothing for tables)
+        // joins the painted tail — the buffered interior repaints never reach
+        // the cells.
+        int paintEnd = HoldbackPaintEnd(tail, blocks, frozenInThisTail);
+        RenderFreshTail(tail, frozenInThisTail, paintEnd);
+        int paintedAbs = _frozenSourceChars + (paintEnd - frozenInThisTail);
+        bool changed = rebuiltAll || frozeAny || _complete || paintedAbs != _lastPaintedChars;
+        _lastPaintedChars = paintedAbs;
+        return changed;
     }
 
-    private void RenderFreshTail(string tail, int from)
+    /// <summary>
+    /// End (tail-relative) of the paintable region: the first incomplete
+    /// fence/table/math block truncates it to its stable prefix. Any other
+    /// tail content paints in full, exactly as before.
+    /// </summary>
+    private static int HoldbackPaintEnd(string tail, List<MdBlock> blocks, int from)
+    {
+        foreach (var b in blocks)
+        {
+            if (b.Start < from || b.Complete)
+            {
+                continue;
+            }
+
+            if (b.Kind is MdBlockKind.Fence or MdBlockKind.Math)
+            {
+                int nl = tail.AsSpan(b.Start).IndexOf('\n');
+                return nl < 0 ? tail.Length : b.Start + nl + 1;
+            }
+
+            if (b.Kind == MdBlockKind.Table)
+            {
+                return b.Start;
+            }
+
+            // Incomplete paragraph/list: keep scanning — a structural block
+            // may follow further down the tail.
+        }
+
+        return tail.Length;
+    }
+
+    private void RenderFreshTail(string tail, int from, int paintEnd)
     {
         _tailLines.Clear();
-        if (from >= tail.Length)
+        if (from >= paintEnd)
         {
             return;
         }
 
-        _tailLines.AddRange(RenderRange(tail, from, tail.Length, _width));
+        _tailLines.AddRange(RenderRange(tail, from, paintEnd, _width));
+    }
+
+    /// <summary>The line starting at <paramref name="at"/> is blank (separator lookahead for math blocks).</summary>
+    private static bool StartsBlankLine(string tail, int at)
+    {
+        if ((uint)at >= (uint)tail.Length)
+        {
+            return false;
+        }
+
+        int nl = tail.AsSpan(at).IndexOf('\n');
+        int end = nl < 0 ? tail.Length : at + nl;
+        return tail.AsSpan(at, end - at).TrimEnd('\r').IsWhiteSpace();
     }
 
     /// <summary>The block ended right before a blank separator line («\n\n» boundary).</summary>
@@ -180,6 +245,12 @@ public sealed class StreamingMarkdownRenderer
                     break;
 
                 case LineKind.FenceOpen:
+                    AddWrapped(lines, [new MdSpan(trimmed.TrimEnd('\r').ToString(), MdStyle.Fence)], width);
+                    break;
+
+                case LineKind.MathFence:
+                    // ENG11 #283: «$$» delimiters are structural markers —
+                    // dimmed like fences; the body stays plain text.
                     AddWrapped(lines, [new MdSpan(trimmed.TrimEnd('\r').ToString(), MdStyle.Fence)], width);
                     break;
 
