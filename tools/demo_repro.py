@@ -447,15 +447,18 @@ def compare(a_path: Path, b_path: Path) -> tuple[bool, list[str], list[str], dic
 
 def _toolchain_provenance(lock: dict[str, str]) -> str:
     lines = [f"- vhs **{lock['VHS_VERSION']}** (sha256 `{lock['VHS_SHA256'][:12]}…`)",
-             f"- ttyd **{lock['TTYD_VERSION']}** (sha256 `{lock['TTYD_SHA256'][:12]}…`)",
-             f"- {lock['FONT_FAMILY']} **{lock['FONT_VERSION']}** (sha256 `{lock['FONT_SHA256'][:12]}…`)"]
+             f"- ttyd **{lock['TTYD_VERSION']}** (sha256 `{lock['TTYD_SHA256'][:12]}…`)"]
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg:
         try:
             out = subprocess.run([ffmpeg, "-version"], capture_output=True, text=True).stdout
-            lines.append(f"- ffmpeg (runner-provided) **{out.split()[2]}**")
+            reported = out.split()[2] if len(out.split()) > 2 else "?"
+            pinned = lock.get("FFMPEG_VERSION", "")
+            suffix = "" if reported.startswith(pinned) else f" — does not match the pinned {pinned}"
+            lines.append(f"- ffmpeg **{reported}**{suffix}")
         except (OSError, IndexError):
             pass
+    lines.append(f"- {lock['FONT_FAMILY']} **{lock['FONT_VERSION']}** (sha256 `{lock['FONT_SHA256'][:12]}…`)")
     lines.append(f"- envelope **{lock['GIF_STATE_FRAMES']} frames/screen @ {lock['GIF_FPS']} fps**, "
                  f"{lock['GIF_WIDTH']}×{lock['GIF_HEIGHT']}, "
                  f"{lock['GIF_TAIL_FRAMES']}-frame settled tail, "
