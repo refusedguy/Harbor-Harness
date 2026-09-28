@@ -79,6 +79,95 @@ public class PerfBudgetTests
     }
 
     [Test]
+    public async Task StreamingPushRender_LiveTail_RepeatFrameRender_IsAllocationFree()
+    {
+        // #463: the frozen-tail moat above calls Complete(), so it always hit
+        // the early return in StreamingMarkdownRenderer and never measured the
+        // LIVE path. This is the live case: an open paragraph that never
+        // freezes, re-rendered twice per frame (Measure + Paint) exactly the
+        // way StreamingMarkdownBlock issues it.
+        var renderer = new Harbor.Ui.Framework.Rendering.Markdown.StreamingMarkdownRenderer();
+        renderer.Push("# heading\n\nan open paragraph that never freezes because no blank line follows it yet\n");
+
+        // The first render at this width does the real work; every repeat
+        // inside a frame is a no-op.
+        _ = renderer.RenderTail(60);
+
+        for (int w = 0; w < 100_000; w++)
+        {
+            _ = renderer.RenderTail(60);
+        }
+
+        GC.WaitForPendingFinalizers();
+        long before = GC.GetAllocatedBytesForCurrentThread();
+
+        const int frames = 5_000;
+        for (int i = 0; i < frames; i++)
+        {
+            _ = renderer.RenderTail(60); // Measure
+            _ = renderer.RenderTail(60); // Paint — same frame, same source
+        }
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        // Guard the premise: this must stay the LIVE (unfrozen) path.
+        await Assert.That(renderer.IsComplete).IsFalse();
+        await Assert.That(renderer.FrozenLineCount).IsLessThan(renderer.LineCount);
+        await Assert.That(allocated).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task StreamingPushRender_LiveTail_PushCostIsIndependentOfTailLength()
+    {
+        // #463 acceptance: a paragraph with no blank line never freezes, so the
+        // tail IS the whole message. Before the fix every push re-parsed and
+        // re-rendered that entire tail — ~10 allocations per line, O(N) per
+        // push, O(N²) per answer. Each push below completes exactly one line,
+        // so the cost must be O(1) and flat in the message length.
+        static long PushCostBytes(int lines)
+        {
+            var source = new System.Text.StringBuilder();
+            for (int i = 0; i < lines; i++)
+            {
+                source.Append("word ").Append(i).Append('\n');
+            }
+
+            var renderer = new Harbor.Ui.Framework.Rendering.Markdown.StreamingMarkdownRenderer();
+            renderer.Push(source.ToString());
+            _ = renderer.RenderTail(60);
+
+            // Warm past JIT tier-up thresholds.
+            for (int w = 0; w < 2_000; w++)
+            {
+                renderer.Push("y\n");
+                _ = renderer.RenderTail(60);
+            }
+
+            GC.WaitForPendingFinalizers();
+            long before = GC.GetAllocatedBytesForCurrentThread();
+
+            const int pushes = 500;
+            for (int i = 0; i < pushes; i++)
+            {
+                renderer.Push("y\n");
+                _ = renderer.RenderTail(60);
+            }
+
+            return (GC.GetAllocatedBytesForCurrentThread() - before) / pushes;
+        }
+
+        long small = PushCostBytes(8);
+        long large = PushCostBytes(800);
+        Console.WriteLine($"#463 live-tail push cost: 8 lines = {small} B/push, 800 lines = {large} B/push");
+
+        // 100x the message must not cost meaningfully more per push. The flat
+        // slack keeps the assertion honest if the per-push floor ever lands at
+        // zero (fully inlined span work), while still failing hard on the old
+        // ~10-allocations-per-line behaviour.
+        await Assert.That(large).IsLessThan(small * 4 + 2048);
+    }
+
+    [Test]
     public async Task StatusAndSpinner_SteadyState_AllocationFree()
     {
         var vm = new StatusViewModel { Model = "kilocode/hy3", Mode = StatusBarMode.Running };
