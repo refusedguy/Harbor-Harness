@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
@@ -128,11 +127,21 @@ public class TimelineDirtyRectTests
         }
 
         /// <summary>One paced stream tick: the coalescer pushes a line and marks
-        /// the block that actually grew.</summary>
-        public void StreamTick(StreamingMarkdownBlock stream, string chunk)
+        /// the block that actually grew. <paramref name="mark"/> selects how:
+        /// <c>false</c> reproduces the pre-#465 coalescer, which called
+        /// <see cref="VirtualizedChatTimeline.MarkLastDirty"/> and paid a
+        /// viewport-wide full scan on every frame.</summary>
+        public void StreamTick(StreamingMarkdownBlock stream, string chunk, bool mark = true)
         {
             stream.Push(chunk);
-            Timeline.MarkDirty(stream);
+            if (mark)
+            {
+                Timeline.MarkDirty(stream);
+            }
+            else
+            {
+                Timeline.MarkLastDirty();
+            }
         }
     }
 
@@ -314,77 +323,64 @@ public class TimelineDirtyRectTests
     }
 
     /// <summary>
-    /// Probe backing the #465 claim: streaming frames over a populated feed take
-    /// the hinted path and must cost less than the same frames diffed with a
-    /// full scan. Shape mirrors <c>RendererMoatPerfTests</c> so the numbers line
-    /// up with the docs/BENCHMARKS.md rows.
+    /// The whole #465 claim, as a deterministic A/B instead of a stopwatch.
+    ///
+    /// Two sessions receive the identical scripted stream over an identical
+    /// feed. One marks the block that grew (<see cref="VirtualizedChatTimeline.MarkDirty"/>),
+    /// the other reproduces the pre-fix coalescer (<see cref="VirtualizedChatTimeline.MarkLastDirty"/>).
+    /// Every frame of the old path must full-scan; every frame of the new one must
+    /// not; and the painted bytes must match exactly.
+    ///
+    /// Pinning it this way means the regression cannot come back quietly: a
+    /// wall-clock assertion would only fail on a machine slow enough to notice,
+    /// whereas re-routing the streaming path to the broad mark fails here on any
+    /// machine. The millisecond figures live in docs/BENCHMARKS.md, which is the
+    /// single source of truth for every measured number in the repo.
     /// </summary>
     [Test]
-    public async Task Stream_Frames_Hinted_Cost_Less_Than_FullScan()
+    public async Task Stream_Frames_Take_Hinted_Path_Where_The_Old_Mark_FullScanned()
     {
         const int cols = 120;
         const int rows = 500;
-        var probe = Session.Create(cols, rows);
+        const int frames = 24;
 
-        // 20× the viewport so the streaming tail stays well below the fold for
-        // every frame of the probe — that is the frame shape #465 makes cheap.
-        var stream = probe.PopulateAndStream(cols, rows, multiple: 20);
+        var named = Session.Create(cols, rows);
+        var broad = Session.Create(cols, rows);
 
-        probe.Frame(cols, rows, fx: false);
-        probe.Timeline.ScrollToTop();
-        probe.Frame(cols, rows, fx: false);
+        // 20x the viewport so the streaming tail sits far below the fold: the
+        // frame shape where a broad mark is pure waste.
+        var namedStream = named.PopulateAndStream(cols, rows, multiple: 20);
+        var broadStream = broad.PopulateAndStream(cols, rows, multiple: 20);
 
-        int line = 0;
+        named.Frame(cols, rows, fx: false);
+        named.Timeline.ScrollToTop();
+        named.Frame(cols, rows, fx: false);
 
-        void StreamFrame(bool fx)
+        broad.Frame(cols, rows, fx: false);
+        broad.Timeline.ScrollToTop();
+        broad.Frame(cols, rows, fx: false);
+
+        for (int i = 0; i < frames; i++)
         {
-            probe.StreamTick(stream, $"streamed line {line++} of the answer\n");
-            _ = probe.Frame(cols, rows, fx);
+            string chunk = $"streamed line {i} of the answer, long enough to wrap at {cols} columns\n";
+
+            named.StreamTick(namedStream, chunk);
+            broad.StreamTick(broadStream, chunk, mark: false);
+
+            var namedFrame = named.Frame(cols, rows, fx: true);
+            var broadFrame = broad.Frame(cols, rows, fx: true);
+
+            await Assert.That(broadFrame.FullScan)
+                .IsTrue()
+                .Because($"the pre-#465 broad mark full-scans on every streaming frame (frame {i})");
+            await Assert.That(namedFrame.FullScan)
+                .IsFalse()
+                .Because($"the streaming frame names the block that grew and hints instead (frame {i})");
         }
 
-        // Warm past JIT tier-up, and prove the hinted path is the one being timed.
-        for (int i = 0; i < 300; i++)
-        {
-            StreamFrame(hint: true);
-            StreamFrame(hint: false);
-        }
-
-        const int frames = 300;
-
-        double FullScan()
-        {
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < frames; i++)
-            {
-                StreamFrame(hint: false);
-            }
-
-            return sw.Elapsed.TotalMilliseconds / frames;
-        }
-
-        double Hinted()
-        {
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < frames; i++)
-            {
-                StreamFrame(hint: true);
-            }
-
-            return sw.Elapsed.TotalMilliseconds / frames;
-        }
-
-        // Interleave order-independence: full → hinted → full → hinted.
-        double full1 = FullScan();
-        double hinted1 = Hinted();
-        double full2 = FullScan();
-        double hinted2 = Hinted();
-        double fullAvg = Math.Min(full1, full2);
-        double hintedAvg = Math.Min(hinted1, hinted2);
-
-        Console.WriteLine(
-            $"#465 stream frame: full={fullAvg:F3} ms hinted={hintedAvg:F3} ms " +
-            $"(120×500 grid, {frames} frames each, tail below the fold)");
-
-        await Assert.That(hintedAvg).IsLessThan(fullAvg);
+        // Same damage policy, same bytes on the wire.
+        await Assert.That(named.Backend.Text).IsEqualTo(broad.Backend.Text);
+        await Assert.That(named.Screen.Engine.FrontMatches(named.Screen.Back)).IsTrue();
+        await Assert.That(broad.Screen.Engine.FrontMatches(broad.Screen.Back)).IsTrue();
     }
 }
