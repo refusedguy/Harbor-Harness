@@ -154,20 +154,36 @@ public sealed class HarborConfig
         set => Ui = Ui with { Onboarded = value };
     }
 
-    /// <summary>Enabled plugins.</summary>
+    /// <summary>
+    ///     Enabled plugins. Snapshot-backed (#183): the getter returns the underlying
+    ///     read-only list directly instead of copying per access. Do not mutate it.
+    /// </summary>
     [JsonIgnore]
-    public List<string> EnabledPlugins
+    public IReadOnlyList<string> EnabledPlugins
     {
-        get => Tooling.EnabledPlugins.ToList();
-        set => Tooling = Tooling with { EnabledPlugins = (value ?? new List<string>()).AsReadOnly() };
+        get => Tooling.EnabledPlugins;
+        set => Tooling = Tooling with
+        {
+            EnabledPlugins = value is null
+                ? Array.Empty<string>()
+                : new List<string>(value).AsReadOnly()
+        };
     }
 
-    /// <summary>Disabled builtin tools.</summary>
+    /// <summary>
+    ///     Disabled builtin tools. Snapshot-backed (#183): the getter returns the underlying
+    ///     read-only list directly instead of copying per access. Do not mutate it.
+    /// </summary>
     [JsonIgnore]
-    public List<string> DisabledTools
+    public IReadOnlyList<string> DisabledTools
     {
-        get => Tooling.DisabledTools.ToList();
-        set => Tooling = Tooling with { DisabledTools = (value ?? new List<string>()).AsReadOnly() };
+        get => Tooling.DisabledTools;
+        set => Tooling = Tooling with
+        {
+            DisabledTools = value is null
+                ? Array.Empty<string>()
+                : new List<string>(value).AsReadOnly()
+        };
     }
 
     /// <summary>Default max steps per agent run.</summary>
