@@ -133,7 +133,10 @@ public class CellForgeBuiltinPanelsTests
         var jump = new CellForgeJumpPalettePanel();
         await Assert.That(jump.Id).IsEqualTo("jump");
         await Assert.That(jump.Title).IsEqualTo("Jump");
-        await Assert.That(jump.DefaultPlacement).IsEqualTo(TuiPanelPlacement.Right);
+
+        // #381: centred modal overlay (CellForgeJumpPaletteOverlayLayer), not a
+        // Right dock leaf — the dock slot it used to hold is released.
+        await Assert.That(jump.DefaultPlacement).IsEqualTo(TuiPanelPlacement.Center);
         await Assert.That(jump.DefaultSize).IsEqualTo(48);
     }
 

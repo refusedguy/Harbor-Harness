@@ -30,7 +30,7 @@ The list below is the **ruthless, ship-first** ranking. Each entry has:
 | 5  | Intra-line word-diff highlighting (not just line)  | 5      | M      | Pi (diff lib) | ✅ R+ (dependency-free `WordDiff` LCS + `DiffBlock` 1:1 pairing; insertion/deletion covered) |
 | 6  | Toast notifications with slide-in + auto-dismiss   | 4      | S      | Orca (sonner) | ✅ R28 |
 | 7  | Tab-strip with drag-reorder + close-gesture        | 4      | L      | Orca          | ❌ |
-| 8  | Worktree jump palette (Cmd-J / Ctrl+J)             | 5      | M      | Orca          | ⚠️ partial (model + Ctrl+J hotkey + reducer + CellForge jump panel; overlay polish pending) |
+| 8  | Worktree jump palette (Cmd-J / Ctrl+J)             | 5      | M      | Orca          | ✅ (typed fuzzy query + centred modal overlay, #381) |
 | 9  | Agent pet mascot that reacts to agent state        | 4      | S      | Orca          | ❌ |
 | 10 | Markdown rich editor (TipTap) with code blocks     | 5      | L      | Orca          | ⚠️ partial (renderer, no editor) |
 | 11 | Image preview inline in chat                       | 4      | M      | Opencode, Kilo | ❌ |
@@ -764,15 +764,26 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** M (6 hours — mostly reuse CommandPaletteView)
 - **Priority:** P1
 - **Dependencies:** None
-- **Status:** Slice 1 landed (`feat/jump-palette`): pure `WorktreeJumpPaletteModel`
-  (`Harbor.Ui.Framework.Services/Palettes/`, row = path + branch + short status,
-  fuzzy filter mirroring `CommandPaletteViewModelBase`) with TUnit coverage
-  (`tests/Harbor.Tui.Tests/WorktreeJumpPaletteTests.cs`); `ChatAction.JumpPalette`
-  + Ctrl+J mapping in SpectreTui/RazorConsole/Termina/TerminalGui; reducer toggles
-  the `"jump"` panel (`OverlayIds.JumpPalette`) — noop until a host registers it.
-  Enter-confirm returns the entry; the host switches via
-  `ISessionManager.OpenSessionAsync(entry.SessionId)`. Pending: renderer panel
-  painting `Results`, session-list seeding, Enter/Esc routing while open.
+- **Status:** ✅ Complete. Slices 1–3 landed:
+  - **Slice 1** (`feat/jump-palette`): pure `WorktreeJumpPaletteModel`
+    (`Harbor.Ui.Framework.Services/Palettes/`, row = path + branch + short
+    status, fuzzy filter mirroring `CommandPaletteViewModelBase`) with TUnit
+    coverage (`tests/Harbor.Tui.Tests/WorktreeJumpPaletteTests.cs`);
+    `ChatAction.JumpPalette` + Ctrl+J mapping in
+    SpectreTui/RazorConsole/Termina/TerminalGui; reducer toggles the `"jump"`
+    panel (`OverlayIds.JumpPalette`).
+  - **Slice 2** (`feat/jump-palette-panel`): `CellForgeJumpPalettePanel` —
+    seeds from `git worktree list --porcelain` + live sessions, renders
+    `Results`, Enter switches via `ISessionManager.OpenSessionAsync`, Esc
+    closes, `r` re-seeds.
+  - **Slice 3** (`feat/jump-palette-381`, #381): the query is finally wired —
+    printable keys feed `WorktreeJumpPaletteModel.SetQuery`, `Backspace` trims,
+    the header shows `Jump: <query>`, and `r` re-seeds *keeping* the filter.
+    The palette moved from a Right-docked panel to a **centred modal overlay**
+    (`CellForgeJumpPaletteOverlayLayer`, an `IOverlayLayer` on the existing
+    `LayoutTree.Overlays` stack with `IsModal ⇒` input barrier), so the Right
+    dock slot is released and typing never leaks into the composer.
+    Covered by `tests/Harbor.Tui.CellForge.Tests/CellForgeJumpPalettePanelTests.cs`.
 
 ---
 
@@ -1309,7 +1320,7 @@ Default Orca shortcuts (from `keybindings.ts` inferred from e2e tests):
 | Quit                          | Cmd/Ctrl + Q       |
 
 **Harbor status:** Harbor has Ctrl+P, Ctrl+B, Ctrl+Shift+T, Ctrl+O, Ctrl+S,
-Ctrl+L, Esc. Missing: Cmd+J (worktree jump), Cmd+W (close tab), Cmd+Tab
+Ctrl+L, Ctrl+J (worktree jump), Esc. Missing: Cmd+W (close tab), Cmd+Tab
 (next tab), Cmd+\` (terminal), Cmd+1-4 (focus regions), Cmd+, (settings),
 Cmd+Q (quit), Cmd+= / Cmd+- (zoom).
 
