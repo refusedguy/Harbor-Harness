@@ -173,7 +173,7 @@ public class SlashSkillsRefreshTests
     /// <summary>Dispatch through the renderer-free overload, capturing writer lines.</summary>
     private static async Task<List<string>> DispatchAsync(
         string input,
-        Func<IReadOnlyList<SkillFreshnessEntry>>? refresh,
+        Func<IReadOnlyList<SkillFreshnessEntry>>? refresh = null,
         Func<IReadOnlyList<string>, Task<SkillUpdateReport>>? update = null)
     {
         var configStore = new JsonConfigStore();
