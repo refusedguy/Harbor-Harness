@@ -65,6 +65,11 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         host._replStore.Dispatch(new UiMsg.ConfigureRuntime(host.SessionModel.Model, host.SessionModel.ProviderId, host.SessionModel.Agent));
         ArmThemeWatcher();
 
+        // Setup guide (issue #383): local setup detection + first-run gating.
+        // The provider probe it starts runs off-thread; a detection failure
+        // leaves the checklist empty and never blocks the first frame.
+        await host.Setup.InitializeAsync(ct).ConfigureAwait(false);
+
         // #170: the heartbeat must outlive Idle while a mascot reaction/latch
         // still owes motion — the bridge polls both directors every frame.
         host.Bridge.TrackMascot(host.Screen.Mascot, host.Screen.Status);
@@ -226,6 +231,20 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             {
                 host._broadDamageNextFrame = true; // status + sidebar both re-render
                 usageChanged = true;
+            }
+
+            // Setup checklist (issue #383): a task completing off-thread staged
+            // its box rect — applied here, on the frame thread that owns the
+            // diff engine's hint list.
+            if (host._setupChecklistDamagePending)
+            {
+                host._setupChecklistDamagePending = false;
+                Rect setupDamage = host._setupChecklistDamage;
+                host._setupChecklistDamage = default;
+                if (setupDamage.Width > 0 && setupDamage.Height > 0)
+                {
+                    host.ScreenSession.Damage(setupDamage);
+                }
             }
 
             if (!string.Equals(retryBefore, host._status.Retry, StringComparison.Ordinal))

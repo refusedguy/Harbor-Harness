@@ -1055,6 +1055,24 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** M (6 hours)
 - **Priority:** P1
 - **Dependencies:** None
+- **Status:** Landed in CellForge (issue #383, part of #23). Pure
+  `SetupChecklistModel` (`Harbor.Ui.Framework.Projection`): five stable
+  `SetupTaskIds` with labels + done/pending markers, a `TaskId → bool`
+  completion snapshot setter (`WithCompletion` / `WithTask`), a `done/total`
+  progress text and a clamped 0..1 ratio. Immutable-on-update — every change
+  returns a new instance, so the render thread paints a snapshot while the host
+  publishes the next one. Detection in `Harbor.Application`
+  (`SetupChecklistDetector`: config file, stored provider key, provider
+  health-check, resolved workspace; "first prompt sent" is host session state).
+  CellForge render: `SetupChecklistOverlay` + `SetupChecklistOverlayLayer`
+  (seated on `ChatScreen.SyncOverlays`) — a centered modal listing every task
+  with `✓`/`○` plus a `GaugeBar` progress bar labeled `3/5`; no new widget
+  family or theme tokens. CLI host wiring (`SetupChecklistController`):
+  auto-opens on first run when `config.Onboarded` is false (latched — Esc closes
+  and it never re-traps in the same session), re-openable via `/setup`, and a
+  completion landing while the modal is open re-damages only its own rect so
+  unrelated panels are not rescanned. The Avalonia `Arc`-based ring of the
+  original sketch is still open for the desktop app.
 
 ---
 

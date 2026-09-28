@@ -132,6 +132,10 @@ internal sealed class PromptPipeline(
         ResetRetryCountdown();
         host.Timeline.Append(new UserBlock(text));
         host.Status.Mode = StatusBarMode.Running;
+
+        // Setup guide (issue #383): the first prompt that actually reaches the
+        // agent completes the checklist's last session-scoped task.
+        host.Setup.MarkPromptSent();
         host.WakeUp();
 
         _promptInFlight = true;

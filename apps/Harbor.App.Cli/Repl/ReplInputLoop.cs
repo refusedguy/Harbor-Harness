@@ -214,6 +214,14 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             return;
         }
 
+        // Setup checklist (issue #383): while the modal is open it owns every key —
+        // Esc/Enter/q/? close it and nothing leaks into the composer behind it.
+        if (host.Setup.HandleKey(key))
+        {
+            host._wake.Writer.TryWrite(null);
+            return;
+        }
+
         // Slash shortcut: typing '/' on an empty composer opens the command
         // palette directly, skipping manual entry.
         if (key.Key == KeyCode.Char

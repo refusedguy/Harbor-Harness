@@ -603,15 +603,23 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
     /// <summary>Fullscreen diff viewer state; seated on <see cref="LayoutTree.Overlays"/> by <see cref="SyncOverlays"/> (PRIM12 #308).</summary>
     public DiffViewerOverlay DiffViewer { get; } = new();
 
+    /// <summary>
+    /// Setup-guide checklist (KILLER_FEATURES §2.7 Feature 9, issue #383);
+    /// seated on <see cref="LayoutTree.Overlays"/> by <see cref="SyncOverlays"/>.
+    /// </summary>
+    public SetupChecklistOverlay SetupChecklist { get; } = new();
+
     private DialogOverlayLayer? _dialogLayer;
     private ToastOverlayLayer? _toastLayer;
     private DiffViewerOverlayLayer? _diffLayer;
+    private SetupChecklistOverlayLayer? _setupLayer;
 
     /// <summary>
     /// PRIM2c seating: reconciles the dialog/toast overlay layers with
     /// <paramref name="viewport"/> (typically the full screen). PRIM12 seats
-    /// the fullscreen diff viewer between them (dialog below, toasts on top).
-    /// Visible layers
+    /// the fullscreen diff viewer between them (dialog below, toasts on top);
+    /// the setup checklist (issue #383) sits above the diff viewer and below the
+    /// toasts. Visible layers
     /// are pushed (dialog below, toast on top); hidden ones are removed so the
     /// stack stays empty and frames paint byte-identically to the panels-only
     /// path. Idempotent — safe to call every frame before
@@ -622,9 +630,11 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
         _dialogLayer ??= new DialogOverlayLayer(Dialog);
         _toastLayer ??= new ToastOverlayLayer(Toasts);
         _diffLayer ??= new DiffViewerOverlayLayer(DiffViewer);
+        _setupLayer ??= new SetupChecklistOverlayLayer(SetupChecklist);
         _dialogLayer.Sync(viewport);
         _toastLayer.Sync(viewport);
         _diffLayer.Sync(viewport);
+        _setupLayer.Sync(viewport);
         if (_dialogLayer.Visible)
         {
             Tree.Overlays.Push(_dialogLayer);
@@ -640,6 +650,14 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
         else
         {
             Tree.Overlays.Remove(DiffViewerOverlayLayer.LayerId);
+        }
+        if (_setupLayer.Visible)
+        {
+            Tree.Overlays.Push(_setupLayer);
+        }
+        else
+        {
+            Tree.Overlays.Remove(SetupChecklistOverlayLayer.LayerId);
         }
         if (_toastLayer.Visible)
         {
