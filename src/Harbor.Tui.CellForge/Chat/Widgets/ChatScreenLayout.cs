@@ -594,6 +594,47 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
     public const string SidebarId = SideBarPanel.DefaultId;
     public const string MascotId = MascotPanel.DefaultId;
 
+    /// <summary>Modal dialog state; seated on <see cref="LayoutTree.Overlays"/> by <see cref="SyncOverlays"/> (PRIM2c).</summary>
+    public DialogOverlay Dialog { get; } = new();
+
+    /// <summary>Toast queue; seated on <see cref="LayoutTree.Overlays"/> by <see cref="SyncOverlays"/> (PRIM2c).</summary>
+    public ToastOverlay Toasts { get; } = new();
+
+    private DialogOverlayLayer? _dialogLayer;
+    private ToastOverlayLayer? _toastLayer;
+
+    /// <summary>
+    /// PRIM2c seating: reconciles the dialog/toast overlay layers with
+    /// <paramref name="viewport"/> (typically the full screen). Visible layers
+    /// are pushed (dialog below, toast on top); hidden ones are removed so the
+    /// stack stays empty and frames paint byte-identically to the panels-only
+    /// path. Idempotent — safe to call every frame before
+    /// <see cref="LayoutTree.PaintAll"/>.
+    /// </summary>
+    public void SyncOverlays(Rect viewport)
+    {
+        _dialogLayer ??= new DialogOverlayLayer(Dialog);
+        _toastLayer ??= new ToastOverlayLayer(Toasts);
+        _dialogLayer.Sync(viewport);
+        _toastLayer.Sync(viewport);
+        if (_dialogLayer.Visible)
+        {
+            Tree.Overlays.Push(_dialogLayer);
+        }
+        else
+        {
+            Tree.Overlays.Remove(DialogOverlayLayer.LayerId);
+        }
+        if (_toastLayer.Visible)
+        {
+            Tree.Overlays.Push(_toastLayer);
+        }
+        else
+        {
+            Tree.Overlays.Remove(ToastOverlayLayer.LayerId);
+        }
+    }
+
     public static ChatScreen Build(
         Rendering.ComposerController composer,
         StatusViewModel status,

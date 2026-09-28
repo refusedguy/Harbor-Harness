@@ -399,6 +399,9 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         _ = host._timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, host._timelineViewportH);
 
         host.ScreenSession.BeginFrame();
+        // PRIM2c: dialog/toast paint through LayoutTree.Overlays (hidden layers
+        // stay off the stack, so quiet frames are byte-identical to panels-only).
+        host.Screen.SyncOverlays(new Rect(0, 0, cols, rows));
         host.Screen.Tree.PaintAll(host.ScreenSession.Back);
 
         // Copy-on-select highlight (P6.4): transient Reverse overlay — the

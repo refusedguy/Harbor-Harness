@@ -190,6 +190,27 @@ public sealed class DialogOverlay
     }
 
     /// <summary>
+    /// Computes the centered modal box for <paramref name="viewport"/> (typically
+    /// the full screen). Returns default when hidden or the viewport is too small.
+    /// Single source of truth for <see cref="Paint"/> and the PRIM2c overlay-layer
+    /// seating (<see cref="DialogOverlayLayer"/> reports this as its bounds).
+    /// </summary>
+    public Rect ComputeBox(Rect viewport)
+    {
+        if (!Visible || viewport.Width < MinWidth || viewport.Height < MinHeight)
+        {
+            return default;
+        }
+
+        int width = Math.Min(MaxWidth, viewport.Width - 2);
+        int contentRows = CountMessageRows(width) + ButtonRowHeight + (Padding * 2) + (_kind == DialogKind.Prompt ? 1 : 0);
+        int height = Math.Min(MaxHeight, Math.Max(MinHeight, Math.Min(viewport.Height - 2, contentRows + 2)));
+        int x = viewport.X + (viewport.Width - width) / 2;
+        int y = viewport.Y + (viewport.Height - height) / 2;
+        return new Rect(x, y, width, height);
+    }
+
+    /// <summary>
     /// Paint the modal centered inside <paramref name="rect"/> (typically the
     /// full screen). No-op when hidden or the rect is too small.
     /// </summary>
@@ -204,12 +225,11 @@ public sealed class DialogOverlay
             return;
         }
 
-        int width = Math.Min(MaxWidth, rect.Width - 2);
-        int contentRows = CountMessageRows(width) + ButtonRowHeight + (Padding * 2) + (_kind == DialogKind.Prompt ? 1 : 0);
-        int height = Math.Min(MaxHeight, Math.Max(MinHeight, Math.Min(rect.Height - 2, contentRows + 2)));
-        int x = rect.X + (rect.Width - width) / 2;
-        int y = rect.Y + (rect.Height - height) / 2;
-        var box = new Rect(x, y, width, height);
+        var box = ComputeBox(rect);
+        if (box.Width <= 0 || box.Height <= 0)
+        {
+            return;
+        }
         DrawBox(buffer, box);
 
         int textX = box.X + Padding;
@@ -218,7 +238,7 @@ public sealed class DialogOverlay
         DrawTitle(buffer, textX, textY, innerW);
         textY += 1;
 
-        int messageRows = Math.Max(1, height - (Padding * 2) - 2 - ButtonRowHeight - (_kind == DialogKind.Prompt ? 1 : 0));
+        int messageRows = Math.Max(1, box.Height - (Padding * 2) - 2 - ButtonRowHeight - (_kind == DialogKind.Prompt ? 1 : 0));
         string[] wrapped = WrapText(_message, innerW);
         int drawn = 0;
         for (int i = 0; i < wrapped.Length && drawn < messageRows; i++)

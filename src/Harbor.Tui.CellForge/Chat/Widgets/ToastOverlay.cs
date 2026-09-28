@@ -75,6 +75,42 @@ public sealed class ToastOverlay
 
     public IReadOnlyList<ToastNotification> Active => _active;
 
+    /// <summary>
+    /// Computes the toast strip for <paramref name="viewport"/>: top-right with a
+    /// 1-cell margin, one row per visible toast (capped to <c>MaxVisible</c>).
+    /// Returns default when empty or the viewport is too small. Single source of
+    /// truth for the PRIM2c overlay-layer seating (<see cref="ToastOverlayLayer"/>
+    /// reports this as its bounds; <see cref="Paint"/> keeps painting at the
+    /// given rect origin so manual-blit callers are unaffected).
+    /// </summary>
+    public Rect ComputeBounds(Rect viewport)
+    {
+        if (IsEmpty)
+        {
+            return default;
+        }
+        if (viewport.Width < MinWidth + AccentWidth || viewport.Height < MinInnerHeight)
+        {
+            return default;
+        }
+
+        int count = Math.Min(Count, MaxVisible);
+        if (count <= 0)
+        {
+            return default;
+        }
+
+        int width = Math.Min(MaxWidth, Math.Min(MinWidth, viewport.Width - AccentWidth));
+        int totalW = width + AccentWidth;
+        int x = viewport.Right - totalW - 1;
+        if (x < viewport.X)
+        {
+            x = viewport.X;
+        }
+        int y = viewport.Y + 1;
+        return new Rect(x, y, totalW, count);
+    }
+
     public void Paint(ScreenBuffer buffer, Rect rect)
     {
         if (_active.Count == 0)
