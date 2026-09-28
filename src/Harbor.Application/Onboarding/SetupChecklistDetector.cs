@@ -155,7 +155,7 @@ public sealed class SetupChecklistDetector
                 return false;
             }
 
-            Result<ProviderHealth> health = await _healthCheck.CheckAsync(configured.Value, ct).ConfigureAwait(false);
+            Result<ProviderHealth> health = await _healthCheck.CheckAsync(configured, ct).ConfigureAwait(false);
             return health.IsSuccess;
         }
         catch (OperationCanceledException)

@@ -1,3 +1,5 @@
+using Harbor.Tui.CellForge.Widgets;
+
 namespace Harbor.App.Cli.Repl.Commands;
 
 /// <summary>

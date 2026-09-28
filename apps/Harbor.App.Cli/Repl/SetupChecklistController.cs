@@ -1,6 +1,7 @@
 using Harbor.Application.Onboarding;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Projection;
+using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Input;
 using Microsoft.Extensions.Logging;
 

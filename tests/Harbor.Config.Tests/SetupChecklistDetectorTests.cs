@@ -81,7 +81,7 @@ public sealed class SetupChecklistDetectorTests
         (SetupChecklistDetector detector, JsonConfigStore store, string dir, string path) = Create();
         try
         {
-            Result<HarborConfig> saved = await store.UpdateAsync(c =>
+            Result saved = await store.UpdateAsync(c =>
             {
                 c.ApiKeys["kilocode"] = "klo_test_key";
                 c.Onboarded = true;
@@ -197,14 +197,19 @@ public sealed class SetupChecklistDetectorTests
             });
 
             await Assert.That(await detector.CheckProviderHealthAsync()).IsFalse();
+            await Assert.That(failed.Calls).IsEqualTo(1);
 
+            // A probe that throws (offline, TLS, DNS) is swallowed the same way:
+            // the task stays pending instead of failing startup.
             var throwing = new StubHealthCheck(Result.Success(new ProviderHealth(1, 1)), new HttpRequestException("offline"));
             var second = new SetupChecklistDetector(
                 store,
                 new AuthStore(store, NullLogger<AuthStore>.Instance),
                 throwing,
                 configPath: Path.Combine(dir, "config.json"));
+
             await Assert.That(await second.CheckProviderHealthAsync()).IsFalse();
+            await Assert.That(throwing.Calls).IsEqualTo(1);
         }
         finally
         {
