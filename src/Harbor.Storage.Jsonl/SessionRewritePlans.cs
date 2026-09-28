@@ -44,7 +44,10 @@ internal enum LineAction : byte
 internal abstract class SessionRewritePlan
 {
     /// <summary>True once the plan has seen the record(s) it was looking for.</summary>
-    internal bool Found { get; protected set; }
+    internal bool Found { get; private set; }
+
+    /// <summary>Called by a plan once its target turns up.</summary>
+    protected void MarkFound() => Found = true;
 
     /// <summary>
     ///     True when committing would alter the file. Finding the target
@@ -89,7 +92,7 @@ internal sealed class HeaderRewritePlan : SessionRewritePlan
         // false and the rewrite is abandoned — the header is written by
         // CreateAsync, so an empty file is corruption, not a session to edit.
         _rewritten = true;
-        Found = true;
+        MarkFound();
         return LineAction.Replace;
     }
 }
@@ -117,7 +120,7 @@ internal sealed class DropMessagePlan : SessionRewritePlan
             return LineAction.Keep;
         }
 
-        Found = true;
+        MarkFound();
         return LineAction.Drop;
     }
 }
@@ -165,7 +168,7 @@ internal sealed class DeleteAfterAnchorPlan : SessionRewritePlan
             }
 
             _pastAnchor = true;
-            Found = true;
+            MarkFound();
             return LineAction.Keep; // the anchor itself survives
         }
 
