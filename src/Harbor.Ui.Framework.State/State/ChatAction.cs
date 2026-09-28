@@ -51,7 +51,36 @@ public enum ChatAction
     ToggleLogsPanel,
 
     /// <summary>Ctrl+J (or a bare LF on terminals that send it instead) — open the worktree jump palette.</summary>
-    JumpPalette
+    JumpPalette,
+
+    // ── tab-strip actions (#389, slice 2/3 — key layer for #388's state model) ──
+    // Every one of these is a thin alias for an existing UiMsg tab transition
+    // (CycleNextTab / CyclePreviousTab / CloseTab / OpenTab): the keymap owns
+    // "which key", the reducer owns "what it means", the host owns "switch the
+    // session". No renderer-private key branches (see ChatKeyMap).
+
+    /// <summary>
+    ///     Ctrl+Tab — focus the next open tab. Guarded by the keymap: it only
+    ///     wins over <see cref="CyclePanelFocus" /> while a multi-tab strip is
+    ///     actually open, so the panel-cycling binding keeps working otherwise.
+    /// </summary>
+    NextTab,
+
+    /// <summary>Ctrl+Shift+Tab — focus the previous open tab (wraps).</summary>
+    PreviousTab,
+
+    /// <summary>
+    ///     Ctrl+W — close the focused tab. Deliberately NOT the app: the
+    ///     explicit quit path stays <see cref="Quit" /> (Esc / Ctrl+C ×2).
+    /// </summary>
+    CloseTab,
+
+    /// <summary>
+    ///     Ctrl+T — open / switch a tab. Rebindable through
+    ///     <see cref="ChatKeyMap" /> like every other entry; the reducer turns it
+    ///     into <see cref="TuiEffect.RequestOpenSession" /> for the host.
+    /// </summary>
+    OpenTab
 }
 
 /// <summary>

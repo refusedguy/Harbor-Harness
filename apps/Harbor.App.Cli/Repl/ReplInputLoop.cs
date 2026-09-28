@@ -323,10 +323,19 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         if (KeyEventMapper.TryMap(key, out var dto))
         {
             var uiKey = KeyEventAdapter.ToUiKey(dto);
-            var resolved = host._keyMap.Resolve(uiKey);
+            // Resolved against the live state: Ctrl+Tab is shared with panel
+            // cycling and only means "next tab" while a multi-tab strip is open
+            // (#389). A host that passes no snapshot gets the pre-#389 mapping.
+            var resolved = host._keyMap.Resolve(uiKey, host._replStore.State);
             if (resolved != ChatAction.None)
             {
-                _ = host._replStore.Dispatch(new AppMsg.KeyInput(resolved, uiKey));
+                var effect = host._replStore.Dispatch(new AppMsg.KeyInput(resolved, uiKey));
+                // The one exception to the sink-the-effect rule above: the strip
+                // actions are effect-driven, because the reducer resolves the
+                // target session and the host performs the switch. Dropping the
+                // effect here would make Ctrl+Tab and Ctrl+W look like no-ops.
+                if (effect is TuiEffect.ActivateSession or TuiEffect.RequestOpenSession)
+                    host.Effects.Run(effect);
             }
         }
 

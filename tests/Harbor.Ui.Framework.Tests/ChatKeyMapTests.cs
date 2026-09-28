@@ -148,4 +148,96 @@ public class ChatKeyMapTests
         var result = ChatAppReducer.Update(state, new AppMsg.KeyInput(action, new UiKey(UiKeyCode.Char, KeyModifierSet.None, '\n')));
         await Assert.That(result.State.Ui.PanelStates.ContainsKey("jump")).IsFalse();
     }
+
+    // ── tab strip (#389) ───────────────────────────────────────────────────
+    // The tab actions live in the shared table, not in a shell: every renderer
+    // that resolves through ChatKeyMap gets them for free.
+
+    [Test]
+    public async Task TabActions_HaveBindingsInCoreTable()
+    {
+        foreach (ChatAction action in new[]
+                 {
+                     ChatAction.NextTab, ChatAction.PreviousTab, ChatAction.CloseTab, ChatAction.OpenTab
+                 })
+        {
+            var entry = Map.Get(action);
+            await Assert.That(entry.Bindings.Length).IsGreaterThan(0);
+            await Assert.That(entry.Label).IsNotEqualTo(string.Empty);
+        }
+    }
+
+    [Test]
+    public async Task CtrlW_ResolvesToCloseTab()
+    {
+        await Assert.That(Map.Resolve(UiKey.ForChar('w', KeyModifierSet.Ctrl))).IsEqualTo(ChatAction.CloseTab);
+    }
+
+    [Test]
+    public async Task CtrlT_ResolvesToOpenTab()
+    {
+        await Assert.That(Map.Resolve(UiKey.ForChar('t', KeyModifierSet.Ctrl))).IsEqualTo(ChatAction.OpenTab);
+    }
+
+    [Test]
+    public async Task CtrlTab_ResolvesToNextTab_WhenStripIsOpen()
+    {
+        await Assert.That(Map.Resolve(new UiKey(UiKeyCode.Tab, KeyModifierSet.Ctrl), WithTabs(2)))
+            .IsEqualTo(ChatAction.NextTab);
+    }
+
+    [Test]
+    public async Task CtrlShiftTab_ResolvesToPreviousTab_WhenStripIsOpen()
+    {
+        var key = new UiKey(UiKeyCode.Tab, KeyModifierSet.Ctrl | KeyModifierSet.Shift);
+        await Assert.That(Map.Resolve(key, WithTabs(2))).IsEqualTo(ChatAction.PreviousTab);
+    }
+
+    [Test]
+    public async Task CtrlTab_FallsBackToPanelCycle_WhenStripIsClosed()
+    {
+        // The chord is shared, so the guard is what keeps the pre-#389 meaning
+        // intact: one tab (or none) is not a strip to cycle.
+        await Assert.That(Map.Resolve(new UiKey(UiKeyCode.Tab, KeyModifierSet.Ctrl), WithTabs(1)))
+            .IsEqualTo(ChatAction.CyclePanelFocus);
+        await Assert.That(Map.Resolve(new UiKey(UiKeyCode.Tab, KeyModifierSet.Ctrl), new UiState()))
+            .IsEqualTo(ChatAction.CyclePanelFocus);
+    }
+
+    [Test]
+    public async Task TabGuards_NeverFire_WithoutAStateSnapshot()
+    {
+        // Resolve(key) is the state-less overload every pre-#389 caller uses;
+        // a guard that fired on null would silently steal Ctrl+Tab from panels.
+        await Assert.That(Map.Resolve(new UiKey(UiKeyCode.Tab, KeyModifierSet.Ctrl)))
+            .IsEqualTo(ChatAction.CyclePanelFocus);
+        await Assert.That(Map.Resolve(new UiKey(UiKeyCode.Tab, KeyModifierSet.Ctrl | KeyModifierSet.Shift)))
+            .IsEqualTo(ChatAction.CyclePanelFocus);
+    }
+
+    [Test]
+    public async Task TabActions_DoNotStealPlainTabOrShiftTab()
+    {
+        var state = WithTabs(3);
+        // Plain Tab is autocomplete and must stay that way while tabs are open.
+        await Assert.That(Map.Resolve(new UiKey(UiKeyCode.Tab), state)).IsEqualTo(ChatAction.Autocomplete);
+        // Shift+Tab matches neither the tab pair (no Ctrl) nor CyclePanelFocus,
+        // so it stays unbound exactly as it was before #389.
+        await Assert.That(Map.Resolve(new UiKey(UiKeyCode.Tab, KeyModifierSet.Shift), state))
+            .IsEqualTo(ChatAction.None);
+    }
+
+    private static UiState WithTabs(int count)
+    {
+        var tabs = Enumerable.Range(0, count)
+            .Select(i => new SessionTab(Harbor.Abstractions.Models.Identifiers.SessionId.Create($"s{i}"), $"t{i}"))
+            .ToImmutableArray();
+        return new UiState
+        {
+            Chat = new ChatDomainState
+            {
+                TabStrip = new TabStripState { Tabs = tabs, ActiveTabId = tabs[0].SessionId }
+            }
+        };
+    }
 }

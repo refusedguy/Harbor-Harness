@@ -35,6 +35,24 @@ public sealed record TabStripState
     /// <summary>Session id of the focused tab, or <see langword="null" /> when no tab is open.</summary>
     public SessionId? ActiveTabId { get; init; }
 
+    /// <summary>
+    ///     Show the strip even with fewer than two tabs open (#389). The default
+    ///     is <see langword="false" />: a lone tab is dead chrome, and every
+    ///     golden in the repo was captured without it. Hosts read this from user
+    ///     config ("always show the tab bar") and seed it into the initial
+    ///     snapshot — it is a display preference, not a transition, so it
+    ///     carries no <c>UiMsg</c>.
+    /// </summary>
+    public bool ForceShow { get; init; }
+
+    /// <summary>
+    ///     Whether a renderer should paint the strip for the given tab count:
+    ///     two or more open tabs, or an explicit <see cref="ForceShow" />.
+    ///     Single source of truth for the rule so the widget, the layout
+    ///     attach/detach and the tests cannot disagree.
+    /// </summary>
+    public bool ShouldRender => ForceShow || Tabs.Length >= 2;
+
     public static readonly TabStripState Empty = new();
 
     /// <summary>

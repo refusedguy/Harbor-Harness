@@ -44,6 +44,30 @@ public sealed class ChatKeyMap
         // below so Alt+'?' keeps resolving here, as the old shell overrides did.
         new(ChatAction.HelpPanel, "help", new Binding(UiKeyCode.Char, KeyModifierSet.None, '?')),
 
+        // ── tab strip (#389) ─────────────────────────────────────────────
+        // Ctrl+Tab / Ctrl+Shift+Tab — next / previous open tab. Listed BEFORE
+        // CyclePanelFocus (which keeps the same key) and gated on a live
+        // multi-tab strip: while two or more tabs are open the tab strip owns
+        // Ctrl+Tab, otherwise the guard fails and the panel binding below wins
+        // exactly as it did before tabs existed. Resolve(key) without a state
+        // snapshot passes null, so the guard can never fire and the legacy
+        // panel mapping is preserved for every existing caller.
+        //
+        // The two entries need separate guards because Binding's subset
+        // semantics make the bare-Ctrl entry match Ctrl+Shift+Tab too: without
+        // the Shift check the "next" entry would swallow "previous".
+        new(ChatAction.NextTab, "next tab",
+            new Binding(UiKeyCode.Tab, KeyModifierSet.Ctrl)) { Guard = TabStripOpenPlain },
+        new(ChatAction.PreviousTab, "prev tab",
+            new Binding(UiKeyCode.Tab, KeyModifierSet.Ctrl)) { Guard = TabStripOpenShifted },
+        // Ctrl+W — close the focused tab. Unconditional: with one tab open this
+        // is still a meaningful (and reversible-by-reopen) action, and it must
+        // never fall through to the quit binding.
+        new(ChatAction.CloseTab, "close tab", new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 'w')),
+        // Ctrl+T — open / switch tab. Rebindable through this table like every
+        // other entry (the slice-3 gesture layer reuses the same action).
+        new(ChatAction.OpenTab, "open tab", new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 't')),
+
         // ── panel hotkeys ────────────────────────────────────────────────
         // Alt+1..Alt+9 — toggle the Nth registered panel. Slot comes from the key's Character.
         new(ChatAction.TogglePanelSlot, "panel 1", new Binding(UiKeyCode.Char, KeyModifierSet.Alt)),
@@ -71,15 +95,60 @@ public sealed class ChatKeyMap
     /// <summary>All documented actions (used to render footer/help).</summary>
     public IReadOnlyList<Entry> All => _entries;
 
-    /// <summary>Resolve a key press to an action (first matching entry wins).</summary>
+    /// <summary>
+    ///     Tab-strip guard for the plain Ctrl+Tab ("next tab") entry: a snapshot
+    ///     must be supplied and at least two tabs must be open, otherwise the key
+    ///     belongs to whatever binding comes next in table order.
+    /// </summary>
+    private static bool TabStripOpenPlain(UiKey key, UiState? state) =>
+        !key.Mods.HasFlag(KeyModifierSet.Shift) && TabStripOpen(state);
+
+    /// <summary>
+    ///     Same guard for Ctrl+Shift+Tab ("previous tab"). Kept separate from
+    ///     <see cref="TabStripOpenPlain" /> because <see cref="Binding" /> uses
+    ///     subset matching: a bare-Ctrl binding also matches Ctrl+Shift+Tab, and
+    ///     first-match-wins would then route "previous" to the "next" action.
+    /// </summary>
+    private static bool TabStripOpenShifted(UiKey key, UiState? state) =>
+        key.Mods.HasFlag(KeyModifierSet.Shift) && TabStripOpen(state);
+
+    /// <summary>
+    ///     True when a state snapshot was supplied and it has a real tab strip
+    ///     to act on. A <see langword="null" /> snapshot (the state-less
+    ///     <see cref="Resolve(UiKey)" /> overload) never opens a tab, which keeps
+    ///     the pre-#389 Ctrl+Tab → <see cref="ChatAction.CyclePanelFocus" />
+    ///     mapping byte-for-byte intact for every caller that has no store.
+    /// </summary>
+    private static bool TabStripOpen(UiState? state) =>
+        state is not null && state.Chat.TabStrip.Tabs.Length >= 2;
+
+    /// <summary>
+    ///     Resolve a key press to an action (first matching entry wins), without
+    ///     a state snapshot. Context-guarded entries can never fire here — see
+    ///     <see cref="Resolve(UiKey, UiState?)" />.
+    /// </summary>
     /// <remarks>
     ///     Entry order defines priority: explicit bindings are matched before the
     ///     implicit printable-character rule, so a key like 'q' with no binding still
     ///     falls through to <see cref="ChatAction.Char" /> and reaches the input box.
     /// </remarks>
-    public ChatAction Resolve(UiKey key)
+    public ChatAction Resolve(UiKey key) => Resolve(key, state: null);
+
+    /// <summary>
+    ///     Resolve a key press against the current <see cref="UiState" /> so
+    ///     context-sensitive entries (the tab-strip Ctrl+Tab pair, which shares
+    ///     its key with <see cref="ChatAction.CyclePanelFocus" />) can win only
+    ///     while the surface they act on is actually on screen.
+    /// </summary>
+    /// <remarks>
+    ///     The state is a pure input to resolution — it is read, never stored,
+    ///     so the keymap stays a singleton-safe value object. A
+    ///     <see langword="null" /> snapshot disables every guard, degrading
+    ///     exactly to <see cref="Resolve(UiKey)" />.
+    /// </remarks>
+    public ChatAction Resolve(UiKey key, UiState? state)
     {
-        var match = _entries.FirstOrDefault(e => e.Bindings.Any(b => b.Matches(key)));
+        var match = _entries.FirstOrDefault(e => Applies(e, key, state));
         if (match != null)
             return match.Action;
 
@@ -92,6 +161,15 @@ public sealed class ChatKeyMap
 
     /// <summary>Get the documented entry for an action.</summary>
     public Entry Get(ChatAction action) => _byAction[action];
+
+    /// <summary>
+    ///     Whether <paramref name="entry" /> claims <paramref name="key" />:
+    ///     one of its bindings matches AND its context guard (if any) passes for
+    ///     this snapshot. Guards run only after a binding hit, so they cost
+    ///     nothing on the overwhelmingly common miss path.
+    /// </summary>
+    private static bool Applies(Entry entry, UiKey key, UiState? state) =>
+        entry.Bindings.Any(b => b.Matches(key)) && (entry.Guard is null || entry.Guard(key, state));
 
     /// <summary>Match spec: a key code, optionally gated by required modifiers and/or an exact character.</summary>
     /// <remarks>
@@ -122,6 +200,24 @@ public sealed class ChatKeyMap
         }
     }
 
-    /// <summary>One documented action: its label and the key bindings that trigger it.</summary>
-    public sealed record Entry(ChatAction Action, string Label, params Binding[] Bindings);
+    /// <summary>
+    ///     One documented action: its label, the key bindings that trigger it,
+    ///     and an optional context guard.
+    /// </summary>
+    /// <param name="Action">The action this entry resolves to.</param>
+    /// <param name="Label">Human-readable label (help overlay, keymap footer).</param>
+    /// <param name="Bindings">Key specs; the first that matches claims the press.</param>
+    public sealed record Entry(
+        ChatAction Action,
+        string Label,
+        params Binding[] Bindings)
+    {
+        /// <summary>
+        ///     Optional context predicate, run after a binding hit. Needed because
+        ///     two features can legitimately share a chord: <c>Ctrl+Tab</c> cycles
+        ///     panels normally and cycles tabs while a tab strip is open (#389).
+        ///     A <see langword="null" /> guard is unconditional.
+        /// </summary>
+        public Func<UiKey, UiState?, bool>? Guard { get; init; }
+    }
 }
