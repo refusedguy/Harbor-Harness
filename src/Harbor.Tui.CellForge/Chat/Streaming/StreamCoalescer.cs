@@ -219,7 +219,22 @@ internal sealed class StreamCoalescer
         var text = _thinkStream.RawText();
         if (!string.IsNullOrEmpty(text))
         {
-            _panel.Timeline.Replace(_thinkStream, new ThinkingBlock(text));
+            var final = new ThinkingBlock(text);
+
+            // [UX4] #264: default-collapsed policy — the finalized block
+            // starts collapsed like the stream; only an explicit user expand
+            // mid-stream carries over (all three stages).
+            if (_thinkStream.IsFullyExpanded)
+            {
+                final.CycleExpand();
+                final.CycleExpand();
+            }
+            else if (_thinkStream.IsExpanded)
+            {
+                final.SetExpanded(true);
+            }
+
+            _panel.Timeline.Replace(_thinkStream, final);
         }
 
         _thinkStream = null;

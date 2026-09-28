@@ -58,7 +58,14 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
     /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291);
     /// this property satisfies the mixin contract.
     /// </summary>
-    public int MaxBodyLines { get; set; } = ICollapsibleChatBlock.DefaultCollapsedBodyLines;
+    public int MaxBodyLines { get; set; } = CollapsedBodyLines;
+
+    /// <summary>
+    /// [UX4] #264: default collapsed budget for thinking — the crush
+    /// 10-line box. Short blocks (≤10 wrapped lines) stay byte-identical
+    /// to the pre-collapse layout.
+    /// </summary>
+    public const int CollapsedBodyLines = 10;
 
     /// <summary>
     /// Expanded body line budget (overflow marker when exceeded).
@@ -69,15 +76,68 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
     /// <summary>
     /// Whether the block is expanded (feed Enter/click toggles via
     /// <see cref="ToggleExpanded"/>). Satisfies the <c>ICollapsibleChatBlock</c>
-    /// mixin contract.
+    /// mixin contract. Defaults to <c>false</c> ([UX4] #264
+    /// default-collapsed policy: thinking never steals feed height).
     /// </summary>
     public bool IsExpanded { get; private set; }
 
+    /// <summary>
+    /// [UX4] #264: third expand stage (collapsed → expanded → full).
+    /// True only after <see cref="CycleExpand"/> passes the 20-line
+    /// expanded budget; <see cref="ToggleExpanded"/> /
+    /// <see cref="SetExpanded"/> never set it (2-stage gesture compat —
+    /// gesture policy itself is UX2 scope and untouched).
+    /// </summary>
+    public bool IsFullyExpanded { get; private set; }
+
     /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click path).</summary>
-    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+    public void ToggleExpanded()
+    {
+        IsExpanded = !IsExpanded;
+        IsFullyExpanded = false;
+    }
 
     /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
-    public void SetExpanded(bool expanded) => IsExpanded = expanded;
+    public void SetExpanded(bool expanded)
+    {
+        IsExpanded = expanded;
+        if (!expanded)
+        {
+            IsFullyExpanded = false;
+        }
+    }
+
+    /// <summary>
+    /// [UX4] #264: 3-stage expand cycle for thinking (crush pattern) —
+    /// collapsed (10 + <c>…</c>) → expanded (20 + <c>…</c>) → full →
+    /// collapsed. Block-side state machine only; the feed gesture keeps
+    /// calling <see cref="ToggleExpanded"/> (UX2 scope).
+    /// </summary>
+    public void CycleExpand()
+    {
+        if (!IsExpanded)
+        {
+            IsExpanded = true;
+            IsFullyExpanded = false;
+        }
+        else if (!IsFullyExpanded)
+        {
+            IsFullyExpanded = true;
+        }
+        else
+        {
+            IsExpanded = false;
+            IsFullyExpanded = false;
+        }
+    }
+
+    /// <summary>
+    /// Effective body budget for the current expand stage:
+    /// <see cref="MaxBodyLines"/> collapsed, <see cref="ExpandedBodyLines"/>
+    /// expanded, unbounded when fully expanded.
+    /// </summary>
+    private int EffectiveBudget =>
+        !IsExpanded ? MaxBodyLines : IsFullyExpanded ? int.MaxValue : ExpandedBodyLines;
 
     public void Append(string delta)
     {
@@ -103,9 +163,9 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
     {
         EnsureWrapped(width);
         int total = _stable.Count + _tail.Length;
-        int budget = IsExpanded ? ExpandedBodyLines : MaxBodyLines;
-        int shown = budget <= 0 ? 0 : Math.Min(total, budget);
-        int visible = shown + (budget > 0 && total > budget ? 1 : 0);
+        int budget = EffectiveBudget;
+        int shown = budget == int.MaxValue ? total : budget <= 0 ? 0 : Math.Min(total, budget);
+        int visible = shown + (budget != int.MaxValue && budget > 0 && total > budget ? 1 : 0);
         return BlockMeasure.Exact(Math.Max(1, visible));
     }
 
@@ -131,7 +191,11 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
         }
 
         total += Math.Max(1, (run + width - 1) / width);
-        return Math.Max(1, total);
+
+        // [UX4] #264: mirror Measure — clamp the off-screen estimate to the
+        // current expand-stage budget (plus the overflow-marker row), so the
+        // layout cache agrees with the painted height.
+        return Math.Max(1, ClampLineCount(total));
     }
 
     public void Paint(in BlockPaintContext ctx)
@@ -140,9 +204,9 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
         var buffer = ctx.Buffer;
         var style = new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic);
         int total = _stable.Count + _tail.Length;
-        int budget = IsExpanded ? ExpandedBodyLines : MaxBodyLines;
-        int shown = budget <= 0 ? 0 : Math.Min(total, budget);
-        int visible = shown + (budget > 0 && total > budget ? 1 : 0);
+        int budget = EffectiveBudget;
+        int shown = budget == int.MaxValue ? total : budget <= 0 ? 0 : Math.Min(total, budget);
+        int visible = shown + (budget != int.MaxValue && budget > 0 && total > budget ? 1 : 0);
         int rows = ctx.Rect.Height;
         int skip = ctx.SkipRows;
         for (int i = 0; i < visible && (skip + i) < visible && i < rows; i++)
@@ -231,7 +295,12 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
 
     private int ClampLineCount(int total)
     {
-        int budget = IsExpanded ? ExpandedBodyLines : MaxBodyLines;
+        int budget = EffectiveBudget;
+        if (budget == int.MaxValue)
+        {
+            return total;
+        }
+
         if (budget <= 0)
         {
             return 0;
@@ -264,7 +333,14 @@ public sealed class ThinkingBlock : ICollapsibleChatBlock
     /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291);
     /// this property satisfies the mixin contract.
     /// </summary>
-    public int MaxBodyLines { get; set; } = ICollapsibleChatBlock.DefaultCollapsedBodyLines;
+    public int MaxBodyLines { get; set; } = CollapsedBodyLines;
+
+    /// <summary>
+    /// [UX4] #264: default collapsed budget for thinking — the crush
+    /// 10-line box. Short blocks (≤10 wrapped lines) stay byte-identical
+    /// to the pre-collapse layout.
+    /// </summary>
+    public const int CollapsedBodyLines = 10;
 
     /// <summary>
     /// Expanded body line budget (overflow marker when exceeded).
@@ -275,15 +351,68 @@ public sealed class ThinkingBlock : ICollapsibleChatBlock
     /// <summary>
     /// Whether the block is expanded (feed Enter/click toggles via
     /// <see cref="ToggleExpanded"/>). Satisfies the <c>ICollapsibleChatBlock</c>
-    /// mixin contract.
+    /// mixin contract. Defaults to <c>false</c> ([UX4] #264
+    /// default-collapsed policy: finalized reasoning never steals feed height).
     /// </summary>
     public bool IsExpanded { get; private set; }
 
+    /// <summary>
+    /// [UX4] #264: third expand stage (collapsed → expanded → full).
+    /// True only after <see cref="CycleExpand"/> passes the 20-line
+    /// expanded budget; <see cref="ToggleExpanded"/> /
+    /// <see cref="SetExpanded"/> never set it (2-stage gesture compat —
+    /// gesture policy itself is UX2 scope and untouched).
+    /// </summary>
+    public bool IsFullyExpanded { get; private set; }
+
     /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click path).</summary>
-    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+    public void ToggleExpanded()
+    {
+        IsExpanded = !IsExpanded;
+        IsFullyExpanded = false;
+    }
 
     /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
-    public void SetExpanded(bool expanded) => IsExpanded = expanded;
+    public void SetExpanded(bool expanded)
+    {
+        IsExpanded = expanded;
+        if (!expanded)
+        {
+            IsFullyExpanded = false;
+        }
+    }
+
+    /// <summary>
+    /// [UX4] #264: 3-stage expand cycle for thinking (crush pattern) —
+    /// collapsed (10 + <c>…</c>) → expanded (20 + <c>…</c>) → full →
+    /// collapsed. Block-side state machine only; the feed gesture keeps
+    /// calling <see cref="ToggleExpanded"/> (UX2 scope).
+    /// </summary>
+    public void CycleExpand()
+    {
+        if (!IsExpanded)
+        {
+            IsExpanded = true;
+            IsFullyExpanded = false;
+        }
+        else if (!IsFullyExpanded)
+        {
+            IsFullyExpanded = true;
+        }
+        else
+        {
+            IsExpanded = false;
+            IsFullyExpanded = false;
+        }
+    }
+
+    /// <summary>
+    /// Effective body budget for the current expand stage:
+    /// <see cref="MaxBodyLines"/> collapsed, <see cref="ExpandedBodyLines"/>
+    /// expanded, unbounded when fully expanded.
+    /// </summary>
+    private int EffectiveBudget =>
+        !IsExpanded ? MaxBodyLines : IsFullyExpanded ? int.MaxValue : ExpandedBodyLines;
 
     public BlockMeasure Measure(int width) =>
         BlockMeasure.Exact(Math.Max(1, ClampLineCount(_text.GetLines(Math.Max(1, width)).Length)));
@@ -297,9 +426,9 @@ public sealed class ThinkingBlock : ICollapsibleChatBlock
         var lines = _text.GetLines(Math.Max(1, ctx.Rect.Width));
         var style = new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic);
         int total = lines.Length;
-        int budget = IsExpanded ? ExpandedBodyLines : MaxBodyLines;
-        int shown = budget <= 0 ? 0 : Math.Min(total, budget);
-        int visible = shown + (budget > 0 && total > budget ? 1 : 0);
+        int budget = EffectiveBudget;
+        int shown = budget == int.MaxValue ? total : budget <= 0 ? 0 : Math.Min(total, budget);
+        int visible = shown + (budget != int.MaxValue && budget > 0 && total > budget ? 1 : 0);
         int rows = ctx.Rect.Height;
         int skip = ctx.SkipRows;
         for (int i = 0; i < visible && (skip + i) < visible && i < rows; i++)
@@ -318,7 +447,12 @@ public sealed class ThinkingBlock : ICollapsibleChatBlock
     /// </summary>
     private int ClampLineCount(int total)
     {
-        int budget = IsExpanded ? ExpandedBodyLines : MaxBodyLines;
+        int budget = EffectiveBudget;
+        if (budget == int.MaxValue)
+        {
+            return total;
+        }
+
         if (budget <= 0)
         {
             return 0;
