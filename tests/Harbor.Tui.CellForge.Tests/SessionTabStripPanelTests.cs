@@ -361,8 +361,11 @@ public class SessionTabStripPanelTests
         // interactions below moved the store and not the panel's own copy.
         var projected = store.State.Chat.TabStrip;
         var panel = StripPanel(projected);
+        // The sink is typed Action<AppMsg> (the widest message type, so the
+        // panel can carry generic messages too), which is wider than
+        // List<ChatAppMsg>.Add — hence the narrowing lambda.
         var seen = new List<ChatAppMsg>();
-        panel.Dispatch = seen.Add;
+        panel.Dispatch = m => seen.Add((ChatAppMsg)m);
 
         var buffer = Painted(panel, 60, 2);
         _ = Row(buffer, 0, 60);
