@@ -245,7 +245,7 @@ public class TabStripKeyBindingTests
     }
 
     private static Session Session(string id, string title) =>
-        new(
+        return new Session(
             Id: id,
             ProjectId: "p",
             Directory: "/tmp",

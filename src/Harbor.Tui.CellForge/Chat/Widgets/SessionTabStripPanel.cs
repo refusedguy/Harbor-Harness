@@ -437,18 +437,23 @@ public sealed class SessionTabStripPanel : Panel
     }
 
     /// <summary>Dispatch <c>ActivateTab</c> for the tab under <paramref name="x" />. False when nothing was hit.</summary>
-    public bool ActivateAt(int x) => Dispatch(ActiveTabOf(x));
+    public bool ActivateAt(int x) => Send(ActiveTabOf(x));
 
     /// <summary>Dispatch <c>CloseTab</c> for the tab under <paramref name="x" />. False when nothing was hit.</summary>
-    public bool CloseAt(int x) => Dispatch(CloseTabOf(x));
+    public bool CloseAt(int x) => Send(CloseTabOf(x));
 
     /// <summary>Dispatch <c>CycleNextTab</c>.</summary>
-    public bool Next() => Dispatch(new AppMsg.CycleNextTab());
+    public bool Next() => Send(new AppMsg.CycleNextTab());
 
     /// <summary>Dispatch <c>CyclePreviousTab</c>.</summary>
-    public bool Previous() => Dispatch(new AppMsg.CyclePreviousTab());
+    public bool Previous() => Send(new AppMsg.CyclePreviousTab());
 
-    private bool Dispatch(AppMsg? msg)
+    /// <summary>
+    ///     Hands <paramref name="msg" /> to the sink, if one is wired. Named
+    ///     <c>Send</c> rather than <c>Dispatch</c> so it cannot be confused with
+    ///     the <see cref="Dispatch" /> property it reads.
+    /// </summary>
+    private bool Send(AppMsg? msg)
     {
         if (msg is null || Dispatch is not { } sink)
             return false;
