@@ -10,12 +10,14 @@ Contracts and abstractions for the Harbor UI Framework — configuration, diagno
 
 | Subfolder | Contents |
 |-----------|----------|
+| `Commands/` | `SlashCommandCatalog` + `SlashCommandDefinition` — the single slash-command registry every palette, autocomplete and help surface derives from (issue #462). |
 | `Configuration/` | `ICommonConfigReader` — reads provider/model overrides from common config. |
 | `Diagnostics/` | `IDiagnosticsPanel`, `InMemoryDiagnosticsPanel`, `DiagnosticEntry`, `DiagnosticsPanelLoggerProvider` (ILoggerProvider that forwards logs into the panel). |
 | `Navigation/` | `IContentHost`, `IShellChrome`, `IWorkspaceCommands`, `OverlayIds` (palette, settings, diff, token usage, provider browser, model picker, sessions flyout, focus session). |
 
 ## Public API summary
 
+- **`SlashCommandCatalog`**: `All` (every command), `Invocations` (`/help`, `/exit`, … — the advertised vocabulary), `Find(text)` (alias- and case-insensitive lookup), plus the palette group constants. `SlashCommandDispatcher` binds its handlers to these entries and throws at construction if a command has no handler, so a command can never be advertised without being runnable.
 - **`ICommonConfigReader.TryReadProviderModelAsync()`**: returns `(ProviderId?, ModelId?)` from common config.
 - **`IDiagnosticsPanel`**: `Log(level, category, message)`, `GetRecent(max)`, `Clear()`.
 - **`DiagnosticsPanelLoggerProvider` / `DiagnosticsPanelLogger` : `ILoggerProvider` / `ILogger` — bridges `Microsoft.Extensions.Logging` into the diagnostics panel.
@@ -46,3 +48,4 @@ dotnet build src/Harbor.Ui.Framework.Abstractions/Harbor.Ui.Framework.Abstractio
 
 - `OverlayIds` are string constants, not a strongly-typed enum — prone to typos at call sites.
 - `InMemoryDiagnosticsPanel` capacity is fixed at construction; no auto-resize.
+- The registry covers the CLI slash dispatcher's vocabulary. Renderer-local affordances (CellForge's `/vim` leader toggle, `/panels`) are deliberately not in it — they are not dispatchable everywhere, so advertising them globally would reintroduce the drift this registry removed.

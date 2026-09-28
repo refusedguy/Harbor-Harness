@@ -13,6 +13,7 @@ using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Harbor.Application.Skills;
 using Harbor.Terminal.Abstractions;
+using Harbor.Ui.Framework.Commands;
 using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.Logging;
 
@@ -62,9 +63,7 @@ internal sealed class SlashCommandDispatcher
 
     /// <summary>All registered slash commands (canonical + aliases → single registration).</summary>
     private sealed record SlashCommandRegistration(
-        string CanonicalName,
-        IReadOnlyList<string> Aliases,
-        IReadOnlyList<string>? ArgSuggestions,
+        SlashCommandDefinition Definition,
         Func<CommandContext, IReadOnlyList<string>, Task<Result>> Execute);
 
     /// <summary>Lightweight context bag passed to command execute delegates.</summary>
@@ -143,7 +142,7 @@ internal sealed class SlashCommandDispatcher
         string cmd = parts[0].ToLowerInvariant();
         string[] args = parts.Skip(1).ToArray();
 
-        if (cmd is "exit" or "quit")
+        if (SlashCommandCatalog.Find(cmd) is { QuitsLoop: true })
         {
             _logger.LogInformation("Quit requested via /{Command}", cmd);
             return Task.FromResult(SlashCommandOutcome.Quit(0));
@@ -166,14 +165,10 @@ internal sealed class SlashCommandDispatcher
     /// <summary>All registered slash commands, including aliases.</summary>
     public IReadOnlyList<ISlashCommand> GetRegisteredCommands()
     {
-        var list = new List<ISlashCommand>(_byName.Count);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var reg in _byName.Values)
+        var list = new List<ISlashCommand>(SlashCommandCatalog.All.Count);
+        foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
         {
-            if (seen.Add(reg.CanonicalName))
-            {
-                list.Add(new DelegateSlashCommand(reg.CanonicalName, reg.Aliases, reg.ArgSuggestions));
-            }
+            list.Add(new CatalogSlashCommand(def));
         }
 
         return list;
@@ -185,17 +180,7 @@ internal sealed class SlashCommandDispatcher
     /// </summary>
     public IReadOnlyList<string>? GetArgSuggestions(string commandName)
     {
-        if (string.IsNullOrEmpty(commandName))
-        {
-            return null;
-        }
-
-        if (_byName.TryGetValue(commandName.ToLowerInvariant(), out var reg))
-        {
-            return reg.ArgSuggestions;
-        }
-
-        return null;
+        return SlashCommandCatalog.Find(commandName)?.ArgSuggestions;
     }
 
     private async Task<SlashCommandOutcome> ExecuteRegisteredAsync(
@@ -203,14 +188,14 @@ internal sealed class SlashCommandDispatcher
     {
         try
         {
-            _logger.LogInformation("Slash command: /{Command} args={ArgCount}", reg.CanonicalName, args.Count);
+            _logger.LogInformation("Slash command: /{Command} args={ArgCount}", reg.Definition.Name, args.Count);
             var result = await reg.Execute(ctx, args).ConfigureAwait(false);
-            _logger.LogDebug("Command /{Command} completed", reg.CanonicalName);
+            _logger.LogDebug("Command /{Command} completed", reg.Definition.Name);
             return SlashCommandOutcome.Continue;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error dispatching command /{Command}", reg.CanonicalName);
+            _logger.LogError(ex, "Error dispatching command /{Command}", reg.Definition.Name);
             ctx.Writer($"Error: {ex.Message}");
             return SlashCommandOutcome.Continue;
         }
@@ -225,71 +210,114 @@ internal sealed class SlashCommandDispatcher
         RegisterHostCommands(dict);
         RegisterSkillCommands(dict);
 
+        // #462: the catalog is the single source of truth, so a handler that
+        // drifted out of it (or a catalog entry nobody bound) fails loudly at
+        // composition time instead of shipping a command the palette offers
+        // but the dispatcher cannot run.
+        AssertCatalogMatchesHandlers(dict);
+
         return dict.ToFrozenDictionary();
+    }
+
+    /// <summary>
+    ///     Verifies the bound handlers and <see cref="SlashCommandCatalog" /> describe the
+    ///     same command set. Loop-quitting commands (<c>/exit</c>, <c>/quit</c>) are handled
+    ///     by <see cref="HandleCoreAsync" /> before the registry lookup, so they carry no
+    ///     delegate and are excluded from the comparison.
+    /// </summary>
+    private static void AssertCatalogMatchesHandlers(Dictionary<string, SlashCommandRegistration> dict)
+    {
+        var missing = new List<string>();
+        foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
+        {
+            if (!def.QuitsLoop && !dict.ContainsKey(def.Name))
+            {
+                missing.Add(def.Name);
+            }
+        }
+
+        if (missing.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"SlashCommandCatalog declares commands with no handler: {string.Join(", ", missing)}.");
+        }
     }
 
     private static void Register(
         Dictionary<string, SlashCommandRegistration> dict,
         string canonical,
-        IReadOnlyList<string> aliases,
-        IReadOnlyList<string>? argSuggestions,
         Func<CommandContext, IReadOnlyList<string>, Task<Result>> execute)
     {
-        var reg = new SlashCommandRegistration(canonical, aliases, argSuggestions, execute);
-        dict[canonical.ToLowerInvariant()] = reg;
-        foreach (var a in aliases)
+        // Aliases, argument suggestions and descriptions live in the catalog
+        // (#462). Passing them here as well is what let the advertised lists
+        // drift away from what the dispatcher can actually run. The name must be
+        // the canonical one — an alias here would silently bind the wrong command.
+        if (SlashCommandCatalog.Find(canonical) is not { } def || def.Name != canonical)
         {
-            dict[a.ToLowerInvariant()] = reg;
+            throw new InvalidOperationException(
+                $"/{canonical} is not a canonical SlashCommandCatalog entry.");
+        }
+
+        var reg = new SlashCommandRegistration(def, execute);
+        dict[def.Name] = reg;
+        foreach (string alias in def.Aliases)
+        {
+            dict[alias] = reg;
         }
     }
 
     private static void RegisterCoreCommands(Dictionary<string, SlashCommandRegistration> dict)
     {
-
-        Register(dict, "help", ["h"], null, (ctx, _) =>
+        Register(dict, "help", (ctx, _) =>
         {
-            ctx.Writer("Commands: /setup /auth /model /agent /config /permissions /providers /sessions /skills /tree /fork /attach /plugins /tui /renderer /storage /exit");
+            // #462: derived from the catalog so /help can never advertise a
+            // command the dispatcher cannot run (or omit one it can). Note this
+            // drops /attach: it is a CellForge-local ReplCommandCatalog command
+            // (like /vim and /panels), resolved by the composer submit path
+            // rather than by this dispatcher, so it is not slash-dispatch
+            // vocabulary and is not advertised to hosts that cannot run it.
+            ctx.Writer("Commands: " + string.Join(" ", SlashCommandCatalog.Invocations));
             return Task.FromResult(Result.Success());
         });
 
-        Register(dict, "new", ["new-session"], null, (ctx, _) =>
+        Register(dict, "new", (ctx, _) =>
         {
             ctx.Writer("Use /new in the interactive TUI to start a fresh session.");
             return Task.FromResult(Result.Success());
         });
 
-        Register(dict, "setup", [], null, async (ctx, _) =>
+        Register(dict, "setup", async (ctx, _) =>
         {
             var result = await ctx.Wizard
                 .RunAsync(ctx.Reader!, ctx.Writer).ConfigureAwait(false);
             return result;
         });
 
-        Register(dict, "auth", ["key", "api-key"], null, (ctx, _) =>
+        Register(dict, "auth", (ctx, _) =>
         {
             return new AuthCommand(ctx.AuthStore, ctx.Writer)
                 .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
         });
 
-        Register(dict, "model", ["m"], null, (ctx, _) =>
+        Register(dict, "model", (ctx, _) =>
         {
             return new ModelCommand(ctx.ConfigStore, ctx.Providers, ctx.Writer, ctx.Agent, ctx.Session)
                 .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
         });
 
-        Register(dict, "agent", ["mode", "a"], null, (ctx, _) =>
+        Register(dict, "agent", (ctx, _) =>
         {
             return new AgentCommand(ctx.ConfigStore, ctx.AgentRegistry, ctx.Writer)
                 .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
         });
 
-        Register(dict, "config", [], null, (ctx, _) =>
+        Register(dict, "config", (ctx, _) =>
         {
             return new ConfigCommand(ctx.ConfigStore, ctx.Writer)
                 .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
         });
 
-        Register(dict, "permissions", [], null, (ctx, _) =>
+        Register(dict, "permissions", (ctx, _) =>
         {
             return new PermissionsCommand(
                     ctx.Permissions,
@@ -301,7 +329,7 @@ internal sealed class SlashCommandDispatcher
 
     private static void RegisterSessionCommands(Dictionary<string, SlashCommandRegistration> dict)
     {
-        Register(dict, "providers", [], null, async (ctx, _) =>
+        Register(dict, "providers", async (ctx, _) =>
         {
             var providers = ctx.Providers;
             ctx.Writer($"Providers ({providers.GetRegisteredProviderIds().Count}):");
@@ -314,7 +342,7 @@ internal sealed class SlashCommandDispatcher
             return Result.Success();
         });
 
-        Register(dict, "sessions", [], null, async (ctx, _) =>
+        Register(dict, "sessions", async (ctx, _) =>
         {
             var store = ctx.SessionStore;
             var result = await store.ListAsync().ConfigureAwait(false);
@@ -324,7 +352,7 @@ internal sealed class SlashCommandDispatcher
             return Result.Success();
         });
 
-        Register(dict, "tree", [], null, static async (ctx, _) =>
+        Register(dict, "tree", static async (ctx, _) =>
         {
             var store = ctx.SessionStore;
             var built = await SessionTreeRunner.BuildAsync(store, ctx.Session.Id).ConfigureAwait(false);
@@ -342,7 +370,7 @@ internal sealed class SlashCommandDispatcher
             return Result.Success();
         });
 
-        Register(dict, "fork", [], null, static async (ctx, args) =>
+        Register(dict, "fork", static async (ctx, args) =>
         {
             if (args.Count < 2)
             {
@@ -365,7 +393,7 @@ internal sealed class SlashCommandDispatcher
 
     private static void RegisterHostCommands(Dictionary<string, SlashCommandRegistration> dict)
     {
-        Register(dict, "plugins", [], null, (ctx, _) =>
+        Register(dict, "plugins", (ctx, _) =>
         {
             // Optional host service (absent on MINIMAL — see the field note).
             if (ctx.PluginReload is { } reload)
@@ -377,19 +405,19 @@ internal sealed class SlashCommandDispatcher
             return Task.FromResult(Result.Success());
         });
 
-        Register(dict, "tui", [], ["ansi", "plain", "spectre", "consoleex", "notifications"], (ctx, _) =>
+        Register(dict, "tui", (ctx, _) =>
         {
             ctx.Writer("TUI: ansi (default), plain, spectre, fullscreen");
             return Task.FromResult(Result.Success());
         });
 
-        Register(dict, "storage", [], ["jsonl", "memory", "sqlite"], (ctx, _) =>
+        Register(dict, "storage", (ctx, _) =>
         {
             ctx.Writer("Storage: jsonl (default), memory, sqlite");
             return Task.FromResult(Result.Success());
         });
 
-        Register(dict, "renderer", [], null, (ctx, _) =>
+        Register(dict, "renderer", (ctx, _) =>
         {
             // Optional host service (absent on headless builds — see the field note).
             if (ctx.RendererPipeline is not { } pipeline)
@@ -412,7 +440,7 @@ internal sealed class SlashCommandDispatcher
         // their git source and then reseeds. The detailed per-skill panel
         // stays host opt-in — the default-on signal is the status-line
         // aggregate pill fed from the same model.
-        Register(dict, "skills", ["skill"], ["refresh", "update"], async (ctx, args) =>
+        Register(dict, "skills", async (ctx, args) =>
         {
             if (args.Count == 0)
             {
@@ -511,14 +539,14 @@ internal sealed class SlashCommandDispatcher
         return Result.Success();
     }
 
-    /// <summary>Minimal ISlashCommand adapter for palette consumption.</summary>
-    private sealed record DelegateSlashCommand(
-        string Name,
-        IReadOnlyList<string> Aliases,
-        IReadOnlyList<string>? ArgSuggestions) : ISlashCommand
+    /// <summary>Catalog-backed <see cref="ISlashCommand" /> adapter for palette consumption.</summary>
+    private sealed record CatalogSlashCommand(SlashCommandDefinition Definition) : ISlashCommand
     {
-        public string Description => "";
-        public string Usage => $"/{Name}";
+        public string Name => Definition.Name;
+        public string Description => Definition.Description;
+        public string Usage => Definition.Invocation;
+        public IReadOnlyList<string> Aliases => Definition.Aliases;
+        public IReadOnlyList<string>? ArgSuggestions => Definition.ArgSuggestions;
         public Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
             => Task.FromResult(Result.Failure("Delegate command — use SlashCommandDispatcher to execute."));
     }

@@ -1,44 +1,47 @@
+using Harbor.Ui.Framework.Commands;
+
 namespace Harbor.Desktop.Shared.Commands;
 /// <summary>
-///     Catalog of slash commands (e.g. <c>/help</c>, <c>/clear</c>,
-///     <c>/quit</c>) shared by every desktop app. The platform app's chat
-///     view-model dispatches the user-typed <c>/</c>-prefixed text via
-///     <c>TuiEffectHost.RunSlash</c> — this catalog just documents the
-///     canonical command names and descriptions for the help screen.
+///     Catalog of slash commands (<c>/help</c>, <c>/exit</c>, …) shared by every
+///     desktop app. The platform app's chat view-model dispatches the
+///     user-typed <c>/</c>-prefixed text via <c>TuiEffectHost.RunSlash</c> —
+///     this catalog documents the canonical command names, descriptions and
+///     aliases for the help screen.
 /// </summary>
+/// <remarks>
+///     The entries are projected from <see cref="SlashCommandCatalog" />, the
+///     single registry the CLI slash dispatcher binds handlers to (issue
+///     #462). This file used to own a private 10-entry copy that had drifted
+///     away from what the dispatcher runs, so desktop apps advertised
+///     <c>/tokens</c>, <c>/theme</c> and <c>/editor</c> — commands that do not
+///     exist — while missing <c>/permissions</c>, <c>/plugins</c> and
+///     <c>/skills</c>. Deriving instead of copying makes that class of bug
+///     unrepresentable.
+/// </remarks>
 public static class SlashCommands
 {
 
-    /// <summary>Canonical list of slash commands.</summary>
-    public static readonly IReadOnlyList<Entry> All =
-    [
-        new("/help", "Show this help screen", Array.Empty<string>()),
-        new("/clear", "Clear the current chat transcript", new[] { "cls" }),
-        new("/quit", "Exit Harbor", new[] { "exit" }),
-        new("/sessions", "List recent sessions", Array.Empty<string>()),
-        new("/branch", "Branch the current session at the last assistant message", Array.Empty<string>()),
-        new("/providers", "List configured providers", Array.Empty<string>()),
-        new("/tokens", "Show token usage for the current session", Array.Empty<string>()),
-        new("/theme", "Toggle between dark and light theme", Array.Empty<string>()),
-        new("/editor", "Open the code editor", Array.Empty<string>()),
-        new("/diff", "Open the diff viewer", Array.Empty<string>())
-    ];
+    /// <summary>Canonical list of slash commands, projected from the shared catalog.</summary>
+    public static readonly IReadOnlyList<Entry> All = BuildAll();
 
     /// <summary>Look up an entry by name (with or without leading slash) or alias.</summary>
-    /// <param name="command">User-typed command (e.g. <c>/help</c> or <c>help</c> or <c>cls</c>).</param>
+    /// <param name="command">User-typed command (e.g. <c>/help</c> or <c>help</c> or <c>quit</c>).</param>
     /// <returns>The matching <see cref="Entry" />, or null if not found.</returns>
     public static Entry? Find(string command)
     {
-        if (string.IsNullOrWhiteSpace(command)) return null;
-        string trimmed = command.TrimStart('/');
-        return All.FirstOrDefault(e => MatchesEntry(e, trimmed));
+        SlashCommandDefinition? def = SlashCommandCatalog.Find(command);
+        return def is null ? null : new Entry(def.Invocation, def.Description, def.Aliases);
     }
 
-    private static bool MatchesEntry(Entry entry, string trimmed)
+    private static IReadOnlyList<Entry> BuildAll()
     {
-        if (entry.Name.TrimStart('/').Equals(trimmed, StringComparison.OrdinalIgnoreCase))
-            return true;
-        return entry.Aliases.Any(alias => alias.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
+        var list = new List<Entry>(SlashCommandCatalog.All.Count);
+        foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
+        {
+            list.Add(new Entry(def.Invocation, def.Description, def.Aliases));
+        }
+
+        return list;
     }
 
     /// <summary>One slash-command entry — name, description, optional aliases.</summary>

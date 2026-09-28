@@ -1,25 +1,31 @@
 using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Commands;
 
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// CF-E-017 (TOP-1 #27): the palette is fed by cell-local mirrors of
-/// <c>SlashCommands.All</c> (10) and <c>BuiltInCommands.Templates</c> (10).
-/// Pins all 10+10 reachable via exact <c>Find</c> (slash strips "/" +
-/// ignore-case + aliases), icon keys mapped (ASCII + Nerd Font, unknown →
-/// plain-text without throw), and the pre-existing fuzzy/groups/navigation/
-/// OnCommit behavior intact (only item sources added).
+/// CF-E-017 (TOP-1 #27): the palette is fed by the slash registry plus the builtin
+/// command templates. Pins every slash entry reachable via exact <c>Find</c> (slash
+/// strips "/" + ignore-case + aliases), icon keys mapped (ASCII + Nerd Font, unknown →
+/// plain-text without throw), and the pre-existing fuzzy/groups/navigation/OnCommit
+/// behavior intact.
 /// </summary>
+/// <remarks>
+/// Issue #462 rewrote the expectations below. The slash half used to be pinned to a
+/// 15-entry literal containing <c>/tokens</c>, <c>/theme</c>, <c>/editor</c>,
+/// <c>/diff</c>, <c>/branch</c> and <c>/clear</c> — none of which the CLI dispatcher
+/// can run, so selecting them produced "Unknown command". Expectations are now derived
+/// from <see cref="SlashCommandCatalog" />, the registry the dispatcher binds handlers
+/// to, which makes this suite incapable of drifting from it again. The test method
+/// names keep their original "Ten"-era wording so the suite history stays readable.
+/// </remarks>
 public class PaletteCatalogTests
 {
+    /// <summary>The registry is the expectation — not a hand-kept copy of it.</summary>
     private static readonly string[] ExpectedSlashTitles =
-    [
-        "/agent", "/branch", "/clear", "/config", "/diff",
-        "/editor", "/help", "/model", "/new", "/providers",
-        "/quit", "/sessions", "/setup", "/theme", "/tokens",
-    ];
+        [.. SlashCommandCatalog.All.Select(d => d.Invocation)];
 
     private static readonly (string Title, string Id)[] ExpectedBuiltin =
     [
@@ -62,7 +68,7 @@ public class PaletteCatalogTests
     {
         var slash = CommandPaletteCatalog.SlashCatalog;
 
-        await Assert.That(slash.Count).IsEqualTo(15);
+        await Assert.That(slash.Count).IsEqualTo(SlashCommandCatalog.All.Count);
         foreach (string title in ExpectedSlashTitles)
         {
             await Assert.That(slash.Any(i => i.Title == title)).IsTrue();
@@ -108,21 +114,21 @@ public class PaletteCatalogTests
     {
         await Assert.That(CommandPaletteCatalog.FindSlash("/HELP")!.Id).IsEqualTo("help");
         await Assert.That(CommandPaletteCatalog.FindSlash("help")!.Id).IsEqualTo("help");
-        await Assert.That(CommandPaletteCatalog.FindSlash("  /Clear  ")!.Id).IsEqualTo("clear");
+        await Assert.That(CommandPaletteCatalog.FindSlash("  /Exit  ")!.Id).IsEqualTo("exit");
         await Assert.That(CommandPaletteCatalog.FindSlash("SESSIONS")!.Id).IsEqualTo("sessions");
-        await Assert.That(CommandPaletteCatalog.FindSlash("Theme")!.Id).IsEqualTo("theme");
+        await Assert.That(CommandPaletteCatalog.FindSlash("Skills")!.Id).IsEqualTo("skills");
     }
 
     [Test]
     public async Task FindSlash_Aliases()
     {
-        await Assert.That(CommandPaletteCatalog.FindSlash("cls")!.Id).IsEqualTo("clear");
-        await Assert.That(CommandPaletteCatalog.FindSlash("CLS")!.Id).IsEqualTo("clear");
-        await Assert.That(CommandPaletteCatalog.FindSlash("/cls")!.Id).IsEqualTo("clear");
-        await Assert.That(CommandPaletteCatalog.FindSlash("exit")!.Id).IsEqualTo("quit");
-        await Assert.That(CommandPaletteCatalog.FindSlash("EXIT")!.Id).IsEqualTo("quit");
-        await Assert.That(CommandPaletteCatalog.Find("cls")!.Title).IsEqualTo("/clear");
-        await Assert.That(CommandPaletteCatalog.Find("exit")!.Title).IsEqualTo("/quit");
+        await Assert.That(CommandPaletteCatalog.FindSlash("h")!.Id).IsEqualTo("help");
+        await Assert.That(CommandPaletteCatalog.FindSlash("H")!.Id).IsEqualTo("help");
+        await Assert.That(CommandPaletteCatalog.FindSlash("/h")!.Id).IsEqualTo("help");
+        await Assert.That(CommandPaletteCatalog.FindSlash("quit")!.Id).IsEqualTo("exit");
+        await Assert.That(CommandPaletteCatalog.FindSlash("EXIT")!.Id).IsEqualTo("exit");
+        await Assert.That(CommandPaletteCatalog.FindSlash("h")!.Title).IsEqualTo("/help");
+        await Assert.That(CommandPaletteCatalog.FindSlash("quit")!.Title).IsEqualTo("/exit");
     }
 
     [Test]
@@ -198,23 +204,23 @@ public class PaletteCatalogTests
 
         await Assert.That(palette.Results.Any(r => r.Title == "/sessions")).IsTrue();
 
-        var tokens = new CommandPaletteView();
-        tokens.Show(CommandPaletteCatalog.GetDefaultCatalog());
-        Type(tokens, "tok");
+        var render = new CommandPaletteView();
+        render.Show(CommandPaletteCatalog.GetDefaultCatalog());
+        Type(render, "rend");
 
-        await Assert.That(tokens.Results.Any(r => r.Title == "/tokens")).IsTrue();
+        await Assert.That(render.Results.Any(r => r.Title == "/renderer")).IsTrue();
 
         var alias = new CommandPaletteView();
         alias.Show(CommandPaletteCatalog.GetDefaultCatalog());
-        Type(alias, "cls");
+        Type(alias, "skil");
 
-        await Assert.That(alias.Results.Any(r => r.Title == "/clear")).IsTrue();
+        await Assert.That(alias.Results.Any(r => r.Title == "/skills")).IsTrue();
 
         var quit = new CommandPaletteView();
         quit.Show(CommandPaletteCatalog.GetDefaultCatalog());
         Type(quit, "EXIT");
 
-        await Assert.That(quit.Results.Any(r => r.Title == "/quit")).IsTrue();
+        await Assert.That(quit.Results.Any(r => r.Title == "/exit")).IsTrue();
     }
 
     [Test]
@@ -225,7 +231,6 @@ public class PaletteCatalogTests
         Type(palette, "theme");
 
         await Assert.That(palette.Results.Any(r => r.Title.EndsWith("Toggle Theme", StringComparison.Ordinal))).IsTrue();
-        await Assert.That(palette.Results.Any(r => r.Title == "/theme")).IsTrue();
 
         var providers = new CommandPaletteView();
         providers.Show(CommandPaletteCatalog.GetDefaultCatalog());
@@ -235,6 +240,39 @@ public class PaletteCatalogTests
         await Assert.That(providers.Results.Any(r => r.Title == "/providers")).IsTrue();
     }
 
+    /// <summary>
+    /// #462 regression: the palette must never offer a command the dispatcher cannot run.
+    /// <c>/tokens</c>, <c>/theme</c>, <c>/editor</c>, <c>/diff</c> and <c>/branch</c> were all
+    /// offered here while resolving to "Unknown command".
+    /// </summary>
+    [Test]
+    public async Task SlashCatalog_OffersNoCommandOutsideTheRegistry()
+    {
+        foreach (CommandItem item in CommandPaletteCatalog.SlashCatalog)
+        {
+            await Assert.That(SlashCommandCatalog.Find(item.Title)).IsNotNull()
+                .Because($"the palette offers {item.Title}, which the CLI dispatcher cannot run.");
+        }
+    }
+
+    /// <summary>
+    /// The exact-lookup index must be keyed by the canonical name, so every registry
+    /// entry resolves to its own palette item (#462: it was keyed by "/help" while
+    /// lookups went through the catalog, so every FindSlash call missed).
+    /// </summary>
+    [Test]
+    public async Task FindSlash_ResolvesEveryRegistryEntryByCanonicalName()
+    {
+        foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
+        {
+            CommandItem? item = CommandPaletteCatalog.FindSlash(def.Name);
+
+            await Assert.That(item).IsNotNull().Because($"the palette is missing /{def.Name}.");
+            await Assert.That(item!.Id).IsEqualTo(def.Name);
+            await Assert.That(item.Title).IsEqualTo(def.Invocation);
+        }
+    }
+
     [Test]
     public async Task Palette_ShowDefaultCatalog_ListsTwenty_WithNavigationAndCommit()
     {
@@ -242,7 +280,8 @@ public class PaletteCatalogTests
         palette.ShowDefaultCatalog();
 
         await Assert.That(palette.Visible).IsTrue();
-        await Assert.That(palette.Results.Count).IsEqualTo(25);
+        await Assert.That(palette.Results.Count)
+            .IsEqualTo(CommandPaletteCatalog.SlashCatalog.Count + 10);
         await Assert.That(palette.SelectedIndex).IsEqualTo(0);
 
         _ = palette.HandleKey(KeyEvent.Simple(KeyCode.Down));

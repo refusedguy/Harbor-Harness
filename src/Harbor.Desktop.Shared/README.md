@@ -19,12 +19,18 @@ desktop app) and `Microsoft.Extensions.Logging.Abstractions`.
   platform views that construct view-models by contract.
 - **`Commands/BuiltInCommands`**: catalog of built-in command-palette item
   templates (Open Session, New Session, Branch, Toggle Theme, etc.).
-- **`Commands/SlashCommands`**: catalog of slash commands (`/help`, `/clear`,
-  `/quit`, etc.) with descriptions and aliases.
+- **`Commands/SlashCommands`**: catalog of slash commands with descriptions and
+  aliases, projected from the shared `SlashCommandCatalog`
+  (`Harbor.Ui.Framework.Abstractions`) — the same registry the CLI slash
+  dispatcher binds handlers to. It used to be a private 10-entry copy that had
+  drifted: desktop apps offered `/tokens`, `/theme` and `/editor`, which the
+  dispatcher cannot run, and missed `/permissions`, `/plugins` and `/skills`.
+  See issue #462.
 
 ## Dependency rules
 
 ✅ **Allowed**: `Harbor.Desktop.Abstractions`, `Harbor.Ui.Framework`,
+`Harbor.Ui.Framework.Abstractions` (slash-command registry, #462),
 `Markdig`, `Microsoft.Extensions.Logging.Abstractions`,
 `Microsoft.Extensions.DependencyInjection.Abstractions`.
 

@@ -15,6 +15,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <!-- #462: SlashCommandCatalog — the single slash-command registry the CLI
+         dispatcher binds handlers to. LayoutBuilder and FullscreenTuiRenderer
+         derive their hint/autocomplete lists from it instead of hardcoding a
+         copy that drifted. Presentation → Domain edge, rule-conforming. -->
+    <ProjectReference Include="..\..\..\src\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

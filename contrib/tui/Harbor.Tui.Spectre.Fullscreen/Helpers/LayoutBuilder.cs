@@ -1,5 +1,6 @@
 using System.Text;
 using Harbor.Tui.Spectre.Fullscreen.Components;
+using Harbor.Ui.Framework.Commands;
 using Spectre.Console;
 namespace Harbor.Tui.Spectre.Fullscreen.Helpers;
 /// <summary>
@@ -8,11 +9,12 @@ namespace Harbor.Tui.Spectre.Fullscreen.Helpers;
 /// </summary>
 internal sealed class LayoutBuilder
 {
-    private static readonly string[] BuiltinCommands =
-    {
-        "/help", "/exit", "/setup", "/auth", "/model", "/agent", "/config",
-        "/providers", "/sessions", "/tui", "/storage", "/clear"
-    };
+    /// <summary>
+    ///     #462: derived from <see cref="SlashCommandCatalog" />, the single registry the
+    ///     CLI slash dispatcher binds handlers to. This was a private 12-entry literal that
+    ///     had drifted from what the dispatcher can actually run.
+    /// </summary>
+    private static readonly string[] BuiltinCommands = [.. SlashCommandCatalog.Invocations];
 
     private readonly ChatState _chat;
     private readonly InputState _input;
