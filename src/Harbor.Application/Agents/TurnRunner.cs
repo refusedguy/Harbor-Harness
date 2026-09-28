@@ -394,7 +394,7 @@ internal sealed class TurnRunner(
                         reportPartial?.Invoke(partial.WithFinish(StopReason.Error, finalUsage ?? new Usage(0, 0)));
                         // #259: transient failures are retried — publishing here
                         // would emit one AgentError per attempt (the same 429
-                        // blob N times). Only fatal errors publish immediately;
+                        // blob N times). Only fatal errors publish immediately,
                         // transient ones publish once when the budget is
                         // exhausted (see the catch below), zero on recovery.
                         if (!ProviderErrors.IsTransient(err.Kind))

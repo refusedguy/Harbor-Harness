@@ -218,9 +218,9 @@ internal static class SsePump
                 if (!response.IsSuccessStatusCode)
                 {
                     string errorBody = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                    // #259: bound the user-facing blob (429 JSON bodies run to
-                    // KBs and every renderer paints Message inline); the full
-                    // body rides on Exception for diagnostics.
+                    // #259: bound the user-facing blob — 429 JSON bodies run
+                    // to KBs and every renderer paints Message inline. The
+                    // full body rides on Exception for diagnostics.
                     string bounded = ProviderErrors.BuildProviderErrorMessage(
                         apiErrorLabel, (int)response.StatusCode, errorBody);
                     logger.LogWarning(
