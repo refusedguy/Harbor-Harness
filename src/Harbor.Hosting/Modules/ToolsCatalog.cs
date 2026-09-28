@@ -42,6 +42,7 @@ internal static class ToolsCatalog
             : prefix + model;
     }
 
+    /// <summary>Build the MCP registry and load the mcp.json overlays (or the empty desktop stand-in).</summary>
     /// <param name="ctx">Composition context (options + logger factory).</param>
     /// <param name="transports">
     ///     Remote transport strategies (#477). Null → <see cref="McpTransportResolver.Default" />.

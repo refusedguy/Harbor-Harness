@@ -46,6 +46,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     private int _nextId;
     private bool _disposed;
 
+    /// <summary>Create an empty MCP registry.</summary>
     /// <param name="logger">Optional logger for registration and transport diagnostics.</param>
     /// <param name="transports">
     ///     Transport strategies. Null → <see cref="McpTransportResolver.Default" />
