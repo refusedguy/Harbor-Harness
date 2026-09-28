@@ -169,10 +169,10 @@ public class TabsTests
         // " Chat │ Files │ Logs": selected "Files" starts past " Chat │ " (8 cells).
         for (int x = 8; x < 13; x++)
         {
-            await Assert.That((char)buffer.Get(x, 1).Rune.Value).IsEqualTo('─');
+            await Assert.That((char)buffer.Get(x, 1).Rune).IsEqualTo('─');
         }
 
-        await Assert.That((char)buffer.Get(1, 1).Rune.Value).IsNotEqualTo('─');
+        await Assert.That((char)buffer.Get(1, 1).Rune).IsNotEqualTo('─');
     }
 
     [Test]
