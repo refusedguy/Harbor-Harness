@@ -34,6 +34,18 @@ namespace Harbor.Storage.Sqlite;
 ///         <c>$type</c> discriminator leaks) and <c>StopReason</c> stays a string.
 ///     </para>
 ///     <para>
+///         <b>Polymorphic root exclusion:</b> <c>ContentPart</c> is deliberately
+///         NOT registered even though <c>AssistantMessage.Parts</c> references it.
+///         Registering the root makes the runtime build a polymorphic type
+///         resolver whose derived-type converter lookup hits the options-level
+///         <c>ContentPartJsonConverter</c>, which does not support metadata
+///         reads/writes (<c>NotSupportedException</c> at first serialization).
+///         Without the registration, elements resolve through the options-level
+///         converter for the declared base type (same mechanism as the config
+///         stores' immutable-collection converters). The concrete part types stay
+///         registered for direct (non-polymorphic) use.
+///     </para>
+///     <para>
 ///         <b>Metadata:</b> <see cref="ToolResultEntry.Metadata" /> is
 ///         <c>object?</c>-typed, which source-gen cannot serve. Non-null values are
 ///         stripped before serialization (see
@@ -52,7 +64,6 @@ namespace Harbor.Storage.Sqlite;
 [JsonSerializable(typeof(SessionMetadata))]
 [JsonSerializable(typeof(ToolResultEntry))]
 [JsonSerializable(typeof(Usage))]
-[JsonSerializable(typeof(ContentPart))]
 [JsonSerializable(typeof(TextPart))]
 [JsonSerializable(typeof(ThinkingPart))]
 [JsonSerializable(typeof(ToolCallPart))]
