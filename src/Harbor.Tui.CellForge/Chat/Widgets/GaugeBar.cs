@@ -10,9 +10,9 @@ public readonly record struct GaugeState(double Ratio, string? Label = null, boo
 /// <summary>
 /// Cell-native horizontal progress bar (ratatui <c>gauge.rs</c> reference):
 /// a single-row <c>filled × N + track × (width − N)</c> run with the label
-/// centered on top. Label cells over the filled run use
-/// <paramref name="labelOnFill" />, over the track
-/// <paramref name="labelOnTrack" /> — the same two-tone split ratatui draws.
+/// centered on top. Label cells over the filled run use one style, over the
+/// track another — the same two-tone split ratatui draws (see
+/// <see cref="Paint" /> parameters).
 /// Host-agnostic: the StatusPanel context bar adopts this for ctx% (UX9
 /// suffix), task cards for step progress (UX5 suffix), the approval modal
 /// for quota display (UX7). Paints nothing when the rect is degenerate.
