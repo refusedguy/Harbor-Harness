@@ -202,7 +202,7 @@ public class JsonlUnboundedAllocationTests
             int seen = Drain(reader);
             await Assert.That(seen).IsEqualTo(1);
             await Assert.That(reader.SawOversizedRecord).IsFalse();
-            await Assert.That(reader.BufferSize).IsLessThanOrEqualTo(atCeiling);
+            await Assert.That((long)reader.BufferSize).IsLessThanOrEqualTo(atCeiling);
         }
 
         using (var stream = SyntheticRecord(atCeiling + 4096))
@@ -211,7 +211,7 @@ public class JsonlUnboundedAllocationTests
             int seen = Drain(reader);
             await Assert.That(seen).IsEqualTo(0);
             await Assert.That(reader.SawOversizedRecord).IsTrue();
-            await Assert.That(reader.BufferSize).IsLessThanOrEqualTo(atCeiling);
+            await Assert.That((long)reader.BufferSize).IsLessThanOrEqualTo(atCeiling);
         }
     }
 
@@ -236,28 +236,33 @@ public class JsonlUnboundedAllocationTests
     }
 
     /// <summary>
-    ///     A single <paramref name="bytes" />-long record with no LF in it. Only
-    ///     the length matters here — the reader never decodes.
+    ///     A single <paramref name="bytes" />-long record with no LF in it, and
+    ///     nothing after it. Only the length matters here — the reader never
+    ///     decodes, so zeroing is enough and nothing is materialized.
     /// </summary>
-    private static Stream SyntheticRecord(long bytes)
-    {
-        var stream = new SyntheticLengthStream(bytes);
-        stream.Position = 0;
-        return stream;
-    }
+    private static Stream SyntheticRecord(long bytes) => new SyntheticLengthStream(bytes);
 
     /// <summary>Reports <see cref="Length" /> without materializing a byte of it.</summary>
-    private sealed class SyntheticLengthStream(long length) : Stream
+    private sealed class SyntheticLengthStream : Stream
     {
+        private readonly long _length;
+        private long _position;
+
+        internal SyntheticLengthStream(long length) => _length = length;
+
         public override bool CanRead => true;
         public override bool CanSeek => true;
         public override bool CanWrite => false;
-        public override long Length => length;
-        public override long Position { get; set; }
+        public override long Length => _length;
+        public override long Position
+        {
+            get => _position;
+            set => _position = value;
+        }
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            long left = length - Position;
+            long left = _length - _position;
             if (left <= 0)
             {
                 return 0;
@@ -265,7 +270,7 @@ public class JsonlUnboundedAllocationTests
 
             int n = (int)Math.Min(count, left);
             Array.Clear(buffer, offset, n); // the content is irrelevant
-            Position += n;
+            _position += n;
             return n;
         }
 
