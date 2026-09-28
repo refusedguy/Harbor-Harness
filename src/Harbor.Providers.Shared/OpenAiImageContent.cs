@@ -5,9 +5,9 @@
 // #386: an LlmImageBlock used to be dropped with a warning on this path — the
 // adapter that serves most providers (Kilocode, OpenRouter, Groq, Mistral, …)
 // had no way to put an image in front of a model. The provider-SPECIFIC wire
-// difference (Anthropic's `type: "image"` + `source.media_type` vs OpenAI's
-// `image_url` data URL) lives in the provider builders, never in a shared
-// provider-id switch (§OOP-002).
+// difference (Anthropic's image source block vs OpenAI's image_url data URL)
+// lives in the provider builders, never in shared provider-id branching
+// (§OOP-002).
 
 using System.Text.Json;
 using Harbor.Abstractions.Providers;

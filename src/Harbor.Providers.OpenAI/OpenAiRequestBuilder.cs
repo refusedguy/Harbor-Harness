@@ -208,8 +208,8 @@ internal static class OpenAiRequestBuilder
                     break;
 
                 case LlmImageBlock image:
-                    // base64 is encoded by OpenAiImageContent.ToDataUrl (§PERF-002);
-                    // only the finished data-URL string reaches the serializer.
+                    // §PERF-002: the base64 is encoded by the shared data-URL
+                    // helper, so only the finished string reaches the serializer.
                     parts.Add(new
                     {
                         type = "image_url",

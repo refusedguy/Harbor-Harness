@@ -14,9 +14,9 @@ namespace Harbor.Application.Attachments;
 ///     </para>
 ///     <para>
 ///         Supported containers: PNG, JPEG, GIF, WebP — the four every
-///         OpenAI-compatible and Anthropic vision endpoint accepts. Anything
-///         else (BMP, TIFF, SVG, HEIC…) is reported as unsupported at attach
-///         time instead of becoming a provider 400 at request time.
+///         OpenAI-compatible and Anthropic vision endpoint accepts. Every other
+///         container — BMP, TIFF, SVG, HEIC — is reported as unsupported at
+///         attach time instead of becoming a provider 400 at request time.
 ///     </para>
 ///     <para>
 ///         All methods are pure and allocation-free (span reads only), so the
