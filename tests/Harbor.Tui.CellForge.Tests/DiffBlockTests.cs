@@ -194,6 +194,8 @@ public class DiffBlockTests
 }
 
 /// <summary>Golden grid-dump of the diff block painted through the real pipeline.</summary>
+// Serialized vs theme tests — rendering reads global TerminalColorPalette.
+[NotInParallel("pty")]
 public class GoldenDiffBlockTests
 {
     [Test]
