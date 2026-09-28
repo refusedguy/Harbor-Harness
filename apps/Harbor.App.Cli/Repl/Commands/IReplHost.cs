@@ -44,6 +44,13 @@ internal interface IReplHost
     IPanelRegistry? PanelRegistry { get; }
 
     /// <summary>
+    ///     Images staged by <c>/attach</c> for the next user turn (issue #386).
+    ///     Null in test doubles — <c>AttachCommand</c> then reports the feature
+    ///     as unavailable instead of failing.
+    /// </summary>
+    ImageAttachmentStash? Attachments { get; }
+
+    /// <summary>
     ///     Plugin hot-reload + install listing for the <c>/plugins</c> panel.
     ///     Null on hosts without the plugin runtime (HARBOR_MINIMAL) — the
     ///     command falls back to the text line instead of failing.

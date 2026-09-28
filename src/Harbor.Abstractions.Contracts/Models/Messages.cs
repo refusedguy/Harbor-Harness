@@ -55,6 +55,12 @@ public abstract partial record AgentMessage(
 /// <param name="Agent">The agent name that received the prompt.</param>
 /// <param name="Model">The model id targeted at the time of submission.</param>
 /// <param name="ParentId">Optional parent message id.</param>
+/// <param name="Attachments">
+///     Images the user attached to this turn (issue #386). Empty / <see langword="null" /> for
+///     the common text-only case, so every existing construction site is unaffected;
+///     <see cref="MessageConverter"/> turns each entry into an
+///     <c>LlmImageBlock</c> that provider builders serialise per their own wire format.
+/// </param>
 [MemoryPackable]
 public sealed partial record UserMessage(
     string Id,
@@ -63,10 +69,14 @@ public sealed partial record UserMessage(
     string Content,
     string Agent,
     string Model,
-    string? ParentId = null) : AgentMessage(Id, SessionId, CreatedAt, ParentId)
+    string? ParentId = null,
+    IReadOnlyList<ImageAttachment>? Attachments = null) : AgentMessage(Id, SessionId, CreatedAt, ParentId)
 {
     /// <inheritdoc />
     public override string Role => "user";
+
+    /// <summary>True when at least one image rides along with this turn.</summary>
+    public bool HasAttachments => Attachments is { Count: > 0 };
 }
 
 /// <summary>
@@ -436,3 +446,29 @@ public sealed partial record FileAttachment(
     string Path,
     string MimeType,
     byte[] Data);
+
+/// <summary>
+///     An image the user attached to a turn (issue #386). Carries the probed
+///     MIME type and pixel dimensions next to the raw bytes so a reloaded
+///     session can describe the attachment without touching the file system
+///     again — the file may live on another machine after a session export.
+/// </summary>
+/// <param name="Path">The path the image was attached from (display + provenance only).</param>
+/// <param name="MimeType">MIME type from the magic-byte probe, never the file extension.</param>
+/// <param name="Width">Pixel width, or 0 when the container carries no dimension header.</param>
+/// <param name="Height">Pixel height, or 0 when the container carries no dimension header.</param>
+/// <param name="Data">The raw image bytes.</param>
+[MemoryPackable]
+public sealed partial record ImageAttachment(
+    string Path,
+    string MimeType,
+    int Width,
+    int Height,
+    byte[] Data)
+{
+    /// <summary>True when the probe recovered usable pixel dimensions.</summary>
+    public bool HasDimensions => Width > 0 && Height > 0;
+
+    /// <summary>Human-readable <c>WIDTH×HEIGHT</c> label, or the MIME type when unknown.</summary>
+    public string DimensionsLabel => HasDimensions ? $"{Width}×{Height}" : MimeType;
+}

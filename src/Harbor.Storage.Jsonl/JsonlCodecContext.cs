@@ -40,6 +40,7 @@ namespace Harbor.Storage.Jsonl;
 [JsonSerializable(typeof(ThinkingPartPayload))]
 [JsonSerializable(typeof(ToolCallPartPayload))]
 [JsonSerializable(typeof(FilePartPayload))]
+[JsonSerializable(typeof(ImageAttachmentPayload))]
 [JsonSerializable(typeof(UnknownPartPayload))]
 [JsonSerializable(typeof(UserPayload))]
 [JsonSerializable(typeof(AssistantPayload))]
@@ -67,7 +68,11 @@ internal sealed partial class JsonlCodecContext : JsonSerializerContext
 internal sealed record UserPayload(
     [property: System.Text.Json.Serialization.JsonPropertyName("content")] string Content,
     [property: System.Text.Json.Serialization.JsonPropertyName("agent")] string Agent,
-    [property: System.Text.Json.Serialization.JsonPropertyName("model")] string Model);
+    [property: System.Text.Json.Serialization.JsonPropertyName("model")] string Model,
+    // #386: images attached to the turn. Omitted entirely for text-only turns
+    // (WhenWritingNull) so pre-#386 session files stay byte-identical.
+    [property: System.Text.Json.Serialization.JsonPropertyName("attachments")]
+    ImageAttachmentPayload[]? Attachments = null);
 
 internal sealed record AssistantPayload(
     [property: System.Text.Json.Serialization.JsonPropertyName("parts")] object[] Parts,
@@ -99,6 +104,19 @@ internal sealed record FilePartPayload(
     [property: System.Text.Json.Serialization.JsonPropertyName("path")] string Path,
     [property: System.Text.Json.Serialization.JsonPropertyName("mimeType")] string MimeType,
     [property: System.Text.Json.Serialization.JsonPropertyName("sizeBytes")] long SizeBytes);
+
+/// <summary>
+///     One user-attached image (issue #386). <c>Data</c> rides as a base64 string
+///     (the source generator's native <c>byte[]</c> shape — no custom converter,
+///     no reflection). Dimensions are stored, not re-derived on read, so a
+///     session exported from another machine still describes the attachment.
+/// </summary>
+internal sealed record ImageAttachmentPayload(
+    [property: System.Text.Json.Serialization.JsonPropertyName("path")] string Path,
+    [property: System.Text.Json.Serialization.JsonPropertyName("mimeType")] string MimeType,
+    [property: System.Text.Json.Serialization.JsonPropertyName("width")] int Width,
+    [property: System.Text.Json.Serialization.JsonPropertyName("height")] int Height,
+    [property: System.Text.Json.Serialization.JsonPropertyName("data")] byte[] Data);
 
 internal sealed record UnknownPartPayload(
     [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type);

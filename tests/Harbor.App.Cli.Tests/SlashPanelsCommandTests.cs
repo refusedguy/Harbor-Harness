@@ -94,6 +94,7 @@ public class SlashPanelsCommandTests
         public Harbor.Hosting.PluginReloadService? PluginReload => null;
         public IProviderHealthCheck? HealthCheck => null;
         public Harbor.Ui.Framework.Panels.IPanelRegistry? PanelRegistry { get; set; }
+        public Harbor.App.Cli.Repl.ImageAttachmentStash? Attachments => null;
         public void WakeUp() { }
         public void OpenSlashPalette() { }
         public void ToggleVimMode() { }

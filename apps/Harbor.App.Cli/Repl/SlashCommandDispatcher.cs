@@ -235,7 +235,7 @@ internal sealed class SlashCommandDispatcher
 
         Register(dict, "help", ["h"], null, (ctx, _) =>
         {
-            ctx.Writer("Commands: /setup /auth /model /agent /config /permissions /providers /sessions /skills /tree /fork /plugins /tui /renderer /storage /exit");
+            ctx.Writer("Commands: /setup /auth /model /agent /config /permissions /providers /sessions /skills /tree /fork /attach /plugins /tui /renderer /storage /exit");
             return Task.FromResult(Result.Success());
         });
 

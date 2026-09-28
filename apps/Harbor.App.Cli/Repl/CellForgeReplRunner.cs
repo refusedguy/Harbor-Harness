@@ -156,7 +156,11 @@ internal sealed class CellForgeReplRunner(
     IProviderHealthCheck? IReplHost.HealthCheck => healthCheck;
     Harbor.Ui.Framework.Panels.IPanelRegistry? IReplHost.PanelRegistry => panelRegistry;
 
-    internal readonly ReplCommandCatalog _catalog = ReplCommandCatalog.CreateDefault();
+    /// <summary>Images staged by <c>/attach</c> for the next user turn (#386).</summary>
+    internal readonly ImageAttachmentStash _attachments = new();
+
+    internal readonly ReplCommandCatalog _catalog =
+        ReplCommandCatalog.CreateDefault(new ImageAttachmentReader(providerRegistry, logger));
 
     // ── Extracted collaborators (SRP: the runner owns the shared state and
     // the IReplHost surface; sessions/titles/prompts/input/commands/lifecycle
@@ -196,6 +200,7 @@ internal sealed class CellForgeReplRunner(
     internal IConfigStore ConfigStore => configStore;
     internal IProviderRegistry ProviderRegistry => providerRegistry;
     internal ITokenTracker? Tokens => tokens;
+    ImageAttachmentStash? IReplHost.Attachments => _attachments;
 
     /// <summary>Leader chord hand-off for async slash commands: the chord resolves
     /// into catalog execution on the frame loop (async work can't run inside Bind actions).</summary>

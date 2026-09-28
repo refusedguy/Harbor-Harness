@@ -18,7 +18,10 @@ internal static class OpenAiRequestBuilder
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // #386: the image_url DTO resolves through source-generated metadata, the
+        // rest of the payload keeps its reflection fallback — no wire change.
+        TypeInfoResolver = OpenAiWireContext.Resolver
     };
 
     public static bool IsReasoningModel(string modelId)
@@ -147,12 +150,9 @@ internal static class OpenAiRequestBuilder
         {
             result.Add(msg switch
             {
-                LlmUserMessage u => new
-                {
-                    role = "user",
-                    // ROP-A ПР.12: non-text blocks dropped loudly.
-                    content = ProviderPayload.FirstTextOrEmpty(u.Content, logger, "openai")
-                },
+                // #386: image turns become a content[] array of text + image_url
+                // parts; a text-only turn keeps the compact string form.
+                LlmUserMessage u => BuildChatUserMessage(u, logger),
                 LlmAssistantMessage a => new
                 {
                     role = "assistant",
@@ -177,6 +177,54 @@ internal static class OpenAiRequestBuilder
         return result;
     }
 
+    /// <summary>
+    ///     Project a user message for <c>/chat/completions</c>. Returns either a
+    ///     <c>content = "&lt;text&gt;"</c> shape (text-only, unchanged legacy wire
+    ///     output) or a <c>content = [{type:text|…}, {type:image_url,…}]</c> array
+    ///     when the turn carries images.
+    /// </summary>
+    private static object BuildChatUserMessage(LlmUserMessage u, ILogger logger)
+    {
+        if (!OpenAiImageContent.HasImage(u.Content))
+        {
+            return new
+            {
+                role = "user",
+                // ROP-A ПР.12: non-text blocks dropped loudly.
+                content = ProviderPayload.FirstTextOrEmpty(u.Content, logger, "openai")
+            };
+        }
+
+        var parts = new List<object>(u.Content.Count);
+        for (int i = 0; i < u.Content.Count; i++)
+        {
+            switch (u.Content[i])
+            {
+                case LlmTextBlock text:
+                    parts.Add(new { type = "text", text = text.Text });
+                    break;
+
+                case LlmImageBlock image:
+                    // base64 is encoded by OpenAiImageContent.ToDataUrl (§PERF-002);
+                    // only the finished data-URL string reaches the serializer.
+                    parts.Add(new
+                    {
+                        type = "image_url",
+                        image_url = new OpenAiImageUrl(OpenAiImageContent.ToDataUrl(image.MimeType, image.Data))
+                    });
+                    break;
+
+                default:
+                    logger.LogWarning(
+                        "Dropping unsupported content block(s) of type {BlockType} for openai",
+                        u.Content[i].Type);
+                    break;
+            }
+        }
+
+        return new { role = "user", content = parts };
+    }
+
     public static List<object> BuildResponsesInput(LlmRequest request, ILogger logger)
     {
         var result = new List<object>(request.Messages.Count + 1);
@@ -190,12 +238,9 @@ internal static class OpenAiRequestBuilder
         {
             result.Add(msg switch
             {
-                LlmUserMessage u => new
-                {
-                    role = "user",
-                    // ROP-A ПР.12: non-text blocks dropped loudly.
-                    content = ProviderPayload.FirstTextOrEmpty(u.Content, logger, "openai")
-                },
+                // #386: the Responses API names the same part `input_image` and
+                // takes the data URL directly.
+                LlmUserMessage u => BuildResponsesUserMessage(u, logger),
                 LlmAssistantMessage a => new
                 {
                     role = "assistant",
@@ -212,5 +257,50 @@ internal static class OpenAiRequestBuilder
         }
 
         return result;
+    }
+
+    /// <summary>
+    ///     Project a user message for <c>/responses</c>: the compact string form
+    ///     for text-only turns, otherwise a <c>content[]</c> array whose image
+    ///     parts are <c>{"type":"input_image","image_url":"data:…"}</c>.
+    /// </summary>
+    private static object BuildResponsesUserMessage(LlmUserMessage u, ILogger logger)
+    {
+        if (!OpenAiImageContent.HasImage(u.Content))
+        {
+            return new
+            {
+                role = "user",
+                // ROP-A ПР.12: non-text blocks dropped loudly.
+                content = ProviderPayload.FirstTextOrEmpty(u.Content, logger, "openai")
+            };
+        }
+
+        var parts = new List<object>(u.Content.Count);
+        for (int i = 0; i < u.Content.Count; i++)
+        {
+            switch (u.Content[i])
+            {
+                case LlmTextBlock text:
+                    parts.Add(new { type = "input_text", text = text.Text });
+                    break;
+
+                case LlmImageBlock image:
+                    parts.Add(new
+                    {
+                        type = "input_image",
+                        image_url = OpenAiImageContent.ToDataUrl(image.MimeType, image.Data)
+                    });
+                    break;
+
+                default:
+                    logger.LogWarning(
+                        "Dropping unsupported content block(s) of type {BlockType} for openai responses",
+                        u.Content[i].Type);
+                    break;
+            }
+        }
+
+        return new { role = "user", content = parts };
     }
 }

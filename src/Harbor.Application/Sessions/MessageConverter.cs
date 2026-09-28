@@ -37,7 +37,7 @@ public sealed class MessageConverter
             switch (msg)
             {
                 case UserMessage u:
-                    result.Add(LlmUserMessage.Text(u.Content));
+                    result.Add(ConvertUser(u));
                     break;
 
                 case AssistantMessage a:
@@ -65,6 +65,28 @@ public sealed class MessageConverter
         }
 
         return result;
+    }
+
+    /// <summary>
+    ///     Convert a user turn, carrying any attached images (#386) as
+    ///     <see cref="LlmImageBlock" />s after the text block. Text-only turns
+    ///     keep the single-block shape <see cref="LlmUserMessage.Text" /> produces,
+    ///     so every existing provider payload is byte-identical.
+    /// </summary>
+    private static LlmUserMessage ConvertUser(UserMessage message)
+    {
+        if (message.Attachments is not { Count: > 0 } attachments)
+            return LlmUserMessage.Text(message.Content);
+
+        var blocks = new LlmContentBlock[attachments.Count + 1];
+        blocks[0] = new LlmTextBlock(message.Content);
+        for (int i = 0; i < attachments.Count; i++)
+        {
+            ImageAttachment image = attachments[i];
+            blocks[i + 1] = new LlmImageBlock(image.MimeType, image.Data);
+        }
+
+        return new LlmUserMessage(blocks);
     }
 
     private static IReadOnlyList<LlmContentBlock> ConvertParts(IReadOnlyList<ContentPart> parts)

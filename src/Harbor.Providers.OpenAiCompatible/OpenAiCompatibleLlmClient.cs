@@ -296,8 +296,9 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             case LlmUserMessage u:
                 writer.WriteStartObject();
                 writer.WriteString("role", "user");
-                // ROP-A ПР.12: non-text blocks dropped loudly.
-                writer.WriteString("content", ProviderPayload.FirstTextOrEmpty(u.Content, logger, providerId));
+                // #386: image parts ride the content[] array; a text-only turn
+                // keeps the compact string form.
+                OpenAiImageContent.WriteUserContent(writer, u.Content, logger, providerId);
                 writer.WriteEndObject();
                 break;
 
