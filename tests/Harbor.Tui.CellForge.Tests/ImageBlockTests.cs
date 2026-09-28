@@ -97,23 +97,22 @@ public class ImageBlockTests
     // ── #387: inline graphics through the terminal's own protocol ────────────
 
     /// <summary>
-    /// The whole feature is one switch: a null sink, a sink reporting
-    /// <c>Enabled == false</c> and a live sink. All three are exercised
-    /// through the same block, so a regression in the fallback shows up here
-    /// rather than only in a graphics terminal.
-    /// </summary>
-    /// <summary>
     /// Test double for the session's image sink. <see cref="Enabled" /> derives
-    /// from the protocol by default — exactly like the real
-    /// <c>InlineImageLayer</c> — so a "None protocol" fixture is genuinely
-    /// disabled instead of merely claiming to be. The settable property exists
-    /// only to exercise the block's own guard.
+    /// from the protocol, exactly like the real <c>InlineImageLayer</c> does,
+    /// so a "None protocol" fixture is genuinely disabled instead of merely
+    /// claiming to be — which is what the tmux-fallback case needs to be worth
+    /// anything. The settable property exists only to exercise the block's own
+    /// guard directly.
     /// </summary>
     private sealed class RecordingSink : IInlineImageSink
     {
         private readonly InlineImageKind _kind;
 
-        public RecordingSink(InlineImageKind kind) => _kind = kind;
+        public RecordingSink(InlineImageKind kind)
+        {
+            _kind = kind;
+            Enabled = kind != InlineImageKind.None;
+        }
 
         public bool Enabled { get; set; }
 
