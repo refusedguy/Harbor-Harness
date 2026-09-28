@@ -240,11 +240,10 @@ public class HotSwapTests
     {
         var session = MakeSession(20, 4, out var backend);
 
-        using (session.BeginFrameScope())
-        {
-            session.Back.SetText(0, 0, "scoped flush row", CellStyle.Plain);
-            session.Flush();
-        }
+        var scope = session.BeginFrameScope();
+        session.Back.SetText(0, 0, "scoped flush row", CellStyle.Plain);
+        scope.Flush();
+        scope.Dispose();
 
         await Assert.That(backend.Text).Contains("scoped flush row");
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
@@ -325,8 +324,10 @@ public class HotSwapTests
         }
 
         backend.ResetForTests();
+        var next = session.BeginFrameScope();
         session.Back.SetText(0, 1, "second frame content", CellStyle.Plain);
-        session.FlushFrame();
+        next.Flush();
+        next.Dispose();
 
         // The aborted row still reaches the terminal on the next frame, and
         // FRONT converges — an aborted frame leaves no half-written state.
@@ -353,8 +354,10 @@ public class HotSwapTests
         }
 
         backend.ResetForTests();
+        var next = session.BeginFrameScope();
         session.Back.SetText(20, 8, "unhinted cell", CellStyle.Plain);
-        session.FlushFrame();
+        next.Flush();
+        next.Dispose();
 
         // The unhinted change is outside the abandoned hint — the frame is
         // only correct if the abort dropped it and the diff went full-scan.
