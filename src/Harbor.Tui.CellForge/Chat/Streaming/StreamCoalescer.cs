@@ -57,7 +57,11 @@ internal sealed class StreamCoalescer
             PushToStream(_pending.Dequeue().Text);
         }
 
-        _panel.Timeline.MarkLastDirty();
+        // #465: name the block that actually grew. MarkLastDirty() forced a
+        // viewport-wide full scan on EVERY paced tick — the single largest
+        // unnecessary cost in the renderer — while the damage is only the
+        // stream block's own suffix.
+        _panel.Timeline.MarkDirty(_stream);
     }
 
     private void PushToStream(string text)
@@ -200,7 +204,12 @@ internal sealed class StreamCoalescer
             _thinkingIncoming.Append(rest.AsSpan(consumed));
         }
 
-        _panel.Timeline.MarkLastDirty();
+        // #465: the thinking block is the one that grew — narrow rect, not a
+        // viewport-wide full scan on every delta.
+        if (_thinkStream is not null)
+        {
+            _panel.Timeline.MarkDirty(_thinkStream);
+        }
     }
 
     public void FinishThinkingStream()
@@ -328,7 +337,7 @@ internal sealed class StreamCoalescer
 
         if (_stream is not null)
         {
-            _panel.Timeline.MarkLastDirty();
+            _panel.Timeline.MarkDirty(_stream);
         }
     }
 

@@ -40,6 +40,27 @@ public sealed class VirtualizedChatTimeline
     private int _fxDamageCount;
     private int _glowCount;
     private bool _broadDamage;
+
+    /// <summary>
+    /// Index of the block whose cached height went stale this frame, or -1 when
+    /// nothing was marked. Dirty-rect invalidation (#465): the next paint turns
+    /// this into ONE narrow rect — the block's top row down to the bottom of the
+    /// timeline, since everything below a height change reflows — instead of
+    /// forcing the host's viewport-wide full scan on every streaming frame.
+    /// </summary>
+    private int _pendingDirtyFrom = -1;
+
+    /// <summary>Virtual top row of the last resolved dirty block. Folded into the
+    /// next resolve with <c>min</c> so a block that moved up never leaves a band
+    /// of stale rows behind; <see cref="long.MaxValue"/> until the first mark.</summary>
+    private long _lastDirtyTop = long.MaxValue;
+
+    /// <summary>Screen rect produced by <see cref="ResolveDirtyRect"/> for the
+    /// frame. Reported at index 0 of the <see cref="ConsumeFrameDamage"/> output
+    /// so hosts keep exactly one damage call site.</summary>
+    private Rect _dirtyRect;
+
+    private bool _dirtyRectValid;
     private long _lastScrollY = -1;
     private int _lastWidth = -1;
     private int _lastViewportH = -1;
@@ -96,6 +117,21 @@ public sealed class VirtualizedChatTimeline
     /// opt in (byte-identical frames when off — golden contract).
     /// </summary>
     public bool EnablePostFx { get; set; }
+
+    /// <summary>
+    /// True when the last paint resolved a narrow dirty-rect
+    /// (<see cref="MarkDirty"/>) that the host is about to receive at index 0
+    /// of <see cref="ConsumeFrameDamage"/>. False on quiet frames, on frames
+    /// that returned viewport-wide damage, and when the dirty block sits below
+    /// the viewport. Read-only mirror of the ledger for hosts and tests that
+    /// want to tell the two cases apart without inspecting rect geometry.
+    ///
+    /// <para>Read it BEFORE <see cref="ConsumeFrameDamage"/>: consuming hands
+    /// the ledger to the host and clears it, so a later read reports false for
+    /// every frame — including the ones that did produce a rect. Hosts that
+    /// learn what to do from the count alone do not need it.</para>
+    /// </summary>
+    public bool HasDirtyRect => _dirtyRectValid;
 
     public int Count => _cache.Count;
 
@@ -211,13 +247,60 @@ public sealed class VirtualizedChatTimeline
         }
     }
 
-    /// <summary>Streaming tail grew — last block's cached height is stale.
-    /// Height changes can reflow every row below the block, so the next
-    /// frame's damage is treated as viewport-wide (partial-scan contract).</summary>
+    /// <summary>Unknown card mutated in place — treat the whole frame as
+    /// viewport-wide (partial-scan contract). This is the hook mutating
+    /// components use when the changed block is NOT the streaming tail:
+    /// approval gates and tool cards settle below newer blocks, so their
+    /// rects are not the tail's suffix and only a full scan is safe.
+    ///
+    /// The streaming path must not use this — it marked every stream frame
+    /// viewport-wide and cost a full scan per frame (#465). Use
+    /// <see cref="MarkDirty"/> with the block that actually changed.</summary>
     public void MarkLastDirty()
     {
         _cache.MarkHeightsDirty(Math.Max(0, _cache.Count - 1));
         _broadDamage = true;
+    }
+
+    /// <summary>Dirty-rect invalidation for one resident block (#465): its
+    /// cached height is stale, so the next frame damages the single rect from
+    /// the block's top row down to the bottom of the timeline — everything
+    /// below a height change reflows, and nothing above it can move.
+    ///
+    /// A no-op for a block that is no longer resident (evicted from the ring
+    /// means nothing of it is painted any more). Callers must still mark
+    /// viewport-wide damage for anything they cannot name a block for, and the
+    /// frame still degrades to a full scan on its own whenever the viewport
+    /// genuinely moved — scroll shift, width change, append, rewrap.</summary>
+    public void MarkDirty(IChatBlock block)
+    {
+        ArgumentNullException.ThrowIfNull(block);
+
+        int index = IndexOf(block);
+        if (index < 0)
+        {
+            return;
+        }
+
+        _cache.MarkHeightsDirty(index);
+        _pendingDirtyFrom = _pendingDirtyFrom < 0 ? index : Math.Min(_pendingDirtyFrom, index);
+    }
+
+    /// <summary>Index of a resident block, or -1 when it is not in the ring.
+    /// Scans from the tail: the streaming block is the last entry, so the hot
+    /// path costs one reference compare (a forward scan would be O(blocks) on
+    /// every stream frame — the exact class of waste #465 removes).</summary>
+    private int IndexOf(IChatBlock block)
+    {
+        for (int i = _cache.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(_cache.BlockAt(i), block))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     public void Clear()
@@ -228,6 +311,9 @@ public sealed class VirtualizedChatTimeline
         _viewport.SetTotal(0); // offset re-clamps to 0; height re-syncs on the next frame
         _dirtyGeometry = true;
         _broadDamage = true;
+        _pendingDirtyFrom = -1;
+        _lastDirtyTop = long.MaxValue;
+        _dirtyRectValid = false;
         ScrollY = 0;
         FollowTail = true;
         _visualScrollY = 0;
@@ -565,6 +651,7 @@ public sealed class VirtualizedChatTimeline
         // of an empty/shifted one.
         _viewport.Configure(TotalHeight, rect.Height);
         long top = _viewport.SetOffset(EffectiveScrollY);
+        ResolveDirtyRect(rect, top);
         var (first, last) = _cache.VisibleRange(top, rect.Height);
         // ENG12 #284 (TGui snapshot pattern): event-thread Append/Evict
         // shifts cache indices mid-draw — snapshot the visible window's refs
@@ -687,27 +774,97 @@ public sealed class VirtualizedChatTimeline
     }
 
     /// <summary>
+    /// Turns the frame's narrow dirty mark into the one rect that can differ:
+    /// the dirty block's top row through the bottom of the timeline rect (every
+    /// row below a height change reflows, none above it can move). The
+    /// previous frame's top row is folded in with <c>min</c> so a block that
+    /// shifted never leaves a band of stale rows behind.
+    ///
+    /// An empty result means the dirty block sits entirely below the viewport —
+    /// the frame changed nothing visible, and the host may take the hinted path
+    /// with no timeline damage at all. Frames that genuinely moved keep the
+    /// viewport-wide flag and return before this rect is ever consulted.</summary>
+    private void ResolveDirtyRect(Rect rect, long top)
+    {
+        _dirtyRectValid = false;
+
+        int index = _pendingDirtyFrom;
+        _pendingDirtyFrom = -1;
+        if (index < 0 || _cache.Count == 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        // Eviction/append can move the index between mark and paint; clamp
+        // instead of trusting it, and re-scan for the block when it fell out.
+        int count = _cache.Count;
+        if (index >= count)
+        {
+            index = count - 1;
+        }
+
+        long blockTop = _cache.BlockTop(index);
+        long from = Math.Min(blockTop, _lastDirtyTop);
+        _lastDirtyTop = blockTop;
+
+        int y = rect.Y + (int)Math.Clamp(from - top, 0, rect.Height);
+        int height = rect.Bottom - y;
+        if (height <= 0)
+        {
+            return; // dirty block is below the viewport — nothing visible moved
+        }
+
+        _dirtyRect = new Rect(rect.X, y, rect.Width, height);
+        _dirtyRectValid = true;
+    }
+
+    /// <summary>
     /// Hands the frame's damage to the host and resets the ledger. Returns
-    /// true when damage is viewport-wide (appends, scroll, rewrap, streaming
-    /// reflow) — the host must then run a plain full scan. When false, the
-    /// <paramref name="fxOut"/> span receives the narrow per-widget rects that
-    /// may have changed (empty = the feed was quiet this frame); everything
-    /// outside those rects is known-identical.
+    /// true when damage is viewport-wide (appends, scroll, rewrap, unknown-card
+    /// mutation) — the host must then run a plain full scan. When false, the
+    /// <paramref name="fxOut"/> span receives the narrow rects that may have
+    /// changed: index 0 is the dirty-rect from <see cref="MarkDirty"/> when
+    /// <see cref="HasDirtyRect"/> holds, then the per-widget animation rects
+    /// (empty = the feed was quiet this frame); everything outside those rects
+    /// is known-identical. A span too small to carry the whole ledger degrades
+    /// to the full scan rather than dropping damage silently.
     /// </summary>
     public bool ConsumeFrameDamage(Span<Rect> fxOut, out int fxCount)
     {
         bool broad = _broadDamage;
-        fxCount = broad ? 0 : Math.Min(_fxDamageCount, fxOut.Length);
-        if (!broad)
+        int dirty = _dirtyRectValid ? 1 : 0;
+        int fx = _fxDamageCount;
+
+        // The dirty rect rides at index 0 and is never truncated; if the caller's
+        // span cannot carry it AND every animation rect, fall back to a full scan.
+        if (!broad && dirty + fx > fxOut.Length)
         {
-            for (int i = 0; i < fxCount; i++)
+            broad = true;
+        }
+
+        if (broad)
+        {
+            fxCount = 0;
+        }
+        else
+        {
+            fxCount = dirty + fx;
+            int at = 0;
+            if (dirty == 1)
             {
-                fxOut[i] = _fxDamage[i];
+                fxOut[0] = _dirtyRect;
+                at = 1;
+            }
+
+            for (int i = 0; i < fx; i++)
+            {
+                fxOut[at + i] = _fxDamage[i];
             }
         }
 
         _broadDamage = false;
         _fxDamageCount = 0;
+        _dirtyRectValid = false;
         return broad;
     }
 
