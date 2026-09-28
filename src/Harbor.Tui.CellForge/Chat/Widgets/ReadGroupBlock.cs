@@ -27,6 +27,11 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
 
     private readonly List<ToolCallBlock> _members = new();
 
+    // ENG10 #282: transition-computed counts fragment (" · 2 read · 1 search").
+    // Membership only grows via AddMember, so the text is rebuilt there —
+    // Paint only slices a span over it (no per-frame StringBuilder).
+    private string _countsText = string.Empty;
+
     public ReadGroupBlock(string id)
     {
         Id = id ?? throw new ArgumentNullException(nameof(id));
@@ -47,6 +52,29 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
     {
         ArgumentNullException.ThrowIfNull(member);
         _members.Add(member);
+        RebuildCountsText();
+    }
+
+    private void RebuildCountsText()
+    {
+        int reads = CountReads();
+        int search = _members.Count - reads;
+        var sb = new StringBuilder();
+        if (reads > 0)
+        {
+            sb.Append(" · ");
+            sb.Append(reads);
+            sb.Append(" read");
+        }
+
+        if (search > 0)
+        {
+            sb.Append(" · ");
+            sb.Append(search);
+            sb.Append(" search");
+        }
+
+        _countsText = sb.ToString();
     }
 
     internal bool ContainsMember(string toolCallId)
@@ -98,27 +126,7 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
     /// Collapsed header (<c>◇ gathered context · 2 read · 1 search</c>);
     /// zero-count parts are omitted.
     /// </summary>
-    public string HeaderText()
-    {
-        int reads = CountReads();
-        int search = _members.Count - reads;
-        var sb = new StringBuilder("◇ gathered context");
-        if (reads > 0)
-        {
-            sb.Append(" · ");
-            sb.Append(reads);
-            sb.Append(" read");
-        }
-
-        if (search > 0)
-        {
-            sb.Append(" · ");
-            sb.Append(search);
-            sb.Append(" search");
-        }
-
-        return sb.ToString();
-    }
+    public string HeaderText() => "◇ gathered context" + _countsText;
 
     private int CountReads()
     {
@@ -199,15 +207,41 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
 
         if (_members.Count > MaxExpandedMembers && shown < rows)
         {
-            string marker = $"… +{_members.Count - MaxExpandedMembers} more";
-            int avail = Math.Max(0, buffer.Cols - ctx.Rect.X);
-            if (marker.Length > avail)
-            {
-                marker = marker[..avail];
-            }
-
-            buffer.SetText(ctx.Rect.X, y + shown, marker, ChatPalette.Dim);
+            // ENG10 #282: segment paints — identical cells to the former
+            // $"… +{n} more" run, no per-frame interpolation or substring.
+            PaintOverflowMarker(buffer, ctx.Rect.X, y + shown, _members.Count - MaxExpandedMembers);
         }
+    }
+
+    private static void PaintOverflowMarker(ScreenBuffer buffer, int x, int y, int overflow)
+    {
+        int avail = Math.Max(0, buffer.Cols - x);
+        if (avail <= 0 || y >= buffer.Rows)
+        {
+            return;
+        }
+
+        Span<char> digits = stackalloc char[11];
+        overflow.TryFormat(digits, out int written);
+        var head = "… +".AsSpan();
+        var tail = " more".AsSpan();
+        int cursor = x;
+        int end = x + avail;
+        PaintRun(buffer, ref cursor, end, y, head, ChatPalette.Dim);
+        PaintRun(buffer, ref cursor, end, y, digits.Slice(0, written), ChatPalette.Dim);
+        PaintRun(buffer, ref cursor, end, y, tail, ChatPalette.Dim);
+    }
+
+    private static void PaintRun(ScreenBuffer buffer, ref int cursor, int end, int y, ReadOnlySpan<char> run, CellStyle style)
+    {
+        if (cursor >= end || run.IsEmpty)
+        {
+            return;
+        }
+
+        int shown = Math.Min(end - cursor, run.Length);
+        buffer.SetText(cursor, y, run.Slice(0, shown), style);
+        cursor += shown;
     }
 
     private void PaintHeader(ScreenBuffer buffer, int x, int y, int width)
@@ -220,23 +254,6 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
                 anyRunning = true;
                 break;
             }
-        }
-
-        int reads = CountReads();
-        int search = _members.Count - reads;
-        var counts = new StringBuilder();
-        if (reads > 0)
-        {
-            counts.Append(" · ");
-            counts.Append(reads);
-            counts.Append(" read");
-        }
-
-        if (search > 0)
-        {
-            counts.Append(" · ");
-            counts.Append(search);
-            counts.Append(" search");
         }
 
         var glyphStyle = anyRunning ? ChatPalette.ToolRunning : ChatPalette.ToolOk;
@@ -253,12 +270,15 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
         buffer.SetText(cursor, y, label, ChatPalette.ToolName);
         cursor += label.Length;
 
-        if (counts.Length > 0)
+        // ENG10 #282: transition-cached counts fragment, span slice —
+        // no per-frame StringBuilder. Identical cells to the former
+        // counts.ToString() run.
+        if (_countsText.Length > 0)
         {
             int avail = (x + width) - cursor;
             if (avail > 0)
             {
-                var span = counts.ToString().AsSpan(0, Math.Min(avail, counts.Length));
+                var span = _countsText.AsSpan(0, Math.Min(avail, _countsText.Length));
                 buffer.SetText(cursor, y, span, ChatPalette.Dim);
             }
         }
@@ -291,28 +311,21 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
         buffer.SetText(cursor, y, tool, ChatPalette.ToolName);
         cursor += tool.Length;
 
-        var detail = new StringBuilder();
+        // ENG10 #282: segment paints over member state + the transition-cached
+        // OutcomeText — no per-frame StringBuilder. Identical cells to the
+        // former ' ' + args + " → " + ("ok "/"error ") + FormatDuration run.
+        int end = x + width;
+        var detailStyle = body?.IsError == true ? ChatPalette.ToolError : ChatPalette.ToolArgs;
         if (!string.IsNullOrEmpty(member.Info.ArgsSummary))
         {
-            detail.Append(' ');
-            detail.Append(member.Info.ArgsSummary);
+            PaintRun(buffer, ref cursor, end, y, " ", detailStyle);
+            PaintRun(buffer, ref cursor, end, y, member.Info.ArgsSummary.AsSpan(), detailStyle);
         }
 
-        if (body is not null)
+        if (body is not null && member.OutcomeText is { Length: > 0 } outcome)
         {
-            detail.Append(" → ");
-            detail.Append(body.IsError ? "error " : "ok ");
-            detail.Append(ToolResultBody.FormatDuration(body.Duration));
-        }
-
-        if (detail.Length > 0)
-        {
-            int avail = (x + width) - cursor;
-            if (avail > 0)
-            {
-                var span = detail.ToString().AsSpan(0, Math.Min(avail, detail.Length));
-                buffer.SetText(cursor, y, span, body?.IsError == true ? ChatPalette.ToolError : ChatPalette.ToolArgs);
-            }
+            PaintRun(buffer, ref cursor, end, y, " → ", detailStyle);
+            PaintRun(buffer, ref cursor, end, y, outcome.AsSpan(), detailStyle);
         }
     }
 

@@ -80,11 +80,20 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     private ToolCallStatus _status;
     private ToolResultBody? _body;
 
+    // ENG10 #282: one-shot paints — transition-computed strings, never
+    // per-frame heap objects. Set once (ctor / first Complete wins);
+    // Paint only slices spans over them.
+    private readonly string _argsRowText;
+    private string _durationText = string.Empty;
+    private string _pillText = string.Empty;
+    private string? _outcomeText;
+
     public ToolCallBlock(in ToolCallInfo info)
     {
         Info = info;
         _status = ToolCallStatus.Running;
         MaxBodyLines = ICollapsibleChatBlock.DefaultCollapsedBodyLines;
+        _argsRowText = "  args: " + ArgsFullText;
     }
 
     public ToolCallInfo Info { get; }
@@ -190,6 +199,11 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     /// <summary>Full args text for the expanded row (falls back to the short summary).</summary>
     public string ArgsFullText => Info.ArgsFull ?? Info.ArgsSummary;
 
+    /// <summary>Completed outcome fragment for group rows
+    /// (<c>"ok 12ms"</c> / <c>"error &lt;1ms"</c>); null while running.
+    /// Computed once at completion — group paint slices it span-wise.</summary>
+    internal string? OutcomeText => _outcomeText;
+
     private Rect? _lastPaintRect;
     private int _lastSkipRows;
 
@@ -212,6 +226,13 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
 
         _body = body;
         _status = body.IsError ? ToolCallStatus.Error : ToolCallStatus.Ok;
+
+        // ENG10 #282: transition-computed paint fragments — Paint slices
+        // spans over these instead of interpolating per frame. Cells identical
+        // to the former $" ({DurationToText})" / $" [{StatusPill}]" runs.
+        _durationText = FrameworkStatusMappers.DurationToText(body.Duration);
+        _pillText = " [" + StatusPill + "]";
+        _outcomeText = (body.IsError ? "error " : "ok ") + ToolResultBody.FormatDuration(body.Duration);
     }
 
     public BlockMeasure Measure(int width)
@@ -340,7 +361,10 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             _ => ChatPalette.ToolRunning,
         };
 
-        buffer.SetText(x, y, [glyph], glyphStyle);
+        // ENG10 #282: one-shot paint — no per-frame heap objects (stack span, not char[]).
+        Span<char> glyphRun = stackalloc char[1];
+        glyphRun[0] = glyph;
+        buffer.SetText(x, y, glyphRun, glyphStyle);
         int cursor = x + 1;
         if (cursor >= x + width)
         {
@@ -356,13 +380,19 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
         {
             // CF-E-012: duration straight from StatusMappers.DurationToText.
             // It returns string.Empty for sub-millisecond (instantaneous) calls,
-            // so the column hides instead of rendering " ()".
-            var durationText = FrameworkStatusMappers.DurationToText(_body.Duration);
+            // so the column hides instead of rendering " ()". Cached at
+            // Complete(); Paint only slices spans (ENG10 #282).
+            var durationText = _durationText.AsSpan();
             if (durationText.Length > 0)
             {
-                var tail = $" ({durationText})";
-                buffer.SetText(cursor, y, tail, ChatPalette.Dim);
-                cursor += tail.Length;
+                // ENG10 #282: segment paints (no $"..." per-frame string) —
+                // identical cells to the former $" ({durationText})" run.
+                buffer.SetText(cursor, y, " (", ChatPalette.Dim);
+                cursor += 2;
+                buffer.SetText(cursor, y, durationText, ChatPalette.Dim);
+                cursor += durationText.Length;
+                buffer.SetText(cursor, y, ")", ChatPalette.Dim);
+                cursor += 1;
             }
 
             // Status pill (CF-E-012): painted only once completed, so the Running
@@ -370,9 +400,9 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             // screenshot baselines). StatusPill still reports "running" pre-flight.
             // No ChatPalette.ToolPill: ChatPalette lives in Harbor.DesignSystem
             // (out of scope) — the pill reuses the status glyph style instead.
-            var pill = $" [{StatusPill}]";
-            buffer.SetText(cursor, y, pill, glyphStyle);
-            cursor += pill.Length;
+            // ENG10 #282: transition-cached fragment, span paint, no per-frame $"...".
+            buffer.SetText(cursor, y, _pillText.AsSpan(), glyphStyle);
+            cursor += _pillText.Length;
         }
 
         if (!string.IsNullOrEmpty(Info.ArgsSummary))
@@ -410,14 +440,13 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             return;
         }
 
-        string text = "  args: " + ArgsFullText;
+        // ENG10 #282: ctor-cached row text sliced as a span — no per-frame
+        // concat + substring. Identical cells to the former
+        // ("  args: " + ArgsFullText)[..avail] paint.
+        var text = _argsRowText.AsSpan();
         int avail = Math.Max(0, buffer.Cols - x);
-        if (text.Length > avail)
-        {
-            text = text[..avail];
-        }
-
-        buffer.SetText(x, y, text, ChatPalette.ToolArgs);
+        int shown = Math.Min(avail, text.Length);
+        buffer.SetText(x, y, text.Slice(0, shown), ChatPalette.ToolArgs);
     }
 
     /// <summary>

@@ -32,6 +32,16 @@ public sealed class TableBlock : IChatBlock
     private readonly GfmTable _table;
     private readonly int _budgetBytes;
 
+    // ENG10 #282: one-shot layout cache (width-keyed, same discipline as
+    // AssistantMarkdownBlock._lines). Table content is immutable once parsed,
+    // so widths / rule strings / fitted cells are rebuilt only when the paint
+    // width or row count changes — steady-state Paint only slices spans.
+    private int[]? _layoutWidths;
+    private string[]? _layoutRules; // top, mid, bottom
+    private string[]? _layoutCells; // (1 header + N body rows) × Columns fitted cells
+    private int _layoutWidth = -1;
+    private int _layoutRows = -1;
+
     public TableBlock(GfmTable table)
     {
         ArgumentNullException.ThrowIfNull(table);
@@ -97,7 +107,9 @@ public sealed class TableBlock : IChatBlock
             return;
         }
 
-        int[] widths = ColumnWidths(width);
+        EnsureLayout(width);
+        int[] widths = _layoutWidths!;
+        string[] rules = _layoutRules!;
         var border = ChatPalette.Dim;
         var headerStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
 
@@ -112,24 +124,64 @@ public sealed class TableBlock : IChatBlock
             switch (row)
             {
                 case 0:
-                    PaintRule(buffer, ctx.Rect.X, y, widths, Tl, Tr, X, width, border);
+                    buffer.SetText(ctx.Rect.X, y, rules[0], border);
                     break;
                 case 1:
-                    PaintDataRow(buffer, ctx.Rect.X, y, _table.Headers, widths, _table.Alignments, width, headerStyle);
+                    PaintDataRow(buffer, ctx.Rect.X, y, _layoutCells!, 0, widths, width, headerStyle);
                     break;
                 case 2:
-                    PaintRule(buffer, ctx.Rect.X, y, widths, Lt, Rt, X, width, border);
+                    buffer.SetText(ctx.Rect.X, y, rules[1], border);
                     break;
                 case int r when r == total - 1:
-                    PaintRule(buffer, ctx.Rect.X, y, widths, Bl, Br, X, width, border);
+                    buffer.SetText(ctx.Rect.X, y, rules[2], border);
                     break;
                 default:
-                    var cells = _table.Rows[row - 3];
-                    PaintDataRow(buffer, ctx.Rect.X, y, cells, widths, _table.Alignments, width, CellStyle.Plain);
+                    int bodyRow = row - 3;
+                    PaintDataRow(buffer, ctx.Rect.X, y, _layoutCells!, (1 + bodyRow) * Columns, widths, width, CellStyle.Plain);
                     break;
             }
         }
     }
+
+    /// <summary>Rebuilds the cached layout when the paint width or row count changed.</summary>
+    private void EnsureLayout(int maxWidth)
+    {
+        if (_layoutWidths is not null && _layoutWidth == maxWidth && _layoutRows == _table.Rows.Count)
+        {
+            return;
+        }
+
+        var widths = ColumnWidths(maxWidth);
+        var rules = new string[3];
+        rules[0] = BuildRule(Tl, Tr, X, widths, maxWidth);
+        rules[1] = BuildRule(Lt, Rt, X, widths, maxWidth);
+        rules[2] = BuildRule(Bl, Br, X, widths, maxWidth);
+
+        int cols = Columns;
+        var cells = new string[(1 + _table.Rows.Count) * cols];
+        for (int c = 0; c < cols; c++)
+        {
+            cells[c] = FitCell(_table.Headers[c], widths[c], AlignAt(c));
+        }
+
+        for (int r = 0; r < _table.Rows.Count; r++)
+        {
+            var row = _table.Rows[r];
+            for (int c = 0; c < cols; c++)
+            {
+                string text = c < row.Count ? row[c] : string.Empty;
+                cells[(1 + r) * cols + c] = FitCell(text, widths[c], AlignAt(c));
+            }
+        }
+
+        _layoutWidths = widths;
+        _layoutRules = rules;
+        _layoutCells = cells;
+        _layoutWidth = maxWidth;
+        _layoutRows = _table.Rows.Count;
+    }
+
+    private GfmAlign AlignAt(int c) => c < _table.Alignments.Count ? _table.Alignments[c] : GfmAlign.Left;
 
     /// <summary>Copy-friendly pipe form (header + separator + body rows).</summary>
     public string RawText()
@@ -218,9 +270,9 @@ public sealed class TableBlock : IChatBlock
         }
     }
 
-    private static void PaintRule(
-        ScreenBuffer buffer, int x, int y, int[] widths,
-        char left, char right, char mid, int maxWidth, CellStyle style)
+    /// <summary>Rule string builder (cache-fill only — Paint slices the cached rules).</summary>
+    private static string BuildRule(
+        char left, char right, char mid, int[] widths, int maxWidth)
     {
         var sb = new StringBuilder();
         sb.Append(left);
@@ -237,19 +289,19 @@ public sealed class TableBlock : IChatBlock
             rule = HardTruncateCells(rule, maxWidth);
         }
 
-        buffer.SetText(x, y, rule, style);
+        return rule;
     }
 
     private static void PaintDataRow(
         ScreenBuffer buffer, int x, int y,
-        IReadOnlyList<string> cells, int[] widths, IReadOnlyList<GfmAlign> aligns,
+        string[] fitted, int offset, int[] widths,
         int maxWidth, CellStyle cellStyle)
     {
         var border = ChatPalette.Dim;
         int cursor = x;
         int end = x + maxWidth;
 
-        buffer.SetText(cursor, y, V.ToString(), border);
+        buffer.SetText(cursor, y, [V], border);
         cursor++;
         for (int c = 0; c < widths.Length && cursor < end; c++)
         {
@@ -260,13 +312,9 @@ public sealed class TableBlock : IChatBlock
                 break;
             }
 
-            string text = c < cells.Count ? cells[c] : string.Empty;
-            GfmAlign align = c < aligns.Count ? aligns[c] : GfmAlign.Left;
-            string fitted = FitCell(text, widths[c], align);
-
             // Cell text and padding share one run; borders stay dim.
-            buffer.SetText(cursor, y, fitted, cellStyle);
-            cursor += UnicodeWidth.Width(fitted);
+            buffer.SetText(cursor, y, fitted[offset + c], cellStyle);
+            cursor += UnicodeWidth.Width(fitted[offset + c]);
             if (cursor >= end)
             {
                 break;
@@ -279,7 +327,7 @@ public sealed class TableBlock : IChatBlock
                 break;
             }
 
-            buffer.SetText(cursor, y, V.ToString(), border);
+            buffer.SetText(cursor, y, [V], border);
             cursor++;
         }
     }
