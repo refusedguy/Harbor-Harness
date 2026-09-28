@@ -1,3 +1,4 @@
+using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 
@@ -308,7 +309,7 @@ public sealed class FilePickerView
         }
 
         string rule = new string('─', Math.Min(width, 64));
-        buffer.SetText(x, top + 1, rule.AsSpan(0, Math.Min(rule.Length, width)), ChatPalette.Border);
+        buffer.SetText(x, top + 1, rule.AsSpan(0, Math.Min(rule.Length, width)), new CellStyle(ChatPalette.Border));
 
         var lines = ResolvePreview(selected);
         if (lines.Count == 0)
