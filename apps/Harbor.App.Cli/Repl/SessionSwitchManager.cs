@@ -3,6 +3,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Ui.Framework.State;
 
@@ -76,6 +77,11 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
 
         await SyncSessionsToStoreAsync(ct).ConfigureAwait(false);
         target.Announce($"⇄ сессия → {loaded.Title} ({loaded.Id[..Math.Min(8, loaded.Id.Length)]})");
+        // Tab strip (#389): the switch is what opens a tab. Idempotent by
+        // construction — OpenTab activates an already-open session instead of
+        // appending a duplicate, so this is safe to run on every switch.
+        _ = host.Store.Dispatch(new AppMsg.OpenTab(
+            new SessionTab(SessionId.Create(loaded.Id), loaded.Title)));
         onSwitched();
         host.WakeUp();
     }
@@ -155,6 +161,17 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
 
         host.WakeUp();
     }
+
+    /// <summary>
+    ///     Opens the session-switch palette — the REPL's answer to the tab
+    ///     strip's <c>Ctrl+T</c> open/switch action (#389). Lives here, next to
+    ///     the switch coordinator, so the keyboard and the palette can never
+    ///     disagree about what "switch session" opens: both go through
+    ///     <see cref="SessionsCommand" />.
+    /// </summary>
+    public void OpenSessionsPalette() =>
+        TaskFireAndForget.Forget(
+            SessionsCommand.ShowSwitchListAsync(host, CancellationToken.None));
 
     /// <summary>
     ///     Default <see cref="ISessionSwitchTarget" /> over <see cref="IReplHost" />:

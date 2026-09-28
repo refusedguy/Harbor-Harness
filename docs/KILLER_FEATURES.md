@@ -1155,8 +1155,29 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
   `tests/Harbor.Ui.Framework.Tests/TabStripReducerTests.cs`. Documented rules:
   closing the active tab focuses next → else previous → else none; a panel dies
   with its tab only when the closed tab was its sole owner, otherwise it is
-  reassigned. Pending: slice 2/3 (tab-strip widget + gestures/keys) and a
-  `UiMsg` to refresh tab title/status/dirty, which lands with the renderer.
+  reassigned.
+- **Status:** Slice 2/3 landed (`feat/tabrender-389`, issue #389) — render + keys:
+  `SessionTabStripPanel`
+  (`src/Harbor.Tui.CellForge/Chat/Widgets/SessionTabStripPanel.cs`) paints the
+  strip from `TabStripState` alone — it holds no selection, raises no events and
+  routes every interaction (`ActivateTab` / `CloseTab` / `CycleNextTab` /
+  `CyclePreviousTab`) through an injected `Action<UiMsg>` sink. Geometry is a
+  pure `Layout(width) → TabStripPlan` (minimum-fit window around the focused tab,
+  slack handed back as title width, `+N` / `<` overflow hints, hard clamp to the
+  row), so it is asserted directly rather than through a screenshot. Seated by
+  `ChatScreen.SyncTabStrip` between timeline and composer; hidden at ≤1 tab unless
+  `TabStripState.ForceShow`. Keys live in the shared `ChatKeyMap`
+  (`ChatAction.NextTab` / `PreviousTab` / `CloseTab` / `OpenTab`). `Ctrl+Tab` is
+  shared with `CyclePanelFocus`, so those two entries carry a context guard:
+  `ChatKeyMap.Resolve(key, state)` gives the chord to the tab strip only while
+  ≥2 tabs are open, and the state-less `Resolve(key)` overload keeps the
+  pre-#389 panel mapping for every existing caller. `Ctrl+W` closes the focused
+  tab and provably cannot return `TuiEffect.QuitApp`; quitting stays Esc /
+  Ctrl+C×2. TUnit coverage:
+  `tests/Harbor.Tui.CellForge.Tests/SessionTabStripPanelTests.cs`,
+  `tests/Harbor.Ui.Framework.Tests/TabStripKeyBindingTests.cs` (including the
+  `SessionEventRouter` cross-session leak regression for the tab-switch path).
+  Pending: slice 3/3 (#390) — drag-reorder, close gestures, context menu.
 
 ---
 

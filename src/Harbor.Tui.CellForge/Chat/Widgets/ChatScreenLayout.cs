@@ -660,13 +660,39 @@ public sealed class SideBarPanel : Panel
 }
 
 /// <summary>Assembled chat screen: timeline above, composer below, status footer.</summary>
-public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, ComposerPanel Composer, StatusPanel Status, SideBarPanel? Sidebar = null, MascotPanel? Mascot = null)
+public sealed record ChatScreen(
+    LayoutTree Tree,
+    ChatTimelinePanel Timeline,
+    ComposerPanel Composer,
+    StatusPanel Status,
+    SideBarPanel? Sidebar = null,
+    MascotPanel? Mascot = null,
+    SessionTabStripPanel? Tabs = null)
 {
     public const string TimelineId = "chat.timeline";
     public const string ComposerId = "chat.composer";
     public const string StatusId = "chat.status";
     public const string SidebarId = SideBarPanel.DefaultId;
     public const string MascotId = MascotPanel.DefaultId;
+    public const string TabsId = SessionTabStripPanel.DefaultId;
+
+    /// <summary>
+    ///     Transcript share of its band, mirroring the <c>timelineRatio</c> passed
+    ///     to <see cref="Build" />. Read back by <see cref="SyncTabStrip" /> to
+    ///     recompute the band from the viewport, so the tab strip needs no
+    ///     knowledge of the solver's internals beyond the ratio itself.
+    /// </summary>
+    public double TimelineRatio { get; init; } = 0.82;
+
+    /// <summary>
+    ///     Rows the transcript refuses to give up. The tab strip may only claim
+    ///     what is left over, so a tiny terminal degrades to "no strip" instead
+    ///     of "no chat".
+    /// </summary>
+    public int TimelineMinRows { get; init; } = 4;
+
+    /// <summary>Rows the composer and status row refuse to give up.</summary>
+    public int ChromeMinRows { get; init; } = 4;
 
     /// <summary>Modal dialog state; seated on <see cref="LayoutTree.Overlays"/> by <see cref="SyncOverlays"/> (PRIM2c).</summary>
     public DialogOverlay Dialog { get; } = new();
@@ -749,7 +775,8 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
         float timelineRatio = 0.82f,
         int minComposerRows = 3,
         bool includeSidebar = true,
-        MascotMode? mascotMode = null)
+        MascotMode? mascotMode = null,
+        bool includeTabStrip = true)
     {
         var tree = new LayoutTree();
         // Pin the auto-show policy (SideBarLayout.AutoShowMinWidth = 120):
@@ -769,9 +796,31 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
             ? new SideBarPanel(SidebarId, minWidth: SideBarLayout.DefaultWidth, priority: 5)
             : null;
 
+        var tabStrip = includeTabStrip ? new SessionTabStripPanel() : null;
+
         tree.AddRoot(timeline);
         tree.Split(TimelineId, SplitDir.Vertical, timelineRatio, composerPanel, gap: 0);
         tree.Split(ComposerId, SplitDir.Vertical, ratio: 1f - (1f / Math.Max(2, minComposerRows)), statusRow, gap: 0);
+
+        // Session tab strip (#389). Split off the timeline leaf AFTER the
+        // composer/status splits, so the strip lands inside the band the
+        // transcript shares with the composer: the rows it claims come out of
+        // the transcript, never out of the input box (the seam the acceptance
+        // criteria name explicitly). Splitting earlier would strand it in the
+        // composer band, which on a 24-row terminal is exactly 4 rows — all of
+        // them the composer's and status row's minimum.
+        //
+        // Ratio 1 = the transcript keeps the whole band and the strip gets
+        // nothing, so a screen nobody called SyncTabStrip on solves and paints
+        // exactly as it did before #389. That is what keeps every existing
+        // golden byte-identical; SyncTabStrip is the only thing that ever moves
+        // the ratio. Doing it as a ratio rather than an add/remove split keeps
+        // the tree's shape (and therefore its row minimum) stable at runtime.
+        if (tabStrip is not null)
+        {
+            tree.Split(TimelineId, SplitDir.Vertical, 1f, tabStrip, gap: 0);
+        }
+
         if (sidebar is not null)
         {
             tree.Split(TimelineId, SplitDir.Horizontal, 0.74f, sidebar, gap: 1);
@@ -794,7 +843,59 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
             statusRow.FooterMascotEnabled = false;
         }
 
-        return new ChatScreen(tree, timeline, composerPanel, statusRow, sidebar, mascotPanel);
+        return new ChatScreen(tree, timeline, composerPanel, statusRow, sidebar, mascotPanel, tabStrip)
+        {
+            TimelineRatio = timelineRatio,
+            TimelineMinRows = timeline.Min.Height,
+            ChromeMinRows = composerPanel.Min.Height + statusRow.Min.Height
+        };
+    }
+
+    /// <summary>
+    ///     Projects the tab-strip snapshot onto the panel and claims (or releases)
+    ///     its rows for the given viewport — the one place that knows both what
+    ///     the strip wants and how much room the screen has (#389).
+    /// </summary>
+    /// <remarks>
+    ///     Rows are expressed as a ratio because that is all
+    ///     <see cref="LayoutTree" /> can store; recomputing on every frame is
+    ///     what keeps it an exact row count. A hidden strip asks for the
+    ///     transcript's whole band back, so "≤1 tab" costs nothing and every
+    ///     pre-#389 frame stays byte-identical. The transcript's own minimum is
+    ///     subtracted first, so a viewport too short for the strip drops the
+    ///     strip rather than the chat.
+    /// </remarks>
+    public void SyncTabStrip(TabStripState strip, int viewportHeight)
+    {
+        if (Tabs is not { } panel)
+            return;
+
+        panel.Strip = strip;
+
+        // The band the strip shares with the transcript. Recomputed from the
+        // viewport with the same clamp LayoutTree.SolveNode applies, so the
+        // frame is decided from the current size rather than from last frame's
+        // rects (which would lag a frame on resize and never recover on a
+        // cold start, where no rect exists yet).
+        int band = viewportHeight <= 0
+            ? 0
+            : Math.Clamp(
+                (int)Math.Round(viewportHeight * TimelineRatio),
+                TimelineMinRows,
+                Math.Max(TimelineMinRows, viewportHeight - ChromeMinRows));
+
+        // Rows the transcript insists on are never taken; anything left over is
+        // capped at what the strip knows how to draw.
+        int rows = strip.ShouldRender
+            ? Math.Min(SessionTabStripPanel.PreferredRows, Math.Max(0, band - TimelineMinRows))
+            : 0;
+
+        // The split's ratio is the TRANSCRIPT's share of the band, so "the strip
+        // gets N rows" is expressed as "the transcript keeps band - N". The
+        // arithmetic is one subtraction; the alternative (a strip-side ratio)
+        // cannot express "give me almost everything", because the solver clamps
+        // the other side to its minimum first.
+        Tree.SetRatio(TabsId, band > 0 ? (band - rows) / (float)band : 1f);
     }
 }
 

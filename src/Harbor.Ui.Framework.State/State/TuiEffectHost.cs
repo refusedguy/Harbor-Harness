@@ -34,6 +34,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
     private readonly Func<string, Task>? _slash;
     private readonly IApprovalCoordinator? _coordinator;
     private readonly Func<string, Task>? _activateSession;
+    private readonly Func<Task>? _openSession;
 
     // #91: rebindable mid-flight via RebindStore. Every async effect captures
     // its store once at entry (a volatile read) and dispatches the whole run
@@ -48,7 +49,8 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         CancellationToken appCt = default,
         ILogger<TuiEffectHost>? logger = null,
         IApprovalCoordinator? coordinator = null,
-        Func<string, Task>? activateSession = null)
+        Func<string, Task>? activateSession = null,
+        Func<Task>? openSession = null)
     {
         _agent = agent;
         _store = store;
@@ -57,6 +59,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         _logger = logger;
         _coordinator = coordinator;
         _activateSession = activateSession;
+        _openSession = openSession;
     }
 
     public void RebindStore(UiStore newStore)
@@ -117,6 +120,19 @@ public sealed class TuiEffectHost : ITuiEffectRunner
                 TaskFireAndForget.Forget(
                     _activateSession(act.SessionId.Value),
                     ex => _logger?.LogError(ex, "ActivateSession failed for {SessionId}", act.SessionId.Value));
+                break;
+            case TuiEffect.RequestOpenSession:
+                // Tab-strip open/switch (#389). Same delegate shape as
+                // ActivateSession: the picker lives in the composition root, so
+                // a host without one just logs and the key stays harmless.
+                if (_openSession is null)
+                {
+                    _logger?.LogDebug("RequestOpenSession ignored: no session picker wired");
+                    break;
+                }
+                TaskFireAndForget.Forget(
+                    _openSession(),
+                    ex => _logger?.LogError(ex, "RequestOpenSession failed"));
                 break;
         }
     }

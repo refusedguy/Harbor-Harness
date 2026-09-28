@@ -171,6 +171,33 @@ public sealed class LayoutTree
         _capsVer++;
     }
 
+    /// <summary>
+    ///     Retargets the ratio of the split created by <see cref="Split" /> for
+    ///     <paramref name="panelId" /> — instantly, with no spring. The animated
+    ///     counterpart is <see cref="AnimateRatio" />; this one exists for
+    ///     size-in-rows chrome (the tab strip, #389) whose height must be an exact
+    ///     number of rows rather than a fraction of the viewport.
+    /// </summary>
+    /// <remarks>
+    ///     A ratio is still viewport-relative, so a caller that wants a fixed
+    ///     pixel count recomputes it on resize: <c>rows / (float)viewportHeight</c>.
+    ///     The solver clamps the result to the panel's minimum, so a viewport too
+    ///     short to host both leaves collapses the strip to zero rows instead of
+    ///     overlapping its neighbour.
+    /// </remarks>
+    public void SetRatio(string panelId, float ratio)
+    {
+        var node = FindSplitWithAChild(_root, panelId)
+                   ?? throw new KeyNotFoundException($"panel '{panelId}' has no owning split");
+        if (Math.Abs(node.Ratio - ratio) <= 0f)
+            return;
+        node.Ratio = ratio;
+        // A retarget supersedes any in-flight spring: the caller asked for an
+        // exact size, and leaving the spring running would keep nudging it.
+        _ratioSprings.Remove(panelId);
+        _capsVer++;
+    }
+
     public void Remove(string panelId)
     {
         _ratioSprings.Remove(panelId);

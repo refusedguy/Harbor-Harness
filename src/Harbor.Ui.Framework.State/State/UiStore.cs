@@ -33,6 +33,16 @@ public abstract record TuiEffect
     /// </summary>
     /// <param name="SessionId">The session the host must open.</param>
     public sealed record ActivateSession(SessionId SessionId) : TuiEffect;
+
+    /// <summary>
+    ///     Ask the host to open or switch a session — the tab-strip's "open tab"
+    ///     contract (#389, raised by <see cref="ChatAction.OpenTab" />).
+    ///     Deliberately argument-free: <i>which</i> session to open is a picker
+    ///     decision the reducer cannot make, so it only asks and the host answers
+    ///     with its own switch UI. Hosts with no picker wired may ignore it —
+    ///     same contract as <see cref="ActivateSession" />.
+    /// </summary>
+    public sealed record RequestOpenSession : TuiEffect;
 }
 
 /// <summary>

@@ -462,6 +462,20 @@ public static class ChatAppReducer
             case ChatAction.Clear:
                 return busy ? null : ReduceResult.NoOp(state.ClearTranscript());
 
+            // Tab-strip actions (#389). The tab model is chat-owned, so these are
+            // claimed here and deliberately NOT gated on `busy`: switching or
+            // closing a tab is chrome, not transcript work, and must stay
+            // available while an agent runs — the effect is what the host
+            // honours or refuses.
+            case ChatAction.NextTab:
+                return NextTabFromKey(state);
+            case ChatAction.PreviousTab:
+                return PreviousTabFromKey(state);
+            case ChatAction.CloseTab:
+                return CloseFocusedTab(state);
+            case ChatAction.OpenTab:
+                return RequestOpenTab(state);
+
             default:
                 return null;
         }
@@ -696,6 +710,55 @@ public static class ChatAppReducer
 
     /// <summary>Focus the previous tab in tab order (wraps around; no-op with fewer than two tabs).</summary>
     public static ReduceResult CyclePreviousTab(UiState state) => CycleTab(state, forward: false);
+
+    // ── tab strip from the keyboard (#389) ──────────────────────────────────
+    // ChatAction → tab-transition aliases. They exist so the keymap stays the
+    // only key→meaning table (no shell-local branches) and every tab mutation
+    // arrives through the one reducer path instead of a renderer's own
+    // selection field.
+
+    /// <summary>
+    ///     <see cref="ChatAction.NextTab" /> — the <c>Ctrl+Tab</c> key path.
+    ///     Delegates to <see cref="CycleNextTab" />, which already no-ops with
+    ///     fewer than two tabs rather than re-emitting an activate effect for
+    ///     the session already on screen.
+    /// </summary>
+    public static ReduceResult NextTabFromKey(UiState state) => CycleNextTab(state);
+
+    /// <summary>
+    ///     <see cref="ChatAction.PreviousTab" /> — the <c>Ctrl+Shift+Tab</c>
+    ///     key path. Delegates to <see cref="CyclePreviousTab" />.
+    /// </summary>
+    public static ReduceResult PreviousTabFromKey(UiState state) => CyclePreviousTab(state);
+
+    /// <summary>
+    ///     <see cref="ChatAction.CloseTab" /> (<c>Ctrl+W</c>) — close the
+    ///     <i>focused</i> tab, not the app.
+    /// </summary>
+    /// <remarks>
+    ///     The distinction is the whole point of the binding, so it is enforced
+    ///     here rather than in a shell: this method can only ever return
+    ///     <see cref="TuiEffect.ActivateSession" /> or
+    ///     <see cref="TuiEffect.None" /> — never
+    ///     <see cref="TuiEffect.QuitApp" />. With no tab open it is a no-op, and
+    ///     the explicit quit path (<see cref="ChatAction.Quit" />) is untouched.
+    /// </remarks>
+    public static ReduceResult CloseFocusedTab(UiState state)
+    {
+        if (state.Chat.TabStrip.ActiveTabId is not { } active)
+            return ReduceResult.NoOp(state);
+
+        return CloseTab(state, active);
+    }
+
+    /// <summary>
+    ///     <see cref="ChatAction.OpenTab" /> (<c>Ctrl+T</c>) — ask the host to
+    ///     open or switch a session. Pure state change: the reducer does not know
+    ///     which session the user means (that is a picker decision), so it only
+    ///     asks, and hosts without a picker wired ignore the effect.
+    /// </summary>
+    public static ReduceResult RequestOpenTab(UiState state) =>
+        new(state, new TuiEffect.RequestOpenSession());
 
     /// <summary>
     ///     Neighbour rule for a closed tab — documented once, pinned by

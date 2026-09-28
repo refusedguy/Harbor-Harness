@@ -116,6 +116,22 @@ internal sealed class CellForgeReplRunner(
     internal readonly VimComposerMode _vim = new();
     internal readonly SelectionEngine _selection = new();
 
+    /// <summary>
+    ///     Runs the tab-strip effects the REPL does not handle inline (#389).
+    ///     The REPL executes submit / abort / quit as gestures rather than from
+    ///     store effects (see <c>ReplInputLoop</c>), so the generic effect host
+    ///     would double-fire them; this narrow runner is scoped to the session
+    ///     effects only, which have no gesture equivalent.
+    /// </summary>
+    internal readonly ReplTabEffectRunner _effects =
+        new(
+            // #389: the tab-strip activate effect lands on the very coordinator
+            // /sessions and the quick-switch chords already use, so a tab switch
+            // and a palette switch cannot drift apart.
+            id => Sessions.SwitchToSessionAsync(id, CancellationToken.None),
+            () => Sessions.OpenSessionsPalette(),
+            ex => logger.LogError(ex, "Tab-strip effect failed"));
+
     // ── IReplHost (Command pattern seam; transitional, see IReplHost.cs) ──
     IAgent IReplHost.Agent => agent;
 

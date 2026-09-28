@@ -59,7 +59,12 @@ internal sealed class SessionsCommand : IReplCommand
         }
     }
 
-    private static async Task ShowSwitchListAsync(IReplHost host, CancellationToken ct)
+    /// <summary>
+    ///     Pushes the "switch session" list. Public so the tab strip's
+    ///     <c>Ctrl+T</c> open/switch action (#389) can reach the very same
+    ///     palette instead of growing a second session browser.
+    /// </summary>
+    public static Task ShowSwitchListAsync(IReplHost host, CancellationToken ct)
     {
         var store = host.SessionStore;
         if (store is null)
