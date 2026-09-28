@@ -261,9 +261,9 @@ public sealed class DiffBlock : ICollapsibleChatBlock
                 // on the row after the last shown diff line.
                 string tail = ICollapsibleChatBlock.OverflowTail(hidden);
                 buffer.SetText(ctx.Rect.X, y, new string(' ', GutterWidth), ChatPalette.Dim);
-                int x = ctx.Rect.X + GutterWidth;
-                int avail = Math.Max(0, ctx.Rect.Right - x);
-                buffer.SetText(x, y, tail.AsSpan(0, Math.Min(avail, tail.Length)), ChatPalette.Dim);
+                int tailX = ctx.Rect.X + GutterWidth;
+                int tailAvail = Math.Max(0, ctx.Rect.Right - tailX);
+                buffer.SetText(tailX, y, tail.AsSpan(0, Math.Min(tailAvail, tail.Length)), ChatPalette.Dim);
                 continue;
             }
 
