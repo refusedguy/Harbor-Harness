@@ -666,7 +666,7 @@ dotnet run --project apps/Harbor.App.Cli
 
 #### Option B: DLL plugin (samples/plugins/)
 
-См. [PLUGIN_DEVELOPMENT.md §Migration from DLL](./PLUGIN_DEVELOPMENT.md#migration-from-dll-to-cs).
+См. [PLUGIN_DEVELOPMENT.md §Migration from DLL](./PLUGIN_DEVELOPMENT.md#migration-from-samplespluginscsproj-dll-to-pluginscs-roslyn).
 Note: `~/.harbor/plugins/` only scans `*.cs` — compiled DLLs must be registered
 by host code or served out-of-process via `src/Harbor.Plugins.Host`.
 

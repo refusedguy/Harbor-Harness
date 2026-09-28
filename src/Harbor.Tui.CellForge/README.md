@@ -5,7 +5,7 @@
 живого чата. BCL-only, AOT-совместимо, 0 unsafe. **Движок (alt-screen/inline
 рендер, ввод, стриминг) — рабочий и включён в интерактивный REPL как
 полноценный бэкенд; интеграция с `Harbor.Ui.Framework` (проекция, TEA-цикл,
-панели, сессии) — в процессе, см. `.ai-factory/plans/cellforge-full-integration-backlog.md`.**
+панели, сессии) — в процессе, см. [docs/ROADMAP.md §Completed — ConsoleEx MVP](../../docs/ROADMAP.md#-completed--consoleex-mvp-ce-0ce-5).**
 
 > Историческое имя проекта — `Harbor.Tui.ConsoleEx` (MVP CE-0…CE-4). Канонический
 > id бэкенда — `cellforge`, `consoleex` остался legacy-алиасом (принимается везде,

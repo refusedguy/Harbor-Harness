@@ -3,8 +3,7 @@
 > Source generators that eliminate repetitive escape-code, renderer-adapter, and mood-dispatch boilerplate in the TUI/render pipeline.
 >
 > **Связанные документы:**
-> - [docs/EXAMPLES.md §Source generators](./EXAMPLES.md#source-generators) — quick recipes.
-> - [docs/DEVELOPMENT.md](./DEVELOPMENT.md) — how to add a new generator.
+> - [§5 Adding a new generator](#5-adding-a-new-generator) — how to register a generator.
 > - [AGENTS.md §Add a builtin tool](../AGENTS.md#add-a-builtin-tool) — registration pattern.
 > - [src/Harbor.CodeGen/](../src/Harbor.CodeGen/) — generator implementations.
 

@@ -9,8 +9,6 @@
 > - CellForge (+ Engine — fullscreen cell-diff terminal renderer) is the canonical interactive backend (`HARBOR_TUI=cellforge`, `consoleex` kept as legacy alias); AnsiPlain covers ANSI-streaming + plain pipes/CI; MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
 >
 > **Связанные документы:**
-> - [.ai-factory/DESCRIPTION.md](./.ai-factory/DESCRIPTION.md) — спецификация проекта и стек
-> - [.ai-factory/rules/base.md](./.ai-factory/rules/base.md) — базовые правила и конвенции
 > - [docs/ROADMAP.md](./docs/ROADMAP.md) — full roadmap with priorities + tech-debt backlog
 > - [docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md) — reusable UI components (Avalonia/Blazor/WPF)
 > - [docs/PATTERNS.md](./docs/PATTERNS.md) — 18 pattern catalog with real code.
