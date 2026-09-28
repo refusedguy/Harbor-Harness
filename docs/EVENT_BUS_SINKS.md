@@ -140,6 +140,11 @@ runtime from two counters, (b) reachable for any host that turns retention off,
 and (c) safe to rely on, because the two terms that gate it are enumerated in
 §2 rather than guessed.
 
+The cost side of the same question (what a qualifying publish actually costs)
+is measured in `docs/BENCHMARKS.md` §5.4: **1.46 ns / 0 B** with no sink,
+**14.5 ns / 0 B** with an optional sink drained, against 83.5 ns / 112 B
+(mandatory sink) and 159.2 ns / 200 B (one subscriber).
+
 ### Follow-up (not in this slice)
 
 `GetScrollback` has **no production caller** on this branch (only the interface,

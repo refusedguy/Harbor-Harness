@@ -332,7 +332,7 @@ attributed there. `InMemoryEventBus` exposes no way to empty its scrollback ring
 run against a ring that saturates; slot overwrite costs the same as a fresh slot, which each class doc
 records under `RetainedState:`.
 
-### 5.4 Zero-subscriber fast path (#47/S3) ⏳ latency not yet measured, allocation pinned
+### 5.4 Zero-subscriber fast path (#47/S3) ✅ measured in CI
 
 `EventBusFastPathBenchmark` measures acceptance cost for four compositions of the same publish, so the
 fast path is a number rather than a claim, and the near-misses that disqualify a bus are visible next
@@ -342,6 +342,8 @@ to it. Run by the CI `benchmark` job (`--filter '*EventBusFastPath*'`, Short job
 dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*EventBusFastPath*'
 ```
 
+These rows measure ACCEPTANCE cost, not delivery — the qualifying rows deliver to nobody.
+
 | Row | Composition | Expected allocation |
 |---|---|---|
 | `Qualifying_0Sub_NoSinks_ScrollbackOff` | 0 subscribers, 0 scrollback, no sinks | **0 B/op** |
@@ -349,13 +351,33 @@ dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*EventBusFa
 | `Disqualified_0Sub_MandatorySink_ScrollbackOff` | + one mandatory sink (type filter) | allocates by design |
 | `Disqualified_1Sub_NoSinks_ScrollbackOff` | one live subscriber | allocates by design |
 
-⏳ **Latency columns are not yet filled** — the rows are code-only, exactly like §5.3, and the honest
-number to quote until a CI run lands is the *allocation* one, which is asserted (not eyeballed) by
-`EventBusFastPathTests` in `tests/Harbor.Core.Tests` via
-`GC.GetAllocatedBytesForCurrentThread() == 0` over 5 000 publishes. Which production compositions
-actually qualify is measured per preset in `tests/Harbor.Hosting.Tests/EventBusSinkCompositionTests.cs`
-and tabulated in [`docs/EVENT_BUS_SINKS.md`](./EVENT_BUS_SINKS.md) §5 (today: 0 % for every shipped
-preset — the mandatory/optional verdict, not the guard, is what keeps them out).
+Measured 2026-09-28 on the CI runner (ubuntu-24.04, `taskset -c 1`), BDN
+`[SimpleJob(warmupCount: 3, iterationCount: 5)]` + `[MemoryDiagnoser]`, commit `f8c9e95`:
+
+| Row | Mean | Allocated |
+|---|---|---|
+| `Qualifying_0Sub_NoSinks_ScrollbackOff` | **1.46 ns** | **0 B** |
+| `Qualifying_0Sub_OptionalSinkDrained_ScrollbackOff` | 14.5 ns | **0 B** |
+| `Disqualified_0Sub_MandatorySink_ScrollbackOff` | 83.5 ns | 112 B |
+| `Disqualified_1Sub_NoSinks_ScrollbackOff` | 159.2 ns | 200 B |
+
+Reading the four rows: the qualifying publish is **~1.5 ns and allocation-free** (a composition-time
+field read, one lock-free subscription-snapshot read, one `Interlocked` for the fast-path counter,
+`Task.CompletedTask` — no async state machine since #47/S3). Draining an optional sink costs ~13 ns
+more (a second `Interlocked` plus a virtual call through the sink interface) and still allocates
+nothing: that is the price of "optional" without "silent". The two disqualified rows are what a bus
+pays when something *can* observe the publish.
+
+Caveat: the same run's `ShortRun` pass reported 96.9 ns ± 692 ns for the optional-drain row (3
+iterations, one extreme outlier) against 14.5 ns in the table. Treat that row's latency as indicative;
+its **allocation** (0 B) is the load-bearing claim, and it is also asserted — not eyeballed — by
+`EventBusFastPathTests` in `tests/Harbor.Core.Tests` with
+`GC.GetAllocatedBytesForCurrentThread() == 0` over 5 000 publishes.
+
+Which production compositions actually qualify is measured per preset in
+`tests/Harbor.Hosting.Tests/EventBusSinkCompositionTests.cs` and tabulated in
+[`docs/EVENT_BUS_SINKS.md`](./EVENT_BUS_SINKS.md) §5 (today: 0 % for every shipped preset — the
+mandatory/optional verdict, not the guard, is what keeps them out).
 
 ### Allocation-budget tripwires (#186, CI-enforced)
 
