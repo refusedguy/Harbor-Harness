@@ -55,7 +55,8 @@ jobs:
           fi
           for p in $suites; do
             echo "::group::goldens $p"
-            dotnet run --project "$p" -c Release -- --treenode-filter "*Golden*" --treenode-filter "*ScreenshotHash*" || true
+            dotnet run --project "$p" -c Release -- --treenode-filter "*Golden*" || true
+            dotnet run --project "$p" -c Release -- --treenode-filter "*ScreenshotHash*" || true
             echo "::endgroup::"
           done
           exit 0
@@ -64,7 +65,7 @@ jobs:
         run: |
           git config user.name "harbor-goldens"
           git config user.email "harbor-goldens@users.noreply.github.com"
-          git add -A -- '*.golden.txt' '*.verified.*' '*hashes*.json' '*Hashes*.json'
+          git add -A -- '*.golden.txt' '*.verified.*' '*hashes*.json' '*Hashes*.json' || true
           if git diff --cached --quiet; then
             echo "No baseline changes."
           else
