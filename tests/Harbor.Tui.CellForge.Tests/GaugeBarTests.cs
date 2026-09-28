@@ -36,7 +36,8 @@ public class GaugeBarTests
     public async Task LabelText_DefaultsToPercent()
     {
         await Assert.That(GaugeBar.LabelText(new GaugeState(0))).IsEqualTo("0%");
-        await Assert.That(GaugeBar.LabelText(new GaugeState(0.425))).IsEqualTo("42%");
+        await Assert.That(GaugeBar.LabelText(new GaugeState(0.424))).IsEqualTo("42%");
+        await Assert.That(GaugeBar.LabelText(new GaugeState(0.425))).IsEqualTo("43%");
         await Assert.That(GaugeBar.LabelText(new GaugeState(1))).IsEqualTo("100%");
         await Assert.That(GaugeBar.LabelText(new GaugeState(0.5, "ctx"))).IsEqualTo("ctx");
     }
