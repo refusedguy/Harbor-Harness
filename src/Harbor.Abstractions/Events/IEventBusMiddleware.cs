@@ -22,6 +22,15 @@ namespace Harbor.Abstractions.Events;
 ///         a warning, and cause the event to be dropped — the bus itself is never
 ///         broken by a faulty middleware.
 ///     </para>
+///     <para>
+///         <b>Mandatory vs optional (#47/S3):</b> every middleware is a sink, and
+///         the bus needs to know what a silent skip would cost before it is
+///         allowed to take the zero-subscriber fast path. Declare the verdict
+///         through <see cref="SinkKind" />; the bus reads it once in its
+///         constructor. The default is <see cref="EventBusSinkKind.Mandatory" />,
+///         so a middleware that has not thought about it can never be bypassed by
+///         accident. Full verdict table: <c>docs/EVENT_BUS_SINKS.md</c>.
+///     </para>
 /// </remarks>
 public interface IEventBusMiddleware
 {
@@ -30,6 +39,28 @@ public interface IEventBusMiddleware
     ///     filtered or transformed an event.
     /// </summary>
     string Name { get; }
+
+    /// <summary>
+    ///     What silently losing an event to this middleware would cost
+    ///     (#47/S3). Defaults to <see cref="EventBusSinkKind.Mandatory" /> —
+    ///     the conservative direction: unknown sinks keep the bus on its full
+    ///     path. Declare <see cref="EventBusSinkKind.Optional" /> only for a
+    ///     diagnostic, sampler, secondary projection or third-party extension,
+    ///     i.e. a sink nothing downstream becomes wrong without.
+    ///     <para>
+    ///         <b>Implementing it on a derived class:</b> because this is a
+    ///         default interface member, a base class that implements
+    ///         <see cref="IEventBusMiddleware" /> without a verdict gets a
+    ///         compiler-synthesised forwarder, and a derived class that merely
+    ///         declares a same-named member does not re-implement the
+    ///         interface — the forwarder keeps answering
+    ///         <see cref="EventBusSinkKind.Mandatory" />. Re-list
+    ///         <c>IEventBusMiddleware</c> in the derived class' base list (or
+    ///         declare the verdict on the class that implements the interface
+    ///         directly).
+    ///     </para>
+    /// </summary>
+    EventBusSinkKind SinkKind => EventBusSinkKind.Mandatory;
 
     /// <summary>
     ///     Process an event. Return <c>true</c> to continue the pipeline,

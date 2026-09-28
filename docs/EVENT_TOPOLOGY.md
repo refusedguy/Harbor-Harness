@@ -62,10 +62,16 @@ concerns:
   are written on the agent path, **not** via bus subscription — there is no
   atomicity between "event published" and "message persisted" (dual-write gap
   from the issue is real: a crash between the two leaves them inconsistent).
-- Mandatory vs optional projections: the codebase has **no
-  mandatory/optional marker** on subscribers. Every subscriber is treated
-  identically by the fan-out loop (§4). "Mandatory projection never silently
-  skipped" is therefore **not enforced** — it is an open item (§7).
+- Mandatory vs optional projections: subscribers are **not** classified by the
+  fan-out loop (§4) — but the *sink* side now is. #47/S3 added
+  `IEventBusMiddleware.SinkKind` (mandatory/optional, declared per sink, computed
+  once at composition time) and the exhaustive verdict table lives in
+  [`docs/EVENT_BUS_SINKS.md`](./EVENT_BUS_SINKS.md). "Mandatory projection never
+  silently skipped" is now enforced for sinks — a bus with a mandatory sink
+  always runs the full path, and optional sinks on the fast path are drained and
+  counted rather than dropped. Subscriber-side mandatoryity stays implicit: the
+  fast path requires **zero** subscribers, so a subscriber's presence is already
+  a disqualifier (§7.5).
 
 ## 3. Ordering guarantees
 
@@ -173,4 +179,7 @@ concerns:
    test.
 4. Whether the dual-write gap (§2) needs an outbox/atomic-commit mechanism is
    a #27 migration decision, not a bus guarantee.
-5. Whether subscribers need mandatory/optional kinds (§2) is undecided.
+5. Whether subscribers need mandatory/optional kinds (§2) is **decided for
+   sinks** in #47/S3 — see `docs/EVENT_BUS_SINKS.md`. A *subscriber*-side kind
+   is still redundant while the fast path requires zero subscribers, and becomes
+   necessary only if a future topology ever fans out to a partial set.

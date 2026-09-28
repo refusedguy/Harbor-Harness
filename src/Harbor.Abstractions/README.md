@@ -87,6 +87,25 @@ public interface IEventBus
 ```
 
 `AgentEvent` lives in `Harbor.Abstractions.Contracts`; the bus interface lives here.
+An implementation may short-circuit a publish only when the event is provably
+unobservable (no subscribers, nothing retained, no mandatory sink — see
+`docs/EVENT_BUS_SINKS.md`); a skip that is not self-evident must stay countable.
+
+### IEventBusMiddleware — sink verdict (#47/S3)
+
+```csharp
+public interface IEventBusMiddleware
+{
+    string Name { get; }
+
+    // Defaults to Mandatory: a sink that has not thought about the question
+    // must never be bypassed. Declare Optional only for a diagnostic,
+    // sampler, secondary projection or third-party extension.
+    EventBusSinkKind SinkKind => EventBusSinkKind.Mandatory;
+
+    ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default);
+}
+```
 
 ### ITool — Strategy pattern
 

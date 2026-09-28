@@ -18,10 +18,25 @@ namespace Harbor.Registries.Events;
 ///         <see cref="AgentEvent.GetType()" /> is a built-in CLR method, not
 ///         reflection.
 ///     </para>
+///     <para>
+///         <b>Verdict (#47/S3): <see cref="EventBusSinkKind.Mandatory" />.</b>
+///         A filter is a contract on what the projections downstream are allowed
+///         to see, not a listener: the UI projections, the IPC broadcaster and
+///         the session/accounting path all assume an unfiltered bus only reaches
+///         them event types a host approved. Silently bypassing the filter would
+///         push unapproved event types into state that is rendered to the user —
+///         a correctness break, not a lost log line. The no-allowlist
+///         construction (<c>_allowAll</c>) is a *configuration*, not a licence to
+///         be skipped: the verdict is decided by the sink's role, not by whether
+///         today's configuration happens to be a no-op.
+///     </para>
 /// </remarks>
 public sealed class TypeFilterMiddleware : IEventBusMiddleware
 {
     public string Name => "type-filter";
+
+    /// <inheritdoc />
+    public EventBusSinkKind SinkKind => EventBusSinkKind.Mandatory;
 
     private readonly ILogger _logger;
     private readonly Type[] _allowedTypes;

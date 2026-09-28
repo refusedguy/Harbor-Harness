@@ -14,10 +14,24 @@ namespace Harbor.Registries.Events;
 ///         <see cref="ValueTask.FromResult{T}(T)" /> for synchronous paths
 ///         to avoid heap allocation.
 ///     </para>
+///     <para>
+///         <b>Verdict (#47/S3): <see cref="EventBusSinkKind.Optional" />.</b>
+///         This sink's entire purpose is to throw events away for the sake of
+///         cheaper downstream rendering — it is a diagnostic throttle, not a
+///         state, audit, accounting or telemetry record. Nothing downstream
+///         becomes wrong when it stops seeing an event, so a bus whose only
+///         sinks are samplers may take the zero-subscriber fast path; the bus
+///         still drains it there and counts the drain
+///         (<c>InMemoryEventBus.OptionalSinkDrainCount</c>), so the cost of the
+///         sampler never becomes a silent skip.
+///     </para>
 /// </remarks>
 public sealed class SamplingMiddleware : IEventBusMiddleware
 {
     public string Name => "sampling";
+
+    /// <inheritdoc />
+    public EventBusSinkKind SinkKind => EventBusSinkKind.Optional;
 
     private readonly ILogger _logger;
     private readonly double _rate;

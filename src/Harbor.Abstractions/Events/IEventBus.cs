@@ -22,6 +22,15 @@ public interface IEventBus
     /// <summary>
     ///     Publish an event to all subscribers.
     /// </summary>
+    /// <remarks>
+    ///     An implementation may short-circuit (returning an already-completed
+    ///     task without touching a collection) only when it can PROVE the event
+    ///     is unobservable: no subscribers, nothing retained, and no sink that
+    ///     declared <see cref="EventBusSinkKind.Mandatory" />. The verdict
+    ///     behind that rule is enumerated per registration site in
+    ///     <c>docs/EVENT_BUS_SINKS.md</c> (#47/S3); a skip that is not
+    ///     self-evident must stay countable rather than silent.
+    /// </remarks>
     /// <param name="event">The event to publish.</param>
     /// <param name="ct">Cancellation token.</param>
     public Task PublishAsync(AgentEvent @event, CancellationToken ct = default);
