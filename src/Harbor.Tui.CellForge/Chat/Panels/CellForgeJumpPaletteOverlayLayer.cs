@@ -151,7 +151,7 @@ public sealed class CellForgeJumpPaletteOverlayLayer : IOverlayLayer
     ///     it through <c>AppMsg.TogglePanel</c>.
     /// </summary>
     private static bool IsOpenIn(UiState state) =>
-        state.PanelStates.TryGetValue(OverlayIds.JumpPalette, out var panelState)
+        state.Ui.PanelStates.TryGetValue(OverlayIds.JumpPalette, out var panelState)
         && panelState != TuiPanelState.Hidden;
 
     /// <summary>
