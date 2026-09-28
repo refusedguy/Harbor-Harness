@@ -61,7 +61,7 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  APPLICATION (use cases, orchestration)                         │
 │  - Harbor.Application (AgentLoop, Sessions, Agents,             │
 │                        Configuration, Permissions, Onboarding)  │
-│  - Harbor.Core (deprecated facade) + Harbor.Registries          │
+│  - Harbor.Registries                                            │
 │  - Harbor.Plugins.{Abstractions, Runtime, Hosting, Registration,│
 │    Instantiation, Compilation, Storage, Host} (8 projects)      │
 │  - contrib/scripting: Harbor.Scripting.* (ScriptHost, Bridge)   │
@@ -146,7 +146,7 @@ flowchart TB
 
     subgraph App["Application (use cases)"]
         AppLayer["Harbor.Application<br/>(AgentLoop, config, permissions)"]
-        Core["Harbor.Core + Harbor.Registries"]
+        Core["Harbor.Registries"]
         Plugins["Harbor.Plugins.*<br/>(8 projects, Roslyn CS-source)"]
     end
 
@@ -312,8 +312,9 @@ Concrete implementations of:
 - **Contains:** adapters — concrete implementations of `ILlmClient`, `ISessionStore`,
   `ITool`, etc. These projects translate between the outside world (HTTP, filesystem,
   subprocess, native interop) and the Domain contracts.
-- **Forbidden:** references to `Harbor.Core` (Application) or to each other
-  (`Harbor.Providers.Anthropic` must not reference `Harbor.Providers.OpenAI`).
+- **Forbidden:** references to the Application layer (`Harbor.Application`,
+  `Harbor.Registries`) or to each other (`Harbor.Providers.Anthropic` must not
+  reference `Harbor.Providers.OpenAI`).
 - **Allowed NuGet:** anything I/O-related — `Microsoft.Data.Sqlite`,
   `Microsoft.Extensions.Http`, `Jint`, etc.
 
@@ -481,9 +482,10 @@ The architecture suite passes cleanly; the previously cited counts (46 tests =
 54 executed cases in the 2026-08-22 run (predates `CellForgeGraphRules`),
 all green.
 
-The previously suspected violation — *"Harbor.Tui.Abstractions references
-Harbor.Core via `IAgent`"* — does **not** exist: `IAgent` lives in
-`Harbor.Abstractions/Agents/IAgent.cs` (Domain), not in `Harbor.Core`. The
+The previously suspected violation — *"Harbor.Tui.Abstractions references the
+agent-harness assembly via `IAgent`"* — does **not** exist: `IAgent` lives in
+`Harbor.Abstractions/Agents/IAgent.cs` (Domain), not in `Harbor.Application` or
+`Harbor.Registries`. The
 `Harbor.Tui.Abstractions.csproj` file references only `Harbor.Abstractions`:
 
 ```xml
@@ -539,7 +541,7 @@ audit history is preserved:
 <!-- Harbor.Providers.Bedrock.csproj -->
 <ItemGroup>
   <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-  <!-- ❌ DO NOT add Harbor.Core here — Bedrock is Infrastructure, Core is Application. -->
+  <!-- ❌ DO NOT add Harbor.Application / Harbor.Registries here — Bedrock is Infrastructure, they are Application. -->
 </ItemGroup>
 <ItemGroup>
   <PackageReference Include="AWSSDK.BedrockRuntime" Version="..."/>

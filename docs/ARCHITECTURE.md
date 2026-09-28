@@ -28,7 +28,6 @@ Harbor.slnx                          (.sln не существует; есть �
 │   ├── Harbor.Abstractions/         (zero-dep contract surface)
 │   ├── Harbor.Abstractions.Contracts/ (models/formatters; бывший Harbor.Domain)
 │   ├── Harbor.Application/          (AgentLoop, Configuration, Permissions…)
-│   ├── Harbor.Core/                 (EventBus, registries helpers)
 │   ├── Harbor.Ui.Framework*/        (TEA state + VMs + services, 9 проектов)
 │   ├── Harbor.Storage.Jsonl|Memory|Sqlite/
 │   ├── Harbor.Providers.Anthropic|OpenAI|Ollama|OpenAiCompatible|Shared/
@@ -71,7 +70,7 @@ inward only. The innermost layer (Domain) references nothing but the BCL.
 ┌─────────────────────────────────────────────────────────────────┐
 │  APPLICATION (use cases, orchestration)                         │
 │  - Harbor.Application (AgentLoop, Configuration, Permissions)   │
-│  - Harbor.Core + Harbor.Registries                              │
+│  - Harbor.Registries                                            │
 │  - Harbor.Plugins.{Runtime, Hosting, Registration, …}           │
 │  - contrib/scripting: Harbor.Scripting.* (ScriptHost, Bridge)   │
 │  Depends on: Abstractions ONLY                                  │
@@ -114,11 +113,11 @@ inward only. The innermost layer (Domain) references nothing but the BCL.
 
 1. `Harbor.Abstractions` references no other Harbor assembly.
 2. `Harbor.Tui.Abstractions` references only `Harbor.Abstractions`.
-3. `Harbor.Application` / `Harbor.Core` reference only Domain (+ registries for Core);
-   never Infrastructure or Presentation.
+3. `Harbor.Application` and `Harbor.Registries` each reference only Domain and
+   not each other; never Infrastructure or Presentation.
 4. `Harbor.Plugins.*` reference Domain (Runtime may also reference Tui.Abstractions);
    NOT Application.
-5. contrib `Harbor.Scripting` references `Harbor.Abstractions` only (NOT `Harbor.Core`).
+5. contrib `Harbor.Scripting` references `Harbor.Abstractions` only (NOT `Harbor.Application`).
 6. `Harbor.Providers.*` references `Harbor.Abstractions` only (NOT `Harbor.Application`).
 7. `Harbor.Storage.*` references `Harbor.Abstractions` only (NOT `Harbor.Application`).
 8. `Harbor.Tools.Builtin` references `Harbor.Abstractions` only (NOT `Harbor.Application`).

@@ -33,7 +33,7 @@ namespace Harbor.Terminal.Abstractions;
 ///     </list>
 ///     <para>
 ///         <b>Decoupling contract:</b> neither this class nor its subclasses may reference
-///         <c>Harbor.Core</c>. All agent state flows in through <see cref="AgentEvent" /> from
+///         the Application layer. All agent state flows in through <see cref="AgentEvent" /> from
 ///         <c>Harbor.Abstractions.Events</c>. There are no direct references to
 ///         <c>AgentLoop</c>, <c>SessionStore</c>, or <c>ProviderRegistry</c>.
 ///     </para>

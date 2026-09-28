@@ -24,7 +24,7 @@ namespace Harbor.Abstractions.Agents;
 ///     <para>
 ///         <b>Layering:</b> declared in <c>Harbor.Abstractions</c> (Domain) so that
 ///         <c>Harbor.Terminal.Abstractions</c> (also Domain) can reference it without going
-///         through <c>Harbor.Core</c> (Application).
+///         through <c>Harbor.Application</c> (Application).
 ///     </para>
 /// </remarks>
 public interface IAgentRunner
@@ -109,7 +109,7 @@ public interface IAgentRunner
 ///         while the agent is running steers the active run instead of failing (Ф2/B1).
 ///     </para>
 ///     <para>
-///         The default implementation is <c>DefaultAgent</c> in <c>Harbor.Core</c>.
+///         The default implementation is <c>DefaultAgent</c> in <c>Harbor.Application</c>.
 ///     </para>
 ///     <para>
 ///         <b>ISP note (§ARCH-002):</b> the runner surface (<see cref="IAgentRunner.AbortToken" />,
@@ -204,7 +204,7 @@ public sealed record AgentState(
 ///     <para>
 ///         Implementations MUST be stateless across runs — all per-conversation state lives in the
 ///         <see cref="ISessionContext" /> passed to <see cref="RunAsync" />. The default
-///         implementation is <c>AgentLoop</c> in <c>Harbor.Core</c>.
+///         implementation is <c>AgentLoop</c> in <c>Harbor.Application</c>.
 ///     </para>
 /// </remarks>
 public interface IAgentLoop

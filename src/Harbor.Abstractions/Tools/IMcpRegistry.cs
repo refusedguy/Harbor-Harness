@@ -10,7 +10,7 @@ namespace Harbor.Abstractions.Tools;
 ///     </para>
 ///     <para>
 ///         Implementations MUST be thread-safe. The default <c>InMemoryMcpRegistry</c> lives in
-///         <c>Harbor.Core</c> and returns <see cref="Result{T}.Failure" /> for every call —
+///         <c>Harbor.Registries</c> and returns <see cref="Result{T}.Failure" /> for every call —
 ///         production hosts replace it with a real MCP client implementation.
 ///     </para>
 /// </remarks>

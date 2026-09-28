@@ -12,7 +12,7 @@ namespace Harbor.Abstractions.Tools;
 ///         <see cref="IToolRegistryBuilder" /> during initialization.
 ///     </para>
 ///     <para>
-///         Implementations MUST be thread-safe. The default <c>ToolRegistry</c> in <c>Harbor.Core</c>
+///         Implementations MUST be thread-safe. The default <c>ToolRegistry</c> in <c>Harbor.Registries</c>
 ///         uses a <c>NonBlocking.ConcurrentDictionary</c> for lock-free scaling and an optional
 ///         <see cref="FrozenDictionary{TKey, TValue}" /> snapshot for O(1) reads after
 ///         <see cref="ToolRegistry.Freeze" /> is called.

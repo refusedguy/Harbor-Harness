@@ -473,7 +473,7 @@ fail: Harbor.App.Cli.Program[0]
       Harbor.Abstractions.Providers.ProviderAuthException: Auth failed for provider 'kilocode'
          at Harbor.Providers.OpenAiCompatible.ConfigAuthResolver.GetApiKeyAsync()
          at Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient.StreamAsync(...)
-         at Harbor.Core.Agents.AgentLoop.RunAsync(...)
+         at Harbor.Application.Agents.AgentLoop.RunAsync(...)
 ```
 
 Fix: `export KILO_API_KEY=klo_xxx` и перезапусти.

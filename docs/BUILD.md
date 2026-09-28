@@ -242,7 +242,6 @@ harbor/
 ├── src/                              # 50 source projects (Clean/Hexagonal layering)
 │   ├── Harbor.Abstractions/          # base contracts (zero deps)
 │   ├── Harbor.Abstractions.Contracts/ # models, events, ValueObjects, PermissionRuleset
-│   ├── Harbor.Core/                  # EventBus, AgentLoop, config, compaction
 │   ├── Harbor.Registries/            # Agent/Tool/Provider registries
 │   ├── Harbor.Application/           # sessions, permissions, configuration
 │   ├── Harbor.Hosting/               # DI modules wired by the CLI

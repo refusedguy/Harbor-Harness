@@ -2,7 +2,7 @@
 
 ## Status: Stable
 
-Thread-safe registry implementations extracted from `Harbor.Core` in the S1
+Thread-safe registry implementations extracted from the old `Harbor.Core` project in the S1
 split. Each registry implements an interface from `Harbor.Abstractions`.
 
 ## Done
@@ -11,8 +11,8 @@ split. Each registry implements an interface from `Harbor.Abstractions`.
 - [x] `AgentRegistryBuilder` - fluent registration helper
 - [x] `ToolRegistry` - tool registry with FrozenDictionary fast-lookup snapshot
 - [x] `ToolRegistryBuilder` - fluent registration helper
-- [x] `ProviderRegistry` migrated from Harbor.Core (`Providers/ProviderRegistry.cs`)
-- [x] `InMemoryEventBus` migrated from Harbor.Core (`Events/InMemoryEventBus.cs`)
+- [x] `ProviderRegistry` migrated out of Harbor.Core (`Providers/ProviderRegistry.cs`)
+- [x] `InMemoryEventBus` migrated out of Harbor.Core (`Events/InMemoryEventBus.cs`)
       with bounded scrollback + lock-free snapshot reads
 - [x] `CompositeToolRegistry` — fan-in over multiple tool sources without re-freeze
       (`Tools/CompositeToolRegistry.cs:4`)

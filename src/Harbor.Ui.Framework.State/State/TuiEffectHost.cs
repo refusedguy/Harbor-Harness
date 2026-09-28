@@ -8,7 +8,7 @@ namespace Harbor.Ui.Framework.State;
 /// <summary>
 ///     Default <see cref="ITuiEffectRunner" />. The ONLY place that touches
 ///     <see cref="IAgentRunner" /> / the slash handler. Renderers stay free of
-///     <c>Harbor.Core</c> references and instead emit <see cref="TuiEffect" />.
+///     the Application layer and instead emit <see cref="TuiEffect" />.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -20,7 +20,7 @@ namespace Harbor.Ui.Framework.State;
 ///         <b>Layering (§ARCH-002):</b> depends on <see cref="IAgentRunner" /> (the
 ///         minimal runner surface in <c>Harbor.Abstractions</c>), not the full
 ///         <see cref="IAgent" />. This keeps <c>Harbor.Terminal.Abstractions</c> in the
-///         Domain layer — it never needs to reference <c>Harbor.Core</c> for agent
+///         Domain layer — it never needs to reference <c>Harbor.Application</c> for agent
 ///         types. <see cref="IAgent" /> extends <see cref="IAgentRunner" />, so the
 ///         Composition Root (<c>HostBuilder</c>) can pass a concrete <c>DefaultAgent</c>
 ///         wherever an <c>IAgentRunner</c> is required.

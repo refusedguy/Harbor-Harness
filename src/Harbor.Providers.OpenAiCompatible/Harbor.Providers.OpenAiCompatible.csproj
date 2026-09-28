@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <!-- §ARCH-003: Infrastructure references Domain (Harbor.Abstractions) ONLY.
-         The previous Harbor.Core reference was vestigial — no `using Harbor.Core.*`
+         The previous Harbor.Core facade reference was vestigial — no `using Harbor.Core.*`
          exists in this project. Removed by arch-cleaner. -->
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
   </ItemGroup>

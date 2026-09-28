@@ -16,7 +16,7 @@ namespace Harbor.Ui.Framework.Panels;
 ///     </para>
 ///     <para>
 ///         <b>Decoupling contract:</b> panel plugins MUST NOT reference
-///         <c>Harbor.Core</c>. All agent state flows in through
+///         the Application layer. All agent state flows in through
 ///         <see cref="PanelContext.State" /> (an immutable <c>UiState</c>); all side
 ///         effects go through <c>UiStore.Dispatch</c> (retrieved from
 ///         <see cref="PanelContext.Services" />).

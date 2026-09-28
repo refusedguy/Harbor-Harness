@@ -49,4 +49,4 @@ The Domain layer is the most stable part of Harbor. Breaking changes here break 
 - No breaking changes within a major version.
 - Deprecation via `[Obsolete]` for at least one minor version before removal.
 
-> Note: `docs/MIGRATION.md` referenced here historically no longer exists; migration guidance for the v0.x splits lives in project READMEs (`Harbor.Core`, `Harbor.Plugins.Runtime`) and [`docs/ROADMAP.md`](../../docs/ROADMAP.md).
+> Note: `docs/MIGRATION.md` referenced here historically no longer exists; migration guidance for the v0.x splits lives in project READMEs (`Harbor.Application`, `Harbor.Plugins.Runtime`) and [`docs/ROADMAP.md`](../../docs/ROADMAP.md).

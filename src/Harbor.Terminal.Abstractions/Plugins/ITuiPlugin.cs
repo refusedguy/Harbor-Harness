@@ -30,7 +30,8 @@ namespace Harbor.Terminal.Abstractions.Plugins;
 ///         </item>
 ///     </list>
 ///     <para>
-///         <b>Decoupling contract:</b> TUI plugins MUST NOT reference <c>Harbor.Core</c>. All
+///         <b>Decoupling contract:</b> TUI plugins MUST NOT reference <c>Harbor.Application</c>
+///         or <c>Harbor.Registries</c>. All
 ///         agent state flows in through <see cref="Harbor.Abstractions.Events.AgentEvent" />; all
 ///         rendering goes through <see cref="Renderers.ITuiRenderContext" />.
 ///     </para>

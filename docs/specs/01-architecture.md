@@ -5,7 +5,7 @@
 > **Drift note (2026-09-26, verified against `origin/dev` HEAD `b0d92c1`; 108 commits since Sep 5).** Key relocations since this spec was frozen — the pipeline/product direction below is unchanged, only the homes moved:
 > - `AgentLoop` — was `src/Harbor.Core/`, now `src/Harbor.Application/Agents/AgentLoop.cs` (`Harbor.Application` = use cases: AgentLoop, CompactionService, SystemPromptBuilder, MessageConverter, PermissionService, OnboardingWizard).
 > - `EventBus` impl — `InMemoryEventBus` now `src/Harbor.Registries/Events/InMemoryEventBus.cs` (`Harbor.Registries` = Agent/Tool/Provider registries + event bus); the `IEventBus` contract stays in `Harbor.Abstractions`.
-> - `Harbor.Core` — now a **deprecated thin facade** (only `FacadeMarker.cs`; forwards via `ProjectReference` to `Harbor.Application` + `Harbor.Registries`). Do not add code there.
+> - `Harbor.Core` — **deleted** in #451. It had been reduced to a `FacadeMarker.cs` facade forwarding via `ProjectReference` to `Harbor.Application` + `Harbor.Registries`; reference those two directly.
 > - `Harbor.Abstractions` split into `Harbor.Abstractions` (base contracts) + `Harbor.Abstractions.Contracts` (models, events, ValueObjects, PermissionRuleset).
 > - Solutions are `.slnx`: `Harbor.slnx` (main) + `Harbor.Samples.slnx` (+ `contrib/Contrib.slnx` for optional components). No plain `.sln`, no `src/Harbor.sln`.
 > - Entry point is `apps/Harbor.App.Cli/` (was `src/Harbor.Cli/`); DI modules live in `src/Harbor.Hosting/Modules/` (`TuiModule`, `StorageModule`, `CoreModule`, …).
@@ -34,7 +34,6 @@ Harbor.sln
 │   │   ├── ILlmClient.cs            (или Microsoft.Extensions.AI.IChatClient)
 │   │   └── Events/                  (LLMEvent, AgentEvent, ToolEvent — discriminated unions)
 │   │
-│   ├── Harbor.Core/                 — базовые impl (host-agnostic)
 │   │   ├── Agent.cs
 │   │   ├── AgentLoop.cs
 │   │   ├── ToolRegistry.cs

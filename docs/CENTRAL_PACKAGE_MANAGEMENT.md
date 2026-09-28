@@ -40,7 +40,7 @@
 Every `.csproj` declared its own package versions:
 
 ```xml
-<!-- src/Harbor.Core/Harbor.Core.csproj -->
+<!-- src/Harbor.Application/Harbor.Application.csproj -->
 <ItemGroup>
   <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0"/>
   <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0"/>
@@ -57,7 +57,7 @@ Every `.csproj` declared its own package versions:
 </ItemGroup>
 ```
 
-**Problem:** If `Harbor.Core` upgraded `ZLinq` to 1.6.0 but `Harbor.Cli` still had `1.5.6`, the build would succeed but at runtime the two assemblies would load different versions of `ZLinq.dll`, leading to `MissingMethodException` or `FileLoadException`. CPM eliminates this entire class of bug.
+**Problem:** If `Harbor.Application` upgraded `ZLinq` to 1.6.0 but `Harbor.Cli` still had `1.5.6`, the build would succeed but at runtime the two assemblies would load different versions of `ZLinq.dll`, leading to `MissingMethodException` or `FileLoadException`. CPM eliminates this entire class of bug.
 
 ### 1.2 After CPM — the new way
 
@@ -81,7 +81,7 @@ A single `Directory.Packages.props` at the repo root declares every package vers
 And every `.csproj` declares the package **without** a `Version`:
 
 ```xml
-<!-- src/Harbor.Core/Harbor.Core.csproj -->
+<!-- src/Harbor.Application/Harbor.Application.csproj -->
 <ItemGroup>
   <PackageReference Include="Microsoft.Extensions.Logging"/>
   <PackageReference Include="ZLinq"/>
@@ -177,11 +177,11 @@ Harbor's `Directory.Packages.props` now carries **79 `<PackageVersion>` entries*
 
 ### 3.4 Evaluation order
 
-When you run `dotnet build src/Harbor.Core/Harbor.Core.csproj`, MSBuild evaluates files in this order:
+When you run `dotnet build src/Harbor.Application/Harbor.Application.csproj`, MSBuild evaluates files in this order:
 
 ```
 1. Directory.Build.props                 (common properties, BEFORE project)
-2. src/Harbor.Core/Harbor.Core.csproj    (project-specific properties + items)
+2. src/Harbor.Application/Harbor.Application.csproj    (project-specific properties + items)
 3. Directory.Build.targets               (common targets, AFTER project)
 4. During restore:
    a. Directory.Packages.props           (CPM versions)
@@ -314,7 +314,7 @@ Place it in the appropriate group (e.g. under "Performance / collections / seria
 ### 5.2 Step 2 — Add the `PackageReference` (no Version) to the .csproj
 
 ```xml
-<!-- src/Harbor.Core/Harbor.Core.csproj -->
+<!-- src/Harbor.Application/Harbor.Application.csproj -->
 <ItemGroup>
   <PackageReference Include="Tomlyn"/>
 </ItemGroup>
@@ -324,7 +324,7 @@ Place it in the appropriate group (e.g. under "Performance / collections / seria
 
 ```bash
 dotnet restore
-dotnet build src/Harbor.Core/Harbor.Core.csproj
+dotnet build src/Harbor.Application/Harbor.Application.csproj
 ```
 
 If you forgot step 1, you'll see:
@@ -341,7 +341,7 @@ If you forgot step 2, no error — the package just isn't consumed by your proje
 If the package is an analyzer or source generator that shouldn't flow to consuming projects, use `<PrivateAssets>` and `<IncludeAssets>` in the .csproj (these go in the .csproj, NOT in `Directory.Packages.props`):
 
 ```xml
-<!-- src/Harbor.Core/Harbor.Core.csproj -->
+<!-- src/Harbor.Application/Harbor.Application.csproj -->
 <PackageReference Include="ZLinq.DropInGenerator">
   <PrivateAssets>all</PrivateAssets>
   <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -659,7 +659,7 @@ The `Version` comes from `Directory.Packages.props`:
 Source generators (e.g. `ZLinq.DropInGenerator`, `Termina.Generators`) should be marked as private assets so they don't flow to consuming projects:
 
 ```xml
-<!-- src/Harbor.Core/Harbor.Core.csproj -->
+<!-- src/Harbor.Application/Harbor.Application.csproj -->
 <PackageReference Include="ZLinq.DropInGenerator">
   <PrivateAssets>all</PrivateAssets>
   <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -725,7 +725,7 @@ dotnet restore --force
 
 ```bash
 # Check what version of ZLinq gets restored
-dotnet list src/Harbor.Core/Harbor.Core.csproj package | grep ZLinq
+dotnet list src/Harbor.Application/Harbor.Application.csproj package | grep ZLinq
 # Expected: ZLinq 1.5.6 (matches Directory.Packages.props)
 ```
 

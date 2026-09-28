@@ -9,7 +9,7 @@ namespace Harbor.Abstractions.Sessions;
 /// <remarks>
 ///     <para>
 ///         The system prompt builder is responsible for assembling the prompt that anchors every
-///         LLM call in a turn. The default <c>SystemPromptBuilder</c> in <c>Harbor.Core</c> produces
+///         LLM call in a turn. The default <c>SystemPromptBuilder</c> in <c>Harbor.Application</c> produces
 ///         a Markdown document with sections for environment, agent instructions, available tools,
 ///         MCP instructions, skills, and project context files.
 ///     </para>

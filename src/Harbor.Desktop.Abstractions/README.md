@@ -40,7 +40,8 @@ UI-framework-agnostic contracts shared by every Harbor desktop app
 ❌ **Forbidden**: any UI framework (`Avalonia*`, `System.Windows.*`,
 `Microsoft.Maui.*`, `Microsoft.AspNetCore.Components.*`), any Infrastructure
 project (`Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tools.*`),
-the deprecated `Harbor.Core` facade (reference `Harbor.Application` directly, #188).
+`Harbor.Application` directly — the `Harbor.Core` facade was removed in #188 and
+deleted in #451).
 
 These rules are enforced by `tests/Harbor.Architecture.Tests`.
 

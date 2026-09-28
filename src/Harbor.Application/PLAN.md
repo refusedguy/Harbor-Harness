@@ -8,13 +8,13 @@ holds all pure use cases. Depends on `Harbor.Abstractions` + `Harbor.Extensions`
 
 ## Done
 
-- [x] `AgentLoop` (Chain-of-Responsibility turn loop) - extracted from Harbor.Core
+- [x] `AgentLoop` (Chain-of-Responsibility turn loop) - extracted from the old Harbor.Core project
 - [x] `DefaultAgent` - stateful IAgent wrapping AgentLoop
 - [x] `CompactionService` - anchored-summary compaction
 - [x] `SystemPromptBuilder` - assembles system prompt (identity + tools + agents + MCP + skills)
       plus `CachingSystemPromptBuilder` memoizing decorator (`Sessions/CachingSystemPromptBuilder.cs:31`)
 - [x] `MessageConverter` - domain `AgentMessage` <-> LLM `LlmMessage`
-- [x] Migration out of Harbor.Core complete (Core is now an empty facade, see its PLAN)
+- [x] Migration out of Harbor.Core complete (the empty facade was deleted in #451)
 - [x] Onboarding: live model catalog during first-run wizard via
       `ProviderPresets` + provider health probes (PROD-UI-0;
       `Configuration/ProviderPresets.cs:11`, `Providers/ProviderHealthCheck.cs:13`)
@@ -58,4 +58,4 @@ holds all pure use cases. Depends on `Harbor.Abstractions` + `Harbor.Extensions`
 
 - [README.md](README.md)
 - [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
-- [../Harbor.Core/README.md](../Harbor.Core/README.md) - deprecated shell this project replaced
+- [../Harbor.Registries/README.md](../Harbor.Registries/README.md) - sibling half of the old Harbor.Core split

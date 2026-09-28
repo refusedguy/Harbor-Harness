@@ -147,7 +147,7 @@ four. The **stream bar** shows `▌ generating... N chars` or
                                        │ calls IAgent
                                        ▼
                             ┌──────────────────────┐
-                            │  IAgent (Harbor.Core)│
+                            │  IAgent (Abstractions) │
                             │  ──────────────       │
                             │  PromptAsync(text)   │
                             │  AbortSource         │
@@ -697,7 +697,8 @@ Notes:
    other renderers (When to use / Platform support / Dependencies / Files /
    How it reads from UiStore / Build / Memory / Limitations).
 
-The decoupling contract: your renderer may NOT reference `Harbor.Core`. All
+The decoupling contract: your renderer may NOT reference `Harbor.Application` /
+`Harbor.Registries`. All
 agent activity flows in through `AgentEvent`; all side-effects flow out
 through `TuiEffect`.
 

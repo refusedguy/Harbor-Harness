@@ -72,7 +72,7 @@ Before task C1, `~/.harbor/config.json` was owned by the legacy
 `HarborConfig` (CLI auth + provider presets + compaction settings). Task C1
 **re-purposes** this file path for `CommonConfig`. The legacy `HarborConfig`
 is still loaded by the CLI's `AuthStore` / `OnboardingWizard` (via the
-`IConfigStore` / `JsonConfigStore` types in `Harbor.Core.Configuration`) —
+`IConfigStore` / `JsonConfigStore` types in `Harbor.Application.Configuration`) —
 both layers coexist during the migration window. See §6 below.
 
 ---
