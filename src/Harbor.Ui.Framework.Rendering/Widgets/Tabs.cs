@@ -198,27 +198,7 @@ public sealed class Tabs : IChatBlock, IFocusTarget
         int right = ctx.Rect.Right;
 
         // Row layout first (paint rows may be skipped, geometry must not).
-        int selX0 = ctx.Rect.X;
-        int selTitleCells = 0;
-        {
-            int x = ctx.Rect.X;
-            int dividerCells = CellWidth(_divider);
-            for (int i = _start; i < _titles.Count && x < right; i++)
-            {
-                if (i > _start)
-                {
-                    x += dividerCells;
-                }
-
-                if (i == Selected)
-                {
-                    selX0 = x;
-                    selTitleCells = CellWidth(_titles[i]);
-                }
-
-                x += 2 + CellWidth(_titles[i]);
-            }
-        }
+        SelectionGeometry(ctx.Rect.X, right, out int selX0, out int selTitleCells);
 
         for (int r = 0; r < rows; r++)
         {
@@ -277,11 +257,39 @@ public sealed class Tabs : IChatBlock, IFocusTarget
 
         if (c.Value is >= '1' and <= '9')
         {
-            int index = (int)c.Value - '1';
+            int index = c.Value - '1';
             return index < _titles.Count && Select(index);
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Selected-title geometry for the underline row: walks the visible run
+    /// from <paramref name="x0"/> to <paramref name="right"/> and reports the
+    /// selected segment start plus its title width in cells.
+    /// </summary>
+    private void SelectionGeometry(int x0, int right, out int selX0, out int selTitleCells)
+    {
+        selX0 = x0;
+        selTitleCells = 0;
+        int x = x0;
+        int dividerCells = CellWidth(_divider);
+        for (int i = _start; i < _titles.Count && x < right; i++)
+        {
+            if (i > _start)
+            {
+                x += dividerCells;
+            }
+
+            if (i == Selected)
+            {
+                selX0 = x;
+                selTitleCells = CellWidth(_titles[i]);
+            }
+
+            x += 2 + CellWidth(_titles[i]);
+        }
     }
 
     private void PaintTitlesRow(ScreenBuffer buffer, int x0, int y, int right)
