@@ -228,7 +228,6 @@ The matrix below is a **coarse-grain summary** of allowed `<ProjectReference>` e
 | Project (row) → may reference (column)         | Domain (Abs. / Contracts / Tui.Abs.) | Application (Application/Core/Registries) | Plugins.* | Storage.* | Providers.* | Tools.Builtin | Tui.* (concrete) | Cli |
 |------------------------------------------------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | **Harbor.Abstractions**                        | ❌ (—) | ❌  | ❌  | ❌  | ❌  | ❌  | ❌  | ❌  |
-| **Harbor.Tui.Abstractions**                    | ✅ Abstractions only | ❌  | ❌  | ❌  | ❌  | ❌  | ❌  | ❌  |
 | **Harbor.Application / Core**                  | ✅  | Registries only | ❌  | ❌  | ❌  | ❌  | ❌* | ❌  |
 | **Harbor.Plugins.{Runtime, Hosting, …}**       | ✅ (Runtime also Tui.Abstractions) | ❌  | —   | ❌  | ❌  | ❌  | ❌  | ❌  |
 | **contrib/scripting Harbor.Scripting***        | ✅  | ❌  | ❌  | ❌  | ❌  | ❌  | ❌  | ❌  |

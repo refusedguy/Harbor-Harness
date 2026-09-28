@@ -6,7 +6,6 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Runtime;
 using Harbor.Terminal.Abstractions.Plugins;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Configuration;
@@ -17,8 +16,9 @@ namespace Harbor.Hosting;
 ///     Adapter that exposes the already-constructed <c>ToolRegistry</c>,
 ///     <c>ProviderRegistry</c>, and <c>AgentRegistry</c> instances (plus the host's
 ///     <see cref="IServiceCollection" />, <see cref="IConfiguration" />,
-///     <see cref="ILoggerFactory" />, and <see cref="IEventBus" />) to the
-///     <see cref="CsPluginLoader" /> as an <see cref="IPluginLoadHost" />.
+///     <see cref="ILoggerFactory" />, and <see cref="IEventBus" />) to the plugin
+///     runtime (<see cref="Harbor.Plugins.Hosting.PluginHost" />) by implementing
+///     <see cref="IPluginLoadHost" />.
 /// </summary>
 /// <remarks>
 ///     Thread-safety is provided by the underlying registries (<c>ConcurrentDictionary</c>
