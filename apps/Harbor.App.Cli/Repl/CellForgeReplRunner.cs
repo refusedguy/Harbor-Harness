@@ -244,6 +244,14 @@ internal sealed class CellForgeReplRunner(
     /// → OSC 1337, everything else keeps the text description card.</summary>
     internal readonly InlineImageKind _inlineImage = InlineImageProbe.Detect();
 
+    /// <summary>
+    /// Fullscreen image zoom viewer (KILLER_FEATURES §2.7 Feature 12, issue
+    /// #387). Seated on the z-stack by <c>Screen.SyncOverlays</c>; the host
+    /// only opens it — zoom, dismiss and the input barrier live in the overlay
+    /// and its layer, so no key can slip past to the agent while it is up.
+    /// </summary>
+    internal ImageViewerOverlay Images => Screen.ImageViewer;
+
     /// <summary>True when a custom theme file exists — it owns the palette and
     /// the OSC 11 auto-detect must not override it (file wins, P3.2 > P3.3).</summary>
     internal bool _themeFileApplied;

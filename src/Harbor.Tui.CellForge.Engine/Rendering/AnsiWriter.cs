@@ -323,6 +323,20 @@ public sealed class AnsiWriter
     /// <summary>Appends an arbitrary escape payload without cursor accounting.</summary>
     public void Raw(string sequence) => AppendAscii(sequence);
 
+    /// <summary>
+    /// Span twin of <see cref="Raw(string)" /> for payloads that are already
+    /// bytes — inline-image escape sequences (kitty APC / OSC 1337) ride the
+    /// same frame buffer and the same single backend write, never a
+    /// <c>Console.Write</c> side channel. No intermediate string, so a
+    /// multi-megabyte base64 payload costs one copy and nothing else.
+    /// </summary>
+    public void RawBytes(ReadOnlySpan<byte> sequence)
+    {
+        EnsureCapacity(sequence.Length);
+        sequence.CopyTo(_buf.AsSpan(_len));
+        _len += sequence.Length;
+    }
+
     /// <summary>Moves up n lines and restarts the pen at column 0 (CUU + CR).</summary>
     public void MoveUpToColumnStart(int lines)
     {

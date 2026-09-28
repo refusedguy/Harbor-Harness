@@ -683,10 +683,18 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
     /// </summary>
     public SetupChecklistOverlay SetupChecklist { get; } = new();
 
+    /// <summary>
+    /// Fullscreen image zoom viewer (KILLER_FEATURES §2.7 Feature 12, issue
+    /// #387); seated on <see cref="LayoutTree.Overlays"/> by
+    /// <see cref="SyncOverlays"/>.
+    /// </summary>
+    public ImageViewerOverlay ImageViewer { get; } = new();
+
     private DialogOverlayLayer? _dialogLayer;
     private ToastOverlayLayer? _toastLayer;
     private DiffViewerOverlayLayer? _diffLayer;
     private SetupChecklistOverlayLayer? _setupLayer;
+    private ImageViewerOverlayLayer? _imageLayer;
 
     /// <summary>
     /// PRIM2c seating: reconciles the dialog/toast overlay layers with
@@ -705,10 +713,12 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
         _toastLayer ??= new ToastOverlayLayer(Toasts);
         _diffLayer ??= new DiffViewerOverlayLayer(DiffViewer);
         _setupLayer ??= new SetupChecklistOverlayLayer(SetupChecklist);
+        _imageLayer ??= new ImageViewerOverlayLayer(ImageViewer);
         _dialogLayer.Sync(viewport);
         _toastLayer.Sync(viewport);
         _diffLayer.Sync(viewport);
         _setupLayer.Sync(viewport);
+        _imageLayer.Sync(viewport);
         if (_dialogLayer.Visible)
         {
             Tree.Overlays.Push(_dialogLayer);
@@ -733,6 +743,19 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
         {
             Tree.Overlays.Remove(SetupChecklistOverlayLayer.LayerId);
         }
+
+        // Image viewer (issue #387) sits above the diff viewer and the setup
+        // guide — it is a deliberate, user-driven fullscreen takeover — and
+        // below the toasts, which stay transient and transparent.
+        if (_imageLayer.Visible)
+        {
+            Tree.Overlays.Push(_imageLayer);
+        }
+        else
+        {
+            Tree.Overlays.Remove(ImageViewerOverlayLayer.LayerId);
+        }
+
         if (_toastLayer.Visible)
         {
             Tree.Overlays.Push(_toastLayer);

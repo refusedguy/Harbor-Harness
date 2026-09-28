@@ -69,4 +69,43 @@ public class Osc1337ImageTests
         await Assert.That(seq.StartsWith("\u001B]1337;File=name=photo.jpg;size=4;")).IsTrue();
         await Assert.That(seq).Contains("inline=1");
     }
+
+    // ── #387: cell-sized envelope for the fullscreen viewer ─────────────────
+
+    [Test]
+    public async Task Encode_Sized_StampsWidthHeightInCellUnits()
+    {
+        byte[] data = [0x01, 0x02, 0x03];
+        string seq = Encoding.UTF8.GetString(Osc1337Image.Encode("shot.png", data, 40, 20)!);
+
+        // A bare N means character cells per the iTerm2 spec — that is what
+        // scales the bitmap into the block rect the timeline measured.
+        await Assert.That(seq).Contains("width=40;height=20;");
+        await Assert.That(seq).Contains("inline=1");
+        await Assert.That(seq).EndsWith("\u0007");
+    }
+
+    [Test]
+    public async Task Encode_Unsized_IsABytePrefixOfTheSizedForm()
+    {
+        byte[] data = [0x01, 0x02, 0x03];
+        string plain = Encoding.UTF8.GetString(Osc1337Image.Encode("shot.png", data)!);
+        string sized = Encoding.UTF8.GetString(Osc1337Image.Encode("shot.png", data, 10, 5)!);
+
+        // The sized form only INSERTS the box keys — the pre-#387 envelope stays
+        // intact, so every existing golden and caller is untouched.
+        await Assert.That(sized).StartsWith(plain[..plain.IndexOf("inline=1", StringComparison.Ordinal)]);
+    }
+
+    [Test]
+    public async Task Encode_NonPositiveDimensions_KeepTheNaturalSizeEnvelope()
+    {
+        byte[] data = [0x01, 0x02, 0x03];
+        string zero = Encoding.UTF8.GetString(Osc1337Image.Encode("shot.png", data, 0, 0)!);
+        string negative = Encoding.UTF8.GetString(Osc1337Image.Encode("shot.png", data, -5, 8)!);
+
+        await Assert.That(zero).DoesNotContain("width=");
+        await Assert.That(negative).DoesNotContain("width=");
+        await Assert.That(zero).IsEqualTo(Encoding.UTF8.GetString(Osc1337Image.Encode("shot.png", data)!));
+    }
 }

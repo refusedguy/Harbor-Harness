@@ -221,7 +221,12 @@ internal sealed class ToolCardTracker
 
     public void AppendImageCard(string path, string mime, long sizeBytes, byte[]? data)
     {
-        _panel.Timeline.Append(new ImageBlock(path, mime, sizeBytes, data));
+        // #387: sample the timeline's inline-image capability at construction so
+        // the block reserves graphic height only when it will actually draw one.
+        // A text-only session (pipes, CI, tmux/screen) then reserves the
+        // two-line card exactly as before — no hole in the feed.
+        bool graphics = _panel.Timeline.InlineImages is { Enabled: true };
+        _panel.Timeline.Append(new ImageBlock(path, mime, sizeBytes, data, graphics));
         if (data is { Length: > 0 })
         {
             // Inline-image hand-off (osc-sprint §1337): the host frame loop
@@ -599,6 +604,49 @@ internal sealed class ToolCardTracker
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Image rows are focusable (KILLER_FEATURES §2.7 Feature 12, issue #387):
+    /// a plain Enter opens the fullscreen zoom viewer on the NEWEST image
+    /// block, mirroring how the expand gesture targets the newest collapsible
+    /// card. Returns the block to show, or null when the key is not a plain
+    /// Enter or the feed holds no image row.
+    ///
+    /// <para>Ordering note: the host calls this BEFORE
+    /// <see cref="TryRouteToolCardKey" />, so when an image row is the newer of
+    /// the two it wins — a screenshot is the thing you asked to look at, the
+    /// collapsible card beneath it is not.</para>
+    /// </summary>
+    public ImageBlock? TryOpenImageViewer(in KeyEvent key)
+    {
+        if (key.EventType is not (KeyEventType.Press or KeyEventType.Repeat)
+            || key.Modifiers != KeyModifiers.None
+            || key.Key != KeyCode.Enter)
+        {
+            return null;
+        }
+
+        return NewestImageBlock();
+    }
+
+    /// <summary>
+    /// Newest image block in the feed, or null — the "which picture does Enter
+    /// open" lookup, split out so the host can wire the overlay without
+    /// re-deriving the scan.
+    /// </summary>
+    public ImageBlock? NewestImageBlock()
+    {
+        var tl = _panel.Timeline;
+        for (int i = tl.Count - 1; i >= 0; i--)
+        {
+            if (tl.BlockAt(i) is ImageBlock image)
+            {
+                return image;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

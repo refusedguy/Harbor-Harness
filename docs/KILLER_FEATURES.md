@@ -1169,6 +1169,25 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** M (6 hours)
 - **Priority:** P1
 - **Dependencies:** None
+- **Status:** Render slice landed (`feat/image-render-387`, issue #387), on
+  top of the attach path from #386. `ImageBlock` now paints the real bitmap
+  through the terminal's own graphics protocol — kitty APC (`f=100,a=T,C=1`
+  + `c`/`r` cell box) or OSC 1337 (`width`/`height` in cell units), whichever
+  `InlineImageProbe` reports — scaled into the block's own cell rect from the
+  **probed pixel** dimensions. `IInlineImageSink` is the single seam:
+  `InlineImageLayer` (CellForge.Engine) owns detection/encoding/emission and
+  the payloads ride the frame's own backend write, so there is no
+  `Console.Write` side channel and the sequence bytes never enter the cell
+  grid — dirty-rect and occlusion accounting are untouched by construction,
+  and the encoded payload is cached per block (a plain scroll re-encodes
+  nothing). Every other environment — pipes, CI, **tmux/screen** (the probe
+  refuses there by design), plain xterm, a corrupt/truncated PNG/JPEG (dim ⚠
+  marker) — keeps the pre-existing two-line text card, byte for byte.
+  `Enter` on an image row opens a fullscreen `ImageViewerOverlay` (the
+  diff viewer's overlay/zoom primitives, modal so no key reaches the agent)
+  with `+`/`-`/arrow zoom clamped to 25–400%; the viewer owns no scroll, no
+  selection and no `UiState` field, so closing it hands the feed back exactly
+  as it was.
 
 ---
 

@@ -19,8 +19,10 @@ namespace Harbor.App.Cli.Repl;
 ///     Terminal lifecycle + frame loop behind the CellForge REPL (G2 split
 ///     of <see cref="CellForgeReplRunner"/>, issue #174): screen enter/leave,
 ///     the event-driven frame loop, frame rendering with damage hints and the
-///     post-render glow pipeline, theme probing, welcome text and inline-image
-///     emission. Stateless service — all mutable state stays on the runner and
+///     post-render glow pipeline, theme probing and welcome text. Inline-image
+///     capability wiring (issue #387) lives here too: the probe verdict is
+///     handed to the session's image layer and to the timeline at startup.
+///     Stateless service — all mutable state stays on the runner and
 ///     is reached through its internal accessors, so the split moves code
 ///     without moving behavior.
 /// </summary>
@@ -64,6 +66,18 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         await PrintWelcomeAsync().ConfigureAwait(false);
         host._replStore.Dispatch(new ChatAppMsg.ConfigureRuntime(host.SessionModel.Model, host.SessionModel.ProviderId, host.SessionModel.Agent));
         ArmThemeWatcher();
+
+        // Inline-image capability (issue #387): the probe ran once at startup,
+        // so hand its verdict to the session's image layer and to the timeline
+        // and image blocks can place their bytes. Both stay inert when the
+        // probe said None — pipes, CI, tmux/screen keep the text card, byte
+        // for byte.
+        host.ScreenSession.Images.Kind = host._inlineImage;
+        host.Screen.Timeline.Timeline.InlineImages = host.ScreenSession.Images;
+        host.Log.LogInformation(
+            "Inline image protocol: {Kind} (image blocks render {Mode})",
+            host._inlineImage,
+            host._inlineImage == InlineImageKind.None ? "text cards only" : "inline graphics");
 
         // Setup guide (issue #383): local setup detection + first-run gating.
         // The provider probe it starts runs off-thread; a detection failure
@@ -198,11 +212,22 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 eventsChanged = true;
             }
 
-            // Inline images (osc-sprint §1337): attachments drained on the
-            // frame thread — the only thread allowed to write the backend.
-            while (host.Bridge.TryTakePendingImage(out var image))
+            // Inline images (issue #387): the hand-off queue is DRAINED, not
+            // written. It started life as an out-of-band emit path (a separate
+            // backend write racing the cell diff); the drawing now belongs to
+            // ImageBlock, which hands its cached payload to
+            // ScreenSession.Images during paint so the escape bytes ride the
+            // frame's own single write. What is left of the queue is a
+            // "something new landed" signal — one boolean, drained so it stays
+            // bounded for the rest of the session.
+            bool imageLanded = false;
+            while (host.Bridge.TryTakePendingImage(out _))
             {
-                await EmitInlineImageAsync(image, ct).ConfigureAwait(false);
+                imageLanded = true;
+            }
+
+            if (imageLanded)
+            {
                 imagesChanged = true;
             }
 
@@ -667,32 +692,6 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         {
             host.ScreenSession.Damage(host._fxDamageScratch[i]);
         }
-    }
-
-    /// <summary>
-    /// Inline-image emission (osc-sprint §1337): routes the attachment bytes
-    /// through the session's detected protocol — kitty APC for PNG, OSC 1337
-    /// for the iTerm2 family. Unsupported protocol/format/oversize → no
-    /// emission; the timeline keeps the text description card as fallback.
-    /// </summary>
-    private async Task EmitInlineImageAsync(ChatScreenBridge.InlineImage image, CancellationToken ct)
-    {
-        string name = Path.GetFileName(image.Path);
-        byte[]? bytes = host._inlineImage switch
-        {
-            InlineImageKind.KittyApc when image.MimeType.EndsWith("png", StringComparison.OrdinalIgnoreCase)
-                => Graphics.KittyPngInline(image.Data),
-            InlineImageKind.Osc1337 => Osc1337Image.Encode(name, image.Data),
-            _ => null,
-        };
-        if (bytes is null)
-        {
-            return;
-        }
-
-        await host.Backend.WriteAsync(bytes, ct).ConfigureAwait(false);
-        host.Bridge.AppendSystemLine($"◆ inline {name} ({host._inlineImage})");
-        host._wake.Writer.TryWrite(null);
     }
 
     /// <summary>OSC 11 auto-theme (sprint UI-V2 P3.3): bright terminal
