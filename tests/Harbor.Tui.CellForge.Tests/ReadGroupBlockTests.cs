@@ -221,8 +221,8 @@ public class ReadGroupBlockTests
         var (bus, panel, bridge) = Setup();
         using (bridge)
         {
-            await ExecAsync(bus, bridge, "tc1", "read", Args("{\"path\":\"a.cs\"}"), 10);
-            await ExecAsync(bus, bridge, "tc2", "read", Args("{\"path\":\"b.cs\"}"), 20);
+            await ExecAsync(bus, bridge, "tc1", "read", "{\"path\":\"a.cs\"}", 10);
+            await ExecAsync(bus, bridge, "tc2", "read", "{\"path\":\"b.cs\"}", 20);
 
             var tl = panel.Timeline;
             tl.PrepareFrame(40, 8);
