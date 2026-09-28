@@ -239,7 +239,7 @@ public class TabStripKeyBindingTests
         // the user's tabs (pinned in #388, re-asserted here because #389 makes
         // the strip visible enough to notice).
         var store = StoreWithTabs(2);
-        _ = store.Dispatch(new AppMsg.Reset);
+        _ = store.Dispatch(new AppMsg.Reset());
 
         await Assert.That(store.State.Chat.TabStrip.Tabs.Length).IsEqualTo(2);
     }
