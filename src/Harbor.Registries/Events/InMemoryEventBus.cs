@@ -115,9 +115,13 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     ///     contention) and return it through <c>TryReset</c>-gated caching. The
     ///     cached instance is always unlinked — linkage to the publisher's token
     ///     is emulated per publish with a registration (see
-    ///     <see cref="DispatchToSubscribersAsync" />). Exchanged with
-    ///     <c>Interlocked</c> only: contention losers dispose their spare
-    ///     instead of blocking.
+    ///     <see cref="DispatchToSubscribersAsync" />) — and, since #391, it also
+    ///     never carries a pending budget timer: the timer is armed only for
+    ///     handlers that outlive their synchronous part (see
+    ///     <see cref="DispatchToOneAsync" />), which is what makes the instance
+    ///     genuinely reusable instead of being discarded on every publish.
+    ///     Exchanged with <c>Interlocked</c> only: contention losers dispose
+    ///     their spare instead of blocking.
     /// </summary>
     private CancellationTokenSource? _pooledBudgetCts;
 
@@ -721,8 +725,9 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
                 // rented source (torn down in the finally below — the same
                 // lifetime the per-publish linked CTS had under `using`).
                 // No linked registration when the outer token can never fire:
-                // the rented CTS behaves identically (CancelAfter still
-                // applies) and skips the linked-cancellation allocation (#47).
+                // the rented CTS behaves identically (the per-dispatch budget
+                // still applies) and skips the linked-cancellation allocation
+                // (#47).
                 budgetCts = RentBudgetCts();
                 if (ct.CanBeCanceled)
                 {
@@ -810,18 +815,21 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     /// <summary>
     ///     Rent a spare budget <see cref="CancellationTokenSource" /> (#249).
     ///     Returns the cached instance when a previous publish left one behind,
-    ///     otherwise allocates. The rented instance is always unlinked and
-    ///     reset — ready for <c>CancelAfter</c>.
+    ///     otherwise allocates. The rented instance is always unlinked, reset
+    ///     and free of a pending budget timer — ready for
+    ///     <c>CancelAfter</c> if a handler needs the budget, and untouched if
+    ///     not, which is what lets the next publish rent it again.
     /// </summary>
     private CancellationTokenSource RentBudgetCts() =>
         Interlocked.Exchange(ref _pooledBudgetCts, null) ?? new CancellationTokenSource();
 
     /// <summary>
     ///     Return a rented budget <see cref="CancellationTokenSource" /> to the
-    ///     single-slot cache (#249). <c>TryReset</c> refuses instances with live
-    ///     callback registrations (a non-cooperative orphan still holding the
-    ///     token) — those are disposed instead of poisoning the pool. On
-    ///     contention the spare is likewise disposed rather than retained.
+    ///     single-slot cache (#249). <c>TryReset</c> refuses a source that was
+    ///     cancelled (a non-cooperative orphan still holding the token, or the
+    ///     emulated link firing) or that still carries callback registrations
+    ///     — those are disposed instead of poisoning the pool. On contention
+    ///     the spare is likewise disposed rather than retained.
     /// </summary>
     private void ReturnBudgetCts(CancellationTokenSource cts)
     {
@@ -852,14 +860,34 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             return (DispatchOutcome.Completed, null);
         }
 
-        budgetCts!.CancelAfter(_handlerBudget);
-        ValueTask dispatch = sub.Handler(@event, budgetCts.Token);
+        var budgetSource = budgetCts!;
+        ValueTask dispatch = sub.Handler(@event, budgetSource.Token);
         if (dispatch.IsCompletedSuccessfully)
         {
+            // #391 follow-up: the budget timer is deliberately NOT armed here.
+            // A handler that already finished needs no cancellation, and arming
+            // it anyway is what stopped the pooled source from recycling — the
+            // pending timer is what makes TryReset refuse the instance (so the
+            // next publish allocates a fresh one) and it costs a timer arm +
+            // disarm per subscriber besides. A pristine source is what lets
+            // ReturnBudgetCts hand it to the next publish.
             return (DispatchOutcome.Completed, null);
         }
 
         Task handlerTask = dispatch.AsTask();
+        if (!handlerTask.IsCompleted)
+        {
+            // The dispatch outlived its synchronous part, so the budget applies
+            // from here: arming after the handler started is equivalent for
+            // every observable purpose (a token the emulated link already
+            // cancelled makes CancelAfter a no-op either way, and the window
+            // shifts only by the handler's synchronous prologue). A dispatch
+            // that already completed — fault or cancellation, both resolved by
+            // the branches below — needs no timer either, and arming it there
+            // would only cost the pool its instance.
+            budgetSource.CancelAfter(_handlerBudget);
+        }
+
         if (!ct.CanBeCanceled)
         {
             // The infinite-delay branch below could never win this
