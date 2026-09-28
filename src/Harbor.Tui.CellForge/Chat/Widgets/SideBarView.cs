@@ -126,7 +126,10 @@ public static class SideBarView
     }
 
     /// <summary>Stateful section painter threading the row cursor through sidebar sections.</summary>
-    private sealed class SidebarPainter(
+    /// <remarks>Struct (not class): instantiated per frame on the paint hot
+    /// path, a class here cost 88 B/frame and broke the allocation-free
+    /// steady-frame budget (RendererMoatPerfTests).</remarks>
+    private struct SidebarPainter(
         ScreenBuffer buffer,
         Rect rect,
         int labelX,
