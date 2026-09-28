@@ -41,6 +41,7 @@ composition only.
 | `State/ChatKeyMap.cs` | `ChatKeyMap` — binds `UiKey` → `ChatAction`. |
 | `State/InputModel.cs` | `InputModel` — text input state with history navigation. |
 | `State/ShellStatus.cs` | `ShellStatus` — observable status bar model. |
+| `State/StatusBarText.cs` | `StatusBarText` — the single token/cost formatting rule for the status bar (#488): `TokensToCompact`, `TokensCell`, `CostToUsd`, `CostCell`. Lives here because it is the only project both the projection and view-model layers reference. |
 | `State/TuiEffectHost.cs` | `TuiEffectHost` — bridges `UiStore` into `ITuiEffectRunner`. |
 | `State/UiKey.cs` | `UiKeyCode`, `KeyModifierSet`, `UiKey` struct. |
 | `State/ChunkedBuffer.cs` | `ChunkedBuffer` — immutable streaming text buffer with `Append`/`Materialize`. |

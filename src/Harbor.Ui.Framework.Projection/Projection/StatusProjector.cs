@@ -1,70 +1,66 @@
-using System.Globalization;
 using System.Collections.Immutable;
 using System.Linq;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 
 namespace Harbor.Ui.Framework.Projection;
 
+/// <summary>
+///     Projects the chrome regions of <see cref="UiState" />. The status bar is
+///     packed from <see cref="StatusBarFacts" /> — the one place the cells are
+///     derived (#488) — so this class never formats a value itself and the
+///     CellForge footer can read the same cells without going through here.
+/// </summary>
 public static class StatusProjector
 {
     public static UiStatusBarModel ProjectStatusBar(UiState state)
     {
+        var facts = StatusBarFacts.Of(state);
         var segments = ImmutableArray.CreateBuilder<UiStatusSegment>();
 
-        segments.Add(new UiStatusSegment(
-            Text: $"{state.Chat.Provider}/{state.Chat.Model}",
-            Align: Alignment.Left,
-            Importance: 1,
-            Style: UiSpanStyle.Default));
-
-        string glyph = state.Chat.Status switch
-        {
-            "running" => "▌",
-            "compacting" => "◐",
-            "error" => "✗",
-            _ => "○"
-        };
-        UiSpanStyle statusStyle = state.Chat.Status switch
-        {
-            "running" => UiSpanStyle.Accent,
-            "error" => UiSpanStyle.Danger,
-            _ => UiSpanStyle.Default
-        };
-        segments.Add(new UiStatusSegment(
-            Text: $"{glyph} {state.Chat.Status}",
-            Align: Alignment.Center,
-            Importance: 2,
-            Style: statusStyle));
-
-        if (!string.IsNullOrEmpty(state.Chat.AgentName))
+        if (facts.Chrome is not null)
         {
             segments.Add(new UiStatusSegment(
-                Text: $"agent {state.Chat.AgentName}",
+                Text: facts.Chrome,
+                Align: Alignment.Left,
+                Importance: 1,
+                Style: UiSpanStyle.Default));
+        }
+
+        segments.Add(new UiStatusSegment(
+            Text: facts.Status,
+            Align: Alignment.Center,
+            Importance: 2,
+            Style: facts.StatusStyle));
+
+        if (facts.Agent is not null)
+        {
+            segments.Add(new UiStatusSegment(
+                Text: facts.Agent,
                 Align: Alignment.Right,
                 Importance: 3,
                 Style: UiSpanStyle.Default));
         }
 
-        if (state.Chat.Cost.TokensIn > 0 || state.Chat.Cost.TokensOut > 0)
+        if (facts.Tokens is not null)
         {
             segments.Add(new UiStatusSegment(
-                Text: $"{state.Chat.Cost.TokensIn}↑ {state.Chat.Cost.TokensOut}↓",
+                Text: facts.Tokens,
                 Align: Alignment.Right,
                 Importance: 2,
                 Style: UiSpanStyle.Dim));
         }
 
-        segments.Add(new UiStatusSegment(
-            Text: state.Chat.Cost.CostUsd.ToString("F4", CultureInfo.InvariantCulture),
-            Align: Alignment.Right,
-            Importance: 1,
-            Style: UiSpanStyle.Dim));
+        if (facts.Cost is not null)
+        {
+            segments.Add(new UiStatusSegment(
+                Text: facts.Cost,
+                Align: Alignment.Right,
+                Importance: 1,
+                Style: UiSpanStyle.Dim));
+        }
 
-        int maxScroll = Math.Max(0, state.Ui.TotalLines - Math.Max(1, state.Ui.ViewportLines));
-        string scrollText = maxScroll == 0 ? "live" : $"scroll {state.Ui.ScrollOffset * 100 / maxScroll}%";
         segments.Add(new UiStatusSegment(
-            Text: scrollText,
+            Text: facts.Scroll,
             Align: Alignment.Right,
             Importance: 0,
             Style: UiSpanStyle.Dim));
@@ -76,12 +72,10 @@ public static class StatusProjector
     {
         var statusBar = ProjectStatusBar(state);
         var ordered = StatusSegmentOrdering.Ordered(statusBar.Segments);
-        var left = ordered.Where(s => s.Align == Alignment.Left);
-        var center = ordered.Where(s => s.Align == Alignment.Center);
-        var right = ordered.Where(s => s.Align == Alignment.Right);
 
-        return string.Join("  ", left.Select(s => s.Text))
-               + (center.Any() ? "  " + string.Join("  ", center.Select(s => s.Text)) : "")
-               + (right.Any() ? "  " + string.Join("  ", right.Select(s => s.Text)) : "");
+        // One join over the ordered cells, not three group joins concatenated:
+        // #488 made the chrome cell nullable (no provider and no model ⇒ no
+        // cell), and a per-group join would then leave a leading "  " behind.
+        return string.Join("  ", ordered.Select(s => s.Text));
     }
 }

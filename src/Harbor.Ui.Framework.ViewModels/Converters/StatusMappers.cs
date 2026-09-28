@@ -1,5 +1,6 @@
 using System.Globalization;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.ViewModels;
 namespace Harbor.Ui.Framework.Converters;
 /// <summary>
@@ -125,19 +126,23 @@ public static class StatusMappers
     ///     Format a token count with K/M suffix for compact display
     ///     ("1.2K" / "12K" / "1.4M"). Returns "0" for zero/negative.
     /// </summary>
-    public static string TokensToCompact(long tokens)
-    {
-        if (tokens <= 0) return "0";
-        if (tokens < 1000) return tokens.ToString();
-        if (tokens < 1_000_000) return $"{(tokens / 1000.0).ToString("F1", CultureInfo.InvariantCulture)}K";
-        return $"{(tokens / 1_000_000.0).ToString("F1", CultureInfo.InvariantCulture)}M";
-    }
+    /// <remarks>
+    ///     #488: the rule itself lives in <see cref="StatusBarText" /> so the
+    ///     status-bar projection and these XAML adapters cannot drift; this is
+    ///     the adapter surface the converters keep calling.
+    /// </remarks>
+    public static string TokensToCompact(long tokens) => StatusBarText.TokensToCompact(tokens);
 
     /// <summary>
     ///     Format a USD cost as a 4-decimal string ("$0.0123"). Returns
     ///     "$0.0000" for zero/negative.
     /// </summary>
-    public static string CostToUsd(decimal costUsd) =>
-        (costUsd < 0 ? 0m : costUsd).ToString("C4", CultureInfo.InvariantCulture)
-        .Replace("¤", "$");
+    /// <remarks>
+    ///     #488: see <see cref="TokensToCompact" /> — the single implementation
+    ///     is <see cref="StatusBarText.CostToUsd" />. Note this adapter always
+    ///     renders a value (a standalone money readout has no "hidden at zero"
+    ///     semantic); the status-bar <em>cell</em> visibility rule is
+    ///     <see cref="StatusBarText.CostCell" />.
+    /// </remarks>
+    public static string CostToUsd(decimal costUsd) => StatusBarText.CostToUsd(costUsd);
 }

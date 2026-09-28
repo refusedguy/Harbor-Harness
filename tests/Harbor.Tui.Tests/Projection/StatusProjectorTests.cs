@@ -15,9 +15,12 @@ public class StatusProjectorTests
         var state = new UiState();
         var model = StatusProjector.ProjectStatusBar(state);
 
-        await Assert.That(model.Segments.Any(s => s.Text == "/")).IsTrue();
+        // #488: no provider and no model ⇒ no chrome cell at all, not the bare
+        // "/" separator the two surfaces used to disagree about. #457 grok
+        // None-semantics for cost is now shared with the CellForge footer too.
+        await Assert.That(model.Segments.Any(s => s.Align == Alignment.Left)).IsFalse();
         await Assert.That(model.Segments.Any(s => s.Text == "○ idle")).IsTrue();
-        await Assert.That(model.Segments.Any(s => s.Align == Alignment.Right && s.Text == "0.0000")).IsTrue();
+        await Assert.That(model.Segments.Any(s => s.Text.Contains('$'))).IsFalse();
         await Assert.That(model.Segments.Any(s => s.Align == Alignment.Right && s.Text == "live")).IsTrue();
         await Assert.That(model.Segments.Any(s => s.Text.Contains("agent"))).IsFalse();
         await Assert.That(model.Segments.Any(s => s.Text.Contains("↑"))).IsFalse();
@@ -68,6 +71,8 @@ public class StatusProjectorTests
         var state = new UiState { Chat = ChatDomainState.Empty with { Cost = new CostSnapshot(123, 456, 0) } };
         var model = StatusProjector.ProjectStatusBar(state);
 
+        // #488: one token rule, shared with the CellForge footer — below a
+        // thousand the compact form is the raw count.
         await Assert.That(model.Segments.Any(s => s.Text == "123↑ 456↓")).IsTrue();
     }
 
@@ -77,7 +82,9 @@ public class StatusProjectorTests
         var state = new UiState { Chat = ChatDomainState.Empty with { Cost = new CostSnapshot(0, 0, 1.5m) } };
         var model = StatusProjector.ProjectStatusBar(state);
 
-        await Assert.That(model.Segments.Any(s => s.Text == "1.5000")).IsTrue();
+        // Four fixed decimals, one "$", no culture symbol — and the very cell the
+        // CellForge footer paints (#488).
+        await Assert.That(model.Segments.Any(s => s.Text == "$1.5000")).IsTrue();
     }
 
     [Test]
@@ -98,7 +105,9 @@ public class StatusProjectorTests
         var state = new UiState();
         var footer = StatusProjector.ProjectFooter(state);
 
-        await Assert.That(footer).IsEqualTo("/  ○ idle  0.0000  live");
+        // #488: no chrome and no money cell for a session that has neither —
+        // the footer no longer opens with a bare "/" nor trails a "$0.0000".
+        await Assert.That(footer).IsEqualTo("○ idle  live");
     }
 
     [Test]

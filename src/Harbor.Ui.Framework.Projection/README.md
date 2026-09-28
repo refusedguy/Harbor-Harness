@@ -11,13 +11,15 @@ Renderer-agnostic projection of `UiState` into `UiScreenModel`. The bridge betwe
 | Subfolder | Contents |
 |-----------|----------|
 | `Projection/` | `IUiProjector`, `DefaultUiProjector`, `IUiViewport`, `UiScreenModel` record hierarchy (`UiHeaderModel`, `UiTranscriptModel`, `UiInputModel`, `UiStatusBarModel`), `UiRenderedLine`, `StyledSpan`, `RgbColor` |
+| `Projection/StatusBarFacts.cs` | `StatusBarFacts` — the status bar's cells (chrome, status, agent, tokens, cost, scroll) derived from `UiState` exactly once (#488). |
 | `Rendering/` | `ChatStreamingPresenter` — derives `SessionStatus` and streaming flags from `UiState`. |
 
 ## Public API summary
 
 - **`IUiProjector.Project(UiState)`**: pure function returning `UiScreenModel`.
 - **`DefaultUiProjector`**: full projection implementation; also exposes `State`, `Screen`, `Transcript`, `Lines`, `BaseRendered`, `BaseBlocks`, `IsStreaming`, `ThinkBuf` for renderer binding.
-- **`StatusProjector`**: `ProjectStatusBar(UiState)` and `ProjectFooter(UiState)` — partial projections for chrome regions.
+- **`StatusProjector`**: `ProjectStatusBar(UiState)` and `ProjectFooter(UiState)` — partial projections for chrome regions. It only *packs* cells; it never formats one.
+- **`StatusBarFacts.Of(UiState)`**: the single derivation of the status-bar cells every renderer reads (#488) — including token and cost text, whose rules live in `Harbor.Ui.Framework.State.StatusBarText`.
 - **`UiScreenModel` records**: `UiMessageBlock`, `UiSpanStyle`, `MessageRenderPhase`, `ToolCallStatus`, etc.
 - **`ChatStreamingPresenter`**: `DeriveStatus(UiState)` helper.
 
