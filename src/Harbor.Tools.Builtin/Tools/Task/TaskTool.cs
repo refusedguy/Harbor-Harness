@@ -147,7 +147,10 @@ public sealed class TaskTool : ITool
                 context.SessionId,
                 ct => _subAgents!.RunAsync(
                     validated.Value,
-                    new SubAgentRunRequest(prompt, ParentSessionId: context.SessionId),
+                    new SubAgentRunRequest(
+                        prompt,
+                        ParentSessionId: context.SessionId,
+                        ParentMessageId: context.MessageId),
                     ct),
                 cancellationToken);
             if (started.IsFailure)
@@ -161,12 +164,15 @@ public sealed class TaskTool : ITool
 
         var result = await _subAgents.RunAsync(
             validated.Value,
-            new SubAgentRunRequest(prompt, ParentSessionId: context.SessionId),
+            new SubAgentRunRequest(
+                prompt,
+                ParentSessionId: context.SessionId,
+                ParentMessageId: context.MessageId),
             cancellationToken);
 
         return result.Match(
             run => SuccessResult(run),
-            err => ToolResult.Error(err));
+            err => ToolResult.Error(err, SubAgentFailureFormat.TryExtractResumeHint(err, agentName)));
     }
 
     private ToolResult SuccessResult(SubAgentRunResult run)
@@ -174,11 +180,18 @@ public sealed class TaskTool : ITool
         _logger.LogInformation(
             "Sub-agent completed: agent={Agent} session={SessionId} messages={Messages} outputChars={Length}",
             run.AgentName, run.SessionId, run.NewMessages, run.FinalOutput.Length);
+        // [UX6] #266: the child cost delta rides the envelope header so the
+        // parent model sees what the delegation burned. Zero-cost runs keep
+        // the legacy shape byte-identical.
+        string costSuffix = run.HasUsage
+            ? $", +{run.ChildUsage!.InputTokens}↑ {run.ChildUsage.OutputTokens}↓"
+            : string.Empty;
         return ToolResult.Success($"""
-                                   [sub-agent '{run.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s)]
+                                   [sub-agent '{run.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s){costSuffix}]
 
                                    {run.FinalOutput}
-                                   """);
+                                   """,
+            metadata: run.ChildUsage);
     }
 
     private ToolResult NotImplementedResult(string agentName, string prompt)
