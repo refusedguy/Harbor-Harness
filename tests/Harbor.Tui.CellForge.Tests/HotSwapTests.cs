@@ -188,9 +188,12 @@ public class HotSwapTests
 
     // ── Frame pin lifecycle (#458): an aborted frame must not keep the pin ─
     //
-    // The palette pin is [ThreadStatic], so each of these reads the state
-    // synchronously on the thread that armed the pin and asserts on the
-    // captured local — never across an await.
+    // Two capture rules for the assertions below:
+    //  - the palette pin is [ThreadStatic], so the state is read on the thread
+    //    that armed it and asserted via a captured local, never across await;
+    //  - row payloads are single tokens, because the diff elides MoveTo only
+    //    between ADJACENT cells — a multi-word payload is split by cursor
+    //    escapes in the captured byte stream and is not a matchable substring.
 
     [Test]
     public async Task AbortFrame_UnpinsThread()
@@ -241,11 +244,11 @@ public class HotSwapTests
         var session = MakeSession(20, 4, out var backend);
 
         var scope = session.BeginFrameScope();
-        session.Back.SetText(0, 0, "scoped flush row", CellStyle.Plain);
+        session.Back.SetText(0, 0, "scopedflushrow", CellStyle.Plain);
         scope.Flush();
         scope.Dispose();
 
-        await Assert.That(backend.Text).Contains("scoped flush row");
+        await Assert.That(backend.Text).Contains("scopedflushrow");
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
         await Assert.That(ChatPalette.IsFramePinned).IsFalse();
     }
@@ -255,13 +258,13 @@ public class HotSwapTests
     {
         var session = MakeSession(20, 4, out var backend);
         var scope = session.BeginFrameScope();
-        session.Back.SetText(0, 0, "async scoped flush", CellStyle.Plain);
+        session.Back.SetText(0, 0, "asyncscopedflush", CellStyle.Plain);
 
         await scope.FlushAsync();
         bool pinnedAfterFlush = ChatPalette.IsFramePinned;
         scope.Dispose();
 
-        await Assert.That(backend.Text).Contains("async scoped flush");
+        await Assert.That(backend.Text).Contains("asyncscopedflush");
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
         await Assert.That(pinnedAfterFlush).IsFalse();
     }
@@ -313,26 +316,26 @@ public class HotSwapTests
     {
         var session = MakeSession(20, 4, out var backend);
         session.BeginFrame();
-        session.Back.SetText(0, 0, "baseline content row", CellStyle.Plain);
+        session.Back.SetText(0, 0, "baseline", CellStyle.Plain);
         session.FlushFrame();
 
         // Abort mid-frame: BACK carries a row the terminal never received,
         // FRONT still mirrors the shipped frame.
         using (session.BeginFrameScope())
         {
-            session.Back.SetText(0, 2, "aborted content row", CellStyle.Plain);
+            session.Back.SetText(0, 2, "abortedrow", CellStyle.Plain);
         }
 
         backend.ResetForTests();
         var next = session.BeginFrameScope();
-        session.Back.SetText(0, 1, "second frame content", CellStyle.Plain);
+        session.Back.SetText(0, 1, "secondframe", CellStyle.Plain);
         next.Flush();
         next.Dispose();
 
         // The aborted row still reaches the terminal on the next frame, and
         // FRONT converges — an aborted frame leaves no half-written state.
-        await Assert.That(backend.Text).Contains("aborted content row");
-        await Assert.That(backend.Text).Contains("second frame content");
+        await Assert.That(backend.Text).Contains("abortedrow");
+        await Assert.That(backend.Text).Contains("secondframe");
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
     }
 
@@ -341,7 +344,7 @@ public class HotSwapTests
     {
         var session = MakeSession(40, 10, out var backend);
         session.BeginFrame();
-        session.Back.SetText(0, 0, "baseline content row", CellStyle.Plain);
+        session.Back.SetText(0, 0, "baseline", CellStyle.Plain);
         session.FlushFrame();
 
         // A frame that registers a narrow damage hint and then aborts: the
@@ -350,18 +353,18 @@ public class HotSwapTests
         using (session.BeginFrameScope())
         {
             session.Damage(new Rect(0, 0, 4, 1));
-            session.Back.SetText(0, 0, "hinted cell", CellStyle.Plain);
+            session.Back.SetText(0, 0, "hinted", CellStyle.Plain);
         }
 
         backend.ResetForTests();
         var next = session.BeginFrameScope();
-        session.Back.SetText(20, 8, "unhinted cell", CellStyle.Plain);
+        session.Back.SetText(20, 8, "unhinted", CellStyle.Plain);
         next.Flush();
         next.Dispose();
 
         // The unhinted change is outside the abandoned hint — the frame is
         // only correct if the abort dropped it and the diff went full-scan.
-        await Assert.That(backend.Text).Contains("unhinted cell");
+        await Assert.That(backend.Text).Contains("unhinted");
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
     }
 
