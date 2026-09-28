@@ -101,7 +101,7 @@ public sealed class SelectorTrackingViewModel : StoreSubscriberViewModel
 
     public void RegisterStatusSelector()
     {
-        Select(state => state.Status, v => SelectorApplied = true);
+        Select(state => state.Chat.Status, v => SelectorApplied = true);
     }
 
     public void SimulateStateChange(UiState state)

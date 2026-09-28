@@ -348,18 +348,24 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "idle",
-            IsAgentRunning = false,
-            Focus = FocusMode.Panel,
-            FocusedPanelId = panelId,
-            PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty
-                .Add(panelId, TuiPanelState.Focused),
-            RegisteredPanelIds = ImmutableArray.Create(panelId),
-            ViewportLines = 20,
-            TotalLines = 1,
+            Ui = TerminalUiState.Empty with
+            {
+                Focus = FocusMode.Panel,
+                FocusedPanelId = panelId,
+                PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty
+                    .Add(panelId, TuiPanelState.Focused),
+                RegisteredPanelIds = ImmutableArray.Create(panelId),
+                ViewportLines = 20,
+                TotalLines = 1,
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "idle",
+                IsAgentRunning = false
+            }
         };
     }
 

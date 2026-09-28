@@ -518,7 +518,7 @@ public sealed class StatusPanel : Panel
         // CF-D-002: the projected path derives the mode from UiState.Chat.Status.
         UiState? projected = ProjectedState;
         StatusBarMode effectiveMode = projected is not null
-            ? StatusProjectorPanel.MapMode(projected.Status)
+            ? StatusProjectorPanel.MapMode(projected.Chat.Status)
             : Vm.Mode;
         byte mode = (byte)effectiveMode;
         if (!_modeSeen)

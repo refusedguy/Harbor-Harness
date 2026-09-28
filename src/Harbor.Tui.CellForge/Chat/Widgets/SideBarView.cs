@@ -158,7 +158,7 @@ public static class SideBarView
         {
             // ── Model ──────────────────────────────────────────────────────────
             Y = Section(buffer, rect, labelX, Y, "MODEL", headingStyle);
-            Y = ValueLine(buffer, rect, labelX, Y, innerW, (state.Chat.Model ?? "—").AsSpan(), valueStyle);
+            Y = ValueLine(buffer, rect, labelX, Y, innerW, (state.Model ?? "—").AsSpan(), valueStyle);
         }
 
         public void PaintAgent(SideBarState state)

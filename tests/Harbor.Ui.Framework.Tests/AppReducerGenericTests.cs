@@ -83,13 +83,13 @@ public class AppReducerGenericTests
         state = AppReducer.Update(state, new AppMsg.TogglePanel("a")).State;
         state = AppReducer.Update(state, new AppMsg.TogglePanel("b")).State;
 
-        var first = AppReducer.Update(state, new AppMsg.CyclePanelFocus);
+        var first = AppReducer.Update(state, new AppMsg.CyclePanelFocus());
         await Assert.That(first.State.Ui.FocusedPanelId).IsEqualTo("a");
 
-        var second = AppReducer.Update(first.State, new AppMsg.CyclePanelFocus);
+        var second = AppReducer.Update(first.State, new AppMsg.CyclePanelFocus());
         await Assert.That(second.State.Ui.FocusedPanelId).IsEqualTo("b");
 
-        var third = AppReducer.Update(second.State, new AppMsg.CyclePanelFocus);
+        var third = AppReducer.Update(second.State, new AppMsg.CyclePanelFocus());
         await Assert.That(third.State.Ui.FocusedPanelId).IsNull();
     }
 
@@ -325,7 +325,7 @@ public class AppReducerGenericTests
     {
         var result = AppReducer.Update(
             new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 12 } },
-            new AppMsg.ScrollResetToTail,
+            new AppMsg.ScrollResetToTail(),
             BusyPlugin.Instance);
         await Assert.That(result.State.Ui.ScrollOffset).IsEqualTo(0);
         await Assert.That(result.State.Chat.Status).IsEqualTo("folded-by-extension");

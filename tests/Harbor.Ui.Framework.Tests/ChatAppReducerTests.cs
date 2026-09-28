@@ -44,7 +44,7 @@ public class ChatAppReducerTests
     {
         var running = Running;
 
-        var tail = ChatAppReducerPlugin.Instance.After(running, new AppMsg.ScrollResetToTail);
+        var tail = ChatAppReducerPlugin.Instance.After(running, new AppMsg.ScrollResetToTail());
         await Assert.That(tail.Chat.WasRunning).IsTrue();
 
         var other = ChatAppReducerPlugin.Instance.After(running, new AppMsg.Viewport(10));

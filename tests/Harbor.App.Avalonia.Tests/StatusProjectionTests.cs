@@ -13,15 +13,21 @@ public class StatusProjectionTests
     {
         var state = new UiState
         {
-            Status = "idle",
-            Provider = "ollama",
-            Model = string.Empty,
-            AgentName = string.Empty,
-            Cost = new CostSnapshot(0, 0, 0m),
-            Lines = ImmutableArray<ChatLine>.Empty,
-            TotalLines = 0,
-            ViewportLines = 0,
-            ScrollOffset = 0
+            Ui = TerminalUiState.Empty with
+            {
+                TotalLines = 0,
+                ViewportLines = 0,
+                ScrollOffset = 0
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "idle",
+                Provider = "ollama",
+                Model = string.Empty,
+                AgentName = string.Empty,
+                Cost = new CostSnapshot(0, 0, 0m),
+                Lines = ImmutableArray<ChatLine>.Empty
+            }
         };
 
         var model = StatusProjector.ProjectStatusBar(state);
@@ -39,16 +45,22 @@ public class StatusProjectionTests
     {
         var state = new UiState
         {
-            Status = "running",
-            Provider = "openai",
-            Model = "gpt-4o",
-            AgentName = "code",
-            IsAgentRunning = true,
-            Cost = new CostSnapshot(0, 0, 0m),
-            Lines = ImmutableArray<ChatLine>.Empty,
-            TotalLines = 0,
-            ViewportLines = 0,
-            ScrollOffset = 0
+            Ui = TerminalUiState.Empty with
+            {
+                TotalLines = 0,
+                ViewportLines = 0,
+                ScrollOffset = 0
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "running",
+                Provider = "openai",
+                Model = "gpt-4o",
+                AgentName = "code",
+                IsAgentRunning = true,
+                Cost = new CostSnapshot(0, 0, 0m),
+                Lines = ImmutableArray<ChatLine>.Empty
+            }
         };
 
         var model = StatusProjector.ProjectStatusBar(state);
@@ -66,15 +78,21 @@ public class StatusProjectionTests
     {
         var state = new UiState
         {
-            Status = "idle",
-            Provider = "anthropic",
-            Model = "claude-opus-4",
-            AgentName = "code",
-            Cost = new CostSnapshot(1234, 5678, 0m),
-            Lines = ImmutableArray<ChatLine>.Empty,
-            TotalLines = 0,
-            ViewportLines = 0,
-            ScrollOffset = 0
+            Ui = TerminalUiState.Empty with
+            {
+                TotalLines = 0,
+                ViewportLines = 0,
+                ScrollOffset = 0
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "idle",
+                Provider = "anthropic",
+                Model = "claude-opus-4",
+                AgentName = "code",
+                Cost = new CostSnapshot(1234, 5678, 0m),
+                Lines = ImmutableArray<ChatLine>.Empty
+            }
         };
 
         var model = StatusProjector.ProjectStatusBar(state);
@@ -90,15 +108,21 @@ public class StatusProjectionTests
     {
         var state = new UiState
         {
-            Status = "idle",
-            Provider = "openai",
-            Model = "gpt-4o-mini",
-            AgentName = string.Empty,
-            Cost = new CostSnapshot(500, 200, 0.0123m),
-            Lines = ImmutableArray<ChatLine>.Empty,
-            TotalLines = 0,
-            ViewportLines = 0,
-            ScrollOffset = 0
+            Ui = TerminalUiState.Empty with
+            {
+                TotalLines = 0,
+                ViewportLines = 0,
+                ScrollOffset = 0
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "idle",
+                Provider = "openai",
+                Model = "gpt-4o-mini",
+                AgentName = string.Empty,
+                Cost = new CostSnapshot(500, 200, 0.0123m),
+                Lines = ImmutableArray<ChatLine>.Empty
+            }
         };
 
         var model = StatusProjector.ProjectStatusBar(state);
@@ -114,15 +138,21 @@ public class StatusProjectionTests
     {
         var state = new UiState
         {
-            Status = "error",
-            Provider = "ollama",
-            Model = string.Empty,
-            AgentName = string.Empty,
-            Cost = new CostSnapshot(0, 0, 0m),
-            Lines = ImmutableArray<ChatLine>.Empty,
-            TotalLines = 0,
-            ViewportLines = 0,
-            ScrollOffset = 0
+            Ui = TerminalUiState.Empty with
+            {
+                TotalLines = 0,
+                ViewportLines = 0,
+                ScrollOffset = 0
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "error",
+                Provider = "ollama",
+                Model = string.Empty,
+                AgentName = string.Empty,
+                Cost = new CostSnapshot(0, 0, 0m),
+                Lines = ImmutableArray<ChatLine>.Empty
+            }
         };
 
         var model = StatusProjector.ProjectStatusBar(state);
@@ -137,15 +167,21 @@ public class StatusProjectionTests
     {
         var state = new UiState
         {
-            Status = "compacting",
-            Provider = "openai",
-            Model = "gpt-4o",
-            AgentName = "code",
-            Cost = new CostSnapshot(0, 0, 0m),
-            Lines = ImmutableArray<ChatLine>.Empty,
-            TotalLines = 0,
-            ViewportLines = 0,
-            ScrollOffset = 0
+            Ui = TerminalUiState.Empty with
+            {
+                TotalLines = 0,
+                ViewportLines = 0,
+                ScrollOffset = 0
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "compacting",
+                Provider = "openai",
+                Model = "gpt-4o",
+                AgentName = "code",
+                Cost = new CostSnapshot(0, 0, 0m),
+                Lines = ImmutableArray<ChatLine>.Empty
+            }
         };
 
         var model = StatusProjector.ProjectStatusBar(state);

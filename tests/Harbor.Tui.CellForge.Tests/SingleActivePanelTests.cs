@@ -25,8 +25,11 @@ public class SingleActivePanelTests
     {
         var store = new UiStore(new UiState
         {
-            Lines = ImmutableArray.Create(new ChatLine(ChatRole.ToolResult, "[ ] Write code")),
-            Cost = new CostSnapshot(1500, 300, 0.0042m),
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = ImmutableArray.Create(new ChatLine(ChatRole.ToolResult, "[ ] Write code")),
+                Cost = new CostSnapshot(1500, 300, 0.0042m)
+            }
         });
         _ = owner.EnsureSeeded(store);
         return store;
@@ -104,9 +107,12 @@ public class SingleActivePanelTests
         owner.Register(new CellForgeTokenBreakdownPanel());
         var state = new UiState
         {
-            PanelStates = ImmutableDictionary.Create<string, TuiPanelState>(StringComparer.Ordinal)
-                .Add("todo-list", TuiPanelState.Pinned)
-                .Add("token-breakdown", TuiPanelState.Visible),
+            Ui = TerminalUiState.Empty with
+            {
+                PanelStates = ImmutableDictionary.Create<string, TuiPanelState>(StringComparer.Ordinal)
+                    .Add("todo-list", TuiPanelState.Pinned)
+                    .Add("token-breakdown", TuiPanelState.Visible)
+            }
         };
 
         var winner = PanelArbiter.ResolveActive(owner.Registry, state);
