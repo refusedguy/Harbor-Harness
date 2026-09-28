@@ -239,10 +239,12 @@ public static class WordDiff
     /// unpaired and the caller paints them as plain line-level rows.
     ///
     /// A pair is emitted only when it is at least
-    /// <see cref="MinRunPairSimilarityPercent"/> similar, except for an exact
-    /// 1:1 run, which is always paired — that is the shipped single-replace
-    /// behaviour and a pair with no shared anchor degrades to the same picture
-    /// anyway (its context run is empty, so the whole row takes the accent).
+    /// <see cref="MinRunPairSimilarityPercent"/> similar. The one exception is
+    /// an exact 1:1 run, which is always paired — that is the shipped
+    /// single-replace behaviour and a pair with no shared anchor degrades to
+    /// the same picture anyway (its context run is empty, so the whole row
+    /// takes the accent). Every other shape, 2:2 included, is a guess about
+    /// which rows correspond and has to clear the bar.
     ///
     /// Pure and deterministic: candidates are scanned in row order, equal
     /// scores keep the earlier Delete row, and no culture-sensitive
@@ -286,7 +288,12 @@ public static class WordDiff
             }
         }
 
-        bool requireSimilarity = deletes != adds;
+        // Only an exact 1:1 run skips the bar: it is the shipped
+        // single-replace behaviour, and a pair with no shared anchor
+        // degrades to the same picture anyway (its context run is empty, so
+        // the whole row takes the accent). Every N:M shape — 2:2 included —
+        // is a guess, so it has to earn the threshold.
+        bool requireSimilarity = deletes != 1 || adds != 1;
         int maxPairs = Math.Min(deletes, adds);
         var deleteUsed = new bool[deletes];
         var addUsed = new bool[adds];

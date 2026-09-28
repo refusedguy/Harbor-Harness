@@ -257,6 +257,20 @@ public class WordDiffPairRunTests
     }
 
     [Test]
+    public async Task PairRun_TwoToTwo_PairsBothRowsWhenSimilar()
+    {
+        // 2:2 is still a guess about correspondence, so it must earn the
+        // threshold like any other N:M shape — here it does.
+        var lines = Body(
+            "-var port = 8080",
+            "-var host = localhost",
+            "+var port = 9090",
+            "+var host = 0.0.0.0");
+
+        await Assert.That(Shape(WordDiff.PairRun(lines, 0))).IsEquivalentTo(new[] { "0->2", "1->3" });
+    }
+
+    [Test]
     public async Task PairRun_UnrelatedRewrite_FallsBackToLineLevel()
     {
         // Nothing in common on either side: no pair clears the threshold, so
