@@ -85,10 +85,13 @@ internal sealed class ToolCardTracker
         var block = new ToolCallBlock(new ToolCallInfo(id, toolName, argsSummary ?? string.Empty, ArgsFull: argsFull));
         if (IsTaskTool(toolName))
         {
-            // [UX5] #265: a task card is always exactly one collapsed line —
-            // the live suffix in the header carries progress, the full child
-            // transcript waits in the expanded body.
-            block.MaxBodyLines = 0;
+            // [UX5] #265 + PRIM1d #294: a task card is always exactly one
+            // collapsed line — the live suffix in the header carries progress,
+            // the full child transcript waits in the expanded body. Collapse
+            // state lives on ICollapsibleChatBlock (zero budget = pure
+            // one-liner, see ClampedBodyLineCount).
+            ICollapsibleChatBlock collapsible = block;
+            collapsible.MaxBodyLines = 0;
             _tasks.TryAdd(id, new TaskState());
         }
 
@@ -119,7 +122,10 @@ internal sealed class ToolCardTracker
         }
 
         card.Block.Complete(new ToolResultBody(output, true, TimeSpan.Zero));
-        card.Block.SetExpanded(false);
+        // PRIM1d #294: error cards collapse through the ICollapsibleChatBlock
+        // mixin (default budget) — Enter/click expands the full text.
+        ICollapsibleChatBlock errorCard = card.Block;
+        errorCard.SetExpanded(false);
         _cards.Remove(id);
         _panel.Timeline.MarkLastDirty();
     }
@@ -324,7 +330,10 @@ internal sealed class ToolCardTracker
             ? $"· {ts.CompletedChildCalls} toolcall{(ts.CompletedChildCalls == 1 ? string.Empty : "s")}"
             : null;
         card.Block.LiveSuffixIsError = false;
-        card.Block.SetExpanded(false);
+        // PRIM1d #294: finished task cards collapse through the mixin —
+        // transcript + tally wait in the expanded body.
+        ICollapsibleChatBlock taskCard = card.Block;
+        taskCard.SetExpanded(false);
         _cards.Remove(taskId);
         _tasks.Remove(taskId);
         _panel.Timeline.MarkLastDirty();
