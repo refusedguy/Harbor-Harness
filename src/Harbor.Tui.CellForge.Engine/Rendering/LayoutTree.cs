@@ -115,9 +115,17 @@ public sealed class LayoutTree
     public IReadOnlyCollection<Panel> Panels => _panels.Values;
 
     /// <summary>
+    /// Z-ordered overlay plane painted after the panels (PRIM2a, btea Compositor
+    /// pattern). Empty by default — steady-state frames and goldens stay
+    /// byte-identical until PRIM2c seats DialogOverlay/ToastOverlay on the stack.
+    /// </summary>
+    public OverlayStack Overlays { get; } = new();
+
+    /// <summary>
     /// Paints every registered panel in registration order through the
     /// dictionary's struct enumerator — the steady-state frame path must not
     /// box an enumerator (the <see cref="Panels" /> interface foreach does).
+    /// Overlays paint last (no-op when the stack is empty).
     /// </summary>
     public void PaintAll(ScreenBuffer buffer)
     {
@@ -125,6 +133,8 @@ public sealed class LayoutTree
         {
             panel.Paint(buffer);
         }
+
+        Overlays.PaintOver(buffer);
     }
 
     public void AddRoot(Panel panel)
