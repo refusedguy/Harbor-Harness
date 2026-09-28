@@ -28,7 +28,7 @@ public abstract record TuiEffect
     ///     Make a session the active one — the tab-strip's "activate" contract
     ///     (#388). The host routes it to the existing session-switch path
     ///     (<c>ISessionManager.OpenSessionAsync</c>); the reducer itself never
-    ///     resolves DI, it only asks (see <see cref="UiReducer.ActivateTab" />).
+    ///     resolves DI, it only asks (see <see cref="ChatAppReducer.ActivateTab" />).
     ///     Pure state-only hosts that never switch sessions may ignore it.
     /// </summary>
     /// <param name="SessionId">The session the host must open.</param>

@@ -12,7 +12,7 @@ namespace Harbor.Ui.Framework.State;
 /// <remarks>
 ///     <para>
 ///         Pure state by construction: the host builds the descriptor and
-///         <see cref="UiReducer" /> folds it. Nothing here touches the
+///         <see cref="ChatAppReducer" /> folds it. Nothing here touches the
 ///         filesystem, the session store, or DI, and there is no provider-local
 ///         mirror — the renderer reads <see cref="TabStripState.Tabs" /> off the
 ///         snapshot (§FP-005/TEA).
@@ -21,7 +21,7 @@ namespace Harbor.Ui.Framework.State;
 ///         <b>Order is the array index.</b> <see cref="TabStripState.Tabs" /> is
 ///         the single source of truth for tab order, so the descriptor carries no
 ///         <c>Order</c> field: a second copy would drift, and
-///         <see cref="UiReducer.ReorderTab" /> clamps a target index instead.
+///         <see cref="ChatAppReducer.ReorderTab" /> clamps a target index instead.
 ///     </para>
 ///     <para>
 ///         <see cref="IsPinned" /> is a flag for the renderer, not an ordering
@@ -48,7 +48,7 @@ public sealed record SessionTab(
     ///     parameter on purpose: a plain init property keeps the primary
     ///     constructor's six display fields readable, and a default
     ///     <see cref="ImmutableArray{T}" /> (never enumerated) can never sneak in
-    ///     from a caller. See the ownership rule on <see cref="UiReducer.CloseTab" />.
+    ///     from a caller. See the ownership rule on <see cref="ChatAppReducer.CloseTab" />.
     /// </summary>
     public ImmutableArray<string> PanelIds { get; init; } = ImmutableArray<string>.Empty;
 }

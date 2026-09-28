@@ -10,7 +10,7 @@ namespace Harbor.Ui.Framework.Tests;
 /// <summary>
 ///     #388 (tab-strip slice 1/3): the tab state model and its reducer
 ///     transitions. State only — no widget is touched here, so every expectation
-///     below is about <see cref="UiReducer.Update" /> and the
+///     below is about <see cref="ChatAppReducer.Update" /> and the
 ///     <see cref="TuiEffect" /> it asks the host to run.
 /// </summary>
 public class TabStripReducerTests
@@ -20,7 +20,7 @@ public class TabStripReducerTests
     [Test]
     public async Task OpenTab_AppendsAndActivates_AndAsksHostToSwitch()
     {
-        var result = UiReducer.Update(new UiState(), new UiMsg.OpenTab(Tab("s1")));
+        var result = ChatAppReducer.Update(new UiState(), new ChatAppMsg.OpenTab(Tab("s1")));
 
         await Assert.That(Ids(result.State)).IsEqualTo("s1");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s1");
@@ -35,7 +35,7 @@ public class TabStripReducerTests
         // is left alone (a re-open is not a metadata refresh).
         var state = WithTabs(Tab("s1", "first"), Tab("s2", "second"));
 
-        var result = UiReducer.Update(state, new UiMsg.OpenTab(Tab("s1", "rewritten", dirty: true)));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.OpenTab(Tab("s1", "rewritten", dirty: true)));
 
         await Assert.That(Ids(result.State)).IsEqualTo("s1,s2");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s1");
@@ -49,7 +49,7 @@ public class TabStripReducerTests
     {
         var state = WithTabs(Tab("s1"), Tab("s2"), Tab("s3"));
 
-        var result = UiReducer.Update(state, new UiMsg.ActivateTab(Id("s1")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.ActivateTab(Id("s1")));
 
         await Assert.That(Ids(result.State)).IsEqualTo("s1,s2,s3");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s1");
@@ -61,8 +61,8 @@ public class TabStripReducerTests
     {
         var state = WithTabs(Tab("s1"), Tab("s2"));
 
-        var current = UiReducer.Update(state, new UiMsg.ActivateTab(Id("s2")));
-        var unknown = UiReducer.Update(state, new UiMsg.ActivateTab(Id("nope")));
+        var current = ChatAppReducer.Update(state, new ChatAppMsg.ActivateTab(Id("s2")));
+        var unknown = ChatAppReducer.Update(state, new ChatAppMsg.ActivateTab(Id("nope")));
 
         await Assert.That(current.State).IsSameReferenceAs(state);
         await Assert.That(current.Effect).IsTypeOf<TuiEffect.None>();
@@ -77,7 +77,7 @@ public class TabStripReducerTests
     {
         var state = WithTabs(Tab("s1"), Tab("s2"), Tab("s3"));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseTab(Id("s1")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTab(Id("s1")));
 
         await Assert.That(Ids(result.State)).IsEqualTo("s2,s3");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s3");
@@ -90,7 +90,7 @@ public class TabStripReducerTests
         // Neighbour rule, first arm: the tab that slid into the closed slot.
         var state = WithActiveTab("s2", Tab("s1"), Tab("s2"), Tab("s3"));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseTab(Id("s2")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTab(Id("s2")));
 
         await Assert.That(Ids(result.State)).IsEqualTo("s1,s3");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s3");
@@ -104,7 +104,7 @@ public class TabStripReducerTests
         // the left takes over.
         var state = WithActiveTab("s2", Tab("s1"), Tab("s2"));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseTab(Id("s2")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTab(Id("s2")));
 
         await Assert.That(Ids(result.State)).IsEqualTo("s1");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s1");
@@ -118,7 +118,7 @@ public class TabStripReducerTests
         // session for the host to open.
         var state = WithTabs(Tab("s1"));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseTab(Id("s1")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTab(Id("s1")));
 
         await Assert.That(Ids(result.State)).IsEqualTo(string.Empty);
         await Assert.That(result.State.Chat.TabStrip.ActiveTabId).IsNull();
@@ -130,7 +130,7 @@ public class TabStripReducerTests
     {
         var state = WithTabs(Tab("s1"));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseTab(Id("nope")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTab(Id("nope")));
 
         await Assert.That(result.State).IsSameReferenceAs(state);
         await Assert.That(result.Effect).IsTypeOf<TuiEffect.None>();
@@ -141,7 +141,7 @@ public class TabStripReducerTests
     {
         var state = WithActiveTab("s2", Tab("s1"), Tab("s2"), Tab("s3"));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseOtherTabs(Id("s2")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseOtherTabs(Id("s2")));
 
         await Assert.That(Ids(result.State)).IsEqualTo("s2");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s2");
@@ -153,7 +153,7 @@ public class TabStripReducerTests
     {
         var state = WithTabs(Tab("s1"), Tab("s2"), Tab("s3"));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseOtherTabs(Id("s1")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseOtherTabs(Id("s1")));
 
         await Assert.That(Ids(result.State)).IsEqualTo("s1");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s1");
@@ -165,7 +165,7 @@ public class TabStripReducerTests
     {
         var state = WithActiveTab("s3", Tab("s1"), Tab("s2"), Tab("s3"), Tab("s4"));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseTabsToRight(Id("s2")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTabsToRight(Id("s2")));
 
         await Assert.That(Ids(result.State)).IsEqualTo("s1,s2");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s2");
@@ -177,7 +177,7 @@ public class TabStripReducerTests
     {
         var state = WithActiveTab("s2", Tab("s1"), Tab("s2"));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseTabsToRight(Id("s2")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTabsToRight(Id("s2")));
 
         await Assert.That(result.State).IsSameReferenceAs(state);
         await Assert.That(result.Effect).IsTypeOf<TuiEffect.None>();
@@ -190,9 +190,9 @@ public class TabStripReducerTests
     {
         var state = WithTabs(Tab("s1"), Tab("s2"), Tab("s3"));
 
-        var pinned = UiReducer.Update(state, new UiMsg.PinTab(Id("s1"), true));
-        var again = UiReducer.Update(pinned.State, new UiMsg.PinTab(Id("s1"), true));
-        var unpinned = UiReducer.Update(pinned.State, new UiMsg.PinTab(Id("s1"), false));
+        var pinned = ChatAppReducer.Update(state, new ChatAppMsg.PinTab(Id("s1"), true));
+        var again = ChatAppReducer.Update(pinned.State, new ChatAppMsg.PinTab(Id("s1"), true));
+        var unpinned = ChatAppReducer.Update(pinned.State, new ChatAppMsg.PinTab(Id("s1"), false));
 
         await Assert.That(Ids(pinned.State)).IsEqualTo("s1,s2,s3");
         await Assert.That(pinned.State.Chat.TabStrip.Find(Id("s1"))!.IsPinned).IsTrue();
@@ -205,7 +205,7 @@ public class TabStripReducerTests
     {
         var state = WithActiveTab("s1", Tab("s1"), Tab("s2"), Tab("s3"));
 
-        var result = UiReducer.Update(state, new UiMsg.ReorderTab(Id("s3"), 0));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.ReorderTab(Id("s3"), 0));
 
         await Assert.That(Ids(result.State)).IsEqualTo("s3,s1,s2");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s1");
@@ -216,9 +216,9 @@ public class TabStripReducerTests
     {
         var state = WithTabs(Tab("s1"), Tab("s2"), Tab("s3"));
 
-        var left = UiReducer.Update(state, new UiMsg.ReorderTab(Id("s2"), -5));
-        var right = UiReducer.Update(state, new UiMsg.ReorderTab(Id("s2"), 99));
-        var sameSpot = UiReducer.Update(state, new UiMsg.ReorderTab(Id("s2"), 1));
+        var left = ChatAppReducer.Update(state, new ChatAppMsg.ReorderTab(Id("s2"), -5));
+        var right = ChatAppReducer.Update(state, new ChatAppMsg.ReorderTab(Id("s2"), 99));
+        var sameSpot = ChatAppReducer.Update(state, new ChatAppMsg.ReorderTab(Id("s2"), 1));
 
         await Assert.That(Ids(left.State)).IsEqualTo("s2,s1,s3");
         await Assert.That(Ids(right.State)).IsEqualTo("s1,s3,s2");
@@ -230,7 +230,7 @@ public class TabStripReducerTests
     {
         var state = WithActiveTab("s3", Tab("s1"), Tab("s2"), Tab("s3"));
 
-        var result = UiReducer.Update(state, new UiMsg.CycleNextTab());
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CycleNextTab());
 
         await Assert.That(Ids(result.State)).IsEqualTo("s1,s2,s3");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s1");
@@ -242,7 +242,7 @@ public class TabStripReducerTests
     {
         var state = WithActiveTab("s1", Tab("s1"), Tab("s2"), Tab("s3"));
 
-        var result = UiReducer.Update(state, new UiMsg.CyclePreviousTab());
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CyclePreviousTab());
 
         await Assert.That(ActiveId(result.State)).IsEqualTo("s3");
         await Assert.That(ActivatedSession(result.Effect)).IsEqualTo("s3");
@@ -258,8 +258,8 @@ public class TabStripReducerTests
             Chat = new ChatDomainState { TabStrip = TabStripState.Empty with { Tabs = [Tab("s1"), Tab("s2")] } }
         };
 
-        var next = UiReducer.Update(state, new UiMsg.CycleNextTab());
-        var previous = UiReducer.Update(state, new UiMsg.CyclePreviousTab());
+        var next = ChatAppReducer.Update(state, new ChatAppMsg.CycleNextTab());
+        var previous = ChatAppReducer.Update(state, new ChatAppMsg.CyclePreviousTab());
 
         await Assert.That(ActiveId(next.State)).IsEqualTo("s1");
         await Assert.That(ActiveId(previous.State)).IsEqualTo("s2");
@@ -270,8 +270,8 @@ public class TabStripReducerTests
     {
         var state = WithTabs(Tab("s1"));
 
-        var next = UiReducer.Update(state, new UiMsg.CycleNextTab());
-        var previous = UiReducer.Update(state, new UiMsg.CyclePreviousTab());
+        var next = ChatAppReducer.Update(state, new ChatAppMsg.CycleNextTab());
+        var previous = ChatAppReducer.Update(state, new ChatAppMsg.CyclePreviousTab());
 
         await Assert.That(next.State).IsSameReferenceAs(state);
         await Assert.That(next.Effect).IsTypeOf<TuiEffect.None>();
@@ -290,7 +290,7 @@ public class TabStripReducerTests
         state = Open(state, Tab("s1", panels: ["tree"]));
         state = Open(state, Tab("s2", panels: ["log"]));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseTab(Id("s1")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTab(Id("s1")));
 
         await Assert.That(result.State.PanelStates["tree"]).IsEqualTo(TuiPanelState.Hidden);
         await Assert.That(result.State.FocusedPanelId).IsNull();
@@ -307,7 +307,7 @@ public class TabStripReducerTests
         state = Open(state, Tab("s1", panels: ["tree"]));
         state = Open(state, Tab("s2", panels: ["tree", "log"]));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseTab(Id("s1")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTab(Id("s1")));
 
         await Assert.That(result.State.PanelStates["tree"]).IsEqualTo(TuiPanelState.Visible);
         await Assert.That(Ids(result.State)).IsEqualTo("s2");
@@ -320,7 +320,7 @@ public class TabStripReducerTests
         state = Open(state, Tab("s1", panels: ["log"]));
         state = Open(state, Tab("s2", panels: ["tree"]));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseOtherTabs(Id("s2")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseOtherTabs(Id("s2")));
 
         await Assert.That(result.State.PanelStates["log"]).IsEqualTo(TuiPanelState.Hidden);
         await Assert.That(result.State.PanelStates["tree"]).IsEqualTo(TuiPanelState.Visible);
@@ -333,7 +333,7 @@ public class TabStripReducerTests
         // must not invent one.
         var state = Open(new UiState(), Tab("s1", panels: ["ghost"]));
 
-        var result = UiReducer.Update(state, new UiMsg.CloseTab(Id("s1")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTab(Id("s1")));
 
         await Assert.That(result.State.PanelStates.Count).IsEqualTo(0);
     }
@@ -344,20 +344,20 @@ public class TabStripReducerTests
     public async Task TabTransitions_ThatChangeNothing_DoNotBumpTheRevision()
     {
         var store = new UiStore();
-        store.Dispatch(new UiMsg.OpenTab(Tab("s1")));
+        store.Dispatch(new ChatAppMsg.OpenTab(Tab("s1")));
         await Assert.That(store.State.Revision).IsEqualTo(1);
 
-        var noOp = store.Dispatch(new UiMsg.ActivateTab(Id("s1")));
-        store.Dispatch(new UiMsg.PinTab(Id("s1"), false));
-        store.Dispatch(new UiMsg.ReorderTab(Id("s1"), 0));
-        store.Dispatch(new UiMsg.CloseTab(Id("nope")));
-        store.Dispatch(new UiMsg.CloseTabsToRight(Id("s1")));
-        store.Dispatch(new UiMsg.CycleNextTab());
+        var noOp = store.Dispatch(new ChatAppMsg.ActivateTab(Id("s1")));
+        store.Dispatch(new ChatAppMsg.PinTab(Id("s1"), false));
+        store.Dispatch(new ChatAppMsg.ReorderTab(Id("s1"), 0));
+        store.Dispatch(new ChatAppMsg.CloseTab(Id("nope")));
+        store.Dispatch(new ChatAppMsg.CloseTabsToRight(Id("s1")));
+        store.Dispatch(new ChatAppMsg.CycleNextTab());
 
         await Assert.That(store.State.Revision).IsEqualTo(1);
         await Assert.That(noOp).IsTypeOf<TuiEffect.None>();
 
-        store.Dispatch(new UiMsg.PinTab(Id("s1"), true));
+        store.Dispatch(new ChatAppMsg.PinTab(Id("s1"), true));
         await Assert.That(store.State.Revision).IsEqualTo(2);
     }
 
@@ -367,7 +367,7 @@ public class TabStripReducerTests
         // Hydration is a session switch, not a tab-strip reset.
         var state = WithTabs(Tab("s1"), Tab("s2"));
 
-        var result = UiReducer.Update(state, new UiMsg.HydrateSession("m", "p", "code", []));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.HydrateSession("m", "p", "code", []));
 
         await Assert.That(Ids(result.State)).IsEqualTo("s1,s2");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s2");
@@ -378,9 +378,9 @@ public class TabStripReducerTests
     public async Task Projection_RoundTrip_LosesNoTabState()
     {
         var store = new UiStore();
-        store.Dispatch(new UiMsg.OpenTab(Tab("s1", "one", dirty: true, panels: ["tree"])));
-        store.Dispatch(new UiMsg.OpenTab(Tab("s2", "two", pinned: true)));
-        store.Dispatch(new UiMsg.ReorderTab(Id("s2"), 0));
+        store.Dispatch(new ChatAppMsg.OpenTab(Tab("s1", "one", dirty: true, panels: ["tree"])));
+        store.Dispatch(new ChatAppMsg.OpenTab(Tab("s2", "two", pinned: true)));
+        store.Dispatch(new ChatAppMsg.ReorderTab(Id("s2"), 0));
 
         var snapshot = store.State;
         var projector = new DefaultUiProjector();
@@ -410,7 +410,7 @@ public class TabStripReducerTests
     }
 
     private static UiState Open(UiState state, SessionTab tab) =>
-        UiReducer.Update(state, new UiMsg.OpenTab(tab)).State;
+        ChatAppReducer.Update(state, new ChatAppMsg.OpenTab(tab)).State;
 
     private static UiState WithTabs(params SessionTab[] tabs)
     {
@@ -423,7 +423,7 @@ public class TabStripReducerTests
     private static UiState WithActiveTab(string sessionId, params SessionTab[] tabs)
     {
         var state = WithTabs(tabs);
-        return UiReducer.Update(state, new UiMsg.ActivateTab(Id(sessionId))).State;
+        return ChatAppReducer.Update(state, new ChatAppMsg.ActivateTab(Id(sessionId))).State;
     }
 
     private static UiState WithPanels(params (string Id, TuiPanelState State)[] panels)

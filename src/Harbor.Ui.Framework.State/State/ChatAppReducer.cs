@@ -1,5 +1,8 @@
+using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Ui.Framework.Panels;
 namespace Harbor.Ui.Framework.State;
 
 /// <summary>
@@ -53,11 +56,20 @@ public static class ChatAppReducer
             Chat = state.Chat with { Model = cr.Model, Provider = cr.Provider, AgentName = cr.AgentName }
         }),
         ChatAppMsg.AppendLine al => ReduceResult.NoOp(state.AddLine(al.Role, al.Text, al.ToolCallId)),
-        ChatAppMsg.HydrateSession h => ReduceResult.NoOp(HydrateSession(h)),
+        ChatAppMsg.HydrateSession h => ReduceResult.NoOp(HydrateSession(state, h)),
         ChatAppMsg.SyncSessions ss => ReduceResult.NoOp(state with
         {
             Chat = state.Chat with { Sessions = ss.Sessions, ActiveSessionId = ss.ActiveSessionId }
         }),
+        ChatAppMsg.OpenTab ot => OpenTab(state, ot.Tab),
+        ChatAppMsg.ActivateTab at => ActivateTab(state, at.SessionId),
+        ChatAppMsg.CloseTab ct => CloseTab(state, ct.SessionId),
+        ChatAppMsg.CloseOtherTabs co => CloseOtherTabs(state, co.Keep),
+        ChatAppMsg.CloseTabsToRight ctr => CloseTabsToRight(state, ctr.From),
+        ChatAppMsg.PinTab pt => ReduceResult.NoOp(PinTab(state, pt.SessionId, pt.Pinned)),
+        ChatAppMsg.ReorderTab ro => ReduceResult.NoOp(ReorderTab(state, ro.SessionId, ro.ToIndex)),
+        ChatAppMsg.CycleNextTab => CycleNextTab(state),
+        ChatAppMsg.CyclePreviousTab => CyclePreviousTab(state),
         AppMsg.KeyInput k => OnKeyInput(state, k),
         _ => null
     };
@@ -374,7 +386,7 @@ public static class ChatAppReducer
     ///     (superseded by the fresh state) or after (appended in order), never
     ///     interleaved mid-history.
     /// </summary>
-    private static UiState HydrateSession(ChatAppMsg.HydrateSession h)
+    private static UiState HydrateSession(UiState state, ChatAppMsg.HydrateSession h)
     {
         var next = new UiState
         {
@@ -383,6 +395,9 @@ public static class ChatAppReducer
                 Model = h.Model,
                 Provider = h.Provider,
                 AgentName = h.AgentName,
+                // The tab strip is workspace chrome, not transcript: hydrating a
+                // session (i.e. switching to it) must not close the open tabs.
+                TabStrip = state.Chat.TabStrip,
             },
         };
         foreach (var line in h.Lines)
@@ -496,6 +511,288 @@ public static class ChatAppReducer
             next with { Chat = next.Chat with { IsStreaming = false, Active = ActiveMessage.Empty } },
             new TuiEffect.AbortAgent());
     }
+
+    // ── tab transitions (#388, slice 1/3 — pure; the host runs the effect) ──
+
+    /// <summary>
+    ///     Open a tab at the right end of the strip and focus it, emitting
+    ///     <see cref="TuiEffect.ActivateSession" /> so the host switches session.
+    ///     <b>Idempotent:</b> a session that already has a tab is activated
+    ///     instead of duplicated, and its position and fields are left alone.
+    /// </summary>
+    public static ReduceResult OpenTab(UiState state, SessionTab tab)
+    {
+        var strip = state.Chat.TabStrip;
+        if (strip.Contains(tab.SessionId))
+            return ActivateTab(state, tab.SessionId);
+
+        var next = state with
+        {
+            Chat = state.Chat with
+            {
+                TabStrip = strip with { Tabs = strip.Tabs.Add(tab), ActiveTabId = tab.SessionId }
+            }
+        };
+        return new ReduceResult(next, new TuiEffect.ActivateSession(tab.SessionId));
+    }
+
+    /// <summary>
+    ///     Focus an already-open tab and ask the host to switch to its session.
+    ///     Order is untouched (activating never reorders). Unknown session or
+    ///     already-active tab → same state instance and no effect, so the store
+    ///     does not bump the revision on a no-op.
+    /// </summary>
+    public static ReduceResult ActivateTab(UiState state, SessionId sessionId)
+    {
+        var strip = state.Chat.TabStrip;
+        if (strip.IndexOf(sessionId) < 0)
+            return ReduceResult.NoOp(state);
+        if (SameSession(strip.ActiveTabId, sessionId))
+            return ReduceResult.NoOp(state);
+
+        var next = state with { Chat = state.Chat with { TabStrip = strip with { ActiveTabId = sessionId } } };
+        return new ReduceResult(next, new TuiEffect.ActivateSession(sessionId));
+    }
+
+    /// <summary>
+    ///     Close a tab, applying the neighbour rule
+    ///     (<see cref="TabNeighbourAfterClose" />) when the active tab was the
+    ///     one closed, and the panel-ownership rule
+    ///     (<see cref="ReleaseOwnedPanels" />).
+    /// </summary>
+    public static ReduceResult CloseTab(UiState state, SessionId sessionId)
+    {
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
+        int index = strip.IndexOf(sessionId);
+        if (index < 0)
+            return ReduceResult.NoOp(state);
+
+        var remaining = tabs.RemoveAt(index);
+        bool closedActive = SameSession(strip.ActiveTabId, sessionId);
+
+        var released = ReleaseOwnedPanels(state, tabs[index], remaining);
+        var activeId = closedActive ? TabNeighbourAfterClose(remaining, index) : strip.ActiveTabId;
+
+        var next = released with
+        {
+            Chat = released.Chat with { TabStrip = strip with { Tabs = remaining, ActiveTabId = activeId } }
+        };
+        // The neighbour (if any) is the session the host must now open.
+        TuiEffect effect = activeId is { } target && closedActive
+            ? new TuiEffect.ActivateSession(target)
+            : new TuiEffect.None();
+        return new ReduceResult(next, effect);
+    }
+
+    /// <summary>
+    ///     Close every tab except <paramref name="keep" /> and focus the
+    ///     survivor. The survivor owns the focus unconditionally — it is the tab
+    ///     the gesture was invoked on, so the strip must not end up pointing at a
+    ///     tab that no longer exists. The effect fires only when the active tab
+    ///     actually changed.
+    /// </summary>
+    public static ReduceResult CloseOtherTabs(UiState state, SessionId keep)
+    {
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
+        int keepIndex = strip.IndexOf(keep);
+        if (keepIndex < 0 || tabs.Length == 1)
+            return ReduceResult.NoOp(state);
+
+        var remaining = ImmutableArray.Create(tabs[keepIndex]);
+        var released = state;
+        for (int i = 0; i < tabs.Length; i++)
+        {
+            if (i != keepIndex)
+                released = ReleaseOwnedPanels(released, tabs[i], remaining);
+        }
+
+        var next = released with
+        {
+            Chat = released.Chat with { TabStrip = strip with { Tabs = remaining, ActiveTabId = keep } }
+        };
+        TuiEffect effect = SameSession(strip.ActiveTabId, keep)
+            ? new TuiEffect.None()
+            : new TuiEffect.ActivateSession(keep);
+        return new ReduceResult(next, effect);
+    }
+
+    /// <summary>
+    ///     Close every tab strictly to the right of <paramref name="from" /> and
+    ///     focus <paramref name="from" />, mirroring
+    ///     <see cref="CloseOtherTabs" />'s focus and effect rules. Closing the
+    ///     last tab to the right is a no-op.
+    /// </summary>
+    public static ReduceResult CloseTabsToRight(UiState state, SessionId from)
+    {
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
+        int index = strip.IndexOf(from);
+        if (index < 0 || index == tabs.Length - 1)
+            return ReduceResult.NoOp(state);
+
+        var remaining = tabs.RemoveRange(index + 1, tabs.Length - index - 1);
+        var released = state;
+        for (int i = index + 1; i < tabs.Length; i++)
+            released = ReleaseOwnedPanels(released, tabs[i], remaining);
+
+        var next = released with
+        {
+            Chat = released.Chat with { TabStrip = strip with { Tabs = remaining, ActiveTabId = from } }
+        };
+        TuiEffect effect = SameSession(strip.ActiveTabId, from)
+            ? new TuiEffect.None()
+            : new TuiEffect.ActivateSession(from);
+        return new ReduceResult(next, effect);
+    }
+
+    /// <summary>
+    ///     Pin or unpin a tab. Flag only: pinning never reorders, so the tab the
+    ///     user is looking at cannot jump under the cursor.
+    /// </summary>
+    public static UiState PinTab(UiState state, SessionId sessionId, bool pinned)
+    {
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
+        int index = strip.IndexOf(sessionId);
+        if (index < 0)
+            return state;
+
+        var tab = tabs[index];
+        if (tab.IsPinned == pinned)
+            return state;
+        return state with
+        {
+            Chat = state.Chat with { TabStrip = strip with { Tabs = tabs.SetItem(index, tab with { IsPinned = pinned }) } }
+        };
+    }
+
+    /// <summary>
+    ///     Move a tab to <paramref name="toIndex" />, clamped to the current
+    ///     range. Remove-then-insert lands the tab exactly at the clamped index
+    ///     (later tabs shift left once), and the active tab never changes —
+    ///     reordering is presentation, not focus.
+    /// </summary>
+    public static UiState ReorderTab(UiState state, SessionId sessionId, int toIndex)
+    {
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
+        int from = strip.IndexOf(sessionId);
+        if (from < 0 || tabs.Length < 2)
+            return state;
+
+        int to = Math.Clamp(toIndex, 0, tabs.Length - 1);
+        if (to == from)
+            return state;
+        return state with
+        {
+            Chat = state.Chat with { TabStrip = strip with { Tabs = tabs.RemoveAt(from).Insert(to, tabs[from]) } }
+        };
+    }
+
+    /// <summary>Focus the next tab in tab order (wraps around; no-op with fewer than two tabs).</summary>
+    public static ReduceResult CycleNextTab(UiState state) => CycleTab(state, forward: true);
+
+    /// <summary>Focus the previous tab in tab order (wraps around; no-op with fewer than two tabs).</summary>
+    public static ReduceResult CyclePreviousTab(UiState state) => CycleTab(state, forward: false);
+
+    /// <summary>
+    ///     Neighbour rule for a closed tab — documented once, pinned by
+    ///     <c>TabStripReducerTests</c>: after removing the tab at
+    ///     <paramref name="removedIndex" />, focus lands on the tab that slid
+    ///     into that slot (the one on its right); when the closed tab was last
+    ///     there is nothing on the right, so focus falls back to the tab on its
+    ///     left; with no tabs left nothing is focused.
+    /// </summary>
+    public static SessionId? TabNeighbourAfterClose(ImmutableArray<SessionTab> remaining, int removedIndex)
+    {
+        if (remaining.Length == 0)
+            return null;
+        int target = removedIndex < remaining.Length ? removedIndex : remaining.Length - 1;
+        return remaining[target].SessionId;
+    }
+
+    private static ReduceResult CycleTab(UiState state, bool forward)
+    {
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
+        if (tabs.Length < 2)
+            return ReduceResult.NoOp(state);
+
+        // No active tab yet → the first tab going forward, the last going back.
+        int current = strip.ActiveTabId is { } active ? strip.IndexOf(active) : -1;
+        int target = current < 0
+            ? (forward ? 0 : tabs.Length - 1)
+            : (forward ? current + 1 : current - 1 + tabs.Length) % tabs.Length;
+        return ActivateTab(state, tabs[target].SessionId);
+    }
+
+    /// <summary>
+    ///     Panel-ownership rule — documented once: a panel dies with the tab only
+    ///     when that tab was its <i>sole</i> owner, in which case it goes
+    ///     <see cref="TuiPanelState.Hidden" /> and gives up focus (chat takes it
+    ///     back). A panel still listed by a surviving tab is <i>reassigned</i> to
+    ///     the nearest surviving owner in tab order and keeps its state, because
+    ///     panel state is global while ownership is per tab. Ids the host never
+    ///     seeded into <see cref="UiState.PanelStates" /> are ignored.
+    /// </summary>
+    private static UiState ReleaseOwnedPanels(UiState state, SessionTab closed, ImmutableArray<SessionTab> survivors)
+    {
+        var owned = closed.PanelIds;
+        if (owned.Length == 0 || state.Ui.PanelStates.Count == 0)
+            return state;
+
+        var panelStates = state.Ui.PanelStates;
+        string? focused = state.Ui.FocusedPanelId;
+        bool changed = false;
+
+        for (int i = 0; i < owned.Length; i++)
+        {
+            string id = owned[i];
+            if (string.IsNullOrEmpty(id) || !panelStates.ContainsKey(id))
+                continue;
+            if (IsOwnedBy(survivors, id))
+                continue;
+
+            if (panelStates[id] != TuiPanelState.Hidden)
+            {
+                panelStates = panelStates.SetItem(id, TuiPanelState.Hidden);
+                changed = true;
+            }
+            if (string.Equals(focused, id, StringComparison.Ordinal))
+            {
+                focused = null;
+                changed = true;
+            }
+        }
+
+        if (!changed)
+            return state;
+        return state with { Ui = state.Ui with { PanelStates = panelStates, FocusedPanelId = focused } };
+    }
+
+    private static bool IsOwnedBy(ImmutableArray<SessionTab> tabs, string panelId)
+    {
+        for (int i = 0; i < tabs.Length; i++)
+        {
+            var owned = tabs[i].PanelIds;
+            for (int j = 0; j < owned.Length; j++)
+            {
+                if (string.Equals(owned[j], panelId, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    ///     Session-id equality by value — <see cref="SessionId" /> is a
+    ///     reference-typed value object, so <c>==</c> would compare references and
+    ///     miss a tab built from an equal-but-distinct id.
+    /// </summary>
+    private static bool SameSession(SessionId? left, SessionId right) =>
+        left is not null && string.Equals(left.Value, right.Value, StringComparison.Ordinal);
 }
 
 /// <summary>
