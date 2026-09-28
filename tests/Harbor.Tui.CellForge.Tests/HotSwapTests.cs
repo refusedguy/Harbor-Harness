@@ -15,8 +15,17 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class HotSwapTests
 {
+    /// <summary>Resets the two process-wide statics this class mutates. The
+    /// palette pin is <c>[ThreadStatic]</c> and TUnit reuses threads, so a
+    /// test that ever ends up holding a pin would otherwise hand it to
+    /// whichever test lands on that thread next — and the pin-lifecycle
+    /// assertions below read it.</summary>
     [After(Test)]
-    public void RestoreDefaultTheme() => TerminalColorPalette.Apply(HarborTheme.HarborDark);
+    public void RestoreDefaultTheme()
+    {
+        TerminalColorPalette.Apply(HarborTheme.HarborDark);
+        ChatPalette.UnpinFrame();
+    }
 
     // ── BufferSwapChain: pool + offer slot ─────────────────────────────────
 
@@ -88,10 +97,11 @@ public class HotSwapTests
         var newFront = chain.Rent(40, 12);
         session.OfferSwap(newBack, newFront);
 
-        session.BeginFrame(); // adoption point
-
-        await Assert.That(session.Back).IsSameReferenceAs(newBack);
-        await Assert.That(session.Front).IsSameReferenceAs(newFront);
+        using (session.BeginFrameScope()) // adoption point
+        {
+            await Assert.That(session.Back).IsSameReferenceAs(newBack);
+            await Assert.That(session.Front).IsSameReferenceAs(newFront);
+        }
 
         // Both grids invalidated → next flush is a clean full repaint; the
         // retired pair is back in the pool for the next renter.
@@ -174,6 +184,182 @@ public class HotSwapTests
 
         var lightWarning = HarborTheme.HarborLight.Warning;
         await Assert.That(nextFrameWarning).IsEqualTo(PackedColor.Rgb(lightWarning.R, lightWarning.G, lightWarning.B));
+    }
+
+    // ── Frame pin lifecycle (#458): an aborted frame must not keep the pin ─
+    //
+    // The palette pin is [ThreadStatic], so each of these reads the state
+    // synchronously on the thread that armed the pin and asserts on the
+    // captured local — never across an await.
+
+    [Test]
+    public async Task AbortFrame_UnpinsThread()
+    {
+        var session = MakeSession(20, 4, out _);
+        session.BeginFrameScope();
+        bool pinnedMidFrame = ChatPalette.IsFramePinned;
+
+        session.AbortFrame();
+        bool pinnedAfterAbort = ChatPalette.IsFramePinned;
+
+        await Assert.That(pinnedMidFrame).IsTrue();
+        await Assert.That(pinnedAfterAbort).IsFalse();
+    }
+
+    [Test]
+    public async Task FrameScope_DisposedWithoutFlush_Unpins()
+    {
+        var session = MakeSession(20, 4, out _);
+        bool pinnedMidFrame;
+
+        using (session.BeginFrameScope())
+        {
+            pinnedMidFrame = ChatPalette.IsFramePinned;
+        }
+
+        // The exception-safe path: leaving scope releases the pin even though
+        // no flush ever ran (a widget threw mid-paint).
+        await Assert.That(pinnedMidFrame).IsTrue();
+        await Assert.That(ChatPalette.IsFramePinned).IsFalse();
+    }
+
+    [Test]
+    public async Task AbortFrame_Twice_StaysReleased()
+    {
+        var session = MakeSession(20, 4, out _);
+        session.BeginFrameScope();
+
+        session.AbortFrame();
+        session.AbortFrame(); // idempotent — the scope disposes after an explicit abort too
+
+        await Assert.That(ChatPalette.IsFramePinned).IsFalse();
+    }
+
+    [Test]
+    public async Task FrameScope_Flush_ShipsTheFrame()
+    {
+        var session = MakeSession(20, 4, out var backend);
+
+        using (session.BeginFrameScope())
+        {
+            session.Back.SetText(0, 0, "scoped flush row", CellStyle.Plain);
+            session.Flush();
+        }
+
+        await Assert.That(backend.Text).Contains("scoped flush row");
+        await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
+        await Assert.That(ChatPalette.IsFramePinned).IsFalse();
+    }
+
+    [Test]
+    public async Task FrameScope_FlushAsync_ShipsTheFrame()
+    {
+        var session = MakeSession(20, 4, out var backend);
+        var scope = session.BeginFrameScope();
+        session.Back.SetText(0, 0, "async scoped flush", CellStyle.Plain);
+
+        await scope.FlushAsync();
+        bool pinnedAfterFlush = ChatPalette.IsFramePinned;
+        scope.Dispose();
+
+        await Assert.That(backend.Text).Contains("async scoped flush");
+        await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
+        await Assert.That(pinnedAfterFlush).IsFalse();
+    }
+
+    [Test]
+    public async Task FrameScope_ThrownPaint_LeavesPinReleased()
+    {
+        TerminalColorPalette.Apply(HarborTheme.HarborDark);
+        var session = MakeSession(20, 4, out _);
+
+        try
+        {
+            using (session.BeginFrameScope())
+            {
+                TerminalColorPalette.Apply(HarborTheme.HarborLight);
+                throw new InvalidOperationException("widget at the layout boundary blew up");
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // the REPL reports the paint failure; the pin must not survive it
+        }
+
+        bool pinned = ChatPalette.IsFramePinned;
+        var live = ChatPalette.Warning;
+        var light = HarborTheme.HarborLight.Warning;
+
+        // The catalogue tracks the published theme again — the regression was
+        // a permanently stale palette, not a dropped update.
+        await Assert.That(pinned).IsFalse();
+        await Assert.That(live).IsEqualTo(PackedColor.Rgb(light.R, light.G, light.B));
+    }
+
+    [Test]
+    public async Task FrameScope_Flushed_DisposeIsNoOp()
+    {
+        var session = MakeSession(20, 4, out _);
+
+        using (session.BeginFrameScope())
+        {
+            session.FlushFrame();
+        }
+
+        await Assert.That(ChatPalette.IsFramePinned).IsFalse();
+    }
+
+    [Test]
+    public async Task AbortFrame_NextFrame_ReemitsCellsTheTerminalNeverGot()
+    {
+        var session = MakeSession(20, 4, out var backend);
+        session.BeginFrame();
+        session.Back.SetText(0, 0, "baseline content row", CellStyle.Plain);
+        session.FlushFrame();
+
+        // Abort mid-frame: BACK carries a row the terminal never received,
+        // FRONT still mirrors the shipped frame.
+        using (session.BeginFrameScope())
+        {
+            session.Back.SetText(0, 2, "aborted content row", CellStyle.Plain);
+        }
+
+        backend.ResetForTests();
+        session.Back.SetText(0, 1, "second frame content", CellStyle.Plain);
+        session.FlushFrame();
+
+        // The aborted row still reaches the terminal on the next frame, and
+        // FRONT converges — an aborted frame leaves no half-written state.
+        await Assert.That(backend.Text).Contains("aborted content row");
+        await Assert.That(backend.Text).Contains("second frame content");
+        await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
+    }
+
+    [Test]
+    public async Task AbortFrame_DropsStaleDamageHints()
+    {
+        var session = MakeSession(40, 10, out var backend);
+        session.BeginFrame();
+        session.Back.SetText(0, 0, "baseline content row", CellStyle.Plain);
+        session.FlushFrame();
+
+        // A frame that registers a narrow damage hint and then aborts: the
+        // hint describes a diff that never shipped. If it survived, the next
+        // frame would scan ONLY that rect and silently skip the rest.
+        using (session.BeginFrameScope())
+        {
+            session.Damage(new Rect(0, 0, 4, 1));
+            session.Back.SetText(0, 0, "hinted cell", CellStyle.Plain);
+        }
+
+        backend.ResetForTests();
+        session.Back.SetText(20, 8, "unhinted cell", CellStyle.Plain);
+        session.FlushFrame();
+
+        // The unhinted change is outside the abandoned hint — the frame is
+        // only correct if the abort dropped it and the diff went full-scan.
+        await Assert.That(backend.Text).Contains("unhinted cell");
+        await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
     }
 
     // ── Concurrent producers/consumers: no locks, no torn pairs ────────────
