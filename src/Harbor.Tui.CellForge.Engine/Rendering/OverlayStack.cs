@@ -243,6 +243,15 @@ public sealed class OverlayStack
                 SubtractAll(frags, occluders[k]);
             }
 
+            // ENG6 #277 (TGui #5360 pattern): a fully-covered opaque overlapped
+            // sibling skips drawing entirely. Layers carry no dirty state, so
+            // the TGui ClearNeedsDraw step is vacuous here — the culled layer
+            // simply never paints this frame and stays clean by construction.
+            if (frags.Count == 0)
+            {
+                continue;
+            }
+
             for (int f = 0; f < frags.Count; f++)
             {
                 layer.Paint(buffer, frags[f]);
