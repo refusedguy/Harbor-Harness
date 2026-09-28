@@ -215,7 +215,8 @@ public static class SkillFreshnessAggregate
             return null;
         }
 
-        var text = new StringBuilder(Label, 32);
+        var text = new StringBuilder(Label, Label.Length + 32);
+        text.Append(Label).Append(' ');
         Append(text, "●", changed, "changed");
         Append(text, "✗", missing, "missing");
         Append(text, "?", untracked, "untracked");
@@ -231,6 +232,11 @@ public static class SkillFreshnessAggregate
         return new SkillFreshnessSummary(text.ToString(), style, changed, missing, untracked);
     }
 
+    /// <summary>
+    ///     Appends one <c>glyph N bucket</c> part, space-separated from the
+    ///     already-written ones. The label is written by the caller together
+    ///     with the first separator, so the label can never run into a glyph.
+    /// </summary>
     private static void Append(StringBuilder sb, string glyph, int count, string bucket)
     {
         if (count <= 0)
@@ -238,7 +244,7 @@ public static class SkillFreshnessAggregate
             return;
         }
 
-        if (sb.Length > Label.Length)
+        if (sb.Length > Label.Length + 1)
         {
             sb.Append(' ');
         }

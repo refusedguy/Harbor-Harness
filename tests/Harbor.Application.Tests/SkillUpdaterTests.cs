@@ -15,11 +15,21 @@ public class SkillUpdaterTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("harbor-update").FullName;
 
+    /// <summary>
+    ///     Second, git-free temp root — a probe under <see cref="_dir" /> would
+    ///     still resolve to its repository, so "not a work tree" needs a tree
+    ///     with no <c>.git</c> anywhere above it.
+    /// </summary>
+    private readonly string _plainDir = Directory.CreateTempSubdirectory("harbor-plain").FullName;
+
     public void Dispose()
     {
-        if (Directory.Exists(_dir))
+        foreach (string dir in new[] { _dir, _plainDir })
         {
-            Directory.Delete(_dir, true);
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
         }
     }
 
@@ -70,7 +80,7 @@ public class SkillUpdaterTests : IDisposable
     [Test]
     public async Task Update_NotGitBacked_IsNoOpWithHint()
     {
-        string skills = Path.Combine(_dir, "skills");
+        string skills = Path.Combine(_plainDir, "skills");
         _ = Directory.CreateDirectory(skills);
         bool gitCalled = false;
 
@@ -92,7 +102,7 @@ public class SkillUpdaterTests : IDisposable
     public async Task Update_NoSource_IsNoOp()
     {
         var report = await SkillUpdater.UpdateAsync(
-            null, Path.Combine(_dir, "absent"), globalSkillsRoot: null, Git(0));
+            null, Path.Combine(_plainDir, "absent"), globalSkillsRoot: null, Git(0));
 
         await Assert.That(report.Outcome).IsEqualTo(SkillUpdateOutcome.NoOp);
         await Assert.That(report.Message).Contains("no skills source");
@@ -154,7 +164,7 @@ public class SkillUpdaterTests : IDisposable
         string? repo = SkillUpdater.FindRepositoryRoot(Path.Combine(skills, "review"));
         await Assert.That(repo).IsEqualTo(_dir);
 
-        string loose = Path.Combine(_dir, "loose");
+        string loose = Path.Combine(_plainDir, "loose");
         _ = Directory.CreateDirectory(loose);
         await Assert.That(SkillUpdater.FindRepositoryRoot(loose)).IsNull();
         await Assert.That(SkillUpdater.FindRepositoryRoot(null)).IsNull();
