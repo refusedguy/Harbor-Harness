@@ -351,7 +351,14 @@ public class EventBusFastPathTests
 
         public EventBusSinkKind SinkKind => EventBusSinkKind.Optional;
 
-        public async ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default)
+        // NOT an async method: CS1988 forbids an async method from declaring
+        // ref/out parameters, and the interface passes the event by ref. The
+        // await therefore lives in a separate helper — which is also the shape
+        // a real async sink has to use.
+        public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default)
+            => new(CountAfterGateAsync());
+
+        private async Task<bool> CountAfterGateAsync()
         {
             await gate.ConfigureAwait(false);
             Seen++;
