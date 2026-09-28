@@ -151,10 +151,18 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
         return BlockMeasure.Exact(_wrapped.Count + 2);
     }
 
+    /// <summary>
+    /// Off-screen height estimate for the timeline layout cache. Must agree with
+    /// <see cref="Measure"/> at the same width, so the wrap cache is refreshed
+    /// through <see cref="EnsureWrapped"/> first (#481): reading <c>_wrapped</c>
+    /// bare returned the previous width's line count after a resize, which made
+    /// the cached slot height disagree with the painted body and overlap rows.
+    /// </summary>
     public int CheapEstimate(int width)
     {
         int w = Math.Max(8, width);
-        return Math.Max(3, _wrapped.Count > 0 ? _wrapped.Count + 2 : BlockMath.EstimateLines(_detailText, w - 4) + 2);
+        EnsureWrapped(w);
+        return Math.Max(3, _wrapped.Count + 2);
     }
 
     public void Paint(in BlockPaintContext ctx)

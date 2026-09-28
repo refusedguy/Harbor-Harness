@@ -40,9 +40,17 @@ public sealed class WrappedText
 /// <summary>Shared arithmetic helpers for text blocks.</summary>
 internal static class BlockMath
 {
-    /// <summary>Sum of per-logical-line ceil(length/width) — allocation-free estimate.</summary>
+    /// <summary>
+    /// Sum of per-logical-line ceil(length/width) — allocation-free estimate.
+    /// <paramref name="width"/> is floored at 1 internally (#481): a zero/negative
+    /// layout width degenerates to "one column per char" instead of throwing
+    /// <see cref="DivideByZeroException"/> on the render thread, so callers no
+    /// longer have to wrap every call site in their own guard. Mirrors the
+    /// literal copy in <c>TimelineBlocks.CheapEstimate</c>.
+    /// </summary>
     public static int EstimateLines(string source, int width)
     {
+        width = Math.Max(1, width);
         int total = 0;
         int run = 0;
         foreach (char c in source)
