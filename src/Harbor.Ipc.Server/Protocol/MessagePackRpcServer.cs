@@ -153,8 +153,8 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
             _logger.LogInformation("Client connected");
             while (!session.ConnectionCts.IsCancellationRequested)
             {
-                FrameReadResult? read = await ReadRequestAsync(session).ConfigureAwait(false);
-                if (read is null)
+                FrameReadResult? readOpt = await ReadRequestAsync(session).ConfigureAwait(false);
+                if (readOpt is not { } read)
                 {
                     return;
                 }
