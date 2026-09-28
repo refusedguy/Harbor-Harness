@@ -69,11 +69,7 @@ public sealed class AnimationClock : IDisposable
     public long Advance()
     {
         long next = Interlocked.Increment(ref _tick);
-        if (Advanced is { } handler)
-        {
-            handler(this, new AnimationTickEventArgs(next));
-        }
-
+        Advanced?.Invoke(this, new AnimationTickEventArgs(next));
         return next;
     }
 
