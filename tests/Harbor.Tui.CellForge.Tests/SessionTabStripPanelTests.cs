@@ -29,7 +29,7 @@ public class SessionTabStripPanelTests
             ActiveTabId = activeIndex >= 0 ? tabs[activeIndex].SessionId : null
         };
 
-    private static SessionTabStripPanel Panel(TabStripState strip)
+    private static SessionTabStripPanel StripPanel(TabStripState strip)
     {
         var panel = new SessionTabStripPanel();
         panel.Strip = strip;
@@ -65,7 +65,7 @@ public class SessionTabStripPanelTests
     [Test]
     public async Task SingleTab_IsHidden_NoDeadChrome()
     {
-        var plan = Panel(Strip(0, Tab("a", "only"))).Layout(80);
+        var plan = StripPanel(Strip(0, Tab("a", "only"))).Layout(80);
         await Assert.That(plan.IsVisible).IsFalse();
         await Assert.That(plan.Cells.Length).IsEqualTo(0);
     }
@@ -73,7 +73,7 @@ public class SessionTabStripPanelTests
     [Test]
     public async Task ZeroTabs_IsHidden()
     {
-        var plan = Panel(TabStripState.Empty).Layout(80);
+        var plan = StripPanel(TabStripState.Empty).Layout(80);
         await Assert.That(plan.IsVisible).IsFalse();
     }
 
@@ -81,7 +81,7 @@ public class SessionTabStripPanelTests
     public async Task ForceShow_RevealsSingleTab()
     {
         // Config escape hatch: a user who wants a one-tab bar gets one.
-        var panel = Panel(Strip(0, Tab("a", "only")) with { ForceShow = true });
+        var panel = StripPanel(Strip(0, Tab("a", "only")) with { ForceShow = true });
         var plan = panel.Layout(80);
         await Assert.That(plan.IsVisible).IsTrue();
         await Assert.That(plan.Cells.Length).IsEqualTo(1);
@@ -91,7 +91,7 @@ public class SessionTabStripPanelTests
     [Test]
     public async Task TwoTabs_AreVisible()
     {
-        var plan = Panel(Strip(1, Tab("a", "alpha"), Tab("b", "beta"))).Layout(80);
+        var plan = StripPanel(Strip(1, Tab("a", "alpha"), Tab("b", "beta"))).Layout(80);
         await Assert.That(plan.IsVisible).IsTrue();
         await Assert.That(plan.Cells.Length).IsEqualTo(2);
         await Assert.That(plan.Cells[1].IsActive).IsTrue();
@@ -103,7 +103,7 @@ public class SessionTabStripPanelTests
     [Test]
     public async Task Paints_Titles_And_ActiveUnderline()
     {
-        var panel = Panel(Strip(1, Tab("a", "alpha"), Tab("b", "beta")));
+        var panel = StripPanel(Strip(1, Tab("a", "alpha"), Tab("b", "beta")));
         var buffer = Painted(panel, 60, SessionTabStripPanel.PreferredRows);
 
         var titles = Row(buffer, 0, 60);
@@ -129,7 +129,7 @@ public class SessionTabStripPanelTests
                 new SessionTab(Sid("b"), "beta")),
             ActiveTabId = Sid("a")
         };
-        var panel = Panel(strip);
+        var panel = StripPanel(strip);
         var buffer = Painted(panel, 60, SessionTabStripPanel.PreferredRows);
         var titles = Row(buffer, 0, 60);
 
@@ -150,7 +150,7 @@ public class SessionTabStripPanelTests
         var tabs = Enumerable.Range(0, 12)
             .Select(i => Tab($"s{i}", $"session-number-{i}"))
             .ToArray();
-        var panel = Panel(Strip(0, tabs));
+        var panel = StripPanel(Strip(0, tabs));
         var plan = panel.Layout(40);
 
         await Assert.That(plan.IsVisible).IsTrue();
@@ -170,7 +170,7 @@ public class SessionTabStripPanelTests
             .Select(i => Tab($"s{i}", $"session-{i}"))
             .ToArray();
         // Focus the last tab in a strip far too narrow for all of them.
-        var panel = Panel(Strip(9, tabs));
+        var panel = StripPanel(Strip(9, tabs));
         var plan = panel.Layout(40);
 
         var activeIndex = -1;
@@ -193,8 +193,8 @@ public class SessionTabStripPanelTests
             .ToArray();
 
         // Focus moving right walks the window right; moving back walks it left.
-        var forward = Panel(Strip(6, tabs)).Layout(40);
-        var back = Panel(Strip(1, tabs)).Layout(40);
+        var forward = StripPanel(Strip(6, tabs)).Layout(40);
+        var back = StripPanel(Strip(1, tabs)).Layout(40);
 
         await Assert.That(forward.FirstVisible).IsGreaterThan(0);
         await Assert.That(back.FirstVisible).IsEqualTo(0);
@@ -209,7 +209,7 @@ public class SessionTabStripPanelTests
         var tabs = Enumerable.Range(0, 6)
             .Select(i => Tab($"s{i}", $"a-rather-long-session-title-{i}"))
             .ToArray();
-        var panel = Panel(Strip(2, tabs));
+        var panel = StripPanel(Strip(2, tabs));
 
         for (int width = 1; width <= 12; width++)
         {
@@ -230,7 +230,7 @@ public class SessionTabStripPanelTests
     [Test]
     public async Task ZeroWidth_HidesCleanly()
     {
-        var plan = Panel(Strip(1, Tab("a", "alpha"), Tab("b", "beta"))).Layout(0);
+        var plan = StripPanel(Strip(1, Tab("a", "alpha"), Tab("b", "beta"))).Layout(0);
         await Assert.That(plan.IsVisible).IsFalse();
     }
 
@@ -239,7 +239,7 @@ public class SessionTabStripPanelTests
     {
         // The solver may hand over one row (or none). One row must still show
         // the tabs — just without the underline row.
-        var panel = Panel(Strip(1, Tab("a", "alpha"), Tab("b", "beta")));
+        var panel = StripPanel(Strip(1, Tab("a", "alpha"), Tab("b", "beta")));
         var buffer = Painted(panel, 40, 1);
         var titles = Row(buffer, 0, 40);
         await Assert.That(titles).Contains("alpha");
@@ -252,7 +252,7 @@ public class SessionTabStripPanelTests
         // The hidden-strip case: the strip is a split child with ratio 0, so the
         // solver hands it an empty rect. Painting is then a no-op, which is what
         // keeps every pre-#389 golden byte-identical.
-        var panel = Panel(Strip(0, Tab("a", "alpha"), Tab("b", "beta")));
+        var panel = StripPanel(Strip(0, Tab("a", "alpha"), Tab("b", "beta")));
         var neighbour = new FillPanel("test.fill", minHeight: 4);
 
         var tree = new LayoutTree();
@@ -337,7 +337,7 @@ public class SessionTabStripPanelTests
     [Test]
     public async Task LongTitle_IsTruncatedNotOverflowing()
     {
-        var panel = Panel(Strip(0, Tab("a", new string('x', 200)), Tab("b", "beta")));
+        var panel = StripPanel(Strip(0, Tab("a", new string('x', 200)), Tab("b", "beta")));
         var plan = panel.Layout(30);
         var cell = plan.Cells[0];
         await Assert.That(cell.Title.Length).IsLessThan(200);
@@ -354,7 +354,7 @@ public class SessionTabStripPanelTests
         store.Dispatch(new AppMsg.OpenTab(strip.Tabs[0]));
         store.Dispatch(new AppMsg.OpenTab(strip.Tabs[1]));
 
-        var panel = Panel(store.State.Chat.TabStrip);
+        var panel = StripPanel(store.State.Chat.TabStrip);
         var seen = new List<AppMsg>();
         panel.Dispatch = seen.Add;
 
@@ -385,7 +385,7 @@ public class SessionTabStripPanelTests
     [Test]
     public async Task NoDispatchSink_IsReadOnlyNotACrash()
     {
-        var panel = Panel(Strip(0, Tab("a", "alpha"), Tab("b", "beta")));
+        var panel = StripPanel(Strip(0, Tab("a", "alpha"), Tab("b", "beta")));
         _ = Painted(panel, 40, 2);
         await Assert.That(panel.ActivateAt(0)).IsFalse();
         await Assert.That(panel.CloseAt(0)).IsFalse();
@@ -395,7 +395,7 @@ public class SessionTabStripPanelTests
     [Test]
     public async Task HitTest_Miss_ReturnsMinusOne()
     {
-        var panel = Panel(Strip(0, Tab("a", "alpha"), Tab("b", "beta")));
+        var panel = StripPanel(Strip(0, Tab("a", "alpha"), Tab("b", "beta")));
         _ = Painted(panel, 40, 2);
         var beyond = panel.LastPlan.Cells[^1].X + panel.LastPlan.Cells[^1].Width;
         await Assert.That(panel.HitTest(beyond + 5)).IsEqualTo(-1);

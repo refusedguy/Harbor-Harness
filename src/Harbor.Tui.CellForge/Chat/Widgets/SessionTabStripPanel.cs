@@ -31,7 +31,8 @@ public readonly record struct TabCell(
     string Status)
 {
     /// <summary>Left cell of the title text (after pin marker, dot and gap).</summary>
-    public int TitleX => X + TabStripPanel.PinWidth + TabStripPanel.DotWidth + TabStripPanel.GapWidth;
+    public int TitleX =>
+        X + SessionTabStripPanel.PinWidth + SessionTabStripPanel.DotWidth + SessionTabStripPanel.GapWidth;
 }
 
 /// <summary>
