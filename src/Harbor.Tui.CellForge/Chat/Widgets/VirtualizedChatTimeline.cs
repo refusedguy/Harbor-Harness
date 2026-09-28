@@ -220,7 +220,7 @@ public sealed class VirtualizedChatTimeline
         }
 
         long target = ScrollY + lines;
-        long maxScroll = _lastViewportH > 0 ? TotalHeightAfter(_lastViewportH) : Math.Max(0, TotalHeight);
+        long maxScroll = TotalHeightAfter(_lastViewportH);
         target = Math.Clamp(target, 0, maxScroll);
 
         long fromVisual = _scrollAnimating ? (long)Math.Round(_visualScrollY) : ScrollY;
@@ -357,12 +357,11 @@ public sealed class VirtualizedChatTimeline
         return new UiMsg[] { new UiMsg.Viewport(viewH), new UiMsg.HistoryMeasured(total), new UiMsg.ScrollClamp(max) };
     }
 
-    private long TotalHeightAfter(int viewportH) => Math.Max(0, TotalHeight - viewportH);
+    private long TotalHeightAfter(int viewportH) => ScrollableViewport.MaxOffsetFor(TotalHeight, viewportH);
 
     private void SetScrollY(long y)
     {
-        long maxScroll = _lastViewportH > 0 ? TotalHeightAfter(_lastViewportH) : Math.Max(0, TotalHeight);
-        ScrollY = Math.Clamp(y, 0, maxScroll);
+        ScrollY = ScrollableViewport.ClampOffsetFor(y, TotalHeight, Math.Max(0, _lastViewportH));
         if (!_scrollAnimating)
         {
             _visualScrollY = ScrollY;
@@ -462,7 +461,7 @@ public sealed class VirtualizedChatTimeline
 
         if (FollowTail)
         {
-            ScrollY = Math.Max(0, TotalHeight - viewportH);
+            ScrollY = TotalHeightAfter(viewportH);
             if (_scrollAnimating)
             {
                 _scrollAnimating = false;
