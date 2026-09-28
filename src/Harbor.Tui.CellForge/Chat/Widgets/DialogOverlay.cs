@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Rendering;
+using Harbor.Ui.Framework.Rendering.Widgets;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -9,6 +10,10 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// <see cref="Select"/>, <see cref="Radio"/> and <see cref="Multiline"/> are
 /// the [PRIM4] form kinds (#289): choice lists and the multiline editor hosted
 /// in the same centered box (seated on the z-stack since [PRIM2c]).
+/// <see cref="Approval"/> is the [UX7] approval modal (#267): the PRIM4 radio
+/// (Allow once / Allow for session / Deny) plus the PRIM4 multiline editor as
+/// the reject-reason field plus a capped unified-diff preview, composed in one
+/// box — no new widgets, only assembly.
 /// </summary>
 public enum DialogKind
 {
@@ -21,6 +26,8 @@ public enum DialogKind
     Radio,
     /// <summary>Multiline text field (<see cref="DialogMultilineInput"/>).</summary>
     Multiline,
+    /// <summary>Approval modal: fixed choice row + reject-reason editor + diff preview.</summary>
+    Approval,
 }
 
 /// <summary>
@@ -45,14 +52,26 @@ public sealed class DialogOverlay
     public const int MaxSelectRows = 6;
     /// <summary>Max editor rows a multiline dialog reserves (extra lines clip).</summary>
     public const int MaxMultilineRows = 5;
+    /// <summary>Max diff preview rows an approval modal reserves (extra lines clip).</summary>
+    public const int MaxApprovalDiffRows = 6;
+    /// <summary>Max reason rows an approval modal reserves (extra lines clip).</summary>
+    public const int MaxApprovalReasonRows = 2;
     private const int Padding = 1;
     private const int ButtonRowHeight = 2;
     private const int SelectPageRows = 5;
+
+    /// <summary>Fixed choice labels of an approval modal (radio order = <see cref="ApprovalChoice"/> order).</summary>
+    public static readonly IReadOnlyList<string> ApprovalChoices = ["Allow once", "Allow for session", "Deny"];
+
+    private const string ApprovalReasonCaption = "reject reason (deny only):";
 
     private readonly List<DialogButton> _buttons = new();
     private readonly DialogSelectList _select = new();
     private readonly DialogRadioGroup _radio = new();
     private readonly DialogMultilineInput _editor = new();
+    private readonly List<DiffViewerLine> _approvalDiff = new();
+    private string _approvalTool = string.Empty;
+    private string _approvalFile = string.Empty;
     private string _title = string.Empty;
     private string _message = string.Empty;
     private string _input = string.Empty;
@@ -78,22 +97,22 @@ public sealed class DialogOverlay
     /// <summary>Choice options for <see cref="DialogKind.Select"/> / <see cref="DialogKind.Radio"/> (empty otherwise).</summary>
     public IReadOnlyList<string> Options =>
         _kind == DialogKind.Select ? _select.Items :
-        _kind == DialogKind.Radio ? _radio.Options :
+        _kind is DialogKind.Radio or DialogKind.Approval ? _radio.Options :
         Array.Empty<string>();
 
     /// <summary>Selected choice index (-1 when the kind has no options).</summary>
     public int SelectedIndex =>
         _kind == DialogKind.Select ? _select.SelectedIndex :
-        _kind == DialogKind.Radio ? _radio.SelectedIndex :
+        _kind is DialogKind.Radio or DialogKind.Approval ? _radio.SelectedIndex :
         -1;
 
     /// <summary>Selected choice text (empty when the kind has no options).</summary>
     public string SelectedOption =>
         _kind == DialogKind.Select ? _select.SelectedItem :
-        _kind == DialogKind.Radio ? _radio.SelectedOption :
+        _kind is DialogKind.Radio or DialogKind.Approval ? _radio.SelectedOption :
         string.Empty;
 
-    /// <summary>Multiline editor state (meaningful for <see cref="DialogKind.Multiline"/>).</summary>
+    /// <summary>Multiline editor state (meaningful for <see cref="DialogKind.Multiline"/> and the <see cref="DialogKind.Approval"/> reject-reason field).</summary>
     public DialogMultilineInput Editor => _editor;
 
     /// <summary>Select-list state (white-box scroll asserts; meaningful for <see cref="DialogKind.Select"/>).</summary>
@@ -257,6 +276,133 @@ public sealed class DialogOverlay
         Visible = true;
     }
 
+    /// <summary>
+    /// Shows an approval modal ([UX7] #267): the fixed PRIM4 radio choice row
+    /// (<see cref="ApprovalChoices"/>) plus the PRIM4 multiline editor as the
+    /// reject-reason field plus a capped unified-diff preview — one centered
+    /// box on the PRIM2c z-stack, no new widgets.
+    /// Enter commits via the host (same contract as <see cref="DialogKind.Prompt"/>);
+    /// the host reads <see cref="SelectedApproval"/> and <see cref="RejectReason"/>.
+    /// Escape dismisses (the host denies fail-closed).
+    /// </summary>
+    /// <param name="toolName">Tool requesting approval (header + audit; blank coerces to "?").</param>
+    /// <param name="detail">One-line request summary (rule pattern + args).</param>
+    /// <param name="diffText">Optional unified diff; prefix-classified and capped at <see cref="MaxApprovalDiffRows"/> rows (null/blank hides the section).</param>
+    /// <param name="filePath">Optional display path shown above the diff (ignored without <paramref name="diffText"/>).</param>
+    /// <param name="selectedIndex">Initial choice (clamped; 0 = allow once).</param>
+    /// <exception cref="ArgumentNullException">When a label is null.</exception>
+    public void ShowApproval(
+        string? toolName,
+        string? detail,
+        string? diffText = null,
+        string? filePath = null,
+        int selectedIndex = 0,
+        string okLabel = "Confirm",
+        string cancelLabel = "Cancel")
+    {
+        ArgumentNullException.ThrowIfNull(okLabel);
+        ArgumentNullException.ThrowIfNull(cancelLabel);
+        _kind = DialogKind.Approval;
+        _approvalTool = string.IsNullOrWhiteSpace(toolName) ? "?" : toolName.Trim();
+        _title = $"permission required · {_approvalTool}";
+        _message = detail ?? string.Empty;
+        _input = string.Empty;
+        _approvalFile = string.IsNullOrWhiteSpace(filePath) ? string.Empty : filePath.Trim();
+        ParseApprovalDiff(diffText);
+        _radio.SetOptions(ApprovalChoices, selectedIndex);
+        _editor.SetText(string.Empty);
+        _buttons.Clear();
+        _buttons.Add(new DialogButton(okLabel, "ok"));
+        _buttons.Add(new DialogButton(cancelLabel, "cancel"));
+        _focusedButton = 0;
+        Visible = true;
+    }
+
+    /// <summary>Tool the visible approval modal asks for (empty unless <see cref="DialogKind.Approval"/>).</summary>
+    public string ApprovalTool => _kind == DialogKind.Approval ? _approvalTool : string.Empty;
+
+    /// <summary>Display path above the approval diff preview (empty when none).</summary>
+    public string ApprovalFilePath => _kind == DialogKind.Approval ? _approvalFile : string.Empty;
+
+    /// <summary>Parsed, capped diff preview rows (empty when the modal has no diff).</summary>
+    public IReadOnlyList<DiffViewerLine> ApprovalDiff => _approvalDiff;
+
+    /// <summary>
+    /// Choice the approval modal commits: radio index 0/1/2 maps to
+    /// Approve / AlwaysAllow / Deny (out-of-range degrades to Deny, fail closed).
+    /// Meaningful only for <see cref="DialogKind.Approval"/>.
+    /// </summary>
+    public ApprovalChoice SelectedApproval => _radio.SelectedIndex switch
+    {
+        0 => ApprovalChoice.Approve,
+        1 => ApprovalChoice.AlwaysAllow,
+        2 => ApprovalChoice.Deny,
+        _ => ApprovalChoice.Deny,
+    };
+
+    /// <summary>
+    /// Reject-reason text (trimmed editor content; empty when the user typed
+    /// nothing). The host attaches it to Deny commits; Allow commits ignore it.
+    /// </summary>
+    public string RejectReason => _kind == DialogKind.Approval ? _editor.Text.Trim() : string.Empty;
+
+    /// <summary>
+    /// Classifies <paramref name="diffText"/> into capped preview rows with the
+    /// same prefix rules as the fullscreen viewer ([PRIM12]): <c>+</c> added,
+    /// <c>-</c> removed, <c>@@</c> headers and <c>\</c> markers as context,
+    /// <c>---</c>/<c>+++</c> file-pair preamble skipped, one leading space of
+    /// unified context stripped. Empty lines are dropped (preview budget).
+    /// </summary>
+    private void ParseApprovalDiff(string? diffText)
+    {
+        _approvalDiff.Clear();
+        if (string.IsNullOrWhiteSpace(diffText))
+        {
+            return;
+        }
+
+        string[] lines = diffText.Replace("\r\n", "\n").Split('\n');
+        for (int i = 0; i < lines.Length && _approvalDiff.Count < MaxApprovalDiffRows; i++)
+        {
+            string line = lines[i].Replace("\t", "  ");
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            if (line.StartsWith("--- ", StringComparison.Ordinal)
+                || line.StartsWith("+++ ", StringComparison.Ordinal)
+                || line is "---" or "+++")
+            {
+                continue;
+            }
+
+            DiffViewerLineKind kind;
+            string text;
+            if (line[0] == '+')
+            {
+                kind = DiffViewerLineKind.Added;
+                text = line[1..];
+            }
+            else if (line[0] == '-')
+            {
+                kind = DiffViewerLineKind.Removed;
+                text = line[1..];
+            }
+            else if (line[0] == '\\')
+            {
+                kind = DiffViewerLineKind.Context;
+                text = line;
+            }
+            else
+            {
+                kind = DiffViewerLineKind.Context;
+                text = line[0] == ' ' ? line[1..] : line;
+            }
+            _approvalDiff.Add(new DiffViewerLine(kind, text));
+        }
+    }
+
     public void Dismiss()
     {
         Visible = false;
@@ -293,7 +439,7 @@ public sealed class DialogOverlay
             case ConsoleKey.LeftArrow:
             case ConsoleKey.RightArrow:
                 bool forward = key.Key == ConsoleKey.RightArrow;
-                if (_kind == DialogKind.Radio)
+                if (_kind is DialogKind.Radio or DialogKind.Approval)
                 {
                     _radio.Move(forward ? 1 : -1);
                     return true;
@@ -318,6 +464,7 @@ public sealed class DialogOverlay
             DialogKind.Prompt => HandlePromptKey(key),
             DialogKind.Select => HandleSelectKey(key),
             DialogKind.Radio => HandleRadioKey(key),
+            DialogKind.Approval => HandleApprovalKey(key),
             DialogKind.Multiline => HandleMultilineKey(key),
             _ => false,
         };
@@ -347,7 +494,7 @@ public sealed class DialogOverlay
             case KeyCode.Left:
             case KeyCode.Right:
                 bool forward = key.Key == KeyCode.Right;
-                if (_kind == DialogKind.Radio)
+                if (_kind is DialogKind.Radio or DialogKind.Approval)
                 {
                     _radio.Move(forward ? 1 : -1);
                     return true;
@@ -367,7 +514,7 @@ public sealed class DialogOverlay
                 CycleFocus(forward);
                 return true;
             case KeyCode.Enter:
-                if (_kind == DialogKind.Multiline
+                if ((_kind == DialogKind.Multiline || _kind == DialogKind.Approval)
                     && (key.Modifiers & KeyModifiers.Ctrl) == 0
                     && (key.Modifiers & (KeyModifiers.Shift | KeyModifiers.Alt)) != 0)
                 {
@@ -381,7 +528,7 @@ public sealed class DialogOverlay
                     _select.Move(-1);
                     return true;
                 }
-                if (_kind == DialogKind.Radio)
+                if (_kind is DialogKind.Radio or DialogKind.Approval)
                 {
                     _radio.Move(-1);
                     return true;
@@ -398,7 +545,7 @@ public sealed class DialogOverlay
                     _select.Move(1);
                     return true;
                 }
-                if (_kind == DialogKind.Radio)
+                if (_kind is DialogKind.Radio or DialogKind.Approval)
                 {
                     _radio.Move(1);
                     return true;
@@ -429,7 +576,7 @@ public sealed class DialogOverlay
                     _select.MoveTo(0);
                     return true;
                 }
-                if (_kind == DialogKind.Radio)
+                if (_kind is DialogKind.Radio or DialogKind.Approval)
                 {
                     _radio.MoveTo(0);
                     return true;
@@ -446,7 +593,7 @@ public sealed class DialogOverlay
                     _select.MoveTo(_select.Count - 1);
                     return true;
                 }
-                if (_kind == DialogKind.Radio)
+                if (_kind is DialogKind.Radio or DialogKind.Approval)
                 {
                     _radio.MoveTo(_radio.Count - 1);
                     return true;
@@ -466,14 +613,14 @@ public sealed class DialogOverlay
                     }
                     return true;
                 }
-                if (_kind == DialogKind.Multiline)
+                if (_kind is DialogKind.Multiline or DialogKind.Approval)
                 {
                     _editor.Backspace();
                     return true;
                 }
                 return false;
             case KeyCode.Delete:
-                if (_kind == DialogKind.Multiline)
+                if (_kind is DialogKind.Multiline or DialogKind.Approval)
                 {
                     _editor.DeleteForward();
                     return true;
@@ -484,7 +631,7 @@ public sealed class DialogOverlay
                 {
                     return false;
                 }
-                if (_kind == DialogKind.Multiline)
+                if (_kind is DialogKind.Multiline or DialogKind.Approval)
                 {
                     string chars = key.Character.ToString();
                     for (int i = 0; i < chars.Length; i++)
@@ -583,6 +730,44 @@ public sealed class DialogOverlay
             default:
                 return false;
         }
+    }
+
+    private bool HandleApprovalKey(ConsoleKeyInfo key)
+    {
+        // Fixed choice row navigates like Radio (Up/Down are aliases);
+        // printable text edits the reject-reason field like Multiline.
+        // Arrows stay on the choice row, so reason edits are append +
+        // Backspace/Delete (the field is capped at MaxApprovalReasonRows).
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow:
+                _radio.Move(-1);
+                return true;
+            case ConsoleKey.DownArrow:
+                _radio.Move(1);
+                return true;
+            case ConsoleKey.Home:
+                _radio.MoveTo(0);
+                return true;
+            case ConsoleKey.End:
+                _radio.MoveTo(_radio.Count - 1);
+                return true;
+            case ConsoleKey.Enter:
+                return false;
+            case ConsoleKey.Backspace:
+                _editor.Backspace();
+                return true;
+            case ConsoleKey.Delete:
+                _editor.DeleteForward();
+                return true;
+        }
+        char ch = key.KeyChar;
+        if (!char.IsControl(ch))
+        {
+            _editor.InsertChar(ch);
+            return true;
+        }
+        return false;
     }
 
     private bool HandleMultilineKey(ConsoleKeyInfo key)
@@ -713,8 +898,83 @@ public sealed class DialogOverlay
         {
             PaintMultiline(buffer, textX, textY, innerW, box);
         }
+        else if (_kind == DialogKind.Approval)
+        {
+            PaintApproval(buffer, box, textX, textY, innerW);
+        }
 
         DrawButtons(buffer, textX, box.Bottom - ButtonRowHeight - 1, innerW);
+    }
+
+    /// <summary>
+    /// Paints the [UX7] approval body below the message: optional file-path +
+    /// capped unified-diff preview (PRIM12 palette mapping), the fixed PRIM4
+    /// choice row, then the reject-reason caption + capped editor rows.
+    /// Every section clips at the button row, so small boxes degrade by
+    /// truncation, never by overlap.
+    /// </summary>
+    private void PaintApproval(ScreenBuffer buffer, Rect box, int x, int y, int innerW)
+    {
+        int bottom = box.Bottom - ButtonRowHeight - 1;
+        if (_approvalDiff.Count > 0)
+        {
+            if (_approvalFile.Length > 0 && y < bottom)
+            {
+                string path = _approvalFile.Length > innerW
+                    ? "…" + _approvalFile[^Math.Max(1, innerW - 1)..]
+                    : _approvalFile;
+                buffer.SetText(x, y, path, ChatPalette.Muted);
+                y++;
+            }
+            for (int i = 0; i < _approvalDiff.Count && y < bottom; i++)
+            {
+                var line = _approvalDiff[i];
+                string prefix = line.Kind switch
+                {
+                    DiffViewerLineKind.Added => "+ ",
+                    DiffViewerLineKind.Removed => "- ",
+                    _ => "  ",
+                };
+                var style = line.Kind switch
+                {
+                    DiffViewerLineKind.Added => ChatPalette.ToolOk,
+                    DiffViewerLineKind.Removed => ChatPalette.ToolError,
+                    _ => ChatPalette.ToolBody,
+                };
+                string row = prefix + line.Text;
+                if (row.Length > innerW)
+                {
+                    row = row[..Math.Max(0, innerW - 1)] + "…";
+                }
+                buffer.SetText(x, y, row, style);
+                y++;
+            }
+        }
+        if (y < bottom)
+        {
+            PaintRadioRow(buffer, x, y, innerW, box);
+            y++;
+        }
+        if (y < bottom)
+        {
+            string caption = ApprovalReasonCaption.Length > innerW
+                ? ApprovalReasonCaption[..Math.Max(0, innerW - 1)] + "…"
+                : ApprovalReasonCaption;
+            buffer.SetText(x, y, caption, ChatPalette.Muted);
+            y++;
+        }
+        string[] reason = _editor.Text.Split('\n');
+        var caretStyle = new CellStyle(ChatPalette.Accent);
+        for (int i = 0; i < reason.Length && i < MaxApprovalReasonRows && y < bottom; i++)
+        {
+            string row = (i == 0 ? "› " : "  ") + reason[i];
+            if (row.Length > innerW)
+            {
+                row = row[..Math.Max(0, innerW - 1)] + "…";
+            }
+            buffer.SetText(x, y, row, i == 0 ? caretStyle : ChatPalette.ToolArgs);
+            y++;
+        }
     }
 
     /// <summary>
@@ -727,8 +987,28 @@ public sealed class DialogOverlay
         DialogKind.Select => Math.Min(_select.Count, MaxSelectRows),
         DialogKind.Radio => _radio.Count > 0 ? 1 : 0,
         DialogKind.Multiline => Math.Clamp(_editor.LineCount, 1, MaxMultilineRows),
+        DialogKind.Approval => ApprovalControlRows(),
         _ => 0,
     };
+
+    /// <summary>
+    /// Control-block height of the [UX7] approval modal: diff section
+    /// (file-path line when set + capped preview rows) + choice row +
+    /// reason caption + capped reason rows. Mirrors <see cref="PaintApproval"/>
+    /// section order so <see cref="ComputeBox"/> reserves exactly what paint emits.
+    /// </summary>
+    private int ApprovalControlRows()
+    {
+        int rows = 0;
+        if (_approvalDiff.Count > 0)
+        {
+            rows += (_approvalFile.Length > 0 ? 1 : 0) + _approvalDiff.Count;
+        }
+        rows += 1; // fixed PRIM4 choice row
+        rows += 1; // reject-reason caption
+        rows += Math.Clamp(_editor.LineCount, 1, MaxApprovalReasonRows);
+        return rows;
+    }
 
     private void PaintSelectList(ScreenBuffer buffer, Rect box, int x, int y, int innerW)
     {
