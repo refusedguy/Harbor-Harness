@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Threading;
 using Harbor.Abstractions.Events;
@@ -27,10 +28,22 @@ namespace Harbor.Application.Resilience;
 ///         (<c>ct.IsCancellationRequested</c>), and everything else.
 ///     </para>
 ///     <para>
-///         <b>Retry-After:</b> <see cref="HttpRequestException" /> does not carry
-///         response headers, so the header value is not retrievable at this
-///         layer; the policy delay is used instead. Providers that surface the
-///         value can wrap it into their exception type and extend the classifier.
+///         <b>Retry-After (#270):</b> when the failure carries a server hint —
+///         <see cref="IRetryAfterHint" /> or <c>Exception.Data["RetryAfter"]</c>
+///         (<c>TimeSpan</c>, seconds as a number, seconds/HTTP-date as text) —
+///         the policy sleeps it (clamped to
+///         <see cref="RetryOptions.EffectiveMaxRetryAfter" />) instead of the
+///         computed backoff. <see cref="HttpRequestException" /> itself carries
+///         no response headers, so without such a channel the policy delay
+///         applies.
+///     </para>
+///     <para>
+///         <b>Rate-limit budget (#270):</b> HTTP 429 / <c>RateLimit</c> failures
+///         draw from <see cref="RetryOptions.EffectiveRateLimitAttempts" />
+///         with <see cref="RetryOptions.EffectiveRateLimitBaseDelay" />-rooted
+///         backoff (capped at two minutes per sleep), not from the general
+///         <see cref="RetryOptions.MaxAttempts" /> budget — 429 storms need
+///         minutes-scale patience, not seconds.
 ///     </para>
 /// </remarks>
 public sealed class RetryPolicy : IRetryPolicy
@@ -50,6 +63,13 @@ public sealed class RetryPolicy : IRetryPolicy
     /// </summary>
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    ///     Upper bound for one rate-limit backoff sleep (#270): 429 storms are
+    ///     weathered with minutes-scale patience, while a single sleep never
+    ///     parks the run for longer than this.
+    /// </summary>
+    private static readonly TimeSpan MaxRateLimitBackoff = TimeSpan.FromMinutes(2);
+
     public Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, RetryOptions options, CancellationToken ct)
     {
         return ExecuteAsync(operation, options, onRetry: null, ct);
@@ -63,9 +83,11 @@ public sealed class RetryPolicy : IRetryPolicy
     {
         if (operation is null) throw new ArgumentNullException(nameof(operation));
         if (options.MaxAttempts < 1) throw new ArgumentOutOfRangeException(nameof(options));
+        if (options.EffectiveRateLimitAttempts < 1) throw new ArgumentOutOfRangeException(nameof(options));
         if (options.BaseDelay < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(options));
 
         int attempt = 0;
+        int rateLimitAttempts = 0;
         while (true)
         {
             ct.ThrowIfCancellationRequested();
@@ -76,15 +98,39 @@ public sealed class RetryPolicy : IRetryPolicy
                 return await operation(ct).ConfigureAwait(false);
             }
             catch (Exception ex)
-                when (attempt < options.MaxAttempts
-                      && !ct.IsCancellationRequested
+                when (!ct.IsCancellationRequested
                       && IsTransient(ex, out TimeSpan? retryAfter))
             {
+                // Rate limits use a dedicated minutes-scale budget while all other
+                // transients share the general one (see #270).
+                bool rateLimited = IsRateLimit(ex);
+                int consumed;
+                int limit;
+                if (rateLimited)
+                {
+                    rateLimitAttempts++;
+                    consumed = rateLimitAttempts;
+                    limit = options.EffectiveRateLimitAttempts;
+                }
+                else
+                {
+                    consumed = attempt;
+                    limit = options.MaxAttempts;
+                }
+
+                if (consumed >= limit)
+                    throw;
+
                 onRetry?.Invoke(ex, attempt);
 
                 // Prefer the server-provided retry hint when the classifier
-                // surfaced one; otherwise use the exponentially scaled backoff.
-                TimeSpan delay = retryAfter ?? ComputeDelay(options, attempt);
+                // surfaced one; otherwise use the exponentially scaled backoff
+                // (rate-limit-rooted for 429s).
+                TimeSpan delay = retryAfter is { } hint
+                    ? ClampRetryAfter(hint, options)
+                    : rateLimited
+                        ? ComputeRateLimitDelay(options, rateLimitAttempts)
+                        : ComputeDelay(options, attempt);
                 await Task.Delay(delay, _time, ct).ConfigureAwait(false);
             }
         }
@@ -115,10 +161,45 @@ public sealed class RetryPolicy : IRetryPolicy
     }
 
     /// <summary>
+    ///     Exponential backoff for the retry that follows a rate-limit failure
+    ///     (#270): <c>EffectiveRateLimitBaseDelay · 2^(attempt − 1)</c>, capped
+    ///     at <see cref="MaxRateLimitBackoff" /> (minutes-scale, not seconds).
+    ///     Jitter semantics match <see cref="ComputeDelay" />. The tool-dispatch
+    ///     loop keeps using <see cref="ComputeDelay" /> — tool 429s stay on the
+    ///     conservative single-retry path by design.
+    /// </summary>
+    public static TimeSpan ComputeRateLimitDelay(RetryOptions options, int failedRateLimitAttempt)
+    {
+        if (failedRateLimitAttempt < 1) throw new ArgumentOutOfRangeException(nameof(failedRateLimitAttempt));
+
+        double target = Math.Min(
+            options.EffectiveRateLimitBaseDelay.TotalMilliseconds * Math.Pow(2, failedRateLimitAttempt - 1),
+            MaxRateLimitBackoff.TotalMilliseconds);
+
+        return options.UseJitter
+            ? TimeSpan.FromMilliseconds(Random.Shared.NextDouble() * target)
+            : TimeSpan.FromMilliseconds(target);
+    }
+
+    /// <summary>
+    ///     Clamp a server-provided Retry-After hint into
+    ///     <c>[0, <see cref="RetryOptions.EffectiveMaxRetryAfter" />]</c> so a
+    ///     rogue header can neither spin the loop nor park the run forever.
+    /// </summary>
+    public static TimeSpan ClampRetryAfter(TimeSpan retryAfter, RetryOptions options)
+    {
+        if (retryAfter < TimeSpan.Zero)
+            return TimeSpan.Zero;
+        TimeSpan cap = options.EffectiveMaxRetryAfter;
+        return retryAfter > cap ? cap : retryAfter;
+    }
+
+    /// <summary>
     ///     Classify an exception as transient (<see langword="true" />, may be
     ///     retried) or fatal (<see langword="false" />, propagate immediately).
     ///     Dispatch is a strategy chain (<see cref="IExceptionClassifier" />):
-    ///     a new transient failure type adds a classifier, never an edit here.
+    ///     a new transient failure type adds a classifier; the Retry-After
+    ///     side-channel (#270) is consulted centrally here, never per classifier.
     /// </summary>
     public static bool IsTransient(Exception ex, out TimeSpan? retryAfter)
     {
@@ -128,11 +209,84 @@ public sealed class RetryPolicy : IRetryPolicy
         {
             if (classifier.TryClassify(ex, out bool transient, out retryAfter))
             {
+                // #270: the classifiers read the wire shape; the Retry-After
+                // hint rides out-of-band (no provider propagates headers yet —
+                // verified by audit), so consult the side-channel here rather
+                // than in every classifier.
+                if (transient && retryAfter is null && TryGetRetryAfter(ex, out TimeSpan hint))
+                    retryAfter = hint;
                 return transient;
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    ///     Whether the failure is a rate limit (HTTP 429 / provider
+    ///     <c>RateLimit</c> kind): such failures draw from the separate
+    ///     minutes-scale budget instead of the general transient budget.
+    /// </summary>
+    public static bool IsRateLimit(Exception ex) => ex switch
+    {
+        HttpRequestException hre => hre.StatusCode == HttpStatusCode.TooManyRequests,
+        LlmStreamErrorException streamError => streamError.Kind == ProviderErrorKind.RateLimit,
+        _ => false,
+    };
+
+    /// <summary>
+    ///     Read a server-provided Retry-After hint carried out-of-band on the
+    ///     exception (#270): <see cref="IRetryAfterHint" /> first, then
+    ///     <c>Exception.Data["RetryAfter"]</c> / <c>"Retry-After"</c> as
+    ///     <c>TimeSpan</c>, seconds as a number, or seconds/HTTP-date as text.
+    ///     Negative or unparseable values are ignored. The result is unclamped;
+    ///     apply <see cref="ClampRetryAfter" /> before sleeping.
+    /// </summary>
+    public static bool TryGetRetryAfter(Exception ex, out TimeSpan retryAfter)
+    {
+        retryAfter = default;
+        if (ex is IRetryAfterHint hint && hint.RetryAfter is { } hinted && hinted >= TimeSpan.Zero)
+        {
+            retryAfter = hinted;
+            return true;
+        }
+
+        if (ex.Data.Contains("RetryAfter") && ToRetryAfter(ex.Data["RetryAfter"], out retryAfter))
+            return true;
+        return ex.Data.Contains("Retry-After") && ToRetryAfter(ex.Data["Retry-After"], out retryAfter);
+    }
+
+    private static bool ToRetryAfter(object? value, out TimeSpan retryAfter)
+    {
+        retryAfter = default;
+        switch (value)
+        {
+            case TimeSpan span when span >= TimeSpan.Zero:
+                retryAfter = span;
+                return true;
+            case double seconds when double.IsFinite(seconds) && seconds >= 0:
+                retryAfter = TimeSpan.FromSeconds(seconds);
+                return true;
+            case float seconds when float.IsFinite(seconds) && seconds >= 0:
+                retryAfter = TimeSpan.FromSeconds(seconds);
+                return true;
+            case int seconds when seconds >= 0:
+                retryAfter = TimeSpan.FromSeconds(seconds);
+                return true;
+            case long seconds when seconds >= 0:
+                retryAfter = TimeSpan.FromSeconds(seconds);
+                return true;
+            case string text when double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) && parsed >= 0:
+                retryAfter = TimeSpan.FromSeconds(parsed);
+                return true;
+            case string text when DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTimeOffset date):
+                retryAfter = date - DateTimeOffset.UtcNow;
+                if (retryAfter < TimeSpan.Zero)
+                    retryAfter = TimeSpan.Zero;
+                return true;
+            default:
+                return false;
+        }
     }
 
     /// <summary>

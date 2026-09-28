@@ -41,7 +41,16 @@ internal sealed class TurnRunner(
     BackgroundDrain backgroundDrain)
 {
     // C7: bounded retry budget for the LLM streaming call site only.
-    private static readonly RetryOptions StreamRetryOptions = new(MaxAttempts: 3, BaseDelay: TimeSpan.FromSeconds(1), UseJitter: true);
+    // #270: 429s draw from a separate minutes-scale budget (10 attempts from a
+    // 5s root, 2-minute single-sleep cap, 5-minute Retry-After clamp) instead of
+    // burning the 3-attempt general budget in seconds and dying terminally.
+    private static readonly RetryOptions StreamRetryOptions = new(
+        MaxAttempts: 3,
+        BaseDelay: TimeSpan.FromSeconds(1),
+        UseJitter: true,
+        MaxRateLimitAttempts: 10,
+        RateLimitBaseDelay: TimeSpan.FromSeconds(5),
+        MaxRetryAfter: TimeSpan.FromMinutes(5));
 
     /// <summary>
     ///     Resolve the provider id, LLM client and concrete model for a run.
@@ -152,20 +161,41 @@ internal sealed class TurnRunner(
 
         // 6. Stream LLM — wrapped in the retry policy (C7): transient provider
         //    failures (HTTP 429/5xx, network errors, timeouts) restart the
-        //    whole stream attempt up to MaxAttempts times; fatal failures
-        //    (auth/quota, caller cancellation) propagate immediately.
+        //    whole stream attempt; fatal failures (auth/quota, caller
+        //    cancellation) propagate immediately. Rate limits additionally draw
+        //    from the minutes-scale budget honoring server Retry-After (#270).
         //    Each attempt rebuilds its accumulators and re-publishes
         //    MessageStart → MessageUpdate… → MessageEnd for the turn,
         //    mirroring a fresh streaming pass.
         TurnStreamResult streamed;
+        AssistantMessage? lastPartial = null;
         try
         {
             streamed = await retryPolicy.ExecuteAsync(
-                attemptCt => ConsumeTurnStreamAsync(client, request, session, model, turn, attemptCt),
+                attemptCt => ConsumeTurnStreamAsync(client, request, session, model, turn, attemptCt, reportPartial: m => lastPartial = m),
                 StreamRetryOptions,
                 (ex, attempt) => logger.LogWarning(
                     ex, "Transient LLM stream failure on attempt {Attempt}; retrying", attempt),
                 ct).ConfigureAwait(false);
+        }
+        catch (LlmStreamErrorException lex) when (RetryPolicy.IsTransient(lex, out _))
+        {
+            // #270: the transient budget (minutes-scale for 429s) is exhausted.
+            // Degrade instead of dying terminally: persist whatever streamed
+            // before the failure and end the run gracefully, so the session
+            // stays resumable and (sub-)callers receive partial output.
+            AssistantMessage degraded = lastPartial ?? AssistantMessage.Empty(session.Session.Id, model.Id);
+            logger.LogWarning(
+                lex, "LLM stream budget exhausted on turn {Turn}; degrading with partial output ({Parts} parts)", turn, degraded.Parts.Count);
+            if (degraded.Parts.Count > 0)
+            {
+                await session.AppendMessageAsync(degraded, ct).ConfigureAwait(false);
+                tokenTracker.RecordAppendedMessage(degraded);
+            }
+            await eventBus.PublishAsync(new MessageEndEvent(degraded), ct).ConfigureAwait(false);
+            await eventBus.PublishAsync(
+                new TurnEndEvent(degraded, Array.Empty<ToolResultMessage>(), session.Session.Id), ct).ConfigureAwait(false);
+            return new TurnStepResult(truncationFallback, EndRun: true);
         }
         catch (LlmStreamErrorException lex)
         {
@@ -267,6 +297,10 @@ internal sealed class TurnRunner(
     ///     state from a failed attempt can leak into the retried one. Cancellation
     ///     by the caller is converted into a graceful <see cref="StopReason.Aborted" />
     ///     outcome, exactly as before the extraction.
+    ///     On a terminal stream error the flushed-so-far partial (stamped
+    ///     <see cref="StopReason.Error" />) is handed to <paramref name="reportPartial" />
+    ///     before the throw, so budget exhaustion (#270) can degrade with the
+    ///     last attempt's output instead of losing it.
     /// </remarks>
     private async Task<TurnStreamResult> ConsumeTurnStreamAsync(
         ILlmClient client,
@@ -274,7 +308,8 @@ internal sealed class TurnRunner(
         ISessionContext session,
         ModelInfo model,
         int turn,
-        CancellationToken ct)
+        CancellationToken ct,
+        Action<AssistantMessage>? reportPartial = null)
     {
         var partial = AssistantMessage.Empty(session.Session.Id, model.Id);
         logger.LogDebug("Message start: turn={Turn}", turn);
@@ -345,10 +380,14 @@ internal sealed class TurnRunner(
                     }
 
                     case ErrorEvent err:
-                        // Discard any per-tool-call pooled StringBuilders before
-                        // propagating the terminal error (same as the previous
-                        // inline early-return out of RunAsync).
+                        // Flush buffered deltas into the partial and report it
+                        // before propagating (#270): on budget exhaustion the
+                        // turn degrades with this output instead of losing it.
+                        // Then discard any per-tool-call pooled StringBuilders
+                        // (same as the previous inline early-return out of RunAsync).
+                        partial = FlushAll(coalescer, partial);
                         coalescer.DiscardPendingToolCalls();
+                        reportPartial?.Invoke(partial.WithFinish(StopReason.Error, finalUsage ?? new Usage(0, 0)));
                         await eventBus.PublishAsync(new AgentErrorEvent(err.Message, err.Exception), ct).ConfigureAwait(false);
                         throw new LlmStreamErrorException(err);
                 }
