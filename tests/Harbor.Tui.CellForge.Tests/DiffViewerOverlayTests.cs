@@ -245,7 +245,7 @@ public sealed class DiffViewerOverlayTests
         await Assert.That(overlay.HandleKey(KeyEvent.Char(new Rune('w')))).IsTrue();
         await Assert.That(overlay.Wrap).IsTrue();
 
-        await Assert.That(overlay.HandleKey(KeyEvent.Simple(KeyCode.Escape)))).IsTrue();
+        await Assert.That(overlay.HandleKey(KeyEvent.Simple(KeyCode.Escape))).IsTrue();
         await Assert.That(overlay.Visible).IsFalse();
     }
 
