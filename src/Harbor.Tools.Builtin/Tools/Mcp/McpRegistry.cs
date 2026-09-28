@@ -30,6 +30,9 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, ServerEntry> _servers = new();
     private readonly ILogger<McpRegistry>? _logger;
+
+    // JSON-RPC request ids: InvokeAsync/InvokeRemoteAsync run concurrently
+    // across servers, so the counter is advanced atomically ([G9] #196).
     private int _nextId;
     private bool _disposed;
 
@@ -330,7 +333,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         try
         {
             await using var transport = new McpJsonRpcTransport(process.Stdout, process.Stdin);
-            int id = ++_nextId;
+            int id = Interlocked.Increment(ref _nextId);
 
             // #180: writer-built envelope over a pooled buffer — no
             // interpolated string, no re-parse. The element is used only
@@ -372,7 +375,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
         try
         {
-            int id = ++_nextId;
+            int id = Interlocked.Increment(ref _nextId);
             using var requestDoc = McpJsonRpc.BuildRequest(id, method, args);
             JsonDocument? response = await transport
                 .RoundTripAsync(requestDoc.RootElement, id, cancellationToken)
@@ -427,6 +430,15 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    ///     Per-server lazy state. Sync ownership ([G9] #196): the outer
+    ///     <c>_servers</c> map is a <c>ConcurrentDictionary</c> (lock-free
+    ///     register/unregister/lookup); <c>_transportGate</c> guards only the
+    ///     lazy <c>_transport</c>/<c>_oauth</c> creation inside one entry;
+    ///     <c>_instructions</c> is volatile with first-writer-wins CAS
+    ///     semantics via <c>TrySetInstructions</c>. Request ids live on the
+    ///     outer registry and advance via <c>Interlocked</c>.
+    /// </summary>
     private sealed class ServerEntry : IAsyncDisposable
     {
         private readonly string _name;
