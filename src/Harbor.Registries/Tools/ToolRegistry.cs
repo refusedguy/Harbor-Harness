@@ -27,6 +27,7 @@ public sealed class ToolRegistry : IToolRegistry
     // логику в GetAllTools / ResolveTools / GetTool. Если добавить третий источник
     // (например, lazy-loaded tools из плагинов), придётся ещё раз дублировать.
     // Лучше — CompositeToolRegistry, делегирующий в один из IToolSource. См. §OOP-005.
+    // Tracked in #358.
     private readonly ConcurrentDictionary<ToolName, ITool> _tools = new();
     // #183: single volatile publish-once snapshot (frozen map + cached descriptor
     // arrays + per-ruleset filtered cache). One reference swap per Freeze(), so

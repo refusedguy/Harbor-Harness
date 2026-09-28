@@ -110,6 +110,7 @@ public sealed class CellForgeDiffPreviewPanel : IPanelProvider
 ///     instead of living in <see cref="UiState"/> keyed by panel id. Guarded by
 ///     a small lock so <c>Build</c> (render thread) and <c>OnKey</c> (input
 ///     thread) stay thread-safe; moving the cursor into the store is follow-up work.
+///     Tracked in #360.
 /// </remarks>
 public sealed class CellForgeDiagnosticsPanel : IPanelProvider
 {
@@ -380,7 +381,7 @@ public sealed class CellForgeLogsPanel : IPanelProvider
 ///     mutable state (same compromise as the Spectre original) instead of living in
 ///     <see cref="UiState"/> keyed by panel id. Guarded by a small lock so
 ///     <c>Build</c> (render thread) and <c>OnKey</c> (input thread) stay thread-safe;
-///     moving the cursor into the store is follow-up work.
+///     moving the cursor into the store is follow-up work. Tracked in #360.
 /// </remarks>
 public sealed class CellForgeFileTreePanel : IPanelProvider
 {

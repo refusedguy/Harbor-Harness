@@ -9,6 +9,7 @@ namespace Harbor.Ui.Framework.Projection;
 // TODO(principles)[DIP]: Spectre builtins (contrib/.../Panels/Builtin/) still
 // carry their own row builders — adopt these shared builders there (wrap rows
 // in TextLine.FromMarkup) once contrib has its own verification lane.
+// Tracked in #362.
 
 /// <summary>
 ///     Shared plain-text row builders for the builtin panels

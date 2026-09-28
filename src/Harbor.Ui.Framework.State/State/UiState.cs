@@ -9,6 +9,7 @@ namespace Harbor.Ui.Framework.State;
 // TODO(principles)[SRP]: finish the split — remove the legacy flat forwarding
 // getters below once all readers use Ui/Chat directly (tracked for the cleanup
 // PR after this branch merges; reads stay source-compatible until then).
+// Tracked in #364.
 
 /// <summary>
 ///     Currently-streaming assistant message. Mutable deltas are folded into
