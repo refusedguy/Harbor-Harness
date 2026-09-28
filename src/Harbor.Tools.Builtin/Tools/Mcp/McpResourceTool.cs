@@ -1,3 +1,4 @@
+using Harbor.Tools.Mcp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text;
@@ -111,8 +112,8 @@ public sealed class McpResourceTool : ITool
 
         _logger.LogDebug("MCP resource read: server={Server} uri={Uri}", server, uri);
 
-        using var paramsDoc = JsonDocument.Parse($"{{\"uri\":{JsonSerializer.Serialize(uri)}}}");
-        var invoked = await registry.InvokeAsync(server, "resources/read", paramsDoc.RootElement.Clone(), cancellationToken)
+        using var paramsDoc = McpJsonRpc.BuildResourceReadParams(uri);
+        var invoked = await registry.InvokeAsync(server, "resources/read", paramsDoc.RootElement, cancellationToken)
             .ConfigureAwait(false);
         if (invoked.IsFailure)
         {

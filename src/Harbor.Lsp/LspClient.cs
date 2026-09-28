@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Text;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -41,6 +42,8 @@ public sealed class LspClient : IAsyncDisposable
     private readonly Dictionary<int, TaskCompletionSource<JsonElement>> _pending = [];
     private readonly Lock _pendingLock = new();
     private readonly CancellationTokenSource _lifetimeCts = new();
+    private readonly byte[] _oneByte = new byte[1]; // reused header probe — the read loop is the only reader
+    private readonly byte[] _headerScratch = new byte[32]; // formatted + written under _writeLock, never shared
     private Task? _readLoopTask;
     private int _nextId;
     private int _disposed;
@@ -130,7 +133,7 @@ public sealed class LspClient : IAsyncDisposable
 
     // ── Framing ────────────────────────────────────────────────────────────
 
-    private static string BuildFrame(string jsonrpc, int? id, string method, object? parameters)
+    private static ArrayBufferWriter<byte> BuildFrame(string jsonrpc, int? id, string method, object? parameters)
     {
         var buffer = new ArrayBufferWriter<byte>(512);
         using (var json = new Utf8JsonWriter(buffer))
@@ -152,7 +155,7 @@ public sealed class LspClient : IAsyncDisposable
             json.WriteEndObject();
         }
 
-        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+        return buffer;
     }
 
     /// <summary>Source-generated serialization for known param DTOs; raw JsonElement passes through.</summary>
@@ -170,17 +173,26 @@ public sealed class LspClient : IAsyncDisposable
         };
     }
 
-    private async Task WriteFrameAsync(string payload, CancellationToken ct)
+    private async Task WriteFrameAsync(ArrayBufferWriter<byte> payload, CancellationToken ct)
     {
-        byte[] body = Encoding.UTF8.GetBytes(payload);
-        string header = $"Content-Length: {body.Length}\r\n\r\n";
-        byte[] headerBytes = Encoding.ASCII.GetBytes(header);
-
+        // #180: frame the pooled UTF-8 bytes directly — no string payload,
+        // no re-encode per frame. The header is formatted into scratch space
+        // under the write lock (the only writer), then both parts stream out.
+        // "Content-Length: " (16) + up to 10 digits + "\r\n\r\n" (4) fits 32 bytes.
         await _writeLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            await _output.WriteAsync(headerBytes, ct).ConfigureAwait(false);
-            await _output.WriteAsync(body, ct).ConfigureAwait(false);
+            const int PrefixLength = 16;
+            "Content-Length: "u8.CopyTo(_headerScratch);
+            if (!payload.WrittenCount.TryFormat(_headerScratch.AsSpan(PrefixLength), out int digits))
+                throw new InvalidOperationException("LSP frame is too large to frame.");
+            _headerScratch[PrefixLength + digits] = (byte)'\r';
+            _headerScratch[PrefixLength + digits + 1] = (byte)'\n';
+            _headerScratch[PrefixLength + digits + 2] = (byte)'\r';
+            _headerScratch[PrefixLength + digits + 3] = (byte)'\n';
+
+            await _output.WriteAsync(_headerScratch.AsMemory(0, PrefixLength + digits + 4), ct).ConfigureAwait(false);
+            await _output.WriteAsync(payload.WrittenMemory, ct).ConfigureAwait(false);
             await _output.FlushAsync(ct).ConfigureAwait(false);
         }
         finally
@@ -253,6 +265,18 @@ public sealed class LspClient : IAsyncDisposable
         }
     }
 
+    /// <summary>ASCII whitespace trim for header spans (no byte-span Trim() in BCL).</summary>
+    private static ReadOnlySpan<byte> TrimAsciiWhiteSpace(ReadOnlySpan<byte> span)
+    {
+        int start = 0;
+        while (start < span.Length && (span[start] == (byte)' ' || span[start] == (byte)'\t'))
+            start++;
+        int end = span.Length;
+        while (end > start && (span[end - 1] == (byte)' ' || span[end - 1] == (byte)'\t'))
+            end--;
+        return span[start..end];
+    }
+
     private async Task<JsonDocument?> ReadFrameAsync(CancellationToken ct)
     {
         int contentLength = await ReadHeadersAsync(ct).ConfigureAwait(false);
@@ -270,35 +294,74 @@ public sealed class LspClient : IAsyncDisposable
 
     private async ValueTask<int> ReadHeadersAsync(CancellationToken ct)
     {
-        // Header blocks are tiny (~40 bytes); byte-wise scanning is simple and
-        // correct, the body below is read in bulk.
-        var bytes = new List<byte>(64);
-        while (true)
+        // Header blocks are tiny (~40 bytes): pooled buffer, byte-wise scan
+        // for the \r\n\r\n terminator, Content-Length parsed from the span —
+        // no List<byte>, no header string, no Split (#180).
+        byte[] rented = ArrayPool<byte>.Shared.Rent(64);
+        int count = 0;
+        try
         {
-            int b = await ReadByteAsync(ct).ConfigureAwait(false);
-            if (b < 0) throw new EndOfStreamException("LSP stream ended while reading headers");
-
-            bytes.Add((byte)b);
-            if (bytes.Count >= 4
-                && bytes[^4] == (byte)'\r' && bytes[^3] == (byte)'\n'
-                && bytes[^2] == (byte)'\r' && bytes[^1] == (byte)'\n')
+            while (true)
             {
-                break;
+                int b = await ReadByteAsync(ct).ConfigureAwait(false);
+                if (b < 0) throw new EndOfStreamException("LSP stream ended while reading headers");
+
+                if (count >= rented.Length)
+                {
+                    if (rented.Length >= 16_384)
+                        throw new InvalidOperationException("LSP header block exceeded 16 KB.");
+                    byte[] grown = ArrayPool<byte>.Shared.Rent(rented.Length * 2);
+                    Buffer.BlockCopy(rented, 0, grown, 0, count);
+                    ArrayPool<byte>.Shared.Return(rented);
+                    rented = grown;
+                }
+
+                rented[count++] = (byte)b;
+                if (count >= 4
+                    && rented[count - 4] == (byte)'\r' && rented[count - 3] == (byte)'\n'
+                    && rented[count - 2] == (byte)'\r' && rented[count - 1] == (byte)'\n')
+                {
+                    break;
+                }
+
+                if (count > 16_384)
+                {
+                    throw new InvalidOperationException("LSP header block exceeded 16 KB.");
+                }
             }
 
-            if (bytes.Count > 16_384)
-            {
-                throw new InvalidOperationException("LSP header block exceeded 16 KB.");
-            }
+            return ParseContentLength(rented.AsSpan(0, count));
         }
-
-        string header = Encoding.ASCII.GetString(bytes.ToArray());
-        foreach (string line in header.Split("\r\n", StringSplitOptions.RemoveEmptyEntries))
+        finally
         {
-            if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase)
-                && int.TryParse(line["Content-Length:".Length..].Trim(), out int length))
+            ArrayPool<byte>.Shared.Return(rented);
+        }
+    }
+
+    /// <summary>
+    /// Find the <c>Content-Length</c> line (case-insensitive, like the old
+    /// string Split version) and parse its value from the span. An
+    /// unparseable value is ignored in favor of later lines, exactly as
+    /// <c>int.TryParse</c> failing did before.
+    /// </summary>
+    private static int ParseContentLength(ReadOnlySpan<byte> headers)
+    {
+        while (!headers.IsEmpty)
+        {
+            int eol = headers.IndexOf("\r\n"u8);
+            ReadOnlySpan<byte> line = eol < 0 ? headers : headers[..eol];
+            headers = eol < 0 ? default : headers[(eol + 2)..];
+
+            if (line.Length > "Content-Length:".Length
+                && Ascii.EqualsIgnoreCase(line[.."Content-Length:".Length], "Content-Length:"u8))
             {
-                return length;
+                // int.TryParse accepted an explicit '+' sign; Utf8Parser may
+                // not, so strip it after the whitespace trim it also needed.
+                ReadOnlySpan<byte> value = TrimAsciiWhiteSpace(line["Content-Length:".Length..]);
+                if (value.StartsWith("+"u8))
+                    value = value[1..];
+                if (Utf8Parser.TryParse(value, out int length, out int consumed) && consumed == value.Length)
+                    return length;
             }
         }
 
@@ -307,9 +370,8 @@ public sealed class LspClient : IAsyncDisposable
 
     private async ValueTask<int> ReadByteAsync(CancellationToken ct)
     {
-        var one = new byte[1];
-        int read = await _input.ReadAsync(one, ct).ConfigureAwait(false);
-        return read == 0 ? -1 : one[0];
+        int read = await _input.ReadAsync(_oneByte.AsMemory(), ct).ConfigureAwait(false);
+        return read == 0 ? -1 : _oneByte[0];
     }
 
     private async ValueTask ReadExactlyAsync(byte[] buffer, int count, CancellationToken ct)

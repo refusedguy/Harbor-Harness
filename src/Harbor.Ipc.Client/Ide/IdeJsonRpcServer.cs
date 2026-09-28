@@ -200,6 +200,25 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
 
     private async Task HandleLine(string line, CancellationToken serverCt)
     {
+        // #180: scan the envelope with Utf8JsonReader over pooled UTF-8 bytes
+        // first. Notifications (no id) and non-object frames resolve without
+        // ever materializing a JsonDocument; only addressed requests (and
+        // malformed lines, which need the original error text) take the DOM
+        // path below — unchanged.
+        switch (ScanEnvelope(line))
+        {
+            case EnvelopeScan.NotObject:
+                await WriteErrorAsync(default, IdeRpcException.InvalidRequest, "Request must be a JSON object.")
+                    .ConfigureAwait(false);
+                return;
+            case EnvelopeScan.Notification:
+                _logger.LogDebug("IDE bridge ignored editor notification: {Line}", line);
+                return;
+            case EnvelopeScan.Request:
+            case EnvelopeScan.Malformed:
+                break;
+        }
+
         JsonDocument doc;
         try
         {
@@ -246,6 +265,76 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             // the id and the params — a JsonElement view into a disposed document
             // throws ObjectDisposedException on first access (GetRawText/Deserialize).
             Dispatch(method, parameters?.Clone(), id.Clone(), serverCt);
+        }
+    }
+
+    // ── Envelope pre-scan (#180) ─────────────────────────────────────────
+
+    private enum EnvelopeScan : byte
+    {
+        Request,
+        Notification,
+        NotObject,
+        Malformed
+    }
+
+    /// <summary>
+    /// Classify one NDJSON line by its top-level envelope without building a
+    /// DOM: objects carrying an <c>"id"</c> are requests, objects without one
+    /// are editor notifications, non-objects are protocol errors, and
+    /// malformed bytes defer to the DOM path (which owns the error text).
+    /// Presence (not value) of <c>"id"</c> decides — mirroring
+    /// <c>TryGetProperty("id")</c>, which succeeds even for null ids.
+    /// </summary>
+    private static EnvelopeScan ScanEnvelope(string line)
+    {
+        int byteCount = Encoding.UTF8.GetByteCount(line);
+        byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
+        try
+        {
+            Encoding.UTF8.GetBytes(line, rented);
+            var reader = new Utf8JsonReader(rented.AsSpan(0, byteCount));
+            try
+            {
+                if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                    return EnvelopeScan.NotObject;
+
+                bool hasId = false;
+                bool closed = false;
+                while (reader.Read())
+                {
+                    if (reader.TokenType == JsonTokenType.EndObject)
+                    {
+                        closed = true;
+                        break;
+                    }
+
+                    if (reader.TokenType != JsonTokenType.PropertyName)
+                        continue;
+                    bool isId = reader.ValueSpan.SequenceEqual("id"u8);
+                    if (!reader.Read())
+                        return EnvelopeScan.Malformed; // truncated frame
+                    if (isId)
+                        hasId = true;
+                    reader.Skip();
+                }
+
+                // An unclosed object is truncated input, not a notification —
+                // defer to the DOM path so it errors exactly as before.
+                if (!closed)
+                    return EnvelopeScan.Malformed;
+                return hasId ? EnvelopeScan.Request : EnvelopeScan.Notification;
+            }
+            catch (Exception)
+            {
+                // Best-effort fast path: anything the scanner does not
+                // understand defers to the DOM path, which owns the verdict.
+                return EnvelopeScan.Malformed;
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rented);
         }
     }
 

@@ -332,8 +332,12 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             await using var transport = new McpJsonRpcTransport(process.Stdout, process.Stdin);
             int id = ++_nextId;
 
-            using var requestDoc = JsonDocument.Parse($"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"{method}\",\"params\":{args.GetRawText()}}}");
-            await transport.WriteAsync(requestDoc.RootElement.Clone(), cancellationToken).ConfigureAwait(false);
+            // #180: writer-built envelope over a pooled buffer — no
+            // interpolated string, no re-parse. The element is used only
+            // inside the using lifetime (WriteAsync reads it synchronously),
+            // so no Clone is needed.
+            using var requestDoc = McpJsonRpc.BuildRequest(id, method, args);
+            await transport.WriteAsync(requestDoc.RootElement, cancellationToken).ConfigureAwait(false);
 
             var response = await transport.ReadAsync(cancellationToken).ConfigureAwait(false);
             if (response is null)
@@ -369,9 +373,9 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         try
         {
             int id = ++_nextId;
-            using var requestDoc = JsonDocument.Parse($"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"{method}\",\"params\":{args.GetRawText()}}}");
+            using var requestDoc = McpJsonRpc.BuildRequest(id, method, args);
             JsonDocument? response = await transport
-                .RoundTripAsync(requestDoc.RootElement.Clone(), id, cancellationToken)
+                .RoundTripAsync(requestDoc.RootElement, id, cancellationToken)
                 .ConfigureAwait(false);
             if (response is null)
                 return Result.Failure<string>($"MCP server '{server}' returned no response.");

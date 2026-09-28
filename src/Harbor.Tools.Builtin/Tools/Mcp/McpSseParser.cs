@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Text;
 using System.Text.Json;
 
 namespace Harbor.Tools.Mcp;
@@ -72,31 +74,109 @@ internal static class McpSse
     /// </summary>
     public static JsonDocument? TryParseResponse(string data, int? expectedId)
     {
-        JsonDocument doc;
-        try
-        {
-            doc = JsonDocument.Parse(data);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-
         if (expectedId is not { } id)
         {
-            return doc;
+            try
+            {
+                return JsonDocument.Parse(data);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
-        if (doc.RootElement.ValueKind == JsonValueKind.Object
-            && doc.RootElement.TryGetProperty("id", out JsonElement idEl)
-            && idEl.ValueKind == JsonValueKind.Number
-            && idEl.TryGetInt32(out int actual)
-            && actual == id)
+        // Filtered path (#180): encode once into a pooled buffer, scan the
+        // envelope for the top-level "id" with Utf8JsonReader (no DOM), and
+        // only then parse the same bytes. Non-JSON frames and id mismatches
+        // return null without ever materializing a document (previously:
+        // full parse + dispose, plus an exception on malformed frames).
+        int byteCount = Encoding.UTF8.GetByteCount(data);
+        byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
+        try
         {
-            return doc;
+            Encoding.UTF8.GetBytes(data, rented);
+            ReadOnlySpan<byte> utf8 = rented.AsSpan(0, byteCount);
+            if (!IdMatches(utf8, id))
+                return null;
+            try
+            {
+                return JsonDocument.Parse(rented.AsMemory(0, byteCount));
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rented);
+        }
+    }
 
-        doc.Dispose();
-        return null;
+    /// <summary>
+    /// Scan a UTF-8 JSON-RPC frame for its top-level <c>"id"</c> without
+    /// building a DOM. Mirrors the old <c>TryGetProperty("id") + Number +
+    /// TryGetInt32</c> check exactly, including last-wins on duplicate keys
+    /// and rejection of trailing garbage; malformed input scans as no-match
+    /// (the old path mapped both to null as well).
+    /// </summary>
+    private static bool IdMatches(ReadOnlySpan<byte> utf8, int expectedId)
+    {
+        try
+        {
+            var reader = new Utf8JsonReader(utf8);
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                return false;
+
+            bool closed = false;
+            bool hasNumericId = false;
+            int lastId = 0;
+            while (reader.Read())
+            {
+                if (reader.TokenType == JsonTokenType.EndObject)
+                {
+                    closed = true;
+                    break;
+                }
+
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                    continue;
+
+                bool isId = reader.ValueSpan.SequenceEqual("id"u8);
+                if (!reader.Read())
+                    return false; // truncated frame
+                if (!isId)
+                {
+                    reader.Skip();
+                    continue;
+                }
+
+                if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out int value))
+                {
+                    hasNumericId = true;
+                    lastId = value;
+                }
+                else
+                {
+                    // String/null/bool/container "id" never matched the old
+                    // Number+TryGetInt32 check; keep scanning so a later
+                    // duplicate still decides (last-wins, like TryGetProperty).
+                    hasNumericId = false;
+                    reader.Skip();
+                }
+            }
+
+            // A closed root object whose trailing bytes hold another token is
+            // malformed (the old Parse threw) — not a match.
+            return closed && hasNumericId && lastId == expectedId && !reader.Read();
+        }
+        catch (Exception)
+        {
+            // Best-effort fast path: anything the scanner does not understand
+            // (malformed frames, novel token shapes) scans as no-match — the
+            // old path mapped every one of those to null as well.
+            return false;
+        }
     }
 }

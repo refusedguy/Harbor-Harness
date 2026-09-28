@@ -178,11 +178,31 @@ public sealed class JsonlSessionPorter : ISessionPorter
         return Result.Success(target.Id);
     }
 
-    private static Result<AgentMessage> DecodeMessageLine(string sessionId, string line) =>
-        Result.Try(
-                () => JsonDocument.Parse(line).RootElement.Clone(),
-                ex => $"malformed JSON line: {ex.Message}")
-            .Bind(element => JsonlMessageCodec.DeserializeMessage(sessionId, element));
+    /// <summary>
+    /// Decode one export body line. Single parse, no <c>Clone()</c> (#180):
+    /// <see cref="JsonlMessageCodec.DeserializeMessage"/> runs synchronously
+    /// inside the document lifetime, so the intermediate copy was dead weight.
+    /// The span fast path (<see cref="JsonlLineParser"/>) stays store-only —
+    /// import must tolerate legacy PascalCase aliases, which the span parser
+    /// deliberately rejects.
+    /// </summary>
+    private static Result<AgentMessage> DecodeMessageLine(string sessionId, string line)
+    {
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(line);
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<AgentMessage>($"malformed JSON line: {ex.Message}");
+        }
+
+        using (doc)
+        {
+            return JsonlMessageCodec.DeserializeMessage(sessionId, doc.RootElement);
+        }
+    }
 
     /// <summary>
     ///     Next non-blank line of an import payload. EOF is a successful

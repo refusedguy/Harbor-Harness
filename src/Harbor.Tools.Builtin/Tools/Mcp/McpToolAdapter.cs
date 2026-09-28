@@ -41,9 +41,9 @@ public sealed class McpToolAdapter : ITool
             ? a
             : default;
 
-        using var argsDoc = JsonDocument.Parse($"{{\"name\":\"{_toolName}\",\"arguments\":{methodArgs.GetRawText()}}}");
+        using var argsDoc = McpJsonRpc.BuildToolCallParams(_toolName, methodArgs);
         // ROP-A Z1 п.17: boundary Match.
-        return await _registry.InvokeAsync(_server, "tools/call", argsDoc.RootElement.Clone(), cancellationToken)
+        return await _registry.InvokeAsync(_server, "tools/call", argsDoc.RootElement, cancellationToken)
             .Match(
                 static value => ToolResult.Success(value),
                 static error => ToolResult.Error($"MCP tool call failed: {error}"))
