@@ -628,6 +628,30 @@ catch (Exception ex) {
 
 ---
 
+### ROP — явно неприменимо (wontfix, issue #204)
+
+> Остаток CFE-покрытия ROP закрыт кодом в PR #230 (`PtyProcess.TryStart` → `Result<PtyProcess>`).
+> Ниже — зафиксированный список мест, где ROP **не применяется по дизайну**. Не переоткрывать,
+> новые issue по этим пунктам не заводить.
+
+1. **Проекты вне ROP-периметра** — `Harbor.Logging` (Serilog plumbing, проброс в логгер
+   не имеет expected-failure семантики), `Harbor.CodeGen` (чистые Roslyn-генераторы,
+   ошибки — diagnostics на этапе компиляции), `Harbor.DesignSystem` (ноль ProjectReferences
+   by design), ядро `Harbor.Extensions`, `Harbor.Diagnostics.Abstractions`,
+   `Harbor.Transport.Remote`, `Harbor.Telemetry.Otlp`, `Harbor.Tui.CellForge.Engine`,
+   `Harbor.Ui.Framework.*` (UI-состояние идёт через reducers/events, а не `Result<T>`).
+2. **Guard-clause throws** (`ArgumentNull`/`ArgumentOutOfRange`, startup fail-fast,
+   внутренние инварианты) — контракты программиста, а не expected failures рантайма.
+   Бросать дальше.
+3. **Nullable как `Maybe`** — UI hit-test/find, protocol EOF/nil, `Try*`-паттерны,
+   `OnboardingWizard.TryFetchLiveModelsAsync`. Здесь nullable — корректный `Maybe`,
+   оборачивание в `Result<T>` не добавляет информации.
+4. **Образцовые сайты** (`SubAgentRunner`, `WorkspaceInspector`, `ProviderHealthCheck`,
+   `CsPluginLoader`, `ToolDispatcher.cs:210,313`) — эталонное применение ROP,
+   а не работа. Использовать как референс.
+
+---
+
 ## 5. Performance
 
 ### §PERF-001 — MapChunk: JsonDocument.Parse на каждый SSE-чанк
