@@ -395,15 +395,11 @@ public sealed class StreamingMarkdownRenderer
                 case LineKind.Blank:
                     break;
 
+                // ENG11 #283: «$$» delimiters are structural markers like
+                // «```» — dimmed; the body stays plain text. Same treatment,
+                // hence one shared case.
                 case LineKind.FenceOpen:
-                    scratch.Single.Clear();
-                    scratch.Single.Add(new MdSpan(trimmed.TrimEnd('\r').ToString(), MdStyle.Fence));
-                    AddWrapped(output, scratch.Single, width, scratch);
-                    break;
-
                 case LineKind.MathFence:
-                    // ENG11 #283: «$$» delimiters are structural markers —
-                    // dimmed like fences; the body stays plain text.
                     scratch.Single.Clear();
                     scratch.Single.Add(new MdSpan(trimmed.TrimEnd('\r').ToString(), MdStyle.Fence));
                     AddWrapped(output, scratch.Single, width, scratch);
