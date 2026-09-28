@@ -57,6 +57,11 @@ public sealed record UiState
     /// <summary>Harbor chat-domain state (transcript, streaming, agent, costs, sessions).</summary>
     public ChatDomainState Chat { get; init; } = ChatDomainState.Empty;
 
+    // Backing field for Revision. Written in exactly two places: the public
+    // `init` accessor (so `with { Revision = … }` keeps working for callers
+    // that normalize a snapshot) and the store-only mutator below (#491).
+    private long _revision;
+
     /// <summary>
     ///     Monotonic store revision, bumped by <see cref="UiStore" /> on every
     ///     successful transition (issue #94). CAS success and <c>Changed</c>
@@ -67,7 +72,34 @@ public sealed record UiState
     ///     Zero on hand-built states (tests/replays); the projector always
     ///     projects those and never treats them as stale.
     /// </summary>
-    public long Revision { get; init; }
+    public long Revision
+    {
+        get => _revision;
+        init => _revision = value;
+    }
+
+    /// <summary>
+    ///     Stamp the revision onto a snapshot the store has <b>not yet
+    ///     published</b> (#491). The store is the sole owner of revision
+    ///     assignment, and it needs a single copy per dispatch: the reducer
+    ///     hands back a freshly built snapshot, so re-cloning it
+    ///     (<c>next with { Revision = … }</c>) allocated a second full
+    ///     <see cref="UiState" /> on the hottest path in the TUI — one dispatch
+    ///     per token, keystroke and tool event.
+    /// </summary>
+    /// <remarks>
+    ///     <b>Contract:</b> only legal on an instance the caller just created
+    ///     and has not published. <see cref="UiStore.Dispatch" /> stamps before
+    ///     its compare-exchange, so no reader can observe the pre-stamp value;
+    ///     stamping a published snapshot would rewrite history that
+    ///     subscribers already hold. The reducers keep it safe by being pure
+    ///     folds over their single <c>state</c> argument: every arm either
+    ///     allocates a fresh snapshot or returns the input, and a returned
+    ///     input is caught by the store's reference-equality short-circuit
+    ///     before the stamp. <c>StoreDispatchAllocTests</c> pins the
+    ///     observable half of that.
+    /// </remarks>
+    internal void SetRevisionUnpublished(long revision) => _revision = revision;
 
     /// <summary>
     ///     Append a line to the transcript, returning a new immutable snapshot.

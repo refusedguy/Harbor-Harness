@@ -67,6 +67,17 @@ public sealed class UiStore
     // other's state via shared mutation.
     private volatile UiState _state;
 
+    // #491: the subscriber set is a flat, per-subscriber snapshot
+    // that is rebuilt on subscription changes and read lock-free on every
+    // notification. It used to be rebuilt per Notify from
+    // `Changed.GetInvocationList().Cast<EventHandler<…>>()` — a `Delegate[]`
+    // plus a `Cast` iterator on the hottest path in the TUI, where the store
+    // pays for delivery isolation on every dispatch instead of on every
+    // subscribe/unsubscribe. The array is replaced, never mutated, so the
+    // snapshot semantics Notify documents are unchanged.
+    private readonly object _subscribersGate = new();
+    private readonly List<EventHandler<UiStateChangedEventArgs>> _subscribers = [];
+    private volatile EventHandler<UiStateChangedEventArgs>[] _delivery = Array.Empty<EventHandler<UiStateChangedEventArgs>>();
 
     /// <summary>Construct a store with the initial (empty) state.</summary>
     public UiStore(UiState? initial = null)
@@ -85,7 +96,61 @@ public sealed class UiStore
     ///     re-read the store and never mutate state. A throwing subscriber is
     ///     isolated: remaining subscribers are still notified.
     /// </summary>
-    public event EventHandler<UiStateChangedEventArgs>? Changed;
+    /// <remarks>
+    ///     Backed by an explicit delivery set rather than a field-like event,
+    ///     because <see cref="Notify" /> must not pay for the delivery set on
+    ///     every dispatch. Semantics match a field-like <c>event</c>: handlers
+    ///     are called in subscription order, the same handler may be registered
+    ///     twice, and each unsubscribe drops one (the last) registration. One
+    ///     deliberate difference: a pre-composed multicast delegate passed to
+    ///     <c>+=</c> stays a single registration instead of being flattened, so
+    ///     a throw inside it skips the rest of that delegate's own list — no
+    ///     call site in the repo does this, and flattening it here would need
+    ///     the <c>GetInvocationList</c> this issue removed.
+    /// </remarks>
+    public event EventHandler<UiStateChangedEventArgs>? Changed
+    {
+        // Subscribe/unsubscribe are cold; the delivery set is what dispatch pays for.
+        add
+        {
+            if (value is null)
+                return;
+            lock (_subscribersGate)
+            {
+                _subscribers.Add(value);
+                PublishDeliveryLocked();
+            }
+        }
+        remove
+        {
+            if (value is null)
+                return;
+            lock (_subscribersGate)
+            {
+                // Last match, mirroring Delegate.Remove for the single-cast
+                // handlers every renderer subscribes.
+                for (int i = _subscribers.Count - 1; i >= 0; i--)
+                {
+                    if (!_subscribers[i].Equals(value))
+                        continue;
+                    _subscribers.RemoveAt(i);
+                    break;
+                }
+
+                PublishDeliveryLocked();
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Replace the delivery snapshot. Callers must hold
+    ///     <c>_subscribersGate</c>; the write is a single volatile publish, so a
+    ///     concurrent Notify sees either the old or the new set.
+    /// </summary>
+    private void PublishDeliveryLocked() =>
+        _delivery = _subscribers.Count == 0
+            ? Array.Empty<EventHandler<UiStateChangedEventArgs>>()
+            : _subscribers.ToArray();
 
     /// <summary>
     ///     The unified TEA dispatch — the single entry point for every state
@@ -109,7 +174,14 @@ public sealed class UiStore
             // No-op short-circuit: state unchanged, no event.
             if (ReferenceEquals(original, next))
                 return effect;
-            next = next with { Revision = original.Revision + 1 };
+            // #491: one copy per dispatch. The reducer handed back
+            // a snapshot it just built, so the revision is stamped on that
+            // instance instead of cloning it — `next with { Revision = … }`
+            // allocated a second full UiState per message. Stamping happens
+            // *before* the CAS below, so the instance is still unreachable and
+            // no reader can observe the pre-stamp revision. A CAS loser throws
+            // its stamped instance away with the rest of the iteration.
+            next.SetRevisionUnpublished(original.Revision + 1);
         } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
         Notify(next);
@@ -117,26 +189,31 @@ public sealed class UiStore
     }
 
     /// <summary>
-    ///     Fan-out to <see cref="Changed" /> subscribers. The delegate is
-    ///     snapshotted once, so concurrent subscribe/unsubscribe never tears
-    ///     the delivery set; each subscriber runs in its own try/catch so one
-    ///     failing renderer cannot starve the rest or fail the dispatch.
-    ///     Still synchronous on the dispatching thread — the frame loop owns
-    ///     marshaling (consume <c>e.State</c>, drop stale via
+    ///     Fan-out to <see cref="Changed" /> subscribers. The delegate array is
+    ///     snapshotted once (a volatile read of the pre-built delivery set), so
+    ///     concurrent subscribe/unsubscribe never tears the delivery set; each
+    ///     subscriber runs in its own try/catch so one failing renderer cannot
+    ///     starve the rest or fail the dispatch. Still synchronous on the
+    ///     dispatching thread — the frame loop owns marshaling (consume
+    ///     <c>e.State</c>, drop stale via
     ///     <see cref="UiStateChangedEventArgs.IsStale" />).
     /// </summary>
     private void Notify(UiState next)
     {
-        var handlers = Changed;
-        if (handlers is null)
-            return;
+        var delivery = _delivery; // volatile read
+        if (delivery.Length == 0)
+            return; // nobody listening: no EventArgs, no fan-out
+
+        // One allocation per notification, and only when a subscriber can
+        // actually observe it. It cannot be pooled or cached: subscribers may
+        // keep the args and read State later (dropping stale revisions on their
+        // own schedule), so each notification needs its own instance.
         var args = new UiStateChangedEventArgs(next);
-        foreach (EventHandler<UiStateChangedEventArgs> single in handlers.GetInvocationList()
-                     .Cast<EventHandler<UiStateChangedEventArgs>>())
+        for (int i = 0; i < delivery.Length; i++)
         {
             try
             {
-                single(this, args);
+                delivery[i](this, args);
             }
             catch
             {
