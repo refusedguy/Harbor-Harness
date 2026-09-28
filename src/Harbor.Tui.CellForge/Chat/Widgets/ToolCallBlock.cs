@@ -168,6 +168,17 @@ public sealed class ToolCallBlock : IChatBlock
     /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
     public void SetExpanded(bool expanded) => IsExpanded = expanded;
 
+    /// <summary>Live one-line header suffix for task cards ([UX5] #265): the
+    /// current child tool while running (<c>› read</c>), the retry fraction
+    /// (<c>↻ read 1/3</c>), or the finished tally (<c>· 3 toolcalls</c>).
+    /// Null/empty hides the suffix — non-task cards never set it, so their
+    /// header paint stays byte-identical.</summary>
+    public string? LiveSuffix { get; set; }
+
+    /// <summary>True while <see cref="LiveSuffix"/> reports a retry — painted
+    /// in <c>ChatPalette.ToolError</c> (red) instead of dim.</summary>
+    public bool LiveSuffixIsError { get; set; }
+
     /// <summary>Full args text for the expanded row (falls back to the short summary).</summary>
     public string ArgsFullText => Info.ArgsFull ?? Info.ArgsSummary;
 
@@ -180,6 +191,7 @@ public sealed class ToolCallBlock : IChatBlock
 
     public int BudgetBytes => 96 + (Info.ToolName.Length * 2) + (Info.ArgsSummary.Length * 2)
         + ((Info.ArgsFull?.Length ?? 0) * 2)
+        + ((LiveSuffix?.Length ?? 0) * 2)
         + (_body is null ? 0 : 64 + (_body.Output.Length * 2));
 
     /// <summary>Completes the card; idempotent — first result wins.</summary>
@@ -361,8 +373,24 @@ public sealed class ToolCallBlock : IChatBlock
             int avail = (x + width) - cursor - sep.Length;
             if (avail > 0)
             {
-                var args = Info.ArgsSummary.AsSpan(0, Math.Min(avail, Info.ArgsSummary.Length));
-                buffer.SetText(cursor + sep.Length, y, args, ChatPalette.ToolArgs);
+                int shown = Math.Min(avail, Info.ArgsSummary.Length);
+                buffer.SetText(cursor + sep.Length, y, Info.ArgsSummary.AsSpan(0, shown), ChatPalette.ToolArgs);
+                cursor += sep.Length + shown;
+            }
+        }
+
+        // [UX5] #265: task-card live suffix — current child tool / retry (red)
+        // / finished tally. Null on every other card: no paint, no measure
+        // change, existing baselines stay byte-identical.
+        if (!string.IsNullOrEmpty(LiveSuffix))
+        {
+            const string suffixSep = "  ";
+            int suffixAvail = (x + width) - cursor - suffixSep.Length;
+            if (suffixAvail > 0)
+            {
+                var slice = LiveSuffix.AsSpan(0, Math.Min(suffixAvail, LiveSuffix.Length));
+                buffer.SetText(cursor + suffixSep.Length, y, slice,
+                    LiveSuffixIsError ? ChatPalette.ToolError : ChatPalette.Dim);
             }
         }
     }
