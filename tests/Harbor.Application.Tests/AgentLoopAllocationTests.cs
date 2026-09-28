@@ -56,6 +56,8 @@ public class AgentLoopAllocationTests
     [Test]
     public async Task TextOnly_Turn_StaysBounded()
     {
+        if (!OperatingSystem.IsLinux())
+            return; // Tripwire is linux-only: GC accounting varies 4x across OS runtimes.
         var warm = await NewTextOnlyLoop().RunAsync(NewSession(), TestAgents.AllowAll());
         await Assert.That(warm.IsSuccess).IsTrue();
 
@@ -91,6 +93,8 @@ public class AgentLoopAllocationTests
     [Test]
     public async Task ToolCall_Turn_StaysBounded()
     {
+        if (!OperatingSystem.IsLinux())
+            return; // Tripwire is linux-only (see above).
         // Exercises StreamingCoalescer start/delta/materialize (TryParseArgs)
         // plus permission check, tool dispatch and result append.
         var warm = await NewToolCallLoop().RunAsync(NewSession(), TestAgents.AllowAll());
