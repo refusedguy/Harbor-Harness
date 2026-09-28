@@ -138,9 +138,13 @@ jobs:
       - name: Install pinned recording toolchain
         run: |
           set -euo pipefail
-          echo "DEMO_TOOLCHAIN_DIR=$RUNNER_TEMP/demo-toolchain" >> "$GITHUB_ENV"
+          # DEMO_TOOLCHAIN_DIR is passed inline rather than through $GITHUB_ENV:
+          # an env file written by a step is not visible until the *next* step, so
+          # the installer would fall back to ~/.cache and the PATH line below
+          # would point at a directory that does not exist.
+          export DEMO_TOOLCHAIN_DIR="$RUNNER_TEMP/demo-toolchain"
           demo/install-toolchain.sh
-          echo "$RUNNER_TEMP/demo-toolchain/bin" >> "$GITHUB_PATH"
+          echo "$DEMO_TOOLCHAIN_DIR/bin" >> "$GITHUB_PATH"
 
       # The tapes drive `harbor --demo` (in-process mock LLM, throw-away HOME), so
       # no API key is needed and none is set here. run-scene.sh unsets every
@@ -180,9 +184,11 @@ jobs:
           set -euo pipefail
           for gif in hero markdown approval plain; do
             python3 tools/demo_repro.py normalize \
-              --input "assets/demo/${gif}-compressed-raw.gif" \
+              --input "assets/demo/${gif}-raw.gif" \
               --output "assets/demo/${gif}-compressed.gif"
+            rm -f "assets/demo/${gif}-raw.gif"
           done
+          python3 tools/demo_repro.py report --dir assets/demo
 
       # Size/quality drift gate. Stdlib-only GIF walker (no decoder, no extra
       # package): reads block structure, per-frame delays and the raw LZW
@@ -575,9 +581,13 @@ jobs:
       - name: Install pinned recording toolchain
         run: |
           set -euo pipefail
-          echo "DEMO_TOOLCHAIN_DIR=$RUNNER_TEMP/demo-toolchain" >> "$GITHUB_ENV"
+          # DEMO_TOOLCHAIN_DIR is passed inline rather than through $GITHUB_ENV:
+          # an env file written by a step is not visible until the *next* step, so
+          # the installer would fall back to ~/.cache and the PATH line below
+          # would point at a directory that does not exist.
+          export DEMO_TOOLCHAIN_DIR="$RUNNER_TEMP/demo-toolchain"
           demo/install-toolchain.sh
-          echo "$RUNNER_TEMP/demo-toolchain/bin" >> "$GITHUB_PATH"
+          echo "$DEMO_TOOLCHAIN_DIR/bin" >> "$GITHUB_PATH"
 
       - name: Record every tape twice
         run: |
