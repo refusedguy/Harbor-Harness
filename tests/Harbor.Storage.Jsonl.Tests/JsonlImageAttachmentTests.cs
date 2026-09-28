@@ -155,7 +155,11 @@ public class JsonlImageAttachmentTests
                 "\"createdAt\":\"2026-01-01T00:00:00+00:00\",\"payload\":{\"content\":\"span path\"," +
                 "\"agent\":\"code\",\"model\":\"claude-opus-4\",\"attachments\":[" +
                 "{\"path\":\"/a.png\",\"mimeType\":\"image/png\",\"width\":1,\"height\":1," +
-                $"\"data\":\"{base64}\"}}]}}";
+                // Plain concatenation, NOT an interpolated string: inside $"…"
+                // a "}}" collapses to a single '}' and silently drops the
+                // line-closing brace, which the parser then reports as an
+                // unterminated object instead of a malformed fixture.
+                "\"data\":\"" + base64 + "\"}]}}";
 
             // Assert on the parser's own diagnostic, not just a boolean: a bare
             // IsTrue() would hide WHY a hand-written line was rejected.
@@ -175,8 +179,10 @@ public class JsonlImageAttachmentTests
             await Assert.That(messages.IsSuccess).IsTrue();
             await Assert.That(messages.Value.Count).IsEqualTo(2);
 
-            var message = (UserMessage)messages.Value[1];
-            await Assert.That(message.Id).IsEqualTo("m-span");
+            // Select by id, not by index: the store orders messages by
+            // CreatedAt, and the hand-written line is dated 2026-01-01 while the
+            // seed message is "now" — so the fixture line sorts FIRST.
+            var message = messages.Value.OfType<UserMessage>().First(m => m.Id == "m-span");
             await Assert.That(message.HasAttachments).IsTrue();
             await Assert.That(message.Attachments).IsNotNull();
 
