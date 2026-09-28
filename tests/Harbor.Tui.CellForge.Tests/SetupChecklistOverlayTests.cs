@@ -152,7 +152,6 @@ public sealed class SetupChecklistOverlayTests
         foreach (KeyEvent dismiss in new[]
                  {
                      KeyEvent.Simple(KeyCode.Escape),
-                     KeyEvent.Simple(KeyCode.Enter),
                      KeyEvent.Char(new Rune('q')),
                      KeyEvent.Char(new Rune('?')),
                  })
@@ -168,14 +167,26 @@ public sealed class SetupChecklistOverlayTests
     }
 
     [Test]
-    public async Task HandleKey_OtherKeys_AreSwallowedByTheModal()
+    public async Task HandleKey_Enter_ClosesButFallsThrough()
+    {
+        var overlay = new SetupChecklistOverlay();
+        overlay.Show(Partial(1));
+
+        bool consumed = overlay.HandleKey(KeyEvent.Simple(KeyCode.Enter));
+
+        await Assert.That(consumed).IsFalse();
+        await Assert.That(overlay.Visible).IsFalse();
+    }
+
+    [Test]
+    public async Task HandleKey_TypedKeys_ReachTheComposerBehindTheGuide()
     {
         var overlay = new SetupChecklistOverlay();
         overlay.Show(Partial(1));
 
         bool consumed = overlay.HandleKey(KeyEvent.Char(new Rune('a')));
 
-        await Assert.That(consumed).IsTrue();
+        await Assert.That(consumed).IsFalse();
         await Assert.That(overlay.Visible).IsTrue();
     }
 
@@ -197,7 +208,7 @@ public sealed class SetupChecklistOverlayTests
     }
 
     [Test]
-    public async Task Layer_Visible_IsModalAndPaintsThroughTheStack()
+    public async Task Layer_Visible_IsOpaqueButLeavesTheComposerReachable()
     {
         var overlay = new SetupChecklistOverlay();
         overlay.Show(Partial(3));
@@ -210,13 +221,17 @@ public sealed class SetupChecklistOverlayTests
         stack.PaintOver(buffer);
 
         await Assert.That(layer.Visible).IsTrue();
-        await Assert.That(layer.IsModal).IsTrue();
-        await Assert.That(stack.TopModal).IsSameReferenceAs(layer);
+        await Assert.That(layer.Opaque).IsTrue();
+
+        // Read-only guide: it occludes the panels under its box but raises no
+        // modal barrier, so keys keep flowing to the composer.
+        await Assert.That(layer.IsModal).IsFalse();
+        await Assert.That(stack.HasModalBarrier).IsFalse();
         await Assert.That(GridDump.Art(buffer)).Contains("Setup guide");
     }
 
     [Test]
-    public async Task Layer_OnKey_ForwardsToTheOverlay()
+    public async Task Layer_OnKey_ForwardsTheDismissKeys()
     {
         var overlay = new SetupChecklistOverlay();
         overlay.Show(Partial(1));

@@ -214,8 +214,9 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             return;
         }
 
-        // Setup checklist (issue #383): while the modal is open it owns every key —
-        // Esc/Enter/q/? close it and nothing leaks into the composer behind it.
+        // Setup checklist (issue #383): the guide is read-only, so it only claims the
+        // dismiss keys (Esc/q/? — consumed); anything else keeps flowing to the
+        // composer and the guide stays up until the user closes it.
         if (host.Setup.HandleKey(key))
         {
             host._wake.Writer.TryWrite(null);

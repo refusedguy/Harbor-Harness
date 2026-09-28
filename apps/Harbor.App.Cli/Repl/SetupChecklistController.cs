@@ -104,10 +104,11 @@ internal sealed class SetupChecklistController
     internal void MarkPromptSent() => Update(next => next[SetupTaskIds.FirstPrompt] = true);
 
     /// <summary>
-    /// Modal key routing for the checklist. Returns true when the key was
-    /// consumed (it dismissed the overlay, or the modal swallowed it) — the
-    /// input loop then skips the composer, so nothing leaks behind the
-    /// checklist. A dismissal also disarms the first-run gate.
+    /// Key routing for the guide. Returns true only when the checklist consumed
+    /// the key (a dismiss key); a key it passes through returns false and the
+    /// input loop continues into the composer — the checklist is a read-only
+    /// surface that must never trap the user mid-prompt. A dismissal also
+    /// disarms the first-run gate.
     /// </summary>
     /// <param name="key">Decoded key event.</param>
     internal bool HandleKey(in KeyEvent key)

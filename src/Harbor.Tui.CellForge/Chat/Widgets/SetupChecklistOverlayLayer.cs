@@ -6,9 +6,11 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// Seats the setup-guide checklist (issue #383) on the PRIM2a z-stack
 /// (<see cref="LayoutTree.Overlays" />). Same contract as the other overlay
 /// layers: <see cref="Visible" /> gates the paint (hidden layers never enter
-/// the stack, so quiet frames stay byte-identical), <see cref="IsModal" />
-/// claims keys through <see cref="OverlayStack.RouteKey" /> and
-/// <see cref="OnKey" /> forwards a decoded key to the overlay's own handler.
+/// the stack, so quiet frames stay byte-identical) and the box is opaque, so it
+/// occludes the panels beneath. Deliberately not modal: the guide is read-only
+/// and leaves the composer reachable, so it claims no key barrier —
+/// <see cref="OnKey" /> still forwards a decoded key for hosts that route
+/// through <see cref="OverlayStack.RouteKey" />.
 /// </summary>
 public sealed class SetupChecklistOverlayLayer : IOverlayLayer
 {
@@ -33,9 +35,7 @@ public sealed class SetupChecklistOverlayLayer : IOverlayLayer
 
     public bool HitTransparent => false;
 
-    public bool IsModal => true;
-
-    /// <summary>Routes a decoded key to the checklist (Esc/Enter/q/? dismiss).</summary>
+    /// <summary>Routes a decoded key to the checklist (Esc/q/? dismiss, Enter closes through).</summary>
     public bool OnKey(in KeyEvent key) => _overlay.HandleKey(key);
 
     /// <summary>Refreshes the viewport the centered box is computed from.</summary>

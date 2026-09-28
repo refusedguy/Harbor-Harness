@@ -72,9 +72,12 @@ public sealed class SetupChecklistOverlay
     public void Hide() => Visible = false;
 
     /// <summary>
-    /// Modal key routing: <c>Esc</c>/<c>Enter</c>/<c>q</c>/<c>?</c> dismiss, any
-    /// other key is consumed so nothing leaks into the composer behind the
-    /// modal. Returns false when the checklist is hidden.
+    /// Key routing for the checklist. The guide is an informational read-only
+    /// surface with no focusable control, so it never traps the user:
+    /// <c>Esc</c>/<c>q</c>/<c>?</c> dismiss and consume, <c>Enter</c> dismisses
+    /// but falls through so an empty composer still submits, and every other key
+    /// falls straight through to the composer behind it. Returns false when the
+    /// checklist is hidden or the key is not one of the dismiss keys.
     /// </summary>
     /// <param name="key">Decoded key event.</param>
     public bool HandleKey(in KeyEvent key)
@@ -84,7 +87,7 @@ public sealed class SetupChecklistOverlay
             return false;
         }
 
-        if (key.Key is KeyCode.Escape or KeyCode.Enter)
+        if (key.Key == KeyCode.Escape)
         {
             Hide();
             return true;
@@ -96,7 +99,12 @@ public sealed class SetupChecklistOverlay
             return true;
         }
 
-        return true;
+        if (key.Key == KeyCode.Enter)
+        {
+            Hide();
+        }
+
+        return false;
     }
 
     /// <summary>
