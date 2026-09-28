@@ -34,7 +34,9 @@ public sealed record PaletteFrame(
 ///     Items sharing a non-empty <see cref="CommandItem.Group" /> are
 ///     rendered under a non-selectable section header. Group headers do not
 ///     participate in keyboard selection — <see cref="SelectedIndex" /> and
-///     <see cref="Move" /> skip them.
+///     <see cref="Move" /> skip them. List scrolling is owned by
+///     <see cref="ScrollableViewport" /> with a <see cref="Scrollbar" />
+///     overlay painted over the list rows' border column.
 /// </remarks>
 public sealed class CommandPaletteView
 {
@@ -47,10 +49,13 @@ public sealed class CommandPaletteView
     private List<int> _selectableIndices = new();
     private string _query = string.Empty;
     private int _selected;
-    private int _offset;
 
-    /// <summary>Rows the last Paint actually showed — drives list scrolling on move.</summary>
-    private int _lastRows = 8;
+    /// <summary>
+    /// List scroll state ([PRIM3c], part of #288): content rows are the flat
+    /// view (headers + items), the viewport height is the last Paint's list
+    /// height. Replaces the hand-rolled offset/rows pair.
+    /// </summary>
+    private readonly ScrollableViewport _viewport = new();
 
     /// <summary>Invoked with the chosen item on Enter; the palette hides itself first.</summary>
     public Action<CommandItem>? OnCommit { get; set; }
@@ -95,6 +100,9 @@ public sealed class CommandPaletteView
     /// <summary>Index into the selectable subset of <see cref="_flatView" />.</summary>
     public int SelectedIndex => _selected;
 
+    /// <summary>Scroll viewport over the flat (headers + items) row space.</summary>
+    public ScrollableViewport Viewport => _viewport;
+
     public void Show(IReadOnlyList<CommandItem> commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
@@ -113,7 +121,7 @@ public sealed class CommandPaletteView
         _selectableIndices = new();
         _query = string.Empty;
         _selected = 0;
-        _offset = 0;
+        _viewport.SetTotal(0);
     }
 
     public void PushFrame(PaletteFrame frame)
@@ -125,7 +133,6 @@ public sealed class CommandPaletteView
         _commands = frame.Items;
         _query = string.Empty;
         _selected = 0;
-        _offset = 0;
         LastInputValue = string.Empty;
         Visible = true;
         Refilter();
@@ -142,7 +149,6 @@ public sealed class CommandPaletteView
             _commands = prev.Items;
             _query = string.Empty;
             _selected = 0;
-            _offset = 0;
             Refilter();
             FramePopped?.Invoke(this, EventArgs.Empty);
             return true;
@@ -293,32 +299,35 @@ public sealed class CommandPaletteView
         }
 
         _selected = 0;
-        _offset = 0;
+        _viewport.SetTotal(_flatView.Count);
+        _viewport.SetOffset(0);
         EnsureVisible();
     }
 
     private void EnsureVisible()
     {
-        if (_selectableIndices.Count == 0)
+        if (_selectableIndices.Count == 0 || _viewport.ViewportH <= 0)
         {
             return;
         }
 
-        int targetVisual = _selectableIndices[Math.Min(_selected, _selectableIndices.Count - 1)];
-        if (targetVisual < _offset)
+        long targetVisual = _selectableIndices[Math.Min(_selected, _selectableIndices.Count - 1)];
+        if (targetVisual < _viewport.Offset)
         {
-            _offset = targetVisual;
+            _viewport.SetOffset(targetVisual);
         }
-        else if (targetVisual >= _offset + _lastRows)
+        else if (targetVisual >= _viewport.Offset + _viewport.ViewportH)
         {
-            _offset = targetVisual - _lastRows + 1;
+            _viewport.SetOffset(targetVisual - _viewport.ViewportH + 1);
         }
     }
 
     /// <summary>
     /// Paints the palette inside <paramref name="rect" /> (host-computed,
     /// typically a centered box): border, query prompt, the rows that fit,
-    /// and a hint footer. Pure over state — no layout side effects.
+    /// a scrollbar overlay when the list overflows, and a hint footer.
+    /// Syncs <see cref="Viewport" /> to the list geometry first, so the
+    /// selection is always in view.
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect rect)
     {
@@ -362,7 +371,7 @@ public sealed class CommandPaletteView
 
         int listTop = rect.Y + 2;
         int availableRows = rect.Height - 3 - 1; // query row + hint footer
-        _lastRows = Math.Max(1, availableRows);
+        _viewport.Configure(_flatView.Count, Math.Max(1, availableRows));
         EnsureVisible();
 
         int selectedVisualIndex = _selectableIndices.Count > 0
@@ -374,13 +383,9 @@ public sealed class CommandPaletteView
         var detailStyle = ChatPalette.Dim;
         var headerStyle = new CellStyle(ChatPalette.Muted, attrs: StyleAttr.Bold);
         int painted = 0;
-        for (int i = 0; i < _flatView.Count && painted < availableRows; i++)
+        int firstRow = (int)_viewport.Offset;
+        for (int i = firstRow; i < _flatView.Count && painted < availableRows; i++)
         {
-            if (i < _offset)
-            {
-                continue;
-            }
-
             var (isHeader, text, detail) = _flatView[i];
             int y = listTop + painted;
             if (isHeader)
@@ -405,6 +410,14 @@ public sealed class CommandPaletteView
             }
 
             painted++;
+        }
+
+        if (availableRows > 0)
+        {
+            // Scrollbar overlay on the border column of the list rows only —
+            // hidden (buffer untouched) when the content fits, so small
+            // palettes paint byte-identical to before.
+            _ = Scrollbar.TryPaint(buffer, new Rect(rect.Right - 1, listTop, 1, availableRows), _viewport);
         }
 
         int selectableCount = _selectableIndices.Count;
