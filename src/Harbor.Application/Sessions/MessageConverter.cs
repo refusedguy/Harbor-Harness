@@ -51,10 +51,13 @@ public sealed class MessageConverter
                     for (int j = 0; j < results.Count; j++)
                     {
                         var r = results[j];
+                        // #235: cap giant payloads before they enter model context.
+                        // Stores, events and TUI keep the full Output — only the
+                        // provider-bound copy is trimmed (head kept, tail cut).
                         result.Add(new LlmToolResultMessage(
                             r.ToolCallId,
                             r.ToolName,
-                            r.Output,
+                            ToolResultContextTrim.Trim(r.Output),
                             r.IsError));
                     }
                     break;
