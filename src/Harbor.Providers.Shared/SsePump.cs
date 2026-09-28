@@ -218,8 +218,16 @@ internal static class SsePump
                 if (!response.IsSuccessStatusCode)
                 {
                     string errorBody = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    // #259: bound the user-facing blob (429 JSON bodies run to
+                    // KBs and every renderer paints Message inline); the full
+                    // body rides on Exception for diagnostics.
+                    string bounded = ProviderErrors.BuildProviderErrorMessage(
+                        apiErrorLabel, (int)response.StatusCode, errorBody);
+                    logger.LogWarning(
+                        "{Label} error {Status}: {Snippet}", apiErrorLabel, (int)response.StatusCode, bounded);
                     await writer.WriteAsync(new ErrorEvent(
-                        $"{apiErrorLabel} error {(int)response.StatusCode}: {errorBody}",
+                        bounded,
+                        errorBody.Length > ProviderErrors.MaxProviderErrorBodyChars ? errorBody : null,
                         Kind: ProviderErrors.FromStatus(response.StatusCode),
                         StatusCode: (int)response.StatusCode), ct).ConfigureAwait(false);
                     return;

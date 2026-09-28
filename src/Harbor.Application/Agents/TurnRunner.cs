@@ -195,6 +195,10 @@ internal sealed class TurnRunner(
             await eventBus.PublishAsync(new MessageEndEvent(degraded), ct).ConfigureAwait(false);
             await eventBus.PublishAsync(
                 new TurnEndEvent(degraded, Array.Empty<ToolResultMessage>(), session.Session.Id), ct).ConfigureAwait(false);
+            // #259: single collapsed-card error for the exhausted budget —
+            // per-attempt publishes are suppressed above, so this is the only
+            // AgentErrorEvent for the storm (never N duplicates).
+            await eventBus.PublishAsync(new AgentErrorEvent(lex.Message, lex.Details), ct).ConfigureAwait(false);
             return new TurnStepResult(truncationFallback, EndRun: true);
         }
         catch (LlmStreamErrorException lex)
@@ -388,7 +392,16 @@ internal sealed class TurnRunner(
                         partial = FlushAll(coalescer, partial);
                         coalescer.DiscardPendingToolCalls();
                         reportPartial?.Invoke(partial.WithFinish(StopReason.Error, finalUsage ?? new Usage(0, 0)));
-                        await eventBus.PublishAsync(new AgentErrorEvent(err.Message, err.Exception), ct).ConfigureAwait(false);
+                        // #259: transient failures are retried — publishing here
+                        // would emit one AgentError per attempt (the same 429
+                        // blob N times). Only fatal errors publish immediately;
+                        // transient ones publish once when the budget is
+                        // exhausted (see the catch below), zero on recovery.
+                        if (!ProviderErrors.IsTransient(err.Kind))
+                        {
+                            await eventBus.PublishAsync(new AgentErrorEvent(err.Message, err.Exception), ct).ConfigureAwait(false);
+                        }
+
                         throw new LlmStreamErrorException(err);
                 }
             }

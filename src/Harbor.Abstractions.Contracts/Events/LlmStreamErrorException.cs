@@ -26,6 +26,9 @@ public sealed class LlmStreamErrorException : Exception
     /// <summary>HTTP status code when the failure came from a non-success response.</summary>
     public int? StatusCode { get; }
 
+    /// <summary>Full provider body / diagnostics when the user-facing message was bounded (#259).</summary>
+    public string? Details { get; }
+
     /// <summary>Creates the error from the terminal stream event.</summary>
     /// <param name="err">The error event reported by the provider stream.</param>
     public LlmStreamErrorException(ErrorEvent err)
@@ -33,6 +36,7 @@ public sealed class LlmStreamErrorException : Exception
     {
         Kind = err.Kind;
         StatusCode = err.StatusCode;
+        Details = err.Exception;
     }
 
     /// <summary>Creates the error with the user-facing failure message.</summary>
