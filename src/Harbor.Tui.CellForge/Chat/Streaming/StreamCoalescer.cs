@@ -30,6 +30,15 @@ internal sealed class StreamCoalescer
     /// <summary>Last frame-loop tick (mirrors the bridge clock).</summary>
     public long NowMs { get; set; }
 
+    /// <summary>
+    /// Characters handed to the newline scan since the last
+    /// <see cref="StartStream"/> — the measurement seam for #489. The scan is
+    /// delta-local, so this tracks streamed bytes, never accumulated buffer
+    /// length; a regression back to a buffer rescan shows up as an
+    /// O(L·D) blowup here. Reset per stream so callers can compare runs.
+    /// </summary>
+    public int NewlineScanChars { get; private set; }
+
     public StreamCoalescer(ChatTimelinePanel panel, StatusViewModel status)
     {
         _panel = panel ?? throw new ArgumentNullException(nameof(panel));
@@ -80,6 +89,7 @@ internal sealed class StreamCoalescer
         _incoming.Clear();
         _streamSource.Clear();
         _pending.Clear();
+        NewlineScanChars = 0;
         _msgStartTick = NowMs;
         _msgTokensIn = 0;
         _msgTokensOut = 0;
@@ -110,8 +120,19 @@ internal sealed class StreamCoalescer
             StartStream();
         }
 
+        // #489: `_incoming` only ever holds the text AFTER the last '\n' (the
+        // drain below keeps that tail, everything else is enqueued), so a line
+        // break can only arrive inside `delta` itself. Scanning the accumulated
+        // buffer instead re-walked the whole partial line on every delta — the
+        // buffer holds ONE line, so a streamed paragraph with no newline yet
+        // (the common case for an answer) was O(L) per delta, O(L·D) per line.
+        // The delta-local scan is O(len(delta)); the invariant is pinned by
+        // StreamCoalescerScanTests (a '\n' in any later chunk still drains).
+        NewlineScanChars += delta.Length;
+        bool lineCompleted = delta.AsSpan().IndexOf('\n') >= 0;
+
         _incoming.Append(delta);
-        if (!ContainsNewline(_incoming))
+        if (!lineCompleted)
         {
             return; // hot path: partial-line deltas allocate nothing
         }
@@ -156,19 +177,6 @@ internal sealed class StreamCoalescer
         }
     }
 
-    private static bool ContainsNewline(StringBuilder sb)
-    {
-        foreach (var chunk in sb.GetChunks())
-        {
-            if (chunk.Span.Contains('\n'))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     public void IncomingThinking(string delta)
     {
         if (_thinkStream is null)
@@ -176,8 +184,14 @@ internal sealed class StreamCoalescer
             StartThinkingStream();
         }
 
+        // #489: same delta-local scan as Incoming — `_thinkingIncoming` is
+        // newline-free on entry by the same construction, so a rescan of the
+        // accumulated buffer could only ever re-find what we already drained.
+        NewlineScanChars += delta.Length;
+        bool lineCompleted = delta.AsSpan().IndexOf('\n') >= 0;
+
         _thinkingIncoming.Append(delta);
-        if (!ContainsNewline(_thinkingIncoming))
+        if (!lineCompleted)
         {
             return; // hot path: partial-line deltas allocate nothing
         }

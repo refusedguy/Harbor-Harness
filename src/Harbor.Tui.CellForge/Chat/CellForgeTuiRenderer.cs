@@ -293,6 +293,9 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     ///     NOTE(CF-B-005): <c>InputModel.History/HistoryIndex</c> are intentionally
     ///     not mirrored here — history recall stays in
     ///     <c>PromptHistory/ComposerController</c> until CF-B-005.
+    ///     #489: the draft is compared with <see cref="PromptBuffer.IsEquivalentTo"/>
+    ///     (in place, no string copy) because this runs on every store change,
+    ///     i.e. per keystroke AND per streamed token.
     /// </summary>
     private void SyncInputFromState(UiState state)
     {
@@ -308,7 +311,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
             _inputVm.Placeholder = state.Chat.IsAgentRunning ? BusyPlaceholder : IdlePlaceholder;
 
-            if (_composer.Buffer.SnapshotText() != text)
+            if (!_composer.Buffer.IsEquivalentTo(text))
             {
                 _composer.Buffer.Clear();
                 if (text.Length != 0)
@@ -337,7 +340,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
             return;
 
         string text = _inputVm.Text ?? string.Empty;
-        if (_composer.Buffer.SnapshotText() != text)
+        if (!_composer.Buffer.IsEquivalentTo(text))
         {
             _composer.Buffer.Clear();
             if (text.Length != 0)
