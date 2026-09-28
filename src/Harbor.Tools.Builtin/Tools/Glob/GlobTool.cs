@@ -67,50 +67,27 @@ public sealed class GlobTool : ITool
         CancellationToken cancellationToken = default)
         => Task.Run(() => ExecuteCore(args, cancellationToken), cancellationToken);
 
+    private sealed record GlobOptions(string Pattern, string BasePath, bool Prune, int MaxResults);
+
     private ToolResult ExecuteCore(JsonElement args, CancellationToken ct)
     {
-        string pattern = args.GetProperty("pattern").GetString()!.Trim();
-        string basePath = args.TryGetProperty("path", out var bp) && bp.ValueKind == JsonValueKind.String
-            ? bp.GetString()!
-            : Environment.CurrentDirectory;
-        bool noPrune = args.TryGetProperty("ignoreGitignore", out var ig)
-                       && ig.ValueKind == JsonValueKind.True;
-        int maxResults = DefaultMaxResults;
-        if (args.TryGetProperty("maxResults", out var mr) && mr.ValueKind == JsonValueKind.Number
-                                                          && mr.TryGetInt32(out int m))
-            maxResults = Math.Clamp(m, 1, HardMaxResults);
+        GlobOptions options = ReadOptions(args);
 
-        var resolvedBase = ToolPaths.Resolve(basePath);
+        var resolvedBase = ToolPaths.Resolve(options.BasePath);
         if (resolvedBase.IsFailure)
             return ToolResult.Error(resolvedBase.Error);
-        basePath = resolvedBase.Value;
+        string basePath = resolvedBase.Value;
 
         if (!Directory.Exists(basePath))
             return ToolResult.Error($"Directory not found: {basePath}");
 
-        _logger.LogDebug("Glob: {Pattern} from {Path}", pattern, basePath);
+        _logger.LogDebug("Glob: {Pattern} from {Path}", options.Pattern, basePath);
 
-        // Expand light braces: *.{cs,ts} → *.cs + *.ts (one level)
-        var patterns = ExpandBraces(pattern);
-        var matches = new List<string>(Math.Min(maxResults, 256));
-        bool truncated = false;
-
+        List<string> matches;
+        bool truncated;
         try
         {
-            foreach (string pat in patterns)
-            {
-                ct.ThrowIfCancellationRequested();
-                foreach (string file in EnumerateGlob(basePath, pat, !noPrune, ct))
-                {
-                    matches.Add(file);
-                    if (matches.Count >= maxResults)
-                    {
-                        truncated = true;
-                        break;
-                    }
-                }
-                if (truncated) break;
-            }
+            (matches, truncated) = CollectMatches(basePath, options, ct);
         }
         catch (OperationCanceledException oce)
         {
@@ -118,30 +95,92 @@ public sealed class GlobTool : ITool
             return ToolResult.Error(ToolErrors.Handler("glob", ct)(oce));
         }
 
+        List<string> relative = ToRelativeSorted(basePath, matches);
+
+        if (relative.Count == 0)
+            return ToolResult.Success($"No files matching pattern '{options.Pattern}' in {basePath}");
+
+        _logger.LogDebug("Glob complete: {Count} matches", relative.Count);
+
+        return RenderResult(basePath, options, relative, truncated);
+    }
+
+    /// <summary>Reads scalar args into options; base-path resolution stays with the caller.</summary>
+    private static GlobOptions ReadOptions(JsonElement args)
+    {
+        string pattern = args.GetProperty("pattern").GetString()!.Trim();
+        string basePath = args.TryGetProperty("path", out var bp) && bp.ValueKind == JsonValueKind.String
+            ? bp.GetString()!
+            : Environment.CurrentDirectory;
+        bool prune = !(args.TryGetProperty("ignoreGitignore", out var ig)
+                       && ig.ValueKind == JsonValueKind.True);
+        int maxResults = DefaultMaxResults;
+        if (args.TryGetProperty("maxResults", out var mr) && mr.ValueKind == JsonValueKind.Number
+                                                          && mr.TryGetInt32(out int m))
+            maxResults = Math.Clamp(m, 1, HardMaxResults);
+
+        return new GlobOptions(pattern, basePath, prune, maxResults);
+    }
+
+    /// <summary>Enumerates all brace-expanded patterns until the match budget is hit.</summary>
+    private static (List<string> Matches, bool Truncated) CollectMatches(
+        string basePath,
+        GlobOptions options,
+        CancellationToken ct)
+    {
+        // Expand light braces: *.{cs,ts} → *.cs + *.ts (one level)
+        var patterns = ExpandBraces(options.Pattern);
+        var matches = new List<string>(Math.Min(options.MaxResults, 256));
+        bool truncated = false;
+
+        foreach (string pat in patterns)
+        {
+            ct.ThrowIfCancellationRequested();
+            foreach (string file in EnumerateGlob(basePath, pat, options.Prune, ct))
+            {
+                matches.Add(file);
+                if (matches.Count >= options.MaxResults)
+                {
+                    truncated = true;
+                    break;
+                }
+            }
+            if (truncated) break;
+        }
+
+        return (matches, truncated);
+    }
+
+    /// <summary>Dedupes absolute matches into a stable relative sort.</summary>
+    private static List<string> ToRelativeSorted(string basePath, List<string> matches)
+    {
         // Dedupe + stable sort
-        var relative = matches
+        return matches
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(f => Path.GetRelativePath(basePath, f))
             .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
 
-        if (relative.Count == 0)
-            return ToolResult.Success($"No files matching pattern '{pattern}' in {basePath}");
-
-        _logger.LogDebug("Glob complete: {Count} matches", relative.Count);
-
+    /// <summary>Renders the relative match list with a count header.</summary>
+    private static ToolResult RenderResult(
+        string basePath,
+        GlobOptions options,
+        List<string> relative,
+        bool truncated)
+    {
         var sb = new StringBuilder(relative.Count * 40);
         sb.Append("Found ").Append(relative.Count);
         if (truncated) sb.Append('+');
         sb.Append(" files");
-        if (truncated) sb.Append(" (truncated at ").Append(maxResults).Append(')');
+        if (truncated) sb.Append(" (truncated at ").Append(options.MaxResults).Append(')');
         sb.Append(':').Append('\n');
         foreach (string r in relative)
             sb.Append(r).Append('\n');
 
         return ToolResult.Success(
             sb.ToString().TrimEnd(),
-            new { count = relative.Count, pattern, basePath, truncated });
+            new { count = relative.Count, pattern = options.Pattern, basePath, truncated });
     }
 
     /// <summary>
@@ -170,13 +209,7 @@ public sealed class GlobTool : ITool
 
             if (segment == "**")
             {
-                // All dirs under each current dir (including itself)
-                foreach (string dir in dirs)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    foreach (string d in EnumerateDirsRecursive(dir, prune, ct))
-                        nextDirs.Add(d);
-                }
+                CollectDoubleStarDirs(dirs, nextDirs, prune, ct);
                 // de-dupe dirs
                 dirs = nextDirs.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 continue;
@@ -191,14 +224,7 @@ public sealed class GlobTool : ITool
                 if (!isLast)
                 {
                     // must be directories
-                    foreach (string sub in SafeEnumerateDirectories(dir))
-                    {
-                        string name = Path.GetFileName(sub);
-                        if (prune && PrunedDirNames.Contains(name))
-                            continue;
-                        if (rx.IsMatch(name))
-                            nextDirs.Add(sub);
-                    }
+                    CollectMatchingSubdirs(dir, rx, prune, nextDirs);
                 }
                 else
                 {
@@ -214,6 +240,39 @@ public sealed class GlobTool : ITool
 
             if (!isLast)
                 dirs = nextDirs;
+        }
+    }
+
+    /// <summary>Collects every directory under each current dir (including itself).</summary>
+    private static void CollectDoubleStarDirs(
+        List<string> dirs,
+        List<string> nextDirs,
+        bool prune,
+        CancellationToken ct)
+    {
+        // All dirs under each current dir (including itself)
+        foreach (string dir in dirs)
+        {
+            ct.ThrowIfCancellationRequested();
+            foreach (string d in EnumerateDirsRecursive(dir, prune, ct))
+                nextDirs.Add(d);
+        }
+    }
+
+    /// <summary>Collects subdirectories of <paramref name="dir" /> matching the segment regex.</summary>
+    private static void CollectMatchingSubdirs(
+        string dir,
+        Regex rx,
+        bool prune,
+        List<string> nextDirs)
+    {
+        foreach (string sub in SafeEnumerateDirectories(dir))
+        {
+            string name = Path.GetFileName(sub);
+            if (prune && PrunedDirNames.Contains(name))
+                continue;
+            if (rx.IsMatch(name))
+                nextDirs.Add(sub);
         }
     }
 

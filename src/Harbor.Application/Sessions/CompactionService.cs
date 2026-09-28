@@ -438,8 +438,18 @@ public sealed class CompactionService(
     /// <inheritdoc />
     public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
     {
+        return IsOverBudget(messages, model, ReserveTokens);
+    }
+
+    /// <summary>
+    ///     Budget check behind <see cref="ShouldCompact" />: the estimated
+    ///     history exceeds the model's context window minus the safety reserve.
+    ///     A negative threshold (reserve larger than the window) trips on any content.
+    /// </summary>
+    private bool IsOverBudget(IReadOnlyList<AgentMessage> messages, ModelInfo model, int reserveTokens)
+    {
         int estimated = tokenTracker.EstimateTokens(messages);
-        return estimated > model.ContextWindow - ReserveTokens;
+        return estimated > model.ContextWindow - reserveTokens;
     }
 
     /// <inheritdoc />
@@ -486,47 +496,20 @@ public sealed class CompactionService(
         var stopwatch = Stopwatch.StartNew();
         try
             {
-            // Ф8/A3: prefer the configured cheap secondary model for the
-            // summarization call; fall back to the primary client/model when
-            // no secondary is configured or it cannot be resolved.
-            ILlmClient summaryClient = client;
-            ModelInfo summaryModel = model;
-            var secondary = await TryResolveSecondaryAsync(model, ct).ConfigureAwait(false);
-            if (secondary is not null)
-            {
-                summaryClient = secondary.Client;
-                summaryModel = secondary.Model;
-            }
+            (ILlmClient summaryClient, ModelInfo summaryModel) =
+                await ResolveSummaryTargetAsync(client, model, ct).ConfigureAwait(false);
 
             string prompt = BuildSummarizationPrompt(messages, tailStart);
-            // Ф8/A1: the summarization system prompt is a compile-time constant, so the
-            // request is a perfect prefix-cache candidate — flag it Ephemeral.
-            var request = new LlmRequest(
-                summaryModel.Id,
-                new[] { LlmUserMessage.Text(prompt) },
-                SummarizationPrompt,
-                Array.Empty<ToolDefinition>(),
-                Temperature: 0.3m,
-                MaxOutputTokens: 4096,
-                CacheStrategy: CacheStrategy.Ephemeral);
+            LlmRequest request = BuildSummaryRequest(summaryModel, prompt);
 
-            // 3. Stream LLM (collect full text into pooled StringBuilder)
-            using var summaryBuilder = StringBuilderPool.Rent(4096);
-            await foreach (var evt in summaryClient.StreamAsync(request, ct).ConfigureAwait(false))
-            {
-                if (evt is TextDeltaEvent td)
-                {
-                    summaryBuilder.Builder.Append(td.Delta);
-                }
-                if (evt is ErrorEvent err)
-                {
-                    return Result.Failure<CompactionResult>($"LLM error during compaction: {err.Message}");
-                }
-            }
+            Result<string> summaryOutcome =
+                await CollectSummaryAsync(summaryClient, request, ct).ConfigureAwait(false);
+            if (summaryOutcome.IsFailure)
+                return Result.Failure<CompactionResult>(summaryOutcome.Error);
 
             stopwatch.Stop();
 
-            string summary = summaryBuilder.ToString();
+            string summary = summaryOutcome.Value;
 
             // F19: an empty summary (content filter, silent provider) used to be
             // accepted as success — the anchor would then discard the ENTIRE
@@ -539,14 +522,8 @@ public sealed class CompactionService(
                 return Result.Failure<CompactionResult>("Compaction produced an empty summary.");
             }
 
-            // 4. Compute tokens saved — iterate head slice directly without materializing a List.
-            int headTokens = 0;
-            for (int i = 0; i < tailStart; i++)
-            {
-                headTokens += tokenTracker.EstimateMessage(messages[i]);
-            }
             int summaryTokens = tokenTracker.Estimate(summary);
-            int tokensSaved = headTokens - summaryTokens;
+            int tokensSaved = ComputeTokensSaved(messages, tailStart, summaryTokens);
 
             // 5. Capture first kept (tail) message id (if any) without allocating a Skip().FirstOrDefault().
             string? summaryFirstKeptId = null;
@@ -555,16 +532,13 @@ public sealed class CompactionService(
                 summaryFirstKeptId = messages[tailStart].Id;
             }
 
-            var summaryMessage = new AssistantMessage(
+            var summaryMessage = CreateSummaryMessage(
                 Guid.NewGuid().ToString("N"),
                 sessionId,
-                DateTimeOffset.UtcNow,
-                new[] { new TextPart(summary) },
-                StopReason.Stop,
-                new Usage(0, summaryTokens),
+                summary,
+                summaryTokens,
                 summaryModel.Id,
-                IsSummary: true,
-                SummaryFirstKeptId: summaryFirstKeptId);
+                summaryFirstKeptId);
 
             return Result.Success(new CompactionResult(
                 summary,
@@ -592,6 +566,100 @@ public sealed class CompactionService(
     }
 
     /// <summary>
+    ///     Prefer the configured cheap secondary model for the summarization
+    ///     call; fall back to the primary client/model when no secondary is
+    ///     configured or it cannot be resolved.
+    /// </summary>
+    private async Task<(ILlmClient Client, ModelInfo Model)> ResolveSummaryTargetAsync(
+        ILlmClient client,
+        ModelInfo model,
+        CancellationToken ct)
+    {
+        // Ф8/A3: prefer the configured cheap secondary model for the
+        // summarization call; fall back to the primary client/model when
+        // no secondary is configured or it cannot be resolved.
+        var secondary = await TryResolveSecondaryAsync(model, ct).ConfigureAwait(false);
+        if (secondary is not null)
+            return (secondary.Client, secondary.Model);
+
+        return (client, model);
+    }
+
+    /// <summary>Builds the summarization LLM request for the given prompt.</summary>
+    private static LlmRequest BuildSummaryRequest(ModelInfo summaryModel, string prompt)
+    {
+        // Ф8/A1: the summarization system prompt is a compile-time constant, so the
+        // request is a perfect prefix-cache candidate — flag it Ephemeral.
+        return new LlmRequest(
+            summaryModel.Id,
+            new[] { LlmUserMessage.Text(prompt) },
+            SummarizationPrompt,
+            Array.Empty<ToolDefinition>(),
+            Temperature: 0.3m,
+            MaxOutputTokens: 4096,
+            CacheStrategy: CacheStrategy.Ephemeral);
+    }
+
+    /// <summary>Streams the summarization call, collecting full text into a pooled builder.</summary>
+    private static async Task<Result<string>> CollectSummaryAsync(
+        ILlmClient summaryClient,
+        LlmRequest request,
+        CancellationToken ct)
+    {
+        // 3. Stream LLM (collect full text into pooled StringBuilder)
+        using var summaryBuilder = StringBuilderPool.Rent(4096);
+        await foreach (var evt in summaryClient.StreamAsync(request, ct).ConfigureAwait(false))
+        {
+            if (evt is TextDeltaEvent td)
+            {
+                summaryBuilder.Builder.Append(td.Delta);
+            }
+            if (evt is ErrorEvent err)
+            {
+                return Result.Failure<string>($"LLM error during compaction: {err.Message}");
+            }
+        }
+
+        return Result.Success(summaryBuilder.ToString());
+    }
+
+    /// <summary>
+    ///     Tokens saved by replacing the head slice with the summary.
+    ///     Iterates the head slice directly without materializing a List.
+    /// </summary>
+    private int ComputeTokensSaved(IReadOnlyList<AgentMessage> messages, int tailStart, int summaryTokens)
+    {
+        // 4. Compute tokens saved — iterate head slice directly without materializing a List.
+        int headTokens = 0;
+        for (int i = 0; i < tailStart; i++)
+        {
+            headTokens += tokenTracker.EstimateMessage(messages[i]);
+        }
+        return headTokens - summaryTokens;
+    }
+
+    /// <summary>Builds the summary anchor message carrying the compacted history.</summary>
+    private static AssistantMessage CreateSummaryMessage(
+        string messageId,
+        string sessionId,
+        string summary,
+        int summaryTokens,
+        string modelId,
+        string? summaryFirstKeptId)
+    {
+        return new AssistantMessage(
+            messageId,
+            sessionId,
+            DateTimeOffset.UtcNow,
+            new[] { new TextPart(summary) },
+            StopReason.Stop,
+            new Usage(0, summaryTokens),
+            modelId,
+            IsSummary: true,
+            SummaryFirstKeptId: summaryFirstKeptId);
+    }
+
+    /// <summary>
     ///     Returns the index at which the tail begins (head = messages[0..tailStart], tail = messages[tailStart..]).
     ///     Returning an index (instead of two List slices) eliminates two List allocations per compaction.
     /// </summary>
@@ -599,6 +667,19 @@ public sealed class CompactionService(
         IReadOnlyList<AgentMessage> messages,
         int keepRecentTokens,
         int tailTurns)
+    {
+        int tailStart = FindTailStartByBudget(messages, keepRecentTokens);
+        return ApplyTailTurnsMinimum(messages, tailStart, tailTurns);
+    }
+
+    /// <summary>
+    ///     Walk backwards accumulating the newest messages until the token
+    ///     budget is hit. Never cuts in the middle of a turn
+    ///     (tool_call ↔ tool_result pair).
+    /// </summary>
+    private int FindTailStartByBudget(
+        IReadOnlyList<AgentMessage> messages,
+        int keepRecentTokens)
     {
         int tailTokens = 0;
         int tailStart = messages.Count;
@@ -621,6 +702,15 @@ public sealed class CompactionService(
             tailStart = i;
         }
 
+        return tailStart;
+    }
+
+    /// <summary>Enforces the tail-turns minimum over a budget-computed cut point.</summary>
+    private static int ApplyTailTurnsMinimum(
+        IReadOnlyList<AgentMessage> messages,
+        int tailStart,
+        int tailTurns)
+    {
         // Enforce tail_turns minimum
         int minTailStart = messages.Count - tailTurns * 4;
         if (minTailStart < tailStart)
