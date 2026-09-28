@@ -94,3 +94,5 @@ internal static class RepoPaths
         return null;
     }
 }
+
+// negative-proof marker

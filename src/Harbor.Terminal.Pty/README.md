@@ -126,26 +126,6 @@ reference is `CSharpFunctionalExtensions` for the `Result` start boundary.
 Referenced by `apps/Harbor.App.Avalonia` and `tests/Harbor.Terminal.Pty.Tests`.
 The absence of a `Harbor.*` edge is what keeps it usable from any host.
 
-## Known limitations
-
-- **No Windows support.** `IsSupported` is `false` and ConPTY is unimplemented;
-  callers must check it (as `TerminalPaneViewModel` does) or the libc `DllImport`
-  will fail.
-- **No terminal emulation.** You get raw bytes; grid rendering, alternate-screen
-  handling, bracketed paste and colour parsing are the consumer's job. This is
-  why the desktop panes pair it with a rendering layer.
-- **No `bash` builtin execution, job control or signal forwarding.** Ctrl+C is
-  delivered by the child only if the pty is in the child's foreground process
-  group; Harbor does not manage that.
-- **`Read` direction is fire-and-forget.** `OutputReceived` runs on a long-lived
-  reader thread; a slow handler applies backpressure to the pipe but there is no
-  flow-control API.
-- **Synchronous `DisposeAsync` sites must not be assumed safe.** `PtyProcess` is
-  `IAsyncDisposable`; the desktop app bridges this explicitly at window/pane
-  close.
-- Not marked `IsAotCompatible` — `DllImport` marshalling keeps it on the JIT
-  path.
-
 ## See also
 
 - [`../../apps/Harbor.App.Avalonia`](../../apps/Harbor.App.Avalonia) — the consuming desktop app
