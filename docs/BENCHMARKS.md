@@ -484,6 +484,8 @@ dotnet run -c Release --project tests/Harbor.Registries.Tests -- --treenode-filt
 | `Parse_UserLine_StaysBounded` (`Harbor.Storage.Jsonl.Tests`) | `JsonlLineParser.Parse` per line | ≤ 8 KB/line |
 | `GetMessages_SeededStore_StaysBounded` | `JsonlSessionStore.GetMessagesAsync` (100 msgs) | ≤ 512 KB/read |
 | `TryParseChatChunkLine_TextDelta_StaysBounded` (`Harbor.Providers.Tests`) | `OpenAiWire.TryParseChatChunkLine` text chunk | ≤ 4 KB/chunk |
+| `DecodeDataLine_KilobytePayload_AllocatesNothing` (`Harbor.Providers.Tests`, #467) | `SsePump.DecodeDataLine` — SSE `data:` prefix strip + `[DONE]` test on a 4 KB line (above the chunk parser, so outside the row above) | 0 B |
+| `LegacyDecode_StillCopiesPayload_TripwireIsNotVacuous` (#467) | the pre-#467 chain kept verbatim (`Substring` → `TrimStart` → `Trim().Equals("[DONE]")`) on the same 4 KB line — keeps the zero-alloc gate from passing vacuously | > 2 bytes/char |
 | `ExtractDiff_NonDiffTool_IsAllocationFree` (`Harbor.Tui.CellForge.Tests`) | `DiffPreview.ExtractDiff` non-diff guard | 0 B |
 | `ExtractDiff_Edit_StaysBounded` | `DiffPreview.ExtractDiff` edit path | ≤ 32 KB/call |
 

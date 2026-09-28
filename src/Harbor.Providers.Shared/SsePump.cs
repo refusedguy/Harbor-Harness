@@ -117,6 +117,33 @@ internal sealed class ChunkStreamState
 }
 
 /// <summary>
+///     Classification of one raw SSE line, as decided by
+///     <see cref="SsePump.DecodeDataLine" /> (#467). The payload itself never
+///     leaves as a string here — it rides out as a span over the line the
+///     reader already owns, so the decode step cannot copy it.
+/// </summary>
+internal enum SseLineKind
+{
+    /// <summary>
+    ///     Not a <c>data:</c> field — a comment (<c>: keep-alive</c>), an
+    ///     <c>event:</c>/<c>id:</c>/<c>retry:</c> line, or anything blank.
+    /// </summary>
+    NotData,
+
+    /// <summary>A <c>data:</c> field with no payload — the keep-alive heartbeat.</summary>
+    Empty,
+
+    /// <summary>
+    ///     The <c>[DONE]</c> sentinel — graceful end of stream. Padding on
+    ///     either side is tolerated.
+    /// </summary>
+    Done,
+
+    /// <summary>A payload chunk; the decode's <c>payload</c> out carries it.</summary>
+    Payload,
+}
+
+/// <summary>
 ///     The one SSE/NDJSON stream pump behind every ILlmClient (ROP-A ПР.1).
 ///     Owns the whole transport pipeline: send → status check → line loop →
 ///     completion, with canonical error classification (ROP-A ПР.5) and the
@@ -268,6 +295,59 @@ internal static class SsePump
         }
     }
 
+    /// <summary>SSE field name — the only field the pump decodes.</summary>
+    private const string DataField = "data:";
+
+    /// <summary>OpenAI-style graceful end-of-stream sentinel.</summary>
+    private const string DoneSentinel = "[DONE]";
+
+    /// <summary>
+    ///     #467: classify one raw SSE line and slice its payload **in place**.
+    ///     The previous chain — <c>line["data:".Length..].TrimStart()</c>
+    ///     followed by <c>data.Trim().Equals("[DONE]", Ordinal)</c> — copied
+    ///     the whole payload (twice for the usual <c>data: {json}</c> line, and
+    ///     a third time whenever the server pads the sentinel) purely to
+    ///     compare it against a six-character literal. Tool-call argument
+    ///     deltas are kilobytes, so that copy dominated the per-delta budget
+    ///     — and it sat *above* <c>OpenAiWire.TryParseChatChunkLine</c>, i.e.
+    ///     outside the reach of the #186 chunk-parsing tripwire. Trimming and
+    ///     the sentinel test run on spans here, so the decode allocates
+    ///     nothing; the caller materialises the payload string exactly once,
+    ///     for the chunk parser.
+    /// </summary>
+    /// <param name="line">One raw line as read from the stream.</param>
+    /// <param name="payload">
+    ///     For <see cref="SseLineKind.Payload" />: the payload with leading
+    ///     whitespace trimmed — byte-for-byte what the old
+    ///     <c>line["data:".Length..].TrimStart()</c> handed downstream
+    ///     (trailing whitespace is kept, as before). Empty otherwise.
+    /// </param>
+    internal static SseLineKind DecodeDataLine(ReadOnlySpan<char> line, out ReadOnlySpan<char> payload)
+    {
+        payload = default;
+        if (!line.StartsWith(DataField, StringComparison.OrdinalIgnoreCase))
+        {
+            return SseLineKind.NotData;
+        }
+
+        // SSE allows `data:{...}` with no space; only the `data:` prefix
+        // itself is significant. TrimStart keeps payload JSON intact
+        // (JsonDocument tolerates leading whitespace anyway).
+        ReadOnlySpan<char> data = line[DataField.Length..].TrimStart();
+        if (data.IsEmpty)
+        {
+            return SseLineKind.Empty; // Heartbeat `data:` — no payload.
+        }
+
+        if (data.Trim().SequenceEqual(DoneSentinel))
+        {
+            return SseLineKind.Done;
+        }
+
+        payload = data;
+        return SseLineKind.Payload;
+    }
+
     /// <summary>
     ///     SSE flavour of <see cref="RunAsync" />: filters <c>data:</c> lines
     ///     and treats the <c>[DONE]</c> sentinel as graceful end-of-stream.
@@ -305,19 +385,53 @@ internal static class SsePump
         Action<HttpResponseMessage>? onResponse = null,
         Func<Exception, CancellationToken, ErrorEvent>? mapSendFailure = null,
         Action<Exception>? onTransportError = null,
-        Action? onComplete = null) =>
-        RunAsync(writer, http, request, async (line, token) =>
+        Action? onComplete = null)
+    {
+        // #467: one handler + one delegate per stream. This used to be an
+        // `async (line, token) => …` lambda, whose per-call state machine
+        // (plus a display class + delegate) was allocated per stream while
+        // each line that carried no payload still paid to enter it.
+        var handler = new SseLineHandler(onData);
+        return RunAsync(
+            writer, http, request, handler.HandleAsync,
+            apiErrorLabel, logger, ct,
+            onResponse, mapSendFailure, onTransportError, onComplete);
+    }
+
+    /// <summary>
+    ///     #467: the per-line handler behind <see cref="RunSseAsync" />.
+    ///     <see cref="HandleAsync" /> is deliberately **not** <c>async</c>: it
+    ///     classifies the line on spans (see
+    ///     <see cref="DecodeDataLine" />) and only the payload case descends
+    ///     into a state machine — and then pays for exactly one payload
+    ///     string, the one the chunk parser needs. Comments, heartbeats and
+    ///     the <c>[DONE]</c> sentinel answer from cached completed tasks.
+    /// </summary>
+    private sealed class SseLineHandler(Func<string, CancellationToken, Task> onData)
+    {
+        private static readonly Task<bool> KeepStreaming = Task.FromResult(true);
+        private static readonly Task<bool> EndOfStream = Task.FromResult(false);
+
+        /// <summary>
+        ///     Handle one raw line. False means the sentinel was seen: stop
+        ///     reading, the pump emits its single FinishEvent.
+        /// </summary>
+        public Task<bool> HandleAsync(string line, CancellationToken ct)
         {
-            // SSE allows `data:{...}` with no space; only the `data:` prefix
-            // itself is significant. TrimStart keeps payload JSON intact
-            // (JsonDocument tolerates leading whitespace anyway).
-            if (!line.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return true;
+            SseLineKind kind = DecodeDataLine(line, out ReadOnlySpan<char> payload);
+            return kind switch
+            {
+                SseLineKind.NotData or SseLineKind.Empty => KeepStreaming,
+                SseLineKind.Done => EndOfStream,
+                // The one and only payload copy per delta.
+                _ => DispatchAsync(new string(payload), ct),
+            };
+        }
 
-            string data = line["data:".Length..].TrimStart();
-            if (data.Length == 0) return true; // Heartbeat `data:` — no payload.
-            if (data.Trim().Equals("[DONE]", StringComparison.Ordinal)) return false;
-
-            await onData(data, token).ConfigureAwait(false);
+        private async Task<bool> DispatchAsync(string data, CancellationToken ct)
+        {
+            await onData(data, ct).ConfigureAwait(false);
             return true;
-        }, apiErrorLabel, logger, ct, onResponse, mapSendFailure, onTransportError, onComplete);
+        }
+    }
 }
