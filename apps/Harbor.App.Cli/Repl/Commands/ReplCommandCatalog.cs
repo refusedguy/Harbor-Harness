@@ -1,3 +1,5 @@
+using Harbor.Application.Attachments;
+
 namespace Harbor.App.Cli.Repl.Commands;
 
 /// <summary>
@@ -31,9 +33,14 @@ internal sealed class ReplCommandCatalog
     public IReadOnlyCollection<IReplCommand> GetAll() => _byId.Values.Distinct().ToArray();
 
     /// <summary>All palette/slash commands: one registration point (OCP).</summary>
-    public static ReplCommandCatalog CreateDefault()
+    /// <param name="attachmentReader">
+    ///     Validator behind <c>/attach</c> (issue #386). Null in tests and
+    ///     catalog-only checks — the command then builds a default reader.
+    /// </param>
+    public static ReplCommandCatalog CreateDefault(ImageAttachmentReader? attachmentReader = null)
     {
         var catalog = new ReplCommandCatalog();
+        catalog.Register(new AttachCommand(attachmentReader));
         catalog.Register(new HelpCommand());
         catalog.Register(new SetupCommand());
         catalog.Register(new VimCommand());
