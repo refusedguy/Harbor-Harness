@@ -190,7 +190,8 @@ public class EventBusFastPathTests
         Console.WriteLine($"eventbus-fastpath: {publishes} optional-drain publishes = {allocated} B ({(double)allocated / publishes:F2} B/publish)");
         await Assert.That(allocated).IsEqualTo(0)
             .Because("an indexed drain over synchronous sinks must not reintroduce an allocation");
-        await Assert.That(sink.Seen).IsEqualTo(publishes + Warmup);
+        await Assert.That(sink.Seen).IsEqualTo(1 + Warmup + publishes)
+            .Because("every publish on this bus must reach the optional sink — the probe one included");
     }
 
     /// <summary>
