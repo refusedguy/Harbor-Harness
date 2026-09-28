@@ -38,17 +38,38 @@ public class StatusSnapshotTests
     }
 
     [Test]
-    public async Task SecondStep_CostAccumulates_AndRebuildsPastTheStaleSnapshot()
+    public async Task CostOnlyChange_RebuildsPastTheStaleSnapshot()
     {
         var store = new UiStore();
-        var first = ReplLifecycle.BuildStatusSnapshot(null, store.State, 1_000, 500, Rows, Total);
+        var before = ReplLifecycle.BuildStatusSnapshot(null, store.State, 1_000, 500, Rows, Total);
+        await Assert.That(before.Cost.CostUsd).IsEqualTo(0m);
+
+        // Same chrome, same token counts, same geometry — the accumulated cost
+        // is the only input that moved. This is exactly what the old memo
+        // dropped: it compared the snapshot's 0 against a hardcoded 0, never
+        // rebuilt, and the footer kept painting the stale $0.0000 segment.
         StepFinished(store, 1_000, 500);
+        var after = ReplLifecycle.BuildStatusSnapshot(before, store.State, 1_000, 500, Rows, Total);
 
-        var second = ReplLifecycle.BuildStatusSnapshot(first, store.State, 2_000, 1_000, Rows, Total);
+        await Assert.That(ReferenceEquals(before, after)).IsFalse();
+        await Assert.That(after.Cost.CostUsd).IsEqualTo(OneStepCost);
+        await Assert.That(Footer(after)).Contains("0.0105");
+    }
 
-        // The memo is reference-based downstream (the footer caches on
-        // ReferenceEquals), so a stale instance here is a stale cost segment.
-        await Assert.That(ReferenceEquals(first, second)).IsFalse();
+    [Test]
+    public async Task SecondStep_CostAccumulatesAcrossSteps()
+    {
+        var store = new UiStore();
+        StepFinished(store, 1_000, 500);
+        var afterOne = ReplLifecycle.BuildStatusSnapshot(null, store.State, 1_000, 500, Rows, Total);
+        await Assert.That(afterOne.Cost.CostUsd).IsEqualTo(OneStepCost);
+
+        StepFinished(store, 1_000, 500);
+        var storeState = store.State;
+        var second = ReplLifecycle.BuildStatusSnapshot(
+            afterOne, storeState, storeState.Cost.TokensIn, storeState.Cost.TokensOut, Rows, Total);
+
+        await Assert.That(ReferenceEquals(afterOne, second)).IsFalse();
         await Assert.That(second.Cost.CostUsd).IsEqualTo(OneStepCost * 2);
         await Assert.That(Footer(second)).Contains("0.0210");
     }
