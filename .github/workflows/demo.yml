@@ -184,9 +184,11 @@ jobs:
           set -euo pipefail
           for gif in hero markdown approval plain; do
             python3 tools/demo_repro.py normalize \
-              --input "assets/demo/${gif}-compressed-raw.gif" \
+              --input "assets/demo/${gif}-raw.gif" \
               --output "assets/demo/${gif}-compressed.gif"
+            rm -f "assets/demo/${gif}-raw.gif"
           done
+          python3 tools/demo_repro.py report --dir assets/demo
 
       # Size/quality drift gate. Stdlib-only GIF walker (no decoder, no extra
       # package): reads block structure, per-frame delays and the raw LZW
