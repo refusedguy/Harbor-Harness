@@ -65,9 +65,11 @@ public class EventBusQueueAgeReporterTests : IDisposable
     public async Task Report_EmitsFullQueueAgeSet_UnderStableNames()
     {
         var sink = new RecordingMetrics();
+
+        // 30 publishes already on the bus when the reporter is constructed —
+        // they are the counter baseline, not part of the first report.
         var source = new StubQueueMetrics
         {
-            PublishedCount = 40,
             InflightPublishCount = 2,
             OldestPendingAge = TimeSpan.FromMilliseconds(33),
             MaxDispatchDuration = TimeSpan.FromMilliseconds(MaxMs),
@@ -76,6 +78,8 @@ public class EventBusQueueAgeReporterTests : IDisposable
 
         using (var reporter = new EventBusQueueAgeReporter(source, sink, _logger))
         {
+            source.PublishedCount = 40; // 10 publishes since wiring
+
             reporter.Report();
 
             // A second report must not re-count the publishes already reported.
@@ -122,9 +126,9 @@ public class EventBusQueueAgeReporterTests : IDisposable
     [Test]
     public async Task Report_ReachesCanonicalMeter_ForMeterListenerAndOtlp()
     {
+        // 30 publishes predate the wiring; 7 more land before the report.
         var source = new StubQueueMetrics
         {
-            PublishedCount = 7,
             InflightPublishCount = 0,
             OldestPendingAge = TimeSpan.Zero,
             MaxDispatchDuration = TimeSpan.FromMilliseconds(MaxMs),
@@ -132,6 +136,7 @@ public class EventBusQueueAgeReporterTests : IDisposable
         };
 
         using var reporter = new EventBusQueueAgeReporter(source, MeterMetrics.Instance, _logger);
+        source.PublishedCount = 37; // 7 more than the 30 the wiring saw
         reporter.Report();
 
         await Assert.That(_observed.Any(e =>
