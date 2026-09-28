@@ -1,9 +1,9 @@
 # Harbor benchmark gate — BenchmarkDotNet subset on every PR.
 #
 # Runs a curated hot-path subset (PermissionRuleset evaluation, provider +
-# tool registry lookups — the numbers quoted in docs/BENCHMARKS.md) with
-# BenchmarkDotNet's Short job, publishes the markdown tables into the job
-# summary and uploads the full BDN artifacts for diffing.
+# tool registry lookups, EventBus publish paths — the numbers quoted in
+# docs/BENCHMARKS.md) with BenchmarkDotNet's Short job, publishes the markdown
+# tables into the job summary and uploads the full BDN artifacts for diffing.
 #
 # The full 220+ benchmark suite is too slow for CI; run it locally:
 #   dotnet run -c Release --project tests/Harbor.Benchmarks
@@ -72,6 +72,18 @@ jobs:
         run: |
           sudo systemctl stop snapd.service snapd.socket || true
           taskset -c 1 dotnet run -c Release --no-build -- --filter '*Registry*' --job Short
+
+      # #391: the EventBus publish path had no CI measurement since the 2026-08-22
+      # pre-ring run, and its single benchmark could not reach the fast path at all
+      # (scrollback was always on). `*EventBusBenchmark*` covers both classes in
+      # tests/Harbor.Benchmarks/EventBusBenchmark.cs — EventBusBenchmark and
+      # EventBusBenchmarkFanout. The older EventBusScrollback/EventBusContention
+      # classes are deliberately left to local full runs.
+      - name: Bench EventBus publish paths
+        working-directory: tests/Harbor.Benchmarks
+        run: |
+          sudo systemctl stop snapd.service snapd.socket || true
+          taskset -c 1 dotnet run -c Release --no-build -- --filter '*EventBusBenchmark*' --job Short
 
       - name: Publish results to job summary
         if: always()
