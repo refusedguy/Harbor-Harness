@@ -568,7 +568,7 @@ render primitives shared across all TUI renderers.
 ### IChatBlock
 
 **Purpose:** One typed cell of the chat timeline. Implemented by `UserBlock`,
-`SystemBlock`, `DiffBlock`, `ApprovalGateView`, `TreeView`, and streaming blocks.
+`SystemBlock`, `DiffBlock`, `ApprovalGateView`, `TreeView`, `TableBlock`, and streaming blocks.
 
 **File:** `src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs`
 
@@ -672,6 +672,52 @@ public sealed class TreeView : IChatBlock, IFocusTarget { public TreeView(IEnume
 **Key bindings:** `Up`/`Down`/`k`/`j` move, `Home`/`End` jump,
 `PageUp`/`PageDown` move a viewport, `Right`/`l` expands or descends,
 `Left`/`h` collapses or ascends, `Enter`/`Space` toggles a parent.
+
+### GaugeBar
+
+**Purpose:** Cell-native horizontal progress bar (ratatui `Gauge` pattern):
+a single-row `filled × N + track × (width − N)` run (`█`/`░`) with the label
+centered on top. Label cells over the fill use one style, over the track
+another — the same two-tone split ratatui draws. Host-agnostic static
+painter over any `ScreenBuffer` rect: the StatusPanel context bar adopts it
+for ctx% (UX9 suffix), task cards for step progress (UX5 suffix), the
+approval modal for quota display (UX7).
+
+**File:** `src/Harbor.Tui.CellForge/Chat/Widgets/GaugeBar.cs`
+
+```csharp
+public readonly record struct GaugeState(double Ratio, string? Label = null, bool ShowLabel = true);
+public static class GaugeBar
+{
+    public static double ClampRatio(double ratio); // NaN → 0, pinned to [0,1]
+    public static string LabelText(GaugeState state); // custom label or "42%"
+    public static int FilledCells(double ratio, int width);
+    public static void Paint(ScreenBuffer buffer, Rect rect, GaugeState state,
+        CellStyle fill = default, CellStyle track = default,
+        CellStyle labelOnFill = default, CellStyle labelOnTrack = default);
+}
+```
+
+### TableBlock
+
+**Purpose:** Cell-native GFM table block over the strings-only
+`GfmTableParser` model: box-drawing frame (`┌┬┐`/`├┼┤`/`└┼┘`, same joints as
+`GfmTableFormatter`), per-column `GfmAlign` alignment and shrink-to-fit widths
+resolved in cell space (wide-rune aware), painted per segment — dim borders,
+accent-bold header, plain body. Height is width-independent (columns truncate
+with `…`, never wrap): top rule + header + mid rule + body rows + bottom rule.
+
+**File:** `src/Harbor.Tui.CellForge/Chat/Widgets/TableBlock.cs`
+
+```csharp
+public sealed class TableBlock : IChatBlock
+{
+    public TableBlock(GfmTable table);
+    public static bool TryParse(IReadOnlyList<string> lines, int index, out TableBlock? block, out int nextIndex);
+    public GfmTable Table { get; }
+    public int Columns { get; }
+}
+```
 
 ### DiffBlock / UnifiedDiffParser
 
