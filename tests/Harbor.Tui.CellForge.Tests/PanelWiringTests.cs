@@ -97,18 +97,18 @@ public class PanelWiringTests
         await renderer.InitializeAsync();
 
         var state = renderer.Store.State;
-        await Assert.That(state.RegisteredPanelIds.Length).IsEqualTo(ExpectedOrder.Length);
+        await Assert.That(state.Ui.RegisteredPanelIds.Length).IsEqualTo(ExpectedOrder.Length);
         for (int i = 0; i < ExpectedOrder.Length; i++)
         {
-            await Assert.That(state.RegisteredPanelIds[i]).IsEqualTo(ExpectedOrder[i]);
+            await Assert.That(state.Ui.RegisteredPanelIds[i]).IsEqualTo(ExpectedOrder[i]);
         }
 
         foreach (string id in ExpectedOrder)
         {
             var provider = renderer.Panels.Registry.Get(id);
             await Assert.That(provider).IsNotNull();
-            await Assert.That(state.PanelStates[id]).IsEqualTo(TuiPanelState.Hidden);
-            await Assert.That(state.PanelSizes[id]).IsEqualTo(provider!.DefaultSize);
+            await Assert.That(state.Ui.PanelStates[id]).IsEqualTo(TuiPanelState.Hidden);
+            await Assert.That(state.Ui.PanelSizes[id]).IsEqualTo(provider!.DefaultSize);
         }
     }
 
@@ -119,11 +119,11 @@ public class PanelWiringTests
         using var renderer = Create(backend);
         await renderer.InitializeAsync();
 
-        _ = renderer.Store.Dispatch(new UiMsg.TogglePanel("help"));
-        await Assert.That(renderer.Store.State.PanelStates["help"]).IsEqualTo(TuiPanelState.Visible);
+        _ = renderer.Store.Dispatch(new AppMsg.TogglePanel("help"));
+        await Assert.That(renderer.Store.State.Ui.PanelStates["help"]).IsEqualTo(TuiPanelState.Visible);
 
-        _ = renderer.Store.Dispatch(new UiMsg.TogglePanel("help"));
-        await Assert.That(renderer.Store.State.PanelStates["help"]).IsEqualTo(TuiPanelState.Hidden);
+        _ = renderer.Store.Dispatch(new AppMsg.TogglePanel("help"));
+        await Assert.That(renderer.Store.State.Ui.PanelStates["help"]).IsEqualTo(TuiPanelState.Hidden);
     }
 
     [Test]
@@ -133,7 +133,7 @@ public class PanelWiringTests
         using var renderer = Create(backend);
         await renderer.InitializeAsync();
 
-        _ = renderer.Store.Dispatch(new UiMsg.TogglePanel("token-breakdown"));
+        _ = renderer.Store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
 
         var screen = BuildScreen();
         await Assert.That(ChatScreenPanelDock.HasDocks(screen)).IsFalse();
@@ -159,10 +159,13 @@ public class PanelWiringTests
         owner.Register(new CellForgeTodoListPanel());
         var store = new UiStore(new UiState
         {
-            Lines = ImmutableArray.Create(new ChatLine(ChatRole.ToolResult, "[ ] Write code")),
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = ImmutableArray.Create(new ChatLine(ChatRole.ToolResult, "[ ] Write code"))
+            }
         });
         _ = owner.EnsureSeeded(store);
-        _ = store.Dispatch(new UiMsg.TogglePanel("todo-list"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("todo-list"));
 
         var screen = BuildScreen();
         ChatScreenPanelDock.AttachPanels(
@@ -182,9 +185,15 @@ public class PanelWiringTests
     {
         var owner = new CellForgePanelRegistry();
         owner.Register(new CellForgeTokenBreakdownPanel());
-        var store = new UiStore(new UiState { Cost = new CostSnapshot(1500, 300, 0.0042m) });
+        var store = new UiStore(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Cost = new CostSnapshot(1500, 300, 0.0042m)
+            }
+        });
         _ = owner.EnsureSeeded(store);
-        _ = store.Dispatch(new UiMsg.TogglePanel("token-breakdown"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
 
         var screen = BuildScreen();
         ChatScreenPanelDock.AttachPanels(
@@ -214,15 +223,15 @@ public class PanelWiringTests
         owner.Register(new CellForgeHelpPanel());
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
-        _ = store.Dispatch(new UiMsg.TogglePanel("help"));
-        _ = store.Dispatch(new UiMsg.FocusPanel("help"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("help"));
+        _ = store.Dispatch(new AppMsg.FocusPanel("help"));
         var services = new FakeServices().Add<UiStore>(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
             owner.Registry, store.State, UiKey.ForChar('?'), services, store: store);
 
         await Assert.That(consumed).IsTrue();
-        await Assert.That(store.State.PanelStates["help"]).IsEqualTo(TuiPanelState.Hidden);
+        await Assert.That(store.State.Ui.PanelStates["help"]).IsEqualTo(TuiPanelState.Hidden);
     }
 
     [Test]
@@ -232,15 +241,15 @@ public class PanelWiringTests
         owner.Register(new CellForgeLogsPanel());
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
-        _ = store.Dispatch(new UiMsg.TogglePanel("logs"));
-        _ = store.Dispatch(new UiMsg.FocusPanel("logs"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("logs"));
+        _ = store.Dispatch(new AppMsg.FocusPanel("logs"));
         var services = new FakeServices().Add<UiStore>(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
             owner.Registry, store.State, new UiKey(UiKeyCode.F12), services, store: store);
 
         await Assert.That(consumed).IsTrue();
-        await Assert.That(store.State.PanelStates["logs"]).IsEqualTo(TuiPanelState.Hidden);
+        await Assert.That(store.State.Ui.PanelStates["logs"]).IsEqualTo(TuiPanelState.Hidden);
     }
 
     [Test]
@@ -250,14 +259,14 @@ public class PanelWiringTests
         owner.Register(new CellForgeHelpPanel());
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
-        _ = store.Dispatch(new UiMsg.TogglePanel("help")); // Visible, never focused
+        _ = store.Dispatch(new AppMsg.TogglePanel("help")); // Visible, never focused
         var services = new FakeServices().Add<UiStore>(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
             owner.Registry, store.State, UiKey.ForChar('?'), services, store: store);
 
         await Assert.That(consumed).IsFalse();
-        await Assert.That(store.State.PanelStates["help"]).IsEqualTo(TuiPanelState.Visible);
+        await Assert.That(store.State.Ui.PanelStates["help"]).IsEqualTo(TuiPanelState.Visible);
     }
 
     [Test]
@@ -267,7 +276,7 @@ public class PanelWiringTests
         owner.Register(new CellForgeHelpPanel());
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
-        _ = store.Dispatch(new UiMsg.FocusPanel("help"));
+        _ = store.Dispatch(new AppMsg.FocusPanel("help"));
         var services = new FakeServices().Add<UiStore>(store);
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
@@ -283,7 +292,7 @@ public class PanelWiringTests
         owner.Register(new CellForgeTodoListPanel());
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
-        _ = store.Dispatch(new UiMsg.FocusPanel("todo-list"));
+        _ = store.Dispatch(new AppMsg.FocusPanel("todo-list"));
         var services = new FakeServices().Add<UiStore>(store);
 
         // Todo-list is non-interactive: OnKey returns false, routing must surface it.
@@ -298,9 +307,15 @@ public class PanelWiringTests
     {
         var owner = new CellForgePanelRegistry();
         owner.Register(new CellForgeTokenBreakdownPanel());
-        var store = new UiStore(new UiState { Cost = new CostSnapshot(1500, 300, 0.0042m) });
+        var store = new UiStore(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Cost = new CostSnapshot(1500, 300, 0.0042m)
+            }
+        });
         _ = owner.EnsureSeeded(store);
-        _ = store.Dispatch(new UiMsg.TogglePanel("token-breakdown"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
 
         var screen = BuildScreen();
         screen.Tree.Solve(100, 40);

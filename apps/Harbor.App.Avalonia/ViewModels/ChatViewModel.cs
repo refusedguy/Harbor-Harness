@@ -78,7 +78,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         Dispatcher.Post(() =>
         {
             Logger.LogDebug("OnAfterSelectorsApplied: lines={Lines}, streaming={Streaming}, agentRunning={Running}, textBufLen={TextBufLen}",
-                state.Lines.Length, state.IsStreaming, state.IsAgentRunning, state.Active.TextBuffer?.Length ?? 0);
+                state.Chat.Lines.Length, state.Chat.IsStreaming, state.Chat.IsAgentRunning, state.Chat.Active.TextBuffer?.Length ?? 0);
 
             _pendingRenderState = state;
             StartRenderTimer();
@@ -135,7 +135,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         if (_sessionManager?.Active is { } activeSession)
         {
             _sessionManager.SetStatus(activeSession.Id, _renderEngine.DeriveStatus(state));
-            _sessionManager.NotifyMessageCount(activeSession.Id, state.Lines.Length);
+            _sessionManager.NotifyMessageCount(activeSession.Id, state.Chat.Lines.Length);
         }
     }
 
@@ -169,7 +169,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         }
         else
         {
-            _store.Dispatch(new UiMsg.AppendLine(ChatRole.User, text));
+            _store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.User, text));
             effect = new TuiEffect.PromptAgent(trimmed);
         }
 
@@ -202,7 +202,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     [RelayCommand]
     private void Clear()
     {
-        _store.Dispatch(new UiMsg.Reset());
+        _store.Dispatch(new AppMsg.Reset());
         ResetRendering();
     }
 
@@ -210,7 +210,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     private void SendSuggestion(string prompt)
     {
         if (string.IsNullOrWhiteSpace(prompt)) return;
-        _store.Dispatch(new UiMsg.AppendLine(ChatRole.User, prompt));
+        _store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.User, prompt));
         _effects.Run(new TuiEffect.PromptAgent(prompt));
     }
 
@@ -292,7 +292,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     private void ExecuteSuggestion(string prompt)
     {
         if (string.IsNullOrWhiteSpace(prompt)) return;
-        _store.Dispatch(new UiMsg.AppendLine(ChatRole.User, prompt));
+        _store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.User, prompt));
         _effects.Run(new TuiEffect.PromptAgent(prompt));
     }
 

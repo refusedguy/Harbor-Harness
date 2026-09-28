@@ -10,8 +10,8 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// through untouched — the host keeps full routing control.
 /// </summary>
 /// <remarks>
-/// Epic C: chord meaning travels as <see cref="UiMsg"/> — hosts bind chords
-/// with <see cref="Bind(char, UiMsg, Action?)"/> and drain the resolved message
+/// Epic C: chord meaning travels as <see cref="AppMsg"/> — hosts bind chords
+/// with <see cref="Bind(char, AppMsg, Action?)"/> and drain the resolved message
 /// via <see cref="TakePendingMsg"/> to <c>UiStore.Dispatch</c> it, so every
 /// renderer shares one reducer-owned experience. The legacy
 /// <see cref="Bind(char, Action)"/> overload stays for action-only chords
@@ -23,7 +23,7 @@ public sealed class LeaderKeyRouter
     public const int TimeoutMs = 1500;
 
     private readonly Dictionary<char, Action> _bindings = [];
-    private readonly Dictionary<char, (UiMsg Msg, Action? Run)> _messages = [];
+    private readonly Dictionary<char, (AppMsg Msg, Action? Run)> _messages = [];
     private long _armedAtMs = long.MinValue;
 
     /// <summary>True while a leader press is awaiting its chord.</summary>
@@ -34,7 +34,7 @@ public sealed class LeaderKeyRouter
     /// host <see cref="TakePendingMsg"/> drain. Null when no msg-bound chord
     /// fired since the last drain.
     /// </summary>
-    public UiMsg? PendingMsg { get; private set; }
+    public AppMsg? PendingMsg { get; private set; }
 
     /// <summary>Registers a single-character chord. Re-binding replaces.</summary>
     public void Bind(char chord, Action action)
@@ -49,7 +49,7 @@ public sealed class LeaderKeyRouter
     /// for the host to dispatch, then runs <paramref name="run"/> (local paint
     /// side, e.g. waking the frame loop). Re-binding replaces.
     /// </summary>
-    public void Bind(char chord, UiMsg msg, Action? run = null)
+    public void Bind(char chord, AppMsg msg, Action? run = null)
     {
         ArgumentNullException.ThrowIfNull(msg);
         _messages[char.ToLowerInvariant(chord)] = (msg, run);
@@ -60,7 +60,7 @@ public sealed class LeaderKeyRouter
     /// returned value through <c>UiStore.Dispatch</c>. Mirrors the palette's
     /// <c>TakePendingCommit</c> hand-off: no host-side chord stacks.
     /// </summary>
-    public UiMsg? TakePendingMsg()
+    public AppMsg? TakePendingMsg()
     {
         var msg = PendingMsg;
         PendingMsg = null;

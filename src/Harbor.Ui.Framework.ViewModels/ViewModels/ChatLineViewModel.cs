@@ -11,7 +11,7 @@ namespace Harbor.Ui.Framework.ViewModels;
 /// <remarks>
 ///     <para>
 ///         <b>Why a record:</b> chat lines are immutable snapshots of a
-///         <c>UiState.Lines</c> entry. Mutability would race with the
+///         <c>UiState.Chat.Lines</c> entry. Mutability would race with the
 ///         reducer's append-only contract, so the projector creates a fresh
 ///         <see cref="ChatLineViewModel" /> per UiStore transition.
 ///     </para>

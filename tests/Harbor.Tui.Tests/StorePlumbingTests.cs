@@ -27,9 +27,12 @@ public class StorePlumbingTests
         var projector = new DefaultUiProjector();
         var state = new UiState
         {
-            IsStreaming = true,
-            Active = new ActiveMessage("he", string.Empty),
-            PendingStreamText = ChunkedBuffer.Empty.Append("llo"),
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true,
+                Active = new ActiveMessage("he", string.Empty),
+                PendingStreamText = ChunkedBuffer.Empty.Append("llo")
+            }
         };
 
         var screen = projector.Project(state);
@@ -45,9 +48,12 @@ public class StorePlumbingTests
         var projector = new DefaultUiProjector();
         var state = new UiState
         {
-            IsStreaming = true,
-            Active = ActiveMessage.Empty,
-            PendingStreamText = ChunkedBuffer.Empty.Append("unflushed"),
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true,
+                Active = ActiveMessage.Empty,
+                PendingStreamText = ChunkedBuffer.Empty.Append("unflushed")
+            }
         };
 
         var screen = projector.Project(state);
@@ -84,8 +90,8 @@ public class StorePlumbingTests
     {
         var store = new UiStore();
         using var args = JsonDocument.Parse("{\"path\":\"f.txt\"}");
-        store.Dispatch(new UiMsg.Agent(new ToolExecutionStartEvent("tc_1", "read", args.RootElement)));
-        store.Dispatch(new UiMsg.Agent(new ToolExecutionEndEvent("tc_1", ToolResult.Success("contents"), false)));
+        store.Dispatch(new ChatAppMsg.Agent(new ToolExecutionStartEvent("tc_1", "read", args.RootElement)));
+        store.Dispatch(new ChatAppMsg.Agent(new ToolExecutionEndEvent("tc_1", ToolResult.Success("contents"), false)));
 
         var lines = ToolCallKey.FindLines(store.State, "tc_1");
         await Assert.That(lines.Count).IsEqualTo(2);
@@ -108,11 +114,11 @@ public class StorePlumbingTests
     {
         var store = new UiStore();
         using var args = JsonDocument.Parse("{}");
-        store.Dispatch(new UiMsg.Agent(new ToolExecutionStartEvent("tc_9", "bash", args.RootElement)));
+        store.Dispatch(new ChatAppMsg.Agent(new ToolExecutionStartEvent("tc_9", "bash", args.RootElement)));
 
         var edited = store.State.SetLine(0, ChatRole.Tool, "edited text");
 
-        await Assert.That(edited.Lines[0].ToolCallId).IsEqualTo("tc_9");
+        await Assert.That(edited.Chat.Lines[0].ToolCallId).IsEqualTo("tc_9");
         await Assert.That(ToolCallKey.FindLines(edited, "tc_9").Count).IsEqualTo(1);
     }
 }

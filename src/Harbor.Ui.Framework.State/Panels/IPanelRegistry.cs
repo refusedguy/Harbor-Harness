@@ -23,7 +23,7 @@ public readonly record struct PanelRegistryView(
         for (int i = 0; i < Providers.Count; i++)
         {
             var p = Providers[i];
-            if (State.PanelStates.TryGetValue(p.Id, out var s) && s != TuiPanelState.Hidden)
+            if (State.Ui.PanelStates.TryGetValue(p.Id, out var s) && s != TuiPanelState.Hidden)
                 result.Add(p);
         }
         return result;
@@ -39,7 +39,7 @@ public readonly record struct PanelRegistryView(
         {
             var p = Providers[i];
             if (p.DefaultPlacement == placement
-                && State.PanelStates.TryGetValue(p.Id, out var s)
+                && State.Ui.PanelStates.TryGetValue(p.Id, out var s)
                 && s != TuiPanelState.Hidden)
             {
                 result.Add(p);
@@ -50,11 +50,11 @@ public readonly record struct PanelRegistryView(
 
     /// <summary>Current state of the panel with this id (Hidden if unknown).</summary>
     public TuiPanelState GetState(string id) =>
-        State.PanelStates.TryGetValue(id, out var s) ? s : TuiPanelState.Hidden;
+        State.Ui.PanelStates.TryGetValue(id, out var s) ? s : TuiPanelState.Hidden;
 
     /// <summary>Current size override (rows or cols), or 0 = use provider's DefaultSize.</summary>
     public int GetSize(string id) =>
-        State.PanelSizes.TryGetValue(id, out int s) ? s : 0;
+        State.Ui.PanelSizes.TryGetValue(id, out int s) ? s : 0;
 }
 
 /// <summary>
@@ -65,11 +65,11 @@ public readonly record struct PanelRegistryView(
 ///         here
 ///     </b>
 ///     — every visibility / focus / size transition flows through
-///     <see cref="UiStore" /> / <see cref="UiReducer" /> via
-///     <see cref="UiMsg.TogglePanel" />, <see cref="UiMsg.FocusPanel" />,
-///     <see cref="UiMsg.CyclePanelFocus" />, <see cref="UiMsg.ResizePanel" />. The
-///     runtime state itself lives in <see cref="UiState.PanelStates" /> /
-///     <see cref="UiState.PanelSizes" /> / <see cref="UiState.FocusedPanelId" /> — the
+///     <see cref="UiStore" /> / <see cref="AppReducer" /> via
+///     <see cref="AppMsg.TogglePanel" />, <see cref="AppMsg.FocusPanel" />,
+///     <see cref="AppMsg.CyclePanelFocus" />, <see cref="AppMsg.ResizePanel" />. The
+///     runtime state itself lives in <see cref="UiState.Ui.PanelStates" /> /
+///     <see cref="UiState.Ui.PanelSizes" /> / <see cref="UiState.Ui.FocusedPanelId" /> — the
 ///     single source of truth (TEA compliance, §FP-005).
 /// </summary>
 /// <remarks>
@@ -181,7 +181,7 @@ public PanelRegistryView View(UiState state)
 ///     Registration-only abstraction over <see cref="PanelRegistry" /> used by plugin
 ///     contracts so plugins do not depend on the concrete implementation. Plugins
 ///     declare panels via <see cref="Register" />; <b>they cannot mutate panel state</b>
-///     — all state transitions flow through <see cref="UiReducer" />.
+///     — all state transitions flow through <see cref="AppReducer" />.
 /// </summary>
 public interface IPanelRegistry
 {

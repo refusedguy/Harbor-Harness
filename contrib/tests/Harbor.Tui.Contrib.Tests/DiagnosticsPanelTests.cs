@@ -232,7 +232,7 @@ public class SpectreTuiLogsPanelTests
         services.AddSingleton<IDiagnosticsPanel>(diag);
         var sp = services.BuildServiceProvider();
 
-        // The store is needed for the panel to dispatch UiMsg.TogglePanel. Use
+        // The store is needed for the panel to dispatch AppMsg.TogglePanel. Use
         // the real UiStore — it raises Changed on dispatch.
         var store = new UiStore();
         var servicesWithStore = new ServiceCollection();

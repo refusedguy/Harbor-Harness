@@ -5,7 +5,7 @@ namespace Harbor.Ui.Framework.Overlays;
 // Escape/Submit) live here so every renderer shares one experience.
 // Cell-side adapter boundary: CommandPaletteView keeps its ranking, group
 // headers, viewport and Paint (ranking stays byte-identical, pinned by
-// CommandPaletteViewTests — see spec 16 §3); full key-semantics-via-UiMsg
+// CommandPaletteViewTests — see spec 16 §3); full key-semantics-via-AppMsg
 // wiring lands with epic C (TEA input loop).
 
 /// <summary>

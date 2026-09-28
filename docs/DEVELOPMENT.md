@@ -841,7 +841,7 @@ dotnet-gcdump collect -n harbor
 
 ### FP
 
-- [ ] **Pure functions**: `UiReducer.Reduce` — эталон. Если функция mutates — это должно быть явно (mutating cache, pool, state).
+- [ ] **Pure functions**: `ChatAppReducer.Reduce` — эталон. Если функция mutates — это должно быть явно (mutating cache, pool, state).
 - [ ] **Immutability**: доменные модели — `record` / `record struct`. `with` для модификации.
 - [ ] **No side-effects in render path**: `ChatScreen.Render` не должен мутировать `UiState` — только читать.
 - [ ] **No fire-and-forget**: `_ = SomeAsync()` — запрещён, кроме случаев с `.ContinueWith(OnlyOnFaulted)`.

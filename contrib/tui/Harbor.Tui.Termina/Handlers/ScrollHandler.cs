@@ -10,21 +10,21 @@ public static class ScrollHandler
 {
     /// <summary>Maximum legal scroll offset for the given state.</summary>
     public static int MaxScroll(UiState s) =>
-        Math.Max(0, s.TotalLines - Math.Max(1, s.ViewportLines));
+        Math.Max(0, s.Ui.TotalLines - Math.Max(1, s.Ui.ViewportLines));
 
-    /// <summary>Visible slice of <see cref="UiState.Lines" /> given the current scroll offset.</summary>
+    /// <summary>Visible slice of <see cref="UiState.Chat.Lines" /> given the current scroll offset.</summary>
     public static IEnumerable<ChatLine> VisibleSlice(UiState s)
     {
-        if (s.Lines.IsDefaultOrEmpty)
+        if (s.Chat.Lines.IsDefaultOrEmpty)
             yield break;
 
-        int total = s.Lines.Length;
-        int viewport = Math.Max(1, s.ViewportLines);
+        int total = s.Chat.Lines.Length;
+        int viewport = Math.Max(1, s.Ui.ViewportLines);
         int bottom = total; // exclusive end
-        int top = Math.Max(0, bottom - viewport - s.ScrollOffset);
-        int count = bottom - s.ScrollOffset - top;
+        int top = Math.Max(0, bottom - viewport - s.Ui.ScrollOffset);
+        int count = bottom - s.Ui.ScrollOffset - top;
         for (int i = 0; i < count; i++)
-            yield return s.Lines[top + i];
+            yield return s.Chat.Lines[top + i];
     }
 
     /// <summary>Footer text shown in the status area: <c>scroll 42%</c>.</summary>
@@ -33,6 +33,6 @@ public static class ScrollHandler
         int max = MaxScroll(s);
         if (max == 0)
             return "scroll 0%";
-        return $"scroll {s.ScrollOffset * 100 / max}%";
+        return $"scroll {s.Ui.ScrollOffset * 100 / max}%";
     }
 }

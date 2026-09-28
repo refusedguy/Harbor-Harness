@@ -64,7 +64,7 @@ status: kilocode/tencent/hy3:free | agent: code | $0.0000 | 142↑ 87↓ | idle
 - Текст между `[message_start]` и `[message_end]` — дельты, склееные в pooled `StringBuilder`.
 - `142↑ 87↓` — токены: input 142, output 87 (из `StepFinishEvent.Usage`).
 - `$0.0000` — Kilocode free tier реально бесплатный.
-- `idle` — `AgentEndEvent` переключил `UiState.Status` обратно в idle.
+- `idle` — `AgentEndEvent` переключил `UiState.Chat.Status` обратно в idle.
 
 ---
 

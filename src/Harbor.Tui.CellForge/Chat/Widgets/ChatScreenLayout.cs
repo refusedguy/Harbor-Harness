@@ -147,7 +147,7 @@ public static class StatusProjectorPanel
     /// <summary>Capacity: chrome, status, agent, retry, skills, scroll, elapsed, tokens, cost.</summary>
     public const int MaxSegments = 9;
 
-    /// <summary>Maps <see cref="UiState.Status"/> text to the footer machine mode.</summary>
+    /// <summary>Maps <see cref="UiState.Chat.Status"/> text to the footer machine mode.</summary>
     public static StatusBarMode MapMode(string? status) => status switch
     {
         "running" => StatusBarMode.Running,
@@ -230,27 +230,27 @@ public static class StatusProjectorPanel
 
         // The projector always emits "provider/model" verbatim — even "/" when
         // both are unknown. No data ⇒ no segment, never a bare separator.
-        if (string.IsNullOrEmpty(state.Provider) && string.IsNullOrEmpty(state.Model))
+        if (string.IsNullOrEmpty(state.Chat.Provider) && string.IsNullOrEmpty(state.Chat.Model))
         {
             chrome = null;
         }
-        else if (chrome is not null && (string.IsNullOrEmpty(state.Provider) || string.IsNullOrEmpty(state.Model)))
+        else if (chrome is not null && (string.IsNullOrEmpty(state.Chat.Provider) || string.IsNullOrEmpty(state.Chat.Model)))
         {
-            chrome = string.IsNullOrEmpty(state.Provider) ? state.Model : state.Provider;
+            chrome = string.IsNullOrEmpty(state.Chat.Provider) ? state.Chat.Model : state.Chat.Provider;
         }
 
         string? tokens = null;
-        if (state.Cost.TokensIn > 0 || state.Cost.TokensOut > 0)
+        if (state.Chat.Cost.TokensIn > 0 || state.Chat.Cost.TokensOut > 0)
         {
-            tokens = FrameworkStatusMappers.TokensToCompact(state.Cost.TokensIn)
+            tokens = FrameworkStatusMappers.TokensToCompact(state.Chat.Cost.TokensIn)
                 + "↑ "
-                + FrameworkStatusMappers.TokensToCompact(state.Cost.TokensOut)
+                + FrameworkStatusMappers.TokensToCompact(state.Chat.Cost.TokensOut)
                 + "↓";
         }
 
         // Zero/negative cost hides (grok None-semantics) instead of "$0.0000".
-        string? cost = state.Cost.CostUsd > 0
-            ? FrameworkStatusMappers.CostToUsd(state.Cost.CostUsd)
+        string? cost = state.Chat.Cost.CostUsd > 0
+            ? FrameworkStatusMappers.CostToUsd(state.Chat.Cost.CostUsd)
             : null;
 
         string? elapsedText = elapsed.HasValue
@@ -515,7 +515,7 @@ public sealed class StatusPanel : Panel
 
         // Smooth state transition: on a mode flip (running ⇄ approval-wait ⇄
         // compaction …) crossfade the whole row in over the HDS micro fade.
-        // CF-D-002: the projected path derives the mode from UiState.Status.
+        // CF-D-002: the projected path derives the mode from UiState.Chat.Status.
         UiState? projected = ProjectedState;
         StatusBarMode effectiveMode = projected is not null
             ? StatusProjectorPanel.MapMode(projected.Status)
@@ -1203,7 +1203,7 @@ public static class ChatScreenPanelDock
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(state);
 
-        string? id = state.FocusedPanelId;
+        string? id = state.Ui.FocusedPanelId;
         if (string.IsNullOrEmpty(id))
         {
             return false;

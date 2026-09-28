@@ -5,7 +5,7 @@ namespace Harbor.Ui.Framework.State;
 ///     plain Enter submits, Shift+Enter / Alt+Enter insert a newline, Ctrl+Enter
 ///     is ignored. <see cref="ChatKeyMap"/> exposes the same decision as
 ///     bindings (<see cref="ChatAction.Submit"/> / <see cref="ChatAction.InsertNewline"/> /
-///     <see cref="ChatAction.None"/>); <see cref="UiReducer.Update"/> owns the
+///     <see cref="ChatAction.None"/>); <see cref="ChatAppReducer.Update"/> owns the
 ///     state transition; the CellForge <c>ComposerController</c> mirrors it as a
 ///     pure executor of store state so key behavior never diverges per renderer.
 /// </summary>

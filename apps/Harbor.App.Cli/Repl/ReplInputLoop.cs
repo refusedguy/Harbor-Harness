@@ -96,7 +96,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                 // Store mirror (epic C): the TEA input box tracks the same
                 // draft the composer paints (cf. CellForgeTuiRenderer sync).
                 _ = host._composer.Buffer.InsertText(sanitized.Text);
-                _ = host._replStore.Dispatch(new UiMsg.InputText(host._composer.Buffer.SnapshotText()));
+                _ = host._replStore.Dispatch(new AppMsg.InputText(host._composer.Buffer.SnapshotText()));
                 break;
             }
 
@@ -238,7 +238,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // Leader chords (ctrl+x …): armed router consumes the leader press and
         // the chord; resolved sync actions run here, slash chords and quick-
         // switch digits hand off to the frame loop for async execution.
-        // Msg-bound chords (scroll anchors) additionally dual-write their UiMsg
+        // Msg-bound chords (scroll anchors) additionally dual-write their AppMsg
         // into the TEA store — same dual-write as agent events in LoopAsync.
         if (host._leader.HandleKey(key, Environment.TickCount64))
         {
@@ -295,7 +295,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             var resolved = host._keyMap.Resolve(uiKey);
             if (resolved != ChatAction.None)
             {
-                _ = host._replStore.Dispatch(new UiMsg.KeyInput(resolved, uiKey));
+                _ = host._replStore.Dispatch(new AppMsg.KeyInput(resolved, uiKey));
             }
         }
 

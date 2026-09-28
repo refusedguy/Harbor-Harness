@@ -1,6 +1,6 @@
 # Harbor.Ui.Framework.Reducers
 
-Pure reducer functions for Harbor UI state. Each reducer is a stateless switch expression that takes an `AgentEvent` (or `UiMsg`) plus current state and returns new state. No side effects, no services.
+Pure reducer functions for Harbor UI state. Each reducer is a stateless switch expression that takes an `AgentEvent` (or `AppMsg`) plus current state and returns new state. No side effects, no services.
 
 ## Layer
 

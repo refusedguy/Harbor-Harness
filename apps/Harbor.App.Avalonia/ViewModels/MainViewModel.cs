@@ -264,16 +264,16 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         // MessageCount / StatusText / token labels stayed at their initial
         // values forever while the raw ShellStatus writes moved — the status
         // bar showed "0 msgs" after messages were sent.
-        Select(s => s.Status, v => StatusText = v);
-        Select(s => s.Provider, v => ProviderLabel = string.IsNullOrEmpty(v) ? "—" : v);
-        Select(s => s.Model, v => ModelLabel = PrettifyModel(v));
-        Select(s => s.AgentName, v => AgentLabel = string.IsNullOrEmpty(v) ? "—" : v);
-        Select(s => s.Cost.TokensIn, v => TokensIn = v);
-        Select(s => s.Cost.TokensOut, v => TokensOut = v);
-        Select(s => s.Cost.CostUsd, v => CostUsd = v);
-        Select(s => s.IsAgentRunning, v => IsRunning = v);
+        Select(s => s.Chat.Status, v => StatusText = v);
+        Select(s => s.Chat.Provider, v => ProviderLabel = string.IsNullOrEmpty(v) ? "—" : v);
+        Select(s => s.Chat.Model, v => ModelLabel = PrettifyModel(v));
+        Select(s => s.Chat.AgentName, v => AgentLabel = string.IsNullOrEmpty(v) ? "—" : v);
+        Select(s => s.Chat.Cost.TokensIn, v => TokensIn = v);
+        Select(s => s.Chat.Cost.TokensOut, v => TokensOut = v);
+        Select(s => s.Chat.Cost.CostUsd, v => CostUsd = v);
+        Select(s => s.Chat.IsAgentRunning, v => IsRunning = v);
         Select(s => Math.Max(1, _contentHost.Sessions.Sessions.Count), v => ActiveSessionCount = v);
-        Select(s => s.Lines.Length, v => MessageCount = v);
+        Select(s => s.Chat.Lines.Length, v => MessageCount = v);
 
         _messenger.Register<ModelPickedMessage>(this, (_, _) =>
         {
@@ -354,7 +354,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         if (IsRunning && !wasRunning)
         {
             _runningStartTime = DateTime.UtcNow;
-            _displayCost = state.Cost.CostUsd;
+            _displayCost = state.Chat.Cost.CostUsd;
             _costAnimator.Start(CostUsd);
             OnPropertyChanged(nameof(RunningDurationText));
             OnPropertyChanged(nameof(AnimatedCostText));
@@ -363,23 +363,23 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         else if (!IsRunning && wasRunning)
         {
             _runningStartTime = null;
-            _displayCost = state.Cost.CostUsd;
+            _displayCost = state.Chat.Cost.CostUsd;
             _costAnimator.Stop();
             OnPropertyChanged(nameof(RunningDurationText));
             OnPropertyChanged(nameof(AnimatedCostText));
             OnPropertyChanged(nameof(ShowAnimatedCost));
         }
 
-        ShellStatus.Status = state.Status;
-        ShellStatus.Provider = string.IsNullOrEmpty(state.Provider) ? "—" : state.Provider;
-        ShellStatus.Model = string.IsNullOrEmpty(state.Model) ? "—" : state.Model;
-        ShellStatus.AgentName = string.IsNullOrEmpty(state.AgentName) ? "—" : state.AgentName;
-        ShellStatus.TokensIn = state.Cost.TokensIn;
-        ShellStatus.TokensOut = state.Cost.TokensOut;
-        ShellStatus.CostUsd = state.Cost.CostUsd;
-        ShellStatus.IsAgentRunning = state.IsAgentRunning;
+        ShellStatus.Status = state.Chat.Status;
+        ShellStatus.Provider = string.IsNullOrEmpty(state.Chat.Provider) ? "—" : state.Chat.Provider;
+        ShellStatus.Model = string.IsNullOrEmpty(state.Chat.Model) ? "—" : state.Chat.Model;
+        ShellStatus.AgentName = string.IsNullOrEmpty(state.Chat.AgentName) ? "—" : state.Chat.AgentName;
+        ShellStatus.TokensIn = state.Chat.Cost.TokensIn;
+        ShellStatus.TokensOut = state.Chat.Cost.TokensOut;
+        ShellStatus.CostUsd = state.Chat.Cost.CostUsd;
+        ShellStatus.IsAgentRunning = state.Chat.IsAgentRunning;
         ShellStatus.ActiveSessionCount = Math.Max(1, ActiveSessionCount);
-        ShellStatus.MessageCount = state.Lines.Length;
+        ShellStatus.MessageCount = state.Chat.Lines.Length;
 
         _contentHost.TokenUsage.RecordUsage(state);
     }

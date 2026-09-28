@@ -49,7 +49,7 @@ public class StreamingDeltaFrequencyBenchmark
         var projector = new DefaultUiProjector();
         var partial = AssistantMessage.Empty("sess", "m");
 
-        store.Dispatch(new UiMsg.Agent(new MessageStartEvent(partial)));
+        store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
         int dispatches = 1;
 
         int projects = 0;
@@ -57,13 +57,13 @@ public class StreamingDeltaFrequencyBenchmark
         int tail = 0;
         int history = 0;
         UiScreenModel? prevScreen = null;
-        var prevLines = store.State.Lines;
-        string? prevBuffer = store.State.Active.TextBuffer;
+        var prevLines = store.State.Chat.Lines;
+        string? prevBuffer = store.State.Chat.Active.TextBuffer;
         string chunk = new('x', 24);
 
         for (int i = 0; i < DeltaCount; i++)
         {
-            store.Dispatch(new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial)));
+            store.Dispatch(new ChatAppMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial)));
             dispatches++;
 
             var state = store.State;
@@ -76,22 +76,22 @@ public class StreamingDeltaFrequencyBenchmark
             }
 
             // ImmutableArray.Equals is backing-array reference equality.
-            if (!state.Lines.Equals(prevLines))
+            if (!state.Chat.Lines.Equals(prevLines))
             {
                 history++;
-                prevLines = state.Lines;
+                prevLines = state.Chat.Lines;
             }
 
-            if (!ReferenceEquals(state.Active.TextBuffer, prevBuffer))
+            if (!ReferenceEquals(state.Chat.Active.TextBuffer, prevBuffer))
             {
                 tail++;
-                prevBuffer = state.Active.TextBuffer;
+                prevBuffer = state.Chat.Active.TextBuffer;
             }
 
             prevScreen = screen;
         }
 
-        store.Dispatch(new UiMsg.Agent(new MessageEndEvent(partial)));
+        store.Dispatch(new ChatAppMsg.Agent(new MessageEndEvent(partial)));
         dispatches++;
         var endScreen = projector.Project(store.State);
         projects++;
@@ -100,13 +100,13 @@ public class StreamingDeltaFrequencyBenchmark
             fast++;
         }
 
-        if (!store.State.Lines.Equals(prevLines))
+        if (!store.State.Chat.Lines.Equals(prevLines))
         {
             history++;
         }
 
         // Return counts (and the final screen) so nothing is DCE'd away.
         GC.KeepAlive(endScreen);
-        return (dispatches, projects, fast, tail, history, store.State.Lines.Length);
+        return (dispatches, projects, fast, tail, history, store.State.Chat.Lines.Length);
     }
 }

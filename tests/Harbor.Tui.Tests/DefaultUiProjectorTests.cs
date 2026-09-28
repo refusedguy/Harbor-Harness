@@ -37,7 +37,7 @@ public class DefaultUiProjectorTests
     [Test]
     public async Task Project_FocusModeInput_FocusIsInput()
     {
-        var state = new UiState() with { Focus = FocusMode.Input };
+        var state = new UiState { Ui = TerminalUiState.Empty with { Focus = FocusMode.Input } };
         var screen = _projector.Project(state);
 
         await Assert.That(screen.Focus).IsEqualTo(FocusMode.Input);
@@ -46,10 +46,13 @@ public class DefaultUiProjectorTests
     [Test]
     public async Task Project_FocusModePanel_FocusIsPanel()
     {
-        var state = new UiState() with
+        var state = new UiState
         {
-            Focus = FocusMode.Panel,
-            FocusedPanelId = "help"
+            Ui = TerminalUiState.Empty with
+            {
+                Focus = FocusMode.Panel,
+                FocusedPanelId = "help"
+            }
         };
         var screen = _projector.Project(state);
 
@@ -59,10 +62,13 @@ public class DefaultUiProjectorTests
     [Test]
     public async Task Project_StreamingState_HasStreamingBlock()
     {
-        var state = new UiState() with
+        var state = new UiState
         {
-            IsStreaming = true,
-            Active = new ActiveMessage("streaming text", string.Empty)
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true,
+                Active = new ActiveMessage("streaming text", string.Empty)
+            }
         };
         var screen = _projector.Project(state);
 
@@ -94,10 +100,13 @@ public class DefaultUiProjectorTests
     [Test]
     public async Task Project_StatusBar_HasProviderModelSegment()
     {
-        var state = new UiState() with
+        var state = new UiState
         {
-            Model = "anthropic/claude-opus-4",
-            Provider = "anthropic"
+            Chat = ChatDomainState.Empty with
+            {
+                Model = "anthropic/claude-opus-4",
+                Provider = "anthropic"
+            }
         };
         var screen = _projector.Project(state);
 
@@ -117,7 +126,7 @@ public class DefaultUiProjectorTests
     [Test]
     public async Task Project_InputDisabled_WhenAgentRunning()
     {
-        var state = new UiState() with { IsAgentRunning = true };
+        var state = new UiState { Chat = ChatDomainState.Empty with { IsAgentRunning = true } };
         var screen = _projector.Project(state);
 
         await Assert.That(screen.Input.IsEnabled).IsFalse();

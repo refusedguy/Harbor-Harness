@@ -234,7 +234,7 @@ public sealed class ChatViewTests : ComponentTestBase
 
         // Drive the error through the REAL event path: direct chat.Lines.Add
         // is stomped by SyncLines on the next store transition (the selector
-        // pipeline re-projects from UiState.Lines, which never saw our manual
+        // pipeline re-projects from UiState.Chat.Lines, which never saw our manual
         // add). AgentErrorEvent is exactly what production raises.
         var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
         await eventBus.PublishAsync(new Harbor.Abstractions.Events.AgentErrorEvent(

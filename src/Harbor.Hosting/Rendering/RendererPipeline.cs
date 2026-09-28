@@ -161,12 +161,12 @@ public sealed class RendererPipeline : IRendererPipeline
     private async Task RestoreStateIntoAsync(ITuiRenderer renderer, CancellationToken ct)
     {
         UiState? snapshot = _store?.State;
-        if (snapshot is null || snapshot.Lines.IsEmpty)
+        if (snapshot is null || snapshot.Chat.Lines.IsEmpty)
         {
             return;
         }
 
-        foreach (ChatLine line in snapshot.Lines)
+        foreach (ChatLine line in snapshot.Chat.Lines)
         {
             ct.ThrowIfCancellationRequested();
             Result written = await renderer.WriteLineAsync(line.Text, ct).ConfigureAwait(false);

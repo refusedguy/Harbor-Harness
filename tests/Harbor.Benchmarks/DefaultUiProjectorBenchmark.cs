@@ -59,21 +59,27 @@ public class DefaultUiProjectorBenchmark
 
         _state = new UiState
         {
-            Lines = lines.ToImmutableArray(),
-            IsStreaming = true,
-            Active = new ActiveMessage("Streaming assistant response text", "Streaming thinking text"),
-            Status = "running",
-            Cost = new CostSnapshot(10000, 5000, 0.50m),
-            Model = "gpt-4",
-            Provider = "openai",
-            AgentName = "code",
-            IsAgentRunning = true,
-            WasRunning = false,
-            Input = new InputModel("test prompt", ImmutableArray<string>.Empty, -1),
-            Focus = FocusMode.Input,
-            ScrollOffset = 0,
-            ViewportLines = 40,
-            TotalLines = LineCount
+            Ui = TerminalUiState.Empty with
+            {
+                Input = new InputModel("test prompt", ImmutableArray<string>.Empty, -1),
+                Focus = FocusMode.Input,
+                ScrollOffset = 0,
+                ViewportLines = 40,
+                TotalLines = LineCount
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = lines.ToImmutableArray(),
+                IsStreaming = true,
+                Active = new ActiveMessage("Streaming assistant response text", "Streaming thinking text"),
+                Status = "running",
+                Cost = new CostSnapshot(10000, 5000, 0.50m),
+                Model = "gpt-4",
+                Provider = "openai",
+                AgentName = "code",
+                IsAgentRunning = true,
+                WasRunning = false
+            }
         };
     }
 
@@ -81,7 +87,7 @@ public class DefaultUiProjectorBenchmark
     public UiScreenModel Project_UiState()
     {
         // Force cache miss: new record instance defeats ReferenceEquals hit that gave 8ns.
-        var fresh = _state with { ScrollOffset = _state.ScrollOffset };
+        var fresh = _state with { Ui = _state.Ui with { ScrollOffset = _state.Ui.ScrollOffset } };
         return _projector.Project(fresh);
     }
 
@@ -94,7 +100,7 @@ public class DefaultUiProjectorBenchmark
     [Benchmark(Description = "ExtractRenderedLines from projected screen")]
     public ImmutableArray<UiRenderedLine> ExtractRenderedLines()
     {
-        var fresh = _state with { ScrollOffset = _state.ScrollOffset };
+        var fresh = _state with { Ui = _state.Ui with { ScrollOffset = _state.Ui.ScrollOffset } };
         var screen = _projector.Project(fresh);
         return DefaultUiProjector.ExtractRenderedLines(screen);
     }

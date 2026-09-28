@@ -3,12 +3,16 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Reducers;
 using Harbor.Ui.Framework.State;
+// Disambiguate from the generic TEA reducer of the same name in
+// Harbor.Ui.Framework.State (added in #437): this benchmark measures the
+// legacy flat AppState reducer, not the composed one.
+using AppReducer = Harbor.Ui.Framework.Reducers.AppReducer;
 using Harbor.Abstractions.Models;
 
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Streaming-delta cost of <see cref="AppReducer" /> — the P0 bottleneck
+///     Streaming-delta cost of <see cref="Harbor.Ui.Framework.Reducers.AppReducer" /> — the P0 bottleneck
 ///     from docs/BENCHMARKS.md (19.4 MB per 1000 TextDelta with O(N²) string
 ///     concatenation, before the ChunkedBuffer + StreamingSync rework).
 ///     A realistic assistant message stream: MessageStart, 1000 text deltas

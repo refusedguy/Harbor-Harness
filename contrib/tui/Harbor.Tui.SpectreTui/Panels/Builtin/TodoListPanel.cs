@@ -8,7 +8,7 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 /// <summary>
 ///     Builtin panel that shows the live todo list contributed by the (optional)
 ///     <c>TodoWritePlugin</c>. Parses the most recent <c>todo</c> tool result line
-///     from <see cref="UiState.Lines" />, so the panel auto-refreshes on every
+///     from <see cref="UiState.Chat.Lines" />, so the panel auto-refreshes on every
 ///     <c>ToolExecutionEndEvent</c> without depending on the plugin assembly.
 /// </summary>
 /// <remarks>
@@ -21,7 +21,7 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 ///     <para>
 ///         <b>Auto-refresh:</b> the host calls <see cref="Build" /> every frame the
 ///         panel is visible. The reducer already appends every
-///         <c>ToolExecutionEndEvent</c> to <see cref="UiState.Lines" />, so the
+///         <c>ToolExecutionEndEvent</c> to <see cref="UiState.Chat.Lines" />, so the
 ///         panel picks up new state without its own event subscription.
 ///     </para>
 /// </remarks>

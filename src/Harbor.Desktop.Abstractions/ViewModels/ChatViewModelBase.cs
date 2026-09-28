@@ -93,13 +93,13 @@ public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
     protected ChatViewModelBase(IDispatcherAdapter dispatcher, ILogger logger)
         : base(dispatcher, logger)
     {
-        Select(state => state.IsStreaming, v => IsStreaming = v);
-        Select(state => state.IsAgentRunning, v => IsAgentRunning = v);
-        Select(state => state.Active.TextBuffer ?? string.Empty, v => StreamingBuffer = v);
-        Select(state => state.Input.Text, v => InputText = v);
-        Select(state => state.IsAgentRunning && !state.IsStreaming, v => IsThinking = v);
-        Select(state => state.IsAgentRunning
-            ? (state.IsStreaming ? "Streaming response…" : "Agent is running…")
+        Select(state => state.Chat.IsStreaming, v => IsStreaming = v);
+        Select(state => state.Chat.IsAgentRunning, v => IsAgentRunning = v);
+        Select(state => state.Chat.Active.TextBuffer ?? string.Empty, v => StreamingBuffer = v);
+        Select(state => state.Ui.Input.Text, v => InputText = v);
+        Select(state => state.Chat.IsAgentRunning && !state.Chat.IsStreaming, v => IsThinking = v);
+        Select(state => state.Chat.IsAgentRunning
+            ? (state.Chat.IsStreaming ? "Streaming response…" : "Agent is running…")
             : "Idle", v => StatusMessage = v);
     }
 
@@ -176,11 +176,11 @@ public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
         for (int i = 0; i < ToolCalls.Count; i++)
             existingById[ToolCalls[i].Id] = ToolCalls[i];
 
-        var ordered = new List<ToolCallViewModel>(state.Lines.Length);
+        var ordered = new List<ToolCallViewModel>(state.Chat.Lines.Length);
 
-        for (int i = 0; i < state.Lines.Length; i++)
+        for (int i = 0; i < state.Chat.Lines.Length; i++)
         {
-            var line = state.Lines[i];
+            var line = state.Chat.Lines[i];
             if (line.ToolCallId is null) continue;
 
             if (line.Role == ChatRole.Tool)
@@ -292,7 +292,7 @@ public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
     protected override void OnStoreChanged(UiState state)
     {
         ApplySelectors(state);
-        SyncLines(state.Lines);
+        SyncLines(state.Chat.Lines);
         SyncToolCalls(state);
     }
 

@@ -89,7 +89,7 @@ public sealed class MouseRouter
     }
 
     // ── Store-driven wheel scroll (CF-B-006 + CF-C-002) ────────────────────
-    // Wheel ticks become UiMsg.KeyInput line-scrolls for UiStore.Dispatch; the
+    // Wheel ticks become AppMsg.KeyInput line-scrolls for UiStore.Dispatch; the
     // existing Press/Release/Wheel routing above is untouched (targets keep
     // working). Positive delta = wheel up per the IPointerTarget contract.
 
@@ -101,19 +101,19 @@ public sealed class MouseRouter
     /// so Input never depends on Widgets. The host dispatches the result
     /// (once per tick, or in a loop for acceleration).
     /// </summary>
-    public static UiMsg WheelToMessage(int delta)
+    public static AppMsg WheelToMessage(int delta)
     {
         if (delta > 0)
         {
-            return new UiMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up));
+            return new AppMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up));
         }
 
         if (delta < 0)
         {
-            return new UiMsg.KeyInput(ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down));
+            return new AppMsg.KeyInput(ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down));
         }
 
-        return new UiMsg.KeyInput(ChatAction.None, UiKey.Unknown);
+        return new AppMsg.KeyInput(ChatAction.None, UiKey.Unknown);
     }
 
     private void Clamp(ref int col, ref int row) =>
@@ -131,12 +131,12 @@ public sealed class MouseRouter
 /// </summary>
 public sealed class TimelineWheelTarget : IPointerTarget
 {
-    private readonly Action<UiMsg> _dispatch;
+    private readonly Action<AppMsg> _dispatch;
 
     /// <summary>Create a wheel-forwarding target bound to a timeline rect.</summary>
     /// <param name="id">Target id for hit-test diagnostics; falls back to "timeline-wheel".</param>
     /// <param name="dispatch">Store dispatch, e.g. <c>msg => { _ = store.Dispatch(msg); }</c>.</param>
-    public TimelineWheelTarget(string id, Action<UiMsg> dispatch)
+    public TimelineWheelTarget(string id, Action<AppMsg> dispatch)
     {
         Id = string.IsNullOrWhiteSpace(id) ? "timeline-wheel" : id;
         _dispatch = dispatch ?? throw new ArgumentNullException(nameof(dispatch));

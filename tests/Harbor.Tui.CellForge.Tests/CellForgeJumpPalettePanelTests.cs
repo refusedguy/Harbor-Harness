@@ -132,7 +132,13 @@ public class CellForgeJumpPalettePanelTests
         new(state, 120, 40, services);
 
     private static UiState StateWithSessions(params SessionInfo[] sessions) =>
-        new UiState { Sessions = ImmutableArray.Create(sessions) };
+        new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Sessions = ImmutableArray.Create(sessions)
+            }
+        };
 
     private static SessionInfo Info(string id, string title) => new(
         SessionId.Create(id),
@@ -148,7 +154,7 @@ public class CellForgeJumpPalettePanelTests
     private static UiStore JumpStore(TuiPanelState state)
     {
         var store = new UiStore();
-        _ = store.Dispatch(new UiMsg.SeedPanels(
+        _ = store.Dispatch(new AppMsg.SeedPanels(
             ImmutableArray.Create(OverlayIds.JumpPalette),
             ImmutableDictionary<string, TuiPanelState>.Empty.Add(OverlayIds.JumpPalette, state),
             ImmutableDictionary<string, int>.Empty.Add(OverlayIds.JumpPalette, 48)));
@@ -215,7 +221,7 @@ public class CellForgeJumpPalettePanelTests
 
         await Assert.That(manager.Opened).Contains("s1");
         await Assert.That(model.Visible).IsFalse();
-        await Assert.That(store.State.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Hidden);
+        await Assert.That(store.State.Ui.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Hidden);
     }
 
     [Test]
@@ -230,7 +236,7 @@ public class CellForgeJumpPalettePanelTests
 
         await Assert.That(manager.Opened).IsEmpty();
         await Assert.That(model.Visible).IsFalse();
-        await Assert.That(store.State.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Hidden);
+        await Assert.That(store.State.Ui.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Hidden);
     }
 
     [Test]
@@ -249,7 +255,7 @@ public class CellForgeJumpPalettePanelTests
         await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Enter), Ctx(new UiState(), services))).IsTrue();
 
         await Assert.That(manager.Opened).IsEmpty();
-        await Assert.That(store.State.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Hidden);
+        await Assert.That(store.State.Ui.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Hidden);
     }
 
     [Test]

@@ -42,7 +42,7 @@ public sealed record TerminalUiState
 
     /// <summary>
     ///     Per-panel runtime state. Mirrors the <c>PanelRegistry</c>; updated by
-    ///     <c>UiReducer</c> on <c>TogglePanel</c> / <c>FocusPanel</c> /
+    ///     <c>AppReducer</c> on <c>TogglePanel</c> / <c>FocusPanel</c> /
     ///     <c>ResizePanel</c>. Renderers read this to decide which panels to render.
     /// </summary>
     public ImmutableDictionary<string, TuiPanelState> PanelStates { get; init; }
@@ -58,7 +58,7 @@ public sealed record TerminalUiState
     /// <summary>
     ///     Per-panel cursor position keyed by panel id (#360). Owns the
     ///     diagnostics / file-tree selection so providers stay stateless across
-    ///     frames; updated by <see cref="UiReducer"/> on
+    ///     frames; updated by <see cref="AppReducer"/> on
     ///     <c>SetPanelCursor</c> / <c>SetPanelDirectory</c>. Missing key = 0.
     /// </summary>
     public ImmutableDictionary<string, int> PanelCursors { get; init; }
@@ -82,7 +82,7 @@ public sealed record TerminalUiState
 
     /// <summary>
     ///     Registered panel ids in registration order. Maintained by the host
-    ///     (<c>PanelRegistry</c>) via <c>Dispatch(new UiMsg.SeedPanels(...))</c>.
+    ///     (<c>PanelRegistry</c>) via <c>Dispatch(new AppMsg.SeedPanels(...))</c>.
     ///     Read by the reducer
     ///     for <c>CyclePanelFocus</c> so it stays pure (no IRegistry dependency).
     /// </summary>

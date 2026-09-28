@@ -9,7 +9,7 @@ namespace Harbor.Ui.Framework.Projection;
 /// <summary>
 ///     Pure transcript extractors backing the builtin panels
 ///     (todo-list, diff-preview, diagnostics). Reads only from
-///     <see cref="UiState.Lines" /> so every renderer (Spectre, CellForge, …)
+///     <see cref="UiState.Chat.Lines" /> so every renderer (Spectre, CellForge, …)
 ///     shares one parsing implementation. No filesystem, no Spectre, no DI —
 ///     only <c>Harbor.Ui.Framework.State</c>.
 /// </summary>
@@ -109,11 +109,11 @@ public static class PanelExtractors
         return items;
     }
 
-    /// <summary>Overload reading from <see cref="UiState.Lines" />.</summary>
+    /// <summary>Overload reading from <see cref="UiState.Chat.Lines" />.</summary>
     public static IReadOnlyList<TodoItem> ExtractTodos(UiState state)
     {
         ArgumentNullException.ThrowIfNull(state);
-        return ExtractTodos(state.Lines);
+        return ExtractTodos(state.Chat.Lines);
     }
 
     /// <summary>
@@ -168,11 +168,11 @@ public static class PanelExtractors
         return result;
     }
 
-    /// <summary>Overload reading from <see cref="UiState.Lines" />.</summary>
+    /// <summary>Overload reading from <see cref="UiState.Chat.Lines" />.</summary>
     public static IReadOnlyList<PanelFileChange> ExtractRecentChanges(UiState state, int maxCount = 8)
     {
         ArgumentNullException.ThrowIfNull(state);
-        return ExtractRecentChanges(state.Lines, maxCount);
+        return ExtractRecentChanges(state.Chat.Lines, maxCount);
     }
 
     /// <summary>
@@ -230,11 +230,11 @@ public static class PanelExtractors
         return result;
     }
 
-    /// <summary>Overload reading from <see cref="UiState.Lines" />.</summary>
+    /// <summary>Overload reading from <see cref="UiState.Chat.Lines" />.</summary>
     public static IReadOnlyList<PanelDiagnostic> CollectDiagnostics(UiState state)
     {
         ArgumentNullException.ThrowIfNull(state);
-        return CollectDiagnostics(state.Lines);
+        return CollectDiagnostics(state.Chat.Lines);
     }
 
     private static int FindToolIndex(IReadOnlyList<ChatLine> lines, int resultIndex, string? toolCallId)

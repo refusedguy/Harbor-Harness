@@ -9,7 +9,7 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     Cell-native help panel: shared <see cref="HelpKeymap"/> hotkey rows plus one
 ///     row per registered panel (from <see cref="IPanelRegistry"/> in
 ///     <c>ctx.Services</c>) plus the slash command list. <c>?</c> while focused
-///     dispatches <c>UiMsg.TogglePanel("help")</c>.
+///     dispatches <c>AppMsg.TogglePanel("help")</c>.
 /// </summary>
 public sealed class CellForgeHelpPanel : CellForgePanelBase
 {
@@ -53,8 +53,8 @@ public sealed class CellForgeHelpPanel : CellForgePanelBase
             for (int i = 0; i < all.Count; i++)
             {
                 var panel = all[i];
-                bool isFocused = panel.Id == ctx.State.FocusedPanelId;
-                var state = ctx.State.PanelStates.TryGetValue(panel.Id, out var ps) ? ps : TuiPanelState.Hidden;
+                bool isFocused = panel.Id == ctx.State.Ui.FocusedPanelId;
+                var state = ctx.State.Ui.PanelStates.TryGetValue(panel.Id, out var ps) ? ps : TuiPanelState.Hidden;
                 string stateText = isFocused ? "*focused*" : state == TuiPanelState.Hidden ? "hidden" : "visible";
                 string slot = i < 9 ? $"Alt+{i + 1}" : "      ";
                 rows.Add($"  {slot}  {panel.Id}  {panel.Title}  {stateText}");
@@ -81,7 +81,7 @@ public sealed class CellForgeHelpPanel : CellForgePanelBase
             // #63: explicit store from the host (no Services lookup).
             if (ctx.Store is UiStore store)
             {
-                _ = store.Dispatch(new UiMsg.TogglePanel(Id));
+                _ = store.Dispatch(new AppMsg.TogglePanel(Id));
             }
 
             return true;

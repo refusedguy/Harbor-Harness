@@ -46,7 +46,7 @@ public static class ToolCallKey
         if (string.IsNullOrEmpty(toolCallId))
             return Array.Empty<ChatLine>();
         var result = new List<ChatLine>(2);
-        foreach (var line in state.Lines)
+        foreach (var line in state.Chat.Lines)
         {
             if (string.Equals(line.ToolCallId, toolCallId, StringComparison.Ordinal))
                 result.Add(line);

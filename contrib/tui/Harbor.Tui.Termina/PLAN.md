@@ -8,15 +8,15 @@
 - [x] **Role headers** — `─ user ─`, `─ assistant ─` etc. via `TerminaMarkdownRenderer.RenderHeader`.
 - [x] **Markdown rendering** — headings (#/##/###), bold (**), italic (*), code (`), bullet/numbered lists, horizontal rule (---).
 - [x] **GFM table rendering** — pipe-separated tables with alignment via shared `GfmTableParser`/`GfmTableFormatter`.
-- [x] **Scrollable history** — `ScrollHandler.VisibleSlice` reads `UiState.ScrollOffset`; ↑/↓/PgUp/PgDn/Home/End all dispatched via `UiMsg.KeyInput`.
+- [x] **Scrollable history** — `ScrollHandler.VisibleSlice` reads `UiState.Ui.ScrollOffset`; ↑/↓/PgUp/PgDn/Home/End all dispatched via `AppMsg.KeyInput`.
 - [x] **Input box** — `InputView` projects `InputModel`; multi-line, history navigation (Alt+↑/↓), slash autocomplete (Tab) via `ChatCommands.Slash`.
 - [x] **Status bar** — `StatusBarView` shows provider/model/agent/tokens-in/tokens-out/$cost/status/scroll%.
 - [x] **Stream bar** — `ChatView.StreamBar` returns "▌ generating... N chars" or "▌ thinking... N chars".
-- [x] **Hotkeys** — Enter/Esc/Ctrl+L/Ctrl+C/F2/↑↓/PgUp/PgDn/Home/End/Alt+↑↓/Tab via `KeyHandler` → `ChatKeyMap` → `UiMsg`.
-- [x] **Session sidebar** — `SessionSidebarView` lists `PanelRegistry.All` with `UiState.PanelStates` visibility; new/branch/delete via slash commands.
+- [x] **Hotkeys** — Enter/Esc/Ctrl+L/Ctrl+C/F2/↑↓/PgUp/PgDn/Home/End/Alt+↑↓/Tab via `KeyHandler` → `ChatKeyMap` → `AppMsg`.
+- [x] **Session sidebar** — `SessionSidebarView` lists `PanelRegistry.All` with `UiState.Ui.PanelStates` visibility; new/branch/delete via slash commands.
 - [x] **Command palette** — `CommandPaletteView` Ctrl+P popup over slash commands + panels + sessions with fuzzy `Contains` filter.
 - [x] **Toast notifications** — `TerminaTeaBridge.Toast` / `DequeueToast` queue with auto-dismiss contract (renderer polls every 4s).
-- [x] **TEA integration** — `TerminaTeaBridge` wraps `UiStore`/`UiReducer`/`TuiEffectHost`; renderer dispatches `UiMsg.KeyInput` and runs returned effects via the host — no direct state mutation.
+- [x] **TEA integration** — `TerminaTeaBridge` wraps `UiStore`/`AppReducer`/`TuiEffectHost`; renderer dispatches `AppMsg.KeyInput` and runs returned effects via the host — no direct state mutation.
 
 ## Done — Termina-specific stretch
 

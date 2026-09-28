@@ -17,7 +17,7 @@ namespace Harbor.Tui.SpectreTui.Panels;
 ///         <b>TEA compliance:</b> all visibility / size reads come from the supplied
 ///         <see cref="UiState" /> (via <see cref="PanelRegistryView" />). The layout
 ///         shell never mutates state — it only builds a Spectre <see cref="Layout" />
-///         tree from a snapshot. State transitions happen in <see cref="UiReducer" />.
+///         tree from a snapshot. State transitions happen in <see cref="AppReducer" />.
 ///     </para>
 ///     <para>
 ///         <b>Layout shape (no panels):</b> identical to the old <c>ChatLayoutShell</c>

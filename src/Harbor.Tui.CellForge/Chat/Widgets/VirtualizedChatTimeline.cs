@@ -282,7 +282,7 @@ public sealed class VirtualizedChatTimeline
     // UiState (Harbor.Ui.Framework.State) is the single source of truth for scroll
     // position: ScrollOffset (0 = pinned to the live tail, grows toward the top),
     // ViewportLines (visible history rows) and TotalLines (wrapped transcript rows).
-    // These helpers only *build* UiMsg values for the host to dispatch via
+    // These helpers only *build* AppMsg values for the host to dispatch via
     // UiStore.Dispatch and *read* UiState snapshots — dispatch stays with the host,
     // so the widget keeps no second scroll authority and the reducer stays pure.
     // Tail-follow is derived, never stored twice: ScrollOffset == 0 means pinned.
@@ -292,25 +292,25 @@ public sealed class VirtualizedChatTimeline
     // object itself is only read by the host, never mutated here.
 
     /// <summary>PageUp key → store page-up scroll (reducer clamps via SetScroll).</summary>
-    public static UiMsg PageUpMsg() => new UiMsg.KeyInput(ChatAction.ScrollUpPage, new UiKey(UiKeyCode.PageUp));
+    public static AppMsg PageUpMsg() => new AppMsg.KeyInput(ChatAction.ScrollUpPage, new UiKey(UiKeyCode.PageUp));
 
     /// <summary>PageDown key → store page-down scroll (reducer clamps via SetScroll).</summary>
-    public static UiMsg PageDownMsg() => new UiMsg.KeyInput(ChatAction.ScrollDownPage, new UiKey(UiKeyCode.PageDown));
+    public static AppMsg PageDownMsg() => new AppMsg.KeyInput(ChatAction.ScrollDownPage, new UiKey(UiKeyCode.PageDown));
 
     /// <summary>Up-arrow key → store single-line scroll up.</summary>
-    public static UiMsg LineUpMsg() => new UiMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up));
+    public static AppMsg LineUpMsg() => new AppMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up));
 
     /// <summary>Down-arrow key → store single-line scroll down.</summary>
-    public static UiMsg LineDownMsg() => new UiMsg.KeyInput(ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down));
+    public static AppMsg LineDownMsg() => new AppMsg.KeyInput(ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down));
 
     /// <summary>Home key → store jump to the oldest row (offset = max).</summary>
-    public static UiMsg ScrollTopMsg() => new UiMsg.KeyInput(ChatAction.ScrollTop, new UiKey(UiKeyCode.Home));
+    public static AppMsg ScrollTopMsg() => new AppMsg.KeyInput(ChatAction.ScrollTop, new UiKey(UiKeyCode.Home));
 
     /// <summary>End key → store pin to the live tail (offset = 0).</summary>
-    public static UiMsg ScrollBottomMsg() => new UiMsg.KeyInput(ChatAction.ScrollBottom, new UiKey(UiKeyCode.End));
+    public static AppMsg ScrollBottomMsg() => new AppMsg.KeyInput(ChatAction.ScrollBottom, new UiKey(UiKeyCode.End));
 
     /// <summary>Pin to the live tail (offset = 0); the reducer also sets WasRunning.</summary>
-    public static UiMsg ResetToTailMsg() => new UiMsg.ScrollResetToTail();
+    public static AppMsg ResetToTailMsg() => new AppMsg.ScrollResetToTail();
 
     /// <summary>
     /// Maps a mouse-wheel tick to the store scroll message. Positive
@@ -322,14 +322,14 @@ public sealed class VirtualizedChatTimeline
     /// <see cref="PageUpMsg"/> / <see cref="PageDownMsg"/> (possibly several line
     /// messages per tick for acceleration).
     /// </summary>
-    public static UiMsg WheelMsg(int delta) =>
-        delta > 0 ? LineUpMsg() : delta < 0 ? LineDownMsg() : new UiMsg.KeyInput(ChatAction.None, UiKey.Unknown);
+    public static AppMsg WheelMsg(int delta) =>
+        delta > 0 ? LineUpMsg() : delta < 0 ? LineDownMsg() : new AppMsg.KeyInput(ChatAction.None, UiKey.Unknown);
 
     /// <summary>
     /// Mirrors a store snapshot into <see cref="ScrollY"/> / <see cref="FollowTail"/>
     /// and runs layout. Viewport height precedence: explicit
     /// <paramref name="viewportH"/> when positive, else
-    /// <c>state.ViewportLines</c>. <c>state.TotalLines</c> is informational only —
+    /// <c>state.Ui.ViewportLines</c>. <c>state.Ui.TotalLines</c> is informational only —
     /// the authoritative total is the cache's <see cref="TotalHeight"/>, reported
     /// back to the store via <see cref="MeasureMsgs"/> (geometry flows
     /// timeline → store, never the reverse). Store offset maps to timeline space
@@ -341,8 +341,8 @@ public sealed class VirtualizedChatTimeline
     public LayoutOutcome ApplyStoreState(UiState state, int width, int viewportH)
     {
         ArgumentNullException.ThrowIfNull(state);
-        int viewH = viewportH > 0 ? viewportH : Math.Max(0, state.ViewportLines);
-        FollowTail = state.ScrollOffset <= 0;
+        int viewH = viewportH > 0 ? viewportH : Math.Max(0, state.Ui.ViewportLines);
+        FollowTail = state.Ui.ScrollOffset <= 0;
         if (!FollowTail)
         {
             // Pre-layout snap on the (possibly stale) range keeps the measure
@@ -361,7 +361,7 @@ public sealed class VirtualizedChatTimeline
             // of truth; clamping (never re-pinning) keeps a growing
             // streaming tail from yanking an unpinned view.
             long max = _cache.MaxScrollFor(viewH);
-            SnapScroll(Math.Clamp(max - (long)state.ScrollOffset, 0, max));
+            SnapScroll(Math.Clamp(max - (long)state.Ui.ScrollOffset, 0, max));
         }
 
         return outcome;
@@ -377,12 +377,12 @@ public sealed class VirtualizedChatTimeline
     /// host must always dispatch the trailing <c>ScrollClamp</c> (a shrunken
     /// viewport otherwise leaves a stale out-of-range offset).
     /// </summary>
-    public UiMsg[] MeasureMsgs(int viewportH)
+    public AppMsg[] MeasureMsgs(int viewportH)
     {
         int viewH = Math.Max(0, viewportH);
         int total = (int)Math.Min(TotalHeight, int.MaxValue);
         int max = (int)Math.Min(_cache.MaxScrollFor(viewH), int.MaxValue);
-        return new UiMsg[] { new UiMsg.Viewport(viewH), new UiMsg.HistoryMeasured(total), new UiMsg.ScrollClamp(max) };
+        return new AppMsg[] { new AppMsg.Viewport(viewH), new AppMsg.HistoryMeasured(total), new AppMsg.ScrollClamp(max) };
     }
 
     /// <summary>Largest legal scroll offset for the settled total, routed

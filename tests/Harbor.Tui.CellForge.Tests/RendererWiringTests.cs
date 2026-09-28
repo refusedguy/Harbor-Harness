@@ -69,7 +69,13 @@ public class RendererWiringTests
         var inputVm = new InputViewModel();
         using var renderer = Create(backend, inputVm);
 
-        renderer.ProjectStateIntoWidgets(new UiState { Input = TextModel("draft") });
+        renderer.ProjectStateIntoWidgets(new UiState
+        {
+            Ui = TerminalUiState.Empty with
+            {
+                Input = TextModel("draft")
+            }
+        });
 
         await Assert.That(inputVm.Text).IsEqualTo("draft");
         await Assert.That(inputVm.Placeholder).IsEqualTo(CellForgeTuiRenderer.IdlePlaceholder);
@@ -77,8 +83,14 @@ public class RendererWiringTests
 
         renderer.ProjectStateIntoWidgets(new UiState
         {
-            Input = TextModel("draft"),
-            IsAgentRunning = true
+            Ui = TerminalUiState.Empty with
+            {
+                Input = TextModel("draft")
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsAgentRunning = true
+            }
         });
 
         await Assert.That(inputVm.Placeholder).IsEqualTo(CellForgeTuiRenderer.BusyPlaceholder);
@@ -91,7 +103,13 @@ public class RendererWiringTests
         var inputVm = new InputViewModel();
         using var renderer = Create(backend, inputVm);
 
-        renderer.ProjectStateIntoWidgets(new UiState { Input = TextModel("hello") });
+        renderer.ProjectStateIntoWidgets(new UiState
+        {
+            Ui = TerminalUiState.Empty with
+            {
+                Input = TextModel("hello")
+            }
+        });
 
         await Assert.That(inputVm.Text).IsEqualTo("hello");
         await Assert.That(inputVm.CursorPosition).IsEqualTo(5);
@@ -126,9 +144,12 @@ public class RendererWiringTests
 
         renderer.ProjectStateIntoWidgets(new UiState
         {
-            Sessions = ImmutableArray.Create(info),
-            ActiveSessionId = id,
-            IsLoading = true
+            Chat = ChatDomainState.Empty with
+            {
+                Sessions = ImmutableArray.Create(info),
+                ActiveSessionId = id,
+                IsLoading = true
+            }
         });
 
         await Assert.That(renderer.SessionsSnapshot.Length).IsEqualTo(1);

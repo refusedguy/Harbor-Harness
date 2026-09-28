@@ -12,15 +12,15 @@ public sealed class InputView
     /// <summary>Render the input box body for the supplied state.</summary>
     public string Build(UiState s)
     {
-        var sb = new StringBuilder(64 + s.Input.Text.Length);
-        bool slash = s.Input.Text.StartsWith('/');
+        var sb = new StringBuilder(64 + s.Ui.Input.Text.Length);
+        bool slash = s.Ui.Input.Text.StartsWith('/');
         string color = slash ? "yellow" : "white";
-        sb.Append($"[cyan]❯ [/][{color}]{RazorMarkdownRenderer.Escape(s.Input.Text)}[/][cyan]▍[/]");
+        sb.Append($"[cyan]❯ [/][{color}]{RazorMarkdownRenderer.Escape(s.Ui.Input.Text)}[/][cyan]▍[/]");
 
-        if (slash && !s.Input.Text.EndsWith(' '))
+        if (slash && !s.Ui.Input.Text.EndsWith(' '))
         {
             string? match = ChatCommands.Slash.FirstOrDefault(c =>
-                c.StartsWith(s.Input.Text, StringComparison.OrdinalIgnoreCase) && c != s.Input.Text);
+                c.StartsWith(s.Ui.Input.Text, StringComparison.OrdinalIgnoreCase) && c != s.Ui.Input.Text);
             if (match is not null)
                 sb.Append($" [grey]↹ {RazorMarkdownRenderer.Escape(match)}[/]");
         }
@@ -29,7 +29,7 @@ public sealed class InputView
     }
 
     /// <summary>Hint line shown beneath the input box.</summary>
-    public static string Hint(UiState s) => s.Focus == FocusMode.Chat
+    public static string Hint(UiState s) => s.Ui.Focus == FocusMode.Chat
         ? "F2 → input  ↑/↓ scroll  PgUp/PgDn page  Home/End top/bottom  Esc quit"
         : "Enter send  Alt+↑/↓ history  Tab complete  Esc quit  F2 → chat";
 }

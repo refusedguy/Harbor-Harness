@@ -14,7 +14,7 @@ public abstract partial class CodeEditorViewModelBase : StoreSubscriberViewModel
     protected CodeEditorViewModelBase(IDispatcherAdapter dispatcher, ILogger logger)
         : base(dispatcher, logger)
     {
-        Select(state => state.IsAgentRunning, v => IsBusy = v);
+        Select(state => state.Chat.IsAgentRunning, v => IsBusy = v);
     }
 
     public ObservableCollection<EditorTabViewModelBase> Tabs { get; } = new();

@@ -53,14 +53,14 @@
                               │ reads
                               │
 ┌────────────────────────────────────────────────────────────────────┐
-│ UiStore + UiReducer  (from Harbor.Tui.Abstractions)               │
+│ UiStore + AppReducer  (from Harbor.Tui.Abstractions)               │
 │   ── UiState (immutable record)                                   │
-│   ── Dispatch(AgentEvent | UiMsg) → (UiState, TuiEffect)          │
+│   ── Dispatch(AgentEvent | AppMsg) → (UiState, TuiEffect)          │
 │   ── TuiEffectHost.Run(effect) → IAgent.PromptAsync / Abort / Quit │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-**Правило:** SpectreTUI **никогда** не обращается к `Harbor.Core` напрямую. Все agent-события приходят через `IEventBus` → `UiStore.Dispatch(AgentEvent)` → `UiReducer.Reduce` → `UiState`. Все side-effects идут через `TuiEffect`.
+**Правило:** SpectreTUI **никогда** не обращается к `Harbor.Core` напрямую. Все agent-события приходят через `IEventBus` → `UiStore.Dispatch(AgentEvent)` → `ChatAppReducer.Reduce` → `UiState`. Все side-effects идут через `TuiEffect`.
 
 ---
 
@@ -75,8 +75,8 @@ LLM provider
             └─ AgentLoop.RunAsync → _eventBus.PublishAsync(MessageUpdateEvent)
                  └─ InMemoryEventBus.PublishAsync → fan-out to subscribers
                       └─ SpectreTuiRenderer.RenderAsync(event)
-                           └─ _store.Dispatch(new UiMsg.Agent(event))
-                                └─ UiReducer.Reduce(state, event)
+                           └─ _store.Dispatch(new ChatAppMsg.Agent(event))
+                                └─ ChatAppReducer.Reduce(state, event)
                                      └─ state with { Active.TextBuffer += "Hello" }
                                           └─ UiStore.Changed event (но Spectre.TUI сам redraw'ит)
                                                └─ (next Spectre.Tui frame)
@@ -393,7 +393,7 @@ private void OnKeyMessage(KeyMessage key) {
     if (HandleLocalScroll(action)) return;
 
     // Dispatcher через reducer
-    var effect = _store.Dispatch(new UiMsg.KeyInput(action, uiKey));
+    var effect = _store.Dispatch(new AppMsg.KeyInput(action, uiKey));
     if (effect is not TuiEffect.None) _effects.Run(effect);
     if (effect is TuiEffect.QuitApp) _app?.Quit();
 }
@@ -456,7 +456,7 @@ private void OnKeyMessage(KeyMessage key) {
    _layout.Diff = s.PendingDiff;  // добавить в UiState новое поле
    ```
 
-6. В `UiReducer.OnMessageUpdate` — ловить `ToolExecutionStartEvent` для `edit` tool:
+6. В `AppReducer.OnMessageUpdate` — ловить `ToolExecutionStartEvent` для `edit` tool:
    ```csharp
    case ToolExecutionStartEvent tes when tes.ToolName == "edit":
        return state with { PendingDiff = ExtractDiff(tes.Args) };
@@ -483,7 +483,7 @@ private void OnKeyMessage(KeyMessage key) {
    }
    ```
 
-3. В `UiReducer.UpdateKey` — обрабатывать Tab/Arrow/Enter когда `state.Completion != null`.
+3. В `ChatAppReducer.UpdateKey` — обрабатывать Tab/Arrow/Enter когда `state.Completion != null`.
 
 ### Фича: token-usage breakdown (как в pi-agent)
 
@@ -494,7 +494,7 @@ private void OnKeyMessage(KeyMessage key) {
 public TokenBreakdown Breakdown { get; init; }
 ```
 
-В `UiReducer.OnStepFinish`:
+В `AppReducer.OnStepFinish`:
 ```csharp
 return state with {
     Breakdown = state.Breakdown.Add(usage),
@@ -527,7 +527,7 @@ return new Layout("Root").SplitColumns(
 
 **Где:** подписка на `ToolExecutionEndEvent` от `bash` tool с pattern'ом `error CS####`.
 
-В `UiReducer.OnMessageUpdate`:
+В `AppReducer.OnMessageUpdate`:
 ```csharp
 case ToolExecutionEndEvent tee when tee.Result.Output.Contains("error CS"):
     return state.AddLine(ChatRole.Error, ParseCompilerErrors(tee.Result.Output));
@@ -580,14 +580,14 @@ if (key.Key == Key.Enter && key.Character is '\n') return;
 
 > **Status:** ✅ RESOLVED — subagent T (tea-restorer) убрал `_scroll` / `_viewport` /
 > `_wasRunning` из `ChatScreen` и удалил `HandleLocalScroll`. Теперь **единственный**
-> scroll-mechanism — `UiState.ScrollOffset`, обновляемый через `UiReducer.Update`
-> по `UiMsg.KeyInput(ScrollUpLine/...)`. Render только читает состояние и диспатчит
-> measurement-сообщения (`UiMsg.Viewport`, `UiMsg.HistoryMeasured`,
-> `UiMsg.ScrollClamp`, `UiMsg.ScrollResetToTail`). См. §14 "TEA compliance" ниже.
+> scroll-mechanism — `UiState.Ui.ScrollOffset`, обновляемый через `ChatAppReducer.Update`
+> по `AppMsg.KeyInput(ScrollUpLine/...)`. Render только читает состояние и диспатчит
+> measurement-сообщения (`AppMsg.Viewport`, `AppMsg.HistoryMeasured`,
+> `AppMsg.ScrollClamp`, `AppMsg.ScrollResetToTail`). См. §14 "TEA compliance" ниже.
 
 Раньше в `ChatScreen` было **два** scroll-mechanism:
 1. `_scroll` — локальное поле, обновлялось через `HandleLocalScroll` (мимо reducer'а)
-2. `UiState.ScrollOffset` — через reducer (но фактически не использовалось в SpectreTUI)
+2. `UiState.Ui.ScrollOffset` — через reducer (но фактически не использовалось в SpectreTUI)
 
 Это было нарушение TEA: state жил в двух местах. См. аудит §FP-005.
 
@@ -603,7 +603,7 @@ if (key.Key == Key.Enter && key.Character is '\n') return;
 
 - [ ] Фича — это **view** или **effect**? Если view — не трогает `Harbor.Core`. Если effect — добавляй в `TuiEffect` discriminated union.
 - [ ] State для фичи — в `UiState` (immutable record, `with` expressions). Не в renderer.
-- [ ] Transitions — в `UiReducer.Update` (pattern match на `UiMsg`). Не в renderer.
+- [ ] Transitions — в `ChatAppReducer.Update` (pattern match на `AppMsg`). Не в renderer.
 - [ ] Виджет — в `View/` папке, `internal sealed class`, не более 100 строк.
 - [ ] Если виджет нужно инжектить в layout — в `ChatLayoutShell.Create()` + `BuildWidgets()`.
 - [ ] Если виджет зависит от measured outputs (scroll, viewport) — обновлять **после** `BuildWidgets`, как `FooterText`.
@@ -802,8 +802,8 @@ Root (rows)
 > **registration-only**: `Register` / `Unregister` / `All` / `Get`. Никаких
 > `SetState` / `SetSize` / `FocusedPanelId` setter / `ApplySnapshot` /
 > `SnapshotStates` / `SnapshotSizes` / `CycleFocus`. Весь state (visibility, focus,
-> size) живёт в `UiState` и мутируется **только** через `UiReducer.Update` по
-> `UiMsg.TogglePanel` / `FocusPanel` / `CyclePanelsFocus` / `ResizePanel`. Renderer
+> size) живёт в `UiState` и мутируется **только** через `ChatAppReducer.Update` по
+> `AppMsg.TogglePanel` / `FocusPanel` / `CyclePanelsFocus` / `ResizePanel`. Renderer
 > читает state через read-only `PanelRegistryView` snapshot.
 
 `UiState` хранит panel state:
@@ -847,7 +847,7 @@ public static UiState ResizePanel(UiState state, string id, int delta) => ...
 - **Lazy build:** `IPanelProvider.Build` вызывается только если панель в состоянии Visible / Focused / Pinned. Hidden панели — нулевая работа.
 - **Layout signature caching:** `PanelLayoutShell.Ensure` перестраивает Spectre Layout только при изменении signature; в steady state это O(visible-panels) string compare.
 - **Tab strip rendering:** один `Paragraph` widget на stack; не перестраивается, если не изменился набор.
-- **No event subscriptions in panels:** панели читают `ctx.State` каждый frame. Reducer уже добавил все `ToolExecutionEndEvent` в `UiState.Lines`, поэтому `TodoListPanel` / `DiagnosticsPanel` / `DiffPreviewPanel` автоматически видят обновления без своих подписок на `IEventBus`.
+- **No event subscriptions in panels:** панели читают `ctx.State` каждый frame. Reducer уже добавил все `ToolExecutionEndEvent` в `UiState.Chat.Lines`, поэтому `TodoListPanel` / `DiagnosticsPanel` / `DiffPreviewPanel` автоматически видят обновления без своих подписок на `IEventBus`.
 
 ### 13.5.7. Writing a panel plugin — full walkthrough (`TodoListPanel`)
 
@@ -858,7 +858,7 @@ public static UiState ResizePanel(UiState state, string id, int delta) => ...
 - Id: `"todo-list"`
 - Placement: `Right` (компактная колонка справа от чата)
 - Size: `40` cols
-- Refresh trigger: `ToolExecutionEndEvent` для tool `todo`. Reducer уже appendит результат в `UiState.Lines` с role `ToolResult` — панели достаточно отсканировать transcript.
+- Refresh trigger: `ToolExecutionEndEvent` для tool `todo`. Reducer уже appendит результат в `UiState.Chat.Lines` с role `ToolResult` — панели достаточно отсканировать transcript.
 
 **Шаг 2: Реализация**
 
@@ -922,7 +922,7 @@ Assert.That(todos.Count).IsEqualTo(1);
 
 > Subagent T (tea-restorer) восстановил TEA-инварианты, нарушённые `ChatScreen`'овскими
 > mutable fields (`_scroll`, `_viewport`, `_wasRunning`) и dual-source-of-truth
-> scroll (`HandleLocalScroll` ↔ `UiReducer`). Этот раздел фиксирует, как SpectreTUI
+> scroll (`HandleLocalScroll` ↔ `AppReducer`). Этот раздел фиксирует, как SpectreTUI
 > устроен теперь.
 
 ### 14.1. State diagram — UiState как single source of truth
@@ -952,12 +952,12 @@ Assert.That(todos.Count).IsEqualTo(1);
      │  (Render loop) │   │ (Layout tree)    │   │ (Widgets)        │
      └────────┬───────┘   └──────────────────┘   └──────────────────┘
               │
-              │ dispatch UiMsg (Viewport / HistoryMeasured /
+              │ dispatch AppMsg (Viewport / HistoryMeasured /
               │ ScrollClamp / ScrollResetToTail / KeyInput)
               ▼
      ┌──────────────────────────────────────────────┐
-     │           UiReducer.Update (PURE)            │
-     │   (UiState, UiMsg) → (UiState, TuiEffect)    │
+     │           ChatAppReducer.Update (PURE)            │
+     │   (UiState, AppMsg) → (UiState, TuiEffect)    │
      └────────────────────┬─────────────────────────┘
                           │ new UiState
                           ▼
@@ -965,7 +965,7 @@ Assert.That(todos.Count).IsEqualTo(1);
 ```
 
 **Single source of truth:** `UiState` — единственное место, где живёт UI state.
-Мутируется **только** через `UiReducer.Update` по `UiMsg`. Никакой renderer не
+Мутируется **только** через `ChatAppReducer.Update` по `AppMsg`. Никакой renderer не
 мутирует state напрямую.
 
 ### 14.2. Flow diagram — scroll action
@@ -976,10 +976,10 @@ User presses ↓  →  KeyMessage(Down)
        ▼
 ChatScreen.OnKeyMessage
        │
-       │ var effect = _store.Dispatch(new UiMsg.KeyInput(
+       │ var effect = _store.Dispatch(new AppMsg.KeyInput(
        │                                    ChatAction.ScrollDownLine, uiKey));
        ▼
-UiReducer.Update(state, UiMsg.KeyInput(ScrollDownLine, _))
+ChatAppReducer.Update(state, AppMsg.KeyInput(ScrollDownLine, _))
        │
        │ return (state.SetScroll(state.ScrollOffset - 1), TuiEffect.None);
        │  └── SetScroll clamps to [0 .. TotalLines - ViewportLines]
@@ -990,7 +990,7 @@ UiStore applies new state via CAS loop, raises Changed event
 Next Render frame: ChatScreen reads state.ScrollOffset
                    → ChatViewProjector.ScrollOffset = state.ScrollOffset
                    → BuildWidgets(viewport, state)
-                   → if scroll > MaxScroll: Dispatch(UiMsg.ScrollClamp(MaxScroll))
+                   → if scroll > MaxScroll: Dispatch(AppMsg.ScrollClamp(MaxScroll))
                    → re-read state
                    → render widgets
 ```
@@ -1010,9 +1010,9 @@ ChatScreen.OnKeyMessage
        │ if (HandlePanelAction(action, uiKey)) return;
        │   └── slot = '1' - '1' = 0
        │   └── id = _registry.All[0].Id  // "help"
-       │   └── _store.Dispatch(new UiMsg.TogglePanel("help"));
+       │   └── _store.Dispatch(new AppMsg.TogglePanel("help"));
        ▼
-UiReducer.Update(state, UiMsg.TogglePanel("help"))
+ChatAppReducer.Update(state, AppMsg.TogglePanel("help"))
        │
        │ return (TogglePanel(state, "help"), TuiEffect.None());
        │  └── PanelStates["help"]: Hidden → Visible
@@ -1025,7 +1025,7 @@ Next Render frame: PanelLayoutShell.Ensure(state, streaming)
 ```
 
 **Note:** `PanelRegistry.SetState` / `ApplySnapshot` — удалены. State живёт только
-в `UiState.PanelStates`. Registry — registration-only.
+в `UiState.Ui.PanelStates`. Registry — registration-only.
 
 ### 14.4. Flow diagram — agent event (new run started)
 
@@ -1035,9 +1035,9 @@ AgentLoop fires AgentStartEvent
        ▼
 SpectreTuiRenderer.RenderAsync(@event)
        │
-       │ _store.Dispatch(new UiMsg.Agent(@event));
+       │ _store.Dispatch(new ChatAppMsg.Agent(@event));
        ▼
-UiReducer.Reduce(state, AgentStartEvent)
+ChatAppReducer.Reduce(state, AgentStartEvent)
        │
        │ return state with {
        │   Status = "running",
@@ -1052,13 +1052,13 @@ Next Render frame: ChatScreen.RenderCore
        │ _panelShell.Ensure(state, state.IsStreaming);
        │ var historyArea = _panelShell.Layout.GetArea(context, "History");
        │ if (state.ViewportLines != historyArea.Height)
-       │     _store.Dispatch(new UiMsg.Viewport(historyArea.Height));
+       │     _store.Dispatch(new AppMsg.Viewport(historyArea.Height));
        │
        │ // Rising-edge belt-and-braces (reducer already reset scroll on AgentStart).
        │ // Handles case where IsAgentRunning was flipped by TuiEffectHost.Transition
        │ // (PromptAgent effect) instead of an AgentStartEvent.
        │ if (state.IsAgentRunning && !state.WasRunning) {
-       │     _store.Dispatch(new UiMsg.ScrollResetToTail());
+       │     _store.Dispatch(new AppMsg.ScrollResetToTail());
        │     state = _store.State;  // WasRunning now true → won't fire again
        │ }
        │
@@ -1075,7 +1075,7 @@ Next Render frame: ChatScreen.RenderCore
 ✅ DO in ChatScreen.Render:
    • Read _store.State (immutable snapshot)
    • Measure geometry (historyArea.Height, _layout.TotalLines, _layout.MaxScroll)
-   • Dispatch UiMsg.Viewport / HistoryMeasured / ScrollClamp / ScrollResetToTail
+   • Dispatch AppMsg.Viewport / HistoryMeasured / ScrollClamp / ScrollResetToTail
      (this is the "subscription" pattern from Elm — measurement msgs flow back
      through the reducer, never mutate state directly)
    • Re-read _store.State after a dispatch (cheap — CAS loop)
@@ -1084,7 +1084,7 @@ Next Render frame: ChatScreen.RenderCore
 
 ❌ DON'T in ChatScreen.Render:
    • Mutate any local field (_scroll, _viewport, _wasRunning — REMOVED)
-   • Mutate _store.State directly (use _store.Dispatch(UiMsg))
+   • Mutate _store.State directly (use _store.Dispatch(AppMsg))
    • Mutate PanelRegistry (no state methods on it anymore)
    • Call IAgent / IToolRegistry / IProviderRegistry (use TuiEffect)
    • Run async work (Render is sync — frame-budgeted)
@@ -1093,13 +1093,13 @@ Next Render frame: ChatScreen.RenderCore
 ### 14.6. What reducer is allowed to do
 
 ```
-✅ DO in UiReducer.Update:
-   • Pattern-match on UiMsg → return new immutable UiState (with expression)
+✅ DO in ChatAppReducer.Update:
+   • Pattern-match on AppMsg → return new immutable UiState (with expression)
    • Return a TuiEffect for the host to run (PromptAgent, RunSlash, etc.)
    • Read state.* fields (no I/O)
    • Pure math (Math.Clamp, +, -, etc.)
 
-❌ DON'T in UiReducer.Update:
+❌ DON'T in ChatAppReducer.Update:
    • Call IAgent / IToolRegistry / IProviderRegistry (no I/O)
    • Call ILogger (no side effects)
    • Mutate state in place (always return new record via `with`)
@@ -1129,7 +1129,7 @@ private bool HandleLocalScroll(ChatAction action)  // removed
 private void OnKeyMessage(KeyMessage key) {
     var action = _keyMap.Resolve(ToUiKey(key));
     if (action == ChatAction.None) return;
-    var effect = _store.Dispatch(new UiMsg.KeyInput(action, ToUiKey(key)));
+    var effect = _store.Dispatch(new AppMsg.KeyInput(action, ToUiKey(key)));
     if (effect is not TuiEffect.None) _effects.Run(effect);
 }
 ```
@@ -1189,11 +1189,11 @@ public override void Render(RenderContext context) {
     var state = _store.State;  // READ ONLY
     ...
     if (state.ViewportLines != viewport) {
-        _store.Dispatch(new UiMsg.Viewport(viewport));  // measurement msg
+        _store.Dispatch(new AppMsg.Viewport(viewport));  // measurement msg
         state = _store.State;  // re-read after dispatch
     }
     if (state.ScrollOffset > _layout.MaxScroll) {
-        _store.Dispatch(new UiMsg.ScrollClamp(_layout.MaxScroll));
+        _store.Dispatch(new AppMsg.ScrollClamp(_layout.MaxScroll));
         state = _store.State;
     }
     ...

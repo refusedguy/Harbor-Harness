@@ -5,21 +5,23 @@ using Harbor.Ui.Framework.Panels;
 
 namespace Harbor.Ui.Framework.State;
 
-// TODO(principles)[SRP, AOT]: split into TerminalUiState (Lines/Input/Scroll/Focus/
-// Panels, generic) + ChatDomainState (Cost/Model/Provider/AgentName/IsAgentRunning)
-// composed as AppState{Ui, Chat} — NO ImmutableDictionary<string,object?> extensions
-// (boxing, IL2xxx). Next PR after this branch merges.
-// Tracked in #364.
+// #33/T4 (#364) RESOLVED for the live TEA path: the state the renderers
+// actually project is UiState{Ui: TerminalUiState, Chat: ChatDomainState} —
+// typed composition only, no ImmutableDictionary<string,object?> extension
+// bag (boxing + IL2xxx under AOT). The legacy flat AppState below is the
+// pre-split shape kept for the non-TEA projection consumers; it is NOT on the
+// TUI read path (UiStore/AppReducer never touch it).
 
 /// <summary>
 ///     Unified immutable UI state for the hybrid MVU+MVVM architecture.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Merges the TUI-oriented <see cref="UiState" />, the shell chrome from
-///         <see cref="AppState" />, and the application chrome (navigation, modals,
-///         toasts) into a single snapshot. Every interactive renderer projects from this
-///         — there is no per-renderer state divergence.
+///         Legacy flat shape superseded by the typed
+///         <c>UiState { Ui: TerminalUiState, Chat: ChatDomainState }</c>
+///         composition used by the TEA path. Kept for the shell-chrome
+///         consumers (<c>AppStore</c> / <c>ChromeReducer</c>) that have not been
+///         migrated yet.
 ///     </para>
 ///     <para>
 ///         Designed for NativeAOT and zero-reflection: all members are value types

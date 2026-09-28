@@ -71,7 +71,7 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
     {
         // Issue #77: every chat write lands in the DI-shared UiStore so the
         // pipeline can restore the snapshot across renderer swaps.
-        _store.Dispatch(new UiMsg.Agent(@event));
+        _store.Dispatch(new ChatAppMsg.Agent(@event));
         // Live output is painted by the registered IAgentEventHandlers (issue
         // #185 visitor registry); everything else (status bar, finalized chat
         // history, diff overlay) renders through the builtin views in

@@ -53,7 +53,7 @@ public enum UiKeyMods : byte
 ///     Framework-neutral key press, free of any State reference. Renderers
 ///     produce this via <see cref="KeyEventMapper" />; the State-side
 ///     <c>KeyEventAdapter</c> converts it into <c>UiKey</c> /
-///     <c>UiMsg.KeyInput</c>. BCL-only and AOT-compatible: no reflection,
+///     <c>AppMsg.KeyInput</c>. BCL-only and AOT-compatible: no reflection,
 ///     no allocations beyond the nullable wrapper.
 /// </summary>
 /// <param name="Kind">The abstract key kind.</param>

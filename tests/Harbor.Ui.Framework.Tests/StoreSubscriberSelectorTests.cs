@@ -42,10 +42,10 @@ public class StoreSubscriberSelectorTests
         int countA = 0;
         int countB = 0;
 
-        vm.RegisterSelector(s => s.ScrollOffset, v => countA++);
-        vm.RegisterSelector(s => s.Status, v => countB++);
+        vm.RegisterSelector(s => s.Ui.ScrollOffset, v => countA++);
+        vm.RegisterSelector(s => s.Chat.Status, v => countB++);
 
-        vm.ApplySelectors(new UiState { ScrollOffset = 5, Status = "running" });
+        vm.ApplySelectors(new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 5 }, Chat = ChatDomainState.Empty with { Status = "running" } });
 
         await Assert.That(countA).IsEqualTo(1);
         await Assert.That(countB).IsEqualTo(1);
@@ -57,10 +57,10 @@ public class StoreSubscriberSelectorTests
         var vm = new TestableStoreSubscriberViewModel();
         int count = 0;
 
-        vm.RegisterSelector(s => s.ScrollOffset, v => count++);
+        vm.RegisterSelector(s => s.Ui.ScrollOffset, v => count++);
 
-        vm.ApplySelectors(new UiState { ScrollOffset = 5 });
-        vm.ApplySelectors(new UiState { ScrollOffset = 5 });
+        vm.ApplySelectors(new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 5 } });
+        vm.ApplySelectors(new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 5 } });
 
         await Assert.That(count).IsEqualTo(1);
     }
@@ -72,15 +72,15 @@ public class StoreSubscriberSelectorTests
         int count = 0;
         int lastValue = -1;
 
-        vm.RegisterSelector(s => s.ScrollOffset, v =>
+        vm.RegisterSelector(s => s.Ui.ScrollOffset, v =>
         {
             count++;
             lastValue = v;
         });
 
-        vm.ApplySelectors(new UiState { ScrollOffset = 5 });
-        vm.ApplySelectors(new UiState { ScrollOffset = 10 });
-        vm.ApplySelectors(new UiState { ScrollOffset = 10 });
+        vm.ApplySelectors(new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 5 } });
+        vm.ApplySelectors(new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 10 } });
+        vm.ApplySelectors(new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 10 } });
 
         await Assert.That(count).IsEqualTo(2);
         await Assert.That(lastValue).IsEqualTo(10);
@@ -92,11 +92,11 @@ public class StoreSubscriberSelectorTests
         var vm = new TestableStoreSubscriberViewModel();
         int count = 0;
 
-        vm.RegisterSelector(s => s.ScrollOffset, v => count++);
+        vm.RegisterSelector(s => s.Ui.ScrollOffset, v => count++);
 
-        vm.ApplySelectors(new UiState { ScrollOffset = 5 });
+        vm.ApplySelectors(new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 5 } });
         vm.ResetSelectors();
-        vm.ApplySelectors(new UiState { ScrollOffset = 5 });
+        vm.ApplySelectors(new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 5 } });
 
         await Assert.That(count).IsEqualTo(2);
     }
@@ -107,9 +107,9 @@ public class StoreSubscriberSelectorTests
         var vm = new TestableStoreSubscriberViewModel();
         string? lastStatus = null;
 
-        vm.RegisterSelector(s => s.Status, v => lastStatus = v);
+        vm.RegisterSelector(s => s.Chat.Status, v => lastStatus = v);
 
-        vm.ApplySelectors(new UiState { Status = "idle" });
+        vm.ApplySelectors(new UiState { Chat = ChatDomainState.Empty with { Status = "idle" } });
 
         await Assert.That(lastStatus).IsEqualTo("idle");
     }
@@ -121,12 +121,12 @@ public class StoreSubscriberSelectorTests
         int count = 0;
 
         vm.RegisterSelector(
-            s => s.Status,
+            s => s.Chat.Status,
             v => count++,
             StringComparer.OrdinalIgnoreCase);
 
-        vm.ApplySelectors(new UiState { Status = "Running" });
-        vm.ApplySelectors(new UiState { Status = "running" });
+        vm.ApplySelectors(new UiState { Chat = ChatDomainState.Empty with { Status = "Running" } });
+        vm.ApplySelectors(new UiState { Chat = ChatDomainState.Empty with { Status = "running" } });
 
         await Assert.That(count).IsEqualTo(1);
     }
@@ -138,11 +138,11 @@ public class StoreSubscriberSelectorTests
         int scrollCount = 0;
         int statusCount = 0;
 
-        vm.RegisterSelector(s => s.ScrollOffset, v => scrollCount++);
-        vm.RegisterSelector(s => s.Status, v => statusCount++);
+        vm.RegisterSelector(s => s.Ui.ScrollOffset, v => scrollCount++);
+        vm.RegisterSelector(s => s.Chat.Status, v => statusCount++);
 
-        vm.ApplySelectors(new UiState { ScrollOffset = 5, Status = "running" });
-        vm.ApplySelectors(new UiState { ScrollOffset = 5, Status = "idle" });
+        vm.ApplySelectors(new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 5 }, Chat = ChatDomainState.Empty with { Status = "running" } });
+        vm.ApplySelectors(new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 5 }, Chat = ChatDomainState.Empty with { Status = "idle" } });
 
         await Assert.That(scrollCount).IsEqualTo(1);
         await Assert.That(statusCount).IsEqualTo(2);

@@ -6,7 +6,7 @@ namespace Harbor.Tui.CellForge.Panels;
 
 /// <summary>
 ///     Cell-native session sidebar panel: lists all known sessions from
-///     <see cref="UiState.Sessions"/> with the active session highlighted.
+///     <see cref="UiState.Chat.Sessions"/> with the active session highlighted.
 ///     Non-interactive (read-only view).
 /// </summary>
 public sealed class CellForgeSessionSidebarPanel : CellForgePanelBase
@@ -28,7 +28,7 @@ public sealed class CellForgeSessionSidebarPanel : CellForgePanelBase
     {
         ArgumentNullException.ThrowIfNull(ctx);
         return PanelText.Clip(
-            PanelRows.SessionRows(ctx.State.Sessions, ctx.State.ActiveSessionId, ctx.State.IsLoading, ctx.Width, ctx.Height),
+            PanelRows.SessionRows(ctx.State.Chat.Sessions, ctx.State.Chat.ActiveSessionId, ctx.State.Chat.IsLoading, ctx.Width, ctx.Height),
             ctx.Width,
             ctx.Height);
     }

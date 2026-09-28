@@ -23,7 +23,7 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 ///         <c>UiStore</c>).
 ///     </para>
 ///     <para>
-///         <b>Decoupling:</b> reads only from <see cref="UiState.Lines" />. Does
+///         <b>Decoupling:</b> reads only from <see cref="UiState.Chat.Lines" />. Does
 ///         not parse files itself — relies on the bash tool output being already in
 ///         the transcript.
 ///     </para>

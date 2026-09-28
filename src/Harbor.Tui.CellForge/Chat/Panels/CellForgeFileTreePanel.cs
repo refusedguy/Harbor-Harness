@@ -8,7 +8,7 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     Cell-native file-tree panel: read-only listing of the working directory,
 ///     directories first. <c>j</c> / <c>k</c> move, <c>h</c> goes to the parent,
 ///     <c>r</c> refreshes, <c>Enter</c> descends into directories or dispatches
-///     <c>UiMsg.KeyInput(Submit)</c> for files (the host slash handler routes it to
+///     <c>AppMsg.KeyInput(Submit)</c> for files (the host slash handler routes it to
 ///     the <c>read</c> tool).
 /// </summary>
 /// <remarks>
@@ -16,8 +16,8 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     id (<c>PanelCursors</c> / <c>PanelDirs</c>, FP-005/TEA, #360):
 ///     <c>Build</c> resolves them from <c>ctx.State</c> (missing key = cursor 0 /
 ///     process working directory) and <c>OnKey</c> folds moves through
-///     <c>ctx.Store</c> via <c>UiMsg.SetPanelCursor</c> /
-///     <c>UiMsg.SetPanelDirectory</c> (descend/parent resets the cursor to 0
+///     <c>ctx.Store</c> via <c>AppMsg.SetPanelCursor</c> /
+///     <c>AppMsg.SetPanelDirectory</c> (descend/parent resets the cursor to 0
 ///     atomically in the reducer). The filesystem listing itself stays a
 ///     provider-local cache — the reducer must never do I/O — invalidated
 ///     whenever the resolved directory changes. The small lock (plus the
@@ -90,7 +90,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
                 }
                 else if (ctx.Store is UiStore store)
                 {
-                    _ = store.Dispatch(new UiMsg.KeyInput(ChatAction.Submit, UiKey.ForChar('\r')));
+                    _ = store.Dispatch(new AppMsg.KeyInput(ChatAction.Submit, UiKey.ForChar('\r')));
                 }
             }
 
@@ -119,7 +119,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
 
                 if (ctx.Store is UiStore store)
                 {
-                    _ = store.Dispatch(new UiMsg.SetPanelCursor(Id, next));
+                    _ = store.Dispatch(new AppMsg.SetPanelCursor(Id, next));
                 }
 
                 return true;
@@ -140,7 +140,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
 
                 if (ctx.Store is UiStore store)
                 {
-                    _ = store.Dispatch(new UiMsg.SetPanelCursor(Id, next));
+                    _ = store.Dispatch(new AppMsg.SetPanelCursor(Id, next));
                 }
 
                 return true;
@@ -184,13 +184,13 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
 
         if (ctx.Store is UiStore store)
         {
-            _ = store.Dispatch(new UiMsg.SetPanelDirectory(Id, dir));
+            _ = store.Dispatch(new AppMsg.SetPanelDirectory(Id, dir));
         }
     }
 
     private int ResolveCursor(PanelContext ctx)
     {
-        if (ctx.State.PanelCursors.TryGetValue(Id, out int stored))
+        if (ctx.State.Ui.PanelCursors.TryGetValue(Id, out int stored))
         {
             return Math.Max(0, stored);
         }
@@ -203,7 +203,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
 
     private string ResolveDir(PanelContext ctx)
     {
-        if (ctx.State.PanelDirs.TryGetValue(Id, out string? stored))
+        if (ctx.State.Ui.PanelDirs.TryGetValue(Id, out string? stored))
         {
             return string.IsNullOrEmpty(stored) ? Environment.CurrentDirectory : stored;
         }

@@ -11,7 +11,7 @@ Meta-package that references all `Harbor.Ui.Framework.*` sub-modules. Produces n
 | ProjectReference | Purpose |
 |------------------|---------|
 | `Harbor.Ui.Framework.Abstractions` | Contracts: config reader, diagnostics panel, shell chrome, navigation |
-| `Harbor.Ui.Framework.State` | TEA state machine: `UiStore`, `UiState`, `UiReducer`, `UiMsg`, panels |
+| `Harbor.Ui.Framework.State` | TEA state machine: `UiStore`, `UiState`, `AppReducer`, `AppMsg`, panels |
 | `Harbor.Ui.Framework.Services` | Platform services: dispatcher, dialogs, theme, toast, file picker, overlays, git |
 | `Harbor.Ui.Framework.ViewModels` | Shared VMs: chat lines, tool calls, diff, session rows, token usage |
 | `Harbor.Ui.Framework.Projection` | Renderer-agnostic projection of `UiState` → `UiScreenModel` |

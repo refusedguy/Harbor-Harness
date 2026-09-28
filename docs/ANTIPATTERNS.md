@@ -327,7 +327,7 @@ _ = Task.Run(async () =>
 **What goes wrong.** Side-effect in render → renders aren't idempotent, hard to
 debug. Breaks TEA.
 
-**Right way.** Render only *reads* state. Mutations go through `UiReducer.Reduce`.
+**Right way.** Render only *reads* state. Mutations go through `ChatAppReducer.Reduce`.
 
 ```csharp
 // ❌ WRONG — mutating state in render
@@ -398,7 +398,7 @@ public async IAsyncEnumerable<LlmEvent> StreamAsync(...)
 
 ### 12. Impure reducer
 
-**What.** Reducer function (e.g. `UiReducer.Reduce`) performs I/O, calls
+**What.** Reducer function (e.g. `ChatAppReducer.Reduce`) performs I/O, calls
 non-deterministic methods (`DateTime.Now`, `Guid.NewGuid`), or mutates shared state.
 
 **What goes wrong.** Reducer isn't reproducible. Time-travel debugging breaks.

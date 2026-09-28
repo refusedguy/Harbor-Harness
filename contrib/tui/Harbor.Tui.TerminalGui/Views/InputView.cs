@@ -11,13 +11,13 @@ public sealed class InputView
     /// <summary>Render the input box body for the supplied state.</summary>
     public string Build(UiState s)
     {
-        var sb = new StringBuilder(64 + s.Input.Text.Length);
-        sb.Append("❯ ").Append(s.Input.Text).Append('▍');
+        var sb = new StringBuilder(64 + s.Ui.Input.Text.Length);
+        sb.Append("❯ ").Append(s.Ui.Input.Text).Append('▍');
 
-        if (s.Input.Text.StartsWith('/') && !s.Input.Text.EndsWith(' '))
+        if (s.Ui.Input.Text.StartsWith('/') && !s.Ui.Input.Text.EndsWith(' '))
         {
             string? match = ChatCommands.Slash.FirstOrDefault(c =>
-                c.StartsWith(s.Input.Text, StringComparison.OrdinalIgnoreCase) && c != s.Input.Text);
+                c.StartsWith(s.Ui.Input.Text, StringComparison.OrdinalIgnoreCase) && c != s.Ui.Input.Text);
             if (match is not null)
                 sb.Append("   ↹ ").Append(match);
         }
@@ -26,7 +26,7 @@ public sealed class InputView
     }
 
     /// <summary>Hint line shown beneath the input box.</summary>
-    public static string Hint(UiState s) => s.Focus == FocusMode.Chat
+    public static string Hint(UiState s) => s.Ui.Focus == FocusMode.Chat
         ? "F2 → input  ↑/↓ scroll  PgUp/PgDn page  Home/End top/bottom  Esc quit"
         : "Enter send  Alt+↑/↓ history  Tab complete  Esc quit  F2 → chat";
 }

@@ -8,9 +8,9 @@ using Harbor.Ui.Framework.State;
 namespace Harbor.Tui.Tests;
 /// <summary>
 ///     Tests for the Harbor panel system: <see cref="PanelRegistry" /> (thread-safe
-///     registration-only registry), <see cref="UiReducer" />'s panel transitions
-///     (<see cref="UiMsg.TogglePanel" />, <see cref="UiMsg.FocusPanel" />,
-///     <see cref="UiMsg.CyclePanelsFocus" />, <see cref="UiMsg.ResizePanel" />), and
+///     registration-only registry), <see cref="AppReducer" />'s panel transitions
+///     (<see cref="AppMsg.TogglePanel" />, <see cref="AppMsg.FocusPanel" />,
+///     <see cref="AppMsg.CyclePanelsFocus" />, <see cref="AppMsg.ResizePanel" />), and
 ///     the read-only <see cref="PanelRegistryView" /> snapshot that
 ///     <c>PanelLayoutShell</c> consumes.
 /// </summary>
@@ -35,9 +35,9 @@ public class PanelRegistryTests
     }
 
     /// <summary>
-    ///     Test 2 — <see cref="UiReducer.TogglePanel" /> flips a Hidden panel to
+    ///     Test 2 — <see cref="AppReducer.TogglePanel" /> flips a Hidden panel to
     ///     Visible and back. Focused → Hidden also clears
-    ///     <see cref="UiState.FocusedPanelId" />.
+    ///     <see cref="UiState.Ui.FocusedPanelId" />.
     /// </summary>
     [Test]
     public async Task TogglePanel_FlipsHiddenAndVisible()
@@ -46,27 +46,30 @@ public class PanelRegistryTests
         // SpectreTuiRenderer.SeedPanelRegistryIntoState does).
         var state = new UiState
         {
-            RegisteredPanelIds = ImmutableArray.Create("alpha"),
-            PanelStates = ImmutableDictionary.CreateRange(new[]
+            Ui = TerminalUiState.Empty with
+            {
+                RegisteredPanelIds = ImmutableArray.Create("alpha"),
+                PanelStates = ImmutableDictionary.CreateRange(new[]
             {
                 new KeyValuePair<string, TuiPanelState>("alpha", TuiPanelState.Hidden)
             })
+            }
         };
 
-        var afterShow = UiReducer.TogglePanel(state, "alpha");
-        await Assert.That(afterShow.PanelStates["alpha"]).IsEqualTo(TuiPanelState.Visible);
+        var afterShow = AppReducer.TogglePanel(state, "alpha");
+        await Assert.That(afterShow.Ui.PanelStates["alpha"]).IsEqualTo(TuiPanelState.Visible);
 
-        var afterHide = UiReducer.TogglePanel(afterShow, "alpha");
-        await Assert.That(afterHide.PanelStates["alpha"]).IsEqualTo(TuiPanelState.Hidden);
+        var afterHide = AppReducer.TogglePanel(afterShow, "alpha");
+        await Assert.That(afterHide.Ui.PanelStates["alpha"]).IsEqualTo(TuiPanelState.Hidden);
 
         // Focused → Hidden must also clear focus.
-        var focused = UiReducer.FocusPanel(afterShow, "alpha");
-        await Assert.That(focused.PanelStates["alpha"]).IsEqualTo(TuiPanelState.Focused);
-        await Assert.That(focused.FocusedPanelId).IsEqualTo("alpha");
+        var focused = AppReducer.FocusPanel(afterShow, "alpha");
+        await Assert.That(focused.Ui.PanelStates["alpha"]).IsEqualTo(TuiPanelState.Focused);
+        await Assert.That(focused.Ui.FocusedPanelId).IsEqualTo("alpha");
 
-        var hiddenFromFocused = UiReducer.TogglePanel(focused, "alpha");
-        await Assert.That(hiddenFromFocused.PanelStates["alpha"]).IsEqualTo(TuiPanelState.Hidden);
-        await Assert.That(hiddenFromFocused.FocusedPanelId).IsNull();
+        var hiddenFromFocused = AppReducer.TogglePanel(focused, "alpha");
+        await Assert.That(hiddenFromFocused.Ui.PanelStates["alpha"]).IsEqualTo(TuiPanelState.Hidden);
+        await Assert.That(hiddenFromFocused.Ui.FocusedPanelId).IsNull();
     }
 
     /// <summary>
@@ -95,7 +98,7 @@ public class PanelRegistryTests
     }
 
     /// <summary>
-    ///     Test 4 — <see cref="UiReducer.CycleFocus" /> walks visible panels in
+    ///     Test 4 — <see cref="AppReducer.CycleFocus" /> walks visible panels in
     ///     registration order. When the last visible panel is focused, a further
     ///     cycle returns focus to chat (FocusedPanelId = null).
     /// </summary>
@@ -111,34 +114,37 @@ public class PanelRegistryTests
 
         var state = new UiState
         {
-            RegisteredPanelIds = ImmutableArray.Create("p1", "p2", "p3"),
-            PanelStates = panelStates,
-            FocusedPanelId = null
+            Ui = TerminalUiState.Empty with
+            {
+                RegisteredPanelIds = ImmutableArray.Create("p1", "p2", "p3"),
+                PanelStates = panelStates,
+                FocusedPanelId = null
+            }
         };
 
         // Initial cycle: focus chat → first visible panel (p1).
-        var s1 = UiReducer.CycleFocus(state);
-        await Assert.That(s1.FocusedPanelId).IsEqualTo("p1");
-        await Assert.That(s1.PanelStates["p1"]).IsEqualTo(TuiPanelState.Focused);
+        var s1 = AppReducer.CycleFocus(state);
+        await Assert.That(s1.Ui.FocusedPanelId).IsEqualTo("p1");
+        await Assert.That(s1.Ui.PanelStates["p1"]).IsEqualTo(TuiPanelState.Focused);
 
         // p1 → p2 (p3 is Hidden, skipped).
-        var s2 = UiReducer.CycleFocus(s1);
-        await Assert.That(s2.FocusedPanelId).IsEqualTo("p2");
-        await Assert.That(s2.PanelStates["p2"]).IsEqualTo(TuiPanelState.Focused);
-        await Assert.That(s2.PanelStates["p1"]).IsEqualTo(TuiPanelState.Visible);
+        var s2 = AppReducer.CycleFocus(s1);
+        await Assert.That(s2.Ui.FocusedPanelId).IsEqualTo("p2");
+        await Assert.That(s2.Ui.PanelStates["p2"]).IsEqualTo(TuiPanelState.Focused);
+        await Assert.That(s2.Ui.PanelStates["p1"]).IsEqualTo(TuiPanelState.Visible);
 
         // p2 → chat (only 2 visible panels, so wrapping returns to chat).
-        var s3 = UiReducer.CycleFocus(s2);
-        await Assert.That(s3.FocusedPanelId).IsNull();
-        await Assert.That(s3.PanelStates["p2"]).IsEqualTo(TuiPanelState.Visible);
+        var s3 = AppReducer.CycleFocus(s2);
+        await Assert.That(s3.Ui.FocusedPanelId).IsNull();
+        await Assert.That(s3.Ui.PanelStates["p2"]).IsEqualTo(TuiPanelState.Visible);
 
         // chat → p1 again.
-        var s4 = UiReducer.CycleFocus(s3);
-        await Assert.That(s4.FocusedPanelId).IsEqualTo("p1");
+        var s4 = AppReducer.CycleFocus(s3);
+        await Assert.That(s4.Ui.FocusedPanelId).IsEqualTo("p1");
     }
 
     /// <summary>
-    ///     Test 5 — <see cref="UiReducer.ResizePanel" /> clamps the new size to
+    ///     Test 5 — <see cref="AppReducer.ResizePanel" /> clamps the new size to
     ///     [<see cref="PanelRegistry.MinSize" />..<see cref="PanelRegistry.MaxSize" />].
     ///     Both grow and shrink paths clamp correctly.
     /// </summary>
@@ -152,28 +158,31 @@ public class PanelRegistryTests
 
         var state = new UiState
         {
-            RegisteredPanelIds = ImmutableArray.Create("p1"),
-            PanelStates = ImmutableDictionary.CreateRange(new[]
+            Ui = TerminalUiState.Empty with
+            {
+                RegisteredPanelIds = ImmutableArray.Create("p1"),
+                PanelStates = ImmutableDictionary.CreateRange(new[]
             {
                 new KeyValuePair<string, TuiPanelState>("p1", TuiPanelState.Visible)
             }),
-            PanelSizes = panelSizes
+                PanelSizes = panelSizes
+            }
         };
 
         // Grow by 10 → 34.
-        var grown = UiReducer.ResizePanel(state, "p1", 10);
-        await Assert.That(grown.PanelSizes["p1"]).IsEqualTo(34);
+        var grown = AppReducer.ResizePanel(state, "p1", 10);
+        await Assert.That(grown.Ui.PanelSizes["p1"]).IsEqualTo(34);
 
         // Grow past max → clamped to MaxSize (200).
-        var maxed = UiReducer.ResizePanel(grown, "p1", 1000);
-        await Assert.That(maxed.PanelSizes["p1"]).IsEqualTo(PanelRegistry.MaxSize);
+        var maxed = AppReducer.ResizePanel(grown, "p1", 1000);
+        await Assert.That(maxed.Ui.PanelSizes["p1"]).IsEqualTo(PanelRegistry.MaxSize);
 
         // Shrink below min → clamped to MinSize (2).
-        var mined = UiReducer.ResizePanel(maxed, "p1", -1000);
-        await Assert.That(mined.PanelSizes["p1"]).IsEqualTo(PanelRegistry.MinSize);
+        var mined = AppReducer.ResizePanel(maxed, "p1", -1000);
+        await Assert.That(mined.Ui.PanelSizes["p1"]).IsEqualTo(PanelRegistry.MinSize);
 
         // Unknown id is a no-op.
-        var unknown = UiReducer.ResizePanel(state, "does-not-exist", 10);
+        var unknown = AppReducer.ResizePanel(state, "does-not-exist", 10);
         await Assert.That(ReferenceEquals(unknown, state)).IsTrue();
     }
 
@@ -194,14 +203,17 @@ public class PanelRegistryTests
 
         var state = new UiState
         {
-            RegisteredPanelIds = ImmutableArray.Create("left-1", "left-2", "right-1", "bottom-1"),
-            PanelStates = ImmutableDictionary.CreateRange(new[]
+            Ui = TerminalUiState.Empty with
+            {
+                RegisteredPanelIds = ImmutableArray.Create("left-1", "left-2", "right-1", "bottom-1"),
+                PanelStates = ImmutableDictionary.CreateRange(new[]
             {
                 new KeyValuePair<string, TuiPanelState>("left-1", TuiPanelState.Visible),
                 new KeyValuePair<string, TuiPanelState>("left-2", TuiPanelState.Focused),
                 new KeyValuePair<string, TuiPanelState>("right-1", TuiPanelState.Hidden),
                 new KeyValuePair<string, TuiPanelState>("bottom-1", TuiPanelState.Hidden)
             })
+            }
         };
 
         var view = registry.View(state);
@@ -271,11 +283,14 @@ public class PanelRegistryTests
 
         var state1 = new UiState
         {
-            RegisteredPanelIds = ImmutableArray.Create("alpha"),
-            PanelStates = ImmutableDictionary.CreateRange(new[]
+            Ui = TerminalUiState.Empty with
+            {
+                RegisteredPanelIds = ImmutableArray.Create("alpha"),
+                PanelStates = ImmutableDictionary.CreateRange(new[]
             {
                 new KeyValuePair<string, TuiPanelState>("alpha", TuiPanelState.Hidden)
             })
+            }
         };
         var view1 = registry.View(state1);
         await Assert.That(view1.GetState("alpha")).IsEqualTo(TuiPanelState.Hidden);
@@ -283,7 +298,7 @@ public class PanelRegistryTests
         // State changes — view1's snapshot is unaffected.
         var state2 = state1 with
         {
-            PanelStates = state1.PanelStates.SetItem("alpha", TuiPanelState.Visible)
+            Ui = state1.Ui with { PanelStates = state1.Ui.PanelStates.SetItem("alpha", TuiPanelState.Visible) }
         };
         await Assert.That(view1.GetState("alpha")).IsEqualTo(TuiPanelState.Hidden);
 
@@ -320,7 +335,7 @@ public class PanelRegistryTests
 /// <summary>
 ///     TEA compliance tests — assert that The Elm Architecture invariants hold:
 ///     <list type="bullet">
-///         <item>All scroll actions go through <see cref="UiReducer.Update" /> (no direct mutation).</item>
+///         <item>All scroll actions go through <see cref="ChatAppReducer.Update" /> (no direct mutation).</item>
 ///         <item>
 ///             <see cref="SpectreTuiRenderer" />'s <c>ChatScreen</c> has no local mutable
 ///             scroll / viewport / was-running fields (they live in <see cref="UiState" />).
@@ -331,8 +346,8 @@ public class PanelRegistryTests
 ///             setter are all gone).
 ///         </item>
 ///         <item>
-///             <see cref="UiReducer.Update" /> handles <see cref="UiMsg.ScrollResetToTail" />
-///             and <see cref="UiMsg.ScrollClamp" /> — the messages a pure render dispatches.
+///             <see cref="ChatAppReducer.Update" /> handles <see cref="AppMsg.ScrollResetToTail" />
+///             and <see cref="AppMsg.ScrollClamp" /> — the messages a pure render dispatches.
 ///         </item>
 ///     </list>
 /// </summary>
@@ -342,7 +357,7 @@ public class TeaComplianceTests
     ///     <see cref="IPanelRegistry" /> exposes only registration methods. State mutation
     ///     methods (<c>SetState</c>, <c>SetSize</c>, <c>FocusedPanelId</c> setter) have
     ///     been removed — TEA: state lives in <see cref="UiState" />, mutated only by
-    ///     <see cref="UiReducer" />.
+    ///     <see cref="AppReducer" />.
     /// </summary>
     [Test]
     public async Task IPanelRegistry_HasOnlyRegistrationMethods()
@@ -401,8 +416,8 @@ public class TeaComplianceTests
     }
 
     /// <summary>
-    ///     <see cref="UiState.ScrollOffset" /> / <see cref="UiState.ViewportLines" /> /
-    ///     <see cref="UiState.TotalLines" /> / <see cref="UiState.WasRunning" /> exist
+    ///     <see cref="UiState.Ui.ScrollOffset" /> / <see cref="UiState.Ui.ViewportLines" /> /
+    ///     <see cref="UiState.Ui.TotalLines" /> / <see cref="UiState.Chat.WasRunning" /> exist
     ///     (TEA: state in UiState, not in renderer fields).
     /// </summary>
     [Test]
@@ -417,13 +432,13 @@ public class TeaComplianceTests
     }
 
     /// <summary>
-    ///     <see cref="UiMsg.ScrollResetToTail" /> and <see cref="UiMsg.ScrollClamp" />
+    ///     <see cref="AppMsg.ScrollResetToTail" /> and <see cref="AppMsg.ScrollClamp" />
     ///     exist as message cases (TEA: render dispatches these — never mutates state).
     /// </summary>
     [Test]
     public async Task UiMsg_HasScrollResetToTailAndScrollClamp()
     {
-        var msgBase = typeof(UiMsg);
+        var msgBase = typeof(AppMsg);
         var nested = msgBase.GetNestedTypes(BindingFlags.Public);
         var names = nested.Select(t => t.Name).ToHashSet();
         await Assert.That(names.Contains("ScrollResetToTail")).IsTrue();
@@ -433,9 +448,9 @@ public class TeaComplianceTests
     }
 
     /// <summary>
-    ///     <see cref="UiReducer.Update" /> handles <see cref="UiMsg.ScrollResetToTail" />
-    ///     by resetting <see cref="UiState.ScrollOffset" /> to 0 and setting
-    ///     <see cref="UiState.WasRunning" /> to true (so the rising-edge detection in
+    ///     <see cref="ChatAppReducer.Update" /> handles <see cref="AppMsg.ScrollResetToTail" />
+    ///     by resetting <see cref="UiState.Ui.ScrollOffset" /> to 0 and setting
+    ///     <see cref="UiState.Chat.WasRunning" /> to true (so the rising-edge detection in
     ///     render does not keep firing every frame).
     /// </summary>
     [Test]
@@ -443,77 +458,92 @@ public class TeaComplianceTests
     {
         var state = new UiState
         {
-            ScrollOffset = 42,
-            WasRunning = false,
-            TotalLines = 100,
-            ViewportLines = 10
+            Ui = TerminalUiState.Empty with
+            {
+                ScrollOffset = 42,
+                TotalLines = 100,
+                ViewportLines = 10
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                WasRunning = false
+            }
         };
 
-        var (next, effect) = UiReducer.Update(state, new UiMsg.ScrollResetToTail());
+        var (next, effect) = ChatAppReducer.Update(state, new AppMsg.ScrollResetToTail());
 
-        await Assert.That(next.ScrollOffset).IsEqualTo(0);
-        await Assert.That(next.WasRunning).IsTrue();
+        await Assert.That(next.Ui.ScrollOffset).IsEqualTo(0);
+        await Assert.That(next.Chat.WasRunning).IsTrue();
         await Assert.That(effect).IsTypeOf<TuiEffect.None>();
     }
 
     /// <summary>
-    ///     <see cref="UiReducer.Update" /> handles <see cref="UiMsg.ScrollClamp" /> by
-    ///     clamping <see cref="UiState.ScrollOffset" /> to [0..MaxScroll].
+    ///     <see cref="ChatAppReducer.Update" /> handles <see cref="AppMsg.ScrollClamp" /> by
+    ///     clamping <see cref="UiState.Ui.ScrollOffset" /> to [0..MaxScroll].
     /// </summary>
     [Test]
     public async Task Reducer_ScrollClamp_ClampsScrollOffset()
     {
-        var state = new UiState { ScrollOffset = 50 };
+        var state = new UiState
+        {
+            Ui = TerminalUiState.Empty with
+            {
+                ScrollOffset = 50
+            }
+        };
 
-        var (next, _) = UiReducer.Update(state, new UiMsg.ScrollClamp(MaxScroll: 20));
-        await Assert.That(next.ScrollOffset).IsEqualTo(20);
+        var (next, _) = ChatAppReducer.Update(state, new AppMsg.ScrollClamp(MaxScroll: 20));
+        await Assert.That(next.Ui.ScrollOffset).IsEqualTo(20);
 
-        var (next2, _) = UiReducer.Update(state, new UiMsg.ScrollClamp(MaxScroll: 100));
-        await Assert.That(next2.ScrollOffset).IsEqualTo(50);
+        var (next2, _) = ChatAppReducer.Update(state, new AppMsg.ScrollClamp(MaxScroll: 100));
+        await Assert.That(next2.Ui.ScrollOffset).IsEqualTo(50);
 
-        var (next3, _) = UiReducer.Update(state, new UiMsg.ScrollClamp(MaxScroll: -1));
-        await Assert.That(next3.ScrollOffset).IsEqualTo(0);
+        var (next3, _) = ChatAppReducer.Update(state, new AppMsg.ScrollClamp(MaxScroll: -1));
+        await Assert.That(next3.Ui.ScrollOffset).IsEqualTo(0);
     }
 
     /// <summary>
     ///     All <c>ChatAction.Scroll*</c> actions flow through
-    ///     <see cref="UiReducer.Update" /> — there is no <c>HandleLocalScroll</c>
+    ///     <see cref="ChatAppReducer.Update" /> — there is no <c>HandleLocalScroll</c>
     ///     shortcut in the renderer. Verified by checking that the reducer handles each
-    ///     scroll action and updates <see cref="UiState.ScrollOffset" />.
+    ///     scroll action and updates <see cref="UiState.Ui.ScrollOffset" />.
     /// </summary>
     [Test]
     public async Task Reducer_HandlesAllScrollActions_ThroughUpdate()
     {
         var state = new UiState
         {
-            ScrollOffset = 5,
-            TotalLines = 100,
-            ViewportLines = 10
+            Ui = TerminalUiState.Empty with
+            {
+                ScrollOffset = 5,
+                TotalLines = 100,
+                ViewportLines = 10
+            }
         };
 
-        var (s1, _) = UiReducer.Update(state, new UiMsg.KeyInput(ChatAction.ScrollUpLine, default));
-        await Assert.That(s1.ScrollOffset).IsEqualTo(6);
+        var (s1, _) = ChatAppReducer.Update(state, new AppMsg.KeyInput(ChatAction.ScrollUpLine, default));
+        await Assert.That(s1.Ui.ScrollOffset).IsEqualTo(6);
 
-        var (s2, _) = UiReducer.Update(s1, new UiMsg.KeyInput(ChatAction.ScrollDownLine, default));
-        await Assert.That(s2.ScrollOffset).IsEqualTo(5);
+        var (s2, _) = ChatAppReducer.Update(s1, new AppMsg.KeyInput(ChatAction.ScrollDownLine, default));
+        await Assert.That(s2.Ui.ScrollOffset).IsEqualTo(5);
 
-        var (s3, _) = UiReducer.Update(s2, new UiMsg.KeyInput(ChatAction.ScrollUpPage, default));
+        var (s3, _) = ChatAppReducer.Update(s2, new AppMsg.KeyInput(ChatAction.ScrollUpPage, default));
         // Page = max(1, viewport-2) = 8.
-        await Assert.That(s3.ScrollOffset).IsEqualTo(13);
+        await Assert.That(s3.Ui.ScrollOffset).IsEqualTo(13);
 
-        var (s4, _) = UiReducer.Update(s3, new UiMsg.KeyInput(ChatAction.ScrollDownPage, default));
-        await Assert.That(s4.ScrollOffset).IsEqualTo(5);
+        var (s4, _) = ChatAppReducer.Update(s3, new AppMsg.KeyInput(ChatAction.ScrollDownPage, default));
+        await Assert.That(s4.Ui.ScrollOffset).IsEqualTo(5);
 
-        var (s5, _) = UiReducer.Update(s4, new UiMsg.KeyInput(ChatAction.ScrollTop, default));
-        await Assert.That(s5.ScrollOffset).IsEqualTo(90); // max = 100 - 10
+        var (s5, _) = ChatAppReducer.Update(s4, new AppMsg.KeyInput(ChatAction.ScrollTop, default));
+        await Assert.That(s5.Ui.ScrollOffset).IsEqualTo(90); // max = 100 - 10
 
-        var (s6, _) = UiReducer.Update(s5, new UiMsg.KeyInput(ChatAction.ScrollBottom, default));
-        await Assert.That(s6.ScrollOffset).IsEqualTo(0);
+        var (s6, _) = ChatAppReducer.Update(s5, new AppMsg.KeyInput(ChatAction.ScrollBottom, default));
+        await Assert.That(s6.Ui.ScrollOffset).IsEqualTo(0);
     }
 
     /// <summary>
-    ///     <c>AgentStartEvent</c> snapshots <see cref="UiState.IsAgentRunning" /> into
-    ///     <see cref="UiState.WasRunning" /> and resets <see cref="UiState.ScrollOffset" />
+    ///     <c>AgentStartEvent</c> snapshots <see cref="UiState.Chat.IsAgentRunning" /> into
+    ///     <see cref="UiState.Chat.WasRunning" /> and resets <see cref="UiState.Ui.ScrollOffset" />
     ///     to 0 (so streaming output is always visible). This is the reducer-side
     ///     replacement for the old ChatScreen <c>_wasRunning</c> / <c>_scroll = 0</c>
     ///     mutation (§FP-005).
@@ -523,23 +553,29 @@ public class TeaComplianceTests
     {
         var state = new UiState
         {
-            IsAgentRunning = false,
-            WasRunning = false,
-            ScrollOffset = 50,
-            TotalLines = 100,
-            ViewportLines = 10
+            Ui = TerminalUiState.Empty with
+            {
+                ScrollOffset = 50,
+                TotalLines = 100,
+                ViewportLines = 10
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsAgentRunning = false,
+                WasRunning = false
+            }
         };
 
-        var next = UiReducer.Update(state, new UiMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>()))).State;
+        var next = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>()))).State;
 
-        await Assert.That(next.IsAgentRunning).IsTrue();
-        await Assert.That(next.WasRunning).IsFalse(); // prior IsAgentRunning
-        await Assert.That(next.ScrollOffset).IsEqualTo(0); // pinned to live tail
+        await Assert.That(next.Chat.IsAgentRunning).IsTrue();
+        await Assert.That(next.Chat.WasRunning).IsFalse(); // prior IsAgentRunning
+        await Assert.That(next.Ui.ScrollOffset).IsEqualTo(0); // pinned to live tail
     }
 
     /// <summary>
-    ///     <c>AgentEndEvent</c> snapshots <see cref="UiState.IsAgentRunning" /> into
-    ///     <see cref="UiState.WasRunning" /> (so the next AgentStart can detect the
+    ///     <c>AgentEndEvent</c> snapshots <see cref="UiState.Chat.IsAgentRunning" /> into
+    ///     <see cref="UiState.Chat.WasRunning" /> (so the next AgentStart can detect the
     ///     rising edge correctly).
     /// </summary>
     [Test]
@@ -547,14 +583,17 @@ public class TeaComplianceTests
     {
         var state = new UiState
         {
-            IsAgentRunning = true,
-            WasRunning = false
+            Chat = ChatDomainState.Empty with
+            {
+                IsAgentRunning = true,
+                WasRunning = false
+            }
         };
 
-        var next = UiReducer.Update(state, new UiMsg.Agent(new AgentEndEvent(Array.Empty<AgentMessage>()))).State;
+        var next = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentEndEvent(Array.Empty<AgentMessage>()))).State;
 
-        await Assert.That(next.IsAgentRunning).IsFalse();
-        await Assert.That(next.WasRunning).IsTrue(); // prior IsAgentRunning
+        await Assert.That(next.Chat.IsAgentRunning).IsFalse();
+        await Assert.That(next.Chat.WasRunning).IsTrue(); // prior IsAgentRunning
     }
 
     /// <summary>
@@ -584,8 +623,8 @@ public class TeaComplianceTests
     /// <summary>
     ///     <see cref="SpectreTuiRenderer" />'s private <c>ChatScreen</c> class has no
     ///     method named <c>HandleLocalScroll</c>. The TEA fix routes every scroll
-    ///     action through <see cref="UiReducer.Update" /> via
-    ///     <see cref="UiStore.Dispatch(UiMsg)" />.
+    ///     action through <see cref="ChatAppReducer.Update" /> via
+    ///     <see cref="UiStore.Dispatch(AppMsg)" />.
     /// </summary>
     [Test]
     public async Task ChatScreen_HasNoHandleLocalScrollMethod()

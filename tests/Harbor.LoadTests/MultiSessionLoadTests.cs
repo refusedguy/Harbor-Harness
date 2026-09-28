@@ -147,11 +147,11 @@ public sealed class MultiSessionLoadTests
         foreach (UiStore store in harness.Stores)
         {
             UiState state = store.State;
-            await Assert.That(state.IsStreaming).IsFalse();
-            await Assert.That(state.IsAgentRunning).IsFalse();
-            await Assert.That(state.Status).IsEqualTo("idle");
-            await Assert.That(state.Lines.Length).IsGreaterThanOrEqualTo(1);
-            await Assert.That(state.Lines.Length).IsLessThanOrEqualTo(TotalRuns * 2);
+            await Assert.That(state.Chat.IsStreaming).IsFalse();
+            await Assert.That(state.Chat.IsAgentRunning).IsFalse();
+            await Assert.That(state.Chat.Status).IsEqualTo("idle");
+            await Assert.That(state.Chat.Lines.Length).IsGreaterThanOrEqualTo(1);
+            await Assert.That(state.Chat.Lines.Length).IsLessThanOrEqualTo(TotalRuns * 2);
         }
     }
 

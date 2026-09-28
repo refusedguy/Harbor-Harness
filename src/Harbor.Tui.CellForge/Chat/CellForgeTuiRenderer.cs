@@ -222,11 +222,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
         EnsureSubscribedToActiveStore();
-        _ = ActiveStore.Dispatch(new UiMsg.Agent(@event));
+        _ = ActiveStore.Dispatch(new ChatAppMsg.Agent(@event));
         return base.RenderAsync(@event, ct);
     }
 
-    /// <summary>Composer buffer mirrored from <see cref="UiState.Input"/> (test seam).</summary>
+    /// <summary>Composer buffer mirrored from <see cref="UiState.Ui.Input"/> (test seam).</summary>
     internal PromptBuffer PromptBuffer => _composer.Buffer;
 
     /// <summary>Fallback TEA store (test seam for panel-seeding assertions). The live path reads <see cref="ActiveStore"/>.</summary>
@@ -245,34 +245,34 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     {
         if (_statusVm is StatusBarViewModel svm)
         {
-            if (!string.IsNullOrEmpty(state.Status))
-                svm.Status = state.Status;
-            if (!string.IsNullOrEmpty(state.Model))
-                svm.Model = state.Model;
-            if (!string.IsNullOrEmpty(state.Provider))
-                svm.Provider = state.Provider;
-            if (!string.IsNullOrEmpty(state.AgentName))
-                svm.Agent = state.AgentName;
-            svm.TokensIn = (int)Math.Min(state.Cost.TokensIn, int.MaxValue);
-            svm.TokensOut = (int)Math.Min(state.Cost.TokensOut, int.MaxValue);
-            svm.Cost = state.Cost.CostUsd;
+            if (!string.IsNullOrEmpty(state.Chat.Status))
+                svm.Status = state.Chat.Status;
+            if (!string.IsNullOrEmpty(state.Chat.Model))
+                svm.Model = state.Chat.Model;
+            if (!string.IsNullOrEmpty(state.Chat.Provider))
+                svm.Provider = state.Chat.Provider;
+            if (!string.IsNullOrEmpty(state.Chat.AgentName))
+                svm.Agent = state.Chat.AgentName;
+            svm.TokensIn = (int)Math.Min(state.Chat.Cost.TokensIn, int.MaxValue);
+            svm.TokensOut = (int)Math.Min(state.Chat.Cost.TokensOut, int.MaxValue);
+            svm.Cost = state.Chat.Cost.CostUsd;
         }
 
         if (_chatVm is ChatHistoryViewModel chvm)
         {
-            chvm.IsStreaming = state.IsStreaming;
+            chvm.IsStreaming = state.Chat.IsStreaming;
             // Synced prefix only (flush-gated, like the projector tail):
             // projecting pending here would copy the whole prefix per frame.
-            chvm.StreamingText = state.Active.TextBuffer;
-            chvm.ThinkingText = state.Active.ThinkBuffer;
-            chvm.IsThinking = state.Active.ThinkBuffer.Length != 0;
+            chvm.StreamingText = state.Chat.Active.TextBuffer;
+            chvm.ThinkingText = state.Chat.Active.ThinkBuffer;
+            chvm.IsThinking = state.Chat.Active.ThinkBuffer.Length != 0;
         }
 
         SyncInputFromState(state);
 
-        SessionsSnapshot = state.Sessions;
-        ActiveSessionIdSnapshot = state.ActiveSessionId;
-        SessionsLoading = state.IsLoading;
+        SessionsSnapshot = state.Chat.Sessions;
+        ActiveSessionIdSnapshot = state.Chat.ActiveSessionId;
+        SessionsLoading = state.Chat.IsLoading;
         _quickSwitchSlots.SyncFromStore(state);
 
         if (Screen is { } screen)
@@ -299,14 +299,14 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         _syncingInput = true;
         try
         {
-            string text = state.Input.Text ?? string.Empty;
+            string text = state.Ui.Input.Text ?? string.Empty;
             if (_inputVm.Text != text)
             {
                 _inputVm.Text = text;
                 _inputVm.CursorPosition = text.Length;
             }
 
-            _inputVm.Placeholder = state.IsAgentRunning ? BusyPlaceholder : IdlePlaceholder;
+            _inputVm.Placeholder = state.Chat.IsAgentRunning ? BusyPlaceholder : IdlePlaceholder;
 
             if (_composer.Buffer.SnapshotText() != text)
             {

@@ -22,7 +22,7 @@ namespace Harbor.Ui.Framework.Projection;
 ///             </item>
 ///             <item>
 ///                 History rows are cached against the
-///                 <see cref="UiState.Lines" /> backing-array reference
+///                 <see cref="UiState.Chat.Lines" /> backing-array reference
 ///                 (<c>ImmutableArray.Equals</c> is reference equality, and the
 ///                 arrays are immutable, so reference equality implies content
 ///                 equality). When the transcript grows by append, only the NEW
@@ -90,10 +90,10 @@ public sealed class DefaultUiProjector : IUiProjector
         // immediately would rebuild the tail AND recompose the whole
         // transcript (O(history)) on every delta — the O(H·N) the flush
         // policy exists to prevent (see StreamingFrequencyTests).
-        string? thinkRaw = state.Active.ThinkBuffer;
-        string? textRaw = state.Active.TextBuffer;
-        string? thinkBuf = state.IsStreaming && !string.IsNullOrEmpty(thinkRaw) ? thinkRaw : null;
-        string? textBuf = state.IsStreaming && !string.IsNullOrEmpty(textRaw) ? textRaw : null;
+        string? thinkRaw = state.Chat.Active.ThinkBuffer;
+        string? textRaw = state.Chat.Active.TextBuffer;
+        string? thinkBuf = state.Chat.IsStreaming && !string.IsNullOrEmpty(thinkRaw) ? thinkRaw : null;
+        string? textBuf = state.Chat.IsStreaming && !string.IsNullOrEmpty(textRaw) ? textRaw : null;
 
         ChromeModels chrome = ProjectChrome(state, cache);
 
@@ -102,7 +102,7 @@ public sealed class DefaultUiProjector : IUiProjector
         TailModels tail = ProjectTail(state, cache, thinkBuf, textBuf);
 
         // ── Compose the transcript (copy-on-write: only changed frames copy) ──
-        string? streamingBlockId = state.IsStreaming ? "streaming" : null;
+        string? streamingBlockId = state.Chat.IsStreaming ? "streaming" : null;
         bool transcriptSame = history.Unchanged
             && tail.Unchanged
             && cache is not null;
@@ -140,7 +140,7 @@ public sealed class DefaultUiProjector : IUiProjector
                 Transcript: transcript,
                 StatusBar: chrome.StatusBar,
                 Input: chrome.Input,
-                Focus: state.Focus,
+                Focus: state.Ui.Focus,
                 StateRevision: ComputeRevision(state));
         }
 
@@ -149,26 +149,26 @@ public sealed class DefaultUiProjector : IUiProjector
             State = state,
             Screen = screen,
             Transcript = transcript,
-            Lines = state.Lines,
+            Lines = state.Chat.Lines,
             BaseRendered = history.Rendered,
             BaseBlocks = history.Blocks,
-            IsStreaming = state.IsStreaming,
+            IsStreaming = state.Chat.IsStreaming,
             ThinkBuf = thinkBuf,
             TextBuf = textBuf,
             TailRendered = tail.Rendered,
             TailBlocks = tail.Blocks,
-            Model = state.Model,
-            Provider = state.Provider,
-            AgentName = state.AgentName,
-            Status = state.Status,
-            InputText = state.Input.Text,
-            IsAgentRunning = state.IsAgentRunning,
-            ShouldQuit = state.ShouldQuit,
-            Focus = state.Focus,
-            Cost = state.Cost,
-            TotalLines = state.TotalLines,
-            ViewportLines = state.ViewportLines,
-            ScrollOffset = state.ScrollOffset,
+            Model = state.Chat.Model,
+            Provider = state.Chat.Provider,
+            AgentName = state.Chat.AgentName,
+            Status = state.Chat.Status,
+            InputText = state.Ui.Input.Text,
+            IsAgentRunning = state.Chat.IsAgentRunning,
+            ShouldQuit = state.Ui.ShouldQuit,
+            Focus = state.Ui.Focus,
+            Cost = state.Chat.Cost,
+            TotalLines = state.Ui.TotalLines,
+            ViewportLines = state.Ui.ViewportLines,
+            ScrollOffset = state.Ui.ScrollOffset,
             Header = chrome.Header,
             StatusBar = chrome.StatusBar,
             Input = chrome.Input
@@ -191,37 +191,37 @@ public sealed class DefaultUiProjector : IUiProjector
     {
         // ── Chrome fingerprint (header / status bar / input) ──
         bool chromeSame = cache is not null
-            && ReferenceEquals(cache.Model, state.Model)
-            && ReferenceEquals(cache.Provider, state.Provider)
-            && ReferenceEquals(cache.AgentName, state.AgentName)
-            && ReferenceEquals(cache.Status, state.Status)
-            && ReferenceEquals(cache.InputText, state.Input.Text)
-            && cache.IsAgentRunning == state.IsAgentRunning
-            && cache.IsStreaming == state.IsStreaming
-            && cache.ShouldQuit == state.ShouldQuit
-            && cache.Focus == state.Focus
-            && cache.Cost == state.Cost
-            && cache.TotalLines == state.TotalLines
-            && cache.ViewportLines == state.ViewportLines
-            && cache.ScrollOffset == state.ScrollOffset;
+            && ReferenceEquals(cache.Model, state.Chat.Model)
+            && ReferenceEquals(cache.Provider, state.Chat.Provider)
+            && ReferenceEquals(cache.AgentName, state.Chat.AgentName)
+            && ReferenceEquals(cache.Status, state.Chat.Status)
+            && ReferenceEquals(cache.InputText, state.Ui.Input.Text)
+            && cache.IsAgentRunning == state.Chat.IsAgentRunning
+            && cache.IsStreaming == state.Chat.IsStreaming
+            && cache.ShouldQuit == state.Ui.ShouldQuit
+            && cache.Focus == state.Ui.Focus
+            && cache.Cost == state.Chat.Cost
+            && cache.TotalLines == state.Ui.TotalLines
+            && cache.ViewportLines == state.Ui.ViewportLines
+            && cache.ScrollOffset == state.Ui.ScrollOffset;
 
         var header = chromeSame ? cache!.Header : new UiHeaderModel(
-            Model: state.Model,
-            Provider: state.Provider,
-            AgentName: state.AgentName,
-            IsAgentRunning: state.IsAgentRunning,
-            IsStreaming: state.IsStreaming,
-            ShouldQuit: state.ShouldQuit,
-            Cost: state.Cost,
+            Model: state.Chat.Model,
+            Provider: state.Chat.Provider,
+            AgentName: state.Chat.AgentName,
+            IsAgentRunning: state.Chat.IsAgentRunning,
+            IsStreaming: state.Chat.IsStreaming,
+            ShouldQuit: state.Ui.ShouldQuit,
+            Cost: state.Chat.Cost,
             FooterText: ProjectFooter(state));
 
         var statusBar = chromeSame ? cache!.StatusBar : ProjectStatusBar(state);
 
         var input = chromeSame ? cache!.Input : new UiInputModel(
-            Text: state.Input.Text,
-            Caret: state.Input.Text.Length,
-            IsEnabled: !state.IsAgentRunning,
-            Placeholder: state.IsAgentRunning ? "Agent is running…" : "Type a message…");
+            Text: state.Ui.Input.Text,
+            Caret: state.Ui.Input.Text.Length,
+            IsEnabled: !state.Chat.IsAgentRunning,
+            Placeholder: state.Chat.IsAgentRunning ? "Agent is running…" : "Type a message…");
 
         return new ChromeModels(header, statusBar, input, chromeSame);
     }
@@ -230,7 +230,7 @@ public sealed class DefaultUiProjector : IUiProjector
     private static HistoryModels ProjectHistory(UiState state, ProjectionCache? cache)
     {
         // ── History rows ──
-        bool linesSame = cache is not null && state.Lines.Equals(cache.Lines);
+        bool linesSame = cache is not null && state.Chat.Lines.Equals(cache.Lines);
         ImmutableArray<UiRenderedLine> baseRendered;
         ImmutableArray<UiBlock> baseBlocks;
         if (linesSame)
@@ -246,8 +246,8 @@ public sealed class DefaultUiProjector : IUiProjector
             int commonPrefix = 0;
             if (cache is not null)
             {
-                int limit = Math.Min(cache.Lines.Length, state.Lines.Length);
-                while (commonPrefix < limit && cache.Lines[commonPrefix].Equals(state.Lines[commonPrefix]))
+                int limit = Math.Min(cache.Lines.Length, state.Chat.Lines.Length);
+                while (commonPrefix < limit && cache.Lines[commonPrefix].Equals(state.Chat.Lines[commonPrefix]))
                 {
                     commonPrefix++;
                 }
@@ -256,23 +256,23 @@ public sealed class DefaultUiProjector : IUiProjector
             // First-occurrence map preserves the historical
             // `Lines.IndexOf(line)` BlockId semantics (first equal line wins)
             // at O(n) total instead of O(n²).
-            var firstIndex = new Dictionary<ChatLine, int>(state.Lines.Length);
-            for (int i = 0; i < state.Lines.Length; i++)
+            var firstIndex = new Dictionary<ChatLine, int>(state.Chat.Lines.Length);
+            for (int i = 0; i < state.Chat.Lines.Length; i++)
             {
-                firstIndex.TryAdd(state.Lines[i], i);
+                firstIndex.TryAdd(state.Chat.Lines[i], i);
             }
 
-            var renderedBuilder = ImmutableArray.CreateBuilder<UiRenderedLine>(state.Lines.Length);
-            var blockBuilder = ImmutableArray.CreateBuilder<UiBlock>(state.Lines.Length);
+            var renderedBuilder = ImmutableArray.CreateBuilder<UiRenderedLine>(state.Chat.Lines.Length);
+            var blockBuilder = ImmutableArray.CreateBuilder<UiBlock>(state.Chat.Lines.Length);
             if (commonPrefix > 0)
             {
                 renderedBuilder.AddRange(cache!.BaseRendered.AsSpan().Slice(0, commonPrefix));
                 blockBuilder.AddRange(cache.BaseBlocks.AsSpan().Slice(0, commonPrefix));
             }
 
-            for (int i = commonPrefix; i < state.Lines.Length; i++)
+            for (int i = commonPrefix; i < state.Chat.Lines.Length; i++)
             {
-                ChatLine line = state.Lines[i];
+                ChatLine line = state.Chat.Lines[i];
                 string id = ToolCallKey.TranscriptBlockId(line, firstIndex[line]);
                 var spans = ResolveSpans(line.Role, line.Text);
 
@@ -303,7 +303,7 @@ public sealed class DefaultUiProjector : IUiProjector
         // Reference equality suffices: buffers are immutable strings replaced
         // wholesale on flush, so a changed reference IS changed content.
         bool tailSame = cache is not null
-            && cache.IsStreaming == state.IsStreaming
+            && cache.IsStreaming == state.Chat.IsStreaming
             && ReferenceEquals(cache.ThinkBuf, thinkBuf)
             && ReferenceEquals(cache.TextBuf, textBuf);
 
@@ -439,9 +439,9 @@ public sealed class DefaultUiProjector : IUiProjector
 
     private static DateTime ResolveTailTimestamp(UiState state, ProjectionCache? cache)
     {
-        if (state.Lines.Length > 0)
+        if (state.Chat.Lines.Length > 0)
         {
-            DateTime lineTs = state.Lines[state.Lines.Length - 1].TimestampUtc;
+            DateTime lineTs = state.Chat.Lines[state.Chat.Lines.Length - 1].TimestampUtc;
             if (lineTs != default)
                 return lineTs;
         }
@@ -463,9 +463,9 @@ public sealed class DefaultUiProjector : IUiProjector
         // Store revision first (stale-drop ordering), then the visible text
         // lengths INCLUDING unflushed pending deltas (#94) so the revision
         // string moves as soon as newly arrived text becomes visible.
-        int textLen = state.Active.TextBuffer.Length + state.PendingStreamText.Length;
-        int thinkLen = state.Active.ThinkBuffer.Length + state.PendingStreamThink.Length;
-        return $"{state.Revision}:{state.Lines.Length}:{state.IsStreaming}:{textLen}:{thinkLen}";
+        int textLen = state.Chat.Active.TextBuffer.Length + state.Chat.PendingStreamText.Length;
+        int thinkLen = state.Chat.Active.ThinkBuffer.Length + state.Chat.PendingStreamThink.Length;
+        return $"{state.Revision}:{state.Chat.Lines.Length}:{state.Chat.IsStreaming}:{textLen}:{thinkLen}";
     }
 
     /// <summary>

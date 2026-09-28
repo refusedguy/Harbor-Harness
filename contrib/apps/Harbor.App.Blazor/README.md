@@ -11,7 +11,7 @@ Composition Root — same DI responsibilities as `Harbor.App.Cli`, but instead o
 - `Harbor.Abstractions` (Domain)
 - `Harbor.Core` (AgentLoop, registries)
 - `Harbor.Storage.Memory` (ephemeral — swap to `Jsonl` for persistence)
-- `Harbor.Tui.Abstractions` (UiStore + UiReducer — shared state model with TUI)
+- `Harbor.Tui.Abstractions` (UiStore + AppReducer — shared state model with TUI)
 - `Microsoft.AspNetCore.App` (framework reference)
 - `CommunityToolkit.Mvvm`
 - `Markdig` (Markdown rendering)

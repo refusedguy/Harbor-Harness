@@ -158,7 +158,7 @@ public static class SideBarView
         {
             // ── Model ──────────────────────────────────────────────────────────
             Y = Section(buffer, rect, labelX, Y, "MODEL", headingStyle);
-            Y = ValueLine(buffer, rect, labelX, Y, innerW, (state.Model ?? "—").AsSpan(), valueStyle);
+            Y = ValueLine(buffer, rect, labelX, Y, innerW, (state.Chat.Model ?? "—").AsSpan(), valueStyle);
         }
 
         public void PaintAgent(SideBarState state)
@@ -555,28 +555,28 @@ public static class SideBarView
     public static SideBarState ProjectFromStore(UiState state)
     {
         SessionInfo? active = default;
-        foreach (var s in state.Sessions)
+        foreach (var s in state.Chat.Sessions)
         {
-            if (s.SessionId == state.ActiveSessionId)
+            if (s.SessionId == state.Chat.ActiveSessionId)
             {
                 active = s;
                 break;
             }
         }
 
-        var sessions = state.Sessions.Length == 0 ? null : state.Sessions.ToArray();
+        var sessions = state.Chat.Sessions.Length == 0 ? null : state.Chat.Sessions.ToArray();
         return new SideBarState(
             SessionTitle: active?.Title,
             SessionId: active?.SessionId?.Value,
-            Model: string.IsNullOrEmpty(state.Model) ? null : state.Model,
-            TokensIn: state.Cost.TokensIn,
-            TokensOut: state.Cost.TokensOut,
-            CostUsd: (double)state.Cost.CostUsd,
+            Model: string.IsNullOrEmpty(state.Chat.Model) ? null : state.Chat.Model,
+            TokensIn: state.Chat.Cost.TokensIn,
+            TokensOut: state.Chat.Cost.TokensOut,
+            CostUsd: (double)state.Chat.Cost.CostUsd,
             ModifiedFiles: null,
             LspErrors: 0,
             LspWarnings: 0,
             McpServers: null,
-            ActiveSessionId: state.ActiveSessionId,
+            ActiveSessionId: state.Chat.ActiveSessionId,
             Sessions: sessions);
     }
 

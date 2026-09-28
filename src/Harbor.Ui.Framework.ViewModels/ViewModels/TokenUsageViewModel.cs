@@ -69,19 +69,19 @@ public sealed partial class TokenUsageViewModel : ObservableObject
     /// </remarks>
     public void RecordUsage(UiState state)
     {
-        if (state.Cost.TokensIn == _lastTokensIn && state.Cost.TokensOut == _lastTokensOut) return;
-        long deltaIn = state.Cost.TokensIn - _lastTokensIn;
-        long deltaOut = state.Cost.TokensOut - _lastTokensOut;
+        if (state.Chat.Cost.TokensIn == _lastTokensIn && state.Chat.Cost.TokensOut == _lastTokensOut) return;
+        long deltaIn = state.Chat.Cost.TokensIn - _lastTokensIn;
+        long deltaOut = state.Chat.Cost.TokensOut - _lastTokensOut;
         if (deltaIn < 0 || deltaOut < 0)
         {
             // Session reset — start fresh.
-            _lastTokensIn = state.Cost.TokensIn;
-            _lastTokensOut = state.Cost.TokensOut;
+            _lastTokensIn = state.Chat.Cost.TokensIn;
+            _lastTokensOut = state.Chat.Cost.TokensOut;
             return;
         }
         _turnIndex++;
 
-        Bars.Add(new TokenUsageBarViewModel(_turnIndex, deltaIn, deltaOut, state.Cost.CostUsd));
+        Bars.Add(new TokenUsageBarViewModel(_turnIndex, deltaIn, deltaOut, state.Chat.Cost.CostUsd));
         // Cap the chart to last 50 turns.
         while (Bars.Count > 50)
         {
@@ -95,19 +95,19 @@ public sealed partial class TokenUsageViewModel : ObservableObject
             RecentOutputTokens.RemoveAt(0);
         }
 
-        TotalTokensIn = state.Cost.TokensIn;
-        TotalTokensOut = state.Cost.TokensOut;
-        TotalCostUsd = state.Cost.CostUsd;
+        TotalTokensIn = state.Chat.Cost.TokensIn;
+        TotalTokensOut = state.Chat.Cost.TokensOut;
+        TotalCostUsd = state.Chat.Cost.CostUsd;
 
-        _lastTokensIn = state.Cost.TokensIn;
-        _lastTokensOut = state.Cost.TokensOut;
+        _lastTokensIn = state.Chat.Cost.TokensIn;
+        _lastTokensOut = state.Chat.Cost.TokensOut;
     }
 
     /// <summary>
     ///     Clear all bars + sparkline + baseline. Called when the user
     ///     switches sessions so the chart reflects only the active
     ///     session's token usage (not the cumulative total across all
-    ///     sessions — a <see cref="UiMsg.Reset" /> zeroes Cost, but the previous
+    ///     sessions — a <see cref="AppMsg.Reset" /> zeroes Cost, but the previous
     ///     session's bars would otherwise linger).
     /// </summary>
     /// <remarks>

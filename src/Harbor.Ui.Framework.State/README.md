@@ -1,6 +1,19 @@
 # Harbor.Ui.Framework.State
 
-TEA (The Elm Architecture) state machine and panel system for the Harbor UI Framework — `UiStore`, `UiState`, `UiReducer`, `UiMsg`, `TuiEffect`, and the panel registry.
+TEA (The Elm Architecture) state machine and panel system for the Harbor UI Framework — `UiStore`, `UiState`, `AppMsg`/`ChatAppMsg`, `AppReducer`/`ChatAppReducer`, `TuiEffect`, and the panel registry.
+
+The state is split by concern into two typed parts with **no flat forwarding
+surface** (#33/T4, #364):
+
+| Part | Type | Owns |
+|------|------|------|
+| `UiState.Ui` | `TerminalUiState` | input, focus, scroll, viewport, panels, quit — zero chat/AI concerns |
+| `UiState.Chat` | `ChatDomainState` | transcript, streaming buffers, agent lifecycle, costs, sessions |
+
+Read `state.Ui.Input` / `state.Chat.Cost` directly; there is no `state.Input` /
+`state.Cost` shortcut. No `ImmutableDictionary<string, object?>` extension bag
+exists (it was rejected for boxing + IL2xxx under NativeAOT) — extension is typed
+composition only.
 
 ## Layer
 
@@ -10,11 +23,14 @@ TEA (The Elm Architecture) state machine and panel system for the Harbor UI Fram
 
 | Subfolder / File | Purpose |
 |------------------|---------|
-| `State/UiState.cs` | Root state record: `Lines`, `Active`, `PendingStreamText`, `PendingStreamThink`, `Cost`, `Model`, `Provider`, `AgentName`, navigation, modals, toasts. |
-| `State/UiMsg.cs` | Message discriminated union: `Agent(AgentEvent)`, `KeyInput(ChatAction)`, `Viewport`, `TogglePanel`, `FocusPanel`, `ResizePanel`, etc. |
-| `State/UiReducer.cs` | `Reduce(UiState, AgentEvent)` and `Update(UiState, UiMsg)` — pure reducers with panel/viewport helpers. |
+| `State/UiState.cs` | Root state record: the `Ui` + `Chat` composition, `Revision`, and the fold helpers (`AddLine`, `SetLine`, `SetInput`, `SetFocus`, `SetScroll`, `ClearTranscript`). |
+| `TerminalUiState.cs` / `ChatDomainState.cs` | The two typed parts of the composition. |
+| `State/AppMsg.cs` | **Generic** message union: `KeyInput`, `InputText`, `Quit`, `Reset`, `Viewport`, `HistoryMeasured`, `ScrollResetToTail`, `ScrollClamp`, `TogglePanel`, `FocusPanel`, `CyclePanelFocus`, `ResizePanel`, `SeedPanels`, `SetPanelCursor`, `SetPanelDirectory`. |
+| `State/ChatAppMsg.cs` | **Harbor chat** arms (`AppMsg` subtype): `Agent`, `AgentStarted`, `AgentEnded`, `StatusChanged`, `AppendLine`, `HydrateSession`, `ConfigureRuntime`, `SyncSessions`. |
+| `State/AppReducer.cs` | **Generic** reducer: `Update(UiState, AppMsg, IAppReducerPlugin?)` + panel/scroll/input/focus helpers. Declares `ReduceResult` and the `IAppReducerPlugin` extension point. |
+| `State/ChatAppReducer.cs` | **Harbor chat** extension: `Reduce(UiState, AgentEvent)`, `Update(UiState, AppMsg)`, plus the `ChatAppReducerPlugin` adapter for `IAppReducerPlugin`. |
 | `State/UiStore.cs` | `UiStore` — the Elm-style store that owns state, dispatches messages, and runs `TuiEffect`s via `ITuiEffectRunner`. |
-| `State/AppState.cs` | Top-level app state aggregating `ChatViewState`, `ChromeViewState`, `SessionsViewState`. |
+| `AppState.cs` | Legacy flat app state (`Harbor.Ui.Framework.Reducers.AppReducer` / `AppStore`) kept only for the not-yet-migrated shell-chrome consumers. **Not** on the TEA read path. |
 | `State/ChatViewState.cs` | Chat transcript state: `Lines`, `ToolCalls`, `IsStreaming`, `IsThinking`, `StreamingBuffer`, `PendingStreaming`. |
 | `State/ChromeViewState.cs` | Chrome state: `ActiveSessionId`, `NavigationStack`, `ActiveModal`, `Toasts`, plus helper reducers. |
 | `State/SessionsViewState.cs` | Sessions list state: `Sessions`, `ActiveSessionId`, `IsLoading`. |
@@ -32,8 +48,9 @@ TEA (The Elm Architecture) state machine and panel system for the Harbor UI Fram
 
 ## Public API summary
 
-- **`UiStore`**: `State`, `Dispatch(UiMsg)`, `Bind(UiEffectRunner)`, events for state changes.
-- **`UiReducer.Reduce/Update`**: pure functions returning new `UiState`.
+- **`UiStore`**: `State`, `Dispatch(AppMsg)`, `Bind(UiEffectRunner)`, `Changed` events for state changes.
+- **`AppReducer.Update`**: generic pure reducer; the optional `IAppReducerPlugin` argument is the extension point (claim → generic → plugin post-fold, in that order).
+- **`ChatAppReducer.Update`**: the composed entry point used by `UiStore.Dispatch` = `AppReducer.Update` + the chat plugin.
 - **`PanelRegistry`**: `Register`, `Unregister`, `GetVisible`, `GetVisibleByPlacement`, `GetState`, `GetSize`, `SetSize`, `Toggle`, `Focus`, `CycleFocus`.
 - **`IPanelProvider`**: `Id`, `Title`, `DefaultPlacement`, `DefaultSize`, `Build(ctx)`, `OnKey`.
 - **`AsyncFeed<T>` / `AsyncData<T>`**: async data primitives with status tracking.

@@ -10,7 +10,7 @@ namespace Harbor.Ui.Framework.Tests;
 
 /// <summary>
 ///     Regression tests for concurrent agent runs sharing the TEA pipeline
-///     (multi-agent sprint): every fold must ride <c>Dispatch(UiMsg)</c> through the
+///     (multi-agent sprint): every fold must ride <c>Dispatch(AppMsg)</c> through the
 ///     CAS reducer — the removed <c>UiStore.Transition</c> escape hatch allowed
 ///     callers to bypass the pure reducer, so two parallel prompts could clobber
 ///     each other's status (e.g. paint a failed session "error" into a healthy one).
@@ -38,14 +38,14 @@ public class TuiEffectHostConcurrencyTests
         var settled = new TaskCompletionSource<UiState>(TaskCreationOptions.RunContinuationsAsynchronously);
         store.Changed += (_, e) =>
         {
-            if (!e.State.IsAgentRunning && e.State.Status is "idle" or "error")
+            if (!e.State.Chat.IsAgentRunning && e.State.Chat.Status is "idle" or "error")
                 settled.TrySetResult(e.State);
         };
         return settled;
     }
 
     private static bool HasErrorLine(UiState state, string text) =>
-        state.Lines.Any(l => l.Role == ChatRole.Error && l.Text == text);
+        state.Chat.Lines.Any(l => l.Role == ChatRole.Error && l.Text == text);
 
     [Test]
     public async Task TwoParallelPromptHosts_FailureDoesNotLeakIntoHealthySession()
@@ -64,26 +64,26 @@ public class TuiEffectHostConcurrencyTests
         hostA.Run(new TuiEffect.PromptAgent("explode"));
         hostB.Run(new TuiEffect.PromptAgent("be healthy"));
 
-        await Assert.That(storeA.State.IsAgentRunning).IsTrue();
-        await Assert.That(storeB.State.IsAgentRunning).IsTrue();
+        await Assert.That(storeA.State.Chat.IsAgentRunning).IsTrue();
+        await Assert.That(storeB.State.Chat.IsAgentRunning).IsTrue();
 
         // Session B finishes CLEANLY while session A is still in flight.
         succeeding.TrySetResult(Result.Success());
         UiState stateB = await settledB.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Assert.That(stateB.Status).IsEqualTo("idle");
+        await Assert.That(stateB.Chat.Status).IsEqualTo("idle");
         await Assert.That(HasErrorLine(storeB.State, "session A failed")).IsFalse();
 
         // Session A then fails — the error must land ONLY in A's store.
         failing.TrySetResult(Result.Failure("session A failed"));
         UiState stateA = await settledA.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Assert.That(stateA.Status).IsEqualTo("error");
+        await Assert.That(stateA.Chat.Status).IsEqualTo("error");
         await Assert.That(HasErrorLine(storeA.State, "session A failed")).IsTrue();
 
         // No cross-contamination in either direction.
         await Assert.That(HasErrorLine(storeB.State, "session A failed")).IsFalse();
-        await Assert.That(storeB.State.Status).IsEqualTo("idle");
-        await Assert.That(storeA.State.IsAgentRunning).IsFalse();
-        await Assert.That(storeB.State.IsAgentRunning).IsFalse();
+        await Assert.That(storeB.State.Chat.Status).IsEqualTo("idle");
+        await Assert.That(storeA.State.Chat.IsAgentRunning).IsFalse();
+        await Assert.That(storeB.State.Chat.IsAgentRunning).IsFalse();
     }
 
     [Test]
@@ -98,7 +98,7 @@ public class TuiEffectHostConcurrencyTests
             {
                 for (int i = 0; i < perThread; i++)
                 {
-                    store.Dispatch(new UiMsg.AppendLine(ChatRole.System, "fold"));
+                    store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.System, "fold"));
                     await Task.Yield();
                 }
             }))
@@ -107,6 +107,6 @@ public class TuiEffectHostConcurrencyTests
         await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(10));
 
         // CAS retry must not lose a single fold — no locks, no lost updates.
-        await Assert.That(store.State.Lines.Length).IsEqualTo(threads * perThread);
+        await Assert.That(store.State.Chat.Lines.Length).IsEqualTo(threads * perThread);
     }
 }

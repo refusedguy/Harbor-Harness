@@ -22,9 +22,9 @@ public class StoreRevisionTests
         var revisions = new List<long>();
         store.Changed += (_, e) => revisions.Add(e.Revision);
 
-        store.Dispatch(new UiMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>())));
-        store.Dispatch(new UiMsg.Agent(new CompactionStartedEvent("s1")));
-        store.Dispatch(new UiMsg.Agent(new AgentErrorEvent("boom")));
+        store.Dispatch(new ChatAppMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>())));
+        store.Dispatch(new ChatAppMsg.Agent(new CompactionStartedEvent("s1")));
+        store.Dispatch(new ChatAppMsg.Agent(new AgentErrorEvent("boom")));
 
         await Assert.That(revisions.Count).IsEqualTo(3);
         await Assert.That(revisions[0]).IsEqualTo(1);
@@ -40,14 +40,14 @@ public class StoreRevisionTests
         UiStateChangedEventArgs? last = null;
         store.Changed += (_, e) => last = e;
 
-        store.Dispatch(new UiMsg.Agent(new CompactionStartedEvent("s1")));
+        store.Dispatch(new ChatAppMsg.Agent(new CompactionStartedEvent("s1")));
 
         await Assert.That(last).IsNotNull();
         await Assert.That(last!.Revision).IsEqualTo(last.State.Revision);
-        await Assert.That(last.State.Status).IsEqualTo("compacting");
+        await Assert.That(last.State.Chat.Status).IsEqualTo("compacting");
 
         // Reset is a transition too: the revision keeps climbing, never resets to zero.
-        store.Dispatch(new UiMsg.Reset());
+        store.Dispatch(new AppMsg.Reset());
         await Assert.That(store.State.Revision).IsEqualTo(2);
     }
 
@@ -58,8 +58,8 @@ public class StoreRevisionTests
         var delivered = new List<UiStateChangedEventArgs>();
         store.Changed += (_, e) => delivered.Add(e);
 
-        store.Dispatch(new UiMsg.Agent(new CompactionStartedEvent("s1"))); // revision 1
-        store.Dispatch(new UiMsg.Agent(new AgentErrorEvent("boom"))); // revision 2
+        store.Dispatch(new ChatAppMsg.Agent(new CompactionStartedEvent("s1"))); // revision 1
+        store.Dispatch(new ChatAppMsg.Agent(new AgentErrorEvent("boom"))); // revision 2
 
         // Simulate cross-thread reorder: revision 2 arrives first, revision 1 late.
         long lastApplied = 0;
@@ -78,24 +78,24 @@ public class StoreRevisionTests
         await Assert.That(lastApplied).IsEqualTo(2);
         await Assert.That(current).IsNotNull();
         await Assert.That(current!.Revision).IsEqualTo(2);
-        await Assert.That(current.Lines.Length).IsEqualTo(1);
+        await Assert.That(current.Chat.Lines.Length).IsEqualTo(1);
     }
 
     [Test]
     public async Task ConfigureRuntime_RoutesThroughReducer()
     {
-        // #92 Transition→UiMsg remainder: the ConfigureRuntime message must
+        // #92 Transition→AppMsg remainder: the ConfigureRuntime message must
         // produce exactly its fold (chrome set, revision bumped, subscribers told).
         var store = new UiStore();
         var notifications = 0;
         store.Changed += (_, _) => notifications++;
 
-        store.Dispatch(new UiMsg.ConfigureRuntime("m", "p", "code"));
+        store.Dispatch(new ChatAppMsg.ConfigureRuntime("m", "p", "code"));
 
-        await Assert.That(store.State.Model).IsEqualTo("m");
-        await Assert.That(store.State.Provider).IsEqualTo("p");
-        await Assert.That(store.State.AgentName).IsEqualTo("code");
-        await Assert.That(store.State.Lines.Length).IsEqualTo(0);
+        await Assert.That(store.State.Chat.Model).IsEqualTo("m");
+        await Assert.That(store.State.Chat.Provider).IsEqualTo("p");
+        await Assert.That(store.State.Chat.AgentName).IsEqualTo("code");
+        await Assert.That(store.State.Chat.Lines.Length).IsEqualTo(0);
         await Assert.That(store.State.Revision).IsEqualTo(1);
         await Assert.That(notifications).IsEqualTo(1);
     }
@@ -103,12 +103,12 @@ public class StoreRevisionTests
     [Test]
     public async Task Dispatch_AgentMsg_RoutesThroughUpdate()
     {
-        // Dispatch(UiMsg) is the single entry point — the store only adds the revision.
+        // Dispatch(AppMsg) is the single entry point — the store only adds the revision.
         var store = new UiStore();
         var @event = new AgentStartEvent("s1", Array.Empty<AgentMessage>());
-        store.Dispatch(new UiMsg.Agent(@event));
+        store.Dispatch(new ChatAppMsg.Agent(@event));
 
-        var expected = UiReducer.Update(new UiState(), new UiMsg.Agent(@event)).State;
+        var expected = ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(@event)).State;
         await Assert.That(store.State with { Revision = 0 }).IsEqualTo(expected);
         await Assert.That(store.State.Revision).IsEqualTo(1);
     }

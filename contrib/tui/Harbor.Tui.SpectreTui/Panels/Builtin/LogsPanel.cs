@@ -89,7 +89,7 @@ public sealed class LogsPanel : IPanelProvider
         if (key.Code == UiKeyCode.F12)
         {
             if (ctx.Services?.GetService(typeof(UiStore)) is UiStore store)
-                store.Dispatch(new UiMsg.TogglePanel(Id));
+                store.Dispatch(new AppMsg.TogglePanel(Id));
             return true;
         }
         return false;

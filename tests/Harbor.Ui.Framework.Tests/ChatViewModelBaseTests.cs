@@ -74,10 +74,16 @@ public class ChatViewModelBaseTests
 
         var state = new UiState
         {
-            IsStreaming = true,
-            IsAgentRunning = true,
-            Active = new ActiveMessage("hello", string.Empty),
-            Input = new InputModel("world", ImmutableArray<string>.Empty, -1)
+            Ui = TerminalUiState.Empty with
+            {
+                Input = new InputModel("world", ImmutableArray<string>.Empty, -1)
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true,
+                IsAgentRunning = true,
+                Active = new ActiveMessage("hello", string.Empty)
+            }
         };
 
         vm.ApplySelectors(state);
@@ -96,11 +102,25 @@ public class ChatViewModelBaseTests
         var dispatcher = new TestDispatcherAdapter();
         var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
 
-        vm.ApplySelectors(new UiState { IsAgentRunning = false, IsStreaming = false });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsAgentRunning = false,
+                IsStreaming = false
+            }
+        });
         await Assert.That(vm.IsAgentRunning).IsFalse();
         await Assert.That(vm.StatusMessage).IsEqualTo("Idle");
 
-        vm.ApplySelectors(new UiState { IsAgentRunning = true, IsStreaming = false });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsAgentRunning = true,
+                IsStreaming = false
+            }
+        });
         await Assert.That(vm.IsAgentRunning).IsTrue();
         await Assert.That(vm.StatusMessage).IsEqualTo("Agent is running…");
     }
@@ -112,10 +132,22 @@ public class ChatViewModelBaseTests
         var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
 
         int applyCount = 0;
-        vm.RegisterSelector(s => s.IsStreaming, v => applyCount++);
+        vm.RegisterSelector(s => s.Chat.IsStreaming, v => applyCount++);
 
-        vm.ApplySelectors(new UiState { IsStreaming = true });
-        vm.ApplySelectors(new UiState { IsStreaming = true });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true
+            }
+        });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true
+            }
+        });
 
         await Assert.That(applyCount).IsEqualTo(1);
     }
@@ -128,15 +160,33 @@ public class ChatViewModelBaseTests
 
         int applyCount = 0;
         bool lastValue = false;
-        vm.RegisterSelector(s => s.IsStreaming, v =>
+        vm.RegisterSelector(s => s.Chat.IsStreaming, v =>
         {
             applyCount++;
             lastValue = v;
         });
 
-        vm.ApplySelectors(new UiState { IsStreaming = false });
-        vm.ApplySelectors(new UiState { IsStreaming = true });
-        vm.ApplySelectors(new UiState { IsStreaming = true });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = false
+            }
+        });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true
+            }
+        });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true
+            }
+        });
 
         await Assert.That(applyCount).IsEqualTo(2);
         await Assert.That(lastValue).IsTrue();
@@ -150,10 +200,16 @@ public class ChatViewModelBaseTests
 
         var state = new UiState
         {
-            IsStreaming = true,
-            IsAgentRunning = true,
-            Active = new ActiveMessage("test", string.Empty),
-            Input = new InputModel("input", ImmutableArray<string>.Empty, -1)
+            Ui = TerminalUiState.Empty with
+            {
+                Input = new InputModel("input", ImmutableArray<string>.Empty, -1)
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true,
+                IsAgentRunning = true,
+                Active = new ActiveMessage("test", string.Empty)
+            }
         };
 
         vm.TriggerStoreChanged(state);
@@ -170,7 +226,14 @@ public class ChatViewModelBaseTests
         var dispatcher = new TestDispatcherAdapter();
         var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
 
-        var state = new UiState { IsStreaming = true, IsAgentRunning = false };
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true,
+                IsAgentRunning = false
+            }
+        };
         dispatcher.Raise(state);
 
         await Assert.That(vm.IsStreaming).IsTrue();
@@ -183,15 +246,36 @@ public class ChatViewModelBaseTests
         var dispatcher = new TestDispatcherAdapter();
         var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
 
-        vm.ApplySelectors(new UiState { IsAgentRunning = true, IsStreaming = false });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsAgentRunning = true,
+                IsStreaming = false
+            }
+        });
         await Assert.That(vm.IsThinking).IsTrue();
         await Assert.That(vm.StatusMessage).IsEqualTo("Agent is running…");
 
-        vm.ApplySelectors(new UiState { IsAgentRunning = true, IsStreaming = true });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsAgentRunning = true,
+                IsStreaming = true
+            }
+        });
         await Assert.That(vm.IsThinking).IsFalse();
         await Assert.That(vm.StatusMessage).IsEqualTo("Streaming response…");
 
-        vm.ApplySelectors(new UiState { IsAgentRunning = false, IsStreaming = false });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                IsAgentRunning = false,
+                IsStreaming = false
+            }
+        });
         await Assert.That(vm.IsThinking).IsFalse();
         await Assert.That(vm.StatusMessage).IsEqualTo("Idle");
     }
@@ -202,10 +286,22 @@ public class ChatViewModelBaseTests
         var dispatcher = new TestDispatcherAdapter();
         var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
 
-        vm.ApplySelectors(new UiState { Active = new ActiveMessage("buffer", string.Empty) });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Active = new ActiveMessage("buffer", string.Empty)
+            }
+        });
         await Assert.That(vm.StreamingBuffer).IsEqualTo("buffer");
 
-        vm.ApplySelectors(new UiState { Active = ActiveMessage.Empty });
+        vm.ApplySelectors(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Active = ActiveMessage.Empty
+            }
+        });
         await Assert.That(vm.StreamingBuffer).IsEqualTo(string.Empty);
     }
 }

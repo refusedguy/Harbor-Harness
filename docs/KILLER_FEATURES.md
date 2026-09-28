@@ -533,7 +533,7 @@ export const useActivePaneAgentStatus = () =>
 ```
 
 **Why this matters for Harbor:** Harbor already has the same pattern with
-`UiStore` + `UiState` (immutable record) + `UiReducer` (pure transition).
+`UiStore` + `UiState` (immutable record) + `AppReducer` (pure transition).
 The Orca slice pattern is essentially the same idea but with mutable
 slices (faster for incremental updates). Harbor's immutable approach is
 safer for AOT but slower for large state trees. **Recommendation:** keep
@@ -2365,7 +2365,7 @@ competitor has this breadth. **Lean into it.**
 
 **Pioneer:** "Render Harbor anywhere" — embed Harbor in any terminal,
 any desktop, any browser, any IDE. The TEA architecture (UiStore +
-UiReducer) makes this possible.
+AppReducer) makes this possible.
 
 ### 7.2 Live profile switching
 
@@ -2666,7 +2666,7 @@ All 4 cloned successfully with `--depth=1`.
 
 ## Appendix C: Glossary
 
-- **TEA** — The Elm Architecture (Model-View-Update). Harbor's UiStore + UiReducer follow this.
+- **TEA** — The Elm Architecture (Model-View-Update). Harbor's UiStore + AppReducer follow this.
 - **AOT** — Ahead-of-Time compilation. .NET NativeAOT for Harbor.
 - **CRDT** — Conflict-free Replicated Data Type. For collaborative editing.
 - **PTY** — Pseudo-terminal. For running shell commands.

@@ -156,13 +156,13 @@ public class SessionManagerAtomicityTests
 
         await Assert.That(await manager.OpenSessionAsync(session.Id)).IsTrue();
         await Assert.That(transitions).IsEqualTo(1);
-        await Assert.That(ctx.Store.State.Lines.Length).IsEqualTo(3);
-        await Assert.That(ctx.Store.State.Lines[0].Text).IsEqualTo("u0");
-        await Assert.That(ctx.Store.State.Lines[1].Text).IsEqualTo("a1");
-        await Assert.That(ctx.Store.State.Lines[2].Text).IsEqualTo("u2");
-        await Assert.That(ctx.Store.State.Model).IsEqualTo(session.Model);
-        await Assert.That(ctx.Store.State.Provider).IsEqualTo(session.ProviderId);
-        await Assert.That(ctx.Store.State.AgentName).IsEqualTo(session.Agent);
+        await Assert.That(ctx.Store.State.Chat.Lines.Length).IsEqualTo(3);
+        await Assert.That(ctx.Store.State.Chat.Lines[0].Text).IsEqualTo("u0");
+        await Assert.That(ctx.Store.State.Chat.Lines[1].Text).IsEqualTo("a1");
+        await Assert.That(ctx.Store.State.Chat.Lines[2].Text).IsEqualTo("u2");
+        await Assert.That(ctx.Store.State.Chat.Model).IsEqualTo(session.Model);
+        await Assert.That(ctx.Store.State.Chat.Provider).IsEqualTo(session.ProviderId);
+        await Assert.That(ctx.Store.State.Chat.AgentName).IsEqualTo(session.Agent);
     }
 
     [Test]
@@ -179,7 +179,7 @@ public class SessionManagerAtomicityTests
 
         await Assert.That(await switcher.OpenAsync(session, target)).IsTrue();
         await Assert.That(transitions).IsEqualTo(1);
-        await Assert.That(target.State.Lines.Length).IsEqualTo(2);
+        await Assert.That(target.State.Chat.Lines.Length).IsEqualTo(2);
     }
 
     [Test]
@@ -227,10 +227,10 @@ public class SessionManagerAtomicityTests
 
         // …and a late event for the deleted session does not leak into the
         // newly-active session's transcript.
-        parked!.Store.Dispatch(new UiMsg.AppendLine(ChatRole.User, "late-event"));
-        await Assert.That(parked.Store.State.Lines.Any(l => l.Text == "late-event")).IsTrue();
+        parked!.Store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.User, "late-event"));
+        await Assert.That(parked.Store.State.Chat.Lines.Any(l => l.Text == "late-event")).IsTrue();
         var ctxB = manager.GetContext(sessionB.Id);
-        await Assert.That(ctxB!.Store.State.Lines.Any(l => l.Text == "late-event")).IsFalse();
+        await Assert.That(ctxB!.Store.State.Chat.Lines.Any(l => l.Text == "late-event")).IsFalse();
     }
 
     [Test]
@@ -318,6 +318,6 @@ public class SessionManagerAtomicityTests
         await Assert.That(manager.Active!.Id).IsEqualTo(session.Id);
         // Both opens hydrate the SAME store with the same payload
         // (replace semantics): no duplicated replay, no torn transcript.
-        await Assert.That(manager.GetContext(session.Id)!.Store.State.Lines.Length).IsEqualTo(3);
+        await Assert.That(manager.GetContext(session.Id)!.Store.State.Chat.Lines.Length).IsEqualTo(3);
     }
 }

@@ -130,7 +130,7 @@ public sealed class FileTreePanel : IPanelProvider
                     {
                         // Dispatch a slash-prompt that the host's slash handler
                         // routes to the read tool (if registered).
-                        store.Dispatch(new UiMsg.KeyInput(
+                        store.Dispatch(new AppMsg.KeyInput(
                             ChatAction.Submit,
                             UiKey.ForChar('\r')));
                         // Best-effort: also publish a slash command via the

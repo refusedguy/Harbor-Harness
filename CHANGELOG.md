@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### 33/T4 — finish AppState/AppMsg/AppReducer + ChatAppReducer split (#437, closes #364)
+
+**TEA state/message split доведён до конца; flat forwarding-слой удалён.**
+
+- `UiState` теперь только `UiState.Ui` (`TerminalUiState`) + `UiState.Chat` (`ChatDomainState`). **Все** legacy flat forwarding-геттеры (`Lines`, `Active`, `Cost`, `Model`, `Provider`, `AgentName`, `IsAgentRunning`, `Status`, `Input`, `Focus`, `ScrollOffset`, `PanelStates`, `Sessions`, …) удалены, ~100 ридеров мигрированы на `Ui`/`Chat` напрямую. Расширение через `ImmutableDictionary<string, object?>` не вводилось (boxing + IL2xxx под AOT) — только типизированная композиция.
+- `UiMsg` → `AppMsg` (generic: `KeyInput`, `Scroll*`, `TogglePanel`, `FocusPanel`, `ResizePanel`, `InputText`, `Viewport`, `HistoryMeasured`, `SeedPanels`, `SetPanelCursor/Directory`, `Quit`, `Reset`) + `ChatAppMsg` (Harbor: `Agent`, `AgentStarted`, `AgentEnded`, `StatusChanged`, `AppendLine`, `HydrateSession`, `ConfigureRuntime`, `SyncSessions`).
+- `UiReducer` → `AppReducer` (panels/scroll/input/focus, без домена) + `ChatAppReducer` (`AgentEvent → state`, Harbor-расширение). Новый хук `IAppReducerPlugin` позволяет добавлять доменные arms **без форка** generic-редьюсера; порядок свёртки: extension claim → generic arms → extension `After` (обоснование в XML-doc `AppReducer.Update`).
+- `UiStore.Dispatch` принимает `AppMsg` и вызывает `ChatAppReducer.Update` (composed). Поведение не менялось — структурный рефакторинг.
+- Новые acceptance-тесты: `AppReducerGenericTests` (без ссылок на домен: panels/scroll/input/focus + контракт плагина) и `ChatAppReducerTests` (Harbor-расширение).
+- Сняты все три `TODO(principles)[SRP]` маркера этого сплита.
+
 ### Sprint ci-cd-maturity — 01.09.2026
 
 **GitHub Actions до production-качества.**

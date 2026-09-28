@@ -4,7 +4,7 @@ Tests for **Harbor.Tui.Abstractions + renderers**.
 
 ## What's covered
 
-TUI unit tests - UiReducer state folding, UiStore, view-model behavior, command dispatch
+TUI unit tests - AppReducer state folding, UiStore, view-model behavior, command dispatch
 
 ## Run
 
@@ -15,7 +15,7 @@ dotnet test tests/Harbor.Tui.Tests
 Or filter to a single test class:
 
 ```bash
-dotnet test tests/Harbor.Tui.Tests --filter "FullyQualifiedName~UiReducer"
+dotnet test tests/Harbor.Tui.Tests --filter "FullyQualifiedName~AppReducer"
 ```
 
 ## Layer

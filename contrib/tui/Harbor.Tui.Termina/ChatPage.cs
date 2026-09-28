@@ -59,7 +59,7 @@ public sealed class ChatViewModel : ReactiveViewModel
     {
         _logger?.LogInformation("ChatViewModel.OnActivated called");
         var state = _bridge.Store.State;
-        _output.OnNext($"Harbor: connected to {state.Provider}/{state.Model} (agent: {state.AgentName}). Type a message, or /help. Esc to quit.");
+        _output.OnNext($"Harbor: connected to {state.Chat.Provider}/{state.Chat.Model} (agent: {state.Chat.AgentName}). Type a message, or /help. Esc to quit.");
 
         _bridge.Store.Changed += OnStoreChanged;
     }
@@ -80,19 +80,19 @@ public sealed class ChatViewModel : ReactiveViewModel
             _lastThinkLen = 0;
         }
 
-        if (state.IsStreaming)
+        if (state.Chat.IsStreaming)
         {
-            if (state.Active.ThinkBuffer.Length > _lastThinkLen)
+            if (state.Chat.Active.ThinkBuffer.Length > _lastThinkLen)
             {
                 _streamOpen = true;
-                _stream.OnNext(state.Active.ThinkBuffer[_lastThinkLen..]);
-                _lastThinkLen = state.Active.ThinkBuffer.Length;
+                _stream.OnNext(state.Chat.Active.ThinkBuffer[_lastThinkLen..]);
+                _lastThinkLen = state.Chat.Active.ThinkBuffer.Length;
             }
-            if (state.Active.TextBuffer.Length > _lastTextLen)
+            if (state.Chat.Active.TextBuffer.Length > _lastTextLen)
             {
                 _streamOpen = true;
-                _stream.OnNext(state.Active.TextBuffer[_lastTextLen..]);
-                _lastTextLen = state.Active.TextBuffer.Length;
+                _stream.OnNext(state.Chat.Active.TextBuffer[_lastTextLen..]);
+                _lastTextLen = state.Chat.Active.TextBuffer.Length;
             }
         }
         else
@@ -102,7 +102,7 @@ public sealed class ChatViewModel : ReactiveViewModel
             _lastThinkLen = 0;
         }
 
-        if (state.ShouldQuit)
+        if (state.Ui.ShouldQuit)
             this.RequestShutdown();
     }
 

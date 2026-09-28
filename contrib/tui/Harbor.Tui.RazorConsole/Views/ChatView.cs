@@ -32,12 +32,12 @@ public sealed class ChatView
     /// <summary>Stream-bar text shown during streaming: <c>▌ generating... 1234 chars</c>.</summary>
     public static string StreamBar(UiState s)
     {
-        if (!s.IsStreaming)
+        if (!s.Chat.IsStreaming)
             return string.Empty;
-        if (!string.IsNullOrEmpty(s.Active.TextBuffer))
-            return $"[cyan]▌ generating... {s.Active.TextBuffer.Length} chars[/]";
-        if (!string.IsNullOrEmpty(s.Active.ThinkBuffer))
-            return $"[cyan]▌ thinking... {s.Active.ThinkBuffer.Length} chars[/]";
+        if (!string.IsNullOrEmpty(s.Chat.Active.TextBuffer))
+            return $"[cyan]▌ generating... {s.Chat.Active.TextBuffer.Length} chars[/]";
+        if (!string.IsNullOrEmpty(s.Chat.Active.ThinkBuffer))
+            return $"[cyan]▌ thinking... {s.Chat.Active.ThinkBuffer.Length} chars[/]";
         return "[cyan]▌ thinking...[/]";
     }
 }

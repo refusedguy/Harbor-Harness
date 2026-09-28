@@ -62,7 +62,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         await host.Backend.WriteAsync(Utf8(TerminalQueries.Osc99NotifyProbe), ct).ConfigureAwait(false);
 
         await PrintWelcomeAsync().ConfigureAwait(false);
-        host._replStore.Dispatch(new UiMsg.ConfigureRuntime(host.SessionModel.Model, host.SessionModel.ProviderId, host.SessionModel.Agent));
+        host._replStore.Dispatch(new ChatAppMsg.ConfigureRuntime(host.SessionModel.Model, host.SessionModel.ProviderId, host.SessionModel.Agent));
         ArmThemeWatcher();
 
         // Setup guide (issue #383): local setup detection + first-run gating.
@@ -188,7 +188,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             {
                 host.Pipeline.ObserveEvent(agentEvt);
                 host._selection.Clear();
-                host._replStore.Dispatch(new UiMsg.Agent(agentEvt));
+                host._replStore.Dispatch(new ChatAppMsg.Agent(agentEvt));
                 await host.Bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
                 if (agentEvt is AgentEndEvent)
                 {
@@ -444,19 +444,19 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         // Same range the projector derives from the snapshot it is handed, so
         // the memo key and the painted text can never disagree.
         int maxScroll = Math.Max(0, totalLines - Math.Max(1, viewportLines));
-        int scrollOffset = Math.Clamp(maxScroll - storeState.ScrollOffset, 0, maxScroll);
+        int scrollOffset = Math.Clamp(maxScroll - storeState.Ui.ScrollOffset, 0, maxScroll);
 
         if (prev is not null
             && prev.Chat.Status == storeChat.Status
             && prev.Chat.Model == storeChat.Model
             && prev.Chat.Provider == storeChat.Provider
             && prev.Chat.AgentName == storeChat.AgentName
-            && prev.Cost.TokensIn == tokensIn
-            && prev.Cost.TokensOut == tokensOut
-            && prev.Cost.CostUsd == costUsd
-            && prev.ScrollOffset == scrollOffset
-            && prev.ViewportLines == viewportLines
-            && prev.TotalLines == totalLines)
+            && prev.Chat.Cost.TokensIn == tokensIn
+            && prev.Chat.Cost.TokensOut == tokensOut
+            && prev.Chat.Cost.CostUsd == costUsd
+            && prev.Ui.ScrollOffset == scrollOffset
+            && prev.Ui.ViewportLines == viewportLines
+            && prev.Ui.TotalLines == totalLines)
         {
             return prev;
         }
@@ -550,9 +550,9 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         {
             host._lastStoreTotal = frameTotal;
             host._lastStoreViewport = rows;
-            _ = host._replStore.Dispatch(new UiMsg.Viewport(rows));
-            _ = host._replStore.Dispatch(new UiMsg.HistoryMeasured(frameTotal));
-            _ = host._replStore.Dispatch(new UiMsg.ScrollClamp(Math.Max(0, frameTotal - rows)));
+            _ = host._replStore.Dispatch(new AppMsg.Viewport(rows));
+            _ = host._replStore.Dispatch(new AppMsg.HistoryMeasured(frameTotal));
+            _ = host._replStore.Dispatch(new AppMsg.ScrollClamp(Math.Max(0, frameTotal - rows)));
         }
         _ = host._timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, host._timelineViewportH);
 

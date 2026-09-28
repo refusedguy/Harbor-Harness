@@ -66,7 +66,7 @@ public sealed class SessionSwitcher
         _agent.Initialize(session, agentDef);
 
         // #89: hydrate-then-swap — build the replayed lines off to the side
-        // and swap them in with a SINGLE UiMsg (one reducer transition, one
+        // and swap them in with a SINGLE AppMsg (one reducer transition, one
         // store CAS) instead of Reset + BindSession + N×AppendLine, whose N+2
         // separate transitions let a background agent event interleave
         // mid-replay and corrupt the transcript order.
@@ -81,7 +81,7 @@ public sealed class SessionSwitcher
             }
         }
 
-        targetStore.Dispatch(new UiMsg.HydrateSession(
+        targetStore.Dispatch(new ChatAppMsg.HydrateSession(
             session.Model, session.ProviderId, session.Agent, lines.ToImmutable()));
 
         _logger.LogInformation("Opened session {Id}, dir={Dir}, replayed {Count} messages",

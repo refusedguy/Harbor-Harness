@@ -182,7 +182,14 @@ public class StateTestRunnerTests
     {
         var state = new UiState
         {
-            Lines = System.Collections.Immutable.ImmutableArray.Create(
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 7
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = System.Collections.Immutable.ImmutableArray.Create(
                 new ChatLine(ChatRole.User, "User message"),
                 new ChatLine(ChatRole.Assistant, "Assistant reply"),
                 new ChatLine(ChatRole.Tool, "read: {}"),
@@ -191,11 +198,10 @@ public class StateTestRunnerTests
                 new ChatLine(ChatRole.System, "System note"),
                 new ChatLine(ChatRole.Thinking, "Thinking block")
             ),
-            Status = "idle",
-            Model = "test-model",
-            Provider = "mock",
-            ViewportLines = 20,
-            TotalLines = 7
+                Status = "idle",
+                Model = "test-model",
+                Provider = "mock"
+            }
         };
 
         string text = StateTestRunner.ExtractExpectedText(state);
@@ -214,13 +220,19 @@ public class StateTestRunnerTests
     {
         var state = new UiState
         {
-            IsStreaming = true,
-            Active = new ActiveMessage("Streaming text", "Thinking text"),
-            Status = "running",
-            Model = "test-model",
-            Provider = "mock",
-            ViewportLines = 20,
-            TotalLines = 1
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 1
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true,
+                Active = new ActiveMessage("Streaming text", "Thinking text"),
+                Status = "running",
+                Model = "test-model",
+                Provider = "mock"
+            }
         };
 
         string text = StateTestRunner.ExtractExpectedText(state);
@@ -234,11 +246,14 @@ public class StateTestRunnerTests
     {
         var state = new UiState
         {
-            Lines = System.Collections.Immutable.ImmutableArray.Create(
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = System.Collections.Immutable.ImmutableArray.Create(
                 new ChatLine(ChatRole.User, ""),
                 new ChatLine(ChatRole.Assistant, "Real text")
             ),
-            Status = "idle"
+                Status = "idle"
+            }
         };
 
         string text = StateTestRunner.ExtractExpectedText(state);
@@ -252,14 +267,17 @@ public class StateTestRunnerTests
     {
         var state = new UiState
         {
-            Active = new ActiveMessage("stream", "think"),
-            Lines = System.Collections.Immutable.ImmutableArray.Create(
+            Chat = ChatDomainState.Empty with
+            {
+                Active = new ActiveMessage("stream", "think"),
+                Lines = System.Collections.Immutable.ImmutableArray.Create(
                 new ChatLine(ChatRole.User, "user line")
             ),
-            Status = "running",
-            Model = "m",
-            Provider = "p",
-            AgentName = "agent"
+                Status = "running",
+                Model = "m",
+                Provider = "p",
+                AgentName = "agent"
+            }
         };
 
         string text = StateTestRunner.ExtractExpectedText(state);
@@ -279,11 +297,11 @@ public class StateTestRunnerTests
     {
         var state = StateTestRunner.StreamingState("hello");
 
-        await Assert.That(state.IsStreaming).IsTrue();
-        await Assert.That(state.Active.TextBuffer).IsEqualTo("hello");
-        await Assert.That(state.Active.ThinkBuffer).IsEmpty();
-        await Assert.That(state.Status).IsEqualTo("running");
-        await Assert.That(state.IsAgentRunning).IsTrue();
+        await Assert.That(state.Chat.IsStreaming).IsTrue();
+        await Assert.That(state.Chat.Active.TextBuffer).IsEqualTo("hello");
+        await Assert.That(state.Chat.Active.ThinkBuffer).IsEmpty();
+        await Assert.That(state.Chat.Status).IsEqualTo("running");
+        await Assert.That(state.Chat.IsAgentRunning).IsTrue();
     }
 
     [Test]
@@ -291,11 +309,11 @@ public class StateTestRunnerTests
     {
         var state = StateTestRunner.ThinkingState("thinking...");
 
-        await Assert.That(state.IsStreaming).IsFalse();
-        await Assert.That(state.Active.TextBuffer).IsEmpty();
-        await Assert.That(state.Active.ThinkBuffer).IsEqualTo("thinking...");
-        await Assert.That(state.Status).IsEqualTo("running");
-        await Assert.That(state.IsAgentRunning).IsTrue();
+        await Assert.That(state.Chat.IsStreaming).IsFalse();
+        await Assert.That(state.Chat.Active.TextBuffer).IsEmpty();
+        await Assert.That(state.Chat.Active.ThinkBuffer).IsEqualTo("thinking...");
+        await Assert.That(state.Chat.Status).IsEqualTo("running");
+        await Assert.That(state.Chat.IsAgentRunning).IsTrue();
     }
 
     [Test]
@@ -303,11 +321,11 @@ public class StateTestRunnerTests
     {
         var state = StateTestRunner.ErrorState("boom");
 
-        await Assert.That(state.Status).IsEqualTo("error");
-        await Assert.That(state.IsAgentRunning).IsFalse();
-        await Assert.That(state.Lines.Length).IsEqualTo(1);
-        await Assert.That(state.Lines[0].Role).IsEqualTo(ChatRole.Error);
-        await Assert.That(state.Lines[0].Text).IsEqualTo("boom");
+        await Assert.That(state.Chat.Status).IsEqualTo("error");
+        await Assert.That(state.Chat.IsAgentRunning).IsFalse();
+        await Assert.That(state.Chat.Lines.Length).IsEqualTo(1);
+        await Assert.That(state.Chat.Lines[0].Role).IsEqualTo(ChatRole.Error);
+        await Assert.That(state.Chat.Lines[0].Text).IsEqualTo("boom");
     }
 
     [Test]
@@ -315,11 +333,11 @@ public class StateTestRunnerTests
     {
         var state = StateTestRunner.PanelFocusedState("logs");
 
-        await Assert.That(state.Focus).IsEqualTo(FocusMode.Panel);
-        await Assert.That(state.FocusedPanelId).IsEqualTo("logs");
-        await Assert.That(state.PanelStates).ContainsKey("logs");
-        await Assert.That(state.PanelStates["logs"]).IsEqualTo(TuiPanelState.Focused);
-        await Assert.That(state.RegisteredPanelIds).Contains("logs");
+        await Assert.That(state.Ui.Focus).IsEqualTo(FocusMode.Panel);
+        await Assert.That(state.Ui.FocusedPanelId).IsEqualTo("logs");
+        await Assert.That(state.Ui.PanelStates).ContainsKey("logs");
+        await Assert.That(state.Ui.PanelStates["logs"]).IsEqualTo(TuiPanelState.Focused);
+        await Assert.That(state.Ui.RegisteredPanelIds).Contains("logs");
     }
 
     [Test]
@@ -327,9 +345,9 @@ public class StateTestRunnerTests
     {
         var state = StateTestRunner.ScrolledState(scrollOffset: 5, totalLines: 30, viewportLines: 20);
 
-        await Assert.That(state.ScrollOffset).IsEqualTo(5);
-        await Assert.That(state.TotalLines).IsEqualTo(30);
-        await Assert.That(state.ViewportLines).IsEqualTo(20);
+        await Assert.That(state.Ui.ScrollOffset).IsEqualTo(5);
+        await Assert.That(state.Ui.TotalLines).IsEqualTo(30);
+        await Assert.That(state.Ui.ViewportLines).IsEqualTo(20);
     }
 
     [Test]
@@ -337,9 +355,9 @@ public class StateTestRunnerTests
     {
         var state = StateTestRunner.HistoryNavigatedState("current", historyIndex: 1);
 
-        await Assert.That(state.Input.Text).IsEqualTo("current");
-        await Assert.That(state.Input.HistoryIndex).IsEqualTo(1);
-        await Assert.That(state.Input.History.Length).IsEqualTo(3);
+        await Assert.That(state.Ui.Input.Text).IsEqualTo("current");
+        await Assert.That(state.Ui.Input.HistoryIndex).IsEqualTo(1);
+        await Assert.That(state.Ui.Input.History.Length).IsEqualTo(3);
     }
 
     [Test]
@@ -347,7 +365,7 @@ public class StateTestRunnerTests
     {
         var state = StateTestRunner.SlashAutocompleteState("/help");
 
-        await Assert.That(state.Input.Text).StartsWith("/");
-        await Assert.That(state.Input.HistoryIndex).IsEqualTo(-1);
+        await Assert.That(state.Ui.Input.Text).StartsWith("/");
+        await Assert.That(state.Ui.Input.HistoryIndex).IsEqualTo(-1);
     }
 }

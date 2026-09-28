@@ -11,7 +11,7 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     <c>SpectreTuiRenderer.Panels + SeedPanelRegistryIntoState</c>: the
 ///     registry holds <see cref="IPanelProvider" /> instances only, all
 ///     visibility / focus / size state lives in <see cref="UiState" /> and is
-///     seeded via <see cref="UiMsg.SeedPanels" />.
+///     seeded via <see cref="AppMsg.SeedPanels" />.
 /// </summary>
 /// <remarks>
 ///     Infrastructure only: this class does NOT register the 7 SpectreTui
@@ -46,7 +46,7 @@ public sealed class CellForgePanelRegistry
 
     /// <summary>
     ///     Seed registered panel ids + states + sizes into <see cref="UiState" />
-    ///     via <see cref="UiMsg.SeedPanels" />. Preserves already-known state
+    ///     via <see cref="AppMsg.SeedPanels" />. Preserves already-known state
     ///     for re-registered ids (same rule as SpectreTui seeding); unknown ids
     ///     start <see cref="TuiPanelState.Hidden" /> with the provider's
     ///     <c>DefaultSize</c>. Returns the reducer effect for the host to run.
@@ -64,15 +64,15 @@ public sealed class CellForgePanelRegistry
         {
             var p = all[i];
             idsBuilder.Add(p.Id);
-            statesBuilder.Add(p.Id, current.PanelStates.TryGetValue(p.Id, out var s)
+            statesBuilder.Add(p.Id, current.Ui.PanelStates.TryGetValue(p.Id, out var s)
                 ? s
                 : TuiPanelState.Hidden);
-            sizesBuilder.Add(p.Id, current.PanelSizes.TryGetValue(p.Id, out int sz)
+            sizesBuilder.Add(p.Id, current.Ui.PanelSizes.TryGetValue(p.Id, out int sz)
                 ? sz
                 : p.DefaultSize);
         }
 
-        return store.Dispatch(new UiMsg.SeedPanels(
+        return store.Dispatch(new AppMsg.SeedPanels(
             idsBuilder.MoveToImmutable(),
             statesBuilder.ToImmutable(),
             sizesBuilder.ToImmutable()));
@@ -109,9 +109,9 @@ public static class PanelArbiter
         ArgumentNullException.ThrowIfNull(state);
 
         // FocusedPanelId is authoritative when its state agrees.
-        string? focusedId = state.FocusedPanelId;
+        string? focusedId = state.Ui.FocusedPanelId;
         if (!string.IsNullOrEmpty(focusedId)
-            && state.PanelStates.TryGetValue(focusedId, out var focusedState)
+            && state.Ui.PanelStates.TryGetValue(focusedId, out var focusedState)
             && focusedState == TuiPanelState.Focused)
         {
             for (int i = 0; i < providers.Count; i++)
@@ -128,7 +128,7 @@ public static class PanelArbiter
         for (int i = 0; i < providers.Count; i++)
         {
             var provider = providers[i];
-            if (!state.PanelStates.TryGetValue(provider.Id, out var panelState)
+            if (!state.Ui.PanelStates.TryGetValue(provider.Id, out var panelState)
                 || panelState == TuiPanelState.Hidden)
             {
                 continue;

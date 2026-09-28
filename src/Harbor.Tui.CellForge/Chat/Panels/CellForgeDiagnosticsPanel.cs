@@ -9,13 +9,13 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     <see cref="PanelExtractors.CollectDiagnostics(UiState)"/>, one row per issue
 ///     (<c>✗ message</c> for errors, <c>▲ message</c> for warnings).
 ///     <c>j</c> / <c>k</c> move the cursor, which lives in
-///     <see cref="UiState.PanelCursors"/> keyed by panel id (FP-005/TEA, #360);
+///     <see cref="UiState.Ui.PanelCursors"/> keyed by panel id (FP-005/TEA, #360);
 ///     scroll-to-source stays host-side.
 /// </summary>
 /// <remarks>
 ///     <c>Build</c> reads the cursor from <c>ctx.State</c> (missing key = 0) and
 ///     clamps it for display without persisting; <c>OnKey</c> folds the move
-///     through <c>ctx.Store</c> via <c>UiMsg.SetPanelCursor</c>. The
+///     through <c>ctx.Store</c> via <c>AppMsg.SetPanelCursor</c>. The
 ///     provider-local fallback covers only the null-store degraded path
 ///     (tests); the lock keeps <c>Build</c> (render thread) and <c>OnKey</c>
 ///     (input thread) thread-safe.
@@ -74,7 +74,7 @@ public sealed class CellForgeDiagnosticsPanel : CellForgePanelBase
 
                 if (ctx.Store is UiStore store)
                 {
-                    _ = store.Dispatch(new UiMsg.SetPanelCursor(Id, next));
+                    _ = store.Dispatch(new AppMsg.SetPanelCursor(Id, next));
                 }
 
                 return true;
@@ -92,7 +92,7 @@ public sealed class CellForgeDiagnosticsPanel : CellForgePanelBase
 
                 if (ctx.Store is UiStore store)
                 {
-                    _ = store.Dispatch(new UiMsg.SetPanelCursor(Id, next));
+                    _ = store.Dispatch(new AppMsg.SetPanelCursor(Id, next));
                 }
 
                 return true;
@@ -105,7 +105,7 @@ public sealed class CellForgeDiagnosticsPanel : CellForgePanelBase
 
     private int ResolveCursor(PanelContext ctx)
     {
-        if (ctx.State.PanelCursors.TryGetValue(Id, out int stored))
+        if (ctx.State.Ui.PanelCursors.TryGetValue(Id, out int stored))
         {
             return Math.Max(0, stored);
         }

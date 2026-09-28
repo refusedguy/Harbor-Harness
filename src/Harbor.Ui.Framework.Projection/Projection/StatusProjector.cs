@@ -13,56 +13,56 @@ public static class StatusProjector
         var segments = ImmutableArray.CreateBuilder<UiStatusSegment>();
 
         segments.Add(new UiStatusSegment(
-            Text: $"{state.Provider}/{state.Model}",
+            Text: $"{state.Chat.Provider}/{state.Chat.Model}",
             Align: Alignment.Left,
             Importance: 1,
             Style: UiSpanStyle.Default));
 
-        string glyph = state.Status switch
+        string glyph = state.Chat.Status switch
         {
             "running" => "▌",
             "compacting" => "◐",
             "error" => "✗",
             _ => "○"
         };
-        UiSpanStyle statusStyle = state.Status switch
+        UiSpanStyle statusStyle = state.Chat.Status switch
         {
             "running" => UiSpanStyle.Accent,
             "error" => UiSpanStyle.Danger,
             _ => UiSpanStyle.Default
         };
         segments.Add(new UiStatusSegment(
-            Text: $"{glyph} {state.Status}",
+            Text: $"{glyph} {state.Chat.Status}",
             Align: Alignment.Center,
             Importance: 2,
             Style: statusStyle));
 
-        if (!string.IsNullOrEmpty(state.AgentName))
+        if (!string.IsNullOrEmpty(state.Chat.AgentName))
         {
             segments.Add(new UiStatusSegment(
-                Text: $"agent {state.AgentName}",
+                Text: $"agent {state.Chat.AgentName}",
                 Align: Alignment.Right,
                 Importance: 3,
                 Style: UiSpanStyle.Default));
         }
 
-        if (state.Cost.TokensIn > 0 || state.Cost.TokensOut > 0)
+        if (state.Chat.Cost.TokensIn > 0 || state.Chat.Cost.TokensOut > 0)
         {
             segments.Add(new UiStatusSegment(
-                Text: $"{state.Cost.TokensIn}↑ {state.Cost.TokensOut}↓",
+                Text: $"{state.Chat.Cost.TokensIn}↑ {state.Chat.Cost.TokensOut}↓",
                 Align: Alignment.Right,
                 Importance: 2,
                 Style: UiSpanStyle.Dim));
         }
 
         segments.Add(new UiStatusSegment(
-            Text: state.Cost.CostUsd.ToString("F4", CultureInfo.InvariantCulture),
+            Text: state.Chat.Cost.CostUsd.ToString("F4", CultureInfo.InvariantCulture),
             Align: Alignment.Right,
             Importance: 1,
             Style: UiSpanStyle.Dim));
 
-        int maxScroll = Math.Max(0, state.TotalLines - Math.Max(1, state.ViewportLines));
-        string scrollText = maxScroll == 0 ? "live" : $"scroll {state.ScrollOffset * 100 / maxScroll}%";
+        int maxScroll = Math.Max(0, state.Ui.TotalLines - Math.Max(1, state.Ui.ViewportLines));
+        string scrollText = maxScroll == 0 ? "live" : $"scroll {state.Ui.ScrollOffset * 100 / maxScroll}%";
         segments.Add(new UiStatusSegment(
             Text: scrollText,
             Align: Alignment.Right,
