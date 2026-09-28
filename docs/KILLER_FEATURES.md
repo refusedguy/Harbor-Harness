@@ -956,9 +956,18 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Dependencies:** `DiffMatchNet` NuGet package
 - **Status:** Implemented dependency-free (no NuGet): whitespace-token LCS in
   `src/Harbor.Ui.Framework.Rendering/Widgets/WordDiff.cs`, wired into
-  `DiffBlock` for 1:1 delete→add pairs (context tokens dim, changed tokens
-  take the row accent). Covered by `WordDiffTests` (replace/insert/delete)
-  + `DiffBlockTests` paint-level insertion/deletion tests.
+  `DiffBlock` for delete→add row pairs (context tokens dim, changed tokens
+  take the row accent). Pairing covers whole **N:M** rewrite runs (#380): a run
+  of consecutive delete rows is matched against the run of add rows after it
+  by line similarity (Sørensen–Dice over token multisets, ordinal), so a
+  3-lines-into-5 rewrite gets word emphasis too. Each row takes part in at
+  most one pair; leftovers and rows too dissimilar to anchor on (below
+  `WordDiff.MinRunPairSimilarityPercent`) stay plain line-level rows, and rows
+  past `WordDiff.MaxPairableLineChars` (4 KB) skip pairing entirely as a
+  guardrail against the O(tokens²) LCS matrix. Covered by `WordDiffTests`
+  (replace/insert/delete) + `WordDiffPairRunTests` (2:3, 3:2, insert-only,
+  delete-only, unrelated fallback, 4 KB guardrail, determinism)
+  + `DiffBlockTests` paint-level insertion/deletion and rewrite-run tests.
 
 ---
 
