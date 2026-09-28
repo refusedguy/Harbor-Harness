@@ -672,7 +672,7 @@ public sealed class CellForgeDockPanel : Panel
     /// <summary>Which placement this leaf hosts (Left, Right or Bottom).</summary>
     public TuiPanelPlacement Placement { get; }
 
-    /// <summary>Visible providers of <see cref="Placement"/> (refreshed by <see cref="ChatScreenPanelDock"/>).</summary>
+    /// <summary>Active provider payload for <see cref="Placement"/> (UX1: at most the <c>PanelArbiter</c> winner; refreshed by <see cref="ChatScreenPanelDock"/>).</summary>
     public IReadOnlyList<IPanelProvider> Providers { get; set; } = Array.Empty<IPanelProvider>();
 
     /// <summary>Registry view carrying per-panel size overrides (null = every provider uses <c>DefaultSize</c>).</summary>
@@ -712,8 +712,8 @@ public sealed class CellForgeDockPanel : Panel
     /// Side docks: every provider spans the full leaf width (the region width
     /// already is the max provider size — see <see cref="ChatScreenPanelDock"/>)
     /// and providers share the leaf height in equal slices (last takes the
-    /// remainder). Equal shares keep toggle churn out of the geometry: showing
-    /// a second side panel never re-wraps the first one's rows.
+    /// remainder). UX1 attaches at most one provider per leaf; the shares keep
+    /// the paint path robust if a host ever overfills it.
     /// </summary>
     private void PaintSide(ScreenBuffer buffer)
     {
@@ -769,16 +769,21 @@ public sealed class CellForgeDockPanel : Panel
 }
 
 /// <summary>
-/// CF-E-002 wiring (TOP-1 #27): attaches <see cref="CellForgeDockPanel"/> leaves
-/// to a <see cref="ChatScreen"/> tree and routes focused-panel input. Only the
-/// Left / Right / Bottom placements get dock regions; Top / Center / FloatingTab
-/// providers (and every visible panel when no dock leaf exists) render through
-/// the <see cref="PaintBottomStack"/> minimum fallback instead — a plain
-/// bottom-stack under the timeline that needs no <see cref="LayoutTree"/> space
-/// reservation. Prefer <see cref="AttachPanels"/> (it reserves solver space so
-/// panels never paint over the composer/status rows); use the fallback only when
-/// the host never attached docks (e.g. lightweight tests, narrow viewports where
-/// the solver collapsed every dock).
+/// UX1 (#261, part of epic #260): fixed slot layout
+/// (feed / composer / ONE active panel / statusline).
+/// <see cref="PanelArbiter"/> picks the single active panel (focused, else
+/// pinned, else first visible in registration order); at most ONE
+/// <see cref="CellForgeDockPanel"/> leaf is attached at a time — side winners
+/// dock beside the timeline, every other winner docks between the timeline and
+/// the composer. Secondary visible panels stay mounted in <see cref="UiState"/>
+/// for the future modal layer and are never painted here.
+/// <see cref="StatusPanel"/> / <see cref="ComposerPanel"/> keep their ids,
+/// rects and paint path — the active leaf only splits the timeline band.
+/// Prefer <see cref="AttachPanels"/> (it reserves solver space so the panel
+/// never paints over the composer/status rows); the <see cref="PaintBottomStack"/>
+/// minimum fallback covers hosts that never attached docks (e.g. lightweight
+/// tests, narrow viewports where the solver collapsed the leaf) and paints the
+/// arbiter winner only.
 /// </summary>
 public static class ChatScreenPanelDock
 {
@@ -809,21 +814,19 @@ public static class ChatScreenPanelDock
     }
 
     /// <summary>
-    /// Attaches one <see cref="CellForgeDockPanel"/> per placement that has a
-    /// visible panel (Left / Right / Bottom), sized from
-    /// <see cref="PanelRegistryView.GetSize"/> (fallback: <c>DefaultSize</c>).
+    /// Attaches the single active panel leaf from <see cref="PanelArbiter"/>
+    /// (focused, else pinned, else first visible in registration order).
     /// Idempotent: previous dock leaves are removed first, so re-attaching on a
     /// visibility/size change never duplicates leaves. The tree is left solved
     /// for (<paramref name="viewportWidth"/>, <paramref name="viewportHeight"/>);
     /// <see cref="StatusPanel"/> / <see cref="ComposerPanel"/> keep their ids,
-    /// rects and paint path — docks only split the timeline band.
-    /// Geometry: the bottom dock splits the timeline vertically (lands between
-    /// timeline and composer, like Spectre's Bottom-above-Input); side docks
-    /// split the timeline horizontally with a 1-column gap (like the sidebar).
+    /// rects and paint path — the leaf only splits the timeline band.
+    /// Geometry: a Bottom (or Top / Center / FloatingTab) winner splits the
+    /// timeline vertically (lands between timeline and composer, like Spectre's
+    /// Bottom-above-Input); a Left / Right winner splits the timeline
+    /// horizontally with a 1-column gap (like the sidebar).
     /// <see cref="LayoutTree.Split"/> always appends the new leaf as B
-    /// (right/below), so the Left dock lands immediately right of the timeline
-    /// rather than left of it — Right is attached first so the visual order is
-    /// timeline | left | right. True left-of-timeline docking is follow-up work.
+    /// (right/below). With no visible panel nothing is attached.
     /// </summary>
     public static void AttachPanels(
         ChatScreen screen,
@@ -851,9 +854,6 @@ public static class ChatScreenPanelDock
         }
 
         var view = registry.View(state);
-        var left = view.GetVisibleByPlacement(TuiPanelPlacement.Left);
-        var right = view.GetVisibleByPlacement(TuiPanelPlacement.Right);
-        var bottom = view.GetVisibleByPlacement(TuiPanelPlacement.Bottom);
 
         bool timelinePresent = false;
         foreach (var panel in screen.Tree.Panels)
@@ -875,43 +875,55 @@ public static class ChatScreenPanelDock
             return;
         }
 
-        // Bottom first (vertical split under the timeline), then Right, then
-        // Left — see the visual-order note above.
-        if (bottom.Count > 0)
+        // UX1: exactly one panel owns the slot — everything secondary goes
+        // modal (stays mounted in UiState, never painted by the dock).
+        var active = PanelArbiter.ResolveActive(view.Providers, state);
+        if (active is null)
         {
-            int h = 0;
-            for (int i = 0; i < bottom.Count; i++)
-            {
-                h += SizeOf(view, bottom[i]);
-            }
-
-            var leaf = new CellForgeDockPanel(CellForgeDockPanel.BottomId, TuiPanelPlacement.Bottom, CellForgeDockPanel.BottomPriority)
-            {
-                Providers = bottom,
-                View = view,
-                State = state,
-                Services = services,
-                Store = store,
-            };
-            int avail = Math.Max(1, screen.Timeline.Rect.Height);
-            float ratio = Math.Clamp((float)(avail - Math.Min(h, avail - 1)) / avail, 0.05f, 0.95f);
-            screen.Tree.Split(ChatScreen.TimelineId, SplitDir.Vertical, ratio, leaf, gap: 0);
-            if (viewportWidth > 0 && viewportHeight > 0)
-            {
-                screen.Tree.Solve(viewportWidth, viewportHeight);
-            }
+            return;
         }
 
-        if (right.Count > 0)
+        if (active.DefaultPlacement == TuiPanelPlacement.Left)
         {
-            AttachSide(screen, view, right, TuiPanelPlacement.Right, CellForgeDockPanel.RightId, state, services, viewportWidth, viewportHeight, store);
+            AttachSide(screen, view, active, TuiPanelPlacement.Left, CellForgeDockPanel.LeftId, state, services, viewportWidth, viewportHeight, store);
+        }
+        else if (active.DefaultPlacement == TuiPanelPlacement.Right)
+        {
+            AttachSide(screen, view, active, TuiPanelPlacement.Right, CellForgeDockPanel.RightId, state, services, viewportWidth, viewportHeight, store);
+        }
+        else
+        {
+            AttachBottom(screen, view, active, state, services, viewportWidth, viewportHeight, store);
         }
 
-        if (left.Count > 0)
+        if (viewportWidth > 0 && viewportHeight > 0)
         {
-            AttachSide(screen, view, left, TuiPanelPlacement.Left, CellForgeDockPanel.LeftId, state, services, viewportWidth, viewportHeight, store);
+            screen.Tree.Solve(viewportWidth, viewportHeight);
         }
+    }
 
+    private static void AttachBottom(
+        ChatScreen screen,
+        PanelRegistryView view,
+        IPanelProvider active,
+        UiState state,
+        IServiceProvider? services,
+        int viewportWidth,
+        int viewportHeight,
+        UiStore? store = null)
+    {
+        int h = SizeOf(view, active);
+        var leaf = new CellForgeDockPanel(CellForgeDockPanel.BottomId, TuiPanelPlacement.Bottom, CellForgeDockPanel.BottomPriority)
+        {
+            Providers = new[] { active },
+            View = view,
+            State = state,
+            Services = services,
+            Store = store,
+        };
+        int avail = Math.Max(1, screen.Timeline.Rect.Height);
+        float ratio = Math.Clamp((float)(avail - Math.Min(h, avail - 1)) / avail, 0.05f, 0.95f);
+        screen.Tree.Split(ChatScreen.TimelineId, SplitDir.Vertical, ratio, leaf, gap: 0);
         if (viewportWidth > 0 && viewportHeight > 0)
         {
             screen.Tree.Solve(viewportWidth, viewportHeight);
@@ -921,7 +933,7 @@ public static class ChatScreenPanelDock
     private static void AttachSide(
         ChatScreen screen,
         PanelRegistryView view,
-        IReadOnlyList<IPanelProvider> providers,
+        IPanelProvider active,
         TuiPanelPlacement placement,
         string leafId,
         UiState state,
@@ -930,15 +942,11 @@ public static class ChatScreenPanelDock
         int viewportHeight,
         UiStore? store = null)
     {
-        int w = 1;
-        for (int i = 0; i < providers.Count; i++)
-        {
-            w = Math.Max(w, SizeOf(view, providers[i]));
-        }
+        int w = Math.Max(1, SizeOf(view, active));
 
         var leaf = new CellForgeDockPanel(leafId, placement, CellForgeDockPanel.SidePriority)
         {
-            Providers = providers,
+            Providers = new[] { active },
             View = view,
             State = state,
             Services = services,
@@ -957,9 +965,13 @@ public static class ChatScreenPanelDock
 
     /// <summary>
     /// Refreshes the payload (providers / view / state / services) of already
-    /// attached dock leaves without tree surgery. Call once per frame (or on
-    /// every <see cref="UiState"/> change) so rows track the latest snapshot;
-    /// call <see cref="AttachPanels"/> only when the visible set or sizes change.
+    /// attached dock leaves without tree surgery. Only the
+    /// <see cref="PanelArbiter"/> winner keeps its rows: a leaf hosting the
+    /// winner shows just it, every other attached leaf is emptied (it paints
+    /// nothing until the host reclaims the space via <see cref="AttachPanels"/>).
+    /// Call once per frame (or on every <see cref="UiState"/> change) so rows
+    /// track the latest snapshot; call <see cref="AttachPanels"/> when the
+    /// visible set or sizes change.
     /// </summary>
     public static void UpdatePanels(ChatScreen screen, PanelRegistry registry, UiState state, IServiceProvider? services, UiStore? store = null)
     {
@@ -968,16 +980,14 @@ public static class ChatScreenPanelDock
         ArgumentNullException.ThrowIfNull(state);
 
         var view = registry.View(state);
+        var active = PanelArbiter.ResolveActive(view.Providers, state);
         foreach (var panel in screen.Tree.Panels)
         {
             if (panel is CellForgeDockPanel dock)
             {
-                dock.Providers = dock.Placement switch
-                {
-                    TuiPanelPlacement.Left => view.GetVisibleByPlacement(TuiPanelPlacement.Left),
-                    TuiPanelPlacement.Right => view.GetVisibleByPlacement(TuiPanelPlacement.Right),
-                    _ => view.GetVisibleByPlacement(TuiPanelPlacement.Bottom),
-                };
+                dock.Providers = active is not null && HostsWinner(dock.Placement, active.DefaultPlacement)
+                    ? new[] { active }
+                    : Array.Empty<IPanelProvider>();
                 dock.View = view;
                 dock.State = state;
                 dock.Services = services;
@@ -985,6 +995,18 @@ public static class ChatScreenPanelDock
             }
         }
     }
+
+    /// <summary>
+    /// True when the leaf of <paramref name="leafPlacement"/> is the slot for a
+    /// winner of <paramref name="winnerPlacement"/>: side leaves host their own
+    /// side, the bottom leaf hosts everything else (Bottom / Top / Center /
+    /// FloatingTab — one slot under the timeline, never a paint-over).
+    /// </summary>
+    private static bool HostsWinner(TuiPanelPlacement leafPlacement, TuiPanelPlacement winnerPlacement) =>
+        leafPlacement == winnerPlacement
+        || (leafPlacement == TuiPanelPlacement.Bottom
+            && winnerPlacement != TuiPanelPlacement.Left
+            && winnerPlacement != TuiPanelPlacement.Right);
 
     /// <summary>
     /// Routes a key to the focused panel's <c>OnKey</c> via
@@ -1037,12 +1059,12 @@ public static class ChatScreenPanelDock
 
     /// <summary>
     /// Minimum fallback when no dock regions exist (docks never attached, or the
-    /// solver collapsed every dock on a narrow viewport): paints every visible
-    /// panel — any placement — as a bottom-stack under
-    /// <paramref name="timelineRect"/>, each reserving its own size. Returns the
-    /// rows painted. Unlike <see cref="AttachPanels"/> this reserves no
-    /// <see cref="LayoutTree"/> space: slots are blanked before blitting, so the
-    /// stack paints over whatever the tree put below the timeline (usually the
+    /// solver collapsed the leaf on a narrow viewport): paints the
+    /// <see cref="PanelArbiter"/> winner — any placement — as a single slot under
+    /// <paramref name="timelineRect"/>, reserving its own size. Returns the rows
+    /// painted. Unlike <see cref="AttachPanels"/> this reserves no
+    /// <see cref="LayoutTree"/> space: the slot is blanked before blitting, so it
+    /// paints over whatever the tree put below the timeline (usually the
     /// composer/status rows). Hosts that can afford tree surgery must prefer
     /// <see cref="AttachPanels"/>.
     /// </summary>
@@ -1059,36 +1081,28 @@ public static class ChatScreenPanelDock
         ArgumentNullException.ThrowIfNull(state);
 
         var view = registry.View(state);
-        var visible = view.GetVisible();
-        if (visible.Count == 0 || timelineRect.Width <= 0)
+        var active = PanelArbiter.ResolveActive(view.Providers, state);
+        if (active is null || timelineRect.Width <= 0)
         {
             return 0;
         }
 
         int y = timelineRect.Bottom;
-        int painted = 0;
-        for (int i = 0; i < visible.Count && y < buffer.Rows; i++)
+        int h = Math.Min(SizeOf(view, active), buffer.Rows - y);
+        if (h <= 0)
         {
-            var provider = visible[i];
-            int h = Math.Min(SizeOf(view, provider), buffer.Rows - y);
-            if (h <= 0)
-            {
-                break;
-            }
-
-            buffer.Fill(new Rect(timelineRect.X, y, timelineRect.Width, h), Cell.Blank);
-            var rows = CellForgePanelAdapter.RenderToRows(provider, state, timelineRect.Width, h, services, store);
-            int n = Math.Min(rows.Count, h);
-            for (int r = 0; r < n; r++)
-            {
-                string row = rows[r] ?? string.Empty;
-                buffer.SetText(timelineRect.X, y + r, row.AsSpan(0, Math.Min(row.Length, timelineRect.Width)), CellStyle.Plain);
-            }
-
-            y += h;
-            painted += h;
+            return 0;
         }
 
-        return painted;
+        buffer.Fill(new Rect(timelineRect.X, y, timelineRect.Width, h), Cell.Blank);
+        var rows = CellForgePanelAdapter.RenderToRows(active, state, timelineRect.Width, h, services, store);
+        int n = Math.Min(rows.Count, h);
+        for (int r = 0; r < n; r++)
+        {
+            string row = rows[r] ?? string.Empty;
+            buffer.SetText(timelineRect.X, y + r, row.AsSpan(0, Math.Min(row.Length, timelineRect.Width)), CellStyle.Plain);
+        }
+
+        return h;
     }
 }
