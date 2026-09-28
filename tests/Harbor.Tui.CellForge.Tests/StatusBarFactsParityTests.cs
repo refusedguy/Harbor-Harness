@@ -1,3 +1,4 @@
+using System.Globalization;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Projection;
@@ -93,14 +94,17 @@ public class StatusBarFactsParityTests
         cells.FirstOrDefault(c => c.Contains('↑', StringComparison.Ordinal));
 
     [Test]
-    [Arguments(0m)]
-    [Arguments(0.00004m)]
-    [Arguments(0.0123m)]
-    [Arguments(12.5m)]
-    [Arguments(-1m)]
-    public async Task Cost_IsTheSameCellOnBothSurfaces(decimal costUsd)
+    [Arguments("0")]
+    [Arguments("0.00004")]
+    [Arguments("0.0123")]
+    [Arguments("12.5")]
+    [Arguments("-1")]
+    public async Task Cost_IsTheSameCellOnBothSurfaces(string costText)
     {
-        var state = State("running", tokensIn: 1500, tokensOut: 300, costUsd: costUsd);
+        // Costs travel as text: `decimal` is not a legal attribute-argument type
+        // (CS0182), and parsing keeps the values exact rather than round-tripping
+        // them through a double.
+        var state = State("running", tokensIn: 1500, tokensOut: 300, costUsd: decimal.Parse(costText, CultureInfo.InvariantCulture));
 
         await Assert.That(CostCellOf(Footer(state)) ?? NoCell)
             .IsEqualTo(CostCellOf(Projected(state)) ?? NoCell);
