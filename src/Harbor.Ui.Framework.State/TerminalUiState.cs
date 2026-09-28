@@ -56,6 +56,24 @@ public sealed record TerminalUiState
         = ImmutableDictionary<string, int>.Empty;
 
     /// <summary>
+    ///     Per-panel cursor position keyed by panel id (#360). Owns the
+    ///     diagnostics / file-tree selection so providers stay stateless across
+    ///     frames; updated by <see cref="UiReducer"/> on
+    ///     <c>SetPanelCursor</c> / <c>SetPanelDirectory</c>. Missing key = 0.
+    /// </summary>
+    public ImmutableDictionary<string, int> PanelCursors { get; init; }
+        = ImmutableDictionary<string, int>.Empty;
+
+    /// <summary>
+    ///     Per-panel directory keyed by panel id (#360). Owns the file-tree
+    ///     current directory; the filesystem listing itself stays a
+    ///     provider-local cache (reducer must never do I/O). Missing or empty
+    ///     key = <see cref="Environment.CurrentDirectory"/>.
+    /// </summary>
+    public ImmutableDictionary<string, string> PanelDirs { get; init; }
+        = ImmutableDictionary<string, string>.Empty;
+
+    /// <summary>
     ///     Id of the panel currently owning keyboard focus, or <see langword="null" />
     ///     when the chat / input box owns focus. Driven by <c>FocusPanel</c> /
     ///     <c>CyclePanelFocus</c> messages.

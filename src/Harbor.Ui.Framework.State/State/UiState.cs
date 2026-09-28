@@ -159,6 +159,16 @@ public sealed record UiState
     public ImmutableDictionary<string, int> PanelSizes { get => Ui.PanelSizes; init => Ui = Ui with { PanelSizes = value }; }
 
     /// <summary>
+    ///     Per-panel cursor position keyed by panel id (#360). Missing key = 0.
+    /// </summary>
+    public ImmutableDictionary<string, int> PanelCursors { get => Ui.PanelCursors; init => Ui = Ui with { PanelCursors = value }; }
+
+    /// <summary>
+    ///     Per-panel directory keyed by panel id (#360). Missing or empty = CWD.
+    /// </summary>
+    public ImmutableDictionary<string, string> PanelDirs { get => Ui.PanelDirs; init => Ui = Ui with { PanelDirs = value }; }
+
+    /// <summary>
     ///     Id of the panel currently owning keyboard focus, or <see langword="null" />
     ///     when the chat / input box owns focus. Driven by <c>FocusPanel</c> /
     ///     <c>CyclePanelFocus</c> messages.

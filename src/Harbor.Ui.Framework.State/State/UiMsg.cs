@@ -175,4 +175,25 @@ public abstract record UiMsg
     public sealed record SyncSessions(
         ImmutableArray<SessionInfo> Sessions,
         SessionId? ActiveSessionId) : UiMsg;
+
+    /// <summary>
+    ///     Move a panel-local cursor into the store (#360, FP-005/TEA).
+    ///     Providers dispatch this instead of mutating provider-local fields;
+    ///     <c>Build</c> reads the cursor back from
+    ///     <c>UiState.PanelCursors[Id]</c> (missing key = 0).
+    /// </summary>
+    /// <param name="Id">The panel id (e.g. <c>"diagnostics"</c>, <c>"file-tree"</c>).</param>
+    /// <param name="Cursor">The new zero-based cursor position (clamped to ≥ 0).</param>
+    public sealed record SetPanelCursor(string Id, int Cursor) : UiMsg;
+
+    /// <summary>
+    ///     Move a panel-local directory into the store (#360, FP-005/TEA).
+    ///     Sets <c>UiState.PanelDirs[Id]</c> and resets the panel cursor to 0
+    ///     atomically so descend/parent navigation never leaves a stale
+    ///     selection behind. Empty <paramref name="Directory" /> clears back to
+    ///     the process working directory.
+    /// </summary>
+    /// <param name="Id">The panel id (e.g. <c>"file-tree"</c>).</param>
+    /// <param name="Directory">The new directory (full path, or empty for CWD).</param>
+    public sealed record SetPanelDirectory(string Id, string Directory) : UiMsg;
 }

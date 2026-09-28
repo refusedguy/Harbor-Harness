@@ -12,18 +12,24 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     the <c>read</c> tool).
 /// </summary>
 /// <remarks>
-///     TODO(principles)[FP-005, TEA]: cursor + directory cache are provider-local
-///     mutable state (same compromise as the Spectre original) instead of living in
-///     <see cref="UiState"/> keyed by panel id. Guarded by a small lock so
-///     <c>Build</c> (render thread) and <c>OnKey</c> (input thread) stay thread-safe;
-///     moving the cursor into the store is follow-up work. Tracked in #360.
+///     Cursor + current directory live in <see cref="UiState"/> keyed by panel
+///     id (<c>PanelCursors</c> / <c>PanelDirs</c>, FP-005/TEA, #360):
+///     <c>Build</c> resolves them from <c>ctx.State</c> (missing key = cursor 0 /
+///     process working directory) and <c>OnKey</c> folds moves through
+///     <c>ctx.Store</c> via <c>UiMsg.SetPanelCursor</c> /
+///     <c>UiMsg.SetPanelDirectory</c> (descend/parent resets the cursor to 0
+///     atomically in the reducer). The filesystem listing itself stays a
+///     provider-local cache — the reducer must never do I/O — invalidated
+///     whenever the resolved directory changes. The small lock (plus the
+///     fallback fields for the null-store degraded path) keeps <c>Build</c>
+///     (render thread) and <c>OnKey</c> (input thread) thread-safe.
 /// </remarks>
 public sealed class CellForgeFileTreePanel : CellForgePanelBase
 {
     private readonly object _gate = new();
-    private string _currentDir = string.Empty;
-    private int _cursor;
-    private string _displayDir = string.Empty;
+    private int _fallbackCursor;
+    private string _fallbackDir = string.Empty;
+    private string _entriesDir = string.Empty;
     private List<Entry> _entries = new();
 
     /// <inheritdoc />
@@ -42,19 +48,20 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
     public override object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        EnsureEntries();
+        string dir = ResolveDir(ctx);
+        EnsureEntries(dir);
         List<Entry> snapshot;
         int cursor;
-        string displayDir;
         lock (_gate)
         {
             snapshot = new List<Entry>(_entries);
-            cursor = _cursor;
-            displayDir = _displayDir;
+            cursor = ResolveCursor(ctx);
         }
 
+        cursor = snapshot.Count == 0 ? 0 : Math.Clamp(cursor, 0, snapshot.Count - 1);
+
         var rows = PanelRows.FileTreeRows(
-            displayDir,
+            dir,
             snapshot.Select(e => new PanelRows.FileTreeRow(e.Name, e.IsDirectory, e.IsHidden)).ToList(),
             cursor,
             ctx.Width,
@@ -71,20 +78,15 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
             Entry? current;
             lock (_gate)
             {
-                current = _cursor >= 0 && _cursor < _entries.Count ? _entries[_cursor] : null;
+                int cursor = ResolveCursor(ctx);
+                current = cursor >= 0 && cursor < _entries.Count ? _entries[cursor] : null;
             }
 
             if (current is not null)
             {
                 if (current.IsDirectory)
                 {
-                    lock (_gate)
-                    {
-                        _currentDir = current.FullPath;
-                        _displayDir = current.FullPath;
-                        _entries = new List<Entry>();
-                        _cursor = 0;
-                    }
+                    MoveToDirectory(ctx, current.FullPath);
                 }
                 else if (ctx.Store is UiStore store)
                 {
@@ -104,51 +106,64 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
         {
             case 'j':
             case 'J':
+            {
+                int next;
                 lock (_gate)
                 {
-                    if (_entries.Count > 0)
-                    {
-                        _cursor = Math.Min(_entries.Count - 1, _cursor + 1);
-                    }
+                    int current = ResolveCursor(ctx);
+                    next = _entries.Count > 0
+                        ? Math.Min(_entries.Count - 1, current + 1)
+                        : current;
+                    _fallbackCursor = next;
+                }
+
+                if (ctx.Store is UiStore store)
+                {
+                    _ = store.Dispatch(new UiMsg.SetPanelCursor(Id, next));
                 }
 
                 return true;
+            }
+
             case 'k':
             case 'K':
+            {
+                int next;
                 lock (_gate)
                 {
-                    if (_entries.Count > 0)
-                    {
-                        _cursor = Math.Max(0, _cursor - 1);
-                    }
+                    int current = ResolveCursor(ctx);
+                    next = _entries.Count > 0
+                        ? Math.Max(0, current - 1)
+                        : current;
+                    _fallbackCursor = next;
+                }
+
+                if (ctx.Store is UiStore store)
+                {
+                    _ = store.Dispatch(new UiMsg.SetPanelCursor(Id, next));
                 }
 
                 return true;
+            }
+
             case 'h':
             case 'H':
-                string currentDir;
-                lock (_gate)
-                {
-                    currentDir = string.IsNullOrEmpty(_currentDir) ? Environment.CurrentDirectory : _currentDir;
-                }
-
+            {
+                string currentDir = ResolveDir(ctx);
                 if (Directory.GetParent(currentDir) is { } parent)
                 {
-                    lock (_gate)
-                    {
-                        _currentDir = parent.FullName;
-                        _displayDir = parent.FullName;
-                        _entries = new List<Entry>();
-                        _cursor = 0;
-                    }
+                    MoveToDirectory(ctx, parent.FullName);
                 }
 
                 return true;
+            }
+
             case 'r':
             case 'R':
                 lock (_gate)
                 {
                     _entries = new List<Entry>();
+                    _entriesDir = string.Empty;
                 }
 
                 return true;
@@ -157,20 +172,56 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
         }
     }
 
-    private void EnsureEntries()
+    private void MoveToDirectory(PanelContext ctx, string dir)
     {
         lock (_gate)
         {
-            if (_entries.Count > 0)
+            _fallbackDir = dir;
+            _fallbackCursor = 0;
+            _entries = new List<Entry>();
+            _entriesDir = string.Empty;
+        }
+
+        if (ctx.Store is UiStore store)
+        {
+            _ = store.Dispatch(new UiMsg.SetPanelDirectory(Id, dir));
+        }
+    }
+
+    private int ResolveCursor(PanelContext ctx)
+    {
+        if (ctx.State.PanelCursors.TryGetValue(Id, out int stored))
+        {
+            return Math.Max(0, stored);
+        }
+
+        lock (_gate)
+        {
+            return _fallbackCursor;
+        }
+    }
+
+    private string ResolveDir(PanelContext ctx)
+    {
+        if (ctx.State.PanelDirs.TryGetValue(Id, out string? stored))
+        {
+            return string.IsNullOrEmpty(stored) ? Environment.CurrentDirectory : stored;
+        }
+
+        lock (_gate)
+        {
+            return string.IsNullOrEmpty(_fallbackDir) ? Environment.CurrentDirectory : _fallbackDir;
+        }
+    }
+
+    private void EnsureEntries(string dir)
+    {
+        lock (_gate)
+        {
+            if (_entries.Count > 0 && _entriesDir == dir)
             {
                 return;
             }
-        }
-
-        string dir;
-        lock (_gate)
-        {
-            dir = string.IsNullOrEmpty(_currentDir) ? Environment.CurrentDirectory : _currentDir;
         }
 
         var fresh = new List<Entry>(32);
@@ -212,14 +263,13 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
         });
         lock (_gate)
         {
-            if (_entries.Count == 0)
+            if (_entries.Count == 0 || _entriesDir != dir)
             {
                 _entries = fresh;
-                _currentDir = dir;
-                _displayDir = dir;
-                if (_cursor >= _entries.Count)
+                _entriesDir = dir;
+                if (_fallbackCursor >= _entries.Count)
                 {
-                    _cursor = 0;
+                    _fallbackCursor = 0;
                 }
             }
         }
