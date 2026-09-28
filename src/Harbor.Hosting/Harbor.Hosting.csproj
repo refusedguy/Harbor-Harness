@@ -52,12 +52,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Base graph: abstractions + contracts + core pipeline + desktop config types -->
+    <!-- Base graph: abstractions + contracts + application pipeline + desktop config types (#188: no Harbor.Core facade) -->
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
     <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Telemetry.Core\Harbor.Telemetry.Core.csproj"/>
-    <ProjectReference Include="..\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+    <ProjectReference Include="..\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
 
     <!-- Storage backends -->

@@ -31,14 +31,16 @@ UI-framework-agnostic contracts shared by every Harbor desktop app
 
 ## Dependency rules
 
-✅ **Allowed**: `Harbor.Abstractions`, `Harbor.Core`,
+✅ **Allowed**: `Harbor.Abstractions`, `Harbor.Application`
+(documented exception #188, part of #96 — `ProviderPresets` catalog),
 `Harbor.Terminal.Abstractions`, `Harbor.Ui.Framework` (+ its submodules:
 `.Abstractions`, `.State`, `.Services`, `.Sessions`, `.ViewModels`),
 `CommunityToolkit.Mvvm`, `Microsoft.Extensions.Logging.Abstractions`.
 
 ❌ **Forbidden**: any UI framework (`Avalonia*`, `System.Windows.*`,
 `Microsoft.Maui.*`, `Microsoft.AspNetCore.Components.*`), any Infrastructure
-project (`Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tools.*`).
+project (`Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tools.*`),
+the deprecated `Harbor.Core` facade (reference `Harbor.Application` directly, #188).
 
 These rules are enforced by `tests/Harbor.Architecture.Tests`.
 
