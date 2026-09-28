@@ -400,6 +400,16 @@ public sealed class StatusPanel : Panel
     public long Tick { get; private set; }
 
     /// <summary>
+    /// ENG5 background animation clock (issue #276): when set, paints read the
+    /// clock's wall-clock tick (~10 Hz) instead of incrementing per paint, so
+    /// the spinner/reactions animate on steady time rather than frame count.
+    /// Null (default) keeps the legacy per-paint increment — existing hosts
+    /// and snapshots paint byte-identically. The interactive host attaches it;
+    /// see CellForgeModule ownership notes.
+    /// </summary>
+    public Harbor.Ui.Framework.Rendering.AnimationClock? AnimationClock { get; set; }
+
+    /// <summary>
     /// Animation debt for the frame-loop heartbeat (#170): a reaction is armed
     /// or the mood latch is live. The bridge polls this (same assembly).
     /// A footer that never paints stays quiet — its director never arms.
@@ -416,7 +426,9 @@ public sealed class StatusPanel : Panel
 
     public override void Paint(ScreenBuffer buffer)
     {
-        Tick++;
+        // ENG5: a background AnimationClock (when attached) owns the tick, so
+        // animation timing survives skipped frames; otherwise legacy per-paint.
+        Tick = AnimationClock?.Tick ?? Tick + 1;
         if (Rect.Width <= 2 || Rect.Height <= 0)
         {
             return;

@@ -70,7 +70,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
             switch (@event)
             {
                 case MessageStartEvent:
-                    AnsiConsole.Write(new Markup("[cyan][[assistant]][/] "));
+                    AnsiConsole.Write(MarkupCache.GetOrParse("[cyan][[assistant]][/] "));
                     break;
 
                 case MessageUpdateEvent mu:
@@ -98,7 +98,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
         {
             var tes = (ToolExecutionStartEvent)@event;
             AnsiConsole.WriteLine();
-            var panel = new Panel(new Markup($"[bold blue]→ {Markup.Escape(tes.ToolName)}[/] [dim]{Markup.Escape(tes.Args.GetRawText())}[/]"))
+            var panel = new Panel(MarkupCache.GetOrParse($"[bold blue]→ {Markup.Escape(tes.ToolName)}[/] [dim]{Markup.Escape(tes.Args.GetRawText())}[/]"))
             {
                 Padding = new Padding(1, 0)
             };
@@ -118,11 +118,11 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
             switch (@event)
             {
                 case CompactionStartedEvent:
-                    AnsiConsole.Write(new Markup("[dim][compacting context...][/]\n"));
+                    AnsiConsole.Write(MarkupCache.GetOrParse("[dim][compacting context...][/]\n"));
                     break;
 
                 case CompactionCompletedEvent cc:
-                    AnsiConsole.Write(new Markup($"[dim][compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s][/]\n"));
+                    AnsiConsole.Write(MarkupCache.GetOrParse($"[dim][compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s][/]\n"));
                     break;
             }
 
@@ -138,7 +138,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
         public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             var err = (AgentErrorEvent)@event;
-            AnsiConsole.Write(new Markup($"[red][[error]] {Markup.Escape(err.Message)}[/]\n"));
+            AnsiConsole.Write(MarkupCache.GetOrParse($"[red][[error]] {Markup.Escape(err.Message)}[/]\n"));
             return Task.CompletedTask;
         }
     }
@@ -152,18 +152,18 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
                 break;
 
             case ThinkingDeltaEvent thd:
-                AnsiConsole.Write(new Markup($"[dim italic]{Markup.Escape(thd.Delta)}[/]"));
+                AnsiConsole.Write(MarkupCache.GetOrParse($"[dim italic]{Markup.Escape(thd.Delta)}[/]"));
                 break;
 
             case ToolCallDeltaEvent tcd:
-                AnsiConsole.Write(new Markup($"[dim]{Markup.Escape(tcd.ArgsDelta)}[/]"));
+                AnsiConsole.Write(MarkupCache.GetOrParse($"[dim]{Markup.Escape(tcd.ArgsDelta)}[/]"));
                 break;
         }
     }
 
     public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
-        AnsiConsole.Write(new Markup($"[green]{Markup.Escape(prompt)}[/]"));
+        AnsiConsole.Write(MarkupCache.GetOrParse($"[green]{Markup.Escape(prompt)}[/]"));
         string? line = Console.ReadLine();
         return Task.FromResult(Result.Success(line ?? string.Empty));
     }
@@ -179,7 +179,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
         if (text is null)
             AnsiConsole.WriteLine();
         else
-            AnsiConsole.Write(new Markup(Markup.Escape(text) + "\n"));
+            AnsiConsole.Write(MarkupCache.GetOrParse(Markup.Escape(text) + "\n"));
         return Task.FromResult(Result.Success());
     }
 
@@ -200,14 +200,14 @@ internal sealed class SpectreRenderContext : ITuiRenderContext
     public void WriteLine(string? text = null)
     {
         if (text is null) AnsiConsole.WriteLine();
-        else AnsiConsole.Write(new Markup(Markup.Escape(text) + "\n"));
+        else AnsiConsole.Write(MarkupCache.GetOrParse(Markup.Escape(text) + "\n"));
     }
 
     public void WriteColored(string text, TuiColor foreground, TuiColor? background = null)
     {
         string fgHex = foreground.ToString();
         string markup = $"[#{fgHex[1..]}]{Markup.Escape(text)}[/]";
-        AnsiConsole.Write(new Markup(markup));
+        AnsiConsole.Write(MarkupCache.GetOrParse(markup));
     }
 
     public void WriteStyled(string text, TuiStyle style)
@@ -223,7 +223,7 @@ internal sealed class SpectreRenderContext : ITuiRenderContext
         string markup = parts.Count > 0
             ? $"[{tags}]{Markup.Escape(text)}[/]"
             : Markup.Escape(text);
-        AnsiConsole.Write(new Markup(markup));
+        AnsiConsole.Write(MarkupCache.GetOrParse(markup));
     }
 
     public void SetCursorPosition(int row, int col) { }
