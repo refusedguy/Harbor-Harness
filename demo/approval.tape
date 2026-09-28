@@ -1,8 +1,17 @@
-# Approval gate demo — the bash tool request hits the permission gate, holds, auto-approves.
-# Run from the repo root after `dotnet build -c Release`:  vhs demo/approval.tape
-# CI regenerates all tapes automatically: .github/workflows/demo.yml
-
-Output "assets/demo/approval-compressed.gif"
+# Approval gate demo — the bash tool request hits the permission gate, holds,
+# auto-approves, and the tool result is rendered.
+#
+# Local equivalent:      vhs demo/approval.tape
+# Scripted run:          demo/run-scene.sh approval ansi
+# CLI equivalent:        ./apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli \
+#                          --demo --scene approval --tui ansi --chunk-delay 0
+# CI regenerates all tapes: .github/workflows/demo.yml (pinned toolchain in
+# demo/toolchain.lock; frame-normalised by tools/demo_repro.py).
+#
+# The gate card itself is the scripted DemoApprovalGate (apps/Harbor.App.Cli/Demo/
+# DemoRuntime.cs): it renders the card, holds it for 1.5 s, then auto-approves.
+# No keyboard input, no credentials — run-scene.sh unsets every *_API_KEY.
+Output "assets/demo/approval-raw.gif"
 
 Set FontFamily "JetBrains Mono"
 Set FontSize 17
@@ -16,8 +25,12 @@ Set Theme { "name": "Catppuccin Mocha", "black": "#45475a", "red": "#f38ba8", "g
 Env HARBOR_LOGLEVEL "Warning"
 
 Hide
-Type "./apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli --demo --scene approval --tui ansi --chunk-delay 15"
+Type "demo/run-scene.sh approval ansi"
 Enter
 Show
 
-Sleep 8s
+# The Sleep has to cover the whole run — the CLI boots for ~7 s and the line
+# pacing in demo/run-scene.sh stretches the scene itself. A tail that is too
+# short does not merely look worse: the recorder stops mid-scene and the GIF is
+# silently missing most of the output. DEMO_TAPE_TAIL_SECONDS in the lock.
+Sleep 20s

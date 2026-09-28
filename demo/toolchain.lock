@@ -1,0 +1,92 @@
+# demo/toolchain.lock — pinned recording toolchain for the README demo GIFs.
+#
+# Issue #26 / #426: a demo re-record used to be a function of the runner image
+# (`vhs-action@v2` always installs the *latest* ttyd, the *latest* ffmpeg and the
+# *latest* JetBrains Mono, and `install-fonts: true` added the whole Google Fonts
+# tree on top), so a font bump silently reflowed every tape and the drift gate
+# could not tell "font changed" from "renderer regressed".
+#
+# Everything the recording depends on is pinned here and installed by
+# `demo/install-toolchain.sh` with sha256 verification. Nothing floats.
+#
+#   vhs      — the recorder (drives ttyd + headless chromium + ffmpeg)
+#   ttyd     — the PTY server the recorder drives
+#   ffmpeg   — NOT installed: the runner image's ffmpeg is used, and its exact
+#              version is printed into the step summary + recorded in
+#              assets/demo/baseline.json, so a runner bump shows up as a visible
+#              provenance change instead of a silent byte-level diff.
+#   font     — the only font the tapes ask for; installed to
+#              ~/.local/share/fonts. No Google Fonts, no Nerd Fonts, no
+#              Liberation — the extra fontconfig candidates are what made the
+#              reflow unpredictable.
+#
+# The tapes drive `harbor --demo` only. No fzf, no vim, no neovim, no shell
+# plugin is executed anywhere in the demo path, so there is nothing else to pin.
+#
+# Recording constants (the deterministic envelope — see tools/demo_repro.py):
+#   GIF_FPS/GIF_FRAMES   every committed GIF is normalised to exactly
+#                        GIF_FRAMES frames at GIF_FPS ⇒ identical frame count and
+#                        identical duration on every run, machine independent.
+#   GIF_WIDTH/HEIGHT     terminal raster the tapes record at.
+#   DEMO_CHUNK_DELAY_MS  0 ⇒ the mock LLM emits every delta in one burst, so the
+#                        frame set is a function of the output *content* instead
+#                        of the machine's speed. Non-zero pacing makes each
+#                        recorded frame depend on when the sampler happened to
+#                        fire — that was the ±30 % size swing.
+#   DEMO_TAIL_SECONDS    settled-screen hold after the demo finished, so the
+#                        last frames are always the finished scene.
+#
+# shell-sourceable and python-parseable: KEY=VALUE, '#' comments.
+
+VHS_VERSION=0.11.0
+VHS_ARCHIVE=vhs_0.11.0_Linux_x86_64.tar.gz
+VHS_URL=https://github.com/charmbracelet/vhs/releases/download/v0.11.0/vhs_0.11.0_Linux_x86_64.tar.gz
+VHS_SHA256=99cb634587eaae0473c1ea377db80c3a048c27f99fe0a7febb1a1e8cb7ee5009
+
+TTYD_VERSION=1.7.7
+TTYD_ARCHIVE=ttyd.x86_64
+TTYD_URL=https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
+TTYD_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
+
+FONT_FAMILY="JetBrains Mono"
+FONT_VERSION=2.304
+FONT_ARCHIVE=JetBrainsMono-2.304.zip
+FONT_URL=https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip
+FONT_SHA256=6f6376c6ed2960ea8a963cd7387ec9d76e3f629125bc33d1fdcd7eb7012f7bbf
+
+GIF_FPS=12
+GIF_WIDTH=1200
+GIF_HEIGHT=620
+
+# The committed GIF is re-paced from the *screen sequence* of the capture, not
+# from its wall-clock frame timing: each distinct screen is held for exactly
+# GIF_STATE_FRAMES frames and the settled screen for GIF_TAIL_FRAMES. Both are
+# constants of the toolchain, so the frame count, the duration and the frame
+# hashes are identical on every run and on every machine.
+#   GIF_FRAMES is the hard ceiling — a scene that outgrows it fails loudly instead
+#   of silently changing the envelope. Headroom over the current largest scene
+#   (markdown, 50 screens) is deliberate: a scene may grow, and growing into the
+#   ceiling is the signal to re-tune rather than to let the GIF drift.
+GIF_STATE_FRAMES=6
+GIF_TAIL_FRAMES=24
+GIF_FRAMES=432
+
+DEMO_CHUNK_DELAY_MS=0
+DEMO_TAIL_SECONDS=3
+DEMO_END_MARKER="harbor demo finished"
+DEMO_PROMPT="harbor-demo\$ "
+
+# Seconds each output line is held before the next is printed. The recorder
+# samples the terminal on a wall clock, so whether a given screen is caught at
+# all depends on where the sampler fires relative to the write. Holding each line
+# for several whole 1/GIF_FPS intervals guarantees every screen is sampled on
+# every pass, which is what makes two recordings byte-identical (measured:
+# byte-identical at 0.25 s, drifting at 0.167 s and at no pacing at all).
+# 0 disables pacing — faster locally, but the frames are then not reproducible.
+#
+# The pacing multiplies the scene length: a 12-line scene becomes 3 s of output on
+# top of the CLI's ~7 s boot, so the tapes' trailing Sleep has to cover the whole
+# run or the recording is cut off mid-scene. DEMO_TAPE_TAIL_SECONDS is that
+# value; a 2 s tail left only the first 3 lines in the GIF.
+DEMO_LINE_HOLD=0.25
+DEMO_TAPE_TAIL_SECONDS=20

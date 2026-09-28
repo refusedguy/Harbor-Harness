@@ -1,8 +1,18 @@
 # Harbor hero demo — scripted agent run through the ansi renderer (mock LLM, no API keys).
-# Run from the repo root after `dotnet build -c Release`:  vhs demo/hero.tape
-# CI regenerates all tapes automatically: .github/workflows/demo.yml
-
-Output "assets/demo/hero-compressed.gif"
+#
+# Local equivalent:      vhs demo/hero.tape
+# Scripted run:          demo/run-scene.sh hero ansi
+# CLI equivalent:        ./apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli \
+#                          --demo --scene hero --tui ansi --chunk-delay 0
+# CI regenerates all tapes: .github/workflows/demo.yml (pinned toolchain in
+# demo/toolchain.lock; every GIF is frame-normalised by tools/demo_repro.py, so
+# the frame count and duration are identical on every run).
+#
+# Determinism: run-scene.sh unsets every *_API_KEY, scrubs the throw-away HOME
+# GUID and the "scene complete in N.Ns" stopwatch, and pins TZ/LANG/LC_ALL/PS1.
+# --chunk-delay 0 makes the mock LLM emit all deltas in one burst, so a frame
+# depends on the output content, not on when the sampler fired.
+Output "assets/demo/hero-raw.gif"
 
 Set FontFamily "JetBrains Mono"
 Set FontSize 17
@@ -18,8 +28,12 @@ Env HARBOR_LOGLEVEL "Warning"
 
 # Type off-screen; record only the running demo (lazygit style).
 Hide
-Type "./apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli --demo --scene hero --tui ansi"
+Type "demo/run-scene.sh hero ansi"
 Enter
 Show
 
-Sleep 7s
+# The Sleep has to cover the whole run — the CLI boots for ~7 s and the line
+# pacing in demo/run-scene.sh stretches the scene itself. A tail that is too
+# short does not merely look worse: the recorder stops mid-scene and the GIF is
+# silently missing most of the output. DEMO_TAPE_TAIL_SECONDS in the lock.
+Sleep 20s

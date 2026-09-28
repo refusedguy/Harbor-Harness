@@ -1,9 +1,16 @@
 # Renderer switch demo — the same scripted run through the plain-text renderer
 # (the HARBOR_TUI=plain fallback used by pipes/CI).
-# Run from the repo root after `dotnet build -c Release`:  vhs demo/plain.tape
-# CI regenerates all tapes automatically: .github/workflows/demo.yml
-
-Output "assets/demo/plain-compressed.gif"
+#
+# Local equivalent:      vhs demo/plain.tape
+# Scripted run:          demo/run-scene.sh hero plain
+# CLI equivalent:        HARBOR_TUI=plain ./apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli \
+#                          --demo --scene hero --tui plain --chunk-delay 0
+# CI regenerates all tapes: .github/workflows/demo.yml (pinned toolchain in
+# demo/toolchain.lock; frame-normalised by tools/demo_repro.py).
+#
+# The scene is the same as hero.tape, so the two GIFs differ only in renderer —
+# that is the point of the tape. run-scene.sh sets HARBOR_TUI itself.
+Output "assets/demo/plain-raw.gif"
 
 Set FontFamily "JetBrains Mono"
 Set FontSize 17
@@ -17,8 +24,12 @@ Set Theme { "name": "Catppuccin Mocha", "black": "#45475a", "red": "#f38ba8", "g
 Env HARBOR_LOGLEVEL "Warning"
 
 Hide
-Type "HARBOR_TUI=plain ./apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli --demo --scene hero --tui plain"
+Type "demo/run-scene.sh hero plain"
 Enter
 Show
 
-Sleep 7s
+# The Sleep has to cover the whole run — the CLI boots for ~7 s and the line
+# pacing in demo/run-scene.sh stretches the scene itself. A tail that is too
+# short does not merely look worse: the recorder stops mid-scene and the GIF is
+# silently missing most of the output. DEMO_TAPE_TAIL_SECONDS in the lock.
+Sleep 20s
