@@ -1,6 +1,6 @@
 // CommonConfigAuthResolver.cs — IAuthResolver backed by the shared CommonConfig.
 //
-// The CLI side uses AuthStore (Harbor.Core) which reads HarborConfig from
+// The CLI side uses AuthStore (Harbor.Application) which reads HarborConfig from
 // ~/.harbor/config.json. The Avalonia app uses CommonConfig (Harbor.Desktop.
 // Abstractions) which reads the SAME file but via a different type. Both
 // share the `apiKeys` JSON field, so a key saved by the wizard (CommonConfig)

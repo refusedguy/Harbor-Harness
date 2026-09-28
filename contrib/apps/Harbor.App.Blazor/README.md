@@ -9,7 +9,8 @@ Composition Root — same DI responsibilities as `Harbor.App.Cli`, but instead o
 ## Dependencies
 
 - `Harbor.Abstractions` (Domain)
-- `Harbor.Core` (AgentLoop, registries)
+- `Harbor.Application` + `Harbor.Registries` (AgentLoop, registries) — **not referenced**: this
+  shell only composes the view layer today
 - `Harbor.Storage.Memory` (ephemeral — swap to `Jsonl` for persistence)
 - `Harbor.Tui.Abstractions` (UiStore + AppReducer — shared state model with TUI)
 - `Microsoft.AspNetCore.App` (framework reference)

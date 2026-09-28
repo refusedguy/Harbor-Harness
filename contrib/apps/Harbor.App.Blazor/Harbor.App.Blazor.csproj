@@ -24,7 +24,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <!-- #451: dropped the Harbor.Core facade reference — this app uses no
+         Harbor.Application / Harbor.Registries type, so the edge was vestigial.
+         The registry + event-bus DI composition lives in the WPF/Maui shells. -->
     <ProjectReference Include="..\..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>

@@ -146,7 +146,11 @@
   <!-- ── Always-referenced core ───────────────────────────────────────────── -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <!-- #451: the deleted Harbor.Core facade forwarded to exactly these two
+         assemblies (Harbor.Application use cases + Harbor.Registries impls);
+         reference the real owners directly. -->
+    <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Hosting\Harbor.Hosting.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
     <!-- #462: SlashCommandDispatcher binds handlers to the shared

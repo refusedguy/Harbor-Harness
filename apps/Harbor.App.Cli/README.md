@@ -196,7 +196,7 @@ apps/Harbor.App.Cli/
 Composition root — references every Harbor library, grouped per build flavor
 (`Harbor.App.Cli.csproj:145-224`):
 
-- Always: `Harbor.Abstractions`, `Harbor.Core`, `Harbor.Hosting` (+ transitively Domain/Application layers), `Harbor.Desktop.Abstractions`, `Harbor.Tools.Builtin`
+- Always: `Harbor.Abstractions`, `Harbor.Application`, `Harbor.Registries`, `Harbor.Hosting` (+ transitively Domain/Application layers), `Harbor.Desktop.Abstractions`, `Harbor.Tools.Builtin`
 - Always: storage `Jsonl` + `Memory`; providers `Ollama`; renderers `Tui.AnsiPlain`, `Tui.CellForge` (+`CellForge.Engine`)
 - Always: IPC quartet `Harbor.Ipc.{Abstractions,InProcess,Server,Client}` (mode via `HARBOR_MODE`: `inprocess` | `ipc-server` | `ipc-client`)
 - `HarborWithPlugins=true`: `Harbor.Plugins.{Runtime,Storage,Compilation,Instantiation,Registration,Hosting}`

@@ -6,12 +6,12 @@
 
 ## Layer
 
-Composition Root — depends on `Harbor.Abstractions`, `Harbor.Core`, `Harbor.Storage.Memory`, `Harbor.Tui.Abstractions`. Same DI responsibilities as `Harbor.App.Cli`, but boots a MAUI lifetime.
+Composition Root — depends on `Harbor.Abstractions`, `Harbor.Application`, `Harbor.Registries`, `Harbor.Storage.Memory`, `Harbor.Tui.Abstractions`. Same DI responsibilities as `Harbor.App.Cli`, but boots a MAUI lifetime.
 
 ## Dependencies
 
 - `Harbor.Abstractions` (Domain)
-- `Harbor.Core` (AgentLoop, registries)
+- `Harbor.Application` + `Harbor.Registries` (AgentLoop, registries)
 - `Harbor.Storage.Memory` (ephemeral)
 - `Harbor.Tui.Abstractions` (UiStore + AppReducer)
 - `Microsoft.Maui.Controls` + `Microsoft.Maui.Controls.Xaml`
@@ -37,7 +37,7 @@ dotnet workload install maui-maccatalyst maui-windows
 MAUI does **not** support Linux. On Linux, exclude this project from solution builds:
 
 ```bash
-dotnet build src/Harbor.Core/Harbor.Core.csproj
+dotnet build src/Harbor.Application/Harbor.Application.csproj
 dotnet build apps/Harbor.App.Cli/Harbor.App.Cli.csproj
 # Do NOT build Harbor.slnx on Linux — MAUI project will fail.
 ```
