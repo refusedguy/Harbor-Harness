@@ -32,6 +32,16 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
                                        - Do not exfiltrate secrets (.env, keys, tokens) into chat or tool arguments.
                                        - No destructive ops without explicit user intent (rm -rf, git push --force, drop db, format).
                                        """;
+
+    private const string PeerSupervisionRecipe = """
+                                                 ## Peer Supervision
+                                                 Peer sessions run in parallel and may need help: `session_read` shows a neighbor's
+                                                 status, outcome, and recent transcript; `session_steer` delivers a message, a redirect,
+                                                 or a restart directive (asks for approval first).
+                                                 Recipe: read → verdict (ok / stuck / failed) → steer only when needed.
+                                                 Rules: never steer yourself or your own supervisor (the session that steered you);
+                                                 one level only. Reads are snapshots — re-read a working session before acting.
+                                                 """;
     private readonly ILogger<SystemPromptBuilder> _logger;
 
     public SystemPromptBuilder() : this(NullLogger<SystemPromptBuilder>.Instance) { }
@@ -110,6 +120,15 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             builder.AppendLine();
         }
 
+        // 5b. Peer-supervision recipe (#165): only when the supervision tools
+        // are actually resolved for this turn. The cache key already covers
+        // tool names, so cached prompts stay consistent.
+        if (HasSupervisionTools(context.Tools))
+        {
+            builder.AppendLine(PeerSupervisionRecipe);
+            builder.AppendLine();
+        }
+
         // 6. MCP
         if (!string.IsNullOrEmpty(context.McpInstructions))
         {
@@ -169,8 +188,20 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
         return Task.FromResult(builder.ToString());
     }
 
-    private static string GetOsShort()
+    private static bool HasSupervisionTools(IReadOnlyList<ToolDescriptor> tools)
     {
+        for (int i = 0; i < tools.Count; i++)
+        {
+            string name = tools[i].Name.Value;
+            if (name == "session_read" || name == "session_steer")
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string GetOsShort()
+    {    {
         if (OperatingSystem.IsWindows()) return "windows";
         if (OperatingSystem.IsMacOS()) return "macos";
         if (OperatingSystem.IsLinux()) return "linux";

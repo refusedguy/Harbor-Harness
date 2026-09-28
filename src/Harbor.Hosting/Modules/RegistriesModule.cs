@@ -43,6 +43,9 @@ internal static class RegistriesModule
         // only exist inside the container. The deferred forwarder closes that gap: the
         // tool holds it now, the real runner attaches on first resolution (F4-decouple).
         var subAgents = new Harbor.Application.Agents.DeferredSubAgentRunner();
+        // #165: peer-supervision tools hold this forwarder until the container
+        // can build the real store (same eager-registry gap as subAgents).
+        var supervisedSessions = new Harbor.Tools.Builtin.DeferredSessionStore();
         var backgroundTasks = new Harbor.Application.Agents.BackgroundTaskRegistry(
             ctx.LoggerFactory.CreateLogger<Harbor.Application.Agents.BackgroundTaskRegistry>());
         services.AddSingleton<Harbor.Abstractions.Agents.IBackgroundTaskRegistry>(backgroundTasks);
@@ -51,15 +54,17 @@ internal static class RegistriesModule
         var lspService = new Harbor.Lsp.LspManager(
             ctx.LoggerFactory.CreateLogger<Harbor.Lsp.LspManager>());
         services.AddSingleton<Harbor.Abstractions.Lsp.ILspService>(lspService);
-        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents, backgroundTasks, lspService);
+        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents, backgroundTasks, lspService, supervisedSessions);
         services.AddSingleton<Harbor.Abstractions.Agents.ISubAgentRunner>(sp =>
         {
+            var store = sp.GetRequiredService<Harbor.Abstractions.Sessions.ISessionStore>();
             var real = new Harbor.Application.Agents.SubAgentRunner(
-                sp.GetRequiredService<Harbor.Abstractions.Sessions.ISessionStore>(),
+                store,
                 sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentLoop>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
                     .CreateLogger<Harbor.Application.Agents.SubAgentRunner>());
             subAgents.Attach(real);
+            supervisedSessions.Attach(store);
             return real;
         });
         var providerRegistry = ProviderFactories.CreateProviderRegistry(ctx, services);
