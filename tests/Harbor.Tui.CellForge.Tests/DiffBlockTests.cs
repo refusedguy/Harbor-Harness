@@ -88,6 +88,20 @@ public class DiffBlockTests
         await Assert.That(sawGreen).IsTrue();
     }
 
+    /// <summary>True when any cell in <c>[x0, x1)</c> of a row carries that foreground.</summary>
+    private static bool HasFg(ScreenBuffer buffer, int row, int x0, int x1, CellStyle style)
+    {
+        for (int x = x0; x < x1; x++)
+        {
+            if (buffer.Get(x, row).Style.Fg == style.Fg)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     [Test]
     public async Task Gutter_Alignment_IsFixedWidth()
     {
@@ -162,6 +176,97 @@ public class DiffBlockTests
         await Assert.That(buffer.Get(signCol + 1, 2).Style.Fg).IsEqualTo(ChatPalette.ToolBody.Fg);
         await Assert.That(buffer.Get(signCol + 12, 2).Style.Fg).IsEqualTo(ChatPalette.ToolOk.Fg);
         await Assert.That(sawError).IsFalse();
+    }
+
+    [Test]
+    public async Task RewriteRun_2To3_MarksChangedTokensAndLeavesLeftoversPlain()
+    {
+        // #380: a run of 2 deletes rewritten into 3 adds. Only the two
+        // genuine rewrites get word emphasis; the net-new add stays a plain
+        // line-level row.
+        const string sample = """
+            @@ -1,2 +1,3 @@
+            -var port = 8080
+            -var listen = host
+            +var port = 9090
+            +var bind = host
+            +var listen = host
+             trailing context
+            """;
+
+        var block = new DiffBlock(sample);
+        var buffer = new ScreenBuffer(48, UnifiedDiffParser.Parse(sample).Count);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 48, buffer.Rows), 0));
+
+        // Rows: 0 header, 1-2 deletes, 3-5 adds, 6 context. Body starts at
+        // signCol+1; "var port =" is 10 cells plus one blank separator, so the
+        // changed token lands at +11 from the body start.
+        int body = DiffBlock.GutterWidth + 1;
+        int changed = body + 11;
+
+        // Delete pair: context dim, the rewritten number in the delete accent.
+        await Assert.That(buffer.Get(body, 1).Style.Fg).IsEqualTo(ChatPalette.ToolBody.Fg);
+        await Assert.That(buffer.Get(changed, 1).Style.Fg).IsEqualTo(ChatPalette.ToolError.Fg);
+
+        // Add pair: same layout on the add side, accent flipped.
+        await Assert.That(buffer.Get(body, 3).Style.Fg).IsEqualTo(ChatPalette.ToolBody.Fg);
+        await Assert.That(buffer.Get(changed, 3).Style.Fg).IsEqualTo(ChatPalette.ToolOk.Fg);
+
+        // The unpaired add row paints line-level: a segmented row always has
+        // at least one dim context run, so "no dim cell" means unpaired.
+        await Assert.That(HasFg(buffer, 4, body, 48, ChatPalette.ToolBody)).IsFalse();
+        await Assert.That(GridDump.Art(buffer)).Contains("var bind = host");
+    }
+
+    [Test]
+    public async Task RewriteRun_UnrelatedRows_PaintLineLevelOnly()
+    {
+        // 2 deletes into 3 adds with no shared tokens: nothing anchors, so the
+        // whole run stays line-level instead of being rainbowed.
+        const string sample = """
+            @@ -1,2 +1,3 @@
+            -zzz qqq xxx
+            -www vvv uuu
+            +aaa bbb ccc
+            +ddd eee fff
+            +ggg hhh iii
+            """;
+
+        var block = new DiffBlock(sample);
+        var buffer = new ScreenBuffer(40, UnifiedDiffParser.Parse(sample).Count);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, buffer.Rows), 0));
+
+        int body = DiffBlock.GutterWidth + 1;
+        for (int row = 1; row <= 5; row++)
+        {
+            await Assert.That(HasFg(buffer, row, body, 40, ChatPalette.ToolBody)).IsFalse();
+        }
+
+        // Whole rows keep their line-level kind colour.
+        await Assert.That(buffer.Get(body, 1).Style.Fg).IsEqualTo(ChatPalette.ToolError.Fg);
+        await Assert.That(buffer.Get(body, 3).Style.Fg).IsEqualTo(ChatPalette.ToolOk.Fg);
+        await Assert.That(GridDump.Art(buffer)).Contains("zzz qqq xxx");
+    }
+
+    [Test]
+    public async Task RewriteRun_SingleLineOver4Kb_PaintsLineLevelOnly()
+    {
+        // Guardrail: a minified row past WordDiff.MaxPairableLineChars must not
+        // reach the O(tokens²) LCS matrix, and paints as a plain row.
+        string huge = new('a', WordDiff.MaxPairableLineChars + 1);
+        string sample = $"@@ -1,1 +1,2 @@\n-{huge}\n+totally different text\n+one more line\n";
+
+        var block = new DiffBlock(sample);
+        var buffer = new ScreenBuffer(60, UnifiedDiffParser.Parse(sample).Count);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 60, buffer.Rows), 0));
+
+        int body = DiffBlock.GutterWidth + 1;
+        for (int row = 1; row <= 3; row++)
+        {
+            await Assert.That(HasFg(buffer, row, body, 60, ChatPalette.ToolBody)).IsFalse();
+        }
+
+        await Assert.That(GridDump.Art(buffer)).Contains("totally different text");
     }
 
     [Test]

@@ -133,9 +133,13 @@ public static class UnifiedDiffParser
 
 /// <summary>
 /// Diff chat block (widgets §3.10): right-aligned gutter numbers + sign +
-/// per-kind color, hard-truncated at rect width. Consecutive delete→add row
-/// pairs additionally get word-level emphasis: context tokens render dim,
-/// changed tokens take the full add/delete accent (git --word-diff view).
+/// per-kind color, hard-truncated at rect width. Delete→add row pairs
+/// additionally get word-level emphasis: context tokens render dim, changed
+/// tokens take the full add/delete accent (git --word-diff view). Pairing
+/// covers whole N:M rewrite runs — a run of deletes is matched against the
+/// run of adds after it by line similarity, so a 3-lines-into-5 rewrite
+/// still gets word emphasis; rows too dissimilar to anchor on and any
+/// leftovers stay plain line-level rows.
 /// Collapsible per the <c>ICollapsibleChatBlock</c> mixin ([UX2] #262):
 /// diffs over <see cref="MaxBodyLines"/> (universal 10) render collapsed
 /// with a <c>"... (N hidden)"</c> tail; shorter diffs paint fully, so the
@@ -372,26 +376,40 @@ public sealed class DiffBlock : ICollapsibleChatBlock
     }
 
     /// <summary>
-    /// One intraline segment set per consecutive delete→add pair, computed at
-    /// parse time — Paint stays allocation-free across frames.
+    /// One intraline segment set per delete→add row pair, computed at parse
+    /// time — Paint stays allocation-free across frames. Pairs come from
+    /// <see cref="WordDiff.PairRun"/>, which matches each run of consecutive
+    /// delete rows with the run of add rows that follows it (N:M, not just
+    /// adjacent singles) and skips pairs too dissimilar to anchor on.
     /// </summary>
     private void BuildPairSegments()
     {
         _pairSegs.Clear();
         int idx = 0;
-        while (idx + 1 < _lines.Count)
+        while (idx < _lines.Count)
         {
-            bool isPair = _lines[idx].Kind == DiffLineKind.Delete && _lines[idx + 1].Kind == DiffLineKind.Add;
-            if (!isPair)
+            if (_lines[idx].Kind != DiffLineKind.Delete)
             {
                 idx++;
                 continue;
             }
 
-            var sides = WordDiff.Segment(_lines[idx].Text, _lines[idx + 1].Text);
-            _pairSegs[idx] = sides;
-            _pairSegs[idx + 1] = sides;
-            idx += 2;
+            foreach (var pair in WordDiff.PairRun(_lines, idx))
+            {
+                _pairSegs[pair.DeleteIndex] = pair.Sides;
+                _pairSegs[pair.AddIndex] = pair.Sides;
+            }
+
+            // Resume after the whole delete+add region: pairing is by
+            // similarity, not position, so a later add row in the same run
+            // may already be claimed and must not be paired a second time.
+            int next = idx;
+            while (next < _lines.Count && (_lines[next].Kind is DiffLineKind.Delete or DiffLineKind.Add))
+            {
+                next++;
+            }
+
+            idx = next;
         }
     }
 }

@@ -55,8 +55,11 @@ jobs:
           fi
           for p in $suites; do
             echo "::group::goldens $p"
-            dotnet run --project "$p" -c Release -- --treenode-filter "*Golden*" || true
-            dotnet run --project "$p" -c Release -- --treenode-filter "*ScreenshotHash*" || true
+            # TUnit treenode filters are /assembly/namespace/class/method paths;
+            # a bare "*Golden*" glob matches nothing and silently regenerates
+            # zero baselines (see docs/BUILD.md §filtering).
+            dotnet run --project "$p" -c Release -- --treenode-filter "/*/*/*Golden*/*" || true
+            dotnet run --project "$p" -c Release -- --treenode-filter "/*/*/*ScreenshotHash*/*" || true
             echo "::endgroup::"
           done
           exit 0
@@ -65,7 +68,13 @@ jobs:
         run: |
           git config user.name "harbor-goldens"
           git config user.email "harbor-goldens@users.noreply.github.com"
-          git add -A -- '*.golden.txt' '*.verified.*' '*hashes*.json' '*Hashes*.json' || true
+          # `git add` aborts the WHOLE invocation when one pathspec matches
+          # nothing, so a repo with no *.verified.* files staged nothing at
+          # all and every dispatch reported "No baseline changes". Add each
+          # pattern on its own so a missing family cannot swallow the rest.
+          for pattern in '*.golden.txt' '*.verified.*' '*hashes*.json' '*Hashes*.json'; do
+            git add -A -- "$pattern" || true
+          done
           if git diff --cached --quiet; then
             echo "No baseline changes."
           else
