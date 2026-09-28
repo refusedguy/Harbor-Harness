@@ -136,8 +136,13 @@ public static class UnifiedDiffParser
 /// per-kind color, hard-truncated at rect width. Consecutive delete→add row
 /// pairs additionally get word-level emphasis: context tokens render dim,
 /// changed tokens take the full add/delete accent (git --word-diff view).
+/// Collapsible per the <c>ICollapsibleChatBlock</c> mixin ([UX2] #262):
+/// diffs over <see cref="MaxBodyLines"/> (universal 10) render collapsed
+/// with a <c>"... (N hidden)"</c> tail; shorter diffs paint fully, so the
+/// default-collapsed state stays byte-identical to the pre-collapse layout.
+/// Feed Enter/click/space toggles via <see cref="ToggleExpanded"/>.
 /// </summary>
-public sealed class DiffBlock : IChatBlock
+public sealed class DiffBlock : ICollapsibleChatBlock
 {
     private readonly string _diffText;
     private IReadOnlyList<DiffLine> _lines = [];
@@ -160,6 +165,45 @@ public sealed class DiffBlock : IChatBlock
 
     public string? Path { get; }
 
+    /// <summary>
+    /// Collapsed-body line budget ([UX2] #262: universal 10-line policy).
+    /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291);
+    /// this property satisfies the mixin contract.
+    /// </summary>
+    public int MaxBodyLines { get; set; } = ICollapsibleChatBlock.DefaultUniversalBodyLines;
+
+    /// <summary>
+    /// Whether the block is expanded (feed Enter/click/space toggles via
+    /// <see cref="ToggleExpanded"/>). Defaults to <c>false</c> so diffs over
+    /// the budget collapse structurally — no ingestion changes needed; short
+    /// diffs paint fully either way, keeping existing goldens byte-identical.
+    /// </summary>
+    public bool IsExpanded { get; private set; }
+
+    /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click/space path).</summary>
+    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
+    public void SetExpanded(bool expanded) => IsExpanded = expanded;
+
+    private Rect? _lastPaintRect;
+    private int _lastSkipRows;
+
+    /// <summary>
+    /// Click hit-test for the first row (unified expand gesture, [UX2] #262;
+    /// mirrors <c>ToolCallBlock.TryHitHeader</c> — diffs have no header, so
+    /// the first body row claims the click).
+    /// </summary>
+    public bool TryHitHeader(int col, int row)
+    {
+        if (_lastPaintRect is not { } rect || _lastSkipRows != 0)
+        {
+            return false;
+        }
+
+        return row == rect.Y && col >= rect.X && col < rect.X + rect.Width;
+    }
+
     public IReadOnlyList<DiffLine> Lines
     {
         get
@@ -172,23 +216,58 @@ public sealed class DiffBlock : IChatBlock
     public BlockMeasure Measure(int width)
     {
         EnsureParsed();
+        if (!IsExpanded && _lines.Count > MaxBodyLines)
+        {
+            // Collapsed overflow: first MaxBodyLines rows + one
+            // overflow-marker row ([UX5] #265: zero budget = no rows at all).
+            return BlockMeasure.Exact(Math.Max(0, MaxBodyLines) + (MaxBodyLines > 0 ? 1 : 0));
+        }
+
         return BlockMeasure.Exact(_lines.Count);
     }
 
-    public int CheapEstimate(int width) => BlockMath.EstimateLines(_diffText, Math.Max(8, width));
+    public int CheapEstimate(int width)
+    {
+        int est = BlockMath.EstimateLines(_diffText, Math.Max(8, width));
+        if (!IsExpanded && est > MaxBodyLines)
+        {
+            est = Math.Max(0, MaxBodyLines) + (MaxBodyLines > 0 ? 1 : 0);
+        }
+
+        return est;
+    }
 
     public void Paint(in BlockPaintContext ctx)
     {
         EnsureParsed();
+        _lastPaintRect = ctx.Rect;
+        _lastSkipRows = ctx.SkipRows;
+
         var buffer = ctx.Buffer;
-        int rows = Math.Min(ctx.Rect.Height, _lines.Count);
+        bool overflow = !IsExpanded && MaxBodyLines > 0 && _lines.Count > MaxBodyLines;
+        int hidden = overflow ? _lines.Count - MaxBodyLines : 0;
+        int total = overflow ? MaxBodyLines + 1 : _lines.Count;
+        int rows = Math.Min(ctx.Rect.Height, total);
         int skip = ctx.SkipRows;
 
-        for (int i = 0; i < rows && (skip + i) < _lines.Count; i++)
+        for (int i = 0; i < rows && (skip + i) < total; i++)
         {
             int lineIdx = skip + i;
-            var dl = _lines[lineIdx];
             int y = ctx.Rect.Y + i;
+
+            if (overflow && lineIdx == MaxBodyLines)
+            {
+                // Collapsed overflow tail ([UX2] #262): dim "... (N hidden)"
+                // on the row after the last shown diff line.
+                string tail = ICollapsibleChatBlock.OverflowTail(hidden);
+                buffer.SetText(ctx.Rect.X, y, new string(' ', GutterWidth), ChatPalette.Dim);
+                int tailX = ctx.Rect.X + GutterWidth;
+                int tailAvail = Math.Max(0, ctx.Rect.Right - tailX);
+                buffer.SetText(tailX, y, tail.AsSpan(0, Math.Min(tailAvail, tail.Length)), ChatPalette.Dim);
+                continue;
+            }
+
+            var dl = _lines[lineIdx];
 
             buffer.SetText(ctx.Rect.X, y, Gutter(dl), ChatPalette.Dim);
 

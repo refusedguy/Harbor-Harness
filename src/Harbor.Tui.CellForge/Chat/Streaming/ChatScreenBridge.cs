@@ -554,18 +554,19 @@ public sealed class ChatScreenBridge : IDisposable
     public bool ToggleToolCard(string toolCallId) => _cards.ToggleToolCard(toolCallId);
 
     /// <summary>
-    /// Routes a plain Enter press to the newest tool card on the feed (toggles
-    /// expand/collapse). Hosts call this after approval routing and before the
-    /// composer so feed-Enter expands cards while composer-Enter still submits
+    /// Routes a plain Enter/Space press to the newest collapsible block on the
+    /// feed ([UX2] #262: single expand gesture — Enter/click/space — everywhere).
+    /// Hosts call this after approval routing and before the
+    /// composer so feed-Enter expands blocks while composer-Enter still submits
     /// — ordering stays host-side. Returns false when the key is not a plain
-    /// Enter press or the feed holds no tool card.
+    /// Enter/Space press or the feed holds no collapsible block.
     /// </summary>
     public bool TryRouteToolCardKey(in KeyEvent key) => _cards.TryRouteToolCardKey(key);
 
     /// <summary>
-    /// Routes a left-button press/click on a tool-card header to
-    /// expand/collapse (mirrors <see cref="TryRouteApprovalClick"/>).
-    /// Returns false when the click lands outside every card header —
+    /// Routes a left-button press/click on a collapsible block's header to
+    /// expand/collapse ([UX2] #262; mirrors <see cref="TryRouteApprovalClick"/>).
+    /// Returns false when the click lands outside every collapsible header —
     /// callers keep normal scroll/selection behavior.
     /// </summary>
     public bool TryRouteToolCardClick(in Input.MouseEvent mouse) => _cards.TryRouteToolCardClick(mouse);

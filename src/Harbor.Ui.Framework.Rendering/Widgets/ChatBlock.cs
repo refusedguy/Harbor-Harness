@@ -120,8 +120,34 @@ public interface ICollapsibleChatBlock : IChatBlock
     /// <summary>Default collapsed-body budget (the pre-mixin ToolCallBlock value).</summary>
     static int DefaultCollapsedBodyLines => 4;
 
+    /// <summary>
+    /// Universal collapsed-body budget ([UX2] #262): every body over this many
+    /// lines renders collapsed with an overflow tail; shorter bodies paint
+    /// fully (no marker), so default-collapsed blocks stay byte-identical
+    /// until they exceed the budget. Tool/thinking cards keep their tighter
+    /// <see cref="DefaultCollapsedBodyLines"/> (4) from the pre-mixin layout.
+    /// </summary>
+    static int DefaultUniversalBodyLines => 10;
+
     /// <summary>Default expanded-result budget (the pre-mixin ToolCallBlock value).</summary>
     static int DefaultExpandedBodyLines => 20;
+
+    /// <summary>
+    /// Overflow tail for newly-collapsible blocks ([UX2] #262):
+    /// <c>"... (N hidden)"</c> carrying the cut line count. Blocks collapsed
+    /// by the earlier slices (tool/thinking/assistant) keep their single
+    /// <c>…</c> marker (pinned by their tests) — unifying the two tails is a
+    /// later-slice decision, not this one.
+    /// </summary>
+    static string OverflowTail(int hiddenLines) => $"... ({Math.Max(0, hiddenLines)} hidden)";
+
+    /// <summary>
+    /// Click hit-test for the unified expand gesture ([UX2] #262): true when
+    /// the block has painted and (<paramref name="col"/>, <paramref name="row"/>)
+    /// lands on its header row. Screen-cell coordinates. Default false —
+    /// blocks that never painted never claim clicks.
+    /// </summary>
+    bool TryHitHeader(int col, int row) => false;
 
     /// <summary>Counts logical (<c>'\n'</c>-separated) lines in <paramref name="text"/>.</summary>
     static int CountLogicalLines(ReadOnlySpan<char> text)

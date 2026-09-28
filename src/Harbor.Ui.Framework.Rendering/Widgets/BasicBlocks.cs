@@ -64,8 +64,13 @@ internal static class BlockMath
 
 /// <summary>User prompt bubble: accent header («YOU»), accent bar and tinted
 /// body (widgets §3.1). The header costs one row; wrap width is unchanged
-/// (2-cell gutter, same as the old «› » prefix).</summary>
-public sealed class UserBlock : IChatBlock
+/// (2-cell gutter, same as the old «› » prefix).
+/// Collapsible per the <c>ICollapsibleChatBlock</c> mixin ([UX2] #262):
+/// bodies over <see cref="MaxBodyLines"/> (universal 10) render collapsed
+/// with a <c>"... (N hidden)"</c> tail; shorter bodies paint fully, so the
+/// default-collapsed state stays byte-identical to the pre-collapse layout.
+/// Feed Enter/click/space toggles via <see cref="ToggleExpanded"/>.</summary>
+public sealed class UserBlock : ICollapsibleChatBlock
 {
     private const string Header = "YOU";
     private const int Gutter = 2;
@@ -82,13 +87,74 @@ public sealed class UserBlock : IChatBlock
 
     public int BudgetBytes => 64 + (_text.SourceLength * 2);
 
-    public BlockMeasure Measure(int width) =>
-        BlockMeasure.Exact(2 + Math.Max(1, _text.GetLines(BodyWidth(width)).Length));
+    /// <summary>
+    /// Collapsed-body line budget ([UX2] #262: universal 10-line policy).
+    /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291);
+    /// this property satisfies the mixin contract.
+    /// </summary>
+    public int MaxBodyLines { get; set; } = ICollapsibleChatBlock.DefaultUniversalBodyLines;
 
-    public int CheapEstimate(int width) => 2 + BlockMath.EstimateLines(_text.Source, Math.Max(1, BodyWidth(width)));
+    /// <summary>
+    /// Whether the block is expanded (feed Enter/click/space toggles via
+    /// <see cref="ToggleExpanded"/>). Defaults to <c>false</c> so bodies over
+    /// the budget collapse structurally — no ingestion changes needed; short
+    /// bodies paint fully either way, keeping existing goldens byte-identical.
+    /// </summary>
+    public bool IsExpanded { get; private set; }
+
+    /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click/space path).</summary>
+    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
+    public void SetExpanded(bool expanded) => IsExpanded = expanded;
+
+    private Rect? _lastPaintRect;
+    private int _lastSkipRows;
+
+    /// <summary>
+    /// Click hit-test for the header row (unified expand gesture, [UX2] #262;
+    /// mirrors <c>ToolCallBlock.TryHitHeader</c>).
+    /// </summary>
+    public bool TryHitHeader(int col, int row)
+    {
+        if (_lastPaintRect is not { } rect || _lastSkipRows != 0)
+        {
+            return false;
+        }
+
+        return row == rect.Y && col >= rect.X && col < rect.X + rect.Width;
+    }
+
+    public BlockMeasure Measure(int width)
+    {
+        var lines = _text.GetLines(BodyWidth(width));
+        if (!IsExpanded && lines.Length > MaxBodyLines)
+        {
+            // Collapsed overflow: header + first MaxBodyLines body rows +
+            // one overflow-marker row + trailing gap row ([UX5] #265:
+            // zero budget = no body, no marker).
+            return BlockMeasure.Exact(2 + Math.Max(0, MaxBodyLines) + (MaxBodyLines > 0 ? 1 : 0));
+        }
+
+        return BlockMeasure.Exact(2 + Math.Max(1, lines.Length));
+    }
+
+    public int CheapEstimate(int width)
+    {
+        int body = BlockMath.EstimateLines(_text.Source, Math.Max(1, BodyWidth(width)));
+        if (!IsExpanded && body > MaxBodyLines)
+        {
+            body = Math.Max(0, MaxBodyLines) + (MaxBodyLines > 0 ? 1 : 0);
+        }
+
+        return 2 + body;
+    }
 
     public void Paint(in BlockPaintContext ctx)
     {
+        _lastPaintRect = ctx.Rect;
+        _lastSkipRows = ctx.SkipRows;
+
         var buffer = ctx.Buffer;
         int bodyWidth = BodyWidth(ctx.Rect.Width);
         if (bodyWidth <= 0)
@@ -110,7 +176,9 @@ public sealed class UserBlock : IChatBlock
         var bgCell = Cell.From(new Rune(' '), new CellStyle(bg: ChatPalette.Surface));
 
         var lines = _text.GetLines(bodyWidth);
-        int totalRows = lines.Length + 2;
+        bool overflow = !IsExpanded && MaxBodyLines > 0 && lines.Length > MaxBodyLines;
+        int hidden = overflow ? lines.Length - MaxBodyLines : 0;
+        int totalRows = overflow ? MaxBodyLines + 3 : lines.Length + 2;
         for (int i = 0; i < rows && (skip + i) < totalRows; i++)
         {
             int row = skip + i;
@@ -135,6 +203,19 @@ public sealed class UserBlock : IChatBlock
             if (row == 0)
             {
                 buffer.SetText(ctx.Rect.X + 1, paintY, Header, headerStyle);
+                continue;
+            }
+
+            if (overflow && row == totalRows - 2)
+            {
+                // Collapsed overflow tail ([UX2] #262): dim "... (N hidden)"
+                // on the row after the last shown body line; the bar keeps
+                // the bubble rhythm, the gap row below stays untouched.
+                string tail = ICollapsibleChatBlock.OverflowTail(hidden);
+                buffer.SetText(ctx.Rect.X, paintY, "│", barStyle);
+                int avail = Math.Max(0, ctx.Rect.Width - Gutter);
+                buffer.SetText(ctx.Rect.X + Gutter, paintY,
+                    tail.AsSpan(0, Math.Min(avail, tail.Length)), ChatPalette.Dim);
                 continue;
             }
 
@@ -170,8 +251,13 @@ public sealed class UserBlock : IChatBlock
     }
 }
 
-/// <summary>Dim italic system notice (session events, compaction, errors).</summary>
-public sealed class SystemBlock : IChatBlock
+/// <summary>Dim italic system notice (session events, compaction, errors).
+/// Collapsible per the <c>ICollapsibleChatBlock</c> mixin ([UX2] #262):
+/// bodies over <see cref="MaxBodyLines"/> (universal 10) render collapsed
+/// with a <c>"... (N hidden)"</c> tail; shorter notices paint fully, so the
+/// default-collapsed state stays byte-identical to the pre-collapse layout.
+/// Feed Enter/click/space toggles via <see cref="ToggleExpanded"/>.</summary>
+public sealed class SystemBlock : ICollapsibleChatBlock
 {
     private readonly WrappedText _text;
 
@@ -183,20 +269,93 @@ public sealed class SystemBlock : IChatBlock
 
     public int BudgetBytes => 48 + (_text.SourceLength * 2);
 
-    public BlockMeasure Measure(int width) =>
-        BlockMeasure.Exact(Math.Max(1, _text.GetLines(Math.Max(1, width)).Length));
+    /// <summary>
+    /// Collapsed-body line budget ([UX2] #262: universal 10-line policy).
+    /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291);
+    /// this property satisfies the mixin contract.
+    /// </summary>
+    public int MaxBodyLines { get; set; } = ICollapsibleChatBlock.DefaultUniversalBodyLines;
 
-    public int CheapEstimate(int width) => BlockMath.EstimateLines(_text.Source, Math.Max(1, width));
+    /// <summary>
+    /// Whether the block is expanded (feed Enter/click/space toggles via
+    /// <see cref="ToggleExpanded"/>). Defaults to <c>false</c> so bodies over
+    /// the budget collapse structurally — no ingestion changes needed; short
+    /// notices paint fully either way, keeping existing goldens byte-identical.
+    /// </summary>
+    public bool IsExpanded { get; private set; }
+
+    /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click/space path).</summary>
+    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
+    public void SetExpanded(bool expanded) => IsExpanded = expanded;
+
+    private Rect? _lastPaintRect;
+    private int _lastSkipRows;
+
+    /// <summary>
+    /// Click hit-test for the first row (unified expand gesture, [UX2] #262;
+    /// mirrors <c>ToolCallBlock.TryHitHeader</c> — system notices have no
+    /// header, so the first body row claims the click).
+    /// </summary>
+    public bool TryHitHeader(int col, int row)
+    {
+        if (_lastPaintRect is not { } rect || _lastSkipRows != 0)
+        {
+            return false;
+        }
+
+        return row == rect.Y && col >= rect.X && col < rect.X + rect.Width;
+    }
+
+    public BlockMeasure Measure(int width)
+    {
+        var lines = _text.GetLines(Math.Max(1, width));
+        if (!IsExpanded && lines.Length > MaxBodyLines)
+        {
+            // Collapsed overflow: first MaxBodyLines rows + one
+            // overflow-marker row ([UX5] #265: zero budget = no rows at all).
+            return BlockMeasure.Exact(Math.Max(0, MaxBodyLines) + (MaxBodyLines > 0 ? 1 : 0));
+        }
+
+        return BlockMeasure.Exact(Math.Max(1, lines.Length));
+    }
+
+    public int CheapEstimate(int width)
+    {
+        int body = BlockMath.EstimateLines(_text.Source, Math.Max(1, width));
+        if (!IsExpanded && body > MaxBodyLines)
+        {
+            body = Math.Max(0, MaxBodyLines) + (MaxBodyLines > 0 ? 1 : 0);
+        }
+
+        return body;
+    }
 
     public void Paint(in BlockPaintContext ctx)
     {
+        _lastPaintRect = ctx.Rect;
+        _lastSkipRows = ctx.SkipRows;
+
         var buffer = ctx.Buffer;
         var lines = _text.GetLines(Math.Max(1, ctx.Rect.Width));
+        bool overflow = !IsExpanded && MaxBodyLines > 0 && lines.Length > MaxBodyLines;
+        int hidden = overflow ? lines.Length - MaxBodyLines : 0;
+        int total = overflow ? MaxBodyLines + 1 : lines.Length;
         int rows = ctx.Rect.Height;
         int skip = ctx.SkipRows;
-        for (int i = 0; i < rows && (skip + i) < lines.Length; i++)
+        for (int i = 0; i < rows && (skip + i) < total; i++)
         {
-            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, lines.Span[skip + i], ChatPalette.System);
+            int lineIdx = skip + i;
+            if (overflow && lineIdx == MaxBodyLines)
+            {
+                string tail = ICollapsibleChatBlock.OverflowTail(hidden);
+                buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i,
+                    tail.AsSpan(0, Math.Min(ctx.Rect.Width, tail.Length)), ChatPalette.Dim);
+                continue;
+            }
+
+            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, lines.Span[lineIdx], ChatPalette.System);
         }
     }
 

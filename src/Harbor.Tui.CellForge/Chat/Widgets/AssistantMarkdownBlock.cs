@@ -9,10 +9,11 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// render, width-keyed cache). Measure/Paint stay allocation-free in steady
 /// state.
 /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291,
-/// parent #286): finalized answers start expanded so default paint stays
-/// byte-identical to the pre-collapse layout; hosts collapse via
-/// <see cref="SetExpanded"/> (feed Enter/click path via
-/// <see cref="ToggleExpanded"/>).
+/// parent #286): answers over <see cref="MaxBodyLines"/> (universal 10,
+/// [UX2] #262) start collapsed with a <c>…</c> overflow marker; shorter
+/// answers paint fully, so the default-collapsed state stays byte-identical
+/// to the pre-collapse layout. Hosts expand via <see cref="SetExpanded"/>
+/// (feed Enter/click/space path via <see cref="ToggleExpanded"/>).
 /// </summary>
 public sealed class AssistantMarkdownBlock : ICollapsibleChatBlock
 {
@@ -21,13 +22,15 @@ public sealed class AssistantMarkdownBlock : ICollapsibleChatBlock
     private List<MdLine> _lines = [];
     private Dictionary<int, List<CodeSpan>>? _code;
     private int _width = -1;
+    private Rect? _lastPaintRect;
+    private int _lastSkipRows;
 
     public AssistantMarkdownBlock(string source, string? header = null)
     {
         _source = source ?? string.Empty;
         _header = string.IsNullOrWhiteSpace(header) ? null : header;
-        MaxBodyLines = ICollapsibleChatBlock.DefaultCollapsedBodyLines;
-        IsExpanded = true;
+        MaxBodyLines = ICollapsibleChatBlock.DefaultUniversalBodyLines;
+        IsExpanded = false;
     }
 
     public string Kind => "assistant";
@@ -37,7 +40,7 @@ public sealed class AssistantMarkdownBlock : ICollapsibleChatBlock
     public int BudgetBytes => 64 + (_source.Length * 2);
 
     /// <summary>
-    /// Collapsed-body line budget (continuation marker when exceeded).
+    /// Collapsed-body line budget ([UX2] #262: universal 10-line policy).
     /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291);
     /// this property satisfies the mixin contract.
     /// </summary>
@@ -46,19 +49,32 @@ public sealed class AssistantMarkdownBlock : ICollapsibleChatBlock
     /// <summary>
     /// Whether the block is expanded. Satisfies the
     /// <c>ICollapsibleChatBlock</c> mixin contract; defaults to
-    /// <c>true</c> so collapsed paint stays opt-in and the default layout
-    /// is byte-identical to the pre-collapse block (header + full body +
-    /// trailing gap row). Collapsed paint shows the header plus the first
-    /// <see cref="MaxBodyLines"/> styled body rows with a <c>…</c> overflow
-    /// marker.
+    /// <c>false</c> so answers over the budget collapse structurally — no
+    /// ingestion changes needed. Collapsed paint shows the header plus the
+    /// first <see cref="MaxBodyLines"/> styled body rows with a <c>…</c>
+    /// overflow marker; shorter answers paint fully either way.
     /// </summary>
     public bool IsExpanded { get; private set; }
 
-    /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click path).</summary>
+    /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click/space path).</summary>
     public void ToggleExpanded() => IsExpanded = !IsExpanded;
 
     /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
     public void SetExpanded(bool expanded) => IsExpanded = expanded;
+
+    /// <summary>
+    /// Click hit-test for the header/first row (unified expand gesture,
+    /// [UX2] #262; mirrors <c>ToolCallBlock.TryHitHeader</c>).
+    /// </summary>
+    public bool TryHitHeader(int col, int row)
+    {
+        if (_lastPaintRect is not { } rect || _lastSkipRows != 0)
+        {
+            return false;
+        }
+
+        return row == rect.Y && col >= rect.X && col < rect.X + rect.Width;
+    }
 
     public BlockMeasure Measure(int width)
     {
@@ -83,6 +99,9 @@ public sealed class AssistantMarkdownBlock : ICollapsibleChatBlock
 
     public void Paint(in BlockPaintContext ctx)
     {
+        _lastPaintRect = ctx.Rect;
+        _lastSkipRows = ctx.SkipRows;
+
         EnsureRendered(ctx.Rect.Width);
         var buffer = ctx.Buffer;
         int rows = ctx.Rect.Height;
