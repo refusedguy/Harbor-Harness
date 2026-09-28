@@ -89,7 +89,7 @@ Resolved from `HARBOR_TUI` or `~/.harbor/cli.json` `defaultTuiRenderer`; falls b
 ```bash
 HARBOR_TUI=ansi        harbor     # streaming renderer (always compiled in)
 HARBOR_TUI=plain       harbor     # no colors, pipe-safe (always compiled in)
-HARBOR_TUI=consoleex   harbor     # cell-diff renderer, own input pipeline (kitty/mouse/paste)
+HARBOR_TUI=cellforge   harbor     # cell-diff renderer, own input pipeline (kitty/mouse/paste)
 HARBOR_TUI=spectre-tui harbor     # official Spectre widget framework (default in full builds)
 HARBOR_TUI=spectre     harbor     # rich panels
 HARBOR_TUI=fullscreen  harbor     # spectre fullscreen mode
@@ -105,12 +105,13 @@ One-shot commands (`ask`, `providers`, …) are always non-interactive regardles
 #### Interactive renderer notes
 
 Interactive renderers own the alt-screen buffer; console logging is routed into the in-TUI
-diagnostics panel (F12) instead of stdout. `consoleex` is the newest interactive renderer:
+diagnostics panel (F12) instead of stdout. `cellforge` is the canonical interactive renderer:
 event-driven frame loop, virtualized timeline, streaming markdown with frozen tail,
 Ctrl+C aborts the current agent turn and repeats to exit — see its README
 ([../../src/Harbor.Tui.CellForge/README.md](../../src/Harbor.Tui.CellForge/README.md)).
-Enable it persistently with `"tui": "consoleex"` in `~/.harbor/config.json` or
-`{ "defaultTuiRenderer": "consoleex" }` in `~/.harbor/cli.json`.
+Enable it persistently with `"tui": "cellforge"` in `~/.harbor/config.json` or
+`{ "defaultTuiRenderer": "cellforge" }` in `~/.harbor/cli.json`. The pre-rename id
+`consoleex` is still accepted as an alias for all three.
 
 See [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) for the full comparison matrix.
 

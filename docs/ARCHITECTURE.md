@@ -7,7 +7,7 @@
 > - [PATTERNS.md](./PATTERNS.md) — каталог из 18 паттернов с примерами кода.
 > - [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 38 "не делайте так" с примерами.
 > - [EXAMPLES.md](./EXAMPLES.md) — 40+ рецептов.
-> - [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 41 known violation + §ARCH-001..§ARCH-NNN layering audit.
+> - [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 45 known violations + §ARCH-001..§ARCH-NNN layering audit.
 
 ## Design goals
 
@@ -35,7 +35,7 @@ Harbor.slnx                          (.sln не существует; есть �
 │   ├── Harbor.Plugins.{Abstractions..Runtime,Host}/  (8 проектов plugin pipeline)
 │   ├── Harbor.Ipc.{Abstractions,Client,Server,InProcess}/
 │   ├── Harbor.Tui.{Abstractions,Ansi,Plain,ConsoleEx,Notifications}/
-│   ├── Harbor.Tools.Builtin/        (14 builtin tools в Tools/)
+│   ├── Harbor.Tools.Builtin/        (20 builtin tools в Tools/)
 │   └── … (Telemetry.*, Logging, Extensions, Hosting, CodeGen и др.)
 ├── contrib/                         (optional components: tui/, apps/, scripting/, tests/)
 ├── tests/                           (27 csproj dirs incl. benchmarks + E2E harnesses)
@@ -283,7 +283,7 @@ Harbor следует строгим принципам OOP/SOLID/GoF/FP/ROP/per
 
 ### Известные нарушения (tech debt)
 
-41 нарушение, 11 критических, разбито по 4 спринта. Полный список — [docs/CODE_PRINCIPLES_AUDIT.md §Prioritized plan](./CODE_PRINCIPLES_AUDIT.md).
+45 нарушений, 11 критических, разбито по 4 спринта. Полный список — [docs/CODE_PRINCIPLES_AUDIT.md §Prioritized plan](./CODE_PRINCIPLES_AUDIT.md).
 
 ## NativeAOT strategy
 
@@ -759,7 +759,7 @@ Mitigated by `record` value equality + structural sharing.
    (Antipattern #9.)
 
 Known existing violations documented in [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md)
-(41 findings, 11 critical). Don't add more of the same kind.
+(45 findings, 11 critical). Don't add more of the same kind.
 
 ## Future architecture (v0.9+, two-process)
 

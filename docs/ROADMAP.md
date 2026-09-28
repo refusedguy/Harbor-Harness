@@ -48,9 +48,11 @@ Second render path for the interactive REPL (`src/Harbor.Tui.CellForge/`, opt-in
 - **Live REPL wire-up** (CE-4): select via `HARBOR_TUI=cellforge` or `tui: "cellforge"` (+ kill-switch `ui.consoleEx.enabled`), `CellForgeModule` DI graph, event pump keeps all timeline mutation on the frame thread, Ctrl+C = abort turn → second press quits, event-driven frames + 80 ms spinner heartbeat, golden E2E smoke (`tests/fixtures/celldiff/ce4-consoleex-repl.golden.txt`). See [README](../src/Harbor.Tui.CellForge/README.md).
 - **PTY hardening** (CE-5): `PtyHarness` runs the real process in a pseudo-terminal (`tests/Harbor.Tui.CellForge.PtyTests/`, 8 scenarios — launch/submit/kitty/mouse/paste/resize/Ctrl+C/termios); fixed Termios struct size 49→60 bytes (kernel wrote past struct → stack corruption in raw-mode Enter, commit 1749841).
 
-### ✅ Completed — Tools (14 builtin)
+### ✅ Completed — Tools (20 builtin)
 
-`read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `webfetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`
+`read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `skill`, `patch`, `notebook`, `tree`, `lsp`,
+`task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`
+— full reference in [TOOLS_CATALOG.md](./TOOLS_CATALOG.md)
 
 ### ✅ Completed — Plugin System (R30 fix) + Plugin Host Decomposition (F-sprints)
 
@@ -294,15 +296,18 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 
 ## 📊 Metrics
 
+> Counts measured 2026-09-28 (`ae3f932`) with `git ls-files` — see the
+> measuring command in the footnote. Re-measure before quoting.
+
 | Metric | Value |
 |---|---|
 | .NET SDK | 10.0.302 |
 | Source projects (`src/`) | 54 (+26 in `contrib/`) |
-| `src/` projects with a README | 54/54 (measured 2026-09-28, `de2358f`; CI-enforced) |
-| Test projects (`tests/`, csproj dirs) | 27 (incl. benchmarks + E2E harnesses) |
+| `src/` projects with a README | 54/54 (CI-enforced) |
+| Test projects (`tests/`, csproj dirs) | 36 (incl. benchmarks + E2E harnesses) |
 | Unit tests passing | ~1350 (см. [PROJECT_STATUS.md](./PROJECT_STATUS.md)) |
-| E2E tests passing | 12 + ConsoleEx PTY suite |
-| Builtin tools | 14 |
+| E2E tests passing | 12 + CellForge PTY suite |
+| Builtin tools | 20 (`HarborToolSetKind.Full14` — enum name predates the count) |
 | Sample plugins | 4 CS-source + 4 DLL legacy |
 | TUI renderers | 6 projects in src/ (Terminal.Abstractions, Tui.AnsiPlain, Tui.CellForge, Tui.CellForge.Engine, Tui.NickConsoleEx, Tui.Notifications) → 4 registered backends (`plain`, `ansi`, `cellforge` (alias `consoleex`), `nickconsoleex`) + 7 in contrib/tui |
 | Desktop platforms | Avalonia (`apps/`); WPF / MAUI (`contrib/apps/`) |
@@ -314,6 +319,22 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 | `unsafe` blocks | 0 |
 | Warnings | 0 |
 | Errors | 0 |
+
+<details>
+<summary>How these were measured</summary>
+
+```bash
+git ls-files 'src/*/*.csproj' | wc -l          # 54
+git ls-files 'contrib/*/*.csproj' | wc -l      # 26
+git ls-files 'tests/*/*.csproj' | wc -l        # 36
+grep -h 'ToolName.Create(' src/Harbor.Tools.Builtin/Tools/*/*.cs | wc -l   # 20 (+1 interpolated mcp_ id)
+```
+
+Test counts come from the CI run log, not from a local enumeration — they move
+with every merge. Benchmark numbers are **not** in this table; they live only in
+[BENCHMARKS.md](./BENCHMARKS.md).
+
+</details>
 
 ---
 

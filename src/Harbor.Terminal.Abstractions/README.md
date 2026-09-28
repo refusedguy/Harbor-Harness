@@ -36,7 +36,7 @@ Terminal UI contracts — renderer, view, view-model, plugin, and navigation abs
 
 ## Tests
 
-No dedicated test project. Validated by `tests/Harbor.Tui.Tests/`, `tests/Harbor.Tui.ConsoleEx.Tests/`, and per-renderer E2E tests.
+No dedicated test project. Validated by `tests/Harbor.Tui.Tests/`, `tests/Harbor.Tui.CellForge.Tests/`, and per-renderer E2E tests.
 
 ## Build
 

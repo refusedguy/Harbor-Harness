@@ -70,8 +70,9 @@ src/Harbor.Ui.Framework{,.Abstractions,.State,.Reducers,.ViewModels,.Rendering,.
 src/Harbor.Desktop.{Abstractions,Shared,Animations} — desktop app support
 src/Harbor.Storage.{Jsonl,Memory,Sqlite}/ — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
 src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible}/ — LLM clients; Harbor.Providers.Shared/ is linked-source (no .csproj, compiled into each provider)
-src/Harbor.Tools.Builtin/             — 18 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
-                                        ls/task/webfetch/patch/notebook/ripgrep/tree/mcp/skill/read_mcp_resource/mcp_prompt/lsp)
+src/Harbor.Tools.Builtin/             — 20 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
+                                        ls/skill/patch/notebook/tree/lsp/task/webfetch/ripgrep/mcp/
+                                        read_mcp_resource/mcp_prompt/session_read/session_steer)
 src/Harbor.Plugins.*                  — plugin hosting split: Abstractions, Compilation (Roslyn),
                                         Instantiation, Registration, Hosting, Runtime (CS loader),
                                         Host, Storage
@@ -92,7 +93,8 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 19 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 60 docs (architecture, tools catalog, roadmap, patterns, ...)
+docs/                                 — 136 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+                                        + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 36 test/bench project directories
                                         incl. shared Harbor.TestKit and Harbor.Benchmarks
 ```
@@ -210,7 +212,7 @@ I want to...
 │
 ├── ...understand what NOT to do
 │   └─→ docs/ANTIPATTERNS.md (38 antipatterns with before/after code)
-│      Then docs/CODE_PRINCIPLES_AUDIT.md (41 known violations to not repeat)
+│      Then docs/CODE_PRINCIPLES_AUDIT.md (45 known violations to not repeat)
 │
 ├── ...debug a failing test
 │   └─→ docs/DEVELOPMENT.md §Workflow: debug a failing test
@@ -578,7 +580,7 @@ dotnet run --project tools/Harbor.Evals -c Release -- --tasks evals/tasks --prof
 
 Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный аудит и чек-лист для PR:
 
-- **[docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md)** — 41 нарушение, 11 критических, приоритизированный план рефакторинга.
+- **[docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md)** — 45 нарушений, 11 критических, приоритизированный план рефакторинга.
 - **[docs/DEVELOPMENT.md §Principles checklist](./docs/DEVELOPMENT.md#principles-checklist)** — чек-лист для PR по 8 категориям.
 - **[CLAUDE.md §Code review checklist](./CLAUDE.md#code-review-checklist)** — расширенный чек-лист (там же).
 

@@ -5,6 +5,14 @@
 **Repo:** Harbor-Harness (`/mnt/projects/Harbor-Harness`, branch `dev`)  
 **Scope:** Rendering performance, memory management, startup time, large-dataset handling, benchmarking, concrete optimizations.
 
+> **Status (2026-09-28): point-in-time analysis, findings still apply.** The prose and
+> numbers below are a snapshot taken on 2026-08-27. Only the file paths in
+> §9 "Key Files Examined" have been refreshed (renderer projects were renamed
+> `Harbor.Tui.ConsoleEx` → `Harbor.Tui.CellForge` and split into
+> `.Engine`; `ScreenBuffer` moved to the shared `Harbor.Ui.Framework.Rendering`).
+> For current numbers see [BENCHMARKS.md](./BENCHMARKS.md); for current
+> renderer anatomy see [SPECTRE_TUI_DEEP_DIVE.md](./SPECTRE_TUI_DEEP_DIVE.md).
+
 ---
 
 ## 1. Executive Summary
@@ -352,12 +360,12 @@ All use `[MemoryDiagnoser]` and `[SimpleJob(warmupCount: 3, iterationCount: 5)]`
 
 | File | Role |
 |------|------|
-| `src/Harbor.Tui.ConsoleEx/Rendering/AnsiWriter.cs` | Frame-based ANSI writer, SGR automaton, cursor elision, palette interning |
-| `src/Harbor.Tui.ConsoleEx/Rendering/DiffEngine.cs` | Cell-diff core, row-hash fast-path, damage-rect hints |
-| `src/Harbor.Tui.ConsoleEx/Rendering/ScreenBuffer.cs` | Double-buffered cell grid, geometric growth, wide-char pair handling |
-| `src/Harbor.Tui.ConsoleEx/Rendering/LayoutTree.cs` | Binary split tree, water-filling solver, cached rect resolution |
+| `src/Harbor.Tui.CellForge.Engine/Rendering/AnsiWriter.cs` | Frame-based ANSI writer, SGR automaton, cursor elision, palette interning |
+| `src/Harbor.Tui.CellForge.Engine/Rendering/DiffEngine.cs` | Cell-diff core, row-hash fast-path, damage-rect hints |
+| `src/Harbor.Ui.Framework.Rendering/ScreenBuffer.cs` | Double-buffered cell grid, geometric growth, wide-char pair handling |
+| `src/Harbor.Tui.CellForge.Engine/Rendering/LayoutTree.cs` | Binary split tree, water-filling solver, cached rect resolution |
 | `src/Harbor.Ui.Framework.State/State/UiState.cs` | Immutable UI snapshot, `record struct`, `ImmutableArray<ChatLine>` |
-| `src/Harbor.Ui.Framework.State/State/ChunkedBuffer.cs` | O(1) append buffer, avoids O(N²) streaming concatenation |
+| `src/Harbor.Ui.Framework.State/ChunkedBuffer.cs` | O(1) append buffer, avoids O(N²) streaming concatenation |
 | `src/Harbor.Ui.Framework.Reducers/ChatViewReducer.cs` | Pure reducer, pattern-matched event → state transitions |
 | `src/Harbor.Extensions/ArrayPoolExtensions.cs` | `RentedArray<T>`, `StringBuilderPool` |
 | `src/Harbor.Desktop.Animations/Transitions.cs` | Fade/slide/scale/color transitions |
