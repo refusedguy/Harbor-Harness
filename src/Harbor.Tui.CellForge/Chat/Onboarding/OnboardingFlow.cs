@@ -98,6 +98,9 @@ public sealed class OnboardingFlow
 
     private OnboardingProvider? _selected;
     private string _model = string.Empty;
+
+    /// <summary>What the model prompt was prefilled with (preset default, or empty for live lists).</summary>
+    private string _modelPrefill = string.Empty;
     private string? _apiKey;
     private bool _keyAlreadyConfigured;
 
@@ -351,6 +354,7 @@ public sealed class OnboardingFlow
         string defaultModel = $"{providerId}/{_selected?.DefaultModel}";
         if (_liveModels.TryGetValue(providerId, out var live) && live.Count > 0)
         {
+            _modelPrefill = string.Empty;
             Dialog.ShowPrompt($"Pick a model — {providerId}", BuildLiveModelMessage(error, live, defaultModel), string.Empty, "Done", "Cancel");
             return;
         }
@@ -361,7 +365,8 @@ public sealed class OnboardingFlow
         }
         sb.Append("Default model: ").Append(defaultModel).Append('\n');
         sb.Append("Press Enter for default, or type a model name.");
-        Dialog.ShowPrompt($"Pick a model — {providerId}", sb.ToString(), _selected?.DefaultModel ?? string.Empty, "Done", "Cancel");
+        _modelPrefill = _selected?.DefaultModel ?? string.Empty;
+        Dialog.ShowPrompt($"Pick a model — {providerId}", sb.ToString(), _modelPrefill, "Done", "Cancel");
     }
 
     private string BuildLiveModelMessage(string? error, IReadOnlyList<string> live, string defaultModel)
@@ -398,6 +403,25 @@ public sealed class OnboardingFlow
         {
             FinishModel(defaultModel);
             return;
+        }
+        // The prompt is prefilled with the preset default and DialogOverlay
+        // appends typed text to it: untouched prefill keeps the default, an
+        // input extending the prefill carries a user-typed suffix — interpret
+        // the suffix (replacement, not append), so a full slash-id wins over
+        // the default and the provider prefix is joined with '/'.
+        if (input.Equals(_modelPrefill, StringComparison.Ordinal))
+        {
+            FinishModel(defaultModel);
+            return;
+        }
+        if (_modelPrefill.Length > 0 && input.StartsWith(_modelPrefill, StringComparison.Ordinal))
+        {
+            input = input[_modelPrefill.Length..].Trim();
+            if (input.Length == 0)
+            {
+                FinishModel(defaultModel);
+                return;
+            }
         }
         if (_liveModels.TryGetValue(providerId, out var live) && live.Count > 0
             && int.TryParse(input, out int idx) && idx >= 1 && idx <= live.Count)
