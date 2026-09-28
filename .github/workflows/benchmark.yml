@@ -36,6 +36,9 @@ env:
 
 jobs:
   bench:
+    # Dependabot action-bump PRs cannot move hot-path numbers — skip the
+    # 15-minute BDN run and keep only the fast correctness gates.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
