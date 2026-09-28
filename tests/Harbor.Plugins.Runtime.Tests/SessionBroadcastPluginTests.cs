@@ -37,7 +37,7 @@ public sealed class SessionBroadcastPluginTests
         using var empty = JsonDocument.Parse("""{"text":"  "}""");
         await Assert.That(broadcast.ValidateArguments(empty.RootElement).IsFailure).IsTrue();
 
-        using var tooLong = JsonDocument.Parse($"""{{"text":"{new string('x', 4001)}"}}""");
+        using var tooLong = JsonDocument.Parse("{\"text\":\"" + new string('x', 4001) + "\"}");
         await Assert.That(broadcast.ValidateArguments(tooLong.RootElement).IsFailure).IsTrue();
 
         using var badFilter = JsonDocument.Parse("""{"text":"hi","filter":42}""");
