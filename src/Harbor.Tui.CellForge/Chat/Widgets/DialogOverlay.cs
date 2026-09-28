@@ -238,7 +238,7 @@ public sealed class DialogOverlay
         DrawTitle(buffer, textX, textY, innerW);
         textY += 1;
 
-        int messageRows = Math.Max(1, height - (Padding * 2) - 2 - ButtonRowHeight - (_kind == DialogKind.Prompt ? 1 : 0));
+        int messageRows = Math.Max(1, box.Height - (Padding * 2) - 2 - ButtonRowHeight - (_kind == DialogKind.Prompt ? 1 : 0));
         string[] wrapped = WrapText(_message, innerW);
         int drawn = 0;
         for (int i = 0; i < wrapped.Length && drawn < messageRows; i++)
