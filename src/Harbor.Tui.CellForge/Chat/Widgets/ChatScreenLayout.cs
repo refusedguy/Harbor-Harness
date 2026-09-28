@@ -719,12 +719,15 @@ public sealed class CellForgeDockPanel : Panel
     {
         int y = Rect.Y;
         int remaining = Rect.Height;
-        for (int i = 0; i < Providers.Count && remaining > 0; i++)
+        // ENG12 #284 (TGui snapshot pattern): Providers is replaced wholesale
+        // on visibility changes — pin the reference for this draw pass.
+        var providers = Providers;
+        for (int i = 0; i < providers.Count && remaining > 0; i++)
         {
-            int left = Providers.Count - i;
+            int left = providers.Count - i;
             int h = Math.Max(1, remaining / left);
             h = Math.Min(h, remaining);
-            var rows = CellForgePanelAdapter.RenderToRows(Providers[i], State, Rect.Width, h, Services, Store);
+            var rows = CellForgePanelAdapter.RenderToRows(providers[i], State, Rect.Width, h, Services, Store);
             Blit(buffer, Rect.X, y, Rect.Width, rows, h);
             y += h;
             remaining -= h;
@@ -741,10 +744,12 @@ public sealed class CellForgeDockPanel : Panel
     {
         int y = Rect.Y;
         int remaining = Rect.Height;
-        for (int i = 0; i < Providers.Count && remaining > 0; i++)
+        // ENG12 #284 (TGui snapshot pattern): see PaintSide.
+        var providers = Providers;
+        for (int i = 0; i < providers.Count && remaining > 0; i++)
         {
-            int h = Math.Min(ChatScreenPanelDock.SizeOf(View, Providers[i]), remaining);
-            var rows = CellForgePanelAdapter.RenderToRows(Providers[i], State, Rect.Width, h, Services, Store);
+            int h = Math.Min(ChatScreenPanelDock.SizeOf(View, providers[i]), remaining);
+            var rows = CellForgePanelAdapter.RenderToRows(providers[i], State, Rect.Width, h, Services, Store);
             Blit(buffer, Rect.X, y, Rect.Width, rows, h);
             y += h;
             remaining -= h;

@@ -37,7 +37,9 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
             return Task.CompletedTask;
         }
 
-        foreach (var entry in vm.Entries)
+        // ENG12 #284 (TGui snapshot pattern): iterate a copy — the event
+        // thread can append entries while this draw pass runs.
+        foreach (var entry in vm.SnapshotEntries())
         {
             RenderEntry(context, entry.Role, entry.Content);
         }
