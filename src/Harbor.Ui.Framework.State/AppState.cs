@@ -9,6 +9,7 @@ namespace Harbor.Ui.Framework.State;
 // Panels, generic) + ChatDomainState (Cost/Model/Provider/AgentName/IsAgentRunning)
 // composed as AppState{Ui, Chat} — NO ImmutableDictionary<string,object?> extensions
 // (boxing, IL2xxx). Next PR after this branch merges.
+// Tracked in #364.
 
 /// <summary>
 ///     Unified immutable UI state for the hybrid MVU+MVVM architecture.

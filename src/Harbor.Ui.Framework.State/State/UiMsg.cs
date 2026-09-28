@@ -8,6 +8,7 @@ namespace Harbor.Ui.Framework.State;
 // TogglePanel, InputText) + ChatMsg (AgentStarted/AgentEnded/AppendLine) with a
 // typed AppState{Ui, Chat} composition — NO ImmutableDictionary<string,object?>
 // extensions (boxing, IL2xxx). Next PR after this branch merges.
+// Tracked in #364.
 
 /// <summary>
 ///     The single message type for the interactive UI (TEA/MVU "Msg"). Every input

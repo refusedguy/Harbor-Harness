@@ -4,6 +4,7 @@ namespace Harbor.Ui.Framework.Overlays;
 // CellForge's CommandPaletteView must delegate frame/query/selection transitions
 // here (adapter + Paint stay cell-side); all key semantics resolve via UiMsg so
 // every renderer shares one experience. Wiring lands with epic C (TEA input loop).
+// Tracked in #363.
 
 /// <summary>
 ///     Generic drill-down palette model: frame stack, query, selection and

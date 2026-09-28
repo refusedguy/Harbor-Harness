@@ -8,6 +8,7 @@ namespace Harbor.Tui.CellForge.Rendering;
 // TODO(principles)[TEA, SRP]: Enter/Shift+Enter/newline decisions belong to UiReducer
 // (UiMsg.KeyInput → AppState); the composer must become a pure executor of store
 // state, otherwise key behavior diverges per renderer (epic C).
+// Tracked in #359.
 
 /// <summary>What the composer did with the key.</summary>
 public enum ComposerAction : byte
