@@ -990,8 +990,12 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
         }
         finally
         {
-            // Unlink before pool-return: a live registration would make
-            // TryReset refuse the instance and silently drain the pool.
+            // Unlink before pool-return. TryReset does NOT refuse an instance
+            // that still carries registrations (it unregisters them all), but a
+            // registration whose outer token already fired cancels the rented
+            // source — and a cancelled source cannot be reset, which would
+            // silently drain the pool. Disposing the link first keeps the reuse
+            // decision in ReturnBudgetCts where it can be observed.
             budgetLink.Dispose();
             if (budgetCts is not null)
             {
@@ -1023,9 +1027,12 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     ///     Return a rented budget <see cref="CancellationTokenSource" /> to the
     ///     single-slot cache (#249). <c>TryReset</c> refuses a source that was
     ///     cancelled (a non-cooperative orphan still holding the token, or the
-    ///     emulated link firing) or that still carries callback registrations
-    ///     — those are disposed instead of poisoning the pool. On contention
-    ///     the spare is likewise disposed rather than retained.
+    ///     emulated link firing) — those are disposed instead of poisoning the
+    ///     pool. Everything else resets: leftover callback registrations are
+    ///     unregistered by the runtime, and a still-pending budget timer is
+    ///     disarmed (it only refuses once that timer reached <c>TimerQueue</c>'s
+    ///     fire loop, which a 250 ms budget returned on time never does — #513).
+    ///     On contention the spare is likewise disposed rather than retained.
     /// </summary>
     private void ReturnBudgetCts(CancellationTokenSource cts)
     {
@@ -1062,11 +1069,24 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
         {
             // #391 follow-up: the budget timer is deliberately NOT armed here.
             // A handler that already finished needs no cancellation, and arming
-            // it anyway is what stopped the pooled source from recycling — the
-            // pending timer is what makes TryReset refuse the instance (so the
-            // next publish allocates a fresh one) and it costs a timer arm +
-            // disarm per subscriber besides. A pristine source is what lets
-            // ReturnBudgetCts hand it to the next publish.
+            // it anyway costs a timer arm + disarm per subscriber for nothing.
+            // A pristine source is what lets ReturnBudgetCts hand this instance
+            // to the next publish.
+            //
+            // #513 correction: the earlier version of this comment claimed the
+            // armed timer was what stopped the pool from recycling ("TryReset
+            // refuses the instance"). That was wrong. On release/10.0 TryReset
+            // DISARMS a still-pending timer (TimerQueueTimer.Change to infinite)
+            // and only then checks !_everQueued, a flag TimerQueue.FireNextTimers
+            // sets (Timer.cs:217) when the timer actually reaches the fire loop.
+            // A 250 ms budget that is disarmed microseconds later never fires,
+            // so the #249 pool was already recycling before this branch existed.
+            // What this branch buys is the guarantee — recycling by construction
+            // instead of by relying on thin runtime behaviour — plus a timer
+            // arm/disarm per subscriber that the measurement no longer pays.
+            // It buys no bytes: docs/BENCHMARKS.md §5.4.3 records the allocation
+            // column unchanged (920 B @10, 8120 B @100) across CI runs
+            // 36452709074 (before) and 36469490918 (after).
             return (DispatchOutcome.Completed, null);
         }
 
