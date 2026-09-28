@@ -14,7 +14,18 @@
     Harbor.Ui.Framework directly and do NOT reference this project.
 
     Dependency policy (Clean Architecture — Domain/Presentation abstraction):
-      ✅ Harbor.Ui.Framework            (TEA + Panels — the generic UI framework)
+      ✅ Harbor.Ui.Framework            (TEA + Panels — the generic UI framework.
+                                        NOTE: no Ui.Framework type is used directly
+                                        in this project's own sources — IL emits no
+                                        Ui.Framework AssemblyRef (see
+                                        TuiAbstractions_ReferencesOnlyAbstractions).
+                                        The edge is load-bearing for transitive flow:
+                                        downstream Harbor.Plugins.Abstractions / Host
+                                        consume Harbor.Ui.Framework.Panels — namespace
+                                        owned by the Harbor.Ui.Framework.State
+                                        assembly — via this project, and declare no
+                                        direct Ui.Framework reference of their own.
+                                        Do NOT delete without adding those directs.)
       ✅ Harbor.Abstractions            (Domain — AgentEvent, KeyPress)
       ✅ CommunityToolkit.Mvvm          (ObservableObject for builtin view models)
       ✅ Microsoft.Extensions.Logging.Abstractions
