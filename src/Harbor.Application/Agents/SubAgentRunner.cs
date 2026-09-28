@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Harbor.Abstractions.Sessions;
 using Microsoft.Extensions.Logging;
@@ -45,6 +46,17 @@ public sealed class SubAgentRunner(
     private const string TitlePrefix = "task";
 
     private static readonly AsyncLocal<int> Depth = new();
+
+    /// <summary>
+    ///     Per-parent-session gates serializing child-cost propagation ([UX6]
+    ///     #266). Parallel sub-runs (detached <c>background=true</c> tasks)
+    ///     share one <see cref="ISessionStore" /> whose stats/message updates
+    ///     are read-modify-write: without the gate two completions can
+    ///     interleave GetStats→AddUsage→UpdateStats and lose one delta.
+    ///     Entries are never removed (a session id + slim per parent is
+    ///     negligible); removal would race waiters.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> ParentCostLocks = new();
 
     /// <inheritdoc />
     public bool CanSpawn => Depth.Value == 0;
@@ -118,7 +130,9 @@ public sealed class SubAgentRunner(
         var messages = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
         if (messages.IsFailure) // §4.6-ok: fresh session should always be readable; treat total store breakage as terminal.
             return Result.Failure<SubAgentRunResult>(
-                $"Failed to load sub-agent session '{session.Id}': {messages.Error}");
+                SubAgentFailureFormat.WithResumeTrailer(
+                    $"Failed to load sub-agent session '{session.Id}': {messages.Error}",
+                    session.Id));
 
         // Fresh unbounded steering channel mirrors DefaultAgent's shape. Nothing will
         // ever steer a sub-run — no external handle to it is published anywhere.
@@ -150,35 +164,58 @@ public sealed class SubAgentRunner(
                     "Sub-agent run ended abnormally: agent={Agent} session={SessionId} error={Error}",
                     agent.Name.Value, session.Id, run.Error);
                 await MarkStatusAsync(session, SessionStatus.Error, ct).ConfigureAwait(false);
+                // [UX6] #266: tokens burned before the failure still count —
+                // propagate the partial delta so the parent totals stay honest.
+                Usage failedUsage = await TryAggregateChildUsageAsync(session.Id, ct).ConfigureAwait(false);
+                await PropagateChildCostAsync(
+                    request.ParentSessionId, request.ParentMessageId, failedUsage, ct).ConfigureAwait(false);
                 // #270: degrade — surface whatever the sub-run produced before
                 // failing, so the parent receives partial output, not just a
                 // session id to go look at.
                 string partialNote = await TryExtractPartialNoteAsync(store, session.Id, ct).ConfigureAwait(false);
+                // [UX6] #266: the trailer is the resumable id — the parent can
+                // continue the same sub-chat instead of dying with the run.
                 return Result.Failure<SubAgentRunResult>(
-                    $"Sub-agent '{agent.Name.Value}' failed: {run.Error}. Its partial history is preserved in session {session.Id}.{partialNote}");
+                    SubAgentFailureFormat.WithResumeTrailer(
+                        $"Sub-agent '{agent.Name.Value}' failed: {run.Error}. Its partial history is preserved in session {session.Id}.{partialNote}",
+                        session.Id));
             }
 
             var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
             // Storage failure vs empty history are distinct diagnoses: the
             // store's own error travels verbatim, emptiness gets its own text.
+            // Both carry the resume trailer — the sub-session exists either way.
             if (history.IsFailure)
                 return Result.Failure<SubAgentRunResult>(
-                    $"Sub-agent '{agent.Name.Value}' history unreadable: {history.Error} (session {session.Id}).");
+                    SubAgentFailureFormat.WithResumeTrailer(
+                        $"Sub-agent '{agent.Name.Value}' history unreadable: {history.Error} (session {session.Id}).",
+                        session.Id));
             if (history.Value.Count == 0)
                 return Result.Failure<SubAgentRunResult>(
-                    $"Sub-agent '{agent.Name.Value}' finished without producing a final assistant message (session {session.Id}).");
+                    SubAgentFailureFormat.WithResumeTrailer(
+                        $"Sub-agent '{agent.Name.Value}' finished without producing a final assistant message (session {session.Id}).",
+                        session.Id));
 
             var finalOutput = ExtractFinalOutput(history.Value);
             if (string.IsNullOrWhiteSpace(finalOutput))
                 return Result.Failure<SubAgentRunResult>(
-                    $"Sub-agent '{agent.Name.Value}' finished without producing a final assistant message (session {session.Id}).");
+                    SubAgentFailureFormat.WithResumeTrailer(
+                        $"Sub-agent '{agent.Name.Value}' finished without producing a final assistant message (session {session.Id}).",
+                        session.Id));
 
             logger.LogInformation(
                 "Sub-agent finished: agent={Agent} session={SessionId} messages={Count} outputChars={Length}",
                 agent.Name.Value, session.Id, history.Value.Count, finalOutput.Length);
             await MarkStatusAsync(session, SessionStatus.Done, ct).ConfigureAwait(false);
 
-            return new SubAgentRunResult(session.Id, agent.Name.Value, Truncate(finalOutput), history.Value.Count);
+            // [UX6] #266: fold the child's token delta into the parent message
+            // + stats (under the per-parent gate) and hand it back in the
+            // envelope so the parent side can render the cost.
+            Usage childUsage = AggregateUsage(history.Value);
+            await PropagateChildCostAsync(
+                request.ParentSessionId, request.ParentMessageId, childUsage, ct).ConfigureAwait(false);
+
+            return new SubAgentRunResult(session.Id, agent.Name.Value, Truncate(finalOutput), history.Value.Count, childUsage);
         }
         finally
         {
@@ -241,6 +278,204 @@ public sealed class SubAgentRunner(
         {
             logger.LogDebug(ex, "Failed to extract degraded sub-agent output for session {SessionId}", sessionId);
             return string.Empty;
+        }
+    }
+
+    /// <summary>
+    ///     Sum token usage over every assistant message of a child run ([UX6]
+    ///     #266). Index loop, no LINQ — mirrors the allocation discipline of
+    ///     the neighboring extractors.
+    /// </summary>
+    private static Usage AggregateUsage(IReadOnlyList<Harbor.Abstractions.Models.AgentMessage> messages)
+    {
+        int input = 0;
+        int output = 0;
+        int reasoning = 0;
+        int cacheRead = 0;
+        int cacheWrite = 0;
+        bool hasReasoning = false;
+        bool hasCacheRead = false;
+        bool hasCacheWrite = false;
+        for (int i = 0; i < messages.Count; i++)
+        {
+            if (messages[i] is not AssistantMessage assistant)
+                continue;
+            Usage usage = assistant.Usage;
+            input += usage.InputTokens;
+            output += usage.OutputTokens;
+            if (usage.ReasoningTokens is { } r)
+            {
+                reasoning += r;
+                hasReasoning = true;
+            }
+
+            if (usage.CacheReadTokens is { } cr)
+            {
+                cacheRead += cr;
+                hasCacheRead = true;
+            }
+
+            if (usage.CacheWriteTokens is { } cw)
+            {
+                cacheWrite += cw;
+                hasCacheWrite = true;
+            }
+        }
+
+        return new Usage(
+            input,
+            output,
+            hasReasoning ? reasoning : null,
+            hasCacheRead ? cacheRead : null,
+            hasCacheWrite ? cacheWrite : null);
+    }
+
+    private static bool IsZeroUsage(Usage usage) =>
+        usage.InputTokens == 0
+        && usage.OutputTokens == 0
+        && (usage.ReasoningTokens ?? 0) == 0
+        && (usage.CacheReadTokens ?? 0) == 0
+        && (usage.CacheWriteTokens ?? 0) == 0;
+
+    private static Usage AddUsage(Usage current, Usage delta) => new(
+        current.InputTokens + delta.InputTokens,
+        current.OutputTokens + delta.OutputTokens,
+        SumOptional(current.ReasoningTokens, delta.ReasoningTokens),
+        SumOptional(current.CacheReadTokens, delta.CacheReadTokens),
+        SumOptional(current.CacheWriteTokens, delta.CacheWriteTokens));
+
+    private static int? SumOptional(int? left, int? right)
+    {
+        if (left is null && right is null)
+            return null;
+        return (left ?? 0) + (right ?? 0);
+    }
+
+    /// <summary>
+    ///     Best-effort child-usage aggregate for the failure path: storage
+    ///     breakage degrades to zero instead of masking the original error.
+    ///     Cancellation propagates — it must never turn a cancel into a quiet
+    ///     success-shaped failure message.
+    /// </summary>
+    private async Task<Usage> TryAggregateChildUsageAsync(string sessionId, CancellationToken ct)
+    {
+        try
+        {
+            var history = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
+            return history.IsSuccess ? AggregateUsage(history.Value) : new Usage(0, 0);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to aggregate sub-agent usage for session {SessionId}", sessionId);
+            return new Usage(0, 0);
+        }
+    }
+
+    /// <summary>
+    ///     Fold a child's token delta into the parent side ([UX6] #266):
+    ///     the issuing assistant message's <see cref="Usage" /> (so JSONL,
+    ///     which derives stats from messages, picks it up) plus the parent
+    ///     session stats record (for stores that persist metadata). Serialized
+    ///     per parent session — parallel background children completing at
+    ///     once must not interleave the read-modify-write and lose a delta.
+    ///     Best-effort throughout: propagation never fails the run it follows.
+    /// </summary>
+    private async Task PropagateChildCostAsync(
+        string? parentSessionId,
+        string? parentMessageId,
+        Usage childUsage,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(parentSessionId) || IsZeroUsage(childUsage))
+            return;
+        var gate = ParentCostLocks.GetOrAdd(parentSessionId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await PropagateUnderLockAsync(parentSessionId, parentMessageId, childUsage, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task PropagateUnderLockAsync(
+        string parentSessionId,
+        string? parentMessageId,
+        Usage childUsage,
+        CancellationToken ct)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(parentMessageId))
+            {
+                var messages = await store.GetMessagesAsync(parentSessionId, ct).ConfigureAwait(false);
+                if (messages.IsFailure)
+                {
+                    logger.LogWarning(
+                        "Failed to read parent session {SessionId} for sub-agent cost propagation: {Error}",
+                        parentSessionId, messages.Error);
+                }
+                else
+                {
+                    AssistantMessage? parent = null;
+                    var list = messages.Value;
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        if (list[i] is AssistantMessage assistant
+                            && string.Equals(assistant.Id, parentMessageId, StringComparison.Ordinal))
+                        {
+                            parent = assistant;
+                            break;
+                        }
+                    }
+
+                    if (parent is null)
+                    {
+                        logger.LogDebug(
+                            "Parent message {MessageId} not found in session {SessionId}; propagating sub-agent cost to stats only",
+                            parentMessageId, parentSessionId);
+                    }
+                    else
+                    {
+                        var merged = parent with { Usage = AddUsage(parent.Usage, childUsage) };
+                        var rewritten = await store.UpdateMessageAsync(parentSessionId, merged, ct).ConfigureAwait(false);
+                        if (rewritten.IsFailure)
+                            logger.LogWarning(
+                                "Failed to propagate sub-agent cost into parent message {MessageId} (session {SessionId}): {Error}",
+                                parentMessageId, parentSessionId, rewritten.Error);
+                    }
+                }
+            }
+
+            var stats = await store.GetStatsAsync(parentSessionId, ct).ConfigureAwait(false);
+            if (stats.IsFailure)
+            {
+                logger.LogWarning(
+                    "Failed to read parent stats for sub-agent cost propagation (session {SessionId}): {Error}",
+                    parentSessionId, stats.Error);
+                return;
+            }
+
+            var stored = await store.UpdateStatsAsync(parentSessionId, stats.Value.AddUsage(childUsage), ct)
+                .ConfigureAwait(false);
+            if (stored.IsFailure)
+                logger.LogWarning(
+                    "Failed to store propagated sub-agent cost (session {SessionId}): {Error}",
+                    parentSessionId, stored.Error);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to propagate sub-agent cost into parent session {SessionId}", parentSessionId);
         }
     }
 
