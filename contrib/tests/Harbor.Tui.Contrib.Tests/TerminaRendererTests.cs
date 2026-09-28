@@ -140,7 +140,7 @@ public class TerminaTeaBridgeTests
         var agent = TestAgentFactory.Create();
         using var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
         bridge.Push(new AgentEndEvent(Array.Empty<AgentMessage>()));
-        await Assert.That(bridge.Store.State.Status).IsEqualTo("idle");
+        await Assert.That(bridge.Store.State.Chat.Status).IsEqualTo("idle");
     }
 
     [Test]
@@ -151,7 +151,7 @@ public class TerminaTeaBridgeTests
         var partial = AssistantMessage.Empty("s1", "m");
         bridge.Push(new MessageStartEvent(partial));
         bridge.Push(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), partial));
-        await Assert.That(bridge.Store.State.Active.TextBuffer).IsEqualTo("Hello");
+        await Assert.That(bridge.Store.State.Chat.Active.TextBuffer).IsEqualTo("Hello");
     }
 
     [Test]
@@ -161,7 +161,7 @@ public class TerminaTeaBridgeTests
         using var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
         var result = new ToolResult("output text", false);
         bridge.Push(new ToolExecutionEndEvent("tc1", result, false));
-        var allText = string.Join("", bridge.Store.State.Lines.Select(l => l.Text));
+        var allText = string.Join("", bridge.Store.State.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("output text");
     }
 
@@ -171,7 +171,7 @@ public class TerminaTeaBridgeTests
         var agent = TestAgentFactory.Create();
         using var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
         bridge.Push(new AgentErrorEvent("something failed"));
-        var allText = string.Join("", bridge.Store.State.Lines.Select(l => l.Text));
+        var allText = string.Join("", bridge.Store.State.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("something failed");
     }
 
@@ -181,7 +181,7 @@ public class TerminaTeaBridgeTests
         var agent = TestAgentFactory.Create();
         using var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
         bridge.Push(new CompactionCompletedEvent("s1", "summary", 5, 500, TimeSpan.FromSeconds(1)));
-        var allText = string.Join("", bridge.Store.State.Lines.Select(l => l.Text));
+        var allText = string.Join("", bridge.Store.State.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("compacted");
     }
 
@@ -191,7 +191,7 @@ public class TerminaTeaBridgeTests
         var agent = TestAgentFactory.Create();
         using var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
         bridge.PushLine("test line");
-        await Assert.That(bridge.Store.State.Lines[^1].Text).IsEqualTo("test line");
+        await Assert.That(bridge.Store.State.Chat.Lines[^1].Text).IsEqualTo("test line");
     }
 
     [Test]

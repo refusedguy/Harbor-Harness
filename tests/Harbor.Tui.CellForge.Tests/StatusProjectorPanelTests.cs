@@ -27,14 +27,20 @@ public class StatusProjectorPanelTests
         int viewportLines = 0,
         int totalLines = 0) => new()
         {
-            Status = status,
-            Provider = provider,
-            Model = model,
-            AgentName = agent,
-            Cost = new CostSnapshot(tokensIn, tokensOut, costUsd),
-            ScrollOffset = scrollOffset,
-            ViewportLines = viewportLines,
-            TotalLines = totalLines,
+            Ui = TerminalUiState.Empty with
+            {
+                ScrollOffset = scrollOffset,
+                ViewportLines = viewportLines,
+                TotalLines = totalLines
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Status = status,
+                Provider = provider,
+                Model = model,
+                AgentName = agent,
+                Cost = new CostSnapshot(tokensIn, tokensOut, costUsd)
+            }
         };
 
     private static int Build(UiState state, StatusSeg[] workspace, string? retry = null, TimeSpan? elapsed = null) =>

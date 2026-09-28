@@ -26,8 +26,8 @@ public class StreamingFrequencyTests
         int tail = 0;
         int history = 0;
         UiScreenModel? prevScreen = null;
-        var prevLines = store.State.Lines;
-        string? prevBuffer = store.State.Active.TextBuffer;
+        var prevLines = store.State.Chat.Lines;
+        string? prevBuffer = store.State.Chat.Active.TextBuffer;
         string chunk = new('x', 24);
 
         for (int i = 0; i < deltaCount; i++)
@@ -42,16 +42,16 @@ public class StreamingFrequencyTests
                 fast++;
             }
 
-            if (!state.Lines.Equals(prevLines))
+            if (!state.Chat.Lines.Equals(prevLines))
             {
                 history++;
-                prevLines = state.Lines;
+                prevLines = state.Chat.Lines;
             }
 
-            if (!ReferenceEquals(state.Active.TextBuffer, prevBuffer))
+            if (!ReferenceEquals(state.Chat.Active.TextBuffer, prevBuffer))
             {
                 tail++;
-                prevBuffer = state.Active.TextBuffer;
+                prevBuffer = state.Chat.Active.TextBuffer;
             }
 
             prevScreen = screen;
@@ -65,7 +65,7 @@ public class StreamingFrequencyTests
             fast++;
         }
 
-        if (!store.State.Lines.Equals(prevLines))
+        if (!store.State.Chat.Lines.Equals(prevLines))
         {
             history++;
         }

@@ -60,7 +60,7 @@ public class TuiEffectHostCancelProtocolTests
         host.Run(new TuiEffect.PromptAgent("explode"));
 
         await WaitUntilAsync(
-            () => !store.State.IsAgentRunning && store.State.Status == "error",
+            () => !store.State.Chat.IsAgentRunning && store.State.Chat.Status == "error",
             "failed run to settle");
 
         // Let any stray (duplicate terminal) dispatch land before counting.
@@ -69,8 +69,8 @@ public class TuiEffectHostCancelProtocolTests
         // Exactly AgentStarted + one AgentEnded — the pre-fix shape dispatched
         // AgentEnded("error", ...) AND the finally's AgentEnded() (3 total).
         await Assert.That(dispatches).IsEqualTo(2);
-        await Assert.That(store.State.Status).IsEqualTo("error");
-        await Assert.That(store.State.Lines.Count(l => l.Role == Harbor.Abstractions.Models.ChatRole.Error)).IsEqualTo(1);
+        await Assert.That(store.State.Chat.Status).IsEqualTo("error");
+        await Assert.That(store.State.Chat.Lines.Count(l => l.Role == Harbor.Abstractions.Models.ChatRole.Error)).IsEqualTo(1);
     }
 
     [Test]
@@ -82,21 +82,21 @@ public class TuiEffectHostCancelProtocolTests
         var host = new TuiEffectHost(new GatedRunner(gate.Task), storeA);
 
         host.Run(new TuiEffect.PromptAgent("long run"));
-        await WaitUntilAsync(() => storeA.State.IsAgentRunning, "run to start in store A");
+        await WaitUntilAsync(() => storeA.State.Chat.IsAgentRunning, "run to start in store A");
 
         // Session switch mid-flight: the run must still terminate in A.
         host.RebindStore(storeB);
         gate.TrySetResult(Result.Success());
 
         await WaitUntilAsync(
-            () => !storeA.State.IsAgentRunning,
+            () => !storeA.State.Chat.IsAgentRunning,
             "run to terminate in the captured store");
 
         // Let any misdirected dispatch land before asserting.
         await Task.Delay(250);
 
-        await Assert.That(storeA.State.Status).IsEqualTo("idle");
-        await Assert.That(storeB.State.IsAgentRunning).IsFalse();
-        await Assert.That(storeB.State.Lines.Length).IsEqualTo(0);
+        await Assert.That(storeA.State.Chat.Status).IsEqualTo("idle");
+        await Assert.That(storeB.State.Chat.IsAgentRunning).IsFalse();
+        await Assert.That(storeB.State.Chat.Lines.Length).IsEqualTo(0);
     }
 }
