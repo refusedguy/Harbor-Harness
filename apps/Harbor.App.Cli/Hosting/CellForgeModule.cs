@@ -55,7 +55,12 @@ internal static class CellForgeModule
 
     public static IServiceCollection AddCellForge(this IServiceCollection services, CellForgeUiConfig ui)
     {
-        services.AddSingleton<ITerminalBackend, StdoutBackend>();
+        // StdoutBackend serves both contracts off ONE instance: ITerminalBackend
+        // for the async REPL writes, ISyncTerminalBackend for ScreenSession's
+        // sync flush and the CellForgeRenderContext adapter (issue #468).
+        services.AddSingleton<StdoutBackend>();
+        services.AddSingleton<ITerminalBackend>(sp => sp.GetRequiredService<StdoutBackend>());
+        services.AddSingleton<ISyncTerminalBackend>(sp => sp.GetRequiredService<StdoutBackend>());
         services.AddSingleton(sp => new AnsiWriter(
             sp.GetRequiredService<ITerminalBackend>(),
             syncUpdates: ui.SyncUpdates));

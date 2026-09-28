@@ -103,10 +103,12 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         Context = new CellForgeRenderContext();
     }
 
-    /// <summary>Golden-frame test seam.</summary>
+    /// <summary>Golden-frame test seam. The backend must be an
+    /// <see cref="ISyncTerminalBackend"/> — the context flushes synchronously
+    /// (issue #468).</summary>
     public CellForgeTuiRenderer(
         ILogger<CellForgeTuiRenderer> logger,
-        ITerminalBackend backend,
+        ISyncTerminalBackend backend,
         StatusBarViewModel? statusVm = null,
         ChatHistoryViewModel? chatVm = null,
         InputViewModel? inputVm = null,
@@ -399,7 +401,14 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
     {
     }
 
-    public CellForgeRenderContext(ITerminalBackend backend)
+    /// <summary>
+    /// Render context over an explicitly supplied backend. Takes
+    /// <see cref="ISyncTerminalBackend"/>, not <see cref="ITerminalBackend"/>:
+    /// <see cref="ITuiRenderContext"/> is an entirely synchronous contract and
+    /// <see cref="Flush"/> has nowhere to await, so an async-only backend can
+    /// never serve it (issue #468).
+    /// </summary>
+    public CellForgeRenderContext(ISyncTerminalBackend backend)
     {
         _writer = new AnsiWriter(backend);
     }

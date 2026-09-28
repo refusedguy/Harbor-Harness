@@ -13,7 +13,7 @@ public class FrameDiffAllocationTests
 {
     /// <summary>Backend that counts writes/bytes without copying — keeps
     /// allocation probes clean while exercising the full encode path.</summary>
-    private sealed class CountingBackend : ITerminalBackend
+    private sealed class CountingBackend : ISyncTerminalBackend
     {
         public int Writes { get; private set; }
 

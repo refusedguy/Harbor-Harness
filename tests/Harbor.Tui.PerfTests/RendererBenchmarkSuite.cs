@@ -168,7 +168,7 @@ public static class RendererBenchmarkSuite
     }
 
     /// <summary>CellForge capture backend: absorbs frames without I/O.</summary>
-    private sealed class NullTerminalBackend : ITerminalBackend
+    private sealed class NullTerminalBackend : ISyncTerminalBackend
     {
         public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;

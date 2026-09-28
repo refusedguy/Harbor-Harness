@@ -42,6 +42,11 @@ public sealed class AnsiWriter
     private const byte Esc = 0x1B;
 
     private readonly ITerminalBackend _backend;
+
+    // Non-null iff the backend also implements ISyncTerminalBackend (#468).
+    // Cached so the sync path costs a null check, not a type test per frame.
+    private readonly ISyncTerminalBackend? _syncBackend;
+
     private readonly bool _syncUpdates;
     private byte[] _buf = new byte[16 * 1024];
     private int _len;
@@ -64,8 +69,32 @@ public sealed class AnsiWriter
     public AnsiWriter(ITerminalBackend backend, bool syncUpdates = false)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+        _syncBackend = backend as ISyncTerminalBackend;
         _syncUpdates = syncUpdates;
     }
+
+    /// <summary>Backend this writer frames through.</summary>
+    public ITerminalBackend Backend => _backend;
+
+    /// <summary>
+    /// True when the backend implements <see cref="ISyncTerminalBackend"/>, i.e.
+    /// when <see cref="FlushSync"/> / <see cref="EndFrame"/> can ship a frame.
+    /// Check this BEFORE painting a frame that would have to flush
+    /// synchronously (#468).
+    /// </summary>
+    public bool SupportsSyncWrites => _syncBackend is not null;
+
+    /// <summary>
+    /// The backend as a synchronous sink, or throws when it is not one. Use
+    /// after <see cref="SupportsSyncWrites"/> when the cost of the type test is
+    /// worth avoiding.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The backend does not implement <see cref="ISyncTerminalBackend"/>.
+    /// </exception>
+    public ISyncTerminalBackend SyncBackend => _syncBackend ?? throw new InvalidOperationException(
+        $"{_backend.GetType().Name} implements ITerminalBackend but not ISyncTerminalBackend; " +
+        "it cannot back a synchronous flush path (AnsiWriter.FlushSync / AnsiWriter.EndFrame).");
 
     /// <summary>Current tracked pen column (-1 when unknown).</summary>
     public int TrackedX => _posX;
@@ -109,9 +138,14 @@ public sealed class AnsiWriter
 
     /// <summary>
     /// Synchronous twin of <see cref="EndFrameAsync"/> for sync render
-    /// contexts (backends implementing <see cref="ITerminalBackend.Write"/>):
+    /// contexts (backends implementing <see cref="ISyncTerminalBackend"/>):
     /// identical empty-frame and sync-update semantics, no async machinery.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The backend is async-only. Check <see cref="SupportsSyncWrites"/> before
+    /// painting the frame so FRONT is not advanced for a frame that never
+    /// shipped (#468).
+    /// </exception>
     public void EndFrame()
     {
         int wrapperBytes = _syncUpdates ? 8 : 0;
@@ -121,12 +155,17 @@ public sealed class AnsiWriter
             return;
         }
 
+        // Resolved BEFORE the wrapper is appended: on an async-only backend
+        // the throw must leave the buffer exactly as it was, so the caller can
+        // fall back to EndFrameAsync without shipping a half-frame.
+        ISyncTerminalBackend sink = SyncBackend;
+
         if (_syncUpdates)
         {
             AppendAscii("\x1B[?2026l");
         }
 
-        _backend.Write(_buf.AsSpan(0, _len));
+        sink.Write(_buf.AsSpan(0, _len));
         _len = 0;
     }
 
@@ -381,9 +420,12 @@ public sealed class AnsiWriter
     /// <summary>
     /// Synchronous flush twin of <see cref="FlushAsync"/> for sync render
     /// contexts (CellForgeTuiRenderer adapter — renderer-unification sprint).
-    /// Purely additive: routes through <see cref="ITerminalBackend.Write"/> so
-    /// the SGR automaton and its buffer management remain untouched.
+    /// Purely additive: routes through <see cref="ISyncTerminalBackend.Write"/>
+    /// so the SGR automaton and its buffer management remain untouched.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The backend is async-only — see <see cref="SupportsSyncWrites"/> (#468).
+    /// </exception>
     public void FlushSync()
     {
         if (_len == 0)
@@ -391,7 +433,7 @@ public sealed class AnsiWriter
             return;
         }
 
-        _backend.Write(_buf.AsSpan(0, _len));
+        SyncBackend.Write(_buf.AsSpan(0, _len));
         _len = 0;
     }
 

@@ -136,6 +136,10 @@ public class CellForgeReplSmokeTests
         return sb.ToString();
     }
 
+    /// <summary>Async-only capture backend on purpose: the REPL frame loop
+    /// flushes through <c>FlushFrameAsync</c>, so this proves the async
+    /// contract stands alone (issue #468 — the sync path no longer accepts
+    /// it).</summary>
     private sealed class FrameCaptureBackend : ITerminalBackend
     {
         public List<byte[]> Writes { get; } = [];

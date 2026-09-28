@@ -3,8 +3,8 @@ using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Tests;
 
-/// <summary>In-memory <see cref="ITerminalBackend"/> capturing every frame write.</summary>
-internal sealed class RecordingBackend : ITerminalBackend
+/// <summary>In-memory <see cref="ISyncTerminalBackend"/> capturing every frame write.</summary>
+internal sealed class RecordingBackend : ISyncTerminalBackend
 {
     private readonly List<byte[]> _writes = [];
 
