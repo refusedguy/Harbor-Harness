@@ -42,7 +42,7 @@ public interface IThemeApplier
 }
 
 /// <summary>Default <see cref="IThemeApplier" /> over <see cref="IThemeService" />.</summary>
-public sealed class ThemeServiceApplier(IThemeService theme, ILogger logger) : IThemeApplier
+public sealed class ThemeServiceApplier(IThemeService themeService, ILogger logger) : IThemeApplier
 {
     /// <inheritdoc />
     public void Apply(OnboardingTheme theme)
@@ -50,13 +50,13 @@ public sealed class ThemeServiceApplier(IThemeService theme, ILogger logger) : I
         switch (theme)
         {
             case OnboardingTheme.Light:
-                theme.ApplyLight();
+                themeService.ApplyLight();
                 break;
             case OnboardingTheme.System:
                 logger.LogInformation("Onboarding theme 'system' — leaving default (dark) active.");
                 break;
             default:
-                theme.ApplyDark();
+                themeService.ApplyDark();
                 break;
         }
     }
