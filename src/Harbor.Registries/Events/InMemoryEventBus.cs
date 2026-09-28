@@ -75,16 +75,41 @@ namespace Harbor.Abstractions.Events;
 ///                 of this, so its zero-alloc claim is unchanged. No
 ///                 <c>IMetrics</c> dependency: Harbor.Registries may reference
 ///                 Harbor.Abstractions only, so percentile export stays in the
-///                 telemetry layer, which polls these counters.
+///                 telemetry layer, which polls these counters through
+///                 <see cref="IEventBusQueueMetrics" />.
+///             </item>
+///             <item>
+///                 Dispatch-duration distribution (#47/S2): the same slow-path
+///                 envelope also folds each completed publish into a
+///                 fixed-capacity ring of
+///                 <see cref="DispatchSampleWindowCapacity" /> monotonic ticks
+///                 (allocated once, 2 KB, never grows). It backs
+///                 <see cref="DispatchDurationPercentile" /> — p50/p95/p99 answer
+///                 "is everything late, or was that one outlier?", which the
+///                 monotonic max alone cannot. One extra short lock per
+///                 completed publish; no allocation, no await.
 ///             </item>
 ///         </list>
 ///     </para>
 /// </remarks>
-public sealed class InMemoryEventBus : IEventBus
+public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
 {
     /// <summary>Default per-handler budget (A4): one slow subscriber may hold
     /// the fan-out for at most this long before it is left behind.</summary>
     public static readonly TimeSpan DefaultHandlerBudget = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>
+    ///     Retained dispatch-duration samples per bus (#47/S2). The percentile
+    ///     window is a fixed-capacity ring allocated once in the constructor:
+    ///     retained memory is O(1) (2 KB) no matter how many publishes run, and
+    ///     the window is a power of two so the slot index is a mask, not a
+    ///     modulo. 256 samples keep p99 above p50 for any realistic burst while
+    ///     staying inside the poll budget of the telemetry layer.
+    /// </summary>
+    public const int DispatchSampleWindowCapacity = 256;
+
+    /// <summary>Mask for the ring index (<see cref="DispatchSampleWindowCapacity" /> is a power of two).</summary>
+    private const int DispatchSampleMask = DispatchSampleWindowCapacity - 1;
 
     /// <summary>Consecutive over-budget dispatches before a subscriber is evicted.</summary>
     private const int MaxSlowStrikes = 3;
@@ -171,7 +196,8 @@ public sealed class InMemoryEventBus : IEventBus
     ///     <c>IMetrics</c> is deliberately NOT referenced here:
     ///     Harbor.Registries may depend on Harbor.Abstractions only
     ///     (docs/ARCHITECTURE_LAYERS.md §2), so percentile export stays in
-    ///     the telemetry layer, which can poll these counters.
+    ///     the telemetry layer, which polls these counters through
+    ///     <see cref="IEventBusQueueMetrics" />.
     /// </summary>
     private long _publishedCount;
     private long _inflightPublishCount;
@@ -200,6 +226,26 @@ public sealed class InMemoryEventBus : IEventBus
     ///     skip work, never to lose an event quietly.
     /// </summary>
     private long _optionalSinkDropCount;
+
+    /// <summary>
+    ///     Bounded dispatch-duration window (#47/S2). A fixed-capacity ring of
+    ///     monotonic stopwatch ticks, allocated once — the percentile view the
+    ///     telemetry layer polls. Unlike the counters above it is guarded by a
+    ///     short lock: the write is a single slot store, and the read is a
+    ///     copy-then-sort that must not observe a half-updated window. O(1)
+    ///     retained samples, zero allocation per publish.
+    /// </summary>
+    private readonly long[] _dispatchWindowTicks = new long[DispatchSampleWindowCapacity];
+
+    /// <summary>Guards <see cref="_dispatchWindowTicks" />, <see cref="_dispatchWindowHead" />
+    /// and <see cref="_dispatchWindowCount" />.</summary>
+    private readonly object _dispatchWindowLock = new();
+
+    /// <summary>Next slot to write in <see cref="_dispatchWindowTicks" /> (wraps at the capacity).</summary>
+    private int _dispatchWindowHead;
+
+    /// <summary>Valid entries in the window, saturating at <see cref="DispatchSampleWindowCapacity" />.</summary>
+    private int _dispatchWindowCount;
 
     /// <summary>
     ///     Construct an <see cref="InMemoryEventBus" /> with a bounded scrollback buffer of the
@@ -638,10 +684,97 @@ public sealed class InMemoryEventBus : IEventBus
 
     /// <summary>
     ///     Slowest slow-path publish observed since construction
-    ///     (submission → fan-out complete). Monotonic max; use the telemetry
-    ///     layer's histograms for percentiles.
+    ///     (submission → fan-out complete). Monotonic max; use
+    ///     <see cref="DispatchDurationPercentile" /> for the distribution view of
+    ///     the same quantity — the max alone cannot tell one 900 ms outlier from
+    ///     a bus where everything is 900 ms late.
     /// </summary>
     public TimeSpan MaxDispatchDuration => StopwatchTicksToTimeSpan(Volatile.Read(ref _maxDispatchTicks));
+
+    /// <inheritdoc />
+    public int DispatchSampleCapacity => DispatchSampleWindowCapacity;
+
+    /// <inheritdoc />
+    public int DispatchSampleCount
+    {
+        get
+        {
+            lock (_dispatchWindowLock)
+            {
+                return _dispatchWindowCount;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public TimeSpan DispatchDurationPercentile(double quantile)
+    {
+        if (double.IsNaN(quantile) || quantile <= 0)
+        {
+            quantile = 0;
+        }
+        else if (quantile > 1)
+        {
+            quantile = 1;
+        }
+
+        // Pooled: the telemetry layer polls, the publish path never touches it.
+        long[] window = ArrayPool<long>.Shared.Rent(DispatchSampleWindowCapacity);
+        try
+        {
+            int count;
+            lock (_dispatchWindowLock)
+            {
+                count = _dispatchWindowCount;
+                if (count == 0)
+                {
+                    return TimeSpan.Zero;
+                }
+
+                // Copy under the lock; the order inside the window is irrelevant
+                // to a percentile, only the multiset matters.
+                Array.Copy(_dispatchWindowTicks, window, count);
+            }
+
+            Array.Sort(window, 0, count);
+
+            // Nearest-rank: index = ceil(q * n) - 1, clamped into the window.
+            int index = (int)Math.Ceiling(quantile * count) - 1;
+            if (index < 0)
+            {
+                index = 0;
+            }
+            else if (index >= count)
+            {
+                index = count - 1;
+            }
+
+            return StopwatchTicksToTimeSpan(window[index]);
+        }
+        finally
+        {
+            ArrayPool<long>.Shared.Return(window);
+        }
+    }
+
+    /// <summary>
+    ///     Fold one completed publish into the bounded window (#47/S2). Called
+    ///     from the same slow-path envelope as the max, so the fast path never
+    ///     enters the histogram. One slot store under a short lock — no
+    ///     allocation, no await, so it is safe inside <c>finally</c>.
+    /// </summary>
+    private void RecordDispatchSample(long elapsedTicks)
+    {
+        lock (_dispatchWindowLock)
+        {
+            _dispatchWindowTicks[_dispatchWindowHead] = elapsedTicks;
+            _dispatchWindowHead = (_dispatchWindowHead + 1) & DispatchSampleMask;
+            if (_dispatchWindowCount < DispatchSampleWindowCapacity)
+            {
+                _dispatchWindowCount++;
+            }
+        }
+    }
 
     /// <summary>
     ///     Record a submission timestamp as the oldest pending unless an older
@@ -663,8 +796,9 @@ public sealed class InMemoryEventBus : IEventBus
 
     /// <summary>
     ///     Leave the in-flight set: fold this publish's dispatch duration into
-    ///     the max and reset (or re-anchor) the oldest-pending baseline.
-    ///     Never throws — safe inside finally.
+    ///     the max and the bounded percentile window (#47/S2), and reset (or
+    ///     re-anchor) the oldest-pending baseline. Never throws — safe inside
+    ///     finally.
     /// </summary>
     private void TrackDequeued(long enqueuedTicks)
     {
@@ -679,6 +813,8 @@ public sealed class InMemoryEventBus : IEventBus
 
             observedMax = Volatile.Read(ref _maxDispatchTicks);
         }
+
+        RecordDispatchSample(elapsed);
 
         if (Interlocked.Decrement(ref _inflightPublishCount) == 0)
         {

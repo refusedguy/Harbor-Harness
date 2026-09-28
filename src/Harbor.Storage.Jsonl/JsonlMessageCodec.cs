@@ -55,7 +55,9 @@ internal static class JsonlMessageCodec
     {
         return message switch
         {
-            UserMessage u => new UserPayload(u.Content, u.Agent, u.Model),
+            UserMessage u => new UserPayload(
+                u.Content, u.Agent, u.Model,
+                Attachments: SerializeAttachments(u.Attachments)),
             AssistantMessage a => new AssistantPayload(
                 Parts: a.Parts.Select(SerializePart).ToArray(),
                 StopReason: a.StopReason.ToString().ToLowerInvariant(),
@@ -81,6 +83,27 @@ internal static class JsonlMessageCodec
         FilePart f => new FilePartPayload("file", f.Path, f.MimeType, f.SizeBytes),
         _ => new UnknownPartPayload("unknown")
     };
+
+    /// <summary>
+    ///     Project the images a user attached to a turn (issue #386). Returns
+    ///     <see langword="null" /> for text-only turns so the field is omitted
+    ///     from the line entirely (<c>WhenWritingNull</c>) — session files written
+    ///     before this feature stay byte-identical.
+    /// </summary>
+    public static ImageAttachmentPayload[]? SerializeAttachments(IReadOnlyList<ImageAttachment>? attachments)
+    {
+        if (attachments is not { Count: > 0 })
+            return null;
+
+        var payload = new ImageAttachmentPayload[attachments.Count];
+        for (int i = 0; i < attachments.Count; i++)
+        {
+            ImageAttachment image = attachments[i];
+            payload[i] = new ImageAttachmentPayload(image.Path, image.MimeType, image.Width, image.Height, image.Data);
+        }
+
+        return payload;
+    }
 
     /// <summary>
     ///     Parse a single JSONL line back into an <see cref="AgentMessage" />.
@@ -145,7 +168,45 @@ internal static class JsonlMessageCodec
             return Result.Failure<AgentMessage>($"user message {id}: missing content/agent/model");
 
         return Result.Success<AgentMessage>(new UserMessage(
-            id, sessionId, createdAt, content, agent, model, parentId));
+            id, sessionId, createdAt, content, agent, model, parentId,
+            DecodeAttachments(payload)));
+    }
+
+    /// <summary>
+    ///     Read the <c>attachments</c> array of a user payload (issue #386).
+    ///     Absent (every pre-#386 line) → <see langword="null" />, so a text-only
+    ///     turn round-trips to exactly the message it was written from.
+    /// </summary>
+    private static IReadOnlyList<ImageAttachment>? DecodeAttachments(JsonElement payload)
+    {
+        if (!payload.TryGetProperty("attachments", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var images = new List<ImageAttachment>(arr.GetArrayLength());
+        foreach (var el in arr.EnumerateArray())
+        {
+            if (el.ValueKind != JsonValueKind.Object)
+                continue;
+
+            string? path = el.TryGetProperty("path", out var p) ? p.GetString() : null;
+            string? mime = el.TryGetProperty("mimeType", out var mt) ? mt.GetString() : null;
+            if (path is null || mime is null)
+            {
+                // Malformed entry: skip it rather than drop the whole message —
+                // a broken attachment must never make a user turn unreadable.
+                continue;
+            }
+
+            int width = el.TryGetProperty("width", out var w) && w.TryGetInt32(out int wi) ? wi : 0;
+            int height = el.TryGetProperty("height", out var h) && h.TryGetInt32(out int hi) ? hi : 0;
+            byte[] data = el.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.String
+                ? d.GetBytesFromBase64()
+                : [];
+
+            images.Add(new ImageAttachment(path, mime, width, height, data));
+        }
+
+        return images.Count == 0 ? null : images;
     }
 
     private static Result<AgentMessage> DecodeAssistant(

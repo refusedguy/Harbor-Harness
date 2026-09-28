@@ -1,8 +1,11 @@
 using System.Collections.Immutable;
+using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Tui.CellForge.Panels;
+using Harbor.Tui.CellForge.Rendering;
+using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
 using Harbor.Ui.Framework.Panels;
@@ -15,13 +18,16 @@ using TUnit.Assertions.Extensions;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-///     Slice-2 contract tests for <see cref="CellForgeJumpPalettePanel" />:
-///     identity (<c>jump</c> id), <c>Build</c> rendering
+///     Contract tests for <see cref="CellForgeJumpPalettePanel" />: identity
+///     (<c>jump</c> id), <c>Build</c> rendering
 ///     <see cref="WorktreeJumpEntry.RowText" /> rows with a selected marker, and
-///     <c>OnKey</c> routing (Up/Down move, Enter switches via the existing
-///     <c>ISessionManager.OpenSessionAsync</c>, Esc closes). The model is
+///     <c>OnKey</c> routing. Issue #381 adds the typed fuzzy query
+///     (printable → <c>SetQuery</c>, <c>Backspace</c> trims, <c>r</c> re-seeds)
+///     and the centred-modal presentation
+///     (<see cref="CellForgeJumpPaletteOverlayLayer" /> +
+///     <see cref="ChatScreenPanelDock" /> releasing the dock slot). The model is
 ///     injected (fake), so no git and no real sessions are involved — except
-///     the seeding test, which pins the porcelain reader.
+///     the seeding tests, which pin the porcelain reader.
 /// </summary>
 public class CellForgeJumpPalettePanelTests
 {
@@ -106,6 +112,11 @@ public class CellForgeJumpPalettePanelTests
         new("s2", "Word Diff", "/repo/.worktrees/worddiff", "feat/word-diff", "working ●"),
     ];
 
+    /// <summary>Two worktrees, no sessions — the reopen/reseed fixture.</summary>
+    private static string Porcelain() =>
+        "worktree /repo/.worktrees/jump-palette\nbranch refs/heads/feat/jump-palette\n"
+        + "worktree /repo/.worktrees/worddiff\nbranch refs/heads/feat/word-diff\n";
+
     private static CellForgeJumpPalettePanel WithModel(out WorktreeJumpPaletteModel model)
     {
         model = new WorktreeJumpPaletteModel();
@@ -130,12 +141,16 @@ public class CellForgeJumpPalettePanelTests
         DateTimeOffset.UtcNow,
         "active");
 
-    private static UiStore VisibleJumpStore()
+    private static UiStore VisibleJumpStore() => JumpStore(TuiPanelState.Visible);
+
+    private static UiStore HiddenJumpStore() => JumpStore(TuiPanelState.Hidden);
+
+    private static UiStore JumpStore(TuiPanelState state)
     {
         var store = new UiStore();
         _ = store.Dispatch(new UiMsg.SeedPanels(
             ImmutableArray.Create(OverlayIds.JumpPalette),
-            ImmutableDictionary<string, TuiPanelState>.Empty.Add(OverlayIds.JumpPalette, TuiPanelState.Visible),
+            ImmutableDictionary<string, TuiPanelState>.Empty.Add(OverlayIds.JumpPalette, state),
             ImmutableDictionary<string, int>.Empty.Add(OverlayIds.JumpPalette, 48)));
         return store;
     }
@@ -158,7 +173,10 @@ public class CellForgeJumpPalettePanelTests
         await Assert.That(panel.Id).IsEqualTo("jump");
         await Assert.That(panel.Id).IsEqualTo(OverlayIds.JumpPalette);
         await Assert.That(panel.Title).IsEqualTo("Jump");
-        await Assert.That(panel.DefaultPlacement).IsEqualTo(TuiPanelPlacement.Right);
+
+        // #381: the palette is a centred modal overlay, not a Right dock leaf —
+        // the Right dock slot it used to hold is released.
+        await Assert.That(panel.DefaultPlacement).IsEqualTo(TuiPanelPlacement.Center);
         await Assert.That(panel.DefaultSize).IsEqualTo(48);
     }
 
@@ -239,8 +257,260 @@ public class CellForgeJumpPalettePanelTests
     {
         var panel = WithModel(out _);
 
+        // Navigation keys the palette does not model stay unconsumed so the host
+        // keymap still sees them. (#381: printable chars are now consumed — they
+        // feed the fuzzy query; see OnKey_TypedChar_FeedsQuery_Filters.)
         await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Left), Ctx(new UiState()))).IsFalse();
-        await Assert.That(panel.OnKey(UiKey.ForChar('x'), Ctx(new UiState()))).IsFalse();
+        await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Tab), Ctx(new UiState()))).IsFalse();
+    }
+
+    [Test]
+    public async Task OnKey_TypedChar_FeedsQuery_Filters()
+    {
+        var panel = WithModel(out var model);
+
+        foreach (char c in "diff")
+        {
+            await Assert.That(panel.OnKey(UiKey.ForChar(c), Ctx(new UiState()))).IsTrue();
+        }
+
+        // SetQuery is finally reached: the query is the typed text and the rows
+        // are filtered down to the single matching worktree session.
+        await Assert.That(model.Query).IsEqualTo("diff");
+        await Assert.That(model.Results.Count).IsEqualTo(1);
+        await Assert.That(model.Results[0].SessionId).IsEqualTo("s2");
+
+        // The query is visible in the rendered rows.
+        await Assert.That(Joined(panel.Build(Ctx(new UiState())))).Contains("Jump: diff");
+    }
+
+    [Test]
+    public async Task OnKey_Backspace_TrimsQuery()
+    {
+        var panel = WithModel(out var model);
+
+        foreach (char c in "dif")
+        {
+            _ = panel.OnKey(UiKey.ForChar(c), Ctx(new UiState()));
+        }
+
+        await Assert.That(model.Query).IsEqualTo("dif");
+        await Assert.That(model.Results.Count).IsEqualTo(1);
+
+        await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Backspace), Ctx(new UiState()))).IsTrue();
+        await Assert.That(model.Query).IsEqualTo("di");
+        await Assert.That(model.Results.Count).IsEqualTo(1);
+
+        // Backspacing the query away restores every row.
+        _ = panel.OnKey(new UiKey(UiKeyCode.Backspace), Ctx(new UiState()));
+        _ = panel.OnKey(new UiKey(UiKeyCode.Backspace), Ctx(new UiState()));
+        await Assert.That(model.Query).IsEmpty();
+        await Assert.That(model.Results.Count).IsEqualTo(2);
+
+        // Backspace on an empty query is a no-op, not an exception.
+        await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Backspace), Ctx(new UiState()))).IsTrue();
+        await Assert.That(model.Query).IsEmpty();
+    }
+
+    [Test]
+    public async Task OnKey_TypedChar_NeverLeaksIntoComposer()
+    {
+        // #381 "no typing leak": every query key is CONSUMED, so a host that
+        // routes keys to the palette first never lets it reach the composer /
+        // chat transcript. The store's input box stays untouched throughout.
+        var panel = WithModel(out var model);
+        var store = VisibleJumpStore();
+        var services = new FakeServices().Add<UiStore>(store);
+
+        foreach (char c in "dif")
+        {
+            await Assert.That(panel.OnKey(UiKey.ForChar(c), Ctx(new UiState(), services))).IsTrue();
+        }
+
+        await Assert.That(model.Query).IsEqualTo("dif");
+        await Assert.That(store.State.Input.Text).IsEmpty();
+        await Assert.That(store.State.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Visible);
+
+        // Modified chords stay unconsumed so Ctrl+J can still toggle the palette
+        // closed and Alt+N can still switch panel slots from under it.
+        await Assert.That(panel.OnKey(UiKey.ForChar('j', KeyModifierSet.Ctrl), Ctx(new UiState(), services))).IsFalse();
+        await Assert.That(panel.OnKey(UiKey.ForChar('1', KeyModifierSet.Alt), Ctx(new UiState(), services))).IsFalse();
+        await Assert.That(model.Query).IsEqualTo("dif");
+    }
+
+    [Test]
+    public async Task OnKey_Escape_ClearsQuery_ReopenStartsEmpty()
+    {
+        var model = new WorktreeJumpPaletteModel();
+        var panel = new CellForgeJumpPalettePanel(model)
+        {
+            WorktreePorcelainReader = () => Porcelain(),
+        };
+        var store = VisibleJumpStore();
+        var services = new FakeServices().Add<UiStore>(store);
+        var ctx = Ctx(new UiState(), services);
+
+        _ = panel.Build(ctx);
+        foreach (char c in "dif")
+        {
+            _ = panel.OnKey(UiKey.ForChar(c), ctx);
+        }
+
+        await Assert.That(model.Query).IsEqualTo("dif");
+        await Assert.That(model.Results.Count).IsEqualTo(1);
+
+        await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Escape), ctx)).IsTrue();
+        await Assert.That(model.Visible).IsFalse();
+        await Assert.That(model.Query).IsEmpty();
+        await Assert.That(store.State.PanelStates[OverlayIds.JumpPalette]).IsEqualTo(TuiPanelState.Hidden);
+
+        // Reopening re-seeds and starts with an empty query and the top hit
+        // selected (current Show semantics preserved).
+        _ = panel.Build(ctx);
+        await Assert.That(model.Visible).IsTrue();
+        await Assert.That(model.Query).IsEmpty();
+        await Assert.That(model.Results.Count).IsEqualTo(2);
+        await Assert.That(model.SelectedIndex).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task OnKey_R_Reseeds_KeepingQuery()
+    {
+        int reads = 0;
+        var model = new WorktreeJumpPaletteModel();
+        model.Show(Entries);
+        var panel = new CellForgeJumpPalettePanel(model)
+        {
+            WorktreePorcelainReader = () =>
+            {
+                reads++;
+                return Porcelain();
+            },
+        };
+
+        // A plain char types without touching git.
+        _ = panel.OnKey(UiKey.ForChar('j'), Ctx(new UiState()));
+        await Assert.That(model.Query).IsEqualTo("j");
+        await Assert.That(reads).IsEqualTo(0);
+
+        // 'r' re-reads git AND types normally — the refresh keeps the filter.
+        await Assert.That(panel.OnKey(UiKey.ForChar('r'), Ctx(new UiState()))).IsTrue();
+        await Assert.That(reads).IsEqualTo(1);
+        await Assert.That(model.Visible).IsTrue();
+        await Assert.That(model.Query).IsEqualTo("jr");
+    }
+
+    [Test]
+    public async Task Build_VisiblePalette_DoesNotReseed_OrSpawnGit()
+    {
+        int reads = 0;
+        var model = new WorktreeJumpPaletteModel();
+        model.Show(Entries);
+        var panel = new CellForgeJumpPalettePanel(model)
+        {
+            WorktreePorcelainReader = () =>
+            {
+                reads++;
+                return "worktree /repo/.worktrees/other\n";
+            },
+        };
+
+        _ = panel.Build(Ctx(new UiState()));
+        await Assert.That(reads).IsEqualTo(0);
+
+        // Rebuilding with the palette already visible must not re-seed — an
+        // unchanged frame spawns no git process.
+        _ = panel.Build(Ctx(new UiState()));
+        _ = panel.Build(Ctx(new UiState()));
+        await Assert.That(reads).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task OverlayLayer_Centres_ModalBarrier_AndRoutesTypedKeys()
+    {
+        // #381: centred modal overlay, not a Right dock panel.
+        var model = new WorktreeJumpPaletteModel();
+        model.Show(Entries);
+        var panel = new CellForgeJumpPalettePanel(model)
+        {
+            WorktreePorcelainReader = () => string.Empty,
+        };
+        var store = VisibleJumpStore();
+        var layer = new CellForgeJumpPaletteOverlayLayer(panel);
+        var viewport = new Rect(0, 0, 120, 40);
+        layer.Sync(viewport, new PanelContext(store.State, 120, 40, null, store));
+
+        await Assert.That(layer.Id).IsEqualTo(CellForgeJumpPaletteOverlayLayer.LayerId);
+        await Assert.That(layer.Visible).IsTrue();
+        await Assert.That(layer.IsModal).IsTrue();
+
+        // Centred: the box is horizontally and vertically centred in the viewport.
+        var box = layer.Bounds;
+        await Assert.That(box.X).IsEqualTo((viewport.Width - box.Width) / 2);
+        await Assert.That(box.Y).IsEqualTo((viewport.Height - box.Height) / 2);
+        await Assert.That(box.Width).IsEqualTo(48);
+
+        // The layer is modal: while it is up the z-stack reports a barrier, and
+        // typed keys route into the query instead of leaking beneath.
+        var overlays = new OverlayStack();
+        overlays.Push(layer);
+        await Assert.That(overlays.HasModalBarrier).IsTrue();
+        await Assert.That(overlays.RouteKey(KeyEvent.Char(new Rune('w')))).IsTrue();
+        await Assert.That(model.Query).IsEqualTo("w");
+    }
+
+    [Test]
+    public async Task OverlayLayer_ClosedPalette_NoBarrier_AndNoPaint()
+    {
+        var model = new WorktreeJumpPaletteModel();
+        model.Show(Entries);
+        var panel = new CellForgeJumpPalettePanel(model)
+        {
+            WorktreePorcelainReader = () => string.Empty,
+        };
+        var store = HiddenJumpStore();
+        var layer = new CellForgeJumpPaletteOverlayLayer(panel);
+        layer.Sync(new Rect(0, 0, 120, 40), new PanelContext(store.State, 120, 40, null, store));
+
+        await Assert.That(layer.Visible).IsFalse();
+        var overlays = new OverlayStack();
+        overlays.Push(layer);
+        await Assert.That(overlays.HasModalBarrier).IsFalse();
+
+        var buffer = new ScreenBuffer(120, 40);
+        buffer.Fill(new Rect(0, 0, 120, 40), Cell.Blank);
+        layer.Paint(buffer, new Rect(0, 0, 120, 40));
+        await Assert.That(GridDump.Art(buffer).Trim()).IsEmpty();
+    }
+
+    [Test]
+    public async Task AttachPanels_CenterPlacement_ReleasesDockSlot()
+    {
+        // The Right dock leaf the palette used to occupy is released: a Center
+        // provider is the modal overlay plane and never docks.
+        var owner = new CellForgePanelRegistry();
+        owner.Register(new CellForgeJumpPalettePanel
+        {
+            WorktreePorcelainReader = () => string.Empty,
+        });
+        var store = new UiStore();
+        _ = owner.EnsureSeeded(store);
+        _ = store.Dispatch(new UiMsg.FocusPanel(OverlayIds.JumpPalette));
+
+        var screen = ChatScreen.Build(new ComposerController(), new StatusViewModel(), includeSidebar: false);
+        ChatScreenPanelDock.AttachPanels(
+            screen, owner.Registry, store.State, services: null, viewportWidth: 100, viewportHeight: 40);
+
+        await Assert.That(ChatScreenPanelDock.HasDocks(screen)).IsFalse();
+
+        // ... and the dock neither paints it in the bottom-stack fallback nor
+        // routes keys to it (the overlay layer owns both).
+        var buffer = new ScreenBuffer(100, 40);
+        int painted = ChatScreenPanelDock.PaintBottomStack(
+            buffer, screen.Timeline.Rect, owner.Registry, store.State, services: null);
+        await Assert.That(painted).IsEqualTo(0);
+        await Assert.That(ChatScreenPanelDock.RoutePanelKey(
+            owner.Registry, store.State, UiKey.ForChar('w'), null, store: store)).IsFalse();
     }
 
     [Test]

@@ -24,7 +24,7 @@ Harbor runs three layers of static analysis + DI validation:
 | `Microsoft.CodeAnalysis.NetAnalyzers` | solution-wide | CA0xxx |
 | `AsyncFixer` | solution-wide | AsyncFixer01–05 |
 | `ReflectionAnalyzers` | solution-wide | REL0001–0002 |
-| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | solution-wide | RS0030 (config in `BannedApi.txt`) |
+| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | solution-wide | RS0030 (config in [`BannedSymbols.txt`](../BannedSymbols.txt)) |
 | `Meziantou.Analyzer` | solution-wide | MA0xxx |
 | **`DependencyInjection.Lifetime.Analyzers`** | **solution-wide** | **DI001–DI027** |
 | **`Excubo.Analyzers.DependencyInjectionValidation`** | **apps-only** | **EDI01–EDI04, ADP0001** |
@@ -64,6 +64,47 @@ scope leaks, and `BuildServiceProvider` misuse.
 | DI027 | Rx subscription without dispose | Warning | Warning | Memory leak. |
 
 Full docs: <https://georgepwall1991.github.io/DependencyInjection.Lifetime.Analyzers/rules/>
+
+### Banned APIs (`BannedSymbols.txt`)
+
+[`BannedSymbols.txt`](../BannedSymbols.txt) is the RS0030 rule set — the
+mechanical expression of the "What NOT to do" list in CLAUDE.md. It is wired in
+`Directory.Build.props` via `<AdditionalFiles Include="BannedSymbols.txt" />`.
+
+> **The filename is load-bearing.** The analyzer only reads files literally named
+> `BannedSymbols.txt`. The rules sat dead under the old name `BannedApi.txt`
+> until ROP-D Z2, which both renamed the file and added the `AdditionalFiles`
+> entry — two independent reasons for it to be invisible. If you rename it, the
+> whole rule set silently stops firing.
+
+What it bans, and why each one is a hard rule rather than a style preference:
+
+| Rule | Reason |
+|---|---|
+| `Newtonsoft.Json.*`, `DataContractJsonSerializer`, `JavaScriptSerializer` | `System.Text.Json` only — one serializer, and it is AOT-compatible. |
+| `XmlSerializer` | Reflection-based; breaks NativeAOT. Use `System.Text.Json` or source-gen. |
+| `Microsoft.Win32.Registry` | Windows-only; the harness is cross-platform. |
+| `BlockingCollection<T>.Add` | Unbounded enqueue under a lock — use `TryAdd`. |
+
+Scope and enforcement:
+
+- **Errors** everywhere except `tests/` and `samples/` — `TreatWarningsAsErrors`
+  is on globally, so a new banned call fails the build.
+- **Silenced** under any project path containing `tests` or `samples`
+  (`<NoWarn>$(NoWarn);RS0030</NoWarn>` in `Directory.Build.props`). The stated
+  reason is that benchmark `GlobalSetup`/`IterationSetup`, Avalonia headless
+  marshaling helpers and IPC fixtures block on async setup by design, and
+  failing CI on those would train people to ignore the rule. Be aware this is
+  `NoWarn`, not a severity downgrade: nothing about the rule is visible in test
+  builds, so review is the only backstop there.
+
+**Adding an exemption.** A legacy call site that cannot be fixed yet carries
+`#pragma warning disable RS0030 // <reason>` and is catalogued by class in
+`BannedSymbols.txt` under "ACCEPTED LEGACY EXEMPTIONS (ROP-D Z2 catalogue)".
+If you add a pragma, add the catalog entry in the same commit — an uncatalogued
+pragma is indistinguishable from a suppression someone forgot to remove.
+`AGENTS.md` §"What NOT to do" forbids blanket `#pragma warning disable`; a
+single-rule, commented, catalogued exemption is the only accepted form.
 
 ### Excubo DI validation rules (Excubo.Analyzers.DependencyInjectionValidation 1.0.33)
 

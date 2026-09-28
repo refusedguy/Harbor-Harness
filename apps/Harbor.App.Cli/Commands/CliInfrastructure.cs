@@ -16,6 +16,7 @@ using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -43,13 +44,23 @@ internal static class CliInfrastructure
 
         // Deferred CellForge screens (see CellForgeScreens): stdin/screens
         // resolve only when CellForge mode is actually entered.
-        CellForgeScreens Screens() => new(
-            services.GetRequiredService<ScreenSession>(),
-            services.GetRequiredService<ChatScreen>(),
-            services.GetRequiredService<ChatScreenBridge>(),
-            services.GetRequiredService<TerminalInputSource>(),
-            services.GetRequiredService<ITerminalBackend>(),
-            services.GetRequiredService<IApprovalCoordinator>());
+        CellForgeScreens Screens()
+        {
+            var chatScreen = services.GetRequiredService<ChatScreen>();
+            // #384: default-on skill-freshness aggregate in the status line. The
+            // detail panel stays opt-in (HARBOR_SKILL_FRESHNESS=1) so the pinned
+            // 9-panel Alt+1..9 slot order is untouched; the pill lives in the
+            // footer row, which has no slot order. The panel polls the model by
+            // revision, so `/skills update` updates it in place.
+            chatScreen.Status.ProjectedSkills = services.GetService<SkillFreshnessModel>();
+            return new(
+                services.GetRequiredService<ScreenSession>(),
+                chatScreen,
+                services.GetRequiredService<ChatScreenBridge>(),
+                services.GetRequiredService<TerminalInputSource>(),
+                services.GetRequiredService<ITerminalBackend>(),
+                services.GetRequiredService<IApprovalCoordinator>());
+        }
 
         return new ReplRunner(
             services.GetRequiredService<ILogger<ReplRunner>>(),
@@ -71,6 +82,7 @@ internal static class CliInfrastructure
             Screens,
             services,
             SkillFreshnessStartup.RefreshCommand(services),
+            SkillFreshnessStartup.UpdateCommand(services),
             services.GetService<IProviderHealthCheck>());
     }
 

@@ -12,7 +12,7 @@ namespace Harbor.Core.Tests;
 ///     lost silently: optional sinks are drained and counted, and the total
 ///     publish count never under-reports.
 /// </summary>
-public class EventBusFastPathTests
+public class EventBusSinkVerdictTests
 {
     /// <summary>Warmup publishes, published before the allocation measurement.</summary>
     private const int Warmup = 3_000;

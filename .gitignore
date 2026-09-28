@@ -117,6 +117,8 @@ e2e/
 
 ## Build artifacts
 *.binlog
+*.tsbuildinfo
+*.received.*
 .avalonia-build-tasks/
 *.wpftmp.csproj
 build/_build/Configuration/
@@ -127,9 +129,9 @@ BenchmarkDotNet.Artifacts/
 .kilocode/
 .ai-factory.json
 opencode.json
-#.ai-factory/
 /skills-lock.json
 temp/
+tmp/
 assets/demo/frames/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
@@ -139,7 +141,6 @@ assets/demo/frames/
 .claude/
 .devin/
 .ai-factory/
-tmp/
 
 # git worktrees (local clones, e.g. .worktrees/tunit-audit)
 .worktrees/

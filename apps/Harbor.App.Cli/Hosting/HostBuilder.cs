@@ -5,6 +5,7 @@ using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Hosting;
+using Harbor.Telemetry;
 using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -43,11 +44,12 @@ internal static partial class HostBuilder
 
         builder.Services.AddCliCompositeConfig();
 
-        // KILLER_FEATURES §2.7 Feature 10 (issue #23, slice 2): the shared
-        // skill-freshness snapshot. Seeded once at CLI startup and re-seeded
-        // on `/skills refresh` (SkillFreshnessStartup); painted by the opt-in
-        // CellForge panel. Host-owned — never a renderer builtin, so the
-        // Alt+1..9 slot order stays pinned.
+        // KILLER_FEATURES §2.7 Feature 10 (issue #23 slice 2, #384): the shared
+        // skill-freshness snapshot. Seeded once at CLI startup, re-seeded on
+        // `/skills refresh`, re-resolved on `/skills update`. Painted as the
+        // default-on aggregate pill in the CellForge status line; the per-skill
+        // detail panel stays host opt-in (HARBOR_SKILL_FRESHNESS=1). Host-owned
+        // — never a renderer builtin, so the Alt+1..9 slot order stays pinned.
         builder.Services.AddSingleton<SkillFreshnessModel>();
 
         // CE-4: второй путь рендера. Регистрации ленивые — резолв только
@@ -121,6 +123,9 @@ internal static partial class HostBuilder
         HarborDir = harborDir,
         DefaultStorageBackend = "jsonl",
         EventBusScrollback = 1000,
+        // #47/S2: export the event-bus queue-age percentiles to telemetry and
+        // to the per-run log (harbor logs --last) every 30s.
+        EventBusQueueAgeReportInterval = EventBusQueueAgeReporter.DefaultReportInterval,
         EventBusMiddlewares = lf =>
             new IEventBusMiddleware[] { new TypeFilterMiddleware(lf.CreateLogger<TypeFilterMiddleware>()) },
         DefaultTuiRenderer = cliConfig.DefaultTuiRenderer,

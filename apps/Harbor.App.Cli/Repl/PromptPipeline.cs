@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Repl.Commands;
@@ -25,7 +26,8 @@ internal sealed class PromptPipeline(
     ReplCommandCatalog catalog,
     ILogger logger,
     ITokenTracker? tokens,
-    Lazy<LegacySlashRunner> legacy) : IDisposable
+    Lazy<LegacySlashRunner> legacy,
+    SetupChecklistController? setupChecklist = null) : IDisposable
 {
     /// <summary>Stream-retry budget mirrored from AgentLoop's C7 policy —
     /// kept in sync for the countdown's «n/3» display only.</summary>
@@ -60,7 +62,14 @@ internal sealed class PromptPipeline(
     }
 
     /// <summary>Drop queued prompts — abort and session switch both clear.</summary>
-    public void ClearQueue() => _pendingPrompts.Clear();
+    public void ClearQueue()
+    {
+        _pendingPrompts.Clear();
+
+        // #386: staged images belong to the session they were attached in, so
+        // a switch must not carry them into an unrelated conversation.
+        host.Attachments?.Clear();
+    }
 
     public async Task SubmitAsync(CancellationToken ct)
     {
@@ -128,15 +137,23 @@ internal sealed class PromptPipeline(
     /// <summary>Begin a model turn for already-extracted text (submit + queue drain share it).</summary>
     private void StartPromptRun(string text, CancellationToken ct)
     {
+        // #386: staged images ride THIS turn and only this one — draining here
+        // (not at compose time) keeps a queued prompt from stealing them.
+        IReadOnlyList<ImageAttachment>? images = host.Attachments?.Drain();
+
         host.Agent.ResetAbortSource();
         ResetRetryCountdown();
         host.Timeline.Append(new UserBlock(text));
         host.Status.Mode = StatusBarMode.Running;
+
+        // Setup guide (issue #383): the first prompt that actually reaches the
+        // agent completes the checklist's last session-scoped task.
+        setupChecklist?.MarkPromptSent();
         host.WakeUp();
 
         _promptInFlight = true;
         ArmLongTurnNotify();
-        _ = RunPromptAsync(text, ct);
+        _ = RunPromptAsync(text, images, ct);
     }
 
     /// <summary>
@@ -176,11 +193,16 @@ internal sealed class PromptPipeline(
 
     /// <summary>Fire-and-forget WITH full observation: every failure lands in
     /// the timeline, cancellation is expected, the wake always fires.</summary>
-    private async Task RunPromptAsync(string text, CancellationToken ct)
+    private async Task RunPromptAsync(
+        string text, IReadOnlyList<ImageAttachment>? images, CancellationToken ct)
     {
         try
         {
-            var result = await host.Agent.PromptAsync(text, ct).ConfigureAwait(false);
+            // #386: an image turn submits a pre-built UserMessage; a text turn
+            // keeps the existing string overload untouched.
+            var result = images is { Count: > 0 }
+                ? await host.Agent.PromptAsync(BuildUserMessage(text, images), ct).ConfigureAwait(false)
+                : await host.Agent.PromptAsync(text, ct).ConfigureAwait(false);
             if (result.IsFailure)
             {
                 // Abort path surfaces as a Result failure ("…cancelled.")
@@ -211,6 +233,24 @@ internal sealed class PromptPipeline(
             DrainPromptQueue(ct);
             host.WakeUp();
         }
+    }
+
+    /// <summary>
+    ///     Build the user turn carrying staged images (#386). The model/agent
+    ///     names come from the live agent state, matching what
+    ///     <c>DefaultAgent.PromptAsync(string)</c> would have stamped.
+    /// </summary>
+    private UserMessage BuildUserMessage(string text, IReadOnlyList<ImageAttachment> images)
+    {
+        var state = host.Agent.State;
+        return new UserMessage(
+            Guid.NewGuid().ToString("N"),
+            state.SessionId,
+            DateTimeOffset.UtcNow,
+            text,
+            state.Agent.Name.Value,
+            state.Agent.Model,
+            Attachments: images);
     }
 
     /// <summary>Queue drain: the next queued prompt starts when the loop is

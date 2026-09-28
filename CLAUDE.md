@@ -11,15 +11,17 @@
 - **[docs/ROADMAP.md](./docs/ROADMAP.md)** — full roadmap with priorities, status, and tech-debt backlog.
 - **[docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md)** — reusable UI components (StatusBadge, ChatBubble, SessionRow) across Avalonia/Blazor/WPF.
 - **[docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md)** — canonical Clean / Hexagonal / Onion layering rules. The allowed/forbidden `<ProjectReference>` matrix is mechanically enforced by `tests/Harbor.Architecture.Tests`. **Read this before adding any `<ProjectReference>` to a `.csproj`.**
-- **[docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md)** — detailed audit of OOP/SOLID/GoF/FP/ROP/perf with 41 findings and prioritized refactoring plan, plus §ARCH-001..§ARCH-NNN layering violations. Every `TODO(principles)` in code references this file.
+- **[docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md)** — detailed audit of OOP/SOLID/GoF/FP/ROP/perf with 45 findings and prioritized refactoring plan, plus §ARCH-001..§ARCH-NNN layering violations. Every `TODO(principles)` in code references this file.
 - **[docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md)** — full anatomy of the interactive shell (`contrib/tui/Harbor.Tui.SpectreTui`; compiled into the default CLI build) for adding features from opencode/kilocode/pi-agent.
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** — high-level design + principles summary.
 - **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** — how to contribute + **principles checklist** for PRs.
 - **[docs/PATTERNS.md](./docs/PATTERNS.md)** — 18 pattern catalog with real code (Strategy, Registry, Observer, Builder, Adapter, Command, Specification, Value Object, Factory, Plugin, Repository, Chain of Resp, Flyweight, Object Pool, MVVM, Decorator, TEA, DU).
 - **[docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md)** — 38 antipatterns we forbid (with before/after code).
 - **[docs/EXAMPLES.md](./docs/EXAMPLES.md)** — 40+ recipes ("How do I...?").
-- **[docs/TOOLS_CATALOG.md](./docs/TOOLS_CATALOG.md)** — comprehensive reference for all 14 builtin tools: args schema, 3+ examples per tool, "when to use X vs Y" matrix, tool chains, JSON Schema tips, permission rationale, sub-agent `task` deep dive, MCP integration, and a full WebFetchTool walkthrough.
+- **[docs/TOOLS_CATALOG.md](./docs/TOOLS_CATALOG.md)** — comprehensive reference for all 20 builtin tools: args schema, 3+ examples per tool, "when to use X vs Y" matrix, tool chains, JSON Schema tips, permission rationale, sub-agent `task` deep dive, MCP integration, and a full WebFetchTool walkthrough.
 - **[docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md)** — Roslyn `.cs` plugin system + 5 full examples.
+- **[docs/BENCHMARKS.md](./docs/BENCHMARKS.md)** — **the only place a measured number is recorded.** Project counts, tool counts and benchmark figures quoted in other docs are copies; when you re-measure, update this file first and propagate in the same commit.
+- **[docs/audit-archive/](./docs/audit-archive/)** — dated audit snapshots kept for provenance. Never cite these as current state; see its README for where each conclusion now lives.
 
 > **TL;DR for AI agents:** read this file for conventions → read AGENTS.md for operational steps → consult CODE_PRINCIPLES_AUDIT.md before refactoring hot paths.
 
@@ -44,8 +46,9 @@ src/                                   — ~50 projects (all included in Harbor.
 ├── Harbor.Hosting/                    — DI modules wired by the CLI (TuiModule, StorageModule, ...)
 ├── Harbor.Storage.{Jsonl,Memory,Sqlite}/  — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
 ├── Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/ — LLM clients
-├── Harbor.Tools.Builtin/              — 14 builtin tools under Tools/
-│                                        (read/write/edit/bash/glob/grep/ls/task + webfetch/patch/notebook/ripgrep/tree/mcp)
+├── Harbor.Tools.Builtin/              — 20 builtin tools under Tools/
+│                                        (read/write/edit/bash/glob/grep/ls/skill/patch/notebook/tree/lsp/task/
+│                                        webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt/session_read/session_steer)
 ├── Harbor.Terminal.Abstractions/      — ITuiRenderer, ITuiRenderContext, BaseTuiRenderer, views/VMs
 ├── Harbor.Tui.AnsiPlain/               — ANSI streaming + plain-text renderers (AnsiTuiRenderer, PlainTuiRenderer)
 ├── Harbor.Tui.CellForge(+.Engine)/        — canonical fullscreen cell-diff renderer (raw-mode input,

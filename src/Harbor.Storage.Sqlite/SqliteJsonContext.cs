@@ -71,5 +71,9 @@ namespace Harbor.Storage.Sqlite;
 [JsonSerializable(typeof(ThinkingPart))]
 [JsonSerializable(typeof(ToolCallPart))]
 [JsonSerializable(typeof(FilePart))]
+// #386: UserMessage.Attachments references ImageAttachment; source-gen walks the
+// member graph, but registering it explicitly keeps the intent visible and fails
+// loudly at compile time if the member is ever renamed.
+[JsonSerializable(typeof(ImageAttachment))]
 [JsonSerializable(typeof(JsonElement))]
 internal sealed partial class SqliteJsonContext : JsonSerializerContext;

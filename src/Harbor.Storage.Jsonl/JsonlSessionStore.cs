@@ -13,8 +13,8 @@ namespace Harbor.Storage.Jsonl;
 ///         keyed by <c>sessionId</c> eliminates the per-call re-parse cost in
 ///         <see cref="GetMessagesAsync" /> and the double-parse that
 ///         <see cref="GetStatsAsync" /> used to pay. The cache records the
-///         file's last-write-time; <see cref="AppendMessageAsync" /> invalidates
-///         just the affected session's entry.
+///         file's <c>(mtime, length)</c> identity; <see cref="AppendMessageAsync" />
+///         invalidates just the affected session's entry.
 ///     </para>
 ///     <para>
 ///         <b>Architecture audit v2 §3.4 (RESOLVED):</b> the synchronous I/O
@@ -39,10 +39,12 @@ public sealed class JsonlSessionStore : ISessionStore
     /// <summary>
     ///     Parsed-message cache. Architecture audit v2 §3.3: keyed by session id,
     ///     value is an immutable <see cref="SessionCacheEntry" /> recording the
-    ///     file's last-write-time and the parsed message list. Reads check the
-    ///     cache for a freshness hit (mtime unchanged) before falling through to
-    ///     a full disk re-parse. Writes invalidate just the affected session's
-    ///     entry, so concurrent reads of other sessions are unaffected.
+    ///     <c>(mtime, length)</c> identity the parse was taken from and the
+    ///     parsed message list. Reads check the cache for a freshness hit
+    ///     (identity unchanged) before falling through to a full disk
+    ///     re-parse. Writes invalidate just the affected session's entry, so
+    ///     concurrent reads of other sessions are unaffected. Both identity
+    ///     fields matter — mtime alone is not a safe key (#459).
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -355,8 +357,8 @@ public sealed class JsonlSessionStore : ISessionStore
 
     /// <summary>
     ///     Read all messages for a session in chronological order. Returns the
-    ///     cached parse result when the file's last-write-time is unchanged
-    ///     since the prior call (§3.3 cache).
+    ///     cached parse result when the file's <c>(mtime, length)</c> is
+    ///     unchanged since the prior call (§3.3 cache).
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -367,6 +369,15 @@ public sealed class JsonlSessionStore : ISessionStore
     ///         the cache for free on the second and subsequent calls.
     ///     </para>
     ///     <para>
+    ///         <b>#459:</b> freshness is keyed on <c>(mtime, length)</c>, not on
+    ///         mtime alone, and only a snapshot the reader marked
+    ///         <see cref="MessageReadSnapshot.IsStable" /> is published. A read
+    ///         that raced a concurrent append used to hand back a list missing
+    ///         the record that was being written, and it was cached under the
+    ///         pre-append timestamp — so the message stayed invisible until the
+    ///         next write or a restart. The short list is still returned (it is
+    ///         a consistent prefix, never a record cut in half), it is just not
+    ///         remembered.
     ///     </para>
     /// </remarks>
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
@@ -385,11 +396,11 @@ public sealed class JsonlSessionStore : ISessionStore
 
         return await Result.Try(async () =>
         {
-            // §3.3 cache: freshness check via file mtime. Most filesystems have
-            // second-level mtime granularity, which is fine here — every write
-            // bumps the mtime.
-            DateTimeOffset fileMtime = File.GetLastWriteTimeUtc(sessionFile);
-            if (_messageCache.TryGetValue(sessionId, out var cached) && cached.FileLastWriteUtc == fileMtime)
+            // §3.3 cache: freshness check against the file's identity. One
+            // FileInfo yields mtime AND length from a single stat, so widening
+            // the key past mtime costs nothing.
+            var stat = SessionFileStat.Read(sessionFile);
+            if (_messageCache.TryGetValue(sessionId, out var cached) && cached.IsFreshFor(stat))
             {
                 // Cache hit — return the cached list directly. Zero allocations.
                 return Result.Success(cached.Messages);
@@ -401,16 +412,29 @@ public sealed class JsonlSessionStore : ISessionStore
             // crashing on an unguarded .Value.
             var parseResult = await SessionFileReader.ParseMessagesFromDiskAsync(sessionFile, sessionId, _logger, ct).ConfigureAwait(false);
             if (parseResult.IsFailure)
-                return parseResult;
+                return Result.Failure<IReadOnlyList<AgentMessage>>(parseResult.Error);
 
-            // Publish the freshly parsed list to the cache. The
-            // ConcurrentDictionary slot is updated atomically and the
-            // cache value is an immutable record, so concurrent readers
-            // see either the old entry or the new entry but never a
-            // half-built one.
             // (parseResult.Value is guarded by the failure check above.)
-            _messageCache[sessionId] = new SessionCacheEntry(fileMtime, parseResult.Value);
-            return parseResult;
+            var snapshot = parseResult.Value;
+            if (snapshot.IsStable)
+            {
+                // The ConcurrentDictionary slot is updated atomically and the
+                // cache value is an immutable record, so concurrent readers see
+                // either the old entry or the new entry but never a half-built
+                // one.
+                _messageCache[sessionId] = new SessionCacheEntry(
+                    snapshot.Stat.LastWriteUtc, snapshot.Stat.Length, snapshot.Messages);
+            }
+            else
+            {
+                // #459: the file moved under the read, so these messages are a
+                // prefix of an unknown generation. Evicting any older entry
+                // forces the next caller to re-read instead of inheriting a
+                // list we cannot vouch for.
+                _messageCache.TryRemove(sessionId, out _);
+            }
+
+            return Result.Success(snapshot.Messages);
         }, ResultErrors.Message)
             .Bind(x => x)
             .TapError(e => _logger.LogError("Failed to read messages of session {SessionId}: {Error}", sessionId, e));

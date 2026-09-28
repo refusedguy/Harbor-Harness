@@ -72,6 +72,27 @@ Tests use [TUnit](https://github.com/thomhurst/TUnit) v1.61.0 with Microsoft Tes
 - **Pre-existing Avalonia 12 headless failures** (`MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — "Stack empty" in `AvaloniaPropertyDictionaryPool.Get()`), plus an occasional flaky pair `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered`. Not Harbor bugs — see ROADMAP backlog.
 - **IPC named-pipe event-stream tests on Linux** (`Harbor.Ipc.Tests`) self-skip unless `HARBOR_IPC_EVENTSTREAM=1` is set; some timing flakes remain.
 
+## Documentation checks
+
+```bash
+./tools/check-md-links.py          # exit 0 = clean, 1 = broken link or anchor
+./tools/check-md-links.py --verbose  # plus a per-file reference count
+```
+
+Stdlib-only Python 3 — no pip install, no network, no dotnet, so it runs
+anywhere the repo is checked out. It resolves every relative link and every
+`#anchor` in the tracked markdown files and reports the ones that do not
+exist, ignoring external URLs and code blocks.
+
+Run it before opening a PR that adds or moves a document, or edits a
+cross-reference. Relative links break silently: a doc that renames or moves is
+still valid markdown, it just sends the reader to a 404.
+
+> **Not in CI yet.** `ci.yml` has `paths-ignore: ['**.md', 'docs/**', …]`, so a
+> docs-only push does not trigger it and a markdown-only PR is never built.
+> Wiring this in needs a separate `docs.yml` triggered on `**.md` — tracked in
+> #39's follow-up rather than smuggled into a docs PR that `ci.yml` would skip.
+
 ## Running the CLI
 
 ```bash
@@ -666,7 +687,7 @@ dotnet run --project apps/Harbor.App.Cli
 
 #### Option B: DLL plugin (samples/plugins/)
 
-См. [PLUGIN_DEVELOPMENT.md §Migration from DLL](./PLUGIN_DEVELOPMENT.md#migration-from-dll-to-cs).
+См. [PLUGIN_DEVELOPMENT.md §Migration from DLL](./PLUGIN_DEVELOPMENT.md#migration-from-samplespluginscsproj-dll-to-pluginscs-roslyn).
 Note: `~/.harbor/plugins/` only scans `*.cs` — compiled DLLs must be registered
 by host code or served out-of-process via `src/Harbor.Plugins.Host`.
 

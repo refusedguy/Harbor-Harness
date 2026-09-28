@@ -177,6 +177,7 @@ internal static class JsonlLineParser
             string? content = null;
             string? agent = null;
             string? model = null;
+            List<ImageAttachment>? attachments = null;
 
             var reader = new Utf8JsonReader(payload, ReaderOptions);
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
@@ -192,19 +193,33 @@ internal static class JsonlLineParser
                 ReadOnlySpan<byte> prop = reader.ValueSpan;
                 reader.Read();
 
-                if (MatchUserProperty(prop) == UserProperty.Content)
-                    content = reader.GetString();
-                else if (MatchUserProperty(prop) == UserProperty.Agent)
-                    agent = reader.GetString();
-                else if (MatchUserProperty(prop) == UserProperty.Model)
-                    model = reader.GetString();
+                switch (MatchUserProperty(prop))
+                {
+                    case UserProperty.Content:
+                        content = reader.GetString();
+                        break;
+                    case UserProperty.Agent:
+                        agent = reader.GetString();
+                        break;
+                    case UserProperty.Model:
+                        model = reader.GetString();
+                        break;
+                    case UserProperty.Attachments:
+                        attachments = ParseAttachments(ref reader);
+                        break;
+                    default:
+                        reader.Skip();
+                        break;
+                }
             }
 
             if (content is null || agent is null || model is null)
                 return Result.Failure<AgentMessage>($"user message {id}: missing content/agent/model");
 
             return Result.Success<AgentMessage>(
-                new UserMessage(id, sessionId, createdAt, content, agent, model, parentId));
+                new UserMessage(
+                    id, sessionId, createdAt, content, agent, model, parentId,
+                    attachments is { Count: > 0 } ? attachments : null));
         }
         catch (Exception ex)
         {
@@ -379,6 +394,81 @@ internal static class JsonlLineParser
         return Result.Success<ToolResultEntry>(new ToolResultEntry(tcId, tn, output, isError));
     }
 
+    /// <summary>Parses the <c>attachments</c> array of a user payload (#386).</summary>
+    private static List<ImageAttachment> ParseAttachments(ref Utf8JsonReader reader)
+    {
+        var images = new List<ImageAttachment>();
+
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return images;
+        }
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            if (reader.TokenType != JsonTokenType.StartObject)
+                continue;
+
+            ImageAttachment? image = ParseSingleAttachment(ref reader);
+            // A malformed entry is skipped, never fatal: one broken attachment
+            // must not make the whole user turn unreadable.
+            if (image is not null)
+                images.Add(image);
+        }
+
+        return images;
+    }
+
+    /// <summary>Parses one <c>attachments</c> entry; the reader sits on its StartObject.</summary>
+    private static ImageAttachment? ParseSingleAttachment(ref Utf8JsonReader reader)
+    {
+        string? path = null;
+        string? mimeType = null;
+        int width = 0;
+        int height = 0;
+        byte[]? data = null;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+                continue;
+
+            ReadOnlySpan<byte> aProp = reader.ValueSpan;
+            reader.Read();
+
+            switch (MatchAttachmentProperty(aProp))
+            {
+                case AttachmentProperty.Path:
+                    path = reader.GetString();
+                    break;
+                case AttachmentProperty.MimeType:
+                    mimeType = reader.GetString();
+                    break;
+                case AttachmentProperty.Width:
+                    if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out int w))
+                        width = w;
+                    break;
+                case AttachmentProperty.Height:
+                    if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out int h))
+                        height = h;
+                    break;
+                case AttachmentProperty.Data:
+                    if (reader.TokenType == JsonTokenType.String)
+                        data = reader.GetBytesFromBase64();
+                    break;
+                default:
+                    reader.Skip();
+                    break;
+            }
+        }
+
+        if (path is null || mimeType is null || data is null)
+            return null;
+
+        return new ImageAttachment(path, mimeType, width, height, data);
+    }
+
     /// <summary>Parses the <c>parts</c> array of an assistant payload inline.</summary>
     private static List<ContentPart> ParseParts(ref Utf8JsonReader reader)
     {
@@ -480,7 +570,8 @@ internal static class JsonlLineParser
     // ── Property matchers (zero-alloc, UTF-8 span compare) ─────────────────
 
     private enum LineProperty : byte { Other, Type, Id, CreatedAt, ParentId, Role, Payload }
-    private enum UserProperty : byte { Other, Content, Agent, Model }
+    private enum UserProperty : byte { Other, Content, Agent, Model, Attachments }
+    private enum AttachmentProperty : byte { Other, Path, MimeType, Width, Height, Data }
     private enum AssistantProperty : byte { Other, Parts, StopReason, Usage, Model, IsSummary, SummaryFirstKeptId }
     private enum ToolResultProperty : byte { Other, Results }
     private enum ResultEntryProperty : byte { Other, ToolCallId, ToolName, Output, IsError }
@@ -503,7 +594,18 @@ internal static class JsonlLineParser
         var x when x.SequenceEqual("content"u8) => UserProperty.Content,
         var x when x.SequenceEqual("agent"u8) => UserProperty.Agent,
         var x when x.SequenceEqual("model"u8) => UserProperty.Model,
+        var x when x.SequenceEqual("attachments"u8) => UserProperty.Attachments,
         _ => UserProperty.Other
+    };
+
+    private static AttachmentProperty MatchAttachmentProperty(ReadOnlySpan<byte> p) => p switch
+    {
+        var x when x.SequenceEqual("path"u8) => AttachmentProperty.Path,
+        var x when x.SequenceEqual("mimeType"u8) => AttachmentProperty.MimeType,
+        var x when x.SequenceEqual("width"u8) => AttachmentProperty.Width,
+        var x when x.SequenceEqual("height"u8) => AttachmentProperty.Height,
+        var x when x.SequenceEqual("data"u8) => AttachmentProperty.Data,
+        _ => AttachmentProperty.Other
     };
 
     private static AssistantProperty MatchAssistantProperty(ReadOnlySpan<byte> p) => p switch

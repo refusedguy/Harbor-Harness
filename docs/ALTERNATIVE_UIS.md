@@ -76,7 +76,7 @@ workflow.
 ### Quick picker
 
 - **Just want it to work?** → `HARBOR_TUI=spectre-tui` (default).
-- **Want the new in-process cell-diff REPL (MVP)?** → `HARBOR_TUI=consoleex`
+- **Want the in-process cell-diff REPL (CellForge)?** → `HARBOR_TUI=cellforge`
 - **On Kitty/WezTerm/Ghostty and want pixel-perfect color?** → `HARBOR_TUI=termina`
 - **Want menus, dialogs, mouse, classic TUI feel?** → `HARBOR_TUI=terminal-gui`
 - **Coming from Blazor and want `.razor` hot reload?** → `HARBOR_TUI=razor`

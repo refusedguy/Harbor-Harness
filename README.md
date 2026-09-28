@@ -47,7 +47,7 @@ CI regenerates the GIFs on TUI changes (`.github/workflows/demo.yml`).
   - `AnsiTuiRenderer` / `PlainTuiRenderer` — classic streaming/plain-text renderers
   - Additional interactive renderers (`Spectre.Tui` shell, `Fullscreen`, `Terminal.Gui`, `Termina`, `RazorConsole`) physically live in [`contrib/tui/`](./contrib/tui) but are compiled into the default CLI build
   - `Notifications` renderer (desktop OS notifications), Avalonia desktop app (`apps/Harbor.App.Avalonia`)
-- **14 builtin tools** under [`src/Harbor.Tools.Builtin`](./src/Harbor.Tools.Builtin): `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task` (sub-agent delegation), `webfetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`
+- **20 builtin tools** under [`src/Harbor.Tools.Builtin`](./src/Harbor.Tools.Builtin): `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `skill`, `patch`, `notebook`, `tree`, `lsp`, `task` (sub-agent delegation), `webfetch`, `ripgrep`, `mcp` (plus `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`)
 - **MCP support** — Model Context Protocol servers over stdio in an out-of-process host: registry, JSON-RPC transport, argv parsing, source-generated serialization ([AOT-safe](./docs/BUILD.md)); a single `mcp` tool surface maps any configured server's tools into the agent; server instructions are aggregated into the system prompt
 - **Sub-agents** — builtin agents `code`, `plan`, `explore` (own permissions per `PermissionRuleset`); the `task` tool delegates to child agents through `IAgentRegistry`
 - **Plugin hosting** — layered architecture instead of one monolithic loader: `Harbor.Plugins.{Abstractions,Compilation,Instantiation,Registration,Hosting,Runtime,Host,Storage}`; CS-source plugins are compiled in-memory by Roslyn at startup (drop a `.cs` into `~/.harbor/plugins/`)
@@ -86,8 +86,8 @@ dotnet run --project apps/Harbor.App.Cli
 # One-shot ask
 dotnet run --project apps/Harbor.App.Cli -- ask "What is 2+2?"
 
-# ConsoleEx — the new second render path (opt-in)
-HARBOR_TUI=consoleex dotnet run --project apps/Harbor.App.Cli
+# CellForge — the canonical interactive cell-diff renderer (opt-in)
+HARBOR_TUI=cellforge dotnet run --project apps/Harbor.App.Cli
 
 # Desktop GUI
 dotnet run --project apps/Harbor.App.Avalonia

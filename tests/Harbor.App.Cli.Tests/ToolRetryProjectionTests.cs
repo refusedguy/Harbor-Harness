@@ -120,6 +120,7 @@ public class ToolRetryProjectionTests
         public Harbor.Hosting.PluginReloadService? PluginReload => null;
         public IProviderHealthCheck? HealthCheck => null;
         public Harbor.Ui.Framework.Panels.IPanelRegistry? PanelRegistry => null;
+        public Harbor.App.Cli.Repl.ImageAttachmentStash? Attachments => null;
         public void WakeUp() { }
         public void OpenSlashPalette() { }
         public void ToggleVimMode() { }

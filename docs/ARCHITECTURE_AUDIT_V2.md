@@ -1,7 +1,7 @@
 # Harbor Architecture Audit v2
 
 > Deep audit of Harbor's architecture, performance, concurrency, and pattern
-> compliance. Builds on `docs/CODE_PRINCIPLES_AUDIT.md` (v1, 41 findings) —
+> compliance. Builds on `docs/CODE_PRINCIPLES_AUDIT.md` (v1, 45 findings) —
 > v2 covers systemic issues the v1 audit deferred, plus 10 killer
 > architectural improvements (4 already implemented in this sprint) with
 > concrete file:line references and implementation sketches.
@@ -58,7 +58,7 @@ open. Each finding cites a concrete `file:line` anchor.
 ## §1. Executive summary
 
 This audit revisits the v1 code-principles audit (`docs/CODE_PRINCIPLES_AUDIT.md`,
-41 findings) after a wave of refactor work. The v1 criticals have largely been
+45 findings) after a wave of refactor work. The v1 criticals have largely been
 resolved: the EventBus scrollback drain bug, the `InvalidateFrozenSnapshot`
 lock thundering-herd, the `fire-and-forget` `_eventBus.PublishAsync` inside
 tool progress reporting, and the `Result.Value` access on invalid input —
@@ -1947,7 +1947,7 @@ documented with implementation sketches in §3.
 
 ### Cross-references
 
-- `docs/CODE_PRINCIPLES_AUDIT.md` — v1 audit, 41 findings.
+- `docs/CODE_PRINCIPLES_AUDIT.md` — v1 audit, 45 findings.
 - `docs/PATTERNS.md` — pattern catalogue.
 - `docs/ANTIPATTERNS.md` — antipattern catalogue.
 - `docs/KILLER_FEATURES.md` — flagship features planned.

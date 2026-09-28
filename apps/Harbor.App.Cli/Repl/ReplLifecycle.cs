@@ -65,6 +65,11 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         host._replStore.Dispatch(new UiMsg.ConfigureRuntime(host.SessionModel.Model, host.SessionModel.ProviderId, host.SessionModel.Agent));
         ArmThemeWatcher();
 
+        // Setup guide (issue #383): local setup detection + first-run gating.
+        // The provider probe it starts runs off-thread; a detection failure
+        // leaves the checklist empty and never blocks the first frame.
+        await host.Setup.InitializeAsync(ct).ConfigureAwait(false);
+
         // #170: the heartbeat must outlive Idle while a mascot reaction/latch
         // still owes motion — the bridge polls both directors every frame.
         host.Bridge.TrackMascot(host.Screen.Mascot, host.Screen.Status);
@@ -228,6 +233,20 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 usageChanged = true;
             }
 
+            // Setup checklist (issue #383): a task completing off-thread staged
+            // its box rect — applied here, on the frame thread that owns the
+            // diff engine's hint list.
+            if (host._setupChecklistDamagePending)
+            {
+                host._setupChecklistDamagePending = false;
+                Rect setupDamage = host._setupChecklistDamage;
+                host._setupChecklistDamage = default;
+                if (setupDamage.Width > 0 && setupDamage.Height > 0)
+                {
+                    host.ScreenSession.Damage(setupDamage);
+                }
+            }
+
             if (!string.Equals(retryBefore, host._status.Retry, StringComparison.Ordinal))
             {
                 retryChanged = true;
@@ -387,6 +406,80 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         host._lastFrameRows = host.ScreenSession.CurrentRows;
     }
 
+    /// <summary>
+    ///     Builds the status snapshot the footer projects from
+    ///     (<see cref="StatusProjector" />), reusing <paramref name="prev" />
+    ///     when no projected input changed: the footer caches on reference
+    ///     equality, so an identical instance is what makes quiet frames free.
+    ///     Internal for the status-projection unit tests (InternalsVisibleTo).
+    /// </summary>
+    /// <param name="prev">Last projected snapshot (<c>null</c> on the first frame).</param>
+    /// <param name="storeState">Live TEA store state — chrome, accumulated cost, scroll.</param>
+    /// <param name="tokensIn">Cumulative input tokens from the token tracker.</param>
+    /// <param name="tokensOut">Cumulative output tokens from the token tracker.</param>
+    /// <param name="viewportLines">Rows the terminal can show.</param>
+    /// <param name="totalLines">Measured timeline extent for the scroll range.</param>
+    /// <remarks>
+    ///     Cost rides the store, not a local zero (#457): <see cref="UiReducer" />
+    ///     accumulates <c>CostUsd</c> per finished step, so the reducer's value is
+    ///     the only one that moves. Scroll likewise: the store counts rows
+    ///     <em>lifted from the tail</em> (0 = live tail, reset on every new
+    ///     message) while the projector reports the position from the top of the
+    ///     range, so the offset is mapped here — the same
+    ///     <c>ScrollY = max - offset</c> convention
+    ///     <see cref="VirtualizedChatTimeline" /> uses in
+    ///     <c>ApplyStoreState</c>.
+    /// </remarks>
+    internal static UiState BuildStatusSnapshot(
+        UiState? prev,
+        UiState storeState,
+        long tokensIn,
+        long tokensOut,
+        int viewportLines,
+        int totalLines)
+    {
+        var storeChat = storeState.Chat;
+        decimal costUsd = storeChat.Cost.CostUsd;
+
+        // Same range the projector derives from the snapshot it is handed, so
+        // the memo key and the painted text can never disagree.
+        int maxScroll = Math.Max(0, totalLines - Math.Max(1, viewportLines));
+        int scrollOffset = Math.Clamp(maxScroll - storeState.ScrollOffset, 0, maxScroll);
+
+        if (prev is not null
+            && prev.Chat.Status == storeChat.Status
+            && prev.Chat.Model == storeChat.Model
+            && prev.Chat.Provider == storeChat.Provider
+            && prev.Chat.AgentName == storeChat.AgentName
+            && prev.Cost.TokensIn == tokensIn
+            && prev.Cost.TokensOut == tokensOut
+            && prev.Cost.CostUsd == costUsd
+            && prev.ScrollOffset == scrollOffset
+            && prev.ViewportLines == viewportLines
+            && prev.TotalLines == totalLines)
+        {
+            return prev;
+        }
+
+        return new UiState
+        {
+            Chat = new ChatDomainState
+            {
+                Status = storeChat.Status,
+                Model = storeChat.Model,
+                Provider = storeChat.Provider,
+                AgentName = storeChat.AgentName,
+                Cost = new CostSnapshot(tokensIn, tokensOut, costUsd)
+            },
+            Ui = new TerminalUiState
+            {
+                ScrollOffset = scrollOffset,
+                ViewportLines = viewportLines,
+                TotalLines = totalLines
+            }
+        };
+    }
+
     private async ValueTask RenderFrameAsync(CancellationToken ct)
     {
         host.ScreenSession.CheckAutoSize();
@@ -410,7 +503,6 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         }
         long tokensIn = 0;
         long tokensOut = 0;
-        decimal costUsd = 0m;
         if (host.Tokens?.GetStats() is { } stats)
         {
             tokensIn = stats.TotalInputTokens;
@@ -418,43 +510,23 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         }
 
         // Read-switching step 4a: chrome identity (status/model/provider/agent)
-        // comes from the TEA store (seeded + dual-written); Cost stays on
+        // comes from the TEA store (seeded + dual-written); token counts stay on
         // ITokenTracker and geometry stays measured (unified under goldens).
         // Memoized: identical inputs reuse the instance so the projector's
         // reference-equality fast path skips re-projection on quiet frames.
-        var storeChat = host._replStore.State.Chat;
+        // #457: cost and scroll used to be hardcoded to 0 here, so the reducer's
+        // accumulated CostUsd never reached the footer and the scroll segment
+        // was pinned. Both now come from the store snapshot.
+        var storeState = host._replStore.State;
         int frameTotal = Math.Max(rows, host.Screen.Timeline.Timeline.Count);
-        if (host._lastStatusSnapshot is not { } prev
-            || prev.Chat.Status != storeChat.Status
-            || prev.Chat.Model != storeChat.Model
-            || prev.Chat.Provider != storeChat.Provider
-            || prev.Chat.AgentName != storeChat.AgentName
-            || prev.Cost.TokensIn != tokensIn
-            || prev.Cost.TokensOut != tokensOut
-            || prev.Cost.CostUsd != costUsd
-            || prev.ViewportLines != rows
-            || prev.TotalLines != frameTotal)
-        {
-            prev = new UiState
-            {
-                Chat = new ChatDomainState
-                {
-                    Status = storeChat.Status,
-                    Model = storeChat.Model,
-                    Provider = storeChat.Provider,
-                    AgentName = storeChat.AgentName,
-                    Cost = new CostSnapshot(tokensIn, tokensOut, costUsd)
-                },
-                Ui = new TerminalUiState
-                {
-                    ScrollOffset = 0,
-                    ViewportLines = rows,
-                    TotalLines = frameTotal
-                }
-            };
-            host._lastStatusSnapshot = prev;
-        }
-
+        var prev = BuildStatusSnapshot(
+            host._lastStatusSnapshot,
+            storeState,
+            tokensIn,
+            tokensOut,
+            rows,
+            frameTotal);
+        host._lastStatusSnapshot = prev;
         host.Screen.Status.ProjectedState = prev;
 
         // Spring resize (P1.6): while a layout spring is in flight the rects
@@ -484,7 +556,11 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         }
         _ = host._timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, host._timelineViewportH);
 
-        host.ScreenSession.BeginFrame();
+        // The frame scope owns the palette pin: everything between here and
+        // the flush can throw (a widget at the layout boundary), and an
+        // exception used to leave the pin armed on the render thread for
+        // good — the theme never updated again until restart (#458).
+        using var frame = host.ScreenSession.BeginFrameScope();
         // PRIM2c: dialog/toast paint through LayoutTree.Overlays (hidden layers
         // stay off the stack, so quiet frames are byte-identical to panels-only).
         host.Screen.SyncOverlays(new Rect(0, 0, cols, rows));
@@ -512,7 +588,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         ApplyFrameDamageHints(cols);
         ArmGateGlow();
 
-        await host.ScreenSession.FlushFrameAsync(ct).ConfigureAwait(false);
+        await frame.FlushAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>

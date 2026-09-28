@@ -978,4 +978,4 @@ value equality, no `with`, more boilerplate.
 - [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 30+ "не делайте так" с примерами.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — high-level дизайн.
 - [EXAMPLES.md](./EXAMPLES.md) — cookbook с 40 рецептами.
-- [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 41 known violation с приоритетами.
+- [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 45 known violations с приоритетами.

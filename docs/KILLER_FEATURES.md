@@ -30,11 +30,11 @@ The list below is the **ruthless, ship-first** ranking. Each entry has:
 | 5  | Intra-line word-diff highlighting (not just line)  | 5      | M      | Pi (diff lib) | ✅ R+ (dependency-free `WordDiff` LCS + `DiffBlock` 1:1 pairing; insertion/deletion covered) |
 | 6  | Toast notifications with slide-in + auto-dismiss   | 4      | S      | Orca (sonner) | ✅ R28 |
 | 7  | Tab-strip with drag-reorder + close-gesture        | 4      | L      | Orca          | ❌ |
-| 8  | Worktree jump palette (Cmd-J / Ctrl+J)             | 5      | M      | Orca          | ⚠️ partial (model + Ctrl+J hotkey + reducer + CellForge jump panel; overlay polish pending) |
+| 8  | Worktree jump palette (Cmd-J / Ctrl+J)             | 5      | M      | Orca          | ✅ (typed fuzzy query + centred modal overlay, #381) |
 | 9  | Agent pet mascot that reacts to agent state        | 4      | S      | Orca          | ❌ |
 | 10 | Markdown rich editor (TipTap) with code blocks     | 5      | L      | Orca          | ⚠️ partial (renderer, no editor) |
 | 11 | Image preview inline in chat                       | 4      | M      | Opencode, Kilo | ❌ |
-| 12 | Skill freshness pill (update available)            | 3      | S      | Orca          | ⚠️ partial (pure `SkillFreshnessModel` + `CellForgeSkillFreshnessPanel`, host seeding pending) |
+| 12 | Skill freshness pill (update available)            | 3      | S      | Orca          | ✅ (`SkillFreshnessModel` + default-on status-line aggregate `skills ●N` + `/skills update`; per-skill panel opt-in via `HARBOR_SKILL_FRESHNESS=1`) |
 | 13 | Setup-guide progress ring + checklist              | 4      | M      | Orca          | ✅ R28 (onboarding wizard with stepper) |
 | 14 | Dictation / speech-to-text input                   | 3      | L      | Orca (sherpa) | ❌ |
 | 15 | Browser/markup overlay for screenshots             | 4      | L      | Orca          | ❌ |
@@ -764,15 +764,26 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** M (6 hours — mostly reuse CommandPaletteView)
 - **Priority:** P1
 - **Dependencies:** None
-- **Status:** Slice 1 landed (`feat/jump-palette`): pure `WorktreeJumpPaletteModel`
-  (`Harbor.Ui.Framework.Services/Palettes/`, row = path + branch + short status,
-  fuzzy filter mirroring `CommandPaletteViewModelBase`) with TUnit coverage
-  (`tests/Harbor.Tui.Tests/WorktreeJumpPaletteTests.cs`); `ChatAction.JumpPalette`
-  + Ctrl+J mapping in SpectreTui/RazorConsole/Termina/TerminalGui; reducer toggles
-  the `"jump"` panel (`OverlayIds.JumpPalette`) — noop until a host registers it.
-  Enter-confirm returns the entry; the host switches via
-  `ISessionManager.OpenSessionAsync(entry.SessionId)`. Pending: renderer panel
-  painting `Results`, session-list seeding, Enter/Esc routing while open.
+- **Status:** ✅ Complete. Slices 1–3 landed:
+  - **Slice 1** (`feat/jump-palette`): pure `WorktreeJumpPaletteModel`
+    (`Harbor.Ui.Framework.Services/Palettes/`, row = path + branch + short
+    status, fuzzy filter mirroring `CommandPaletteViewModelBase`) with TUnit
+    coverage (`tests/Harbor.Tui.Tests/WorktreeJumpPaletteTests.cs`);
+    `ChatAction.JumpPalette` + Ctrl+J mapping in
+    SpectreTui/RazorConsole/Termina/TerminalGui; reducer toggles the `"jump"`
+    panel (`OverlayIds.JumpPalette`).
+  - **Slice 2** (`feat/jump-palette-panel`): `CellForgeJumpPalettePanel` —
+    seeds from `git worktree list --porcelain` + live sessions, renders
+    `Results`, Enter switches via `ISessionManager.OpenSessionAsync`, Esc
+    closes, `r` re-seeds.
+  - **Slice 3** (`feat/jump-palette-381`, #381): the query is finally wired —
+    printable keys feed `WorktreeJumpPaletteModel.SetQuery`, `Backspace` trims,
+    the header shows `Jump: <query>`, and `r` re-seeds *keeping* the filter.
+    The palette moved from a Right-docked panel to a **centred modal overlay**
+    (`CellForgeJumpPaletteOverlayLayer`, an `IOverlayLayer` on the existing
+    `LayoutTree.Overlays` stack with `IsModal ⇒` input barrier), so the Right
+    dock slot is released and typing never leaks into the composer.
+    Covered by `tests/Harbor.Tui.CellForge.Tests/CellForgeJumpPalettePanelTests.cs`.
 
 ---
 
@@ -1064,6 +1075,24 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** M (6 hours)
 - **Priority:** P1
 - **Dependencies:** None
+- **Status:** Landed in CellForge (issue #383, part of #23). Pure
+  `SetupChecklistModel` (`Harbor.Ui.Framework.Projection`): five stable
+  `SetupTaskIds` with labels + done/pending markers, a `TaskId → bool`
+  completion snapshot setter (`WithCompletion` / `WithTask`), a `done/total`
+  progress text and a clamped 0..1 ratio. Immutable-on-update — every change
+  returns a new instance, so the render thread paints a snapshot while the host
+  publishes the next one. Detection in `Harbor.Application`
+  (`SetupChecklistDetector`: config file, stored provider key, provider
+  health-check, resolved workspace; "first prompt sent" is host session state).
+  CellForge render: `SetupChecklistOverlay` + `SetupChecklistOverlayLayer`
+  (seated on `ChatScreen.SyncOverlays`) — a centered modal listing every task
+  with `✓`/`○` plus a `GaugeBar` progress bar labeled `3/5`; no new widget
+  family or theme tokens. CLI host wiring (`SetupChecklistController`):
+  auto-opens on first run when `config.Onboarded` is false (latched — Esc closes
+  and it never re-traps in the same session), re-openable via `/setup`, and a
+  completion landing while the modal is open re-damages only its own rect so
+  unrelated panels are not rescanned. The Avalonia `Arc`-based ring of the
+  original sketch is still open for the desktop app.
 
 ---
 
@@ -1076,7 +1105,7 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** S (2 hours)
 - **Priority:** P2
 - **Dependencies:** Plugin version metadata
-- **Status:** Slice 1 landed (`feat/23-small-slice`, issue #23): pure
+- **Status:** ✅ Slice 1 landed (`feat/23-small-slice`, issue #23): pure
   `SkillFreshnessModel` (`Harbor.Ui.Framework.Projection`, entry = name +
   installed/locked hashes, `✓/●/?/✗` pills) with TUnit coverage
   (`SkillFreshnessTests`); `PanelRows.SkillFreshnessRows` shared row builder;
@@ -1086,7 +1115,21 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
   (`Harbor.Application`, BCL-only — sha256 over `SKILL.md`, `skills-lock.json`
   via `Utf8JsonReader`), CLI-startup seeding of the DI-shared model,
   `/skills refresh`, opt-in panel registration (`HARBOR_SKILL_FRESHNESS=1`,
-  appends after the 9 builtins). No update dialog — pills only.
+  appends after the 9 builtins).
+  Slice 3 (issue #384, default-on pill + update): `SkillFreshnessAggregate`
+  collapses the snapshot into one status-line segment —
+  **`skills ●2 changed ✗1 missing ?1 untracked`, rendered by default in the
+  CellForge footer with no env var** (a fully `current` snapshot renders
+  *nothing*, per the footer's no-data ⇒ no-segment contract, so the row stays
+  byte-identical for clean workspaces). The footer lives outside the panel slot
+  order, so the 9-panel `Alt+1..9` pin is untouched and the detailed panel
+  stays opt-in. The pill re-derives from `SkillFreshnessModel.Revision`, so
+  `/skills refresh` / `/skills update` move it in place. `SkillUpdater`
+  (`Harbor.Application`, injectable `SkillGitRunner`) backs
+  **`/skills update [name…]`**: no args ⇒ every stale skill, named args ⇒ those
+  skills, re-resolving the git work tree that owns the skills root via
+  `git pull --ff-only`. A non-git-backed source is an explicit no-op with a
+  hint; a failed pull is a command error that never marks a skill `current`.
 
 ---
 
@@ -1277,7 +1320,7 @@ Default Orca shortcuts (from `keybindings.ts` inferred from e2e tests):
 | Quit                          | Cmd/Ctrl + Q       |
 
 **Harbor status:** Harbor has Ctrl+P, Ctrl+B, Ctrl+Shift+T, Ctrl+O, Ctrl+S,
-Ctrl+L, Esc. Missing: Cmd+J (worktree jump), Cmd+W (close tab), Cmd+Tab
+Ctrl+L, Ctrl+J (worktree jump), Esc. Missing: Cmd+W (close tab), Cmd+Tab
 (next tab), Cmd+\` (terminal), Cmd+1-4 (focus regions), Cmd+, (settings),
 Cmd+Q (quit), Cmd+= / Cmd+- (zoom).
 
