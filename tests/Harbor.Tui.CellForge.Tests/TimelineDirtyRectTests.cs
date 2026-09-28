@@ -105,6 +105,10 @@ public class TimelineDirtyRectTests
             Screen.BeginFrame();
             Chat.Tree.PaintAll(Screen.Back);
 
+            // Snapshot BEFORE consuming: ConsumeFrameDamage hands the ledger to
+            // the host and clears it, so reading HasDirtyRect afterwards would
+            // always report false no matter what the frame decided.
+            bool hasDirtyRect = Timeline.HasDirtyRect;
             bool fullScan = Timeline.ConsumeFrameDamage(Fx, out int fxCount);
             if (fx && !fullScan)
             {
@@ -123,7 +127,7 @@ public class TimelineDirtyRectTests
             }
 
             Screen.FlushFrame();
-            return new FrameOutcome(fullScan, fxCount, Timeline.HasDirtyRect);
+            return new FrameOutcome(fullScan, fxCount, hasDirtyRect);
         }
 
         /// <summary>One paced stream tick: the coalescer pushes a line and marks

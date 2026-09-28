@@ -125,6 +125,11 @@ public sealed class VirtualizedChatTimeline
     /// that returned viewport-wide damage, and when the dirty block sits below
     /// the viewport. Read-only mirror of the ledger for hosts and tests that
     /// want to tell the two cases apart without inspecting rect geometry.
+    ///
+    /// <para>Read it BEFORE <see cref="ConsumeFrameDamage"/>: consuming hands
+    /// the ledger to the host and clears it, so a later read reports false for
+    /// every frame — including the ones that did produce a rect. Hosts that
+    /// learn what to do from the count alone do not need it.</para>
     /// </summary>
     public bool HasDirtyRect => _dirtyRectValid;
 
