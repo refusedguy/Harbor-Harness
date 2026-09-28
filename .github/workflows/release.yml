@@ -87,7 +87,7 @@ jobs:
           (cd publish/${{ matrix.rid }} && zip -r "../../harbor-cli-${{ github.ref_name }}-${{ matrix.rid }}.zip" .)
 
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: "harbor-cli-${{ github.ref_name }}-${{ matrix.rid }}.*"
 
