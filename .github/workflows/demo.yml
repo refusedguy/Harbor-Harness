@@ -2,6 +2,18 @@
 # command or the VHS tapes change. Local equivalent:  vhs demo/hero.tape
 # (or HARBOR_DEMO=1 dotnet test tests/Harbor.Tui.E2E.Tests — TuiDemoRecorder).
 #
+# Every fresh recording is compared against the committed baseline manifest
+# `assets/demo/baseline.json` BEFORE the auto-commit, so a bad render (size
+# blowup, truncated frame list, wrong duration) can never reach the README
+# unnoticed — issue #425.
+#
+#   gh workflow run demo.yml                        # enforce (default)
+#   gh workflow run demo.yml -f enforce=false       # annotate drift, do not block
+#   gh workflow run demo.yml -f record_baseline=true # re-record the manifest
+#
+# The dispatch that relaxes or re-records the gate is itself the audit trail:
+# every run logs its mode into the step summary.
+#
 # PRs: NOT run (saves 8-14 min per PR; GIF review artifacts were never
 # inspected — regeneration happens on merge to dev/master instead).
 name: demo-gifs
@@ -16,6 +28,23 @@ on:
       - "demo/*.tape"
       - ".github/workflows/demo.yml"
   workflow_dispatch:
+    inputs:
+      enforce:
+        description: "Fail the run when a GIF drifts past its baseline (missing / oversized / lost frames / duration change). false = annotate only."
+        type: boolean
+        default: true
+      size_threshold_pct:
+        description: "Allowed size growth over baseline, in percent."
+        type: string
+        default: "20"
+      duration_tolerance_ms:
+        description: "Allowed absolute duration deviation from baseline, in milliseconds."
+        type: string
+        default: "500"
+      record_baseline:
+        description: "Rewrite assets/demo/baseline.json from this run's GIFs (report-only; the manifest is committed back by the auto-commit step on push runs)."
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -98,27 +127,360 @@ jobs:
           path: demo/plain.tape
           install-fonts: true
 
-      - name: Validate GIFs (<5 MB each, all four present)
+      # Size/quality drift gate. Stdlib-only GIF walker (no decoder, no extra
+      # package): reads block structure, per-frame delays and the raw LZW
+      # payload bytes, which is all the comparison needs.
+      #
+      #   fail  — missing GIF, unreadable/truncated GIF, size above
+      #           baseline + threshold, size above the 5 MiB absolute budget,
+      #           lost frames, or duration changed outside tolerance;
+      #   warn  — anything below a fail threshold (annotated, never fatal);
+      #   table — per-GIF baseline -> actual size / frames / duration / delta
+      #           in the step summary.
+      #
+      # inputs.* is empty on push runs, so the `|| '…'` defaults below make the
+      # gate behave identically whether it was triggered by a push or a
+      # workflow_dispatch that left the inputs alone.
+      - name: Drift gate (size / frames / duration vs baseline)
+        env:
+          ENFORCE: ${{ inputs.enforce }}
+          SIZE_THRESHOLD_PCT: ${{ inputs.size_threshold_pct || '20' }}
+          DURATION_TOLERANCE_MS: ${{ inputs.duration_tolerance_ms || '500' }}
+          RECORD_BASELINE: ${{ inputs.record_baseline }}
+          BASELINE_STAMP: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          for gif in hero markdown approval plain; do
-            file="assets/demo/${gif}-compressed.gif"
-            if [ ! -f "$file" ]; then
-              echo "::error::missing demo GIF: $file"; exit 1
-            fi
-            bytes=$(stat -c%s "$file")
-            if [ "$bytes" -gt 5242880 ]; then
-              echo "::error::$file is ${bytes} bytes (>5 MiB budget)"; exit 1
-            fi
-            echo "$file: $bytes bytes"
-          done
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          # Demo GIF size/quality drift gate (issue #425).
+          #
+          # Compares freshly recorded README demo GIFs against the committed baseline
+          # manifest `assets/demo/baseline.json` and reports size / frame-count /
+          # duration / content drift. Stdlib only — no GIF decoder, no new package: we
+          # read block structure, per-frame delays and the raw LZW payload bytes, which
+          # is all the comparison needs.
+          #
+          #   fail  — missing/unreadable GIF, size above baseline + threshold, size above
+          #           the 5 MiB absolute budget, lost frames, duration changed outside
+          #           tolerance;
+          #   warn  — anything below a fail threshold (annotated, never fatal);
+          #   table — per-GIF baseline -> actual size / frames / duration / delta in the
+          #           GitHub Step Summary.
+
+          GIFS = ("hero", "markdown", "approval", "plain")
+          BASELINE_PATH = Path("assets/demo/baseline.json")
+          ABSOLUTE_CAP_BYTES = 5 * 1024 * 1024
+
+          GENERATOR = ".github/workflows/demo.yml (drift gate, stdlib GIF walker)"
+          NOTES = (
+              "Per GIF: byte size, frame count, total duration, and a content-hash summary. "
+              "`framesSha256` is the sha256 over every per-frame LZW payload digest, in frame "
+              "order (that rollup is the per-frame content hash summary); `uniqueFrames` counts "
+              "the distinct per-frame digests. The gate fails on a missing GIF, size above "
+              "baseline + threshold, lost frames, or a duration change outside tolerance, and "
+              "warns on anything smaller. Re-record with: gh workflow run demo.yml "
+              "-f record_baseline=true"
+          )
+
+
+          def _sub_blocks(buf, i):
+              """Concatenate a GIF data sub-block chain."""
+              out = bytearray()
+              while True:
+                  if i >= len(buf):
+                      raise ValueError("truncated GIF: sub-block chain runs past end of file")
+                  size = buf[i]
+                  i += 1
+                  if size == 0:
+                      return bytes(out), i
+                  if i + size > len(buf):
+                      raise ValueError("truncated GIF: sub-block runs past end of file")
+                  out += buf[i:i + size]
+                  i += size
+
+
+          def measure(path):
+              """Walk a GIF block by block and report its size / shape."""
+              buf = Path(path).read_bytes()
+              if buf[:6] not in (b"GIF89a", b"GIF87a"):
+                  raise ValueError(f"not a GIF (bad signature {buf[:6]!r})")
+
+              packed = buf[10]
+              i = 13 + (3 * (1 << ((packed & 0x07) + 1)) if packed & 0x80 else 0)
+
+              frames = 0
+              duration_cs = 0
+              digests = []
+              delay_cs = 0
+
+              while i < len(buf) and buf[i] != 0x3B:  # 0x3B = trailer
+                  marker = buf[i]
+                  if marker == 0x21:  # extension
+                      if i + 2 > len(buf):
+                          raise ValueError("truncated GIF: extension introducer runs past end of file")
+                      if buf[i + 1] == 0xF9:  # graphic control -> next frame delay
+                          delay_cs = int.from_bytes(buf[i + 4:i + 6], "little")
+                      _, i = _sub_blocks(buf, i + 2)
+                      continue
+                  if marker != 0x2C:  # 0x2C = image descriptor
+                      raise ValueError(f"unexpected GIF block 0x{marker:02X} at offset {i}")
+                  local = buf[i + 9]
+                  i += 10 + (3 * (1 << ((local & 0x07) + 1)) if local & 0x80 else 0) + 1
+                  payload, i = _sub_blocks(buf, i)
+                  frames += 1
+                  duration_cs += delay_cs
+                  delay_cs = 0
+                  digests.append(hashlib.sha256(payload).hexdigest())
+
+              if frames == 0:
+                  raise ValueError("truncated GIF: no image frames found")
+
+              rollup = hashlib.sha256()
+              for digest in digests:
+                  rollup.update(digest.encode("ascii"))
+
+              return {
+                  "bytes": len(buf),
+                  "width": int.from_bytes(buf[6:8], "little"),
+                  "height": int.from_bytes(buf[8:10], "little"),
+                  "frames": frames,
+                  "durationMs": duration_cs * 10,
+                  "uniqueFrames": len(set(digests)),
+                  "fileSha256": hashlib.sha256(buf).hexdigest(),
+                  "framesSha256": rollup.hexdigest(),
+              }
+
+
+          def _delta(actual, base):
+              return 100.0 * (actual - base) / base if base else 0.0
+
+
+          def _flag(msg):
+              print(f"::error::{msg}", flush=True)
+
+
+          def _note(msg):
+              print(f"::warning::{msg}", flush=True)
+
+
+          def _threshold(name, default, minimum=0.0):
+              """Parse a free-text dispatch input, falling back to the default so a typo
+              in the dispatch form degrades to the documented threshold instead of
+              crashing the gate."""
+              raw = (os.environ.get(name) or "").strip()
+              if not raw:
+                  return default
+              try:
+                  value = float(raw)
+              except ValueError:
+                  _note(f"{name}={raw!r} is not a number — falling back to the default {default:g}")
+                  return default
+              if value < minimum:
+                  _note(f"{name}={raw} is below the floor {minimum:g} — clamped")
+                  return minimum
+              return value
+
+
+          # inputs.* is empty on push runs, so the `or <default>` fallbacks below keep the
+          # gate behaving identically whether it was triggered by a push or by a
+          # workflow_dispatch that left the inputs alone.
+          SIZE_PCT = _threshold("SIZE_THRESHOLD_PCT", 20)
+          DURATION_TOL = _threshold("DURATION_TOLERANCE_MS", 500)
+          RECORD = (os.environ.get("RECORD_BASELINE") or "").strip().lower() in ("true", "1", "yes")
+          ENFORCE = (os.environ.get("ENFORCE") or "").strip().lower() not in ("false", "0", "no")
+          if RECORD:
+              # Re-baselining is a deliberate, reviewed act — report, never block.
+              ENFORCE = False
+              print("::notice::record_baseline=true — the manifest is rewritten, the gate is report-only")
+
+          actual, errors, warnings = {}, [], []
+          for name in GIFS:
+              path = Path(f"assets/demo/{name}-compressed.gif")
+              if not path.is_file():
+                  errors.append(f"missing demo GIF: {path}")
+                  continue
+              try:
+                  actual[name] = measure(path)
+              except (OSError, ValueError, IndexError) as ex:
+                  errors.append(f"unreadable demo asset: {path}: {ex}")
+
+          baseline = {}
+          if BASELINE_PATH.is_file():
+              try:
+                  baseline = json.loads(BASELINE_PATH.read_text()).get("gifs", {})
+              except json.JSONDecodeError as ex:
+                  errors.append(f"unreadable baseline manifest: {BASELINE_PATH}: {ex}")
+          elif not RECORD:
+              errors.append(
+                  f"missing baseline manifest: {BASELINE_PATH} "
+                  f"(run: gh workflow run demo.yml -f record_baseline=true)"
+              )
+
+          rows = []
+          for name in GIFS:
+              gif = f"assets/demo/{name}-compressed.gif"
+              a = actual.get(name)
+              b = baseline.get(name)
+              if a is None:
+                  rows.append(f"| `{name}` | — | — | — | — | — | — | — | — | ❌ missing |")
+                  continue
+              if b is None:
+                  rows.append(
+                      f"| `{name}` | — | {a['bytes']:,} | new | — | {a['frames']} | — | "
+                      f"{a['durationMs']} ms | new | ⚠️ no baseline |"
+                  )
+                  warnings.append(f"`{gif}` has no baseline entry — treated as newly recorded")
+                  continue
+
+              failed, drifted = [], []
+              growth = _delta(a["bytes"], b["bytes"])
+              if a["bytes"] > b["bytes"] * (1 + SIZE_PCT / 100.0):
+                  errors.append(
+                      f"`{gif}` is {a['bytes']:,} bytes — +{growth:.1f}% over its baseline of "
+                      f"{b['bytes']:,} (limit +{SIZE_PCT:g}%). A size blowup is the cheapest proxy "
+                      f"for a broken or looping render."
+                  )
+                  failed.append("size")
+              elif growth > 0:
+                  warnings.append(
+                      f"`{gif}` grew +{growth:.1f}% ({b['bytes']:,} → {a['bytes']:,} bytes), "
+                      f"under the +{SIZE_PCT:g}% limit"
+                  )
+                  drifted.append("size")
+
+              if a["bytes"] > ABSOLUTE_CAP_BYTES:
+                  errors.append(f"`{gif}` is {a['bytes']:,} bytes (> 5 MiB absolute budget)")
+                  failed.append("size")
+
+              frame_delta = a["frames"] - b["frames"]
+              if frame_delta < 0:
+                  errors.append(
+                      f"`{gif}` lost frames: {a['frames']} recorded vs {b['frames']} in the "
+                      f"baseline ({frame_delta:+d}) — the render truncated or stalled"
+                  )
+                  failed.append("frames")
+              elif frame_delta:
+                  warnings.append(
+                      f"`{gif}` frame count {b['frames']} → {a['frames']} ({frame_delta:+d})"
+                  )
+                  drifted.append("frames")
+
+              d_ms = a["durationMs"] - b["durationMs"]
+              if abs(d_ms) > DURATION_TOL:
+                  errors.append(
+                      f"`{gif}` duration {b['durationMs']} ms → {a['durationMs']} ms ({d_ms:+d} ms), "
+                      f"outside the ±{DURATION_TOL:g} ms tolerance"
+                  )
+                  failed.append("duration")
+              elif d_ms:
+                  warnings.append(
+                      f"`{gif}` duration {b['durationMs']} ms → {a['durationMs']} ms ({d_ms:+d} ms)"
+                  )
+                  drifted.append("duration")
+
+              same = a["framesSha256"] == b.get("framesSha256")
+              if failed:
+                  verdict = "❌ " + ", ".join(failed)
+              elif drifted:
+                  verdict = "⚠️ " + ", ".join(drifted)
+              elif not same:
+                  verdict = "ℹ️ content"
+              else:
+                  verdict = "✅ ok"
+
+              rows.append(
+                  f"| `{name}` | {b['bytes']:,} | {a['bytes']:,} | {growth:+.1f}% | "
+                  f"{b['frames']} | {a['frames']} | {b['durationMs']} ms | {a['durationMs']} ms | "
+                  f"{'same' if same else 'changed'} | {verdict} |"
+              )
+
+          for warning in warnings:
+              _note(warning)
+
+          if ENFORCE:
+              mode = "enforced"
+          elif RECORD:
+              mode = "report-only (re-baselining)"
+          else:
+              mode = "report-only (enforce=false)"
+
+          summary = [
+              "## Demo GIF drift gate",
+              "",
+              f"Mode **{mode}** · size budget **baseline +{SIZE_PCT:g}%** · "
+              f"duration tolerance **±{DURATION_TOL:g} ms** · absolute cap **5 MiB**",
+              "",
+              "Baseline manifest: [`assets/demo/baseline.json`](assets/demo/baseline.json)",
+              "",
+              "| gif | baseline | actual | Δ size | baseline frames | actual frames "
+              "| baseline dur | actual dur | content | verdict |",
+              "|---|---|---|---|---|---|---|---|---|---|",
+              *rows,
+              "",
+          ]
+          if RECORD:
+              summary += [
+                  "**Baseline re-recorded** from this run's output — `assets/demo/baseline.json` "
+                  "was rewritten and is committed back by the auto-commit step (push runs only).",
+                  "",
+              ]
+          if errors:
+              outcome = "failed the gate — the GIFs were NOT committed" if ENFORCE else "reported; gate relaxed"
+              summary += [f"**{len(errors)} finding(s) {outcome}**", ""]
+              summary += [f"- {e}" for e in errors]
+              summary += [""]
+          else:
+              summary += ["**No drift beyond the configured thresholds.**", ""]
+
+          text = "\n".join(summary) + "\n"
+          step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if step_summary:
+              with open(step_summary, "a") as fh:
+                  fh.write(text)
+          print(text)
+
+          exit_code = 0
+          if RECORD:
+              if len(actual) != len(GIFS):
+                  _flag(f"refusing to re-record: only {len(actual)}/{len(GIFS)} GIFs present")
+                  raise SystemExit(1)
+              recorded = {
+                  "version": 1,
+                  "generatedAt": os.environ.get("BASELINE_STAMP", ""),
+                  "generator": GENERATOR,
+                  "notes": NOTES,
+                  "gifs": {
+                      name: {"path": f"assets/demo/{name}-compressed.gif", **actual[name]}
+                      for name in GIFS
+                  },
+              }
+              BASELINE_PATH.parent.mkdir(parents=True, exist_ok=True)
+              BASELINE_PATH.write_text(json.dumps(recorded, indent=2) + "\n")
+              print(f"::notice::re-recorded {BASELINE_PATH}")
+
+          if errors and ENFORCE:
+              for error in errors:
+                  _flag(error)
+              exit_code = 1
+          elif errors:
+              for error in errors:
+                  _note(error)
+
+          raise SystemExit(exit_code)
+          PY
 
       - name: Upload demo GIFs artifact
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: demo-gifs
-          path: assets/demo/*-compressed.gif
+          path: |
+            assets/demo/*-compressed.gif
+            assets/demo/baseline.json
           if-no-files-found: warn
 
       - name: Commit regenerated GIFs (push to dev/master only)
@@ -126,4 +488,6 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore(demo): regenerate README GIFs [skip ci]"
-          file_pattern: "assets/demo/*-compressed.gif"
+          file_pattern: |
+            assets/demo/*-compressed.gif
+            assets/demo/baseline.json
