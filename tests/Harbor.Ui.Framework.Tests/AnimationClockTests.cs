@@ -17,7 +17,7 @@ public class AnimationClockTests
     {
         using var clock = new AnimationClock();
         var seen = new List<long>();
-        clock.Advanced += seen.Add;
+        clock.Advanced += (_, e) => seen.Add(e.Tick);
 
         await Assert.That(clock.Tick).IsEqualTo(0);
         long t1 = clock.Advance();

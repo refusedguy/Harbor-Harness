@@ -26,7 +26,7 @@ public sealed class AnimationClock : IDisposable
     private bool _disposed;
 
     /// <summary>Raised on the timer thread after every tick with the new value. Subscribers must be quick and must not throw.</summary>
-    public event Action<long>? Advanced;
+    public event EventHandler<AnimationTickEventArgs>? Advanced;
 
     public AnimationClock(bool start = false)
     {
@@ -69,7 +69,11 @@ public sealed class AnimationClock : IDisposable
     public long Advance()
     {
         long next = Interlocked.Increment(ref _tick);
-        Advanced?.Invoke(next);
+        if (Advanced is { } handler)
+        {
+            handler(this, new AnimationTickEventArgs(next));
+        }
+
         return next;
     }
 
@@ -92,4 +96,11 @@ public sealed class AnimationClock : IDisposable
             Advance();
         }
     }
+}
+
+/// <summary>Payload for <see cref="AnimationClock.Advanced"/>: the new monotonic tick.</summary>
+public sealed class AnimationTickEventArgs(long tick) : EventArgs
+{
+    /// <summary>The new monotonic tick value.</summary>
+    public long Tick { get; } = tick;
 }

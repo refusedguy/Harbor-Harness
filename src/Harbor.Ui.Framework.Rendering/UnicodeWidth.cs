@@ -152,7 +152,7 @@ public static class UnicodeWidth
     private struct WidthCacheEntry
     {
         public string? Text;
-        public int Width;
+        public int CellWidth;
     }
 
     /// <summary>
@@ -169,12 +169,12 @@ public static class UnicodeWidth
             var slot = _widthCache[index];
             if (slot.Text is not null && (ReferenceEquals(slot.Text, text) || slot.Text.Equals(text, StringComparison.Ordinal)))
             {
-                return slot.Width;
+                return slot.CellWidth;
             }
 
-            int width = Width(text.AsSpan());
-            _widthCache[index] = new WidthCacheEntry { Text = text, Width = width };
-            return width;
+            int cellWidth = Width(text.AsSpan());
+            _widthCache[index] = new WidthCacheEntry { Text = text, CellWidth = cellWidth };
+            return cellWidth;
         }
     }
 
