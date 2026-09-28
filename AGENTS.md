@@ -531,7 +531,14 @@ When making changes to:
 
 ## Benchmarks
 
-Harbor benchmarks live in `docs/BENCHMARKS.md`. Key numbers:
+**`docs/BENCHMARKS.md` is the single source of truth for every measured number in
+this repo.** If a figure appears here it is a copy of a row there — never
+independently typed. When you re-measure, update BENCHMARKS.md first, then this
+table in the same commit; a stale headline number in AGENTS.md/CLAUDE.md is a
+doc bug, not a rounding difference.
+
+Key numbers (2026-09-09 CI-short run, AMD EPYC 9V74 — full table and provenance
+in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md)):
 
 | Metric | Value |
 |---|---|
@@ -543,7 +550,9 @@ Harbor benchmarks live in `docs/BENCHMARKS.md`. Key numbers:
 | `ToolRegistry.ResolveTools` (4 tools, with permission) | **2.3 µs** |
 | `PermissionRuleset.Evaluate` | **0.35 µs** |
 
-2026-09-09 PR run (AMD EPYC); full table in `docs/BENCHMARKS.md`. Historical spot-checks there; re-measure before quoting on hot-path PRs.
+Do not quote these on a hot-path PR without re-measuring — historical
+spot-checks from other machines live in BENCHMARKS.md §5 and are not
+comparable to the CI-short rows above.
 
 ### Adding a benchmark
 
