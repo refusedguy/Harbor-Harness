@@ -14,6 +14,9 @@ namespace Harbor.Core.Tests;
 /// </summary>
 public class EventBusFastPathTests
 {
+    /// <summary>Warmup publishes, published before the allocation measurement.</summary>
+    private const int Warmup = 3_000;
+
     // ── (a) a mandatory sink keeps the event ────────────────────────────────
 
     /// <summary>
@@ -95,7 +98,7 @@ public class EventBusFastPathTests
             .Because("the fast path returns the cached completed task — no state machine, no Task allocation");
 
         var evt = new TurnStartEvent(1);
-        for (int i = 0; i < 3_000; i++)
+        for (int i = 0; i < Warmup; i++)
         {
             await bus.PublishAsync(evt);
         }
@@ -113,7 +116,8 @@ public class EventBusFastPathTests
         Console.WriteLine($"eventbus-fastpath: {publishes} qualifying publishes = {allocated} B ({(double)allocated / publishes:F2} B/publish)");
         await Assert.That(allocated).IsEqualTo(0)
             .Because("the qualifying fast path is the #47/S3 zero-allocation claim; a regression here is a regression in the claim");
-        await Assert.That(bus.FastPathCount).IsEqualTo(publishes + 3_000);
+        await Assert.That(bus.FastPathCount).IsEqualTo(1 + Warmup + publishes)
+            .Because("the probe publish above is a fast-path publish too — nothing on this path may be uncounted");
     }
 
     // ── (c) one subscriber rules the fast path out ──────────────────────────
@@ -168,7 +172,7 @@ public class EventBusFastPathTests
         await Assert.That(bus.FastPathCount).IsEqualTo(1);
         await Assert.That(bus.OptionalSinkDrainCount).IsEqualTo(1);
 
-        for (int i = 0; i < 3_000; i++)
+        for (int i = 0; i < Warmup; i++)
         {
             await bus.PublishAsync(evt);
         }
@@ -186,7 +190,7 @@ public class EventBusFastPathTests
         Console.WriteLine($"eventbus-fastpath: {publishes} optional-drain publishes = {allocated} B ({(double)allocated / publishes:F2} B/publish)");
         await Assert.That(allocated).IsEqualTo(0)
             .Because("an indexed drain over synchronous sinks must not reintroduce an allocation");
-        await Assert.That(sink.Seen).IsEqualTo(publishes + 3_000);
+        await Assert.That(sink.Seen).IsEqualTo(publishes + Warmup);
     }
 
     /// <summary>
@@ -297,14 +301,26 @@ public class EventBusFastPathTests
 
     // ── sinks ──────────────────────────────────────────────────────────────
 
-    /// <summary>Sink that declared itself mandatory and counts what it saw.</summary>
-    private sealed class RecordingMandatorySink : RecordingSinkBase
+    /// <summary>
+    ///     Sink that declared itself mandatory and counts what it saw.
+    ///     <para>
+    ///         <c>IEventBusMiddleware</c> is re-listed in the base list on
+    ///         purpose: <see cref="SinkKind" /> is a <em>default</em> interface
+    ///         member, so a base class that implements the interface without it
+    ///         gets a compiler-synthesised forwarder — and a derived class that
+    ///         only declares a same-named member does NOT re-implement the
+    ///         interface. The forwarder would keep answering Mandatory and the
+    ///         bus would refuse the fast path. Re-listing the interface is the
+    ///         documented way out; the same trap is called out on the interface.
+    ///     </para>
+    /// </summary>
+    private sealed class RecordingMandatorySink : RecordingSinkBase, IEventBusMiddleware
     {
         public EventBusSinkKind SinkKind => EventBusSinkKind.Mandatory;
     }
 
     /// <summary>Sink that declared itself optional and counts what it saw.</summary>
-    private sealed class RecordingOptionalSink : RecordingSinkBase
+    private sealed class RecordingOptionalSink : RecordingSinkBase, IEventBusMiddleware
     {
         public EventBusSinkKind SinkKind => EventBusSinkKind.Optional;
     }

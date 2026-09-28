@@ -47,6 +47,18 @@ public interface IEventBusMiddleware
     ///     path. Declare <see cref="EventBusSinkKind.Optional" /> only for a
     ///     diagnostic, sampler, secondary projection or third-party extension,
     ///     i.e. a sink nothing downstream becomes wrong without.
+    ///     <para>
+    ///         <b>Implementing it on a derived class:</b> because this is a
+    ///         default interface member, a base class that implements
+    ///         <see cref="IEventBusMiddleware" /> without a verdict gets a
+    ///         compiler-synthesised forwarder, and a derived class that merely
+    ///         declares a same-named member does not re-implement the
+    ///         interface — the forwarder keeps answering
+    ///         <see cref="EventBusSinkKind.Mandatory" />. Re-list
+    ///         <c>IEventBusMiddleware</c> in the derived class' base list (or
+    ///         declare the verdict on the class that implements the interface
+    ///         directly).
+    ///     </para>
     /// </summary>
     EventBusSinkKind SinkKind => EventBusSinkKind.Mandatory;
 
