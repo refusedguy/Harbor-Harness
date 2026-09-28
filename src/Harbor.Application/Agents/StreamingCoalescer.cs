@@ -102,12 +102,30 @@ internal sealed class StreamingCoalescer : IDisposable
     }
 
     /// <summary>Append a tool-call args delta.</summary>
+    /// <remarks>
+    ///     #493: the pending-call table is a table of <b>references</b>, not
+    ///     of values. <c>PooledStringBuilder</c> is a readonly struct that
+    ///     wraps a shared <see cref="StringBuilder" />, so
+    ///     <c>acc.Args.Builder.Append(argsDelta)</c> has already mutated the
+    ///     very object the stored entry points at — the entry's tuple cannot
+    ///     have changed. Re-storing it was a hash lookup plus a bucket write
+    ///     per args fragment, on the largest delta stream in a turn, with no
+    ///     semantic effect: an observer holding the entry (or the builder it
+    ///     wraps) from before the call sees the appended text either way.
+    ///     <para>
+    ///         The class therefore needs no copy-on-write semantics, and the
+    ///         write-back only made it <i>look</i> as though it did — which
+    ///         invites "fixes" that do pay. If a future change needs value
+    ///         state in the entry (a length, a digest), store it where the
+    ///         mutation happens instead of reintroducing a per-delta store.
+    ///         Pinned by <c>StreamingCoalescerNoStoreTests</c>.
+    ///     </para>
+    /// </remarks>
     public void AppendToolCallDelta(string id, string argsDelta)
     {
         if (_pendingToolCalls.TryGetValue(id, out var acc))
         {
             acc.Args.Builder.Append(argsDelta);
-            _pendingToolCalls[id] = acc;
         }
     }
 

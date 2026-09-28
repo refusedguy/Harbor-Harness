@@ -628,6 +628,9 @@ dotnet run -c Release --project tests/Harbor.Registries.Tests -- --treenode-filt
 | `TryParseChatChunkLine_TextDelta_StaysBounded` (`Harbor.Providers.Tests`) | `OpenAiWire.TryParseChatChunkLine` text chunk | ≤ 4 KB/chunk |
 | `DecodeDataLine_KilobytePayload_AllocatesNothing` (`Harbor.Providers.Tests`, #467) | `SsePump.DecodeDataLine` — SSE `data:` prefix strip + `[DONE]` test on a 4 KB line (above the chunk parser, so outside the row above) | 0 B |
 | `LegacyDecode_StillCopiesPayload_TripwireIsNotVacuous` (#467) | the pre-#467 chain kept verbatim (`Substring` → `TrimStart` → `Trim().Equals("[DONE]")`) on the same 4 KB line — keeps the zero-alloc gate from passing vacuously | > 2 bytes/char |
+| `Style_SweepsEveryStyleCombination_AllocatesNothing` (`Harbor.Tui.RendererTests`, #493) | `AnsiEscapeStrategy.Style` — a table read over all 64 `TuiStyle` combinations, once per styled run (not per frame) | 0 B |
+| `PerStyledRunStringBuilder_StillAllocated_TripwireIsNotVacuous` (#493) | the pre-#493 chain kept verbatim (throwaway `StringBuilder(11)` + `ToString()` per styled run) over the same 64 combinations | > 64 B |
+| `ToolCallDelta_AppendsEveryFragment_WithoutWritingToTheTable` (`Harbor.Application.Tests`, #493) | `StreamingCoalescer.AppendToolCallDelta` — not an allocation cell: the removed write-back was a hash + bucket store (0 B, non-zero cycles), so it is gated on the table's own modification contract instead | exact |
 | `ExtractDiff_NonDiffTool_IsAllocationFree` (`Harbor.Tui.CellForge.Tests`) | `DiffPreview.ExtractDiff` non-diff guard | 0 B |
 | `ExtractDiff_Edit_StaysBounded` | `DiffPreview.ExtractDiff` edit path | ≤ 32 KB/call |
 | `Fit_AllocatesNothing_WhenTheRowIsResolvedByDroppingSegments` (`Harbor.Ui.Framework.Tests`, #487) | `StatusBarLayout.Fit` drop path (8 segments → 5) | 0 B |

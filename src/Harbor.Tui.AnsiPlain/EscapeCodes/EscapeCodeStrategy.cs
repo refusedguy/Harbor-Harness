@@ -81,6 +81,14 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
     public string EnterAlternateScreen => EnterAlternateScreenSeq;
     public string ExitAlternateScreen => ExitAlternateScreenSeq;
 
+    // #493 left these two interpolating on purpose. Each costs exactly one
+    // string — the sequence itself — and neither has a cacheable key space:
+    // truecolor is 16.7M R;G;B triples, and a cursor move is bounded only by
+    // the terminal size. A cache would trade a single short-lived string for
+    // unbounded retained state to save nothing on the styled-run path, which
+    // is what SgrParamTable covers. The plain backend is the low-volume one
+    // (CellForge.Engine/Rendering/AnsiWriter.cs is already 0-alloc); revisit
+    // both together rather than alone.
     public string CursorPosition(int row, int col) =>
         $"\x1b[{Math.Max(1, row)};{Math.Max(1, col)}H";
 
@@ -88,33 +96,70 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
         $"\x1b[{ground};2;{color.R};{color.G};{color.B}m";
 
     /// <summary>
+    ///     Longest possible SGR parameter list: six single-digit codes joined
+    ///     by five <c>;</c> separators.
+    /// </summary>
+    private const int MaxSgrLength = 11;
+
+    /// <summary>Number of distinct <see cref="StyleFlag" /> combinations (six bits, incl. <see cref="StyleFlag.None" />).</summary>
+    private const int SgrTableSize = 1 << 6;
+
+    /// <summary>
+    ///     #493: the SGR parameter list for every style, precomputed once per
+    ///     process. <see cref="StyleFlag" /> is six bits wide, so the whole
+    ///     input space is 64 entries and the table is <b>complete</b> — there
+    ///     is no miss and therefore no fallback. <see cref="SgrParams" /> is a
+    ///     single array read: the styled-run path no longer allocates a
+    ///     <c>StringBuilder</c> and a result string per styled run, which a
+    ///     text-heavy frame paid for once per run. The zero only holds because
+    ///     <see cref="MapStyle" /> is box-free too.
+    /// </summary>
+    private static readonly string[] SgrParamTable = BuildSgrParamTable();
+
+    /// <summary>
+    ///     Build <see cref="SgrParamTable" /> from the same code/order the
+    ///     per-call builder used, so painted bytes are unchanged (golden
+    ///     frames depend on it). The <c>StringBuilder</c> this replaces ran
+    ///     once per combination at type init instead of once per styled run.
+    /// </summary>
+    private static string[] BuildSgrParamTable()
+    {
+        var table = new string[SgrTableSize];
+
+        // stackalloc is hoisted out of the loop on purpose: inside a loop body
+        // it would re-stackalloc on every iteration.
+        Span<char> codes = stackalloc char[MaxSgrLength];
+
+        for (int bits = 0; bits < table.Length; bits++)
+        {
+            var flags = (StyleFlag)bits;
+            int length = 0;
+            AppendParam(codes, ref length, flags, StyleFlag.Bold, '1');
+            AppendParam(codes, ref length, flags, StyleFlag.Dim, '2');
+            AppendParam(codes, ref length, flags, StyleFlag.Italic, '3');
+            AppendParam(codes, ref length, flags, StyleFlag.Underline, '4');
+            AppendParam(codes, ref length, flags, StyleFlag.Strike, '9');
+            AppendParam(codes, ref length, flags, StyleFlag.Reverse, '7');
+            table[bits] = new string(codes[..length]);
+        }
+
+        return table;
+    }
+
+    /// <summary>
     ///     SGR parameter list (e.g. <c>"1;4"</c>), or empty for
     ///     <see cref="TuiStyle.None" />. Order and codes mirror the former
     ///     generated <c>FormatStyle</c> so golden frames stay stable.
     /// </summary>
-    private static string SgrParams(TuiStyle style)
-    {
-        StyleFlag flags = MapStyle(style);
-        if (flags == StyleFlag.None)
-            return string.Empty;
+    private static string SgrParams(TuiStyle style) => SgrParamTable[(int)MapStyle(style)];
 
-        StringBuilder sb = new(11);
-        AppendParam(ref sb, flags, StyleFlag.Bold, '1');
-        AppendParam(ref sb, flags, StyleFlag.Dim, '2');
-        AppendParam(ref sb, flags, StyleFlag.Italic, '3');
-        AppendParam(ref sb, flags, StyleFlag.Underline, '4');
-        AppendParam(ref sb, flags, StyleFlag.Strike, '9');
-        AppendParam(ref sb, flags, StyleFlag.Reverse, '7');
-        return sb.ToString();
-    }
-
-    private static void AppendParam(ref StringBuilder sb, StyleFlag flags, StyleFlag flag, char code)
+    private static void AppendParam(Span<char> codes, ref int length, StyleFlag flags, StyleFlag flag, char code)
     {
-        if (!flags.HasFlag(flag))
+        if ((flags & flag) == 0)
             return;
-        if (sb.Length > 0)
-            sb.Append(';');
-        sb.Append(code);
+        if (length > 0)
+            codes[length++] = ';';
+        codes[length++] = code;
     }
 
     private const string HideCursorSeq = "\x1b[?25l";
@@ -126,13 +171,18 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
 
     private static StyleFlag MapStyle(TuiStyle style)
     {
+        // Bit tests, not Enum.HasFlag. HasFlag takes an Enum, so every call
+        // boxes its argument — six boxes per styled run, which is what kept
+        // SgrParams allocating (288 B/run, measured) even after the parameter
+        // table removed the builder. For a [Flags] enum the two are equivalent.
+        int bits = (int)style;
         StyleFlag flags = StyleFlag.None;
-        if (style.HasFlag(TuiStyle.Bold)) flags |= StyleFlag.Bold;
-        if (style.HasFlag(TuiStyle.Dim)) flags |= StyleFlag.Dim;
-        if (style.HasFlag(TuiStyle.Italic)) flags |= StyleFlag.Italic;
-        if (style.HasFlag(TuiStyle.Underline)) flags |= StyleFlag.Underline;
-        if (style.HasFlag(TuiStyle.Strike)) flags |= StyleFlag.Strike;
-        if (style.HasFlag(TuiStyle.Reverse)) flags |= StyleFlag.Reverse;
+        if ((bits & (int)TuiStyle.Bold) != 0) flags |= StyleFlag.Bold;
+        if ((bits & (int)TuiStyle.Dim) != 0) flags |= StyleFlag.Dim;
+        if ((bits & (int)TuiStyle.Italic) != 0) flags |= StyleFlag.Italic;
+        if ((bits & (int)TuiStyle.Underline) != 0) flags |= StyleFlag.Underline;
+        if ((bits & (int)TuiStyle.Strike) != 0) flags |= StyleFlag.Strike;
+        if ((bits & (int)TuiStyle.Reverse) != 0) flags |= StyleFlag.Reverse;
         return flags;
     }
 }
