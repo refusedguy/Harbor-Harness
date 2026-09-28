@@ -65,6 +65,15 @@ public sealed record ChatDomainState
     /// <summary>Id of the currently active session, or null if none.</summary>
     public SessionId? ActiveSessionId { get; init; }
 
+    /// <summary>
+    ///     Open tabs in tab order plus the focused tab (#388). Distinct from
+    ///     <see cref="Sessions" />: that is every session the store knows about,
+    ///     this is the subset that is open right now. Transitions live in
+    ///     <see cref="UiReducer" /> (<c>OpenTab</c> / <c>ActivateTab</c> /
+    ///     <c>CloseTab</c> / <c>ReorderTab</c> / …) — nothing mutates it here.
+    /// </summary>
+    public TabStripState TabStrip { get; init; } = TabStripState.Empty;
+
     /// <summary>Whether the session list is currently loading.</summary>
     public bool IsLoading { get; init; }
 
