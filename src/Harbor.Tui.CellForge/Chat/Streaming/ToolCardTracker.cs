@@ -94,11 +94,62 @@ internal sealed class ToolCardTracker
             collapsible.MaxBodyLines = 0;
             _tasks.TryAdd(id, new TaskState());
         }
+        else if (ReadGroupBlock.IsReadOnlyTool(toolName))
+        {
+            // [UX3] #263: consecutive read-only context tools coalesce into
+            // one "gathered context" group line (opencode pattern) instead of
+            // N cards. Single reads stay plain ToolCallBlocks.
+            EnsureReadCard(id, block);
+            return;
+        }
 
         _panel.Timeline.Append(block);
         _panel.Timeline.MarkLastDirty();
         var card = new ToolCard { Block = block, StartedMs = NowMs };
         _cards[id] = card;
+    }
+
+    // ── Read group ([UX3] #263) ────────────────────────────────────────────
+    // Consecutive read-only context tools (read/glob/grep/ls/tree/ripgrep)
+    // share one "gathered context" group line: the second adjacent read-only
+    // card converts the pair into a ReadGroupBlock (in-place Replace — no
+    // timeline removal needed), further adjacent ones extend it. Any other
+    // block (tool card, text, gate) breaks the run. Members stay tracked in
+    // _cards by id, so completion, durations and toggle routing work unchanged.
+
+    private int _readGroupSeq;
+
+    private string NewReadGroupId() => $"readgroup-{_readGroupSeq++}";
+
+    private void EnsureReadCard(string id, ToolCallBlock block)
+    {
+        var tl = _panel.Timeline;
+        if (tl.Count > 0)
+        {
+            var last = tl.BlockAt(tl.Count - 1);
+            if (last is ReadGroupBlock group)
+            {
+                group.AddMember(block);
+                _cards[id] = new ToolCard { Block = block, StartedMs = NowMs };
+                tl.MarkLastDirty();
+                return;
+            }
+
+            if (last is ToolCallBlock lastCard && ReadGroupBlock.IsReadOnlyTool(lastCard.Info.ToolName))
+            {
+                var merged = new ReadGroupBlock(NewReadGroupId());
+                merged.AddMember(lastCard);
+                merged.AddMember(block);
+                tl.Replace(last, merged);
+                _cards[id] = new ToolCard { Block = block, StartedMs = NowMs };
+                tl.MarkLastDirty();
+                return;
+            }
+        }
+
+        tl.Append(block);
+        tl.MarkLastDirty();
+        _cards[id] = new ToolCard { Block = block, StartedMs = NowMs };
     }
 
     /// <summary>Agent-level error rendered through the same collapsible
@@ -494,6 +545,15 @@ internal sealed class ToolCardTracker
                 tl.MarkLastDirty();
                 return true;
             }
+
+            // [UX3] #263: a read group toggles by its own id or any member id.
+            if (tl.BlockAt(i) is ReadGroupBlock group
+                && (string.Equals(group.Id, toolCallId, StringComparison.Ordinal) || group.ContainsMember(toolCallId)))
+            {
+                group.ToggleExpanded();
+                tl.MarkLastDirty();
+                return true;
+            }
         }
 
         return false;
@@ -518,9 +578,12 @@ internal sealed class ToolCardTracker
         var tl = _panel.Timeline;
         for (int i = tl.Count - 1; i >= 0; i--)
         {
-            if (tl.BlockAt(i) is ToolCallBlock card)
+            var block = tl.BlockAt(i);
+            // [UX3] #263: the read group expands like any tool card (no policy
+            // change — the same newest-card Enter toggles it).
+            if (block is ToolCallBlock or ReadGroupBlock)
             {
-                card.ToggleExpanded();
+                ((ICollapsibleChatBlock)block).ToggleExpanded();
                 tl.MarkLastDirty();
                 return true;
             }
@@ -546,9 +609,17 @@ internal sealed class ToolCardTracker
         var tl = _panel.Timeline;
         for (int i = tl.Count - 1; i >= 0; i--)
         {
-            if (tl.BlockAt(i) is ToolCallBlock card && card.TryHitHeader(mouse.Column, mouse.Row))
+            var block = tl.BlockAt(i);
+            // [UX3] #263: group headers toggle like card headers.
+            bool hit = block switch
             {
-                card.ToggleExpanded();
+                ToolCallBlock card => card.TryHitHeader(mouse.Column, mouse.Row),
+                ReadGroupBlock group => group.TryHitHeader(mouse.Column, mouse.Row),
+                _ => false,
+            };
+            if (hit)
+            {
+                ((ICollapsibleChatBlock)block).ToggleExpanded();
                 tl.MarkLastDirty();
                 return true;
             }
