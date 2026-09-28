@@ -25,6 +25,24 @@ namespace Harbor.Benchmarks;
 ///     is included in the assistant-message cost; the <c>StopReason</c> → wire-string lowering
 ///     is also on the hot path.
 /// </remarks>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one <c>MessageConverter.ToLlmMessages</c> call over
+///          <c>MessageCount</c> domain messages.</item>
+///          <item><c>Payload:</c> a repeating user / assistant(text+thinking+tool_call) /
+///          tool_result cycle, built once in <c>Setup</c> with a shared pre-cloned
+///          <c>JsonElement</c> for the tool arguments.</item>
+///          <item><c>StateReset:</c> per invocation — the converter is stateless, so there is
+///          nothing to reset between iterations.</item>
+///          <item><c>Drain:</c> none — the adapter is synchronous and fully consumed by the
+///          op.</item>
+///          <item><c>RetainedState:</c> only the immutable input message list from
+///          <c>Setup</c>.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in this row.</item>
+///          <item><c>AllocAttribution:</c> the output <c>LlmMessage</c> list plus one
+///          <c>LlmContentBlock</c> per assistant part and one block per tool-result entry; the
+///          capacity pre-pass is why the list is not oversized.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class MessageConverterLlmBenchmark

@@ -15,6 +15,26 @@ namespace Harbor.Benchmarks;
 ///     Each iteration uses a fresh temp directory to avoid unbounded file growth
 ///     contaminating later iterations.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> <c>MessageCount</c> single or interleaved
+///          <c>AppendMessageAsync</c> calls, or the same appends followed by one
+///          <c>GetMessagesAsync</c> reload.</item>
+///          <item><c>Payload:</c> a user message and an assistant message with one text part
+///          (a short C# snippet), rebuilt per iteration.</item>
+///          <item><c>StateReset:</c> per iteration — <c>IterationSetup</c> creates a fresh
+///          temp directory and a fresh store; <c>IterationCleanup</c> deletes it. The .jsonl
+///          file therefore never grows across iterations.</item>
+///          <item><c>Drain:</c> none — the store appends synchronously to the file; there is
+///          no background queue.</item>
+///          <item><c>RetainedState:</c> the store's in-memory parse cache, discarded with the
+///          per-iteration instance.</item>
+///          <item><c>AwaitSemantics:</c> every row awaits each append (and the reload) — the
+///          flush-to-disk cost is inside the measurement, which is the point of this
+///          class.</item>
+///          <item><c>AllocAttribution:</c> JSON serialization buffers + the message graph; the
+///          reload row adds the full materialized message list.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class JsonlSessionStoreBenchmark
@@ -132,6 +152,28 @@ public class JsonlSessionStoreBenchmark
 ///     fresh store per invocation so the parse cache is cold), the
 ///     10k-message acceptance scenario.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one JSONL line parse (new UTF-8 span path, or the old
+///          string+JsonElement path), or a whole-file cold parse of a pre-seeded
+///          session.</item>
+///          <item><c>Payload:</c> two canned JSONL lines (one user, one assistant with a text
+///          part); the file case seeds <c>MessageCount</c> messages once in
+///          <c>Setup</c>.</item>
+///          <item><c>StateReset:</c> none per iteration — the seed file is written once and
+///          the measured ops never append to it, so file growth cannot contaminate a later
+///          iteration. <c>Cleanup</c> deletes the temp directory at the end of the
+///          class.</item>
+///          <item><c>Drain:</c> none — parsing is synchronous and the whole-file row uses a
+///          fresh store per invocation so the parse cache is cold by construction.</item>
+///          <item><c>RetainedState:</c> only the UTF-8 line byte arrays built in <c>Setup</c>
+///          (read-only fixtures).</item>
+///          <item><c>AwaitSemantics:</c> the whole-file row awaits the store read; the
+///          single-line rows are synchronous.</item>
+///          <item><c>AllocAttribution:</c> the old path allocates per line (string + re-encode
+///          + JsonElement round-trip) and the new path only for strings that survive into the
+///          message graph — that delta is the optimization being tracked.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class JsonlParseBenchmark

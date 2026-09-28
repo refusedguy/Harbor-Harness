@@ -12,6 +12,27 @@ namespace Harbor.Benchmarks;
 ///     it to a target buffer, focusing on zero-allocation span-based line
 ///     splitting and context matching.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one full <c>PatchTool.ExecuteAsync</c> (parse + apply a
+///          <c>HunkCount</c>-hunk unified diff to a temp file), or a hand-rolled parse-only
+///          scan of the same patch.</item>
+///          <item><c>Payload:</c> a synthetic C# file of <c>HunkCount × 10</c> lines plus its
+///          unified diff, both built once in <c>Setup</c>.</item>
+///          <item><c>StateReset:</c> per iteration — <c>ResetTargetFile</c> rewrites the
+///          target file with the original content before every iteration (the tool mutates
+///          it), and <c>Cleanup</c> deletes it afterwards, so every iteration applies the same
+///          patch to the same input.</item>
+///          <item><c>Drain:</c> none — the tool writes the file synchronously; nothing is
+///          queued.</item>
+///          <item><c>RetainedState:</c> the tool instance (stateless between calls) and the
+///          immutable patch string; the temp file itself is reset, not retained.</item>
+///          <item><c>AwaitSemantics:</c> the apply row awaits the tool execution, so the file
+///          read + rewrite is inside the measurement; the parse row is synchronous.</item>
+///          <item><c>AllocAttribution:</c> line splitting + hunk/context buffers + the
+///          rewritten file content. The apply row additionally pays the <c>JsonSerializer</c>
+///          roundtrip used to build the tool arguments.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class PatchToolUnifiedDiffBenchmark

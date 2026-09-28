@@ -10,6 +10,22 @@ namespace Harbor.Benchmarks;
 ///     <c>StreamingCoalescer.Materialize</c> / tool argument deserialization on
 ///     the hot path (every tool call parses its JSON args).
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one <c>JsonDocument.Parse</c> + <c>RootElement.Clone</c>
+///          over a tool-argument payload (14 B / ~1 KB / ~4 KB).</item>
+///          <item><c>Payload:</c> three canned JSON documents built once in <c>Setup</c>: a 14
+///          B object, a ~1 KB object with one big string, and a ~4 KB array of 8 tool
+///          calls.</item>
+///          <item><c>StateReset:</c> per invocation — the documents are disposed at the end of
+///          each op (<c>using</c>), so no parsed DOM survives an iteration.</item>
+///          <item><c>Drain:</c> none — parsing is synchronous.</item>
+///          <item><c>RetainedState:</c> only the immutable JSON strings.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
+///          <item><c>AllocAttribution:</c> the cloned <c>JsonElement</c> (one backing document
+///          per call) is the only allocation the tool path makes; that is the cost the
+///          streaming/tool-call path pays per tool invocation.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class ToolArgsJsonBenchmark
@@ -61,6 +77,23 @@ public class ToolArgsJsonBenchmark
 ///     vs <see cref="Regex"/>. Proxy for ChatMarkdown / streaming markdown
 ///     rendering without taking a dependency on contrib.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one inline-markdown scan over a ~600-char message either
+///          via an <c>IndexOf</c> scan or via a compiled <see
+///          cref="System.Text.RegularExpressions.Regex" />.</item>
+///          <item><c>Payload:</c> a text with 10 <c>**bold**</c> and 10 <c>`code`</c> segments
+///          interleaved with filler, built once in <c>Setup</c>.</item>
+///          <item><c>StateReset:</c> per invocation — the text is immutable and the regex is a
+///          read-only compiled instance.</item>
+///          <item><c>Drain:</c> none — both scans are synchronous.</item>
+///          <item><c>RetainedState:</c> the compiled <c>Regex</c> (its construction cost is
+///          amortized by design, matching how the renderer uses it as a static).</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
+///          <item><c>AllocAttribution:</c> the regex row allocates a <c>Match</c> collection
+///          per call; the <c>IndexOf</c> row allocates nothing. The delta is the case for the
+///          hand-rolled scan.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class InlineMarkdownScanBenchmark

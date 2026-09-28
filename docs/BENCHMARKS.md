@@ -4,20 +4,39 @@
 > - **CI-short** — PR `benchmark` job (`.github/workflows/benchmark.yml`, `ubuntu-latest`, `taskset -c 1`,
 >   `--job Short`), latest 2026-09-09 (AMD EPYC 9V74, .NET 10.0.12, BenchmarkDotNet 0.15.8).
 >   Covers `*PermissionRuleset*` + `*Registry*` filters only — marked **[CI-short]** in the tables.
+>   Those two globs match exactly three classes: `PermissionRulesetBenchmark`, `ProviderRegistryBenchmark`,
+>   `ToolRegistryBenchmark`. No other row in this file is produced by that job.
 > - **Local full runs** — 2026-08-22 (i5-8250U, .NET 10.0.10) plus UiStore/streaming rows from 2026-09-10
 >   (machine n/a). Since #46 all classes use unified `[SimpleJob(warmup 3 / iter 5)]`; older rows were
 >   measured with mixed configs (2/3 or 3/10), so absolute values will shift on re-measure.
-> Suite: `tests/Harbor.Benchmarks` — 24 benchmark classes / 72+ cases, `[MemoryDiagnoser]`, Release, 0 warnings.
+> - **⏳ not yet measured** — the benchmark exists in `tests/Harbor.Benchmarks` but has no run recorded
+>   here yet. Never invent a value for these; run the row locally and fill it in with machine + date.
+>   Introduced by the #408 bus split, whose rows are code-only until the next local pass.
+>
+> **How to read any row in this file:** it lives under a section header that names the machine, the
+> date and the job, or it carries an explicit `⏳ not yet measured` / `⚠️ retracted` marker. There is
+> no unattributed row — that is the litmus for #408.
+>
+> Suite: `tests/Harbor.Benchmarks` — 39 benchmark classes (after the #408 split), `[MemoryDiagnoser]`, Release, 0 warnings.
+> Since #408 every class carries its own 7-field measurement contract (Operation / Payload /
+> StateReset / Drain / RetainedState / AwaitSemantics / AllocAttribution), enforced by
+> `BenchmarkContractTests` in `tests/Harbor.Architecture.Tests`. Read the class doc before quoting its number.
 > Run: `dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter "*<Category>*" --buildTimeout 600 --keepFiles`
 
 ## Bottlenecks (P0→P3, measured)
+
+> **Provenance.** Rows that name a date inline are attributed there. Rows without a date are local
+> full runs (2026-08-22, i5-8250U, .NET 10.0.10, Release) as tabulated in §5.2 — except the
+> `EventBroadcaster` row, which is an **undated pre-#408 measurement** and must be re-measured before
+> it is quoted again. None of these rows is produced by the CI-short job (`*PermissionRuleset*` /
+> `*Registry*` filters do not match these classes).
 
 | # | Target | Evidence | Fix direction |
 |---|---|---|---|
 | P0 | `AppReducer` streaming concat | 1.72 ms / **19.4 MB** per 1000 TextDelta (O(N²) string +) | pooled StringBuilder / chunk list, materialize on MessageEnd |
 | P0 | `MessageConverter` large msgs | serialize 2.35 ms / 1.2 MB per msg; 100×large round-trip **545 ms** | Utf8Json source-gen (audit §PERF-002) |
 | P1 | `CompactionService.ShouldCompact` | 598 µs @1000 msgs **каждый turn** | incremental token counter |
-| P1 | `EventBroadcaster` | 9–11 ms / **8 MB** per 1000 events, не зависит от числа клиентов | serialize once, reuse buffers |
+| P1 | `EventBroadcaster` | 9–11 ms / **8 MB** per 1000 events, не зависит от числа клиентов ⚠️ undated pre-#408 run | serialize once, reuse buffers |
 | P1 | `EventBus.PublishAsync` | ~~фикс. 8.1 KB alloc даже при 0 подписчиков~~ ✅ resolved: 0-sub fast path returns before scrollback/fan-out (zero alloc, locked by `PublishAsync_ZeroSubscribers_IsAllocationFree`); 1/10-sub fan-out covered by bounded tripwires (#186) | ring-buffer scrollback (landed) |
 | P2 | `StreamingCoalescer` tool-call Materialize | 481 µs @1000 дельт (35–48× медленнее текста) | кэш разобранных аргументов |
 | P2 | `PatchTool` apply | 10.1 ms / **9.3 MB** @5000 hunks | стримить вместо List<string>+Join |
@@ -81,6 +100,10 @@
 | Build config | Release (`-c Release`) |
 
 > Numbers are **relative indicators**, not absolute promises. Production hardware will differ. The cloud sandbox CPU is variable — cold start in particular fluctuates ±200 ms between runs.
+>
+> **Scope of this section:** every table in §2, §3 and §4 below is measured in *this* environment
+> (2026-07-18, linux-x64 container, .NET 10.0.302 Release) unless the table itself says otherwise —
+> §5, §6 and §7 each carry their own machine/date or job attribution.
 
 ## 2. Solution metrics
 
@@ -230,15 +253,39 @@ dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
 | `ProviderRegistry.GetClient` (frozen) | 0.14 µs | 0.01 µs | 288 B |
 | `ProviderRegistry.GetAllModelsAsync` (frozen, 1 / 5 / 20 providers) | 9.2 / 12.9 / 24.6 µs | 0.8 / 1.8 / 6.7 µs | 1112 B / 2776 B / 9016 B |
 | `ToolRegistry.ResolveTools` (4 tools, frozen, no permission) | 0.085 µs | 0.001 µs | 344 B |
-| `ToolRegistry.ResolveTools` (4 tools, frozen, with permission) | 2.3 µs | 0.02 µs | 88 B |
+| `ToolRegistry.ResolveTools` (4 tools, frozen, with permission) ⚠️ retracted | 2.3 µs | 0.02 µs | 88 B |
 | `ToolRegistry.ResolveTools` (8 / 16 tools, frozen, no permission) | 0.16 / 0.31 µs | 0.001 / 0.003 µs | 664 B / 1304 B |
-| `ToolRegistry.ResolveTools` (8 / 16 tools, frozen, with permission) | 4.1 / 8.3 µs | 0.003 / 0.03 µs | 120 B / 184 B |
+| `ToolRegistry.ResolveTools` (8 / 16 tools, frozen, with permission) ⚠️ retracted | 4.1 / 8.3 µs | 0.003 / 0.03 µs | 120 B / 184 B |
 | `ToolRegistry.ResolveTools` (4 tools, unfrozen) | 0.23 µs | 0.001 µs | 600 B |
 | `ToolRegistry.GetTool` (frozen) | 0.10–0.20 µs | 0.001–0.005 µs | 80–160 B |
 | `ToolRegistry.ResolveTools` (14 tools) | 1.10 µs | 0.08 µs | 0 B |
 | `PermissionRuleset.Evaluate` (default Allow) | 0.35 µs | 0.002 µs | 0 B |
 | `PermissionRuleset.Evaluate` (Deny bash rm -rf /) | 0.17 µs | 0.001 µs | 488 B |
 | `PermissionRuleset.Evaluate` (custom, Allow at end-of-scan, 4 rules) | 0.025 µs | 0.001 µs | 0 B |
+
+> ⚠️ **Retracted by #408 — the "with permission" rows were never a comparison.**
+> `ToolRegistryBenchmark` fed `PermissionRuleset.Default` to `ResolveTools`, and `Default` has no rule
+> for a stub tool named `tool_N`, so `Evaluate` fell through to `Ask` and the filter resolved **0 of N**
+> descriptors. The row therefore measured a *result-shape change* (N → 0 items) against an empty cached
+> snapshot, not the cost of permission filtering — "2.3 µs / 88 B" is the price of a 0-of-4 lookup, and
+> it looks faster than the no-permission row only because the frozen snapshot returns a cached empty
+> array. Do not quote it, do not diff against it.
+>
+> The bench now uses an explicit allow-all ruleset (one `Allow` rule per stub tool, no safety policies)
+> so the compared cases resolve the same descriptors, and `[GlobalSetup]` **throws** via
+> `AssertComparable` if the resolved count, name set or descriptor type ever diverge. The replacement
+> rows below come from the same CI job (the class is still matched by `*Registry*`) and are
+> ⏳ pending the next run:
+
+| Benchmark | Mean | StdDev | Allocations |
+|---|---:|---:|---:|
+| `ToolRegistry.ResolveTools` (4 / 8 / 16 tools, frozen, **allow-all** permission) ⏳ not yet measured | — | — | — |
+| `ToolRegistry.ResolveTools` (4 / 8 / 16 tools, frozen, **deny-all** — 0 tools, *not* comparable) ⏳ not yet measured | — | — | — |
+| `ToolRegistry.ResolveTools` (4 / 8 / 16 tools, unfrozen, **allow-all** permission) ⏳ not yet measured | — | — | — |
+
+The denied shape itself is pinned by `ToolRegistryResolveShapeTests` (`tests/Harbor.Registries.Tests`,
+platform shard): deny-all resolves 0 tools on both the frozen and the unfrozen path, and an allow-all
+ruleset resolves exactly the unfiltered descriptor set.
 
 ### 5.2 Local full runs (2026-08-22, i5-8250U, .NET 10.0.10)
 
@@ -252,6 +299,38 @@ dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
 | `SystemPromptBuilder.Build` (10 tools) | 18 µs | 2 µs | 1.2 KB |
 | `TokenEstimator.Estimate` (1k chars) | 0.8 µs | 0.1 µs | 0 B |
 | `MessageConverter.ToLlmMessages` (10 msgs) | 2.5 µs | 0.3 µs | 1.5 KB |
+
+### 5.3 Event-bus + IPC delivery split (#408) ⏳ not yet measured
+
+Before #408 the bus rows were one blended number per class, so "event bus throughput" silently
+depended on whether a consumer happened to be attached. Each of the three bus files now reports three
+separately-named rows:
+
+| File | Row | What the number includes | Consumer awaited? |
+|---|---|---|---|
+| `EventBusBenchmark.cs` (`EventBusDeliveryBenchmark`) | `EnqueueOnly` | ring append + publish counters on a bus with **zero subscribers** — says **nothing about delivery** | n/a (there is no consumer) |
+| | `EnqueueAndDrainConsumer` | + fan-out to 10 handlers | yes |
+| | `SteadyState` | awaited publish on a **saturated** ring + `GetScrollback` tail read | yes |
+| `EventBusScrollbackBenchmark.cs` (`EventBusScrollbackDeliveryBenchmark`) | `EnqueueOnly` | ring slot overwrite on a full 1000-slot ring, zero subscribers — says **nothing about delivery** | n/a |
+| | `EnqueueAndDrainConsumer` | + fan-out to 10 handlers | yes |
+| | `SteadyState` | awaited publish + 1000-event tail read | yes |
+| `EventBroadcasterThroughputBenchmark.cs` (`EventBroadcasterDeliveryBenchmark`) | `EnqueueOnly` | projection + MessagePack + per-client enqueue; the per-client writer tasks are **not** awaited — says **nothing about client delivery** | no |
+| | `EnqueueAndDrainConsumer` | + drain every client pipe (bounded passes) | drained to completion |
+| | `SteadyState` | 4 warm burst+drain rounds | drained to completion |
+
+⏳ **No numbers yet.** These rows are code-only as of #408: no local full run and no CI-short run
+(the CI `benchmark` job filters on `*PermissionRuleset*` / `*Registry*`, so it never touches the bus
+classes). Fill them in with machine + date on the next local pass:
+
+```bash
+dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*Delivery*'
+```
+
+The pre-#408 blended rows that remain valid are the `EventBus.PublishAsync` fan-out curve in §5.2
+(1 / 10 subscribers) and the P1 `EventBroadcaster` bottleneck row at the top of this file — both are
+attributed there. `InMemoryEventBus` exposes no way to empty its scrollback ring, so the enqueue rows
+run against a ring that saturates; slot overwrite costs the same as a fresh slot, which each class doc
+records under `RetainedState:`.
 
 ### Allocation-budget tripwires (#186, CI-enforced)
 
@@ -320,7 +399,7 @@ Machine: Linux x64, .NET 10 Release JIT, no tty I/O (discarding backend).
 
 ## 6. Test suite
 
-### 6.1 Per-project results (Debug, no-build)
+### 6.1 Per-project results (Debug, no-build) — local run, linux-x64 container, .NET 10.0.302, pre-#186 counts
 
 | Test project | Passed | Failed | Skipped | Duration |
 |---|---:|---:|---:|---:|
@@ -363,6 +442,10 @@ dotnet run --project tests/Harbor.Registries.Tests -c Release --no-build -- --tr
 ```
 
 ## 7. Comparison with previous (inflated) numbers
+
+> "Reality (this doc)" points at the section each figure lives in, so every row inherits that
+> section's provenance — §3/§4 (§1 environment, 2026-07-18) for binary size, RSS and cold start;
+> §6.1 (local run, pre-#186 counts) for the test rows.
 
 | Metric | Old claim | Reality (this doc) | Why differed |
 |---|---:|---:|---|

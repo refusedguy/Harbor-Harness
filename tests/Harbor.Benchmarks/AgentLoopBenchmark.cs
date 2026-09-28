@@ -32,7 +32,36 @@ namespace Harbor.Benchmarks;
 ///     Every dependency of <see cref="AgentLoop" /> is replaced by a minimal in-process stub; no
 ///     provider, file, or network I/O occurs. Each benchmark invocation builds a fresh
 ///     <see cref="ISessionContext" /> so accumulated messages do not leak across iterations.
+///     <para>
+///         Deliberately a <b>full-cycle</b> benchmark rather than a component one, and kept at
+///         <c>iterationCount: 5</c> per the #46 audit: the point of this class is the orchestration
+///         cost of a whole turn, so narrowing it to a component would answer a different question.
+///     </para>
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one full <c>AgentLoop.RunAsync</c> turn (stubbed LLM →
+///          event stream → optional tool dispatch → stop).</item>
+///          <item><c>Payload:</c> one user message ("Benchmark prompt.") plus a stub client
+///          that emits one text delta and a <c>stop</c> finish, or one tool call plus a
+///          trivial tool result.</item>
+///          <item><c>StateReset:</c> per invocation — <c>CreateSessionContext()</c> builds a
+///          fresh <see cref="Session" /> and a fresh message list, so no message leaks into
+///          the next iteration.</item>
+///          <item><c>Drain:</c> none needed — <c>RunAsync</c> returns only after the loop has
+///          stopped; the event bus is a drop-everything stub, so there is no consumer to
+///          drain.</item>
+///          <item><c>RetainedState:</c> the <see cref="TokenTracker" /> and the loop instance
+///          live for the whole class (both are inert on this path —
+///          <c>BenchCompactionService.ShouldCompact</c> is always false, the bus drops
+///          events).</item>
+///          <item><c>AwaitSemantics:</c> the op awaits the whole turn, so the number includes
+///          the streaming state machine and one <c>Task.Yield()</c> continuation from the stub
+///          client. It excludes model latency by construction (no network I/O).</item>
+///          <item><c>AllocAttribution:</c> orchestration only — prompt string, message
+///          conversion, event objects and the per-invocation session context. Tool-row delta
+///          vs text-row delta is the <c>ToolDispatcher</c> path.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class AgentLoopBenchmark

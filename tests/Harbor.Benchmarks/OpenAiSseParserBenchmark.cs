@@ -12,6 +12,25 @@ namespace Harbor.Benchmarks;
 ///     sequences, focusing on zero-allocation span-based extraction of the
 ///     <c>content</c> and <c>tool_calls</c> fields.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one <c>OpenAiWire.TryParseChatChunkLine</c> call over a
+///          canned multi-<c>data:</c> SSE chunk.</item>
+///          <item><c>Payload:</c> three chunk shapes built once in <c>Setup</c>: 32 B text,
+///          256 B text, and a 4 KB chunk carrying 3 <c>tool_calls</c> plus a usage
+///          frame.</item>
+///          <item><c>StateReset:</c> per invocation — a fresh <c>ChunkStreamState</c> (with
+///          its own index→id map) is built inside every row, so tool-call indices never carry
+///          over between iterations.</item>
+///          <item><c>Drain:</c> none — parsing is synchronous and the resulting event list is
+///          fully consumed.</item>
+///          <item><c>RetainedState:</c> none; the three chunk strings are read-only
+///          fixtures.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
+///          <item><c>AllocAttribution:</c> the parsed <c>LlmEvent</c> list plus any string
+///          that escapes into it. The tool-call row's extra cost is the argument-fragment
+///          string materialisation.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class OpenAiSseParserBenchmark

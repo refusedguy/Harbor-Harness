@@ -29,6 +29,32 @@ namespace Harbor.Benchmarks;
 /// per-run minimum/maximum is echoed into the log by
 /// <see cref="ReportStreamBytes" /> (min = paced, max = unpaced).
 /// </remarks>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one cell-diff frame flush
+///          (<c>BeginFrame/Flush/EndFrameAsync</c>) through a discarding backend, or a cold
+///          <c>LayoutTree.Solve</c>.</item>
+///          <item><c>Payload:</c> pre-built screens (200×50 idle, 200×50 token, 200×50 +
+///          400×120 full repaint, 20-panel layout); the streaming rows type 1000 five-char
+///          deltas into a chat tail.</item>
+///          <item><c>StateReset:</c> per row, not per iteration — the full-repaint rows
+///          <c>BlankAll()</c> the front buffer themselves so the next flush is a genuine full
+///          repaint; the token row cycles through 16 pre-built bands.</item>
+///          <item><c>Drain:</c> none — the backend discards bytes synchronously
+///          (<c>ValueTask.CompletedTask</c>), so no tty I/O and no pipe back-pressure is
+///          measured.</item>
+///          <item><c>RetainedState:</c> the front/back <c>ScreenBuffer</c> pair and its
+///          residue hash. The streaming rows also keep
+///          <c>_minStreamBytes</c>/<c>_maxStreamBytes</c> for the acceptance echo in
+///          <c>ReportStreamBytes</c>.</item>
+///          <item><c>AwaitSemantics:</c> every row awaits <c>EndFrameAsync()</c>, so the
+///          encoded ANSI write is inside the measurement; the encoding itself is included, the
+///          transport is not.</item>
+///          <item><c>AllocAttribution:</c> ANSI encode buffers + the residue-row bookkeeping.
+///          The streaming rows return the emitted byte count so nothing is dead-code
+///          eliminated — BDN does not print return values, hence
+///          <c>ReportStreamBytes</c>.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class DiffEngineBenchmark

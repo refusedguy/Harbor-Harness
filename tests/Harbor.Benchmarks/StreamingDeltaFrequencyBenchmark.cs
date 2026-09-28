@@ -16,6 +16,25 @@ namespace Harbor.Benchmarks;
 ///     Markdown parses on this path are 0 by construction
 ///     (<c>DefaultUiProjector.ResolveSpans</c> styles whole lines, no parser).
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> <c>DeltaCount</c> × (dispatch one <c>TextDeltaEvent</c>
+///          into a fresh <c>UiStore</c>, then project the resulting state), wrapped in a
+///          <c>MessageStart</c>/<c>MessageEnd</c> pair.</item>
+///          <item><c>Payload:</c> one shared 24-char chunk reused for every delta (the shape a
+///          token stream actually produces).</item>
+///          <item><c>StateReset:</c> per invocation — a new <c>UiStore</c> and a new
+///          <c>DefaultUiProjector</c> are built inside the row, so the transcript and the
+///          projector's cache never carry over.</item>
+///          <item><c>Drain:</c> none — dispatch and projection are synchronous.</item>
+///          <item><c>RetainedState:</c> none across iterations (both instances are local); the
+///          previous-screen / previous-lines / previous-buffer references are iteration-local
+///          trackers, not state.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in this row.</item>
+///          <item><c>AllocAttribution:</c> the projector output (this row measures
+///          <em>frequency</em>, not time — it returns the classified counters so BDN keeps the
+///          work alive).</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class StreamingDeltaFrequencyBenchmark

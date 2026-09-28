@@ -15,6 +15,26 @@ namespace Harbor.Benchmarks;
 ///     where builders of 1 KiB–16 KiB are rented on every turn.
 ///     See <c>src/Harbor.Extensions/PLAN.md</c> P2.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one rent/append/return cycle at 1 KB or 16 KB, with and
+///          without a <c>Clear()</c> in the middle, against a raw <c>new StringBuilder</c>
+///          baseline.</item>
+///          <item><c>Payload:</c> pre-built 1 KB and 16 KB strings of a single repeated
+///          character.</item>
+///          <item><c>StateReset:</c> per invocation — the rent/return pair is scoped to the op
+///          via <c>using</c>, so the pooled builder is always returned before the measurement
+///          ends.</item>
+///          <item><c>Drain:</c> none — no queues are involved.</item>
+///          <item><c>RetainedState:</c> <b>the pool itself</b>, which is the thing under test:
+///          rented capacity survives across iterations (that is the win being measured), so it
+///          is intentionally not cleared between iterations.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
+///          <item><c>AllocAttribution:</c> the pooled rows allocate only the returned
+///          <c>string</c>; the raw rows additionally allocate the <c>StringBuilder</c> + its
+///          char buffer. Any growth-triggered re-allocation shows up as extra bytes on the
+///          pooled rows.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class StringBuilderPoolBenchmark
@@ -103,6 +123,22 @@ public class StringBuilderPoolBenchmark
 ///         <c>string.Split</c> vs span as a proxy (identical work).
 ///     </para>
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> count lines in a message body either via
+///          <c>string.Split('\n')</c> or via a <c>ReadOnlySpan&lt;char&gt;</c> <c>IndexOf</c>
+///          loop.</item>
+///          <item><c>Payload:</c> a 10-line and a 100-line body (48-char lines, varying
+///          content so branch prediction is realistic), built once in <c>Setup</c>.</item>
+///          <item><c>StateReset:</c> per invocation — the input strings are immutable and
+///          read-only, so there is nothing to reset.</item>
+///          <item><c>Drain:</c> none — both variants are synchronous and fully consumed.</item>
+///          <item><c>RetainedState:</c> none.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
+///          <item><c>AllocAttribution:</c> the <c>Split</c> rows allocate a <c>string[]</c>
+///          plus one <c>string</c> per line; the span rows allocate nothing. That delta is the
+///          reason the span loop exists.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class BodyLinesBenchmark

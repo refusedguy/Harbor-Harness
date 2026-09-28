@@ -8,6 +8,23 @@ namespace Harbor.Benchmarks;
 ///     of ANSI escape sequence emission vs raw Console.Write for the same
 ///     content volume.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> write one 120×40 frame either as ANSI-styled lines or as
+///          plain text (40 <c>Console.Write</c> calls per op).</item>
+///          <item><c>Payload:</c> 40 pre-built lines per variant (ANSI row ≈ 130 B with a
+///          24-bit colour escape; plain row ≈ 120 B), built once in <c>Setup</c>.</item>
+///          <item><c>StateReset:</c> per invocation — the rows write to <see cref="Console" />
+///          directly and hold no state between ops.</item>
+///          <item><c>Drain:</c> none — <c>Console.Write</c> hands the data to the standard
+///          output stream; when the host is redirected to a file or pipe this measures the
+///          redirected write, which is why CI and local numbers must not be mixed.</item>
+///          <item><c>RetainedState:</c> none.</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
+///          <item><c>AllocAttribution:</c> the string concatenation (<c>line + "\n"</c>) is
+///          inside the measurement; the underlying console/stream buffers are not attributed
+///          to the row.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class TerminalScreenBufferBlitBenchmark

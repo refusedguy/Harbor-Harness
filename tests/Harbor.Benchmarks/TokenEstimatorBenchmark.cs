@@ -9,6 +9,24 @@ namespace Harbor.Benchmarks;
 ///     non-CJK chars (×0.25 tokens), so English-only inputs are O(n) char
 ///     scans with no allocations.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one <c>Estimate</c> call over a text payload, or one
+///          <c>EstimateMessage</c> over a two-part assistant message.</item>
+///          <item><c>Payload:</c> 100-char, 4 K-char, 64 K-char ASCII strings and a 2 K-char
+///          CJK/ASCII mix, all pre-built in <c>Setup</c>.</item>
+///          <item><c>StateReset:</c> per invocation — <c>Estimate</c> is a pure character scan
+///          and does not touch the tracker's running totals, so nothing accumulates between
+///          iterations.</item>
+///          <item><c>Drain:</c> none — synchronous.</item>
+///          <item><c>RetainedState:</c> the shared <see cref="TokenTracker" /> instance, whose
+///          usage counters stay at zero on this path (only <c>RecordTurnUsage</c> would move
+///          them).</item>
+///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
+///          <item><c>AllocAttribution:</c> zero for every row — that is the claim under test.
+///          A non-zero allocation here means the estimator regressed to a regex or a substring
+///          path.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class TokenEstimatorBenchmark

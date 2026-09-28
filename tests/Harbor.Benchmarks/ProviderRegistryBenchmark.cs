@@ -11,6 +11,25 @@ namespace Harbor.Benchmarks;
 ///     The frozen path uses <c>FrozenDictionary</c> for O(1) lookup; the
 ///     unfrozen path falls back to <c>NonBlocking.ConcurrentDictionary</c>.
 /// </summary>
+/// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
+/// <list type="bullet">
+///          <item><c>Operation:</c> one <c>ProviderRegistry.GetClient</c> lookup, or one
+///          <c>GetAllModelsAsync</c> fan-out across every registered provider.</item>
+///          <item><c>Payload:</c> <c>ProviderCount</c> (1 / 5 / 20) stub providers, each
+///          returning a fixed 2-model list synchronously — no network I/O.</item>
+///          <item><c>StateReset:</c> none — both registries are built once in <c>Setup</c>;
+///          only the frozen one is frozen (the unfrozen registry is deliberately left on the
+///          <c>ConcurrentDictionary</c> path).</item>
+///          <item><c>Drain:</c> none — lookups are synchronous; the model fan-out is stubbed
+///          to a completed task.</item>
+///          <item><c>RetainedState:</c> the frozen snapshot (client map + memoised model list)
+///          after <c>Freeze()</c>; that is the contract the baseline row measures.</item>
+///          <item><c>AwaitSemantics:</c> the model row awaits <c>GetAllModelsAsync</c>, which
+///          awaits every stub client — task overhead is included but no real I/O is.</item>
+///          <item><c>AllocAttribution:</c> the frozen lookup row allocates nothing once warm;
+///          the model row allocates the aggregated <c>List&lt;ModelInfo&gt;</c> sized by
+///          <c>ProviderCount</c>.</item>
+/// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class ProviderRegistryBenchmark
