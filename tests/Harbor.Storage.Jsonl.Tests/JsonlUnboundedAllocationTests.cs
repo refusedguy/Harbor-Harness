@@ -228,6 +228,21 @@ public class JsonlUnboundedAllocationTests
         }
     }
 
+    /// <summary>
+    ///     Takes the first record and reports its length. A local helper because
+    ///     the span cannot live across an await (CS4007) and the test method is
+    ///     async.
+    /// </summary>
+    private static int ReadHeadLength(ChunkedLineReader reader)
+    {
+        if (!reader.TryGetRecord(out var head))
+        {
+            return -1;
+        }
+
+        return head.Length;
+    }
+
     /// <summary>Counts every record the reader yields, to EOF.</summary>
     private static int Drain(ChunkedLineReader reader)
     {
@@ -507,8 +522,8 @@ public class JsonlUnboundedAllocationTests
         source.Position = 0;
 
         using var reader = new ChunkedLineReader(source);
-        await Assert.That(reader.TryGetRecord(out var head)).IsTrue();
-        await Assert.That(head.Length).IsEqualTo(4);
+        int headLength = ReadHeadLength(reader);
+        await Assert.That(headLength).IsEqualTo(4);
 
         using var sink = new MemoryStream();
         reader.CopyRemainderTo(sink);
@@ -516,8 +531,18 @@ public class JsonlUnboundedAllocationTests
         byte[] piped = sink.ToArray();
         await Assert.That(piped.Length).IsEqualTo(payload.Length + 1);
         await Assert.That(piped[^1]).IsEqualTo((byte)'\n');
-        await Assert.That(piped.AsSpan(0, payload.Length).SequenceEqual(payload)).IsTrue();
+
+        // Span comparison in a sync helper for the same reason as above.
+        await Assert.That(PayloadMatches(piped, payload)).IsTrue();
     }
+
+    /// <summary>
+    ///     Whether <paramref name="piped" /> starts with exactly
+    ///     <paramref name="payload" />. A helper because a span cannot cross an
+    ///     await (CS4007).
+    /// </summary>
+    private static bool PayloadMatches(byte[] piped, byte[] payload) =>
+        piped.AsSpan(0, payload.Length).SequenceEqual(payload);
 
     [Test]
     public async Task Update_HeaderEditOnABigSession_CopiesBytesWithoutMaterializingThem()

@@ -140,24 +140,27 @@ public class WordDiffBoundsTests
     [Test]
     public async Task PairRun_LopsidedPairJustOverTheProductCap_IsLeftUnpaired()
     {
-        // The other side of the same boundary: 2 800 tokens against 5 is
-        // 2 801 × 6 = 16 806 cells, just past 16 384, so the pair is declined.
-        // A square cap of 128 would have declined this too — what the product
-        // cap buys is the lopsided case ABOVE, not this one.
-        // Single-character tokens on BOTH sides, because the character cap and
-        // the cell cap are different axes: 2 802 tokens need 2 803 cells, and
-        // 5 562 chars do not fit in 4 KiB. So the other side carries 6 tokens
-        // and 6 048 cells with 6 chars — over the cap on the cells, well under
-        // it on the characters. That is the only way to sit just past a product
-        // cap with a row short enough for PairRun to consider at all.
+        // The other side of the same boundary, and the case that actually needed
+        // thought: the character cap and the cell cap are DIFFERENT axes, and
+        // the natural fixture straddles both. 2 800 filler tokens is 5 562 chars
+        // — past MaxPairableLineChars, so PairRun would decline it on the wrong
+        // cap and the test would prove nothing.
+        //
+        // Single-character tokens on both sides separate the axes: 2 802 tokens
+        // is 2 803 cells, and 5 603 chars. Against 6 tokens that is
+        // 2 803 × 7 = 19 621 cells — over the 16 384 cap, under the 4 KiB
+        // character cap. Over the cells, inside the characters, which is the
+        // only place a product cap can be tested.
         string longRow = string.Join(' ', Enumerable.Repeat("x", 2_802));
         string shortRow = string.Join(' ', Enumerable.Repeat("y", 6));
+
         await Assert.That(longRow.Length).IsLessThan(WordDiff.MaxPairableLineChars);
+        await Assert.That((2_802 + 1) * (6 + 1)).IsGreaterThan(WordDiff.MaxLcsMatrixCells);
 
         IReadOnlyList<DiffLine> lines =
         [
             new(DiffLineKind.Delete, 1, 0, longRow),
-            new(DiffLineKind.Add, 0, 1, shared),
+            new(DiffLineKind.Add, 0, 1, shortRow),
         ];
 
         await Assert.That(WordDiff.PairRun(lines, 0)).IsEmpty();
