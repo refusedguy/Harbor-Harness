@@ -40,9 +40,8 @@ Harbor is a modular .NET 10 AI coding agent harness. The architecture prioritize
 src/                                   — ~50 projects (all included in Harbor.slnx unless noted)
 ├── Harbor.Abstractions/               — base contracts (zero deps)
 ├── Harbor.Abstractions.Contracts/     — models, events, ValueObjects, PermissionRuleset
-├── Harbor.Core/                       — EventBus, AgentLoop, config, onboarding, compaction
-├── Harbor.Registries/                 — Agent/Tool/Provider registries (builtin agents: code, plan, explore)
-├── Harbor.Application/                — sessions, permissions, configuration
+├── Harbor.Registries/                 — Agent/Tool/Provider registries, EventBus (builtin agents: code, plan, explore)
+├── Harbor.Application/                — AgentLoop, sessions, permissions, config, onboarding, compaction
 ├── Harbor.Hosting/                    — DI modules wired by the CLI (TuiModule, StorageModule, ...)
 ├── Harbor.Storage.{Jsonl,Memory,Sqlite}/  — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
 ├── Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/ — LLM clients
@@ -90,8 +89,8 @@ innermost layer (Domain/Abstractions) references nothing but the BCL.
 | Layer            | Harbor projects                                                                                              | May reference                                |
 |------------------|--------------------------------------------------------------------------------------------------------------|----------------------------------------------|
 | **Domain**       | `Harbor.Abstractions`, `Harbor.Tui.Abstractions`                                                             | BCL only (no other Harbor project, except Tui.Abstractions → Abstractions) |
-| **Application**  | `Harbor.Core`, `Harbor.Plugins.Runtime`, `Harbor.Scripting`                                                  | Domain only (NOT each other, NOT Infrastructure, NOT Presentation) |
-| **Infrastructure** | `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`                                           | Domain only (NOT `Harbor.Core`, NOT each other) |
+| **Application**  | `Harbor.Application`, `Harbor.Registries`, `Harbor.Plugins.Runtime`, `Harbor.Scripting`                    | Domain only (NOT each other, NOT Infrastructure, NOT Presentation) |
+| **Infrastructure** | `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`                                           | Domain only (NOT Application, NOT each other) |
 | **Presentation** | `Harbor.App.Cli`, `Harbor.App.Avalonia`, `Harbor.Tui.AnsiPlain/CellForge/NickConsoleEx/Notifications`, `contrib/tui/*` (SpectreTui shell, Fullscreen, TerminalGui, Termina, RazorConsole) | Domain only (NOT Application, NOT Infrastructure, NOT each other) |
 | **Composition Root** | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (+ `src/Harbor.Hosting/Modules/*`) | Everything — the ONLY place that `new`s concrete impls |
 
@@ -99,12 +98,12 @@ innermost layer (Domain/Abstractions) references nothing but the BCL.
 
 1. `Harbor.Abstractions` references ZERO other Harbor assemblies.
 2. `Harbor.Tui.Abstractions` references only `Harbor.Abstractions`.
-3. `Harbor.Core` references only `Harbor.Abstractions`.
+3. `Harbor.Application` and `Harbor.Registries` each reference only `Harbor.Abstractions`, and not each other.
 4. `Harbor.Plugins.Runtime` references `Harbor.Abstractions` + `Harbor.Tui.Abstractions` only.
 5. `Harbor.Scripting` (moved to `contrib/scripting`) references `Harbor.Abstractions` only.
-6. `Harbor.Providers.*` references `Harbor.Abstractions` only — **NOT** `Harbor.Core`.
-7. `Harbor.Storage.*` references `Harbor.Abstractions` only — **NOT** `Harbor.Core`.
-8. `Harbor.Tools.Builtin` references `Harbor.Abstractions` only — **NOT** `Harbor.Core`.
+6. `Harbor.Providers.*` references `Harbor.Abstractions` only — **NOT** Application.
+7. `Harbor.Storage.*` references `Harbor.Abstractions` only — **NOT** Application.
+8. `Harbor.Tools.Builtin` references `Harbor.Abstractions` only — **NOT** Application.
 9. `Harbor.Tui.*` concrete renderers reference `Harbor.Abstractions` + `Harbor.Tui.Abstractions` only.
 10. `Harbor.App.Cli` may reference everything (it is the Composition Root host).
 
@@ -115,10 +114,10 @@ innermost layer (Domain/Abstractions) references nothing but the BCL.
   `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` and the DI modules in
   `src/Harbor.Hosting/Modules/`. `Program.cs` resolves them from DI by interface.
 - New interfaces go in `Harbor.Abstractions` (or `Harbor.Tui.Abstractions` for UI-only
-  contracts), never in `Harbor.Core`.
-- New value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Core`.
+  contracts), never in `Harbor.Application` / `Harbor.Registries`.
+- New value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Application` / `Harbor.Registries`.
 - Application projects must not cross-reference each other (e.g. `Harbor.Scripting` must
-  not reference `Harbor.Core`). If two Application projects need to share a type, the type
+  not reference `Harbor.Application`). If two Application projects need to share a type, the type
   belongs in Domain.
 
 ### Interface Segregation (ISP) — §ARCH-002
@@ -128,7 +127,7 @@ innermost layer (Domain/Abstractions) references nothing but the BCL.
 `State`, `Subscribe`, `Steer`, `FollowUp`, `Initialize`, `PromptAsync(UserMessage, ct)`).
 Callers that only need to "send a prompt and wait for idle" take `IAgentRunner`. This
 keeps `Harbor.Tui.Abstractions` in the Domain layer — it never needs to reference
-`Harbor.Core` for agent types.
+`Harbor.Application` for agent types.
 
 ### Before adding a `<ProjectReference>` — checklist
 
@@ -265,8 +264,8 @@ Rules:
 
 The TUI layer is a strict MVVM triad: **renderers** dispatch events to **view models**,
 which hold state; **views** read VM state at render time and emit characters through the
-**render context**. Nothing in this triad references `Harbor.Core` — agent state flows in
-only through `AgentEvent` from `Harbor.Abstractions.Events`.
+**render context**. Nothing in this triad references `Harbor.Application` / `Harbor.Registries`
+— agent state flows in only through `AgentEvent` from `Harbor.Abstractions.Events`.
 
 ```
         ┌────────────────────────────────────────────────────────────┐
@@ -310,8 +309,8 @@ Extension points:
 - **Custom placement logic** — override `BaseTuiRenderer.ShouldRenderPlacement` to control
   which events trigger a repaint of each placement.
 
-Decoupling contract: **never** import `Harbor.Core` from a TUI assembly. All agent state
-arrives via `AgentEvent`; all rendering goes through `ITuiRenderContext`.
+Decoupling contract: **never** import `Harbor.Application` / `Harbor.Registries` from a TUI
+assembly. All agent state arrives via `AgentEvent`; all rendering goes through `ITuiRenderContext`.
 
 ### SOLID principles
 - **S**ingle Responsibility — each class does one thing.
@@ -668,7 +667,7 @@ Harbor is performance-obsessed. These techniques are applied throughout:
 | `[StructLayout(Sequential)]` | InMemoryEventBus.Subscription (cache-friendly iteration) | 1 ref |
 | `ConfigureAwait(false)` | All async library code | 193 refs |
 | `MemoryPack` `[MemoryPackable]` | All domain models (Session, Messages, Usage, etc.) | 27 refs |
-| `ZLinq` drop-in | Harbor.Core (replaces System.Linq) | 4 refs |
+| `ZLinq` drop-in | Harbor.Application / Registries / Abstractions (replaces System.Linq) | 3 refs |
 | `IReadOnlyCollection<T>` | Public APIs (no defensive copies) | 43 refs |
 | Pre-sized `List<T>(capacity)` | All List allocations in Core | verified |
 
@@ -1111,7 +1110,7 @@ Real error — invalid `id` field:
 ```
 
 ```
-warn: Harbor.Core.Configuration.JsonConfigStore[0]
+warn: Harbor.Application.Configuration.JsonConfigStore[0]
       Failed to load provider config 'MyLLM': id must be lowercase alphanumeric + dash.
       Got: 'MyLLM'
 ```
@@ -1180,7 +1179,7 @@ See `specs/` for the full design rationale. Key decisions:
 - [ ] Uses `ArgumentList.Add()` for process args.
 - [ ] Uses `Utf8JsonReader` / `JsonSerializerContext` source-gen on hot paths (no `JsonSerializer.Serialize<T>` reflection).
 - [ ] New view models use `CommunityToolkit.Mvvm` source generators (`[ObservableProperty]`, `[RelayCommand]`).
-- [ ] New TUI views never reach into `Harbor.Core` — only subscribe to `AgentEvent`.
+- [ ] New TUI views never reach into `Harbor.Application` / `Harbor.Registries` — only subscribe to `AgentEvent`.
 - [ ] Hot paths use manual `for` loops or ZLinq, not `System.Linq`.
 - [ ] Hot paths avoid `string.Split`, `string.Format`, `new StringBuilder()` — use `Span<T>` + `StringBuilderPool`.
 - [ ] Singleton services with mutable instance state — thread-safe (`lock` / `Interlocked` / per-call local state).
@@ -1188,8 +1187,8 @@ See `specs/` for the full design rationale. Key decisions:
 - [ ] NativeAOT: 0 IL2026 warnings in `dotnet build -c Release`.
 - [ ] **Layering:** every new `<ProjectReference>` is allowed per [ARCHITECTURE_LAYERS.md §2](./docs/ARCHITECTURE_LAYERS.md). Run `dotnet test tests/Harbor.Architecture.Tests/` — it must stay green.
 - [ ] **Layering:** no concrete impl type (`AnthropicLlmClient`, `JsonlSessionStore`, `AgentLoop`, `DefaultAgent`, `InMemoryEventBus`, `SharpTsScriptEngine`, `JintScriptEngine`, `RoslynPluginCompiler`, …) is `new`'d outside `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` and `src/Harbor.Hosting/Modules/`. `Program.cs` resolves services by interface from DI.
-- [ ] **Layering:** new interfaces go in `Harbor.Abstractions` (or `Harbor.Tui.Abstractions` for UI-only contracts), never in `Harbor.Core`.
-- [ ] **Layering:** new value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Core`.
+- [ ] **Layering:** new interfaces go in `Harbor.Abstractions` (or `Harbor.Tui.Abstractions` for UI-only contracts), never in `Harbor.Application` / `Harbor.Registries`.
+- [ ] **Layering:** new value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Application` / `Harbor.Registries`.
 
 ## When in doubt
 

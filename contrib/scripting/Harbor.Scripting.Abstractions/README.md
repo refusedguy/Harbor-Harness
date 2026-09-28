@@ -4,7 +4,7 @@ Scripting pipeline contracts. Defines `IScriptEngine`, `IScriptStore`, `IScriptC
 
 ## Layer
 
-Infrastructure — scripting pipeline layer. Depends only on `Harbor.Abstractions` (Domain) — never `Harbor.Core`.
+Infrastructure — scripting pipeline layer. Depends only on `Harbor.Abstractions` (Domain) — never `Harbor.Application` / `Harbor.Registries`.
 
 ## Dependencies
 

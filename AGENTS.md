@@ -57,7 +57,7 @@ Do not re-read whole files when a `graft` crux or `serena` symbol body already a
 ```
 src/Harbor.Abstractions/              — base contracts (zero deps)
 src/Harbor.Abstractions.Contracts/    — models, events, ValueObjects, PermissionRuleset
-src/Harbor.Core/                      — deprecated thin facade (FacadeMarker only; AgentLoop/config/onboarding/compaction live in Harbor.Application, EventBus in Harbor.Registries)
+
 src/Harbor.Registries/                — Agent/Tool/Provider registries (builtin agents: code, plan, explore)
 src/Harbor.Application/               — sessions, permissions, configuration
 src/Harbor.Hosting/                   — DI modules wired by the CLI (TuiModule, StorageModule, CoreModule, ...)
@@ -363,7 +363,7 @@ Run: `dotnet run --project tests/Harbor.YourNamespace.Tests -c Release --no-buil
 5. Implement `UpdateFromEventAsync` to react to `AgentEvent`s (pattern-match by type).
 6. See `Harbor.Terminal.Abstractions/ViewModels/TuiViewModels.cs` for examples.
 
-> Never reference `Harbor.Core` from a TUI assembly. All agent state arrives via `AgentEvent`.
+> Never reference `Harbor.Application` / `Harbor.Registries` from a TUI assembly. All agent state arrives via `AgentEvent`.
 
 ### Add a TUI view
 
@@ -399,7 +399,7 @@ CS plugins are compiled in-memory via Roslyn at startup. Cached by source SHA-25
 
 1. **State** для фичи → добавить в `UiState` (immutable record), обновлять через `with`.
 2. **Transitions** → в `ChatAppReducer.Update` (pattern match на `AppMsg`). Не мутить state в renderer'е.
-3. **View** → `internal sealed class` в `View/`, не более 100 строк, не трогает `Harbor.Core`.
+3. **View** → `internal sealed class` в `View/`, не более 100 строк, не трогает `Harbor.Application` / `Harbor.Registries`.
 4. **Layout slot** → в `ChatLayoutShell.Create()` добавить `new Layout("MySlot").Size(N)`, в `BuildWidgets()` возвращать виджет по ключу `"MySlot"`.
 5. **SyncLayout** → копировать из `UiState` в `ChatViewProjector` (pass-through property).
 6. **Hot path** → `for (int i = ...)` вместо `foreach`/LINQ, `StringBuilderPool.Rent()` вместо `new StringBuilder()`.

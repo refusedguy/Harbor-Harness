@@ -2,8 +2,9 @@
 
   <!--
     Harbor.App.Avalonia — standalone ORCA-level desktop GUI for Harbor.
-    Composition root: depends on Harbor.Abstractions + Harbor.Terminal.Abstractions + Harbor.Core +
-    Harbor.Storage.Memory + Harbor.Tools.Builtin + Harbor.Providers.Ollama + Harbor.Providers.OpenAiCompatible.
+    Composition root: depends on Harbor.Abstractions + Harbor.Terminal.Abstractions + Harbor.Application +
+    Harbor.Registries + Harbor.Storage.Memory + Harbor.Tools.Builtin + Harbor.Providers.Ollama +
+    Harbor.Providers.OpenAiCompatible.
     Same DI responsibilities as Harbor.Cli — but instead of a terminal REPL, boots Avalonia 12.1
     desktop lifetime with Catppuccin-Mocha dark theme, code editor (AvaloniaEdit), streaming chat,
     session manager, command palette, diff view, token-usage chart, plugin panel host,
@@ -82,7 +83,11 @@
     <!-- Composition-root references: the app wires Harbor services, exactly like Harbor.Cli. -->
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <!-- #451: the deleted Harbor.Core facade forwarded to exactly these two
+         assemblies (Harbor.Application use cases + Harbor.Registries impls);
+         reference the real owners directly. -->
+    <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Hosting\Harbor.Hosting.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
     <!-- Centralized view-model / overlay / dialog locator set. -->

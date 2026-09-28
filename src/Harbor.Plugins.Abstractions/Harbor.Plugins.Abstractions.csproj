@@ -16,7 +16,7 @@
       - CompilationResult        (result struct returned by IPluginCompiler)
 
     Dependency policy (Clean Architecture):
-      - References Harbor.Abstractions (Domain) only — never Harbor.Core.
+      - References Harbor.Abstractions (Domain) only — never Harbor.Application / Harbor.Registries.
       - References Harbor.Terminal.Abstractions for the panel/TUI-plugin contracts
         surfaced on IPluginLoadHost (registration sink).
       - References Microsoft.CodeAnalysis for Diagnostic (compiler result).

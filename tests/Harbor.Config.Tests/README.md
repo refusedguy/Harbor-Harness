@@ -1,6 +1,6 @@
 # Harbor.Config.Tests
 
-Tests for **Harbor.Abstractions + Harbor.Core**.
+Tests for **Harbor.Abstractions + Harbor.Application**.
 
 ## What's covered
 

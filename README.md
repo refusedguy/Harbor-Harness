@@ -142,7 +142,7 @@ Clean / Hexagonal layering enforced mechanically by [tests/Harbor.Architecture.T
 ```
 Domain            Harbor.Abstractions (+ .Contracts), Harbor.Terminal.Abstractions,
                   Harbor.Desktop.Abstractions, Harbor.Diagnostics.Abstractions
-Application       Harbor.Core, Harbor.Application, Harbor.Registries,
+Application       Harbor.Application, Harbor.Registries,
                   Harbor.Ipc.*, Harbor.Ui.Framework.* (TEA-style state/reducers/projection),
                   Harbor.Plugins.* (Abstractions/Compilation/Instantiation/
                                     Registration/Hosting/Runtime/Host/Storage)

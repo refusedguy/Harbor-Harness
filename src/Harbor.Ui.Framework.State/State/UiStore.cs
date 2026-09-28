@@ -3,7 +3,7 @@ namespace Harbor.Ui.Framework.State;
 /// <summary>
 ///     Declarative UI-driven side-effect. Renderers never call <c>IAgent</c>
 ///     directly; instead they emit effects that the host executes. This keeps the
-///     renderer decoupled from <c>Harbor.Core</c> (per the decoupling contract).
+///     renderer decoupled from the Application layer (per the decoupling contract).
 /// </summary>
 public abstract record TuiEffect
 {

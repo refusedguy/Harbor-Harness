@@ -26,7 +26,7 @@ See [docs/ARCHITECTURE.md](./ARCHITECTURE.md) for the full layout.
 dotnet build
 
 # Build a specific project
-dotnet build src/Harbor.Core
+dotnet build src/Harbor.Application
 dotnet build apps/Harbor.App.Avalonia
 
 # Build Release configuration
@@ -198,7 +198,7 @@ public class YourTests
 ### Add a new project
 
 1. Create `src/Harbor.<Name>/` directory.
-2. Create `.csproj` file referencing `Harbor.Abstractions` (and `Harbor.Core` if needed).
+2. Create `.csproj` file referencing `Harbor.Abstractions` (and `Harbor.Application` / `Harbor.Registries` if needed).
 3. Add `GlobalUsings.cs` if helpful.
 4. `dotnet sln add src/Harbor.<Name>/Harbor.<Name>.csproj`.
 5. Create corresponding test project in `tests/Harbor.<Name>.Tests/`.

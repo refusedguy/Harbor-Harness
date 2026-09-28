@@ -23,7 +23,7 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.App.Wpf;
 /// <summary>
 ///     WPF application root. Bootstraps the Microsoft.Extensions.Hosting DI
-///     container, registers Harbor.Core services, and shows the
+///     container, registers Harbor.Application + Harbor.Registries services, and shows the
 ///     <see cref="MainWindow" /> on startup.
 /// </summary>
 public partial class App : Application

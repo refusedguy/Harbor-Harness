@@ -220,7 +220,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 ### Architectural debt
 
 - [x] `Harbor.Desktop.Abstractions` namespace drift: 4 files declared `namespace Harbor.App.Avalonia.ViewModels` while living in `Harbor.Desktop.Abstractions/ViewModels/`. **Verified fixed (ROP-D Z1, 25.08): every file in the project now declares `Harbor.Desktop.Abstractions.*`.**
-- [x] Namespace drift `Harbor.Core.*` in Harbor.Application.dll (42 declarations) and Harbor.Registries.dll (3) — migrated to assembly-matching namespaces (ROP-D Z1).
+- [x] Namespace drift `Harbor.Core.*` in Harbor.Application.dll (42 declarations) and Harbor.Registries.dll (3) — migrated to assembly-matching namespaces (ROP-D Z1). The `Harbor.Core` assembly that inherited the name was deleted in #451.
 - [x] Namespace drift `Harbor.Cli.*` in Harbor.App.Cli — 18 declarations + all references migrated to `Harbor.App.Cli.*`; remaining census findings documented as intentional at migration time (compat namespaces in Contracts/Extensions/Registries; same-family sub-namespaces in Ipc/Telemetry/Ui.Framework) (ROP-D Z1, 25.08; see commit 9ec5c7b).
 - [x] BannedApi.txt was dead (never wired, wrong filename for the analyzer) — renamed to `BannedSymbols.txt`, wired via AdditionalFiles in Directory.Build.props; all 9 production GetResult sites resolved or pragma-exempted with a catalogued reason (ROP-D Z2, commit be81e42).
 - [x] Arch tests probed the wrong assembly for "TuiAbstractions" (typeof(UiStore) from Ui.Framework.State); retargeted to Terminal.Abstractions + new UiFrameworkState rule (ROP-D Z2, commit 9060475).

@@ -149,7 +149,8 @@ public interface ITuiPanelPlugin : IPlugin
 ```
 
 Panels may register lazily — even after the renderer has started — and appear in the
-next frame. Panel plugins MUST NOT reference `Harbor.Core`: agent state flows in via
+next frame. Panel plugins MUST NOT reference `Harbor.Application` or
+`Harbor.Registries`: agent state flows in via
 `PanelContext.State` (an immutable `UiState`), side effects go through `UiStore.Dispatch`
 retrieved from `PanelContext.Services`.
 
@@ -207,7 +208,7 @@ public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, Ca
 
 | ❌ Forbidden | Why | ✅ Use instead |
 |---|---|---|
-| `Harbor.Core.*` (from TUI plugins) | Couples TUI to Core, breaks AOT | `Harbor.Abstractions.Events` |
+| `Harbor.Application.*` / `Harbor.Registries.*` (from TUI plugins) | Couples TUI to the Application layer, breaks AOT | `Harbor.Abstractions.Events` |
 | `Newtonsoft.Json` | AOT-incompatible | `System.Text.Json` |
 | `Assembly.Load` / `AssemblyLoadContext` collectible | AOT-incompatible | Pre-loaded assemblies |
 | `Type.GetProperties()` reflection | AOT-incompatible | Pattern match on known types |
@@ -1094,14 +1095,14 @@ public void Initialize(PluginContext context)
 }
 ```
 
-### Plugins can't reference `Harbor.Core`
+### Plugins can't reference the Application layer
 
 TUI plugins must use only `Harbor.Abstractions` + `Harbor.Tui.Abstractions`.
-Referencing `Harbor.Core` couples TUI to Core, breaks AOT.
+Referencing `Harbor.Application` or `Harbor.Registries` couples TUI to the Application layer, breaks AOT.
 
 ```csharp
 // ❌ WRONG — TUI plugin referencing Core
-using Harbor.Core.Sessions;   // ← will fail in AOT mode
+using Harbor.Application.Sessions;   // ← will fail in AOT mode
 
 // ✅ RIGHT — TUI plugin uses only Abstractions
 using Harbor.Abstractions.Events;   // AgentEvent comes from here

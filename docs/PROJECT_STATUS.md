@@ -90,7 +90,7 @@ full backlog. Highlights:
 |---|---|
 | Domain contracts | `src/Harbor.Abstractions/`, `src/Harbor.Abstractions.Contracts/` (бывший Harbor.Domain, F1 decoupling) |
 | UI framework (TEA, VMs, components) | `src/Harbor.Ui.Framework.*` (9 проектов: State, ViewModels, Services, Sessions, Projection…) |
-| Application layer (AgentLoop, registries) | `src/Harbor.Core/`, `src/Harbor.Application/`, `src/Harbor.Registries/` |
+| Application layer (AgentLoop, registries) | `src/Harbor.Application/`, `src/Harbor.Registries/` |
 | Plugin system | `src/Harbor.Plugins.{Abstractions,Storage,Compilation,Instantiation,Registration,Hosting,Runtime}/` + out-of-process `Harbor.Plugins.Host/` (exe) |
 | Scripting (SharpTS + Jint) | `contrib/scripting/Harbor.Scripting.*/` (moved to contrib) |
 | IPC (MessagePack over pipe/UDS) | `src/Harbor.Ipc.{Abstractions,Client,Server,InProcess}/` + `src/Harbor.Transport.Remote/` |

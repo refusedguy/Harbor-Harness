@@ -37,7 +37,7 @@ event bus.
 ## Dependency rules
 
 * **May reference:** `Harbor.Abstractions` only.
-* **Must not reference:** `Harbor.Application`, `Harbor.Core`,
+* **Must not reference:** `Harbor.Application`,
   `Harbor.Plugins.*`, `Harbor.Scripting.*`, `Harbor.Providers.*`,
   `Harbor.Storage.*`, `Harbor.Tools.Builtin`, `Harbor.Tui.*`, any app.
 * **Rationale:** registries are infrastructure; they must be substitutable
@@ -56,7 +56,8 @@ Registries use two namespace families:
 * `Harbor.Abstractions.{Agents, Tools, Providers, Events}` — kept from the
   pre-split era so that interfaces and their original implementations shared
   a namespace (`AgentRegistry`, `ToolRegistry`, `ProviderRegistry`,
-  `InMemoryEventBus`).
+  `InMemoryEventBus`). Note the namespace family does NOT match the assembly
+  name: these types ship in `Harbor.Registries.dll`.
 * `Harbor.Registries.{Events, Tools}` — newer members live here:
   `CompositeToolRegistry`, `InMemoryMcpRegistry`, `SamplingMiddleware`,
   `TypeFilterMiddleware`.
@@ -80,7 +81,5 @@ Registries use two namespace families:
 
 * [`Harbor.Application`](../Harbor.Application) — use cases that consume
   these registries via their abstractions.
-* [`Harbor.Core`](../Harbor.Core) — deprecated thin facade that combines
-  both for backward compatibility.
 * [`docs/ARCHITECTURE_LAYERS.md`](../../docs/ARCHITECTURE_LAYERS.md) —
   the canonical layering matrix and design rationale.

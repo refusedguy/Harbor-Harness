@@ -19,7 +19,7 @@ Chose **Variant V1 (narrowest)** from the recon options.
 ### What we consciously do NOT change
 - Existing architectural layering (already enforced by 46 architecture tests)
 - Public interfaces (`ILlmClient`, `ITool`, `IHarborClient`, `IMcpRegistry`)
-- Harbor.Core → Application/Registries split (already done)
+- Harbor.Core → Harbor.Application / Harbor.Registries split (done; the empty facade itself deleted in #451)
 - Existing test suite (no breaking changes to passing tests)
 - DI container structure
 

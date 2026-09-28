@@ -44,13 +44,20 @@
     <InternalsVisibleTo Include="Harbor.App.Wpf.Tests"/>
   </ItemGroup>
 
-  <!-- App depends on Abstractions + Core (via DI). Infrastructure impls are
-       pulled in transitively through Harbor.Cli.Hosting's HostBuilder is NOT
+  <!-- App depends on Abstractions + Application/Registries (via DI). Infrastructure
+       impls pulled in transitively through Harbor.Cli.Hosting's HostBuilder is NOT
        used here (we build our own WPF host) — but we still want the option to
-       register Harbor.Core providers in the WPF composition root. -->
+       register Harbor providers in the WPF composition root. -->
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <!-- #451: the deleted Harbor.Core facade forwarded to exactly these two
+         assemblies (Harbor.Application use cases + Harbor.Registries impls);
+         reference the real owners directly. The WPF composition root registers
+         AgentLoop/PermissionService (Harbor.Application) and
+         AgentRegistry/ToolRegistry/ProviderRegistry/InMemoryEventBus
+         (Harbor.Registries). -->
+    <ProjectReference Include="..\..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <!--

@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### ARCH-2 — delete the Harbor.Core facade (#451)
+
+**Пустой facade-проект удалён; 6 потребителей переведены на реальных владельцев.**
+
+`src/Harbor.Core` состоял из двух файлов (`FacadeMarker.cs` + `GlobalUsings.cs`) и пары `ProjectReference` на `Harbor.Application` + `Harbor.Registries`. Обоснование в `GlobalUsings.cs` («сохранить namespace `Harbor.Core.*` для source-compat») было ложным: ни один файл в репозитории не объявлял `namespace Harbor.Core` и не писал `using Harbor.Core`.
+
+- **Классификация потребителей вместо механической замены.** `Harbor.App.Cli`, `Harbor.App.Avalonia`, `Harbor.App.Maui`, `Harbor.App.Wpf` действительно используют обе половины (`AgentLoop`/`PermissionService` из Application, `AgentRegistry`/`ToolRegistry`/`ProviderRegistry`/`InMemoryEventBus` из Registries) → ссылаются на двух реальных владельцев напрямую, с сохранением прежней поверхности типов. `Harbor.App.Blazor` не использует ни того, ни другого — ребро было привычкой, поэтому удалено, а не заменено.
+- **Канарейка.** `Harbor.Architecture.Tests` отпустил фасад последним (проект уже ссылался на оба реальных проекта напрямую). Удалены два правила, существовавших только для пробинга фасада, — инвариант, который они охраняли, теперь проверяется напрямую через per-assembly reference-set в `FullLayerMatrixTests`. Остальные правила перенаправлены на двух владельцев: NetArchTest считает несуществующее имя выполненным ограничением, поэтому, например, `NetArch_StorageSqlite_DoesNotDependOn_Core` проверял только мёртвую строку и прошёл бы даже при ссылке Sqlite на весь Application-слой. Ни один инвариант не ослаблен — часть из них усилена.
+- `FullLayerMatrixTests`: удалены строка инвентаря, строка матрицы и устаревшая запись в `Allowed` для `Harbor.Hosting` (иначе `Matrix_CoversExactlyTheSrcInventory` упал бы на orphan-строке). `ReadmeCoverageTests`: удалён грандфазерированный хвост `Harbor.Core` — `Assert_LegacyEntriesAreAccurate` требует, чтобы он исчез вместе с проектом.
+- **BREAKING:** `Harbor.Core` больше не поставляется как NuGet-пакет. Потребитель, ссылавшийся на `Harbor.Core` ради транзитивного доступа к `Harbor.Application`/`Harbor.Registries`, должен ссылаться на них напрямую.
+- Документация (AGENTS.md, CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/ARCHITECTURE_LAYERS.md, docs/CENTRAL_PACKAGE_MANAGEMENT.md) и XML-doc-комментарии, указывавшие, где живёт реализация, переведены на двух реальных владельцев. Датированные записи (CHANGELOG-история, `docs/audit-archive/`, `docs/.kilo-docs/`, `docs/FEATURE_RESEARCH.md`, shell-recon-отчёты) оставлены как есть — переписывать историю не правка документации.
+
 ### 33/T4 — finish AppState/AppMsg/AppReducer + ChatAppReducer split (#437, closes #364)
 
 **TEA state/message split доведён до конца; flat forwarding-слой удалён.**

@@ -9,7 +9,8 @@ Sample plugin — implements `IPlugin` (+ `IToolPlugin`) from `Harbor.Abstractio
 ## Dependencies
 
 - `Harbor.Abstractions` (Domain — for `IPlugin` / `IToolPlugin`)
-- `Harbor.Core` (for tool dispatch integration)
+- (nothing else — tool dispatch arrives through `ToolContext`, so the plugin
+  needs no Application-layer reference)
 - `Harbor.Tui.Abstractions` (for the TUI panel)
 
 ## Public API

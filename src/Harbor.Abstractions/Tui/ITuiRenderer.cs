@@ -151,7 +151,8 @@ public interface ICommandContext
 ///     Router for slash-commands.
 /// </summary>
 /// <remarks>
-///     Implementations live in <c>Harbor.Core</c>.
+///     Implementations live in the renderer/composition-root assemblies
+///     (<c>Harbor.Tui.*</c>, <c>Harbor.Hosting</c>).
 /// </remarks>
 public interface ISlashCommandRouter
 {

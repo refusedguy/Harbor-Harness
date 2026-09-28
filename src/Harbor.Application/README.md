@@ -45,7 +45,7 @@ Application projects (`Harbor.Plugins.Runtime`, `Harbor.Scripting.*`).
 
 * **May reference:** `Harbor.Abstractions`, `Harbor.Extensions`,
   `Harbor.Diagnostics.Abstractions`.
-* **Must not reference:** `Harbor.Registries`, `Harbor.Core`,
+* **Must not reference:** `Harbor.Registries`,
   `Harbor.Plugins.*`, `Harbor.Scripting.*`, `Harbor.Providers.*`,
   `Harbor.Storage.*`, `Harbor.Tools.Builtin`, `Harbor.Tui.*`, any app.
 * **Rationale:** use cases must be testable in isolation with stub/fake
@@ -64,8 +64,8 @@ Types declare namespaces matching their assembly of residence (ROP-D Z1):
 `Harbor.Application.Permissions`, `Harbor.Application.Onboarding`,
 `Harbor.Application.Configuration`, `Harbor.Application.Resilience`,
 `Harbor.Application.Providers`, `Harbor.Application.Telemetry`. Consumers that
-switch from the old `Harbor.Core` facade must update their `using` directives
-once when they migrate.
+no longer needs a `using` rewrite: the old `Harbor.Core` facade that once
+re-exported them was deleted in #451.
 
 ## Performance intent
 
@@ -85,7 +85,5 @@ once when they migrate.
 * [`Harbor.Registries`](../Harbor.Registries) — concrete registry impls
   (AgentRegistry, ToolRegistry, ProviderRegistry, InMemoryEventBus,
   InMemoryMcpRegistry).
-* [`Harbor.Core`](../Harbor.Core) — deprecated thin facade that combines
-  both for backward compatibility.
 * [`docs/ARCHITECTURE_LAYERS.md`](../../docs/ARCHITECTURE_LAYERS.md) —
   the canonical layering matrix and design rationale.

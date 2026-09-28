@@ -149,7 +149,7 @@ public sealed class PluginContext
 ///     Host for plugins — manages discovery, loading, and lifecycle.
 /// </summary>
 /// <remarks>
-///     Implementations live in <c>Harbor.Core</c> (JIT) and a future AOT-compatible
+///     Implementations live in <c>Harbor.Plugins.Runtime</c> (JIT) and a future AOT-compatible
 ///     out-of-process variant.
 /// </remarks>
 public interface IPluginHost

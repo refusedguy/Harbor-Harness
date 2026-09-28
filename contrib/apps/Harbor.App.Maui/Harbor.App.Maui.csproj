@@ -8,7 +8,7 @@
     (`dotnet workload install maui-windows maui-maccatalyst`). Build this
     project on Windows or macOS. On Linux, exclude it from the solution build
     by passing the project list explicitly, e.g.
-    `dotnet build path/to/Harbor.Core.csproj` etc.
+    `dotnet build path/to/Harbor.Application.csproj` etc.
   -->
 
   <PropertyGroup>
@@ -46,7 +46,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <!-- #451: the deleted Harbor.Core facade forwarded to exactly these two
+         assemblies (Harbor.Application use cases + Harbor.Registries impls);
+         reference the real owners directly. -->
+    <ProjectReference Include="..\..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>

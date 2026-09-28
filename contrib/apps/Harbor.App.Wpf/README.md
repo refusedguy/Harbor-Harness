@@ -3,7 +3,7 @@
 Standalone production-ready WPF desktop GUI for the Harbor AI coding agent harness.
 
 > This is **not** a TUI renderer — it's a self-contained desktop application
-> built directly on `Harbor.Abstractions` + `Harbor.Core`, designed to ship as
+> built directly on `Harbor.Abstractions` + `Harbor.Application` + `Harbor.Registries`, designed to ship as
 > a Windows `.exe` that anyone can double-click. The Avalonia-based renderer
 > in `src/Harbor.Tui.Avalonia/` remains the cross-platform renderer; this WPF
 > shell is the Windows-native alternative.
@@ -27,7 +27,8 @@ apps/Harbor.App.Wpf/
 ```
 Harbor.App.Wpf
    ├── Harbor.Abstractions         (domain contracts)
-   ├── Harbor.Core                 (AgentLoop, ProviderRegistry, AgentRegistry)
+   ├── Harbor.Application          (AgentLoop, PermissionService, SystemPromptBuilder)
+   ├── Harbor.Registries           (ProviderRegistry, AgentRegistry, ToolRegistry, InMemoryEventBus)
    ├── Harbor.Tui.Abstractions     (reused for state types — not as a renderer)
    ├── Harbor.Storage.Memory       (in-memory session store — swap for Jsonl/Sqlite)
    ├── CommunityToolkit.Mvvm       ([ObservableProperty], [RelayCommand])

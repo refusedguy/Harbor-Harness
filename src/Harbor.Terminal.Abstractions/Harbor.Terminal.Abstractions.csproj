@@ -29,7 +29,7 @@
       ✅ Harbor.Abstractions            (Domain — AgentEvent, KeyPress)
       ✅ CommunityToolkit.Mvvm          (ObservableObject for builtin view models)
       ✅ Microsoft.Extensions.Logging.Abstractions
-      ❌ NO Harbor.Core / Application / Registries / Scripting
+      ❌ NO Harbor.Application / Harbor.Registries / Scripting
       ❌ NO Harbor.Providers.* / Harbor.Storage.* / Harbor.Tools.*
       ❌ NO Spectre.Console / Terminal.Gui / GUI framework types
 

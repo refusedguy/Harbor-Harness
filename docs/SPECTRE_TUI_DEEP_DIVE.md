@@ -60,7 +60,7 @@
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-**Правило:** SpectreTUI **никогда** не обращается к `Harbor.Core` напрямую. Все agent-события приходят через `IEventBus` → `UiStore.Dispatch(AgentEvent)` → `ChatAppReducer.Reduce` → `UiState`. Все side-effects идут через `TuiEffect`.
+**Правило:** SpectreTUI **никогда** не обращается к Application слою (`Harbor.Application` / `Harbor.Registries`) напрямую. Все agent-события приходят через `IEventBus` → `UiStore.Dispatch(AgentEvent)` → `ChatAppReducer.Reduce` → `UiState`. Все side-effects идут через `TuiEffect`.
 
 ---
 
@@ -601,7 +601,7 @@ if (key.Key == Key.Enter && key.Character is '\n') return;
 
 ## 13. Чек-лист для PR с новой фичей в SpectreTUI
 
-- [ ] Фича — это **view** или **effect**? Если view — не трогает `Harbor.Core`. Если effect — добавляй в `TuiEffect` discriminated union.
+- [ ] Фича — это **view** или **effect**? Если view — не трогает Application слой. Если effect — добавляй в `TuiEffect` discriminated union.
 - [ ] State для фичи — в `UiState` (immutable record, `with` expressions). Не в renderer.
 - [ ] Transitions — в `ChatAppReducer.Update` (pattern match на `AppMsg`). Не в renderer.
 - [ ] Виджет — в `View/` папке, `internal sealed class`, не более 100 строк.

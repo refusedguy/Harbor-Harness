@@ -82,7 +82,6 @@ public class FullLayerMatrixTests
         "Harbor.Registries",
         "Harbor.Plugins.Abstractions",
         "Harbor.Plugins.Runtime",
-        "Harbor.Core", // empty backward-compat facade over Application+Registries
         // Infrastructure
         "Harbor.Providers.OpenAiCompatible",
         "Harbor.Providers.Anthropic",
@@ -117,7 +116,8 @@ public class FullLayerMatrixTests
         // #188 (part of #96) Presentation → Application tech debt, owner: architecture, sprint: next:
         // Desktop.Abstractions uses ProviderPresets (Harbor.Application.Configuration)
         // in ProviderModelPickerViewModel / OnboardingViewModel. Direct
-        // Harbor.Application ref (Harbor.Core facade removed in #188).
+        // Harbor.Application ref (the Harbor.Core facade was removed in #188 and
+        // the facade itself deleted in #451).
         // Future fix: move preset catalog to Domain (Harbor.Abstractions.Providers).
         ["Harbor.Desktop.Abstractions"] =
         [
@@ -265,8 +265,6 @@ public class FullLayerMatrixTests
         ["Harbor.Application"] = new(Layer.Application,
             ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions"]),
         ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]),
-        // Empty backward-compat facade forwarding to Application+Registries.
-        ["Harbor.Core"] = new(Layer.Application, ["Harbor.Application", "Harbor.Registries"]),
         ["Harbor.Plugins.Abstractions"] = new(Layer.Application, ["Harbor.Abstractions"]),
         // Runtime is the composition surface over the plugin machinery stack
         // (Host/Storage/Compilation/Instantiation/Registration are its family);
@@ -322,7 +320,7 @@ public class FullLayerMatrixTests
             // Wires DI over the whole graph incl. contrib renderers — free tier.
             "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
             "Harbor.Diagnostics.Abstractions", "Harbor.Telemetry.Core",
-            "Harbor.Core", "Harbor.Application", "Harbor.Registries",
+            "Harbor.Application", "Harbor.Registries",
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
             "Harbor.Ui.Framework.Sessions",

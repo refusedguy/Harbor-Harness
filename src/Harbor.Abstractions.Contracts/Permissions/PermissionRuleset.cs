@@ -540,7 +540,7 @@ public sealed record PermissionResponse(
 ///     </para>
 ///     <para>
 ///         Implementations MUST be thread-safe. The default <c>PermissionService</c> lives in
-///         <c>Harbor.Core</c>.
+///         <c>Harbor.Application</c>.
 ///     </para>
 /// </remarks>
 public interface IPermissionService

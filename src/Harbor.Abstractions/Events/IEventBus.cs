@@ -8,12 +8,13 @@ namespace Harbor.Abstractions.Events;
 ///         The event bus is the single broadcast channel for everything that happens inside the
 ///         agent loop: turn boundaries, LLM streaming deltas, tool execution progress, compaction
 ///         events, errors, and periodic stats snapshots. The TUI, loggers, IPC clients, and plugins
-///         all subscribe to <see cref="AgentEvent" />s without ever reaching into <c>Harbor.Core</c> directly.
+///         all subscribe to <see cref="AgentEvent" />s without ever reaching into the
+///         Application layer (<c>Harbor.Application</c> / <c>Harbor.Registries</c>) directly.
 ///     </para>
 ///     <para>
 ///         Implementations MUST be thread-safe and SHOULD support backpressure (e.g. bounded
 ///         channels or drop-oldest semantics). The default <c>InMemoryEventBus</c> lives in
-///         <c>Harbor.Core</c> and uses an <c>ImmutableArray</c> for lock-free snapshot reads plus
+///         <c>Harbor.Registries</c> and uses an <c>ImmutableArray</c> for lock-free snapshot reads plus
 ///         a bounded scrollback channel for late-attaching subscribers.
 ///     </para>
 /// </remarks>

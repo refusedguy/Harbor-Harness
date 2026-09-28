@@ -68,7 +68,6 @@ public class ReadmeCoverageTests
         ("Harbor.Abstractions", new[] { "wiring", "limits" }),
         ("Harbor.Abstractions.Contracts", new[] { "wiring" }),
         ("Harbor.Application", new[] { "wiring", "usage", "limits" }),
-        ("Harbor.Core", new[] { "wiring", "usage", "deps", "limits" }),
         ("Harbor.DesignSystem", new[] { "public", "wiring", "deps", "limits" }),
         ("Harbor.Desktop.Abstractions", new[] { "public", "wiring", "limits" }),
         ("Harbor.Desktop.Animations", new[] { "public", "wiring", "limits" }),

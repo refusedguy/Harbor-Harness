@@ -4,7 +4,7 @@ Contracts shared across the entire plugin pipeline. Contains the leaf-level inte
 
 ## Layer
 
-Infrastructure — plugin pipeline layer. References `Harbor.Abstractions` + `Harbor.Terminal.Abstractions` (for the panel/TUI-plugin contracts surfaced on `IPluginLoadHost`). Never references `Harbor.Core`.
+Infrastructure — plugin pipeline layer. References `Harbor.Abstractions` + `Harbor.Terminal.Abstractions` (for the panel/TUI-plugin contracts surfaced on `IPluginLoadHost`). Never references `Harbor.Application` / `Harbor.Registries`.
 
 ## Dependencies
 

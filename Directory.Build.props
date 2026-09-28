@@ -72,9 +72,10 @@
     <!--
       XML doc comment warnings are noisy and not actionable in the hot loop of
       authoring interfaces — many cref references intentionally span to
-      Harbor.Core implementations (e.g. ProviderRegistry.Freeze) that cannot be
-      referenced from Harbor.Abstractions without breaking the dependency
-      inversion. CS1570 (malformed XML), CS1571 (duplicate param tag),
+      implementations living further out (e.g. ProviderRegistry.Freeze in
+      Harbor.Registries) that cannot be referenced from Harbor.Abstractions
+      without breaking the dependency inversion. CS1570 (malformed XML),
+      CS1571 (duplicate param tag),
       CS1574 (unresolved cref), and CS0419 (ambiguous cref) are suppressed so
       documentation improvements can land incrementally without blocking the
       build.

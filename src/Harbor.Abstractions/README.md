@@ -34,7 +34,7 @@ Domain models (`Session`, `AgentMessage`, identifiers like `SessionId`/`ModelRef
 - **No domain models.** `Session`, `AgentMessage`, `ModelInfo`, `Usage`, `Pricing`, `ToolResult`, `ToolResultEntry`, `FileAttachment`, all 16 `AgentEvent` record variants and all 13 derived `LlmEvent` streaming-event types, `PermissionRuleset` / `PermissionRule` / `PermissionAction`, and the identifiers (`SessionId`, `MessageId`, `ToolCallId`, `ProviderId`, `ModelRef`, `ToolName`, `AgentName`) — all live in `Harbor.Abstractions.Contracts`.
 - **No infrastructure helpers.** `ArrayPoolExtensions.RentScoped<T>`, `StringBuilderPool`, `RentedArray<T>`, `CollectionExtensions.ToFrozenSet<T>` / `ToFrozenDictionary<...>`, `MemoryPackExtensions.ToMemoryPackBytes<T>` / `FromMemoryPackBytes<T>` — all live in `Harbor.Extensions`. The facade does **not** re-export them; add a direct project reference when you need them.
 - **No HTTP, no HttpClient, no JSON serialization beyond `JsonElement`/`JsonDocument`.** Provider implementations live in `Harbor.Providers.*` (Infrastructure).
-- **No DI registration.** `IServiceCollection` extensions live in `Harbor.Core` or composition roots.
+- **No DI registration.** `IServiceCollection` extensions live in `Harbor.Hosting` or composition roots.
 - **No Roslyn, no reflection-based activation.** Plugin instantiation lives in `Harbor.Plugins.Instantiation`.
 - **No file I/O.** Session storage lives in `Harbor.Storage.*`.
 - **No UI code.** TUI renderers live in `Harbor.Tui.*`.
