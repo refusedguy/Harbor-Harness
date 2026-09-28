@@ -225,7 +225,7 @@ public sealed class SetupChecklistOverlayTests
 
         // Read-only guide: it occludes the panels under its box but raises no
         // modal barrier, so keys keep flowing to the composer.
-        await Assert.That(layer.IsModal).IsFalse();
+        await Assert.That(stack.TopModal).IsNull();
         await Assert.That(stack.HasModalBarrier).IsFalse();
         await Assert.That(GridDump.Art(buffer)).Contains("Setup guide");
     }
