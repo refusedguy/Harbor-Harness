@@ -188,30 +188,43 @@ public class JsonlUnboundedAllocationTests
     [Test]
     public async Task ChunkedLineReader_RecordAtTheCeiling_NeverExceedsIt()
     {
-        // The hard bound itself, checked directly. A record right at
-        // MaxRecordBytes is still assembled (it is legal); one past it is
-        // dropped. Either way the block must not exceed the ceiling — which is
-        // what stops a hostile 2 GB single-line file from renting 2 GB. The
-        // stream is synthetic rather than a real file so the test does not have
-        // to write 32 MiB to disk.
-        long atCeiling = ChunkedLineReader.MaxRecordBytes;
+        // The hard bound itself, checked directly on both sides of the line. What
+        // it stops: a hostile 2 GB single-line file renting 2 GB. The stream is
+        // synthetic rather than a real file, so the test never writes 32 MiB to
+        // disk to check a number.
+        long ceiling = ChunkedLineReader.MaxRecordBytes;
 
-        using (var stream = SyntheticRecord(atCeiling))
+        // One byte under the ceiling: still a record, still assembled.
+        using (var stream = SyntheticRecord(ceiling - 1))
         {
             using var reader = new ChunkedLineReader(stream);
             int seen = Drain(reader);
             await Assert.That(seen).IsEqualTo(1);
             await Assert.That(reader.SawOversizedRecord).IsFalse();
-            await Assert.That((long)reader.BufferSize).IsLessThanOrEqualTo(atCeiling);
+            await Assert.That((long)reader.BufferSize).IsLessThanOrEqualTo(ceiling);
         }
 
-        using (var stream = SyntheticRecord(atCeiling + 4096))
+        // Exactly at the ceiling: refused. This is the case that matters — with
+        // a `>` check the block fills to the ceiling, there is no room to read
+        // the bytes that end the record, and the whole thing comes back as if it
+        // were a legitimate unterminated final line.
+        using (var stream = SyntheticRecord(ceiling))
         {
             using var reader = new ChunkedLineReader(stream);
             int seen = Drain(reader);
             await Assert.That(seen).IsEqualTo(0);
             await Assert.That(reader.SawOversizedRecord).IsTrue();
-            await Assert.That((long)reader.BufferSize).IsLessThanOrEqualTo(atCeiling);
+            await Assert.That((long)reader.BufferSize).IsLessThanOrEqualTo(ceiling);
+        }
+
+        // And well past it: same answer, and still no bigger block.
+        using (var stream = SyntheticRecord(ceiling + 4096))
+        {
+            using var reader = new ChunkedLineReader(stream);
+            int seen = Drain(reader);
+            await Assert.That(seen).IsEqualTo(0);
+            await Assert.That(reader.SawOversizedRecord).IsTrue();
+            await Assert.That((long)reader.BufferSize).IsLessThanOrEqualTo(ceiling);
         }
     }
 

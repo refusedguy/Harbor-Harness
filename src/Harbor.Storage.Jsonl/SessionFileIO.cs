@@ -198,37 +198,40 @@ internal static class SessionFileIO
     {
         using var reader = new ChunkedLineReader(source);
 
-        // The first record always gets a verdict, whatever the plan.
-        bool headDone = false;
-        while (!headDone && reader.Fill())
+        // The head (first record) always gets a verdict, whatever the plan. A
+        // verbatim plan stops right after it: every later record is the same
+        // verdict by definition, so the rest of the file is piped rather than
+        // assembled. Note the inner drain has to be entered from the SAME Fill
+        // that produced the head — the records after it are already sitting in
+        // the current block, and a plan that is not verbatim must see them
+        // before the next Fill refills.
+        bool verbatim = false;
+        while (reader.Fill())
         {
-            if (!reader.TryGetRecord(out var head))
+            while (reader.TryGetRecord(out var record))
             {
-                continue; // the first record straddles this block
-            }
+                ApplyVerdict(sink, plan, record);
 
-            ApplyVerdict(sink, plan, head);
-            headDone = true;
-        }
-
-        if (headDone && plan.CopiesRemainderVerbatim)
-        {
-            reader.CopyRemainderTo(sink);
-        }
-        else
-        {
-            while (reader.Fill())
-            {
-                while (reader.TryGetRecord(out var record))
+                if (plan.CopiesRemainderVerbatim)
                 {
-                    ApplyVerdict(sink, plan, record);
+                    verbatim = true;
+                    break;
                 }
             }
 
-            if (reader.TryGetTrailingRecord(out var trailing))
+            if (verbatim)
             {
-                ApplyVerdict(sink, plan, trailing);
+                break;
             }
+        }
+
+        if (verbatim)
+        {
+            reader.CopyRemainderTo(sink);
+        }
+        else if (reader.TryGetTrailingRecord(out var trailing))
+        {
+            ApplyVerdict(sink, plan, trailing);
         }
 
         if (trailer is not null)

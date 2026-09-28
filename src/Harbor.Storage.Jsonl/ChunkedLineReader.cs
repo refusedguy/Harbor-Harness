@@ -47,14 +47,22 @@ internal sealed class ChunkedLineReader : IDisposable
     internal const int InitialBlockBytes = 2 * ChunkBytes;
 
     /// <summary>
-    ///     Ceiling on a single JSONL record. The largest payload a message can
-    ///     legitimately carry is a <c>read</c> tool result, which
-    ///     <c>ReadTool.MaxFileBytes</c> caps at 10 MiB, and JSON escaping
-    ///     inflates that text further; 32 MiB leaves more than 3x headroom over
-    ///     the worst legitimate record while sitting 64x below the 2 GiB buffer
-    ///     it replaces. A record past it is corrupt or hostile — it is reported,
-    ///     never assembled.
+    ///     Ceiling on a single JSONL record, EXCLUSIVE: a record of this size or
+    ///     more is refused. The largest payload a message can legitimately carry
+    ///     is a <c>read</c> tool result, which <c>ReadTool.MaxFileBytes</c> caps
+    ///     at 10 MiB, and JSON escaping inflates that text further; 32 MiB leaves
+    ///     more than 3x headroom over the worst legitimate record while sitting
+    ///     64x below the 2 GiB buffer it replaces.
     /// </summary>
+    /// <remarks>
+    ///     Exclusive on purpose. The check fires when the block has filled to the
+    ///     ceiling, so a record of exactly <see cref="MaxRecordBytes" /> would
+    ///     otherwise sit in a full block with no room to read the LF that ends
+    ///     it — and be handed back whole by
+    ///     <see cref="TryGetTrailingRecord" /> as if it were a legitimate final
+    ///     line. Refusing at the ceiling means the block is never full when the
+    ///     record is dropped, so the read always recovers.
+    /// </remarks>
     internal const long MaxRecordBytes = 32L * 1024 * 1024;
 
     private readonly Stream _stream;
@@ -150,17 +158,19 @@ internal sealed class ChunkedLineReader : IDisposable
         // block, grow to carry + one chunk so the rest of a legal-sized record
         // arrives in a single read.
         //
-        // The target is clamped to MaxRecordBytes, so the block's worst case is
-        // exactly that — never MaxRecordBytes + a chunk, and never a power of
-        // two above it. The clamp cannot strand the reader: a carry that
-        // REACHED the ceiling has already been handed to TryGetRecord, which
-        // drops it and frees the whole block, so _filled is 0 by the time we
-        // get back here.
-        int want = (int)Math.Min(ChunkBytes, Math.Min(MaxRecordBytes, ByteCeiling) - _filled);
-        if (want <= 0 || _buffer.Length - _filled >= want)
+        // Growth is clamped to MaxRecordBytes, so the block's worst case is
+        // exactly that: never the ceiling plus a chunk, and never a power of
+        // two above it. The clamp cannot strand the reader — a carry that
+        // REACHED the ceiling was already handed to TryGetRecord, which drops
+        // it and consumes the whole block, so _filled is 0 by the time we get
+        // back here. When the clamp leaves no room at all, the block is full to
+        // the ceiling and TryGetRecord is about to drop the carry, so reading
+        // is finished either way.
+        int headroom = (int)Math.Min(ChunkBytes, Math.Min(MaxRecordBytes, ByteCeiling) - _filled);
+        if (headroom <= 0 || _buffer.Length - _filled >= headroom)
             return _buffer.Length > _filled;
 
-        var grown = ArrayPool<byte>.Shared.Rent(_filled + want);
+        var grown = ArrayPool<byte>.Shared.Rent(_filled + headroom);
         _buffer.AsSpan(0, _filled).CopyTo(grown);
         ArrayPool<byte>.Shared.Return(_buffer);
         _buffer = grown;
@@ -198,7 +208,13 @@ internal sealed class ChunkedLineReader : IDisposable
             {
                 // No terminator in what we hold: the record continues in the
                 // next block, unless it has already blown the ceiling.
-                if (!_overflow && _filled - (long)_cursor > MaxRecordBytes)
+                // >= not >: MaxRecordBytes is the first size that is REFUSED, so
+                // the block filling to exactly the ceiling is enough to drop the
+                // record. With `>` a record of exactly MaxRecordBytes would sit
+                // in a full block, MakeRoom would decline to read the bytes that
+                // end it, and the record would be handed back whole by
+                // TryGetTrailingRecord — a ceiling that could be passed.
+                if (!_overflow && _filled - (long)_cursor >= MaxRecordBytes)
                 {
                     SawOversizedRecord = true;
                     _overflow = true;
@@ -285,9 +301,19 @@ internal sealed class ChunkedLineReader : IDisposable
             return false;
 
         _trailingTaken = true;
-        if (_cursor >= _filled || _overflow)
+
+        // An unterminated tail that reached the ceiling is an oversized record
+        // that never got its LF, not a final record: refuse it rather than hand
+        // the caller MaxRecordBytes of buffer as if it were one line.
+        bool oversized = _overflow || _filled - (long)_cursor >= MaxRecordBytes;
+        if (_cursor >= _filled || oversized)
         {
             _cursor = _filled;
+            if (oversized)
+            {
+                SawOversizedRecord = true;
+            }
+
             return false;
         }
 
