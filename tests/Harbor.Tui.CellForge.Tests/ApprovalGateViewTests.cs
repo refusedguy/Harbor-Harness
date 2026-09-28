@@ -74,6 +74,65 @@ public class ApprovalGateViewTests
     }
 
     [Test]
+    public async Task CheapEstimate_MatchesMeasure_ForColdBlock()
+    {
+        var block = new ApprovalGateView("bash", "cargo build --release --configuration Release");
+
+        // Never measured/painted: the estimate must already be the real height,
+        // the layout cache never has to re-patch the slot after settling.
+        for (int w = 8; w <= 80; w += 8)
+        {
+            await Assert.That(block.CheapEstimate(w)).IsEqualTo(block.Measure(w).MinLines);
+        }
+    }
+
+    [Test]
+    public async Task CheapEstimate_AfterResize_DoesNotReuseStaleWrapWidth()
+    {
+        // #481: Paint at the wide layout, then estimate/measure at the narrow one.
+        // CheapEstimate used to read the cached _wrapped list bare, so it
+        // reported the WIDE width's line count and the cached slot height
+        // disagreed with the painted body (overlapping rows).
+        var block = new ApprovalGateView("bash", "cargo build --release");
+        var wide = new ScreenBuffer(60, 4);
+        block.Paint(new BlockPaintContext(wide, new Rect(0, 0, 60, 4), 0));
+
+        int wideRows = block.WrappedDetail(60).Count;
+        await Assert.That(wideRows).IsEqualTo(1);
+
+        int narrowEstimate = block.CheapEstimate(20);
+        await Assert.That(block.Measure(20).MinLines).IsGreaterThan(3);
+        await Assert.That(narrowEstimate).IsEqualTo(block.Measure(20).MinLines);
+        await Assert.That(narrowEstimate).IsGreaterThan(block.CheapEstimate(60));
+    }
+
+    [Test]
+    public async Task CheapEstimate_AfterNarrowPaint_DoesNotReuseStaleWrapWidth()
+    {
+        // Same invariant in the widening direction: an estimate issued after a
+        // narrow paint must not keep the narrow (taller) line count.
+        var block = new ApprovalGateView("bash", "cargo build --release");
+        var narrow = new ScreenBuffer(20, 6);
+        block.Paint(new BlockPaintContext(narrow, new Rect(0, 0, 20, 6), 0));
+
+        int wideEstimate = block.CheapEstimate(60);
+        await Assert.That(wideEstimate).IsEqualTo(block.Measure(60).MinLines);
+        await Assert.That(wideEstimate).IsLessThan(block.CheapEstimate(20));
+    }
+
+    [Test]
+    public async Task CheapEstimate_ClampsSubMinimalWidth_ToMeasure()
+    {
+        var block = new ApprovalGateView("bash", "cargo build --release");
+
+        // Both paths floor the width at 8, so widths below that agree too.
+        for (int w = 0; w < 8; w++)
+        {
+            await Assert.That(block.CheapEstimate(w)).IsEqualTo(block.Measure(w).MinLines);
+        }
+    }
+
+    [Test]
     public async Task Paint_ShowsHeader_Detail_AndHint()
     {
         var buffer = new ScreenBuffer(50, 3);
