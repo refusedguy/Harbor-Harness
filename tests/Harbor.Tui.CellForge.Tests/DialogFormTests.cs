@@ -347,12 +347,13 @@ public class DialogFormTests
     public async Task Alert_Paint_ContainsTitleMessageAndButton()
     {
         var dialog = new DialogOverlay();
-        dialog.ShowAlert("Hello", "world body");
+        // Single-word message: WrapText splits on spaces (PRIM2c precedent).
+        dialog.ShowAlert("Hello", "worldbody");
 
         string art = PaintArt(dialog);
 
         await Assert.That(art.Contains("Hello")).IsTrue();
-        await Assert.That(art.Contains("world body")).IsTrue();
+        await Assert.That(art.Contains("worldbody")).IsTrue();
         await Assert.That(art.Contains("[OK]")).IsTrue();
     }
 
