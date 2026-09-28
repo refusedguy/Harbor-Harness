@@ -35,11 +35,13 @@ internal static class AnthropicEventMapper
         try
         {
             int remapsBefore = state.RemappedToolCalls;
-            int byteCount = Encoding.UTF8.GetByteCount(data);
-            byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
+            // #171: single-pass transcode — GetMaxByteCount rent + one
+            // GetBytes (was GetByteCount + GetBytes: two passes per event).
+            byte[] rented = ArrayPool<byte>.Shared.Rent(Encoding.UTF8.GetMaxByteCount(data.Length));
+            int byteCount;
             try
             {
-                Encoding.UTF8.GetBytes(data, rented);
+                byteCount = Encoding.UTF8.GetBytes(data, rented);
                 events = MapAnthropicEvents(rented.AsSpan(0, byteCount), state);
             }
             finally

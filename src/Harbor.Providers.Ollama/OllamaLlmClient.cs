@@ -261,12 +261,8 @@ public sealed class OllamaLlmClient : ILlmClient
     /// <summary>
     ///     Parse one NDJSON line and write any emitted events directly into the channel.
     ///     Malformed lines follow the unified skip-and-count policy (ROP-A ПР.4).
-    /// </summary>
-    /// <summary>
-    ///     Parse one NDJSON line and write any emitted events directly into the channel.
-    ///     Malformed lines follow the unified skip-and-count policy (ROP-A ПР.4).
-    ///     #171: the payload transcodes into a pooled buffer and parses via
-    ///     Utf8JsonReader — no JsonDocument per line.
+    ///     #171: the payload transcodes in one pass into a pooled buffer and
+    ///     parses via Utf8JsonReader — no JsonDocument per line.
     /// </summary>
     private async Task WriteNdjsonEventsAsync(string line, ChannelWriter<LlmEvent> writer, ChunkStreamState chunkState, CancellationToken ct)
     {
@@ -274,11 +270,13 @@ public sealed class OllamaLlmClient : ILlmClient
         try
         {
             int remapsBefore = chunkState.RemappedToolCalls;
-            int byteCount = Encoding.UTF8.GetByteCount(line);
-            byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
+            // #171: single-pass transcode — GetMaxByteCount rent + one
+            // GetBytes (was GetByteCount + GetBytes: two passes per line).
+            byte[] rented = ArrayPool<byte>.Shared.Rent(Encoding.UTF8.GetMaxByteCount(line.Length));
+            int byteCount;
             try
             {
-                Encoding.UTF8.GetBytes(line, rented);
+                byteCount = Encoding.UTF8.GetBytes(line, rented);
                 events = MapNdjsonChunk(rented.AsSpan(0, byteCount), chunkState.IndexToId, chunkState);
             }
             finally
