@@ -104,7 +104,9 @@ public static class StatusBarLayout
 
             int victim = cursor;
             total -= widths[victim] + (segs.Length > 1 ? 1 : 0);
-            RemoveAt(ref segs, ref widths, victim);
+            RemoveAt(segs, widths, victim);
+            segs = segs[..^1];
+            widths = widths[..^1];
 
             // Index `victim` now holds what used to be `victim + 1` — a fixed
             // segment, or past the end of a shorter span — so the rightmost
@@ -128,15 +130,17 @@ public static class StatusBarLayout
                 if (!s.FixedPriority)
                 {
                     total -= widths[target] + (segs.Length > 1 ? 1 : 0);
-                    RemoveAt(ref segs, ref widths, target);
+                    RemoveAt(segs, widths, target);
+                    segs = segs[..^1];
+                    widths = widths[..^1];
                     continue;
                 }
 
                 // Fixed: it keeps one cell of itself. A segment that is already
                 // one cell wide has nothing left to give, and the old code
                 // re-clamped it in place forever — two one-cell fixed segments at
-                // width 1 spun here until the process was killed. #487 found it
-                // while pinning the narrow-width sweep.
+                // width 1 spun here until the process was killed. #487 tripped
+                // over this pinning the narrow-width sweep.
                 keep = 1;
             }
 
@@ -193,16 +197,19 @@ public static class StatusBarLayout
         return total;
     }
 
-    private static void RemoveAt(ref Span<StatusSeg> segs, ref Span<int> widths, int index)
+    /// <summary>
+    /// Shifts the segments after <paramref name="index"/> one slot left in both
+    /// spans. The caller owns the re-slicing: a <c>stackalloc</c>-backed span
+    /// cannot be handed to a <c>ref</c> parameter (CS8350), and the widths table
+    /// must shrink in lockstep with the row.
+    /// </summary>
+    private static void RemoveAt(Span<StatusSeg> segs, Span<int> widths, int index)
     {
         for (int i = index; i < segs.Length - 1; i++)
         {
             segs[i] = segs[i + 1];
             widths[i] = widths[i + 1];
         }
-
-        segs = segs[..^1];
-        widths = widths[..^1];
     }
 
     /// <summary>

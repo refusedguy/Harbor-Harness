@@ -524,7 +524,7 @@ public static class UnicodeWidth
     // Status rows and markdown lines re-measure the same run texts every
     // frame, and runs are immutable strings, so widths memoize exactly: a tiny
     // direct-mapped table (256 slots, hash-indexed, collision = evict, never
-    // grows) keyed by reference-then-value equality. Hits allocate nothing;
+    // grows) keyed by reference-then-value equality. Hits allocate nothing,
     // misses measure once and store. Bounded by construction — at most 256
     // retained strings per measuring thread, no eviction bookkeeping.
     //
