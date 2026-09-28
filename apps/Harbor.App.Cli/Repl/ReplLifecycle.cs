@@ -420,7 +420,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     /// <param name="viewportLines">Rows the terminal can show.</param>
     /// <param name="totalLines">Measured timeline extent for the scroll range.</param>
     /// <remarks>
-    ///     Cost rides the store, not a local zero (#457): <see cref="UiReducer" />
+    ///     Cost rides the store, not a local zero (#457): <see cref="ChatAppReducer" />
     ///     accumulates <c>CostUsd</c> per finished step, so the reducer's value is
     ///     the only one that moves. Scroll likewise: the store counts rows
     ///     <em>lifted from the tail</em> (0 = live tail, reset on every new
