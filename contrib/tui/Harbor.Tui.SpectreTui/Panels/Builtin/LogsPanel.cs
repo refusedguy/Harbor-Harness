@@ -1,9 +1,9 @@
 using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
-using Microsoft.Extensions.Logging;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 /// <summary>
@@ -55,57 +55,29 @@ public sealed class LogsPanel : IPanelProvider
     /// <inheritdoc />
     public object? Build(PanelContext ctx)
     {
-        var p = new Paragraph().Alignment(Justify.Left);
-        p.Lines.Add(TextLine.FromMarkup(
-            "[bold cyan]Logs[/] [grey](F12 to hide · live ILogger output · file at ~/.harbor/logs/)[/]"));
-        p.Lines.Add(TextLine.FromMarkup("[grey]─────────────────────────────[/]"));
-
         var panel = ResolvePanel(ctx);
         if (panel is null)
         {
-            p.Lines.Add(TextLine.FromMarkup(
+            var p0 = new Paragraph().Alignment(Justify.Left);
+            p0.Lines.Add(TextLine.FromMarkup(
+                "[bold cyan]Logs[/] [grey](F12 to hide · live ILogger output · file at ~/.harbor/logs/)[/]"));
+            p0.Lines.Add(TextLine.FromMarkup("[grey]" + PanelText.Separator + "[/]"));
+            p0.Lines.Add(TextLine.FromMarkup(
                 "[yellow]Diagnostics panel not registered.[/]"));
-            p.Lines.Add(TextLine.FromMarkup(
+            p0.Lines.Add(TextLine.FromMarkup(
                 "[grey]This should never happen in production — HostBuilder registers[/]"));
-            p.Lines.Add(TextLine.FromMarkup(
+            p0.Lines.Add(TextLine.FromMarkup(
                 "[grey]IDiagnosticsPanel whenever an interactive TUI is active.[/]"));
-            return p;
+            return p0;
         }
 
         int maxVisible = Math.Max(2, ctx.Height - 4);
         int requested = Math.Min(maxVisible, 50);
-        var entries = panel.GetRecent(requested);
-        if (entries.Count == 0)
-        {
-            p.Lines.Add(TextLine.FromMarkup("[green]No log entries yet.[/]"));
-            p.Lines.Add(TextLine.FromMarkup(
-                "[grey]Logs from every ILogger will appear here in arrival order.[/]"));
-            return p;
-        }
+        var rows = PanelRows.LogRows(panel.GetRecent(requested), ctx.Width, ctx.Height);
 
-        foreach (var entry in entries)
-        {
-            string color = LevelColor(entry.Level);
-            string levelTag = entry.Level switch
-            {
-                LogLevel.Trace => "TRAC",
-                LogLevel.Debug => "DBUG",
-                LogLevel.Information => "INFO",
-                LogLevel.Warning => "WARN",
-                LogLevel.Error => "ERRO",
-                LogLevel.Critical => "CRIT",
-                _ => "????"
-            };
-            string time = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff");
-            string category = ShortenCategory(entry.Category);
-            string body = ChatMarkup.Escape(Truncate(entry.Message, ctx.Width - time.Length - levelTag.Length - category.Length - 7));
-            string bold = entry.Level == LogLevel.Critical ? "bold " : string.Empty;
-            p.Lines.Add(TextLine.FromMarkup(
-                $"[grey]{time}[/] [{bold}{color}]{levelTag}[/] [grey]{category}[/] {body}"));
-        }
-
-        p.Lines.Add(TextLine.FromMarkup("[grey]─────────────────────────────[/]"));
-        p.Lines.Add(TextLine.FromMarkup("[grey]F12 toggle · Ctrl+L clear console (does not clear this buffer)[/]"));
+        var p = new Paragraph().Alignment(Justify.Left);
+        foreach (string row in rows)
+            p.Lines.Add(TextLine.FromMarkup(StyleRow(row)));
         return p;
     }
 
@@ -130,34 +102,52 @@ public sealed class LogsPanel : IPanelProvider
         return ctx.Services.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel;
     }
 
-    private static string LevelColor(LogLevel level) => level switch
+    private static string StyleRow(string row)
     {
-        LogLevel.Trace => "grey",
-        LogLevel.Debug => "grey",
-        LogLevel.Information => "white",
-        LogLevel.Warning => "yellow",
-        LogLevel.Error => "red",
-        LogLevel.Critical => "red",
-        _ => "white"
-    };
+        if (row.StartsWith("Logs (", StringComparison.Ordinal))
+        {
+            int paren = row.IndexOf('(');
+            string tail = paren >= 0 ? row[paren..] : string.Empty;
+            return "[bold cyan]Logs[/] [grey]" + ChatMarkup.Escape(tail) + "[/]";
+        }
 
-    private static string ShortenCategory(string category)
-    {
-        if (string.IsNullOrEmpty(category))
-            return "-";
-        // Show last segment of "Harbor.Application.Sessions.AgentLoop" → "AgentLoop".
-        int lastDot = category.LastIndexOf('.');
-        return lastDot >= 0 && lastDot < category.Length - 1
-            ? category[(lastDot + 1)..]
-            : category;
-    }
+        if (row == PanelText.Separator)
+            return "[grey]" + PanelText.Separator + "[/]";
 
-    private static string Truncate(string text, int max)
-    {
-        if (max <= 3) return text;
-        if (string.IsNullOrEmpty(text)) return string.Empty;
-        // Collapse newlines so a multi-line log entry stays on one display row.
-        string single = text.Replace("\r", " ").Replace("\n", " ");
-        return single.Length <= max ? single : single[..(max - 1)] + "…";
+        if (row is "No log entries yet.")
+            return "[green]" + ChatMarkup.Escape(row) + "[/]";
+
+        if (row is "Logs from every ILogger will appear here in arrival order."
+            or "F12 toggle · Ctrl+L clear console (does not clear this buffer)")
+            return "[grey]" + ChatMarkup.Escape(row) + "[/]";
+
+        // Entry row: "HH:mm:ss.fff LEVEL category body".
+        if (row.Length > 18)
+        {
+            string levelTag = row.Length >= 17 ? row[13..17] : string.Empty;
+            (string color, bool isBold) = levelTag switch
+            {
+                "TRAC" => ("grey", false),
+                "DBUG" => ("grey", false),
+                "INFO" => ("white", false),
+                "WARN" => ("yellow", false),
+                "ERRO" => ("red", false),
+                "CRIT" => ("red", true),
+                _ => ("white", false),
+            };
+            if (levelTag is "TRAC" or "DBUG" or "INFO" or "WARN" or "ERRO" or "CRIT" or "????")
+            {
+                string time = row[..12];
+                string rest = row.Length > 18 ? row[18..] : string.Empty;
+                int space = rest.IndexOf(' ');
+                string category = space < 0 ? rest : rest[..space];
+                string body = space < 0 ? string.Empty : rest[(space + 1)..];
+                string boldPrefix = isBold ? "bold " : string.Empty;
+                return ($"[grey]{ChatMarkup.Escape(time)}[/] [{boldPrefix}{color}]{levelTag}[/] " +
+                    $"[grey]{ChatMarkup.Escape(category)}[/] {ChatMarkup.Escape(body)}").TrimEnd();
+            }
+        }
+
+        return ChatMarkup.Escape(row);
     }
 }

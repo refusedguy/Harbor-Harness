@@ -1,5 +1,6 @@
-using System.Globalization;
+using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Spectre.Tui;
@@ -27,45 +28,32 @@ public sealed class TokenBreakdownPanel : IPanelProvider
     /// <inheritdoc />
     public object? Build(PanelContext ctx)
     {
+        var rows = PanelRows.TokenRows(
+            ctx.State.Cost.TokensIn, ctx.State.Cost.TokensOut, ctx.State.Cost.CostUsd, ctx.Width);
+
         var p = new Paragraph().Alignment(Justify.Left);
-        p.Lines.Add(TextLine.FromMarkup("[bold cyan]Token Breakdown[/]"));
-        p.Lines.Add(TextLine.FromMarkup("[grey]─────────────────────────────[/]"));
-
-        long input = ctx.State.Cost.TokensIn;
-        long output = ctx.State.Cost.TokensOut;
-        decimal cost = ctx.State.Cost.CostUsd;
-
-        // Cumulative totals.
-        p.Lines.Add(TextLine.FromMarkup(
-            $"  [green]in[/]   {Format(input).PadLeft(12)}  {Bar(input, ctx.Width - 24, MaxOf(input, output))}"));
-        p.Lines.Add(TextLine.FromMarkup(
-            $"  [yellow]out[/]  {Format(output).PadLeft(12)}  {Bar(output, ctx.Width - 24, MaxOf(input, output))}"));
-
-        p.Lines.Add(TextLine.FromMarkup("[grey]─────────────────────────────[/]"));
-        p.Lines.Add(TextLine.FromMarkup(
-            $"  [bold]total[/] {Format(input + output).PadLeft(12)}  [grey]${cost.ToString("F4", CultureInfo.InvariantCulture)}[/]"));
-        p.Lines.Add(TextLine.FromMarkup("[grey](cumulative session totals)[/]"));
+        foreach (string row in rows)
+            p.Lines.Add(TextLine.FromMarkup(StyleRow(row)));
         return p;
     }
 
     /// <inheritdoc />
     public bool OnKey(UiKey key, PanelContext ctx) => false;
 
-    private static long MaxOf(long a, long b) => Math.Max(a, Math.Max(b, 1));
-
-    private static string Format(long n) =>
-        n >= 1_000_000
-            ? (n / 1_000_000.0).ToString("F2", CultureInfo.InvariantCulture) + "M"
-            : n >= 1_000
-                ? (n / 1_000.0).ToString("F1", CultureInfo.InvariantCulture) + "K"
-                : n.ToString(CultureInfo.InvariantCulture);
-
-    private static string Bar(long value, int width, long scale)
+    private static string StyleRow(string row)
     {
-        if (width <= 0) return string.Empty;
-        int filled = (int)((double)value / scale * width);
-        if (filled > width) filled = width;
-        if (filled < 0) filled = 0;
-        return new string('█', filled) + new string('░', width - filled);
+        if (row == "Token Breakdown")
+            return "[bold cyan]Token Breakdown[/]";
+        if (row == PanelText.Separator)
+            return "[grey]" + PanelText.Separator + "[/]";
+        if (row.StartsWith("in ", StringComparison.Ordinal))
+            return "[green]in[/]" + ChatMarkup.Escape(row[2..]);
+        if (row.StartsWith("out", StringComparison.Ordinal))
+            return "[yellow]out[/]" + ChatMarkup.Escape(row[3..]);
+        if (row.StartsWith("total", StringComparison.Ordinal))
+            return "[bold]total[/]" + ChatMarkup.Escape(row[5..]);
+        if (row.StartsWith("(cumulative", StringComparison.Ordinal))
+            return "[grey]" + ChatMarkup.Escape(row) + "[/]";
+        return ChatMarkup.Escape(row);
     }
 }
