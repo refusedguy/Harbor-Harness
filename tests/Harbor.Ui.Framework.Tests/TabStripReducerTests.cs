@@ -292,9 +292,9 @@ public class TabStripReducerTests
 
         var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTab(Id("s1")));
 
-        await Assert.That(result.State.PanelStates["tree"]).IsEqualTo(TuiPanelState.Hidden);
-        await Assert.That(result.State.FocusedPanelId).IsNull();
-        await Assert.That(result.State.PanelStates["log"]).IsEqualTo(TuiPanelState.Visible);
+        await Assert.That(result.State.Ui.PanelStates["tree"]).IsEqualTo(TuiPanelState.Hidden);
+        await Assert.That(result.State.Ui.FocusedPanelId).IsNull();
+        await Assert.That(result.State.Ui.PanelStates["log"]).IsEqualTo(TuiPanelState.Visible);
     }
 
     [Test]
@@ -309,7 +309,7 @@ public class TabStripReducerTests
 
         var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTab(Id("s1")));
 
-        await Assert.That(result.State.PanelStates["tree"]).IsEqualTo(TuiPanelState.Visible);
+        await Assert.That(result.State.Ui.PanelStates["tree"]).IsEqualTo(TuiPanelState.Visible);
         await Assert.That(Ids(result.State)).IsEqualTo("s2");
     }
 
@@ -322,8 +322,8 @@ public class TabStripReducerTests
 
         var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseOtherTabs(Id("s2")));
 
-        await Assert.That(result.State.PanelStates["log"]).IsEqualTo(TuiPanelState.Hidden);
-        await Assert.That(result.State.PanelStates["tree"]).IsEqualTo(TuiPanelState.Visible);
+        await Assert.That(result.State.Ui.PanelStates["log"]).IsEqualTo(TuiPanelState.Hidden);
+        await Assert.That(result.State.Ui.PanelStates["tree"]).IsEqualTo(TuiPanelState.Visible);
     }
 
     [Test]
@@ -335,7 +335,7 @@ public class TabStripReducerTests
 
         var result = ChatAppReducer.Update(state, new ChatAppMsg.CloseTab(Id("s1")));
 
-        await Assert.That(result.State.PanelStates.Count).IsEqualTo(0);
+        await Assert.That(result.State.Ui.PanelStates.Count).IsEqualTo(0);
     }
 
     // ── store / projection invariants ──────────────────────────────────────
@@ -371,7 +371,7 @@ public class TabStripReducerTests
 
         await Assert.That(Ids(result.State)).IsEqualTo("s1,s2");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s2");
-        await Assert.That(result.State.Model).IsEqualTo("m");
+        await Assert.That(result.State.Chat.Model).IsEqualTo("m");
     }
 
     [Test]
@@ -438,9 +438,12 @@ public class TabStripReducerTests
 
         return new UiState
         {
-            RegisteredPanelIds = ids.ToImmutable(),
-            PanelStates = states,
-            FocusedPanelId = panels.FirstOrDefault(p => p.State == TuiPanelState.Focused).Id,
+            Ui = TerminalUiState.Empty with
+            {
+                RegisteredPanelIds = ids.ToImmutable(),
+                PanelStates = states,
+                FocusedPanelId = panels.FirstOrDefault(p => p.State == TuiPanelState.Focused).Id,
+            },
         };
     }
 
