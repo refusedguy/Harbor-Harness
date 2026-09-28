@@ -55,7 +55,9 @@ public class StatusBarLayoutFitBenchmark
     private const int Eight = 2;
     private const int TwentyFour = 3;
 
-    private readonly Payload[] _rows = null!;
+    // Assigned in GlobalSetup, so it cannot be `readonly` — that is only legal in
+    // a constructor or a field initializer.
+    private Payload[] _rows = null!;
 
     /// <summary>One row shape: a pristine template, the buffer it is packed into,
     /// and the width it is packed to. Nothing here grows or accumulates between
