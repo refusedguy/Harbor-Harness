@@ -188,6 +188,88 @@ public class BorderPanelTests
         await Assert.That(buf.Get(10, 0).Rune).IsEqualTo('─');
         await Assert.That(buf.Get(2, 0).Rune).IsEqualTo('C'); // title start
     }
+
+    [Test]
+    public async Task Paint_RoundedCorners()
+    {
+        var buf = new ScreenBuffer(6, 4);
+        var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(0, 0, 6, 4), BorderKind = BorderKind.Rounded };
+        panel.Paint(buf);
+
+        await Assert.That(buf.Get(0, 0).Rune).IsEqualTo('╭');
+        await Assert.That(buf.Get(5, 0).Rune).IsEqualTo('╮');
+        await Assert.That(buf.Get(0, 3).Rune).IsEqualTo('╰');
+        await Assert.That(buf.Get(5, 3).Rune).IsEqualTo('╯');
+        await Assert.That(buf.Get(2, 0).Rune).IsEqualTo('─');
+        await Assert.That(buf.Get(0, 1).Rune).IsEqualTo('│');
+    }
+
+    [Test]
+    public async Task Paint_DoubleFrame()
+    {
+        var buf = new ScreenBuffer(6, 4);
+        var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(0, 0, 6, 4), BorderKind = BorderKind.Double };
+        panel.Paint(buf);
+
+        await Assert.That(buf.Get(0, 0).Rune).IsEqualTo('╔');
+        await Assert.That(buf.Get(5, 0).Rune).IsEqualTo('╗');
+        await Assert.That(buf.Get(0, 3).Rune).IsEqualTo('╚');
+        await Assert.That(buf.Get(5, 3).Rune).IsEqualTo('╝');
+        await Assert.That(buf.Get(2, 0).Rune).IsEqualTo('═');
+        await Assert.That(buf.Get(0, 1).Rune).IsEqualTo('║');
+    }
+
+    [Test]
+    public async Task Paint_ThickFrame()
+    {
+        var buf = new ScreenBuffer(6, 4);
+        var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(0, 0, 6, 4), BorderKind = BorderKind.Thick };
+        panel.Paint(buf);
+
+        await Assert.That(buf.Get(0, 0).Rune).IsEqualTo('┏');
+        await Assert.That(buf.Get(5, 0).Rune).IsEqualTo('┓');
+        await Assert.That(buf.Get(0, 3).Rune).IsEqualTo('┗');
+        await Assert.That(buf.Get(5, 3).Rune).IsEqualTo('┛');
+        await Assert.That(buf.Get(2, 0).Rune).IsEqualTo('━');
+        await Assert.That(buf.Get(0, 1).Rune).IsEqualTo('┃');
+    }
+
+    [Test]
+    public async Task Paint_Shadow_PaintsRightAndBottomStrips()
+    {
+        var buf = new ScreenBuffer(8, 6);
+        var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(1, 1, 4, 3), Shadow = true };
+        panel.Paint(buf);
+
+        // Frame rect is (1,1)-(4,3); shadow lands at x=5 / y=4.
+        await Assert.That(buf.Get(5, 2).Rune).IsEqualTo(' ');
+        await Assert.That(buf.Get(5, 2).Style.Bg).IsEqualTo(PackedColor.Indexed(8));
+        await Assert.That(buf.Get(2, 4).Rune).IsEqualTo(' ');
+        await Assert.That(buf.Get(2, 4).Style.Bg).IsEqualTo(PackedColor.Indexed(8));
+        // Frame itself is untouched by the shadow.
+        await Assert.That(buf.Get(1, 1).Rune).IsEqualTo('┌');
+    }
+
+    [Test]
+    public async Task Paint_NoShadow_ByDefault()
+    {
+        var buf = new ScreenBuffer(8, 6);
+        var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(1, 1, 4, 3) };
+        panel.Paint(buf);
+
+        await Assert.That(buf.Get(5, 2).IsBlankSpace).IsTrue();
+        await Assert.That(buf.Get(2, 4).IsBlankSpace).IsTrue();
+    }
+
+    [Test]
+    public async Task Paint_Shadow_AtBufferEdge_DoesNotThrow()
+    {
+        var buf = new ScreenBuffer(6, 4);
+        var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(0, 0, 6, 4), Shadow = true };
+        panel.Paint(buf);
+
+        await Assert.That(buf.Get(0, 0).Rune).IsEqualTo('┌');
+    }
 }
 
 public class FocusRouterTests

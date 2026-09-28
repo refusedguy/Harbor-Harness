@@ -518,6 +518,24 @@ public sealed class LayoutTree
 }
 
 /// <summary>
+/// Box glyph set for <see cref="BorderPanel"/> (ratatui <c>BorderType</c>).
+/// </summary>
+public enum BorderKind : byte
+{
+    /// <summary>Single lines: ┌┐└┘ ─ │ (default, golden-compatible).</summary>
+    Plain = 0,
+
+    /// <summary>Curved corners: ╭╮╰╯ ─ │.</summary>
+    Rounded = 1,
+
+    /// <summary>Double lines: ╔╗╚╝ ═ ║.</summary>
+    Double = 2,
+
+    /// <summary>Heavy lines: ┏┓┗┛ ━ ┃.</summary>
+    Thick = 3,
+}
+
+/// <summary>
 /// Box-drawing frame panel — the minimal concrete painter used by golden
 /// grid-dump tests. Focus switches the border to bold accent style.
 /// </summary>
@@ -525,6 +543,7 @@ public class BorderPanel : Panel
 {
     private static readonly CellStyle FrameStyle = new(PackedColor.Indexed(8));
     private static readonly CellStyle FocusedStyle = new(attrs: StyleAttr.Bold);
+    private static readonly CellStyle ShadowStyle = new(bg: PackedColor.Indexed(8));
 
     public BorderPanel(string id, int minWidth, int minHeight, int priority = 0, string title = "")
         : base(id, new Size(minWidth, minHeight), priority)
@@ -533,6 +552,12 @@ public class BorderPanel : Panel
     }
 
     public string Title { get; set; }
+
+    /// <summary>Box glyph set; <see cref="BorderKind.Plain"/> is the default.</summary>
+    public BorderKind BorderKind { get; set; } = BorderKind.Plain;
+
+    /// <summary>One-cell drop shadow (right + bottom), clipped to the buffer.</summary>
+    public bool Shadow { get; set; }
 
     public override void Paint(ScreenBuffer buffer)
     {
@@ -543,12 +568,40 @@ public class BorderPanel : Panel
         }
 
         var style = Focused ? FocusedStyle : FrameStyle;
-        var topLeft = Cell.From(new Rune('┌'), style);
-        var topRight = Cell.From(new Rune('┐'), style);
-        var bottomLeft = Cell.From(new Rune('└'), style);
-        var bottomRight = Cell.From(new Rune('┘'), style);
-        var horiz = Cell.From(new Rune('─'), style);
-        var vert = Cell.From(new Rune('│'), style);
+        char topLeftCh = '┌', topRightCh = '┐', bottomLeftCh = '└', bottomRightCh = '┘';
+        char horizCh = '─', vertCh = '│';
+        switch (BorderKind)
+        {
+            case BorderKind.Rounded:
+                topLeftCh = '╭';
+                topRightCh = '╮';
+                bottomLeftCh = '╰';
+                bottomRightCh = '╯';
+                break;
+            case BorderKind.Double:
+                topLeftCh = '╔';
+                topRightCh = '╗';
+                bottomLeftCh = '╚';
+                bottomRightCh = '╝';
+                horizCh = '═';
+                vertCh = '║';
+                break;
+            case BorderKind.Thick:
+                topLeftCh = '┏';
+                topRightCh = '┓';
+                bottomLeftCh = '┗';
+                bottomRightCh = '┛';
+                horizCh = '━';
+                vertCh = '┃';
+                break;
+        }
+
+        var topLeft = Cell.From(new Rune(topLeftCh), style);
+        var topRight = Cell.From(new Rune(topRightCh), style);
+        var bottomLeft = Cell.From(new Rune(bottomLeftCh), style);
+        var bottomRight = Cell.From(new Rune(bottomRightCh), style);
+        var horiz = Cell.From(new Rune(horizCh), style);
+        var vert = Cell.From(new Rune(vertCh), style);
 
         int x1 = r.X, y1 = r.Y, x2 = r.Right - 1, y2 = r.Bottom - 1;
 
@@ -567,6 +620,15 @@ public class BorderPanel : Panel
         {
             buffer.At(x1, y) = vert;
             buffer.At(x2, y) = vert;
+        }
+
+        if (Shadow)
+        {
+            // One-cell drop shadow (right + bottom). Fill clips to the
+            // buffer, so a flush-edge frame cannot index out of range.
+            var shade = Cell.From(new Rune(' '), ShadowStyle);
+            buffer.Fill(new Rect(x2 + 1, y1 + 1, 1, y2 - y1 + 1), shade);
+            buffer.Fill(new Rect(x1 + 1, y2 + 1, x2 - x1 + 1, 1), shade);
         }
 
         if (Title.Length > 0 && x2 - x1 > Title.Length + 1)
