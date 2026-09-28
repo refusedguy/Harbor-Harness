@@ -43,11 +43,19 @@ public sealed class AnimationClock : IDisposable
     /// <summary>Whether the background timer is currently armed.</summary>
     public bool IsRunning => Volatile.Read(ref _running) == 1;
 
-    /// <summary>Arms the ~10 Hz background timer (idempotent).</summary>
+    /// <summary>Arms the ~10 Hz background timer (idempotent, phase-preserving:
+    /// re-starting a running clock is a no-op — re-arming the timer here
+    /// would reset the 100 ms phase, so a caller that starts per frame (the
+    /// REPL heartbeat re-arms at ≥12 Hz while a run is active) would starve
+    /// the tick forever, freezing the spinner/mascot (#344).</summary>
     public void Start()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        Interlocked.Exchange(ref _running, 1);
+        if (Interlocked.Exchange(ref _running, 1) == 1)
+        {
+            return;
+        }
+
         _timer.Change(Interval, Interval);
     }
 
