@@ -58,9 +58,9 @@ public class StatusBarFitPerfTests
         StatusSeg[] warm = row.ToArray();
         _ = StatusBarLayout.Fit(warm, 600); // prime the width cache; drops nothing
 
-        long before = UnicodeWidth.BeginWidthLookupTracking();
+        UnicodeWidth.BeginWidthLookupTracking();
         int kept = StatusBarLayout.Fit(row, 40);
-        long lookups = UnicodeWidth.EndWidthLookupTracking() - before;
+        long lookups = UnicodeWidth.EndWidthLookupTracking();
 
         Console.WriteLine(
             $"#487 fit lookups: {segments} segments -> {kept} kept = {lookups} width lookups "
@@ -83,9 +83,9 @@ public class StatusBarFitPerfTests
         foreach (int width in new[] { 0, 1, 2, 5, 9, 13, 21, 34, 55, 89, 144, 400 })
         {
             StatusSeg[] row = StandardRow(segments);
-            long before = UnicodeWidth.BeginWidthLookupTracking();
+            UnicodeWidth.BeginWidthLookupTracking();
             _ = StatusBarLayout.Fit(row, width);
-            long lookups = UnicodeWidth.EndWidthLookupTracking() - before;
+            long lookups = UnicodeWidth.EndWidthLookupTracking();
             if (lookups != segments)
             {
                 problems.Add($"width {width}: {lookups} lookups for {segments} segments");

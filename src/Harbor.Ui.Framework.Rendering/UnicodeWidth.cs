@@ -587,9 +587,11 @@ public static class UnicodeWidth
     }
 
     /// <summary>
-    /// Starts counting <see cref="WidthCached"/> calls on the CALLING thread and
-    /// returns the count seen so far, so a caller can snapshot a baseline
-    /// before the region it cares about and subtract.
+    /// Starts counting <see cref="WidthCached"/> calls on the calling thread,
+    /// discarding anything it had counted so far. Pair with
+    /// <see cref="EndWidthLookupTracking"/>, which returns the number of calls
+    /// made in between — that number needs no baseline arithmetic, so there is
+    /// nothing here to subtract from it later.
     /// </summary>
     /// <remarks>
     /// Counting is opt-in so the render path does not pay for it: the only cost
@@ -602,12 +604,10 @@ public static class UnicodeWidth
     /// width lookup per segment, whatever the outcome), so a test can assert it
     /// exactly on any machine.
     /// </remarks>
-    public static long BeginWidthLookupTracking()
+    public static void BeginWidthLookupTracking()
     {
-        long soFar = t_widthLookups;
         t_widthLookups = 0;
         t_trackLookups = true;
-        return soFar;
     }
 
     /// <summary>
