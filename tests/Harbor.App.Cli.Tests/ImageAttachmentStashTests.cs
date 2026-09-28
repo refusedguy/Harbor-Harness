@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Models;
+using Harbor.App.Cli.Repl;
 
 namespace Harbor.App.Cli.Tests;
 
