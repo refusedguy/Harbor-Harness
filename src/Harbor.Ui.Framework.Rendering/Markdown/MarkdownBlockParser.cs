@@ -170,7 +170,7 @@ internal static class MarkdownBlockParser
                         // until the structure settles (separator or more rows
                         // may still stream in).
                         int end = pos;
-                        bool terminated = false;
+                        bool closed = false;
                         int cursor = pos;
                         while (cursor < source.Length)
                         {
@@ -180,7 +180,7 @@ internal static class MarkdownBlockParser
 
                             if (k != LineKind.TableRow)
                             {
-                                terminated = true;
+                                closed = true;
                                 end = k == LineKind.Blank
                                     ? (term ? le + 1 : le) // blank consumed as terminator
                                     : cursor; // foreign block starts here — exclude
@@ -198,7 +198,7 @@ internal static class MarkdownBlockParser
 
                         // EOF-with-newline still leaves the run open: the next
                         // chunk may append rows (same strictness as lists).
-                        blocks.Add(new MdBlock(MdBlockKind.Table, pos, end, terminated, 0));
+                        blocks.Add(new MdBlock(MdBlockKind.Table, pos, end, closed, 0));
                         pos = Math.Max(end, pos + 1);
                         break;
                     }
