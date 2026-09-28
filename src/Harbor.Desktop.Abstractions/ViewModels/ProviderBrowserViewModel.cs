@@ -13,9 +13,11 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// <summary>
 ///     Browse providers + models with metadata. Read-only view; configuring a new
 ///     provider is done in <see cref="SettingsViewModel" />. Uses
-///     <see cref="AsyncFeed{T}" /> to own cancellation + timeout + state.
+///     <see cref="AsyncFeed{T}" /> to own cancellation + timeout + state, and
+///     <see cref="AsyncDataBinder" /> for the status → surface mapping it shares
+///     with the model picker (#484).
 /// </summary>
-public sealed partial class ProviderBrowserViewModel : ObservableObject
+public sealed partial class ProviderBrowserViewModel : ObservableObject, IAsyncDataSink<ModelRowViewModel>
 {
     public static readonly TimeSpan ModelFetchTimeout = TimeSpan.FromSeconds(5);
 
@@ -103,32 +105,37 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
         }
     }
 
-    private void OnModelsChanged(AsyncData<IReadOnlyList<ModelRowViewModel>> data)
+    private void OnModelsChanged(AsyncData<IReadOnlyList<ModelRowViewModel>> data) =>
+        AsyncDataBinder.Apply(data, this);
+
+    /// <inheritdoc />
+    public void OnLoading()
     {
-        switch (data.Status)
-        {
-            case AsyncStatus.Loading:
-            case AsyncStatus.Refreshing:
-                Models.Clear();
-                break;
-            case AsyncStatus.Success:
-                if (data.HasValue && data.Value is not null)
-                {
-                    Models.Clear();
-                    foreach (var m in data.Value)
-                        Models.Add(m);
-                    if (Models.Count == 0)
-                    {
-                        ErrorMessage = $"No models returned by provider '{_currentProviderId}'. " +
-                                       "If this is a local provider (e.g. Ollama), make sure it's running.";
-                    }
-                }
-                break;
-            case AsyncStatus.Error:
-                _logger.LogWarning("Model fetch error: {Error}", data.Error);
-                ErrorMessage = data.Error ?? "Unknown error";
-                break;
-        }
+        IsLoading = true;
+        ErrorMessage = string.Empty;
+        Models.Clear();
+    }
+
+    /// <inheritdoc />
+    public void OnLoaded(IReadOnlyList<ModelRowViewModel> models)
+    {
+        IsLoading = false;
+        ErrorMessage = string.Empty;
+
+        Models.Clear();
+        for (int i = 0; i < models.Count; i++)
+            Models.Add(models[i]);
+
+        if (Models.Count == 0)
+            ErrorMessage = ProviderModelLoadMessages.NoModelsForProvider(_currentProviderId);
+    }
+
+    /// <inheritdoc />
+    public void OnError(string message)
+    {
+        IsLoading = false;
+        _logger.LogWarning("Model fetch error: {Error}", message);
+        ErrorMessage = ProviderModelLoadMessages.LoadFailed(message);
     }
 
     private async Task<Result<IReadOnlyList<ModelRowViewModel>>> LoadModelsAsync(CancellationToken ct)

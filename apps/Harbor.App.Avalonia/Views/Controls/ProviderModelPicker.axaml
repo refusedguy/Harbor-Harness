@@ -47,7 +47,7 @@
             <!-- Error banner -->
             <Border Grid.Row="2" Background="{DynamicResource BgSubtleBrush}"
                     CornerRadius="4" Padding="8" Margin="0,0,0,8"
-                    IsVisible="{Binding ErrorMessage}">
+                    IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                 <TextBlock Text="{Binding ErrorMessage}" FontSize="11"
                            Foreground="{DynamicResource StateWarningBrush}"
                            TextWrapping="Wrap" />
@@ -93,7 +93,7 @@
                                     <TextBlock Text="{Binding SetupHint}" FontSize="10"
                                                Foreground="{DynamicResource AccentHoverBrush}"
                                                TextWrapping="Wrap"
-                                               IsVisible="{Binding SetupHint}" />
+                                               IsVisible="{Binding SetupHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
                                     <!-- Model list -->
                                     <ItemsControl ItemsSource="{Binding Models}">
