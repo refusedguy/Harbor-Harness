@@ -187,8 +187,8 @@ public sealed class LayoutTree
     /// </remarks>
     public void SetRatio(string panelId, float ratio)
     {
-        var node = FindSplitWithAChild(_root, panelId)
-                   ?? throw new KeyNotFoundException($"panel '{panelId}' has no owning split");
+        var node = FindOwningSplit(_root, panelId)
+                   ?? throw new KeyNotFoundException($"panel '{panelId}' is not split against a sibling");
         if (Math.Abs(node.Ratio - ratio) <= 0f)
             return;
         node.Ratio = ratio;
@@ -441,6 +441,24 @@ public sealed class LayoutTree
         }
 
         return anyUnsettled;
+    }
+
+    /// <summary>
+    ///     The split node <paramref name="id" /> is a direct child of, on either
+    ///     side. <see cref="FindSplitWithAChild" /> only inspects the A side,
+    ///     which is enough for every existing caller because they all retarget a
+    ///     panel that <see cref="Split" /> kept as A; chrome that lands as B (the
+    ///     tab strip, #389) needs both.
+    /// </summary>
+    private static SplitNode? FindOwningSplit(SplitNode? node, string id)
+    {
+        if (node is null || node.Leaf is not null)
+            return null;
+
+        if (node.A?.Leaf?.Id == id || node.B?.Leaf?.Id == id)
+            return node;
+
+        return FindOwningSplit(node.A, id) ?? FindOwningSplit(node.B, id);
     }
 
     private static SplitNode? FindSplitWithAChild(SplitNode? node, string id)

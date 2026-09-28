@@ -110,13 +110,15 @@ public class SessionTabStripPanelTests
         await Assert.That(titles).Contains("alpha");
         await Assert.That(titles).Contains("beta");
 
-        // The focused tab is underlined across its own span, and only its own.
+        // Only the focused tab is underlined, and across its own span: the
+        // inactive neighbour must stay blank or the marker reads as "both".
         var underline = Row(buffer, 1, 60);
         int firstTab = panel.LastPlan.Cells[0].X;
         int secondTab = panel.LastPlan.Cells[1].X;
-        await Assert.That(underline[firstTab]).IsNotEqualTo(' ');
-        await Assert.That(underline[firstTab + 1]).IsEqualTo(' ');
         await Assert.That(underline[secondTab]).IsNotEqualTo(' ');
+        await Assert.That(underline[secondTab + 1]).IsNotEqualTo(' ');
+        await Assert.That(underline[firstTab]).IsEqualTo(' ');
+        await Assert.That(underline[firstTab + 1]).IsEqualTo(' ');
     }
 
     [Test]
@@ -354,7 +356,11 @@ public class SessionTabStripPanelTests
         store.Dispatch(new AppMsg.OpenTab(strip.Tabs[0]));
         store.Dispatch(new AppMsg.OpenTab(strip.Tabs[1]));
 
-        var panel = StripPanel(store.State.Chat.TabStrip);
+        // OpenTab focuses what it opens, so the projected strip is on the
+        // SECOND tab — snapshot it here so the final assertion can prove the
+        // interactions below moved the store and not the panel's own copy.
+        var projected = store.State.Chat.TabStrip;
+        var panel = StripPanel(projected);
         var seen = new List<AppMsg>();
         panel.Dispatch = seen.Add;
 
@@ -379,7 +385,7 @@ public class SessionTabStripPanelTests
         await Assert.That(seen[0]).IsTypeOf<AppMsg.CyclePreviousTab>();
 
         // Nothing moved the panel's own copy: it is still the projected state.
-        await Assert.That(panel.Strip.ActiveTabId!.Value).IsEqualTo("a");
+        await Assert.That(panel.Strip.ActiveTabId!.Value).IsEqualTo(projected.ActiveTabId!.Value);
     }
 
     [Test]
