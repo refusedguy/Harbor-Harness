@@ -115,14 +115,13 @@ public class FullLayerMatrixTests
     // each with its reason. Anything NOT listed here is a hard failure.
     private static readonly Dictionary<string, string[]> DocumentedExceptions = new()
     {
-        // Known tech debt (docs/ROADMAP.md "Circular project reference workaround"):
-        // Desktop.Abstractions pulls agent/config vocabulary through the Core
-        // facade AND directly from Application (IL-level edge). Tracked for
-        // resolution (merge into Ui.Framework or split Terminal.Abstractions).
+        // #188 (part of #96) Presentation → Application tech debt, owner: architecture, sprint: next:
+        // Desktop.Abstractions uses ProviderPresets (Harbor.Application.Configuration)
+        // in ProviderModelPickerViewModel / OnboardingViewModel. Direct
+        // Harbor.Application ref (Harbor.Core facade removed in #188).
+        // Future fix: move preset catalog to Domain (Harbor.Abstractions.Providers).
         ["Harbor.Desktop.Abstractions"] =
         [
-            // NOTE: the csproj also declares Harbor.Core (facade), but no Core
-            // type survives in IL — only the Application edge is real.
             "Harbor.Application",
         ],
         // ITuiPlugin / TUI vocabulary lives in Terminal.Abstractions by design;
