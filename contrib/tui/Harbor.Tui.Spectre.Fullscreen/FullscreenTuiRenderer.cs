@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Permissions;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Tui.Spectre.Fullscreen.Components;
@@ -29,6 +30,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
     private readonly ScrollManager _scroll = new();
 
     private decimal _cost;
+    private IApprovalCoordinator? _coordinator;
     private string _footer = "Type a message, or /help.";
     private bool _isStreaming;
     private LiveDisplayContext? _liveCtx;
@@ -94,6 +96,14 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
         _layout.Model = agent.State.Agent.Model;
         _layout.Provider = agent.State.Agent.ProviderId;
         _layout.Agent = agent.State.Agent.Name.Value;
+
+        // #190: single cancellation ingress. The renderer keeps its logger-only
+        // ctor (own solution, contrib hosts construct it directly), so the
+        // coordinator is resolved per-run from the host provider — the contract
+        // explicitly allows renderers optional lookups (ReplRunner._rendererHost).
+        // Null (minimal hosts/tests without the coordinator) keeps the direct
+        // cancel, same fallback idiom as TuiEffectHost/RequestDispatcher.
+        _coordinator = host.GetService(typeof(IApprovalCoordinator)) as IApprovalCoordinator;
 
         Console.Write("\x1b[?1000h\x1b[?1006h");
 
@@ -283,6 +293,27 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
         }
     }
 
+    /// <summary>
+    ///     Single abort ingress for this renderer (#190): funnels Esc/Ctrl+C
+    ///     through <see cref="IApprovalCoordinator.RequestCancel" /> so the
+    ///     cancel is ordered against any in-flight approval decision and its
+    ///     waiter is unblocked. <see cref="IAgent"/> extends
+    ///     <see cref="Harbor.Abstractions.Agents.IAgentRunner"/>, so it can be
+    ///     passed directly. Null coordinator (hosts without one registered)
+    ///     falls back to the direct cancel.
+    /// </summary>
+    private void RequestCoordinatedCancel(IAgent agent)
+    {
+        if (_coordinator is not null)
+        {
+            _coordinator.RequestCancel(agent);
+        }
+        else
+        {
+            agent.RequestAbort();
+        }
+    }
+
     private async Task RunWaitLoopAsync(IAgent agent, CancellationToken ct)
     {
         while (agent.State.IsRunning && !_stop)
@@ -318,9 +349,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             switch (key.Key)
             {
                 case ConsoleKey.Escape:
-                    // TODO(principles)[ARCH, single-ingress]: route through IApprovalCoordinator.RequestCancel (#49 PR2).
-                    // Contrib renderer has no DI access to the coordinator (own solution, logger-only ctor).
-                    agent.RequestAbort();
+                    RequestCoordinatedCancel(agent);
                     _chat.Add("system", "[yellow]⏹ Aborted.[/]");
                     await agent.WaitForIdleAsync(ct).ConfigureAwait(false);
                     break;
@@ -331,8 +360,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
                 case ConsoleKey.Home: DoScrollToTop(); break;
                 case ConsoleKey.End: DoScrollToBottom(); break;
                 case ConsoleKey.C when (key.Modifiers & ConsoleModifiers.Control) != 0:
-                    // TODO(principles)[ARCH, single-ingress]: same as Esc above (#49 PR2).
-                    agent.RequestAbort();
+                    RequestCoordinatedCancel(agent);
                     _chat.Add("system", "[yellow]⏹ Cancelled (Ctrl+C).[/]");
                     await agent.WaitForIdleAsync(ct).ConfigureAwait(false);
                     break;
