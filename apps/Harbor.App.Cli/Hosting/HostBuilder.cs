@@ -62,7 +62,17 @@ internal static partial class HostBuilder
             builder.Services.AddDemoRuntime();
         }
 
-        return builder.Build();
+        var host = builder.Build();
+
+        // TaskTool holds a DeferredSubAgentRunner forwarder (built eagerly in
+        // RegistriesModule, before ISessionStore/IAgentLoop exist). Its Attach
+        // fires only on DI resolution — which no agent-loop path ever triggers
+        // (only the /task-run slash command resolves it). Without this warmup
+        // every task call in every session fails CanSpawn with the misleading
+        // "sub-agents cannot invoke" error on a detached forwarder.
+        _ = host.Services.GetRequiredService<Harbor.Abstractions.Agents.ISubAgentRunner>();
+
+        return host;
     }
 
     /// <summary>
