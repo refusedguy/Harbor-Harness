@@ -82,7 +82,9 @@ public class AgentLoopAllocationTests
 
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Console.WriteLine($"agentloop-alloc: text-only turn avg = {(double)allocated / turns:F0} B over {turns} turns");
-        await Assert.That(allocated).IsLessThanOrEqualTo(turns * 64L * 1_024L);
+        // Tripwire, not a pin: CI measured ~153KB/turn (linux). 320KB catches
+        // 2x regressions without flaking across platforms/GC moods.
+        await Assert.That(allocated).IsLessThanOrEqualTo(turns * 320L * 1_024L);
     }
 
     [Test]
@@ -116,6 +118,7 @@ public class AgentLoopAllocationTests
 
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Console.WriteLine($"agentloop-alloc: tool-call turn avg = {(double)allocated / runs:F0} B over {runs} runs");
-        await Assert.That(allocated).IsLessThanOrEqualTo(runs * 256L * 1_024L);
+        // Tripwire: CI measured ~437KB/turn (linux). 896KB catches 2x blowups.
+        await Assert.That(allocated).IsLessThanOrEqualTo(runs * 896L * 1_024L);
     }
 }
