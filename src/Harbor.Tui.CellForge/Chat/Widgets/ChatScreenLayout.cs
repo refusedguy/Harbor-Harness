@@ -802,13 +802,13 @@ public sealed record ChatScreen(
         tree.Split(TimelineId, SplitDir.Vertical, timelineRatio, composerPanel, gap: 0);
         tree.Split(ComposerId, SplitDir.Vertical, ratio: 1f - (1f / Math.Max(2, minComposerRows)), statusRow, gap: 0);
 
-        // Session tab strip (#389). Split off the timeline leaf AFTER the
-        // composer/status splits, so the strip lands inside the band the
-        // transcript shares with the composer: the rows it claims come out of
-        // the transcript, never out of the input box (the seam the acceptance
+        // Issue #389 — the session strip, split off the timeline leaf AFTER the
+        // composer and status splits, so it lands inside the band the transcript
+        // shares with the composer: the rows it claims come out of the
+        // transcript, never out of the input box (the seam the acceptance
         // criteria name explicitly). Splitting earlier would strand it in the
         // composer band, which on a 24-row terminal is exactly 4 rows — all of
-        // them the composer's and status row's minimum.
+        // them the composer's and the status row's minimum.
         //
         // Ratio 1 = the transcript keeps the whole band and the strip gets
         // nothing, so a screen nobody called SyncTabStrip on solves and paints

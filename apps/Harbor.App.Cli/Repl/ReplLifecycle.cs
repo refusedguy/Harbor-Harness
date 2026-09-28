@@ -486,9 +486,9 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         int cols = host.ScreenSession.CurrentCols;
         int rows = host.ScreenSession.CurrentRows;
         ApplySidebarResizePolicy(cols);
-        // Tab strip (#389): claim rows before the solve so the strip is part of
-        // this frame's layout rather than a post-paint overlay, and so a
-        // resize re-derives the row count from the new height.
+        // Issue #389: claim the strip's rows before the solve, so it is part of
+        // this frame's layout rather than a post-paint overlay, and so a resize
+        // re-derives the row count from the new height.
         host.Screen.SyncTabStrip(host._replStore.State.Chat.TabStrip, rows);
         host.Screen.Tree.Solve(cols, rows);
 

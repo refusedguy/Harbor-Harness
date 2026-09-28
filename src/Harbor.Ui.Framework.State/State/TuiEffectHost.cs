@@ -122,10 +122,10 @@ public sealed class TuiEffectHost : ITuiEffectRunner
                     ex => _logger?.LogError(ex, "ActivateSession failed for {SessionId}", act.SessionId.Value));
                 break;
             case TuiEffect.RequestOpenSession:
-                // Tab-strip open/switch (#389). Same delegate shape as the
-                // activate case above — the picker lives in the composition
-                // root, so a host without one just logs and the key stays
-                // harmless.
+                // Opening a session from the strip (issue #389). Same delegate
+                // shape as the activate case above: the picker lives in the
+                // composition root, so a host without one just logs and the key
+                // stays harmless.
                 if (_openSession is null)
                 {
                     _logger?.LogDebug("RequestOpenSession ignored: no session picker wired");

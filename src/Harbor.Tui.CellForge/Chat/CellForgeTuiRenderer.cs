@@ -283,9 +283,9 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
                 sidebar.State = SideBarView.ProjectFromStore(state);
             }
 
-            // Tab strip (#389): pure projection. The panel keeps no selection of
-            // its own, so handing it the snapshot is the whole wiring — which is
-            // why a tab opened by any host shows up with no renderer changes.
+            // Issue #389 — pure projection. The panel keeps no selection of its
+            // own, so handing it the snapshot is the whole wiring, which is why a
+            // tab opened by any host shows up with no renderer changes.
             if (screen.Tabs is { } tabs)
             {
                 tabs.Strip = state.Chat.TabStrip;

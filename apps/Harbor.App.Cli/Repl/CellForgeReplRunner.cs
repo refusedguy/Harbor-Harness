@@ -125,9 +125,9 @@ internal sealed class CellForgeReplRunner(
     /// </summary>
     internal readonly ReplTabEffectRunner _effects =
         new(
-            // #389: the tab-strip activate effect lands on the very coordinator
-            // /sessions and the quick-switch chords already use, so a tab switch
-            // and a palette switch cannot drift apart.
+            // Issue #389: the activate effect lands on the very coordinator the
+            // sessions palette and the quick-switch chords already use, so a
+            // keyboard switch and a palette switch cannot drift apart.
             id => Sessions.SwitchToSessionAsync(id, CancellationToken.None),
             () => Sessions.OpenSessionsPalette(),
             ex => logger.LogError(ex, "Tab-strip effect failed"));

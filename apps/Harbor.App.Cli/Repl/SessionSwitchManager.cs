@@ -77,9 +77,9 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
 
         await SyncSessionsToStoreAsync(ct).ConfigureAwait(false);
         target.Announce($"⇄ сессия → {loaded.Title} ({loaded.Id[..Math.Min(8, loaded.Id.Length)]})");
-        // Tab strip (#389): the switch is what opens a tab. Idempotent by
-        // construction — OpenTab activates an already-open session instead of
-        // appending a duplicate, so this is safe to run on every switch.
+        // Issue #389 — a session switch is what opens a tab. Idempotent by
+        // construction, since OpenTab activates an already-open session instead
+        // of appending a duplicate, so this is safe on every switch.
         _ = host.Store.Dispatch(new AppMsg.OpenTab(
             new SessionTab(SessionId.Create(loaded.Id), loaded.Title)));
         onSwitched();

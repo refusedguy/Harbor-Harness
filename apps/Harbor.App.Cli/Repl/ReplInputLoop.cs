@@ -298,7 +298,11 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             var resolved = host._keyMap.Resolve(uiKey, host._replStore.State);
             if (resolved != ChatAction.None)
             {
+<<<<<<< HEAD
                 var effect = host._replStore.Dispatch(new AppMsg.KeyInput(resolved, uiKey));
+=======
+                var effect = host._replStore.Dispatch(new UiMsg.KeyInput(resolved, uiKey));
+>>>>>>> 38edd97 (fix: reword comments that Sonar S125 reads as commented-out code)
                 // The one exception to the sink-the-effect rule above: the strip
                 // actions are effect-driven, because the reducer resolves the
                 // target session and the host performs the switch. Dropping the
