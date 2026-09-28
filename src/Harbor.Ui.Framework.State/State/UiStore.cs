@@ -181,7 +181,7 @@ public sealed class UiStore
             // *before* the CAS below, so the instance is still unreachable and
             // no reader can observe the pre-stamp revision. A CAS loser throws
             // its stamped instance away with the rest of the iteration.
-            next.SetRevisionUnpublished(original.Revision + 1);
+            next.SetRevision(original.Revision + 1);
         } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
         Notify(next);
