@@ -55,8 +55,11 @@ jobs:
           fi
           for p in $suites; do
             echo "::group::goldens $p"
-            dotnet run --project "$p" -c Release -- --treenode-filter "*Golden*" || true
-            dotnet run --project "$p" -c Release -- --treenode-filter "*ScreenshotHash*" || true
+            # TUnit treenode filters are /assembly/namespace/class/method paths;
+            # a bare "*Golden*" glob matches nothing and silently regenerates
+            # zero baselines (see docs/BUILD.md §filtering).
+            dotnet run --project "$p" -c Release -- --treenode-filter "/*/*/*Golden*/*" || true
+            dotnet run --project "$p" -c Release -- --treenode-filter "/*/*/*ScreenshotHash*/*" || true
             echo "::endgroup::"
           done
           exit 0

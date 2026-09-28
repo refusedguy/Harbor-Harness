@@ -144,9 +144,12 @@ public class WordDiffPairRunTests
     private static string Render(IReadOnlyList<WordSeg> segs, WordSegKind kind) =>
         string.Join(" ", segs.Where(s => s.Kind == kind).Select(s => s.Text));
 
-    /// <summary>Body-only diff, so row indexes count from the first body row.</summary>
+    /// <summary>
+    /// Parses a body-only diff and drops the hunk header, so the returned
+    /// indexes are body-row indexes — the ones <c>PairRun</c> reports.
+    /// </summary>
     private static IReadOnlyList<DiffLine> Body(params string[] rows) =>
-        UnifiedDiffParser.Parse("@@ -1,1 +1,1 @@\n" + string.Join('\n', rows) + "\n");
+        [.. UnifiedDiffParser.Parse("@@ -1,1 +1,1 @@\n" + string.Join('\n', rows) + "\n").Skip(1)];
 
     private static string[] Shape(IReadOnlyList<WordPair> pairs) =>
         [.. pairs.OrderBy(p => p.DeleteIndex).Select(p => $"{p.DeleteIndex}->{p.AddIndex}")];
@@ -270,8 +273,9 @@ public class WordDiffPairRunTests
     [Test]
     public async Task PairRun_LeavesUnrelatedRowsUnpairedInsideRelatedRun()
     {
-        // 2:3 run where exactly one add is a genuine rewrite of one delete;
-        // the noise rows on both sides get no emphasis.
+        // Two deletes rewritten into three adds, where only one add is a
+        // genuine rewrite of one delete; the noise rows on both sides get
+        // no emphasis.
         var lines = Body(
             "-var port = 8080",
             "-completely unrelated text here",
