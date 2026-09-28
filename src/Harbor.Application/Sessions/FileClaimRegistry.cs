@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -429,10 +430,7 @@ public sealed class FileClaim : IDisposable
 
     internal static bool TryParse(string content, out int pid, out string token, out DateTime stampedUtc)
     {
-        pid = -1;
-        token = string.Empty;
-        stampedUtc = DateTime.MinValue;
-
+        var fields = new ClaimFields();
         foreach (var part in content.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             int eq = part.IndexOf('=');
@@ -443,22 +441,39 @@ public sealed class FileClaim : IDisposable
 
             string key = part[..eq];
             string value = part[(eq + 1)..];
-            switch (key)
+            if (FieldParsers.TryGetValue(key, out var parse))
             {
-                case "pid":
-                    _ = int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out pid);
-                    break;
-                case "token":
-                    token = value;
-                    break;
-                case "ts":
-                    _ = DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out stampedUtc);
-                    break;
+                parse(fields, value);
             }
         }
 
+        pid = fields.Pid;
+        token = fields.Token;
+        stampedUtc = fields.StampedUtc;
         return pid >= 0 && token.Length > 0 && stampedUtc != DateTime.MinValue;
     }
+
+    /// <summary>Mutable parse target for the field-parser map (one instance per parse, no sharing).</summary>
+    private sealed class ClaimFields
+    {
+        public int Pid = -1;
+        public string Token = string.Empty;
+        public DateTime StampedUtc = DateTime.MinValue;
+    }
+
+    /// <summary>
+    ///     Field-parser map (#197): a new claim field adds one row here,
+    ///     never an edit to <see cref="TryParse" />. Unknown fields stay ignored.
+    /// </summary>
+    private static readonly FrozenDictionary<string, Action<ClaimFields, string>> FieldParsers =
+        new Dictionary<string, Action<ClaimFields, string>>(StringComparer.Ordinal)
+        {
+            ["pid"] = static (f, v) =>
+                _ = int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out f.Pid),
+            ["token"] = static (f, v) => f.Token = v,
+            ["ts"] = static (f, v) =>
+                _ = DateTime.TryParse(v, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out f.StampedUtc),
+        }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Refresh the timestamp so dead-pid theft does not fire early.</summary>
     public void KeepAlive()

@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -258,33 +259,10 @@ public sealed class StopReasonJsonConverter : JsonStringConverter<StopReason>
         if (finishReason is null)
             return default;
 
-        switch (finishReason.ToLowerInvariant())
-        {
-            case "tool_calls":
-            case "tool_use":
-            case "function_call":
-                return StopReason.ToolUse;
-            case "length":
-            case "max_tokens":
-            case "max_tokens_length":
-                return StopReason.Length;
-            case "content_filter":
-            case "content_filtering":
-                return StopReason.ContentFilter;
-            case "abort":
-            case "aborted":
-            case "cancelled":
-                return StopReason.Aborted;
-            case "error":
-            case "failed":
-                return StopReason.Error;
-            case "stop":
-            case "end_turn":
-            case "finish":
-                return StopReason.Stop;
-            default:
-                return Enum.TryParse<StopReason>(finishReason, true, out var v) ? v : default;
-        }
+        if (StopReasonTable.Aliases.TryGetValue(finishReason, out var aliased))
+            return aliased;
+
+        return Enum.TryParse<StopReason>(finishReason, true, out var v) ? v : default;
     }
 
     /// <inheritdoc />
@@ -292,6 +270,86 @@ public sealed class StopReasonJsonConverter : JsonStringConverter<StopReason>
     {
         string? s = reader.GetString();
         return Parse(s);
+    }
+}
+
+/// <summary>
+///     Single source of truth for provider finish_reason normalization (#197).
+///     Both the string path (<see cref="StopReasonJsonConverter.Parse" />) and
+///     the zero-alloc span path (JSONL fast path) derive from one spec table —
+///     a new provider variant adds one row, never two edits.
+/// </summary>
+public static class StopReasonTable
+{
+    internal static readonly KeyValuePair<string, StopReason>[] Spec =
+    [
+        new("tool_calls", StopReason.ToolUse),
+        new("tool_use", StopReason.ToolUse),
+        new("function_call", StopReason.ToolUse),
+        new("tooluse", StopReason.ToolUse),
+        new("length", StopReason.Length),
+        new("max_tokens", StopReason.Length),
+        new("max_tokens_length", StopReason.Length),
+        new("content_filter", StopReason.ContentFilter),
+        new("content_filtering", StopReason.ContentFilter),
+        new("contentfilter", StopReason.ContentFilter),
+        new("abort", StopReason.Aborted),
+        new("aborted", StopReason.Aborted),
+        new("cancelled", StopReason.Aborted),
+        new("error", StopReason.Error),
+        new("failed", StopReason.Error),
+        new("stop", StopReason.Stop),
+        new("end_turn", StopReason.Stop),
+        new("finish", StopReason.Stop),
+    ];
+
+    internal static readonly FrozenDictionary<string, StopReason> Aliases =
+        Spec.ToFrozenDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+
+    private static readonly byte[][] SpecUtf8 = BuildUtf8();
+
+    private static byte[][] BuildUtf8()
+    {
+        var bytes = new byte[Spec.Length][];
+        for (int i = 0; i < Spec.Length; i++)
+            bytes[i] = Encoding.UTF8.GetBytes(Spec[i].Key);
+        return bytes;
+    }
+
+    /// <summary>
+    ///     Zero-alloc span lookup over the same rows as <see cref="Aliases" />.
+    ///     Case-insensitive (ASCII); unknown values return <see langword="false" />
+    ///     so the caller falls back to the string path.
+    /// </summary>
+    public static bool TryParseSpan(ReadOnlySpan<byte> span, out StopReason reason)
+    {
+        for (int i = 0; i < SpecUtf8.Length; i++)
+        {
+            if (EqualsAsciiIgnoreCase(span, SpecUtf8[i]))
+            {
+                reason = Spec[i].Value;
+                return true;
+            }
+        }
+
+        reason = default;
+        return false;
+    }
+
+    private static bool EqualsAsciiIgnoreCase(ReadOnlySpan<byte> span, byte[] lower)
+    {
+        if (span.Length != lower.Length)
+            return false;
+        for (int i = 0; i < span.Length; i++)
+        {
+            byte b = span[i];
+            if (b >= (byte)'A' && b <= (byte)'Z')
+                b = (byte)(b + 32);
+            if (b != lower[i])
+                return false;
+        }
+
+        return true;
     }
 }
 

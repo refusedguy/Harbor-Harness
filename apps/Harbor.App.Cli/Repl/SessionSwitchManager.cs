@@ -2,10 +2,34 @@ using System.Collections.Immutable;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Ui.Framework.State;
 
 namespace Harbor.App.Cli.Repl;
+
+/// <summary>
+///     Narrow target surface for the session-switch coordinator steps (#197):
+///     steps talk to this contract, never directly to <see cref="IReplHost" />
+///     (fixes the Feature Envy spread across Bridge/Timeline/Selection/Screen).
+/// </summary>
+internal interface ISessionSwitchTarget
+{
+    /// <summary>Denial message when the switch must not start, null when clear.</summary>
+    string? CheckGuard(string sessionId);
+    /// <summary>Load the session (announces store/load failures, null on failure).</summary>
+    Task<Session?> LoadSessionAsync(string sessionId, CancellationToken ct);
+    /// <summary>Resolve the session's agent (announces failures, null on failure).</summary>
+    AgentDefinition? ResolveAgent(Session session);
+    /// <summary>Bind the loaded session + agent definition to the host.</summary>
+    void ApplySession(Session session, AgentDefinition definition);
+    /// <summary>Full context swap + history replay; returns history on success, null otherwise.</summary>
+    Task<IReadOnlyList<AgentMessage>?> ReplayHistoryAsync(Session session, CancellationToken ct);
+    /// <summary>Recompute token totals + sidebar identity for the target session.</summary>
+    Task RefreshSidebarAsync(Session session, IReadOnlyList<AgentMessage>? history, CancellationToken ct);
+    /// <summary>Announce a status line.</summary>
+    void Announce(string line);
+}
 
 /// <summary>
 ///     Session lifecycle behind the REPL (SRP extraction from the runner):
@@ -19,92 +43,39 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
 {
     private readonly QuickSwitchSlots _quickSwitch = new();
 
+    /// <summary>
+    ///     Coordinator: guard → load → resolve → apply → replay → sidebar →
+    ///     sync → announce. Each step lives on <see cref="ISessionSwitchTarget" />;
+    ///     this method only sequences them (#197).
+    /// </summary>
     public async Task SwitchToSessionAsync(string sessionId, CancellationToken ct)
     {
-        if (sessionId == host.SessionModel.Id)
+        ISessionSwitchTarget target = new HostSwitchTarget(host);
+
+        if (target.CheckGuard(sessionId) is { } denial)
         {
-            host.Bridge.AppendSystemLine("⇄ уже в этой сессии");
+            target.Announce(denial);
             return;
         }
 
-        if (host.Agent.State.IsRunning)
+        if (await target.LoadSessionAsync(sessionId, ct).ConfigureAwait(false) is not { } loaded)
         {
-            host.Bridge.AppendSystemLine("⇄ агент занят — сессия не переключена");
             return;
         }
 
-        if (host.SessionStore is not { } store)
+        if (target.ResolveAgent(loaded) is not { } definition)
         {
-            host.Bridge.AppendSystemLine("⇄ переключение недоступно: хост без хранилища сессий");
             return;
         }
 
-        var loaded = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
-        if (loaded.IsFailure)
-        {
-            host.Bridge.AppendSystemLine("! " + loaded.Error);
-            return;
-        }
+        target.ApplySession(loaded, definition);
+        _quickSwitch.Push(loaded.Id);
 
-        var definition = host.AgentRegistry
-            .GetAgent(AgentName.Create(loaded.Value.Agent));
-        if (definition.IsFailure)
-        {
-            host.Bridge.AppendSystemLine("! " + definition.Error);
-            return;
-        }
-
-        host.Agent.Initialize(loaded.Value, definition.Value);
-        host.SessionModel = loaded.Value;
-        _quickSwitch.Push(loaded.Value.Id);
-
-        // Full context swap: drop old blocks/selection/tracking, then replay
-        // the target session's persisted history so the switch lands on a
-        // live transcript instead of an empty feed.
-        host.Bridge.ResetMessageTracking();
-        host.Timeline.Clear();
-        host.Selection.Clear();
-        host.ScrollTimelineToEnd();
-        var history = await store.GetMessagesAsync(loaded.Value.Id, ct).ConfigureAwait(false);
-        if (history.IsSuccess && history.Value.Count > 0)
-        {
-            host.Bridge.ReplayHistory(history.Value);
-        }
-
-        if (host.Screen.Sidebar is { } sidebar)
-        {
-            // Token totals belong to the target session: recompute from its
-            // persisted history instead of keeping the previous session's.
-            long tokensIn = 0, tokensOut = 0;
-            if (history.IsSuccess)
-            {
-                foreach (var message in history.Value)
-                {
-                    if (message is AssistantMessage assistant)
-                    {
-                        tokensIn += assistant.Usage.InputTokens;
-                        tokensOut += assistant.Usage.OutputTokens;
-                    }
-                }
-            }
-
-            int window = await host.ResolveContextWindowAsync(
-                loaded.Value.ProviderId, loaded.Value.Model, ct).ConfigureAwait(false);
-            sidebar.State = sidebar.State with
-            {
-                SessionTitle = loaded.Value.Title,
-                SessionId = loaded.Value.Id,
-                Model = $"{loaded.Value.ProviderId}/{loaded.Value.Model}",
-                Agent = loaded.Value.Agent,
-                MessageCount = host.Timeline.Count,
-                ContextWindow = window,
-                TokensIn = tokensIn,
-                TokensOut = tokensOut,
-            };
-        }
+        var history = await target.ReplayHistoryAsync(loaded, ct).ConfigureAwait(false);
+        await target.RefreshSidebarAsync(loaded, history, ct).ConfigureAwait(false);
 
         await SyncSessionsToStoreAsync(ct).ConfigureAwait(false);
-        host.Bridge.AppendSystemLine($"⇄ сессия → {loaded.Value.Title} ({loaded.Value.Id[..Math.Min(8, loaded.Value.Id.Length)]})");
+        target.Announce($"⇄ сессия → {loaded.Title} ({loaded.Id[..Math.Min(8, loaded.Id.Length)]})");
         onSwitched();
         host.WakeUp();
     }
@@ -183,5 +154,129 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
         }
 
         host.WakeUp();
+    }
+
+    /// <summary>
+    ///     Default <see cref="ISessionSwitchTarget" /> over <see cref="IReplHost" />:
+    ///     owns every host touchpoint (Bridge/Timeline/Selection/Screen/Sidebar/
+    ///     Agent) so the coordinator steps stay envy-free (#197).
+    /// </summary>
+    private sealed class HostSwitchTarget(IReplHost host) : ISessionSwitchTarget
+    {
+        public string? CheckGuard(string sessionId)
+        {
+            if (sessionId == host.SessionModel.Id)
+            {
+                return "⇄ уже в этой сессии";
+            }
+
+            if (host.Agent.State.IsRunning)
+            {
+                return "⇄ агент занят — сессия не переключена";
+            }
+
+            return null;
+        }
+
+        public async Task<Session?> LoadSessionAsync(string sessionId, CancellationToken ct)
+        {
+            if (host.SessionStore is not { } store)
+            {
+                Announce("⇄ переключение недоступно: хост без хранилища сессий");
+                return null;
+            }
+
+            var loaded = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
+            if (loaded.IsFailure)
+            {
+                Announce("! " + loaded.Error);
+                return null;
+            }
+
+            return loaded.Value;
+        }
+
+        public AgentDefinition? ResolveAgent(Session session)
+        {
+            var definition = host.AgentRegistry.GetAgent(AgentName.Create(session.Agent));
+            if (definition.IsFailure)
+            {
+                Announce("! " + definition.Error);
+                return null;
+            }
+
+            return definition.Value;
+        }
+
+        public void ApplySession(Session session, AgentDefinition definition)
+        {
+            host.Agent.Initialize(session, definition);
+            host.SessionModel = session;
+        }
+
+        public async Task<IReadOnlyList<AgentMessage>?> ReplayHistoryAsync(Session session, CancellationToken ct)
+        {
+            // Full context swap: drop old blocks/selection/tracking, then replay
+            // the target session's persisted history so the switch lands on a
+            // live transcript instead of an empty feed.
+            host.Bridge.ResetMessageTracking();
+            host.Timeline.Clear();
+            host.Selection.Clear();
+            host.ScrollTimelineToEnd();
+
+            if (host.SessionStore is not { } store)
+            {
+                return null;
+            }
+
+            var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
+            if (history.IsSuccess && history.Value.Count > 0)
+            {
+                host.Bridge.ReplayHistory(history.Value);
+            }
+
+            return history.IsSuccess ? history.Value : null;
+        }
+
+        public async Task RefreshSidebarAsync(Session session, IReadOnlyList<AgentMessage>? history, CancellationToken ct)
+        {
+            if (host.Screen.Sidebar is not { } sidebar)
+            {
+                return;
+            }
+
+            // Token totals belong to the target session: recompute from its
+            // persisted history instead of keeping the previous session's.
+            // (Inline recount stays here with the sidebar it feeds — moving it
+            // out would split one write across two owners.)
+            long tokensIn = 0, tokensOut = 0;
+            if (history is not null)
+            {
+                foreach (var message in history)
+                {
+                    if (message is AssistantMessage assistant)
+                    {
+                        tokensIn += assistant.Usage.InputTokens;
+                        tokensOut += assistant.Usage.OutputTokens;
+                    }
+                }
+            }
+
+            int window = await host.ResolveContextWindowAsync(
+                session.ProviderId, session.Model, ct).ConfigureAwait(false);
+            sidebar.State = sidebar.State with
+            {
+                SessionTitle = session.Title,
+                SessionId = session.Id,
+                Model = $"{session.ProviderId}/{session.Model}",
+                Agent = session.Agent,
+                MessageCount = host.Timeline.Count,
+                ContextWindow = window,
+                TokensIn = tokensIn,
+                TokensOut = tokensOut,
+            };
+        }
+
+        public void Announce(string line) => host.Bridge.AppendSystemLine(line);
     }
 }

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using CSharpFunctionalExtensions;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Desktop.Abstractions.Messages;
 using Harbor.Application.Configuration;
@@ -9,6 +10,91 @@ using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
+
+/// <summary>Onboarding theme choice as an enum (string-free dispatch, #197).</summary>
+public enum OnboardingTheme
+{
+    /// <summary>Dark theme (also the fallback for unknown values).</summary>
+    Dark,
+    /// <summary>Light theme.</summary>
+    Light,
+    /// <summary>Keep the host default (currently dark).</summary>
+    System
+}
+
+/// <summary>Parses the step-5 theme string into an <see cref="OnboardingTheme" />.</summary>
+public static class OnboardingThemeParser
+{
+    /// <summary>Null/unknown values map to <see cref="OnboardingTheme.Dark" /> (legacy default).</summary>
+    public static OnboardingTheme Parse(string? choice) => (choice ?? "dark").ToLowerInvariant() switch
+    {
+        "light" => OnboardingTheme.Light,
+        "system" => OnboardingTheme.System,
+        _ => OnboardingTheme.Dark,
+    };
+}
+
+/// <summary>Applies the chosen onboarding theme (strategy seam, #197).</summary>
+public interface IThemeApplier
+{
+    /// <summary>Apply the theme immediately.</summary>
+    void Apply(OnboardingTheme theme);
+}
+
+/// <summary>Default <see cref="IThemeApplier" /> over <see cref="IThemeService" />.</summary>
+public sealed class ThemeServiceApplier(IThemeService themeService, ILogger logger) : IThemeApplier
+{
+    /// <inheritdoc />
+    public void Apply(OnboardingTheme theme)
+    {
+        switch (theme)
+        {
+            case OnboardingTheme.Light:
+                themeService.ApplyLight();
+                break;
+            case OnboardingTheme.System:
+                logger.LogInformation("Onboarding theme 'system' — leaving default (dark) active.");
+                break;
+            default:
+                themeService.ApplyDark();
+                break;
+        }
+    }
+}
+
+/// <summary>Persists the onboarding result (strategy seam, #197).</summary>
+public interface IOnboardingPersister
+{
+    /// <summary>
+    ///     Merge the wizard result into the shared config (API-key merge,
+    ///     defaults, storage backend) and mark onboarding completed.
+    /// </summary>
+    Task<Result> PersistAsync(string provider, string model, string? newKey, bool overwriteDefaults, CancellationToken ct);
+}
+
+/// <summary>Default <see cref="IOnboardingPersister" /> over <see cref="ICommonConfigStore" />.</summary>
+public sealed class ConfigStoreOnboardingPersister(ICommonConfigStore configStore) : IOnboardingPersister
+{
+    /// <inheritdoc />
+    public Task<Result> PersistAsync(string provider, string model, string? newKey, bool overwriteDefaults, CancellationToken ct) =>
+        configStore.UpdateAsync(cfg =>
+        {
+            var mergedKeys = cfg.ApiKeys.ToBuilder();
+            if (newKey is not null)
+            {
+                mergedKeys[provider] = newKey;
+            }
+
+            return cfg with
+            {
+                OnboardingCompleted = true,
+                ApiKeys = mergedKeys.ToImmutable(),
+                DefaultProvider = overwriteDefaults || string.IsNullOrEmpty(cfg.DefaultProvider) ? provider : cfg.DefaultProvider,
+                DefaultModel = overwriteDefaults || string.IsNullOrEmpty(cfg.DefaultModel) ? model : cfg.DefaultModel,
+                StorageBackend = string.IsNullOrEmpty(cfg.StorageBackend) ? "jsonl" : cfg.StorageBackend
+            };
+        }, ct);
+}
 /// <summary>
 ///     First-launch onboarding wizard view-model. Walks the user through
 ///     provider selection → API key entry → default model → theme → done,
@@ -29,13 +115,13 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     /// </summary>
     public static string OfflineFallbackModel => ProviderPresets.Find("ollama")?.DefaultModel ?? "llama3.2";
 
-    private readonly ICommonConfigStore _configStore;
     private readonly ILogger<OnboardingViewModel> _logger;
     private readonly IMessenger _messenger;
     private readonly Harbor.Abstractions.Providers.IProviderHealthCheck? _healthCheck;
     private readonly Harbor.Abstractions.Providers.IProviderRegistry? _providers;
-    private readonly IThemeService _theme;
     private readonly IToastService _toasts;
+    private readonly IThemeApplier _themeApplier;
+    private readonly IOnboardingPersister _persister;
     private readonly CancellationTokenSource _wizardCts = new();
 
     /// <summary>API key currently being entered for the provider on step 3.</summary>
@@ -126,6 +212,8 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     ///     Optional provider registry (PROD-UI-0 З.4) — enables the live model
     ///     picker on step 4 with explicit free-text fallback.
     /// </param>
+    /// <param name="themeApplier">Theme strategy (defaults to <see cref="ThemeServiceApplier" />).</param>
+    /// <param name="persister">Persistence strategy (defaults to <see cref="ConfigStoreOnboardingPersister" />).</param>
     public OnboardingViewModel(
         ICommonConfigStore configStore,
         IThemeService theme,
@@ -133,15 +221,17 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         ILogger<OnboardingViewModel> logger,
         IMessenger messenger,
         Harbor.Abstractions.Providers.IProviderHealthCheck? healthCheck = null,
-        Harbor.Abstractions.Providers.IProviderRegistry? providers = null)
+        Harbor.Abstractions.Providers.IProviderRegistry? providers = null,
+        IThemeApplier? themeApplier = null,
+        IOnboardingPersister? persister = null)
     {
-        _configStore = configStore;
-        _theme = theme;
         _toasts = toasts;
         _logger = logger;
         _messenger = messenger;
         _healthCheck = healthCheck;
         _providers = providers;
+        _themeApplier = themeApplier ?? new ThemeServiceApplier(theme, logger);
+        _persister = persister ?? new ConfigStoreOnboardingPersister(configStore);
 
         // PROD-UI-0 З.1: single source of truth — the wizard catalogue is
         // derived from <see cref="ProviderPresets" /> (the same presets the
@@ -267,32 +357,9 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     {
         try
         {
-            string provider = SelectedProvider?.Id ?? "ollama";
-            string model = string.IsNullOrWhiteSpace(DefaultModel)
-                ? SelectedProvider?.DefaultModel ?? OfflineFallbackModel
-                : DefaultModel.Trim();
-            string? newKey = SelectedProvider is not null
-                             && SelectedProvider.RequiresKey
-                             && !string.IsNullOrWhiteSpace(ApiKey)
-                ? ApiKey.Trim()
-                : null;
+            CollectWizardResult(out string provider, out string model, out string? newKey);
 
-            var updateResult = await _configStore.UpdateAsync(cfg =>
-            {
-                var mergedKeys = cfg.ApiKeys.ToBuilder();
-                if (newKey is not null)
-                {
-                    mergedKeys[provider] = newKey;
-                }
-                return cfg with
-                {
-                    OnboardingCompleted = true,
-                    ApiKeys = mergedKeys.ToImmutable(),
-                    DefaultProvider = string.IsNullOrEmpty(cfg.DefaultProvider) ? provider : cfg.DefaultProvider,
-                    DefaultModel = string.IsNullOrEmpty(cfg.DefaultModel) ? model : cfg.DefaultModel,
-                    StorageBackend = string.IsNullOrEmpty(cfg.StorageBackend) ? "jsonl" : cfg.StorageBackend
-                };
-            }, _wizardCts.Token).ConfigureAwait(true);
+            var updateResult = await _persister.PersistAsync(provider, model, newKey, overwriteDefaults: false, _wizardCts.Token).ConfigureAwait(true);
 
             if (updateResult.IsFailure)
             {
@@ -448,6 +515,25 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    ///     Collect the wizard result shared by Finish and Skip: provider id,
+    ///     model id, and the newly-typed API key (null when none). The wizard
+    ///     collects a key for the currently-selected provider only — other
+    ///     providers keep their existing key (merged, never wiped).
+    /// </summary>
+    private void CollectWizardResult(out string provider, out string model, out string? newKey)
+    {
+        provider = SelectedProvider?.Id ?? "ollama";
+        model = string.IsNullOrWhiteSpace(DefaultModel)
+            ? SelectedProvider?.DefaultModel ?? OfflineFallbackModel
+            : DefaultModel.Trim();
+        newKey = SelectedProvider is not null
+                 && SelectedProvider.RequiresKey
+                 && !string.IsNullOrWhiteSpace(ApiKey)
+            ? ApiKey.Trim()
+            : null;
+    }
+
+    /// <summary>
     ///     Persist the onboarding result to <c>~/.harbor/config.json</c> and
     ///     raise <see cref="Completed" />. Non-blocking: returns immediately
     ///     on the UI thread; the await chain is fire-and-forget.
@@ -459,38 +545,9 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         StatusText = "Saving configuration…";
         try
         {
-            // The wizard collects an API key for the currently-selected provider
-            // only (step 3 binds the TextBox to ApiKey + SelectedProvider). Any
-            // other selected providers keep their existing key in config — the
-            // user can fill them in later via Settings. We MERGE with the
-            // existing ApiKeys dictionary (not replace) so re-running the
-            // wizard for a second provider doesn't wipe the first one's key.
-            string provider = SelectedProvider?.Id ?? "ollama";
-            string model = string.IsNullOrWhiteSpace(DefaultModel)
-                ? SelectedProvider?.DefaultModel ?? OfflineFallbackModel
-                : DefaultModel.Trim();
-            string? newKey = SelectedProvider is not null
-                             && SelectedProvider.RequiresKey
-                             && !string.IsNullOrWhiteSpace(ApiKey)
-                ? ApiKey.Trim()
-                : null;
+            CollectWizardResult(out string provider, out string model, out string? newKey);
 
-            var updateResult = await _configStore.UpdateAsync(cfg =>
-            {
-                var mergedKeys = cfg.ApiKeys.ToBuilder();
-                if (newKey is not null)
-                {
-                    mergedKeys[provider] = newKey;
-                }
-                return cfg with
-                {
-                    OnboardingCompleted = true,
-                    ApiKeys = mergedKeys.ToImmutable(),
-                    DefaultProvider = provider,
-                    DefaultModel = model,
-                    StorageBackend = string.IsNullOrEmpty(cfg.StorageBackend) ? "jsonl" : cfg.StorageBackend
-                };
-            }, _wizardCts.Token).ConfigureAwait(true);
+            var updateResult = await _persister.PersistAsync(provider, model, newKey, overwriteDefaults: true, _wizardCts.Token).ConfigureAwait(true);
 
             if (updateResult.IsFailure)
             {
@@ -502,18 +559,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
 
             // Apply the chosen theme immediately so the main window opens
             // with it (and the user sees their choice reflected).
-            switch ((ThemeChoice ?? "dark").ToLowerInvariant())
-            {
-                case "light":
-                    _theme.ApplyLight();
-                    break;
-                case "system":
-                    _logger.LogInformation("Onboarding theme 'system' — leaving default (dark) active.");
-                    break;
-                default:
-                    _theme.ApplyDark();
-                    break;
-            }
+            _themeApplier.Apply(OnboardingThemeParser.Parse(ThemeChoice));
 
             _toasts.Show("Onboarding complete — welcome to Harbor!", ToastKind.Success);
             IsCompleted = true;

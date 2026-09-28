@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Frozen;
 using System.Text;
 using System.Text.Json;
 
@@ -48,19 +49,25 @@ internal sealed class SseEventReader
                 ? line[(colon + 2)..]
                 : line[(colon + 1)..];
 
-        switch (field)
+        if (FieldHandlers.TryGetValue(field, out var handle))
         {
-            case "event":
-                _eventName = string.IsNullOrEmpty(value) ? "message" : value;
-                break;
-            case "data":
-                _data.Add(value);
-                break;
-            // "id" / "retry" / unknown fields are ignored per the SSE spec
+            handle(this, value);
         }
+        // "id" / "retry" / unknown fields are ignored per the SSE spec
 
         return null;
     }
+
+    /// <summary>
+    ///     Field-handler map (#197): a new SSE field adds one row here, never
+    ///     an edit to <see cref="Feed" />. Unknown fields stay ignored.
+    /// </summary>
+    private static readonly FrozenDictionary<string, Action<SseEventReader, string>> FieldHandlers =
+        new Dictionary<string, Action<SseEventReader, string>>(StringComparer.Ordinal)
+        {
+            ["event"] = static (r, v) => r._eventName = string.IsNullOrEmpty(v) ? "message" : v,
+            ["data"] = static (r, v) => r._data.Add(v),
+        }.ToFrozenDictionary(StringComparer.Ordinal);
 }
 
 /// <summary>JSON-RPC helpers over SSE payloads, shared by the MCP remote transports.</summary>
