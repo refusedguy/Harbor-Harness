@@ -17,6 +17,15 @@ public sealed class VirtualizedChatTimeline
     public const int MaxFxDamage = 8;
 
     private readonly TimelineLayoutCache _cache = new();
+
+    /// <summary>
+    /// Windowed-render viewport (ENG8 #279, btea viewport pattern): owns the
+    /// visible row slice (clamped offset + clipped rows) over the settled
+    /// timeline height. Published from <see cref="ScrollY"/> on every layout /
+    /// paint pass — <see cref="Paint"/> renders only this window, never the
+    /// whole buffer. Same shape as <see cref="CommandPaletteView.Viewport"/>.
+    /// </summary>
+    private readonly ScrollableViewport _viewport = new();
     private readonly Dictionary<IChatBlock, long> _entranceStarts = new();
     private readonly Rect[] _fxDamage = new Rect[MaxFxDamage];
     private readonly GlowRegion[] _glowRegions = new GlowRegion[MaxFxDamage];
@@ -97,6 +106,16 @@ public sealed class VirtualizedChatTimeline
 
     /// <summary>True while stuck to the bottom (default).</summary>
     public bool FollowTail { get; private set; } = true;
+
+    /// <summary>
+    /// The visible row window (ENG8 #279): synced from <see cref="ScrollY"/>
+    /// on every <see cref="PrepareFrame"/> / <see cref="Paint"/> pass.
+    /// <c>Offset</c> is the top row in timeline space; <c>VisibleSlice</c> is
+    /// the clipped <c>[Offset .. min(Total, Offset + ViewportH))</c> rows the
+    /// next paint renders. Same shape as
+    /// <see cref="CommandPaletteView.Viewport"/>.
+    /// </summary>
+    public ScrollableViewport Viewport => _viewport;
 
     /// <summary>
     /// Panel chrome — inter-message separators in the feed: when true, message
@@ -206,6 +225,7 @@ public sealed class VirtualizedChatTimeline
         _cache.Clear();
         _entranceStarts.Clear();
         _budgetUsed = 0;
+        _viewport.SetTotal(0); // offset re-clamps to 0; height re-syncs on the next frame
         _dirtyGeometry = true;
         _broadDamage = true;
         ScrollY = 0;
@@ -365,11 +385,19 @@ public sealed class VirtualizedChatTimeline
         return new UiMsg[] { new UiMsg.Viewport(viewH), new UiMsg.HistoryMeasured(total), new UiMsg.ScrollClamp(max) };
     }
 
-    private long TotalHeightAfter(int viewportH) => ScrollableViewport.MaxOffsetFor(TotalHeight, viewportH);
+    /// <summary>Largest legal scroll offset for the settled total, routed
+    /// through the owned <see cref="Viewport"/> so every scroll path shares
+    /// the single <c>max(0, total - viewportH)</c> bounds formula.</summary>
+    private long TotalHeightAfter(int viewportH)
+    {
+        _viewport.Configure(TotalHeight, viewportH);
+        return _viewport.MaxOffset;
+    }
 
     private void SetScrollY(long y)
     {
-        ScrollY = ScrollableViewport.ClampOffsetFor(y, TotalHeight, Math.Max(0, _lastViewportH));
+        _viewport.Configure(TotalHeight, Math.Max(0, _lastViewportH));
+        ScrollY = _viewport.SetOffset(y);
         if (!_scrollAnimating)
         {
             _visualScrollY = ScrollY;
@@ -495,6 +523,13 @@ public sealed class VirtualizedChatTimeline
             _lastScrollY = EffectiveScrollY;
         }
 
+        // ENG8 #279: publish the settled window (offset + clipped rows) so
+        // hosts/tests can read the exact slice the next paint renders.
+        // Publish-only: ScrollY stays the logical authority (anchor restores
+        // may legitimately sit past the settled max for a frame).
+        _viewport.Configure(TotalHeight, viewportH);
+        _viewport.SetOffset(ScrollY);
+
         return outcome;
     }
 
@@ -521,7 +556,16 @@ public sealed class VirtualizedChatTimeline
         // of bug as the composer's SetText("") no-op erase).
         buffer.Fill(rect, Cell.Blank);
 
-        var (first, last) = _cache.VisibleRange(EffectiveScrollY, rect.Height);
+        // ENG8 #279 (btea viewport pattern): the paint window comes from the
+        // viewport — offset clamped to the settled total, rows clipped to the
+        // rect. Long timelines render only this slice, never the whole
+        // buffer. In-range frames are a no-op clamp (top == EffectiveScrollY),
+        // so settled output is byte-identical; a stale offset (evict /
+        // anchor-restore past the settled max) paints the last window instead
+        // of an empty/shifted one.
+        _viewport.Configure(TotalHeight, rect.Height);
+        long top = _viewport.SetOffset(EffectiveScrollY);
+        var (first, last) = _cache.VisibleRange(top, rect.Height);
         // ENG12 #284 (TGui snapshot pattern): event-thread Append/Evict
         // shifts cache indices mid-draw — snapshot the visible window's refs
         // so BlockAt can never throw past the end. The buffer is reused
@@ -551,7 +595,7 @@ public sealed class VirtualizedChatTimeline
                 break;
             }
             long blockTop = _cache.BlockTop(i);
-            long relTop = blockTop - EffectiveScrollY;
+            long relTop = blockTop - top;
             int screenY = rect.Y + (int)Math.Max(0, relTop);
             int skipRows = relTop < 0 ? -(int)relTop : 0;
             int h = _cache.EffectiveHeight(i);
