@@ -62,6 +62,19 @@ public sealed class ChatScreenBridge : IDisposable
     /// whether AgentEnd flags the run as errored or succeeded (mascot moods).</summary>
     private bool _runHadError;
 
+    private int _errorCardSeq;
+
+    private string NewErrorCardId() => $"err-{_errorCardSeq++}";
+
+    /// <summary>One-line header blurb for an error card (the full text lives
+    /// in the collapsed body, expandable like any tool card).</summary>
+    internal static string ErrorBlurb(string message)
+    {
+        int nl = message.IndexOf('\n');
+        string first = nl >= 0 ? message[..nl] : message;
+        return first.Length <= 200 ? first : first[..200] + "…";
+    }
+
     public ChatScreenBridge(
         IEventBus bus,
         ChatTimelinePanel panel,
@@ -203,7 +216,7 @@ public sealed class ChatScreenBridge : IDisposable
 
             case AgentErrorEvent error:
                 _streams.FlushStreamNow();
-                AppendSystem("! " + error.Message);
+                _cards.CompleteError(NewErrorCardId(), "error", ErrorBlurb(error.Message), error.Message);
                 _runHadError = true;
                 _status.Phase = AgentPhase.Errored;
                 _status.SignalMascot(MascotReaction.ErrorBlink);

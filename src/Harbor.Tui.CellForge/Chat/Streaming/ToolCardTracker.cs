@@ -55,6 +55,25 @@ internal sealed class ToolCardTracker
         _cards[id] = card;
     }
 
+    /// <summary>Agent-level error rendered through the same collapsible
+    /// card component as tool calls: error-glyph header with the short
+    /// blurb, collapsed by default, Enter/click expands the full text.
+    /// No <see cref="ToolExecutionEndEvent" /> is fabricated — completion
+    /// lands directly on the block.</summary>
+    public void CompleteError(string id, string toolName, string summary, string output)
+    {
+        EnsureCard(id, toolName, summary, argsFull: output);
+        if (!_cards.TryGetValue(id, out var card))
+        {
+            return;
+        }
+
+        card.Block.Complete(new ToolResultBody(output, true, TimeSpan.Zero));
+        card.Block.SetExpanded(false);
+        _cards.Remove(id);
+        _panel.Timeline.MarkLastDirty();
+    }
+
     public void CompleteCard(ToolExecutionEndEvent e)
     {
         if (!_cards.TryGetValue(e.ToolCallId, out var card))
