@@ -215,7 +215,9 @@ public static class SkillFreshnessAggregate
             return null;
         }
 
-        var text = new StringBuilder(Label, Label.Length + 32);
+        // Capacity-only ctor: the label is appended below, together with the
+        // separator that keeps it off the first bucket's glyph.
+        var text = new StringBuilder(Label.Length + 32);
         text.Append(Label).Append(' ');
         Append(text, "●", changed, "changed");
         Append(text, "✗", missing, "missing");
