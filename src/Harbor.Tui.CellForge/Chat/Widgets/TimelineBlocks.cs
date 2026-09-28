@@ -25,8 +25,11 @@ public sealed class ChatTimelinePanel : Rendering.Panel
 /// ENG11 #283 (crush stable-prefix): only newline-terminated logical lines
 /// are stable — the final partial line is the sole re-wrap per frame — and an
 /// incremental FNV-1a content hash short-circuits frames with no new text, so
-/// steady-state Measure/Paint is O(1) instead of O(document).</summary>
-public sealed class StreamingThinkingBlock : IChatBlock
+/// steady-state Measure/Paint is O(1) instead of O(document).
+/// Collapsible per the <c>ICollapsibleChatBlock</c> mixin (PRIM1c #293):
+/// collapsed paint shows the first <see cref="MaxBodyLines"/> wrapped lines
+/// plus a <c>…</c> overflow marker.</summary>
+public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
 {
     private const ulong FnvOffsetBasis = 14695981039346656037ul;
     private const ulong FnvPrime = 1099511628211ul;
@@ -49,6 +52,32 @@ public sealed class StreamingThinkingBlock : IChatBlock
 
     /// <summary>Incremental FNV-1a hash of the accumulated text (crush pattern).</summary>
     public ulong ContentHash => _contentHash;
+
+    /// <summary>
+    /// Collapsed-body line budget (continuation marker when exceeded).
+    /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291);
+    /// this property satisfies the mixin contract.
+    /// </summary>
+    public int MaxBodyLines { get; set; } = ICollapsibleChatBlock.DefaultCollapsedBodyLines;
+
+    /// <summary>
+    /// Expanded body line budget (overflow marker when exceeded).
+    /// Mirrors <c>ICollapsibleChatBlock.DefaultExpandedBodyLines</c>.
+    /// </summary>
+    public const int ExpandedBodyLines = 20;
+
+    /// <summary>
+    /// Whether the block is expanded (feed Enter/click toggles via
+    /// <see cref="ToggleExpanded"/>). Satisfies the <c>ICollapsibleChatBlock</c>
+    /// mixin contract.
+    /// </summary>
+    public bool IsExpanded { get; private set; }
+
+    /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click path).</summary>
+    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
+    public void SetExpanded(bool expanded) => IsExpanded = expanded;
 
     public void Append(string delta)
     {
@@ -73,7 +102,11 @@ public sealed class StreamingThinkingBlock : IChatBlock
     public BlockMeasure Measure(int width)
     {
         EnsureWrapped(width);
-        return BlockMeasure.Exact(Math.Max(1, _stable.Count + _tail.Length));
+        int total = _stable.Count + _tail.Length;
+        int budget = IsExpanded ? ExpandedBodyLines : MaxBodyLines;
+        int shown = budget <= 0 ? 0 : Math.Min(total, budget);
+        int visible = shown + (budget > 0 && total > budget ? 1 : 0);
+        return BlockMeasure.Exact(Math.Max(1, visible));
     }
 
     public int CheapEstimate(int width)
@@ -105,14 +138,20 @@ public sealed class StreamingThinkingBlock : IChatBlock
     {
         EnsureWrapped(ctx.Rect.Width);
         var buffer = ctx.Buffer;
+        var style = new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic);
+        int total = _stable.Count + _tail.Length;
+        int budget = IsExpanded ? ExpandedBodyLines : MaxBodyLines;
+        int shown = budget <= 0 ? 0 : Math.Min(total, budget);
+        int visible = shown + (budget > 0 && total > budget ? 1 : 0);
         int rows = ctx.Rect.Height;
         int skip = ctx.SkipRows;
-        int total = _stable.Count + _tail.Length;
-        for (int i = 0; i < rows && (skip + i) < total; i++)
+        for (int i = 0; i < visible && (skip + i) < visible && i < rows; i++)
         {
             int idx = skip + i;
-            string line = idx < _stable.Count ? _stable[idx] : _tail[idx - _stable.Count];
-            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, line, new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
+            string line = idx < shown
+                ? (idx < _stable.Count ? _stable[idx] : _tail[idx - _stable.Count])
+                : "…";
+            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, line, style);
         }
     }
 
@@ -182,11 +221,33 @@ public sealed class StreamingThinkingBlock : IChatBlock
         TextWrap.WrapTo(_text.ToString(start, length).AsSpan(), Math.Max(1, _width), rows);
         _stable.AddRange(rows);
     }
+
+    /// <summary>
+    /// Visible rows for <paramref name="total"/> wrapped lines under the
+    /// current collapse budget: capped lines plus one continuation-marker row
+    /// on overflow ([UX5] #265: zero budget shows nothing, not even a marker).
+    /// </summary>
+    private int VisibleLineCount(int total) => ClampLineCount(total);
+
+    private int ClampLineCount(int total)
+    {
+        int budget = IsExpanded ? ExpandedBodyLines : MaxBodyLines;
+        if (budget <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Min(total, budget) + (total > budget ? 1 : 0);
+    }
 }
 
 /// <summary>Finalized thinking block: renders committed reasoning text with
-/// dim+italic styling, wrapped to the available width.</summary>
-public sealed class ThinkingBlock : IChatBlock
+/// dim+italic styling, wrapped to the available width.
+/// Collapsible per the <c>ICollapsibleChatBlock</c> mixin (PRIM1c #293,
+/// parent #286): collapsed paint shows the first <see cref="MaxBodyLines"/>
+/// wrapped lines plus a <c>…</c> overflow marker; short blocks stay
+/// byte-identical to the pre-collapse layout.</summary>
+public sealed class ThinkingBlock : ICollapsibleChatBlock
 {
     private readonly WrappedText _text;
 
@@ -198,22 +259,71 @@ public sealed class ThinkingBlock : IChatBlock
 
     public int BudgetBytes => 48 + (_text.SourceLength * 2);
 
-    public BlockMeasure Measure(int width) =>
-        BlockMeasure.Exact(Math.Max(1, _text.GetLines(Math.Max(1, width)).Length));
+    /// <summary>
+    /// Collapsed-body line budget (continuation marker when exceeded).
+    /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291);
+    /// this property satisfies the mixin contract.
+    /// </summary>
+    public int MaxBodyLines { get; set; } = ICollapsibleChatBlock.DefaultCollapsedBodyLines;
 
-    public int CheapEstimate(int width) => BlockMath.EstimateLines(_text.Source, Math.Max(1, width));
+    /// <summary>
+    /// Expanded body line budget (overflow marker when exceeded).
+    /// Mirrors <c>ICollapsibleChatBlock.DefaultExpandedBodyLines</c>.
+    /// </summary>
+    public const int ExpandedBodyLines = 20;
+
+    /// <summary>
+    /// Whether the block is expanded (feed Enter/click toggles via
+    /// <see cref="ToggleExpanded"/>). Satisfies the <c>ICollapsibleChatBlock</c>
+    /// mixin contract.
+    /// </summary>
+    public bool IsExpanded { get; private set; }
+
+    /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click path).</summary>
+    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
+    public void SetExpanded(bool expanded) => IsExpanded = expanded;
+
+    public BlockMeasure Measure(int width) =>
+        BlockMeasure.Exact(Math.Max(1, ClampLineCount(_text.GetLines(Math.Max(1, width)).Length)));
+
+    public int CheapEstimate(int width) =>
+        Math.Max(1, ClampLineCount(BlockMath.EstimateLines(_text.Source, Math.Max(1, width))));
 
     public void Paint(in BlockPaintContext ctx)
     {
         var buffer = ctx.Buffer;
         var lines = _text.GetLines(Math.Max(1, ctx.Rect.Width));
+        var style = new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic);
+        int total = lines.Length;
+        int budget = IsExpanded ? ExpandedBodyLines : MaxBodyLines;
+        int shown = budget <= 0 ? 0 : Math.Min(total, budget);
+        int visible = shown + (budget > 0 && total > budget ? 1 : 0);
         int rows = ctx.Rect.Height;
         int skip = ctx.SkipRows;
-        for (int i = 0; i < lines.Length && (skip + i) < lines.Length && i < rows; i++)
+        for (int i = 0; i < visible && (skip + i) < visible && i < rows; i++)
         {
-            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, lines.Span[skip + i], new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
+            int index = skip + i;
+            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, index < shown ? lines.Span[index] : "…", style);
         }
     }
 
     public string RawText() => _text.Source;
+
+    /// <summary>
+    /// Visible rows for <paramref name="total"/> wrapped lines under the
+    /// current collapse budget: capped lines plus one continuation-marker row
+    /// on overflow ([UX5] #265: zero budget shows nothing, not even a marker).
+    /// </summary>
+    private int ClampLineCount(int total)
+    {
+        int budget = IsExpanded ? ExpandedBodyLines : MaxBodyLines;
+        if (budget <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Min(total, budget) + (total > budget ? 1 : 0);
+    }
 }
