@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Tui.CellForge.Rendering;
@@ -552,11 +553,25 @@ public static class SideBarView
     ///     top-level sidebar fields; the full session list is attached for the
     ///     sessions section rendered by <see cref="Paint"/>.
     /// </summary>
-    public static SideBarState ProjectFromStore(UiState state)
+    public static SideBarState ProjectFromStore(UiState state) => Project(state, null);
+
+    /// <summary>
+    ///     <see cref="ProjectFromStore(UiState)"/> through a
+    ///     <paramref name="cache"/>: the linear active-session scan and the
+    ///     session-list array copy are skipped while the fingerprint is unchanged
+    ///     (issue #466).
+    /// </summary>
+    public static SideBarState Project(UiState state, SideBarProjectionCache? cache)
     {
-        SessionInfo? active = default;
-        foreach (var s in state.Chat.Sessions)
+        if (cache is not null && cache.TryGet(state, out SideBarState cached))
         {
+            return cached;
+        }
+
+        SessionInfo? active = default;
+        for (int i = 0; i < state.Chat.Sessions.Length; i++)
+        {
+            var s = state.Chat.Sessions[i];
             if (s.SessionId == state.Chat.ActiveSessionId)
             {
                 active = s;
@@ -565,7 +580,7 @@ public static class SideBarView
         }
 
         var sessions = state.Chat.Sessions.Length == 0 ? null : state.Chat.Sessions.ToArray();
-        return new SideBarState(
+        var projected = new SideBarState(
             SessionTitle: active?.Title,
             SessionId: active?.SessionId?.Value,
             Model: string.IsNullOrEmpty(state.Chat.Model) ? null : state.Chat.Model,
@@ -578,6 +593,9 @@ public static class SideBarView
             McpServers: null,
             ActiveSessionId: state.Chat.ActiveSessionId,
             Sessions: sessions);
+
+        cache?.Store(state, projected);
+        return projected;
     }
 
     /// <summary>Compact token figure: 999 → «999», 12 345 → «12.3k», 1 234 567 → «1.2M».</summary>
@@ -595,6 +613,97 @@ public static class SideBarView
         return new Rect(rect.X, rect.Y, Math.Max(0, width), Math.Max(0, height));
     }
 
+}
+
+/// <summary>
+///     Single-slot memo for <see cref="SideBarView.ProjectFromStore"/> (issue #466).
+///     <para>
+///         The projection walks <c>UiState.Chat.Sessions</c> to find the active
+///         session and then copies the whole list into a fresh array. Both are
+///         pure functions of the sidebar inputs, and a text delta changes none
+///         of them — yet the projection ran on every notification, so a
+///         200-session store paid a 200-compare scan plus a 200-element array
+///         copy per token. The cache answers from the previous instance while
+///         the fingerprint matches.
+///     </para>
+///     <para>
+///         The fingerprint is deliberately wider than (Sessions,
+///         ActiveSessionId): the projected <see cref="SideBarState"/> also
+///         carries model, token counts and cost, and those DO move on a
+///         <c>StepFinishEvent</c>. Caching on the session pair alone would pin
+///         a stale cost line. The session list compares by reference — the
+///         immutable array is never mutated in place, so a fresh instance can
+///         only mean a change and the same instance proves there was none — and
+///         the scalars compare by value. Anything less specific re-projects,
+///         which is correct but slower; it can never skip a real change.
+///     </para>
+///     <para>
+///         Not thread-safe by design — the frame that owns the sidebar also owns
+///         this cache, so it is only ever touched from the render thread.
+///     </para>
+/// </summary>
+public sealed class SideBarProjectionCache
+{
+    private bool _has;
+    private ImmutableArray<SessionInfo> _sessions;
+    private SessionId? _activeSessionId;
+    private string? _model;
+    private CostSnapshot _cost;
+    private SideBarState? _state;
+
+    /// <summary>Projections actually computed (cache misses) since construction.</summary>
+    public int MissCount { get; private set; }
+
+    /// <summary>
+    ///     Reference-equal-or-ordinal-equal, allocation-free. The store hands
+    ///     out a fresh <see cref="SessionId" /> / model string whenever a
+    ///     session sync re-seeds them, so reference identity alone would miss
+    ///     on inputs the sidebar renders identically. Deliberately NOT
+    ///     <see cref="SessionId" />'s structural <c>Equals</c>: the ValueObject
+    ///     base walks a <c>yield</c> iterator, which would put two allocations
+    ///     per comparison back on the per-frame path this cache exists to
+    ///     protect. <see cref="SessionId" /> has exactly one equality component
+    ///     (its string), so ordinal string equality is the same answer.
+    /// </summary>
+    internal static bool SameId(SessionId? a, SessionId? b) =>
+        ReferenceEquals(a, b)
+        || (a is not null && b is not null && string.Equals(a.Value, b.Value, StringComparison.Ordinal));
+
+    /// <summary>Same contract as <see cref="SameId" />, for the model string.</summary>
+    internal static bool SameText(string? a, string? b) =>
+        ReferenceEquals(a, b) || string.Equals(a, b, StringComparison.Ordinal);
+
+    /// <summary>
+    ///     The cached projection when <paramref name="state" /> carries the same
+    ///     sidebar inputs, otherwise <c>false</c>.
+    /// </summary>
+    public bool TryGet(UiState state, out SideBarState projected)
+    {
+        if (_has
+            && _sessions.Equals(state.Chat.Sessions)
+            && SameId(_activeSessionId, state.Chat.ActiveSessionId)
+            && SameText(_model, state.Chat.Model)
+            && _cost == state.Chat.Cost)
+        {
+            projected = _state!;
+            return true;
+        }
+
+        projected = SideBarState.Empty;
+        return false;
+    }
+
+    /// <summary>Memoize <paramref name="projected" /> for <paramref name="state" />.</summary>
+    public void Store(UiState state, SideBarState projected)
+    {
+        _has = true;
+        _sessions = state.Chat.Sessions;
+        _activeSessionId = state.Chat.ActiveSessionId;
+        _model = state.Chat.Model;
+        _cost = state.Chat.Cost;
+        _state = projected;
+        MissCount++;
+    }
 }
 
 /// <summary>Sidebar placement policy (Kilo/OpenCode pattern).</summary>

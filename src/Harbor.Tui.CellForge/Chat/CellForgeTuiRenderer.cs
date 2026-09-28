@@ -69,6 +69,28 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     private long _lastProjectedRevision;
 
     /// <summary>
+    ///     Newest store state awaiting the frame tick (#466). Written by the
+    ///     event thread, drained by the render thread; the reference swap is
+    ///     interlocked so the pair (<c>_pendingProjection</c>,
+    ///     <c>_projectionPending</c>) is never observed torn. A torn read can
+    ///     only be conservative: <see cref="PumpProjection" /> returning false
+    ///     leaves the state parked for the next tick.
+    /// </summary>
+    private UiState? _pendingProjection;
+
+    private int _projectionPending;
+
+    /// <summary>
+    ///     Sidebar projection memo (#466) — the sidebar's inputs cannot move on
+    ///     a text delta, but its projection was recomputed per notification.
+    /// </summary>
+    private readonly SideBarProjectionCache _sideBarCache = new();
+
+    private StatusSlice _lastStatusSlice;
+    private StreamingSlice _lastStreamingSlice;
+    private SessionSlice _lastSessionSlice;
+
+    /// <summary>
     /// CF-E-002 wiring (TOP-1 #27): renderer-owned panel registry holding the 9
     /// cell-native builtin providers (see <see cref="RegisterBuiltinPanels"/>).
     /// Registration order is significant — Alt+1..9 hotkey slots follow it.
@@ -208,7 +230,12 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         // The new store's revision ledger starts over — adopt its revision so
         // the stale-drop guard does not swallow its first notifications.
         _lastProjectedRevision = active.State.Revision;
-        ProjectStateIntoWidgets(active.State);
+        // #466: the seed goes through the same park→pump seam as every other
+        // notification, so a session switch is the one drain point that cannot
+        // be forgotten.
+        Interlocked.Exchange(ref _pendingProjection, active.State);
+        Volatile.Write(ref _projectionPending, 1);
+        _ = PumpProjection();
     }
 
     private void OnStoreChanged(object? sender, UiStateChangedEventArgs e)
@@ -216,13 +243,60 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         if (e.IsStale(_lastProjectedRevision))
             return;
         _lastProjectedRevision = e.Revision;
-        ProjectStateIntoWidgets(e.State);
+        // #466: the notification does NOT project. A streaming turn publishes
+        // one notification per token delta, and projecting each of them re-ran
+        // the whole widget projection — 11 view-model writes, a full
+        // SnapshotText() of the draft, a linear pass over the session list for
+        // the quick-switch slots and a sidebar projection that re-copied the
+        // whole session array — for state a text delta does not change and that
+        // no painted frame reads before the next one. The newest state is
+        // parked instead and applied once, by the frame tick.
+        Interlocked.Exchange(ref _pendingProjection, e.State);
+        Volatile.Write(ref _projectionPending, 1);
     }
+
+    /// <summary>
+    ///     Frame tick: apply the parked projection, if any, and report whether it
+    ///     ran. At most one projection per call no matter how many store
+    ///     notifications arrived since the last one — the parked state is the
+    ///     newest, and the projection is a pure function of that state, so
+    ///     coalescing N notifications into one call is lossless.
+    ///     <para>
+    ///         Called from <see cref="RenderAsync" /> (one call per event) and
+    ///         from <see cref="Dispose" />, so the last state of a turn is never
+    ///         left unpainted. Hosts with a real frame loop can call it instead.
+    ///     </para>
+    /// </summary>
+    /// <returns>True when a projection was applied.</returns>
+    public bool PumpProjection()
+    {
+        if (Interlocked.Exchange(ref _projectionPending, 0) == 0)
+            return false;
+        var pending = Interlocked.Exchange(ref _pendingProjection, null);
+        if (pending is null)
+            return false;
+        ProjectStateIntoWidgets(pending);
+        ProjectionCount++;
+        return true;
+    }
+
+    /// <summary>
+    ///     Projections actually applied since construction (test seam for the
+    ///     per-frame coalescing gate — one per pump, not one per notification).
+    /// </summary>
+    internal long ProjectionCount { get; private set; }
+
+    /// <summary>True while a store notification is parked awaiting the frame tick.</summary>
+    internal bool HasPendingProjection => Volatile.Read(ref _projectionPending) != 0;
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
         EnsureSubscribedToActiveStore();
         _ = ActiveStore.Dispatch(new ChatAppMsg.Agent(@event));
+        // The render pass IS the frame: drain the coalesced projection here,
+        // before any placement paints, so the widgets a view reads are the
+        // ones this event's state produced (#466).
+        _ = PumpProjection();
         return base.RenderAsync(@event, ct);
     }
 
@@ -243,54 +317,182 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     internal void ProjectStateIntoWidgets(UiState state)
     {
-        if (_statusVm is StatusBarViewModel svm)
-        {
-            if (!string.IsNullOrEmpty(state.Chat.Status))
-                svm.Status = state.Chat.Status;
-            if (!string.IsNullOrEmpty(state.Chat.Model))
-                svm.Model = state.Chat.Model;
-            if (!string.IsNullOrEmpty(state.Chat.Provider))
-                svm.Provider = state.Chat.Provider;
-            if (!string.IsNullOrEmpty(state.Chat.AgentName))
-                svm.Agent = state.Chat.AgentName;
-            svm.TokensIn = (int)Math.Min(state.Chat.Cost.TokensIn, int.MaxValue);
-            svm.TokensOut = (int)Math.Min(state.Chat.Cost.TokensOut, int.MaxValue);
-            svm.Cost = state.Chat.Cost.CostUsd;
-        }
-
-        if (_chatVm is ChatHistoryViewModel chvm)
-        {
-            chvm.IsStreaming = state.Chat.IsStreaming;
-            // Synced prefix only (flush-gated, like the projector tail):
-            // projecting pending here would copy the whole prefix per frame.
-            chvm.StreamingText = state.Chat.Active.TextBuffer;
-            chvm.ThinkingText = state.Chat.Active.ThinkBuffer;
-            chvm.IsThinking = state.Chat.Active.ThinkBuffer.Length != 0;
-        }
-
+        ProjectStatus(state);
+        ProjectStreaming(state);
         SyncInputFromState(state);
+        ProjectSessions(state);
+        ProjectScreen(state);
+    }
 
+    /// <summary>
+    ///     Status-bar slice. The seven setters are guarded by the toolkit's
+    ///     own equality check, so re-running them on an unchanged value costs
+    ///     no INPC — but each is still a virtual property write, so the slice
+    ///     is skipped outright when none of its inputs moved.
+    /// </summary>
+    private void ProjectStatus(UiState state)
+    {
+        if (_statusVm is not StatusBarViewModel svm)
+            return;
+
+        if (_lastStatusSlice.Initialized
+            && ReferenceEquals(_lastStatusSlice.Status, state.Chat.Status)
+            && ReferenceEquals(_lastStatusSlice.Model, state.Chat.Model)
+            && ReferenceEquals(_lastStatusSlice.Provider, state.Chat.Provider)
+            && ReferenceEquals(_lastStatusSlice.AgentName, state.Chat.AgentName)
+            && _lastStatusSlice.Cost == state.Chat.Cost)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(state.Chat.Status))
+            svm.Status = state.Chat.Status;
+        if (!string.IsNullOrEmpty(state.Chat.Model))
+            svm.Model = state.Chat.Model;
+        if (!string.IsNullOrEmpty(state.Chat.Provider))
+            svm.Provider = state.Chat.Provider;
+        if (!string.IsNullOrEmpty(state.Chat.AgentName))
+            svm.Agent = state.Chat.AgentName;
+        svm.TokensIn = (int)Math.Min(state.Chat.Cost.TokensIn, int.MaxValue);
+        svm.TokensOut = (int)Math.Min(state.Chat.Cost.TokensOut, int.MaxValue);
+        svm.Cost = state.Chat.Cost.CostUsd;
+
+        _lastStatusSlice = StatusSlice.Capture(state);
+    }
+
+    /// <summary>
+    ///     Streaming-tail slice. A text delta lands in
+    ///     <c>Chat.PendingStreamText</c> and only reaches
+    ///     <c>Chat.Active.TextBuffer</c> on the flush gate, so during a burst
+    ///     the projected tail is usually the same string instance — and
+    ///     comparing the instance (not the contents) skips the whole slice.
+    /// </summary>
+    private void ProjectStreaming(UiState state)
+    {
+        if (_chatVm is not ChatHistoryViewModel chvm)
+            return;
+
+        if (_lastStreamingSlice.Initialized
+            && _lastStreamingSlice.IsStreaming == state.Chat.IsStreaming
+            && ReferenceEquals(_lastStreamingSlice.TextBuffer, state.Chat.Active.TextBuffer)
+            && ReferenceEquals(_lastStreamingSlice.ThinkBuffer, state.Chat.Active.ThinkBuffer))
+        {
+            return;
+        }
+
+        chvm.IsStreaming = state.Chat.IsStreaming;
+        // Synced prefix only (flush-gated, like the projector tail):
+        // projecting pending here would copy the whole prefix per frame.
+        chvm.StreamingText = state.Chat.Active.TextBuffer;
+        chvm.ThinkingText = state.Chat.Active.ThinkBuffer;
+        chvm.IsThinking = state.Chat.Active.ThinkBuffer.Length != 0;
+
+        _lastStreamingSlice = StreamingSlice.Capture(state);
+    }
+
+    /// <summary>
+    ///     Session slice. <see cref="QuickSwitchSlots" /> rewrites all
+    ///     <c>Count</c> slots from <c>(Sessions, ActiveSessionId)</c> — a linear
+    ///     pass over the session list. The list is immutable (reference
+    ///     compare); the id compares by value, because a session sync hands out
+    ///     a fresh <see cref="SessionId" /> for the same session and re-running
+    ///     the pass would be pure waste.
+    /// </summary>
+    private void ProjectSessions(UiState state)
+    {
         SessionsSnapshot = state.Chat.Sessions;
         ActiveSessionIdSnapshot = state.Chat.ActiveSessionId;
         SessionsLoading = state.Chat.IsLoading;
-        _quickSwitchSlots.SyncFromStore(state);
 
-        if (Screen is { } screen)
+        if (_lastSessionSlice.Initialized
+            && _lastSessionSlice.Sessions.Equals(state.Chat.Sessions)
+            && SideBarProjectionCache.SameId(_lastSessionSlice.ActiveSessionId, state.Chat.ActiveSessionId))
         {
-            screen.Status.ProjectedState = state;
-            if (screen.Sidebar is SideBarPanel sidebar)
-            {
-                sidebar.State = SideBarView.ProjectFromStore(state);
-            }
-
-            // Issue #389 — pure projection. The panel keeps no selection of its
-            // own, so handing it the snapshot is the whole wiring, which is why a
-            // tab opened by any host shows up with no renderer changes.
-            if (screen.Tabs is { } tabs)
-            {
-                tabs.Strip = state.Chat.TabStrip;
-            }
+            return;
         }
+
+        _quickSwitchSlots.SyncFromStore(state);
+        _lastSessionSlice = SessionSlice.Capture(state);
+    }
+
+    /// <summary>
+    ///     Host-screen slice: the status panel's projected state plus the
+    ///     sidebar snapshot. The sidebar goes through
+    ///     <see cref="SideBarProjectionCache" />, which answers from the
+    ///     previous instance while its fingerprint holds — the active-session
+    ///     scan and the session-array copy it would otherwise repeat per frame.
+    /// </summary>
+    private void ProjectScreen(UiState state)
+    {
+        if (Screen is not { } screen)
+            return;
+
+        screen.Status.ProjectedState = state;
+        if (screen.Sidebar is SideBarPanel sidebar)
+        {
+            sidebar.State = SideBarView.Project(state, _sideBarCache);
+        }
+
+        // Issue #389 — pure projection. The panel keeps no selection of its
+        // own, so handing it the snapshot is the whole wiring, which is why a
+        // tab opened by any host shows up with no renderer changes.
+        if (screen.Tabs is { } tabs)
+        {
+            tabs.Strip = state.Chat.TabStrip;
+        }
+    }
+
+    /// <summary>Fingerprint of the status-bar slice's inputs (issue #466).</summary>
+    private struct StatusSlice
+    {
+        internal bool Initialized;
+        internal string? Status;
+        internal string? Model;
+        internal string? Provider;
+        internal string? AgentName;
+        internal CostSnapshot Cost;
+
+        internal static StatusSlice Capture(UiState state) => new()
+        {
+            Initialized = true,
+            Status = state.Chat.Status,
+            Model = state.Chat.Model,
+            Provider = state.Chat.Provider,
+            AgentName = state.Chat.AgentName,
+            Cost = state.Chat.Cost
+        };
+    }
+
+    /// <summary>Fingerprint of the streaming-tail slice's inputs (issue #466).</summary>
+    private struct StreamingSlice
+    {
+        internal bool Initialized;
+        internal bool IsStreaming;
+        internal string? TextBuffer;
+        internal string? ThinkBuffer;
+
+        internal static StreamingSlice Capture(UiState state) => new()
+        {
+            Initialized = true,
+            IsStreaming = state.Chat.IsStreaming,
+            TextBuffer = state.Chat.Active.TextBuffer,
+            ThinkBuffer = state.Chat.Active.ThinkBuffer
+        };
+    }
+
+    /// <summary>Fingerprint of the session slice's inputs (issue #466).</summary>
+    private struct SessionSlice
+    {
+        internal bool Initialized;
+        internal ImmutableArray<SessionInfo> Sessions;
+        internal SessionId? ActiveSessionId;
+
+        internal static SessionSlice Capture(UiState state) => new()
+        {
+            Initialized = true,
+            Sessions = state.Chat.Sessions,
+            ActiveSessionId = state.Chat.ActiveSessionId
+        };
     }
 
     /// <summary>
@@ -338,6 +540,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     ///     VM → composer-buffer sync: user edits applied to the
     ///     <see cref="InputViewModel"/> (text or caret) are mirrored into the
     ///     composer buffer so the interactive prompt paints the same draft.
+    ///     #466: span comparison, same reason as <see cref="SyncInputFromState" />.
     /// </summary>
     private void OnInputVmChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -360,6 +563,10 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     public override void Dispose()
     {
+        // #466: the last state of a turn can still be parked if no render pass
+        // followed the final notification. Drain it before the VMs go away, or
+        // the widgets freeze one event behind.
+        _ = PumpProjection();
         _inputVm.PropertyChanged -= OnInputVmChanged;
         if (_subscribedStore is not null)
         {
