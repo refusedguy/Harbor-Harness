@@ -21,6 +21,7 @@
 - **[docs/TOOLS_CATALOG.md](./docs/TOOLS_CATALOG.md)** — comprehensive reference for all 20 builtin tools: args schema, 3+ examples per tool, "when to use X vs Y" matrix, tool chains, JSON Schema tips, permission rationale, sub-agent `task` deep dive, MCP integration, and a full WebFetchTool walkthrough.
 - **[docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md)** — Roslyn `.cs` plugin system + 5 full examples.
 - **[docs/BENCHMARKS.md](./docs/BENCHMARKS.md)** — **the only place a measured number is recorded.** Project counts, tool counts and benchmark figures quoted in other docs are copies; when you re-measure, update this file first and propagate in the same commit.
+- **[docs/audit-archive/](./docs/audit-archive/)** — dated audit snapshots kept for provenance. Never cite these as current state; see its README for where each conclusion now lives.
 
 > **TL;DR for AI agents:** read this file for conventions → read AGENTS.md for operational steps → consult CODE_PRINCIPLES_AUDIT.md before refactoring hot paths.
 
