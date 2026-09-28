@@ -165,7 +165,7 @@ internal sealed class CellForgeReplRunner(
     internal LegacySlashRunner LegacySlash => legacySlash;
     private PromptPipeline? _pipeline;
     internal PromptPipeline Pipeline => _pipeline ??= new PromptPipeline(
-        this, _catalog, logger, Tokens, new Lazy<LegacySlashRunner>(() => LegacySlash));
+        this, _catalog, logger, Tokens, new Lazy<LegacySlashRunner>(() => LegacySlash), Setup);
     internal void DisposePipeline() => _pipeline?.Dispose();
     private SessionSwitchManager? _sessions;
     internal SessionSwitchManager Sessions => _sessions ??= new SessionSwitchManager(this, Pipeline.ClearQueue);

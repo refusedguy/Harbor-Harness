@@ -13,12 +13,12 @@ namespace Harbor.App.Cli.Repl;
 // controller maps signals onto the model and feeds the CellForge overlay.
 //
 // Three responsibilities:
-//   * detection → completion snapshot (`TaskId → bool`) → `SetupChecklistModel`;
-//   * first-run gating — auto-open when setup never completed, latched so a
-//     dismissal never re-traps the user in the same session;
-//   * in-place progress — a task completing while the checklist is open
-//     re-renders the modal alone (damage hint on its rect), so unrelated panels
-//     are not rescanned.
+//   1. detection → completion snapshot (TaskId → bool) → `SetupChecklistModel`
+//   2. first-run gating — auto-open when setup never completed, latched so a
+//      dismissal never re-traps the user in the same session
+//   3. in-place progress — a task completing while the checklist is open
+//      re-renders the modal alone (damage hint on its rect), so unrelated panels
+//      are not rescanned
 
 /// <summary>
 /// Drives the CellForge setup checklist for one REPL session: detection,

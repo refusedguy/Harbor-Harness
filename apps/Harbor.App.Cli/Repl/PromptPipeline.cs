@@ -25,7 +25,8 @@ internal sealed class PromptPipeline(
     ReplCommandCatalog catalog,
     ILogger logger,
     ITokenTracker? tokens,
-    Lazy<LegacySlashRunner> legacy) : IDisposable
+    Lazy<LegacySlashRunner> legacy,
+    SetupChecklistController? setupChecklist = null) : IDisposable
 {
     /// <summary>Stream-retry budget mirrored from AgentLoop's C7 policy —
     /// kept in sync for the countdown's «n/3» display only.</summary>
@@ -135,7 +136,7 @@ internal sealed class PromptPipeline(
 
         // Setup guide (issue #383): the first prompt that actually reaches the
         // agent completes the checklist's last session-scoped task.
-        host.Setup.MarkPromptSent();
+        setupChecklist?.MarkPromptSent();
         host.WakeUp();
 
         _promptInFlight = true;
