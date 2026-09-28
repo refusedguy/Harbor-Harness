@@ -168,8 +168,8 @@ public class TabStripKeyBindingTests
     public async Task TabSwitch_DoesNotLeakMessagesAcrossSessions()
     {
         var router = new SessionEventRouter();
-        var a = router.GetOrCreateContext(Session("s0", "alpha"));
-        var b = router.GetOrCreateContext(Session("s1", "beta"));
+        var a = router.GetOrCreateContext(MakeSession("s0", "alpha"));
+        var b = router.GetOrCreateContext(MakeSession("s1", "beta"));
 
         // The strip itself lives in the host store — tabs are workspace chrome,
         // not transcript. Transcripts live in the router's per-session stores.
@@ -210,8 +210,8 @@ public class TabStripKeyBindingTests
         // regresses to an active-store fallback, a background agent in the tab
         // we left writes into the transcript now on screen.
         var router = new SessionEventRouter();
-        var a = router.GetOrCreateContext(Session("s0", "alpha"));
-        var b = router.GetOrCreateContext(Session("s1", "beta"));
+        var a = router.GetOrCreateContext(MakeSession("s0", "alpha"));
+        var b = router.GetOrCreateContext(MakeSession("s1", "beta"));
 
         _ = router.GetContext("s0")!.Store
             .Dispatch(new AppMsg.AppendLine(ChatRole.Assistant, "late event for alpha"));
@@ -244,7 +244,10 @@ public class TabStripKeyBindingTests
         await Assert.That(store.State.Chat.TabStrip.Tabs.Length).IsEqualTo(2);
     }
 
-    private static Session Session(string id, string title) =>
+    // Named MakeSession, not Session: a method called `Session` would shadow the
+    // type of the same name and leave the target-typed `new` below with no type
+    // to infer from (CS1526).
+    private static Session MakeSession(string id, string title) =>
         new(
             Id: id,
             ProjectId: "p",
