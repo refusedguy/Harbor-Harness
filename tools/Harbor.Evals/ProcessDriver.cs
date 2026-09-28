@@ -57,13 +57,10 @@ internal static class ProcessDriver
         var stderr = new StringBuilder();
         try
         {
-            using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
             var exited = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            proc.Exited += (_, _) => exited.TrySetResult(true);
-            if (!proc.Start())
+            using var proc = await StartChildAsync(psi, exited).ConfigureAwait(false);
+            if (proc is null)
                 return new DriveResult(-1, string.Empty, "start failed", "harness_error", started, DateTimeOffset.UtcNow);
-
-            proc.StandardInput.Close();
 
             var stdoutTask = ReadAllAsync(proc.StandardOutput, stdout, ct);
             var stderrTask = ReadAllAsync(proc.StandardError, stderr, ct);
@@ -96,8 +93,62 @@ internal static class ProcessDriver
         }
         catch (Exception ex)
         {
-            return new DriveResult(-1, stdout.ToString(), stderr.ToString() + "\nHARNESS: " + ex.Message, "harness_error", started, DateTimeOffset.UtcNow);
+            return new DriveResult(-1, stdout.ToString(), stderr.ToString() + "\nHARNESS: " + ex.GetType().Name + ": " + ex.Message, "harness_error", started, DateTimeOffset.UtcNow);
         }
+    }
+
+    /// <summary>Starts the child, retrying once on instant-exit EPIPE.
+    /// .NET's Unix StartCore can throw IOException (Broken pipe) when the
+    /// child dies during setup — near-certain only for millisecond-lived
+    /// children, but a retry keeps one spurious harness_error out of the
+    /// baseline. No agent interaction happened yet, so this is still the
+    /// same attempt. Returns null when the child cannot be started.</summary>
+    private static async Task<Process?> StartChildAsync(
+        ProcessStartInfo psi,
+        TaskCompletionSource<bool> exited)
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            var candidate = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            candidate.Exited += (_, _) => exited.TrySetResult(true);
+            try
+            {
+                if (!candidate.Start())
+                {
+                    candidate.Dispose();
+                    return null;
+                }
+
+                try
+                {
+                    candidate.StandardInput.Close();
+                }
+                catch (Exception ex)
+                {
+                    // Child already exited before reading stdin (fast fail or
+                    // instant exit): not a harness failure, outcome comes from
+                    // the exit code below.
+                    _ = ex;
+                }
+
+                return candidate;
+            }
+            catch (IOException ex) when (i == 0)
+            {
+                candidate.Dispose();
+                _ = ex;
+                // Untimed breather (no ct: Ctrl+C must still surface as
+                // OperationCanceledException from the wait below, not here).
+                await Task.Delay(100).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                candidate.Dispose();
+                return null;
+            }
+        }
+
+        return null;
     }
 
     private static async Task ReadAllAsync(StreamReader reader, StringBuilder sink, CancellationToken ct)
