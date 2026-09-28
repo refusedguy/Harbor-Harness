@@ -4,7 +4,7 @@ using Harbor.Terminal.Abstractions.ViewModels;
 namespace Harbor.Terminal.Abstractions.Views;
 /// <summary>
 ///     Builtin status bar view — renders <see cref="StatusBarViewModel" /> state as a single
-///     colored line showing model, agent, cost, tokens, and current status.
+///     collapsed codex-<c>/statusline</c> line: model, context-%, cost, queue, status.
 /// </summary>
 /// <remarks>
 ///     <para>
