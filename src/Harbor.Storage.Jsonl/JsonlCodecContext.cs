@@ -71,7 +71,14 @@ internal sealed record UserPayload(
     [property: System.Text.Json.Serialization.JsonPropertyName("model")] string Model,
     // #386: images attached to the turn. Omitted entirely for text-only turns
     // (WhenWritingNull) so pre-#386 session files stay byte-identical.
+    // The attribute is required rather than the context-wide
+    // DefaultIgnoreCondition: the store serializes through
+    // `JsonlCodecContext.Default.*` (the source-generated metadata), which does
+    // NOT inherit `JsonlCodecContext.JsonOptions` — only that pre-built options
+    // object carries the context-level ignore rule.
     [property: System.Text.Json.Serialization.JsonPropertyName("attachments")]
+    [property: System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     ImageAttachmentPayload[]? Attachments = null);
 
 internal sealed record AssistantPayload(

@@ -92,7 +92,11 @@ public class ImageProbeTests
     [Test]
     public async Task TryReadDimensions_TruncatedPayload_ReturnsFalseNotGarbage()
     {
-        await Assert.That(ImageProbe.TryReadDimensions(Png(), ImageProbe.PngMimeType, out int w, out int h)).IsFalse();
+        // Signature + "IHDR" are there, but the width/height fields are cut off:
+        // the probe must report "unknown" (0×0), never half-read integers.
+        byte[] truncated = Png().AsSpan(0, 20).ToArray();
+
+        await Assert.That(ImageProbe.TryReadDimensions(truncated, ImageProbe.PngMimeType, out int w, out int h)).IsFalse();
         await Assert.That(w).IsEqualTo(0);
         await Assert.That(h).IsEqualTo(0);
     }

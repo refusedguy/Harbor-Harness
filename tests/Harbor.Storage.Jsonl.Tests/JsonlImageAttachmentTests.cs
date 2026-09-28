@@ -68,7 +68,7 @@ public class JsonlImageAttachmentTests
             await Assert.That(image.Width).IsEqualTo(1);
             await Assert.That(image.Height).IsEqualTo(1);
             await Assert.That(image.Data.Length).IsEqualTo(png.Length);
-            await Assert.That(image.Data).IsEquivalentTo(png);
+            await Assert.That(Convert.ToBase64String(image.Data)).IsEqualTo(Convert.ToBase64String(png));
         }
         finally
         {
@@ -141,7 +141,8 @@ public class JsonlImageAttachmentTests
     {
         // The store's read path is the span-based JsonlLineParser, NOT the
         // JsonElement codec — both must honour attachments, so exercise the one
-        // that actually runs in production.
+        // that actually runs in production. The line is hand-written (it never
+        // went through the writer) to pin the on-disk shape as well.
         var store = CreateStore();
         try
         {
@@ -149,27 +150,44 @@ public class JsonlImageAttachmentTests
             byte[] png = OnePixelPng();
             string base64 = Convert.ToBase64String(png);
 
-            string file = SessionFile(store, session);
-            File.AppendAllText(file,
+            string line =
                 "{\"type\":\"message\",\"id\":\"m-span\",\"parentId\":null,\"role\":\"user\"," +
                 "\"createdAt\":\"2026-01-01T00:00:00+00:00\",\"payload\":{\"content\":\"span path\"," +
                 "\"agent\":\"code\",\"model\":\"claude-opus-4\",\"attachments\":[" +
                 "{\"path\":\"/a.png\",\"mimeType\":\"image/png\",\"width\":1,\"height\":1," +
-                $"\"data\":\"{base64}\"}}]}}\n");
+                $"\"data\":\"{base64}\"}}]}}";
+
+            // Assert on the parser's own diagnostic, not just a boolean: a bare
+            // IsTrue() would hide WHY a hand-written line was rejected.
+            var direct = JsonlLineParser.Parse(System.Text.Encoding.UTF8.GetBytes(line), session.Id);
+            await Assert.That(direct.IsFailure ? direct.Error : "ok").IsEqualTo("ok");
+
+            // Seed the session file through the store first (header line and a
+            // valid message), so the hand-written line is the only new one.
+            await store.AppendMessageAsync(session.Id, new UserMessage(
+                "m-seed", session.Id, DateTimeOffset.UtcNow, "seed", "code", "claude-opus-4"));
+
+            string file = SessionFile(store, session);
+            File.AppendAllText(file, line + "\n");
             File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddSeconds(1));
 
             var messages = await store.GetMessagesAsync(session.Id);
             await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages.Value.Count).IsEqualTo(2);
 
-            var message = (UserMessage)messages.Value[0];
+            var message = (UserMessage)messages.Value[1];
             await Assert.That(message.Id).IsEqualTo("m-span");
             await Assert.That(message.HasAttachments).IsTrue();
+            await Assert.That(message.Attachments).IsNotNull();
 
             var image = message.Attachments![0];
             await Assert.That(image.MimeType).IsEqualTo("image/png");
             await Assert.That(image.Width).IsEqualTo(1);
             await Assert.That(image.Height).IsEqualTo(1);
-            await Assert.That(image.Data).IsEquivalentTo(png);
+            await Assert.That(image.Path).IsEqualTo("/a.png");
+            // Base64 comparison, not collection equivalence: a length mismatch
+            // must surface as a readable assertion, not an indexer crash.
+            await Assert.That(Convert.ToBase64String(image.Data)).IsEqualTo(base64);
         }
         finally
         {
