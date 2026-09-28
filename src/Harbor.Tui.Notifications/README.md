@@ -89,8 +89,9 @@ toasts, install `snoretoast.exe` and replace `WindowsToastBackend`.
 # Cross-platform build, no extra workloads needed
 dotnet build src/Harbor.Tui.Notifications/Harbor.Tui.Notifications.csproj -c Release
 
-# Run Harbor with the notifications renderer (background mode)
-HARBOR_TUI=notifications harbor ask "Refactor src/Harbor.Core/ for SOLID compliance"
+# Exercise the renderer (it is not a registered HARBOR_TUI backend — see
+# "Selecting this renderer" above):
+dotnet run --project tests/Harbor.Tui.RendererTests -c Release --no-build
 ```
 
 On Linux you may need to install libnotify first:
@@ -102,8 +103,29 @@ sudo dnf install libnotify       # Fedora
 
 ## Selecting this renderer
 
-Set `HARBOR_TUI=notifications` in your environment, or add `tui: "notifications"`
-to `~/.harbor/config.json`.
+> **Not currently selectable.** `NotificationTuiRenderer` is **not** registered
+> in `TuiBackendRegistry`, and `src/Harbor.Hosting` carries no
+> `ProjectReference` to this project — so `HARBOR_TUI=notifications` does not
+> resolve, and `tui: "notifications"` in `~/.harbor/config.json` falls through
+> the fallback rule to `ansi` (or `plain`) with a warning. This project is
+> exercised by `tests/Harbor.Tui.RendererTests`, not by the shipped CLI.
+>
+> Earlier revisions of this README documented `HARBOR_TUI=notifications` as the
+> activation path. That claim was wrong. It is corrected here rather than
+> deleted, because "the code exists but is not wired" is the more useful thing
+> to know. Wiring it means adding an `ITuiRendererFactory` to
+> `TuiBackendRegistry` and a conditional `ProjectReference` in
+> `Harbor.Hosting.csproj` — a follow-up, not part of #430.
+
+The renderer is still usable directly, which is how the tests drive it:
+
+```csharp
+using Harbor.Tui.Notifications;
+
+var renderer = new NotificationTuiRenderer(NullLogger<NotificationTuiRenderer>.Instance);
+await renderer.InitializeAsync(ct);
+await renderer.RenderAsync(evt, ct);   // fires an OS notification, writes nothing
+```
 
 ## Memory footprint
 

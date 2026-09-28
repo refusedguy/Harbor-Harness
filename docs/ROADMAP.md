@@ -242,7 +242,22 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 ### Documentation debt
 
 - [ ] API docs not published (DocFX / MdDocs pipeline stubbed but not wired).
-- [ ] Per-project READMEs: 19 of 51 src projects still have no README (coverage **32/51**; major groups rewritten against real code in DOCS-ZERO D1a/b, D2a/b, D3 — commits b9e6010…9ec5c7b, 2026-08-27) — write one when a project is next touched.
+- [x] Per-project READMEs: **54/54 `src/` projects** have a README, enforced by
+  `ReadmeCoverageTests` in `tests/Harbor.Architecture.Tests/` (fails the Release
+  build via the `HarborArchitectureGate` target). Measured 2026-09-28 on
+  `de2358f` (#430): coverage was **48/54** before the slice — 6 projects had no
+  README (`Harbor.Lsp`, `Harbor.Terminal.Pty`, `Harbor.Tui.AnsiPlain`,
+  `Harbor.Tui.CellForge.Engine`, `Harbor.Tui.NickConsoleEx`,
+  `Harbor.Ui.Framework.Rendering`), all of them the newest subsystems. The
+  earlier "32/51" figure was stale by two revisions and is replaced here by a
+  check rather than a number. Template:
+  [`standards/README-template.md`](./standards/README-template.md).
+- [ ] README section conformance: 36 packable projects predate the template and
+  are recorded in `LegacyNonConformantReadmes` (`ReadmeCoverageTests.cs`), each
+  mapped to its missing sections. The list is a ratchet — a test fails if an
+  entry overstates what is missing, so it can only shrink. Fix a listed README
+  and drop its entry in the same PR. Audit trail and false-positive list:
+  [`standards/README-AUDIT.md`](./standards/README-AUDIT.md).
 - [x] Architecture decision records exist: `DECISIONS.md` (ADR-001…ADR-008 — production stabilization, ROP rails, ConsoleEx, sub-agent `task`, plugin hosting split, MCP adapter, ProviderPresets catalog, F1 Abstractions.Contracts decoupling).
 
 ---
@@ -282,13 +297,14 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 | Metric | Value |
 |---|---|
 | .NET SDK | 10.0.302 |
-| Source projects (`src/`) | 51 (+26 in `contrib/`) |
+| Source projects (`src/`) | 54 (+26 in `contrib/`) |
+| `src/` projects with a README | 54/54 (measured 2026-09-28, `de2358f`; CI-enforced) |
 | Test projects (`tests/`, csproj dirs) | 27 (incl. benchmarks + E2E harnesses) |
 | Unit tests passing | ~1350 (см. [PROJECT_STATUS.md](./PROJECT_STATUS.md)) |
 | E2E tests passing | 12 + ConsoleEx PTY suite |
 | Builtin tools | 14 |
 | Sample plugins | 4 CS-source + 4 DLL legacy |
-| TUI renderers | 5 in src/ (Ansi, Plain, ConsoleEx, Notifications, +Abstractions) + 7 in contrib/tui |
+| TUI renderers | 6 projects in src/ (Terminal.Abstractions, Tui.AnsiPlain, Tui.CellForge, Tui.CellForge.Engine, Tui.NickConsoleEx, Tui.Notifications) → 4 registered backends (`plain`, `ansi`, `cellforge` (alias `consoleex`), `nickconsoleex`) + 7 in contrib/tui |
 | Desktop platforms | Avalonia (`apps/`); WPF / MAUI (`contrib/apps/`) |
 | Web platforms | Blazor Server (`contrib/apps/`) |
 | Native LLM providers | 4 |

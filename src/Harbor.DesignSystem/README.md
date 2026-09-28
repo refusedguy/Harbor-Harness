@@ -1,8 +1,8 @@
 # Harbor.DesignSystem
 
-Standalone design-system package for [Harbor](https://github.com/harbor-sh/harbor) — the HDS v1
+Standalone design-system package for [Harbor](https://github.com/refusedguy/Harbor-Harness) — the HDS v1
 token catalog that powers the Harbor terminal renderers, desktop apps, and web surfaces. One
-design system, every renderer: ConsoleEx / CellForge TUI, Avalonia, WPF, MAUI, Blazor.
+design system, every renderer: CellForge TUI, AnsiPlain, Avalonia, WPF, MAUI, Blazor.
 
 **Zero dependencies.** References no Harbor assembly, no UI framework, no NuGet package — BCL only,
 NativeAOT/trim clean.

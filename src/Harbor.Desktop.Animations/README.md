@@ -23,7 +23,13 @@ and delegates to configure its own animation primitives (Avalonia
 
 ## Dependency rules
 
-✅ **Allowed**: `Harbor.Desktop.Abstractions` (for `RgbColor`).
+✅ **Allowed**: `Harbor.DesignSystem` — for `RgbColor` and the easing curves.
+It is the project's **only** Harbor reference.
+
+> Corrected in #430: this section previously named `Harbor.Desktop.Abstractions`
+> as the allowed reference. That edge no longer exists — `RgbColor` is declared
+> in `src/Harbor.DesignSystem/DesignSystem/RgbColor.cs` and moved there in the
+> issue #33 split.
 
 ❌ **Forbidden**: any UI framework, `System.Drawing`.
 
