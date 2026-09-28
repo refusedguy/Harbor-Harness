@@ -45,6 +45,24 @@ internal static class JsonlLineParser
         ToolResult
     }
 
+    /// <summary>Envelope fields scanned from a message line's top-level object.</summary>
+    /// <remarks>
+    ///     Ref struct: <c>RoleSpan</c>/<c>PayloadSpan</c> borrow from the line
+    ///     buffer — the split adds zero heap allocations to the read hot path.
+    /// </remarks>
+    private ref struct LineEnvelope
+    {
+        public string? Id;
+        public DateTimeOffset CreatedAt;
+        public string? ParentId;
+        public MessageRole Role;
+        public bool HasRole;
+        public bool IsMessage;
+        public ReadOnlySpan<byte> RoleSpan;
+        public ReadOnlySpan<byte> PayloadSpan;
+        public bool HasPayload;
+    }
+
     /// <summary>
     ///     Parse one JSONL line (raw UTF-8) into an <see cref="AgentMessage" />.
     ///     Returns <see cref="Result{T}" /> with a diagnostic message on
@@ -59,87 +77,94 @@ internal static class JsonlLineParser
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
                 return Result.Failure<AgentMessage>("JSON does not start with an object");
 
-            string? id = null;
-            DateTimeOffset createdAt = default;
-            string? parentId = null;
-            MessageRole role = MessageRole.Unknown;
-            bool hasRole = false;
-            bool isMessage = false;
-            ReadOnlySpan<byte> roleSpan = default;
-            ReadOnlySpan<byte> payloadSpan = default;
-            bool hasPayload = false;
-
-            while (reader.Read())
-            {
-                if (reader.TokenType == JsonTokenType.EndObject)
-                    break;
-
-                if (reader.TokenType != JsonTokenType.PropertyName)
-                    continue;
-
-                ReadOnlySpan<byte> prop = reader.ValueSpan;
-                reader.Read();
-
-                switch (MatchLineProperty(prop))
-                {
-                    case LineProperty.Type:
-                        isMessage = reader.ValueSpan.SequenceEqual("message"u8);
-                        break;
-                    case LineProperty.Id:
-                        id = reader.GetString();
-                        break;
-                    case LineProperty.CreatedAt:
-                        createdAt = reader.GetDateTimeOffset();
-                        break;
-                    case LineProperty.ParentId:
-                        if (reader.TokenType == JsonTokenType.String)
-                            parentId = reader.GetString();
-                        break;
-                    case LineProperty.Role:
-                        hasRole = reader.TokenType == JsonTokenType.String;
-                        roleSpan = hasRole ? reader.ValueSpan : default;
-                        role = hasRole ? MatchRole(reader.ValueSpan) : MessageRole.Unknown;
-                        break;
-                    case LineProperty.Payload:
-                        int payloadStart = (int)reader.TokenStartIndex;
-                        reader.Skip();
-                        payloadSpan = line.Slice(payloadStart, (int)(reader.BytesConsumed - payloadStart));
-                        hasPayload = true;
-                        break;
-                    default:
-                        reader.Skip();
-                        break;
-                }
-            }
-
-            if (!isMessage)
-                return Result.Failure<AgentMessage>("Not a message line");
-
-            if (id is null)
-                return Result.Failure<AgentMessage>("missing 'id'");
-
-            if (!hasRole)
-                return Result.Failure<AgentMessage>($"message {id}: missing 'role'");
-
-            if (role == MessageRole.Unknown)
-                return Result.Failure<AgentMessage>(
-                    $"message {id}: unknown role '{System.Text.Encoding.UTF8.GetString(roleSpan)}'");
-
-            if (!hasPayload)
-                return Result.Failure<AgentMessage>($"message {id}: missing 'payload'");
-
-            return role switch
-            {
-                MessageRole.User => ParseUserPayload(payloadSpan, id, sessionId, createdAt, parentId),
-                MessageRole.Assistant => ParseAssistantPayload(payloadSpan, id, sessionId, createdAt, parentId),
-                MessageRole.ToolResult => ParseToolResultPayload(payloadSpan, id, sessionId, createdAt, parentId),
-                _ => Result.Failure<AgentMessage>($"message {id}: unknown role")
-            };
+            var envelope = new LineEnvelope();
+            ScanEnvelope(ref reader, line, ref envelope);
+            return BuildFromEnvelope(ref envelope, sessionId);
         }
         catch (Exception ex)
         {
             return Result.Failure<AgentMessage>($"Line parse failed: {ex.Message}");
         }
+    }
+
+    /// <summary>Scans the top-level envelope object into <paramref name="envelope" />.</summary>
+    private static void ScanEnvelope(ref Utf8JsonReader reader, ReadOnlySpan<byte> line, ref LineEnvelope envelope)
+    {
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.EndObject)
+                break;
+
+            if (reader.TokenType != JsonTokenType.PropertyName)
+                continue;
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+
+            switch (MatchLineProperty(prop))
+            {
+                case LineProperty.Type:
+                    envelope.IsMessage = reader.ValueSpan.SequenceEqual("message"u8);
+                    break;
+                case LineProperty.Id:
+                    envelope.Id = reader.GetString();
+                    break;
+                case LineProperty.CreatedAt:
+                    envelope.CreatedAt = reader.GetDateTimeOffset();
+                    break;
+                case LineProperty.ParentId:
+                    if (reader.TokenType == JsonTokenType.String)
+                        envelope.ParentId = reader.GetString();
+                    break;
+                case LineProperty.Role:
+                    envelope.HasRole = reader.TokenType == JsonTokenType.String;
+                    envelope.RoleSpan = envelope.HasRole ? reader.ValueSpan : default;
+                    envelope.Role = envelope.HasRole ? MatchRole(reader.ValueSpan) : MessageRole.Unknown;
+                    break;
+                case LineProperty.Payload:
+                    int payloadStart = (int)reader.TokenStartIndex;
+                    reader.Skip();
+                    envelope.PayloadSpan = line.Slice(payloadStart, (int)(reader.BytesConsumed - payloadStart));
+                    envelope.HasPayload = true;
+                    break;
+                default:
+                    reader.Skip();
+                    break;
+            }
+        }
+    }
+
+    /// <summary>Validates the scanned envelope and dispatches to the role payload parser.</summary>
+    private static Result<AgentMessage> BuildFromEnvelope(ref LineEnvelope envelope, string sessionId)
+    {
+        if (!envelope.IsMessage)
+            return Result.Failure<AgentMessage>("Not a message line");
+
+        string? id = envelope.Id;
+        if (id is null)
+            return Result.Failure<AgentMessage>("missing 'id'");
+
+        if (!envelope.HasRole)
+            return Result.Failure<AgentMessage>($"message {id}: missing 'role'");
+
+        if (envelope.Role == MessageRole.Unknown)
+            return Result.Failure<AgentMessage>(
+                $"message {id}: unknown role '{System.Text.Encoding.UTF8.GetString(envelope.RoleSpan)}'");
+
+        if (!envelope.HasPayload)
+            return Result.Failure<AgentMessage>($"message {id}: missing 'payload'");
+
+        ReadOnlySpan<byte> payload = envelope.PayloadSpan;
+        DateTimeOffset createdAt = envelope.CreatedAt;
+        string? parentId = envelope.ParentId;
+
+        return envelope.Role switch
+        {
+            MessageRole.User => ParseUserPayload(payload, id, sessionId, createdAt, parentId),
+            MessageRole.Assistant => ParseAssistantPayload(payload, id, sessionId, createdAt, parentId),
+            MessageRole.ToolResult => ParseToolResultPayload(payload, id, sessionId, createdAt, parentId),
+            _ => Result.Failure<AgentMessage>($"message {id}: unknown role")
+        };
     }
 
     // ── Role payloads ──────────────────────────────────────────────────────
@@ -216,7 +241,7 @@ internal static class JsonlLineParser
                 switch (MatchAssistantProperty(prop))
                 {
                     case AssistantProperty.Parts:
-                        parts = ParseParts(ref reader, id);
+                        parts = ParseParts(ref reader);
                         break;
                     case AssistantProperty.StopReason:
                         stopReason = ParseStopReason(reader.ValueSpan);
@@ -292,43 +317,11 @@ internal static class JsonlLineParser
                     if (reader.TokenType != JsonTokenType.StartObject)
                         continue;
 
-                    string? tcId = null;
-                    string? tn = null;
-                    string? output = null;
-                    bool isError = false;
+                    Result<ToolResultEntry> entry = ParseSingleResultEntry(ref reader, id);
+                    if (entry.IsFailure)
+                        return Result.Failure<AgentMessage>(entry.Error);
 
-                    while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-                    {
-                        if (reader.TokenType != JsonTokenType.PropertyName)
-                            continue;
-
-                        ReadOnlySpan<byte> rProp = reader.ValueSpan;
-                        reader.Read();
-
-                        switch (MatchResultEntryProperty(rProp))
-                        {
-                            case ResultEntryProperty.ToolCallId:
-                                tcId = reader.GetString();
-                                break;
-                            case ResultEntryProperty.ToolName:
-                                tn = reader.GetString();
-                                break;
-                            case ResultEntryProperty.Output:
-                                output = reader.GetString();
-                                break;
-                            case ResultEntryProperty.IsError:
-                                isError = reader.GetBoolean();
-                                break;
-                            default:
-                                reader.Skip();
-                                break;
-                        }
-                    }
-
-                    if (tcId is null || tn is null || output is null)
-                        return Result.Failure<AgentMessage>($"tool_result message {id}: malformed result entry");
-
-                    results.Add(new ToolResultEntry(tcId, tn, output, isError));
+                    results.Add(entry.Value);
                 }
             }
 
@@ -344,8 +337,50 @@ internal static class JsonlLineParser
         }
     }
 
+    /// <summary>Parses one <c>results</c> array entry; the reader must sit on its StartObject.</summary>
+    private static Result<ToolResultEntry> ParseSingleResultEntry(ref Utf8JsonReader reader, string messageId)
+    {
+        string? tcId = null;
+        string? tn = null;
+        string? output = null;
+        bool isError = false;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+                continue;
+
+            ReadOnlySpan<byte> rProp = reader.ValueSpan;
+            reader.Read();
+
+            switch (MatchResultEntryProperty(rProp))
+            {
+                case ResultEntryProperty.ToolCallId:
+                    tcId = reader.GetString();
+                    break;
+                case ResultEntryProperty.ToolName:
+                    tn = reader.GetString();
+                    break;
+                case ResultEntryProperty.Output:
+                    output = reader.GetString();
+                    break;
+                case ResultEntryProperty.IsError:
+                    isError = reader.GetBoolean();
+                    break;
+                default:
+                    reader.Skip();
+                    break;
+            }
+        }
+
+        if (tcId is null || tn is null || output is null)
+            return Result.Failure<ToolResultEntry>($"tool_result message {messageId}: malformed result entry");
+
+        return Result.Success<ToolResultEntry>(new ToolResultEntry(tcId, tn, output, isError));
+    }
+
     /// <summary>Parses the <c>parts</c> array of an assistant payload inline.</summary>
-    private static List<ContentPart> ParseParts(ref Utf8JsonReader reader, string messageId)
+    private static List<ContentPart> ParseParts(ref Utf8JsonReader reader)
     {
         var parts = new List<ContentPart>();
 
@@ -354,72 +389,92 @@ internal static class JsonlLineParser
             if (reader.TokenType != JsonTokenType.StartObject)
                 continue;
 
-            PartType partType = PartType.Unknown;
-            string? text = null;
-            string? partId = null;
-            string? toolName = null;
-            JsonElement args = default;
-            bool hasArgs = false;
-            string? path = null;
-            string? mimeType = null;
-            long sizeBytes = 0;
-
-            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-            {
-                if (reader.TokenType != JsonTokenType.PropertyName)
-                    continue;
-
-                ReadOnlySpan<byte> pProp = reader.ValueSpan;
-                reader.Read();
-
-                switch (MatchPartProperty(pProp))
-                {
-                    case PartProperty.Type:
-                        partType = MatchPartType(reader.ValueSpan);
-                        break;
-                    case PartProperty.Text:
-                        text = reader.GetString();
-                        break;
-                    case PartProperty.Id:
-                        partId = reader.GetString();
-                        break;
-                    case PartProperty.ToolName:
-                        toolName = reader.GetString();
-                        break;
-                    case PartProperty.Args:
-                        args = JsonSerializer.Deserialize(ref reader, JsonlCodecContext.Default.JsonElement);
-                        hasArgs = true;
-                        break;
-                    case PartProperty.Path:
-                        path = reader.GetString();
-                        break;
-                    case PartProperty.MimeType:
-                        mimeType = reader.GetString();
-                        break;
-                    case PartProperty.SizeBytes:
-                        sizeBytes = reader.GetInt64();
-                        break;
-                    default:
-                        reader.Skip();
-                        break;
-                }
-            }
-
-            ContentPart? part = partType switch
-            {
-                PartType.Text when text is not null => new TextPart(text),
-                PartType.Thinking when text is not null => new ThinkingPart(text),
-                PartType.ToolCall when partId is not null && toolName is not null && hasArgs
-                    => new ToolCallPart(partId, toolName, args),
-                PartType.File when path is not null && mimeType is not null => new FilePart(path, mimeType, sizeBytes),
-                _ => null
-            };
-
+            ContentPart? part = ParseSinglePart(ref reader);
             if (part is not null)
                 parts.Add(part);
         }
 
         return parts;
+    }
+
+    /// <summary>Parses one object of the <c>parts</c> array; unknown/incomplete parts yield null.</summary>
+    private static ContentPart? ParseSinglePart(ref Utf8JsonReader reader)
+    {
+        PartType partType = PartType.Unknown;
+        string? text = null;
+        string? partId = null;
+        string? toolName = null;
+        JsonElement args = default;
+        bool hasArgs = false;
+        string? path = null;
+        string? mimeType = null;
+        long sizeBytes = 0;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+                continue;
+
+            ReadOnlySpan<byte> pProp = reader.ValueSpan;
+            reader.Read();
+
+            switch (MatchPartProperty(pProp))
+            {
+                case PartProperty.Type:
+                    partType = MatchPartType(reader.ValueSpan);
+                    break;
+                case PartProperty.Text:
+                    text = reader.GetString();
+                    break;
+                case PartProperty.Id:
+                    partId = reader.GetString();
+                    break;
+                case PartProperty.ToolName:
+                    toolName = reader.GetString();
+                    break;
+                case PartProperty.Args:
+                    args = JsonSerializer.Deserialize(ref reader, JsonlCodecContext.Default.JsonElement);
+                    hasArgs = true;
+                    break;
+                case PartProperty.Path:
+                    path = reader.GetString();
+                    break;
+                case PartProperty.MimeType:
+                    mimeType = reader.GetString();
+                    break;
+                case PartProperty.SizeBytes:
+                    sizeBytes = reader.GetInt64();
+                    break;
+                default:
+                    reader.Skip();
+                    break;
+            }
+        }
+
+        return BuildContentPart(partType, text, partId, toolName, args, hasArgs, path, mimeType, sizeBytes);
+    }
+
+    /// <summary>Builds a <see cref="ContentPart" /> from scanned fields; null when incomplete/unknown.</summary>
+    private static ContentPart? BuildContentPart(
+        PartType partType,
+        string? text,
+        string? partId,
+        string? toolName,
+        JsonElement args,
+        bool hasArgs,
+        string? path,
+        string? mimeType,
+        long sizeBytes)
+    {
+        return partType switch
+        {
+            PartType.Text when text is not null => new TextPart(text),
+            PartType.Thinking when text is not null => new ThinkingPart(text),
+            PartType.ToolCall when partId is not null && toolName is not null && hasArgs
+                => new ToolCallPart(partId, toolName, args),
+            PartType.File when path is not null && mimeType is not null => new FilePart(path, mimeType, sizeBytes),
+            _ => null
+        };
     }
 
     // ── Property matchers (zero-alloc, UTF-8 span compare) ─────────────────
