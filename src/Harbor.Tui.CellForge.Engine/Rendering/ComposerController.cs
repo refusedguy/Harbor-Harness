@@ -181,34 +181,34 @@ public sealed class ComposerController
     private static readonly KeyBinding[] CharBindings =
     [
         new(static k => k.Character == new Rune('c') && (k.Modifiers & KeyModifiers.Ctrl) != 0,
-            static (c, _) => c.Buffer.IsEmpty ? ComposerAction.Aborted : c.ClearAll()),
+            static (c, key) => c.Buffer.IsEmpty ? ComposerAction.Aborted : c.ClearAll()),
         new(static k => k.Character == new Rune('u') && (k.Modifiers & KeyModifiers.Ctrl) != 0,
-            static (c, _) => { _ = c.Buffer.DeleteToLineStart(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.DeleteToLineStart(); return ComposerAction.Edited; }),
         new(static k => k.Character == new Rune('w') && (k.Modifiers & KeyModifiers.Ctrl) != 0,
-            static (c, _) => { _ = c.Buffer.DeleteWordBackward(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.DeleteWordBackward(); return ComposerAction.Edited; }),
         // Readline kill/yank-lite family: Ctrl+A/E line jumps, Ctrl+K
         // kill-to-line-end, Alt+B/D/F word-wise move/delete.
         new(static k => k.Character == new Rune('a') && k.Modifiers == KeyModifiers.Ctrl,
-            static (c, _) => { _ = c.Buffer.MoveToLineStart(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.MoveToLineStart(); return ComposerAction.Edited; }),
         new(static k => k.Character == new Rune('e') && k.Modifiers == KeyModifiers.Ctrl,
-            static (c, _) => { _ = c.Buffer.MoveToLineEnd(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.MoveToLineEnd(); return ComposerAction.Edited; }),
         // No history ⇒ ignored, matching the Ctrl+Y dead-yank contract.
         new(static k => k.Character == new Rune('z') && k.Modifiers == KeyModifiers.Ctrl,
-            static (c, _) => c.Buffer.Undo().Kind == EditOutcomeKind.Unchanged
+            static (c, key) => c.Buffer.Undo().Kind == EditOutcomeKind.Unchanged
                 ? ComposerAction.Ignored
                 : ComposerAction.Edited),
         // Kitty CSI-u reports the shifted codepoint; legacy terminals
         // cannot express C-S-z distinctly and stay on undo-only.
         new(static k => k.Character == new Rune('Z') && k.Modifiers == (KeyModifiers.Ctrl | KeyModifiers.Shift),
-            static (c, _) => c.Buffer.Redo().Kind == EditOutcomeKind.Unchanged
+            static (c, key) => c.Buffer.Redo().Kind == EditOutcomeKind.Unchanged
                 ? ComposerAction.Ignored
                 : ComposerAction.Edited),
         new(static k => k.Character == new Rune('k') && k.Modifiers == KeyModifiers.Ctrl,
-            static (c, _) => { _ = c.Buffer.DeleteToLineEnd(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.DeleteToLineEnd(); return ComposerAction.Edited; }),
         // Readline yank: Ctrl+Y pastes the last kill recorded on the
         // buffer (Ctrl+U/W/K, Alt+D) at the caret; nothing killed ⇒ ignored.
         new(static k => k.Character == new Rune('y') && k.Modifiers == KeyModifiers.Ctrl,
-            static (c, _) =>
+            static (c, key) =>
             {
                 if (c.Buffer.LastKill is not { Length: > 0 } kill)
                 {
@@ -219,23 +219,23 @@ public sealed class ComposerController
                 return ComposerAction.Edited;
             }),
         new(static k => k.Character == new Rune('b') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, _) => { _ = c.Buffer.MoveWordLeft(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.MoveWordLeft(); return ComposerAction.Edited; }),
         new(static k => k.Character == new Rune('f') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, _) => { _ = c.Buffer.MoveWordRight(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.MoveWordRight(); return ComposerAction.Edited; }),
         new(static k => k.Character == new Rune('d') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, _) => { _ = c.Buffer.DeleteWordForward(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.DeleteWordForward(); return ComposerAction.Edited; }),
         // Markdown composer chords: M-s bold, M-i italic, M-c inline code —
         // they toggle around the word at the caret via MarkdownEditOps.
         new(static k => k.Character == new Rune('s') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, _) => { _ = MarkdownEditOps.ToggleWrap(c.Buffer, "**"); return ComposerAction.Edited; }),
+            static (c, key) => { _ = MarkdownEditOps.ToggleWrap(c.Buffer, "**"); return ComposerAction.Edited; }),
         new(static k => k.Character == new Rune('i') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, _) => { _ = MarkdownEditOps.ToggleWrap(c.Buffer, "*"); return ComposerAction.Edited; }),
+            static (c, key) => { _ = MarkdownEditOps.ToggleWrap(c.Buffer, "*"); return ComposerAction.Edited; }),
         new(static k => k.Character == new Rune('c') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, _) => { _ = MarkdownEditOps.ToggleWrap(c.Buffer, "`"); return ComposerAction.Edited; }),
+            static (c, key) => { _ = MarkdownEditOps.ToggleWrap(c.Buffer, "`"); return ComposerAction.Edited; }),
         new(static k => k.Character == new Rune('h') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, _) => { _ = MarkdownEditOps.ToggleHeading(c.Buffer); return ComposerAction.Edited; }),
+            static (c, key) => { _ = MarkdownEditOps.ToggleHeading(c.Buffer); return ComposerAction.Edited; }),
         new(static k => k.Character == new Rune('l') && (k.Modifiers & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (k.Modifiers & KeyModifiers.Ctrl) == 0,
-            static (c, _) => { _ = MarkdownEditOps.ToggleListItem(c.Buffer); return ComposerAction.Edited; }),
+            static (c, key) => { _ = MarkdownEditOps.ToggleListItem(c.Buffer); return ComposerAction.Edited; }),
     ];
 
     /// <summary>Caret movement + deletion keys (word jumps, Backspace/Delete, Home/End).</summary>
@@ -256,21 +256,21 @@ public sealed class ComposerController
     private static readonly KeyBinding[] EditBindings =
     [
         new(static k => k.Key == KeyCode.Left && (k.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta)) != 0 && (k.Modifiers & (KeyModifiers.Shift | KeyModifiers.Alt)) == 0,
-            static (c, _) => { _ = c.Buffer.MoveWordLeft(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.MoveWordLeft(); return ComposerAction.Edited; }),
         new(static k => k.Key == KeyCode.Right && (k.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta)) != 0 && (k.Modifiers & (KeyModifiers.Shift | KeyModifiers.Alt)) == 0,
-            static (c, _) => { _ = c.Buffer.MoveWordRight(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.MoveWordRight(); return ComposerAction.Edited; }),
         new(static k => k.Key == KeyCode.Backspace && (k.Modifiers == KeyModifiers.None || k.Modifiers == KeyModifiers.Shift),
-            static (c, _) => { _ = c.Buffer.Backspace(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.Backspace(); return ComposerAction.Edited; }),
         new(static k => k.Key == KeyCode.Delete && k.Modifiers == KeyModifiers.None,
-            static (c, _) => { _ = c.Buffer.DeleteForward(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.DeleteForward(); return ComposerAction.Edited; }),
         new(static k => k.Key == KeyCode.Left && (k.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta)) == 0,
-            static (c, _) => { _ = c.Buffer.MoveLeft(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.MoveLeft(); return ComposerAction.Edited; }),
         new(static k => k.Key == KeyCode.Right && (k.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta)) == 0,
-            static (c, _) => { _ = c.Buffer.MoveRight(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.MoveRight(); return ComposerAction.Edited; }),
         new(static k => k.Key == KeyCode.Home && k.Modifiers == KeyModifiers.None,
-            static (c, _) => { _ = c.Buffer.MoveToLineStart(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.MoveToLineStart(); return ComposerAction.Edited; }),
         new(static k => k.Key == KeyCode.End && k.Modifiers == KeyModifiers.None,
-            static (c, _) => { _ = c.Buffer.MoveToLineEnd(); return ComposerAction.Edited; }),
+            static (c, key) => { _ = c.Buffer.MoveToLineEnd(); return ComposerAction.Edited; }),
     ];
 
     /// <summary>Up/Down: history recall at the buffer edges, caret movement otherwise.</summary>

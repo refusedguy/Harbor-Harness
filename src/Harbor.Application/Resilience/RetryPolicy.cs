@@ -179,6 +179,28 @@ public sealed class RetryPolicy : IRetryPolicy
             transient = IsTransientStatus(hre.StatusCode, ref retryAfter);
             return true;
         }
+
+        private static bool IsTransientStatus(HttpStatusCode? status, ref TimeSpan? retryAfter)
+        {
+            // No status code → failure below the HTTP layer (DNS, connection reset,
+            // TLS): inherently transient.
+            if (status is null)
+            {
+                return true;
+            }
+
+            int code = (int)status;
+            if (code == 429)
+            {
+                // Rate-limited. HttpRequestException exposes no response headers, so
+                // a wire-level Retry-After is not retrievable here — leave null and
+                // let the caller fall back to the policy delay.
+                retryAfter = null;
+                return true;
+            }
+
+            return code == 408 || code >= 500;
+        }
     }
 
     private sealed class StreamErrorClassifier : IExceptionClassifier
@@ -215,26 +237,4 @@ public sealed class RetryPolicy : IRetryPolicy
     ///     are fatal.
     /// </summary>
     public static bool IsTransient(ProviderErrorKind kind) => ProviderErrors.IsTransient(kind);
-
-    private static bool IsTransientStatus(HttpStatusCode? status, ref TimeSpan? retryAfter)
-    {
-        // No status code → failure below the HTTP layer (DNS, connection reset,
-        // TLS): inherently transient.
-        if (status is null)
-        {
-            return true;
-        }
-
-        int code = (int)status;
-        if (code == 429)
-        {
-            // Rate-limited. HttpRequestException exposes no response headers, so
-            // a wire-level Retry-After is not retrievable here — leave null and
-            // let the caller fall back to the policy delay.
-            retryAfter = null;
-            return true;
-        }
-
-        return code == 408 || code >= 500;
-    }
 }
