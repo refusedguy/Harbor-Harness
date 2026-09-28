@@ -45,10 +45,10 @@ public sealed class ImageAttachmentReader
     ///     capability probe then degrades to "unknown → allow".
     /// </param>
     /// <param name="logger">Diagnostics sink.</param>
-    public ImageAttachmentReader(IProviderRegistry? providers = null, ILogger<ImageAttachmentReader>? logger = null)
+    public ImageAttachmentReader(IProviderRegistry? providers = null, ILogger? logger = null)
     {
         _providers = providers;
-        _logger = (ILogger?)logger ?? NullLogger<ImageAttachmentReader>.Instance;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <summary>

@@ -12,6 +12,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Commands;
 using Harbor.App.Cli.Repl.Commands;
+using Harbor.Application.Attachments;
 using Harbor.Application.Configuration;
 using Harbor.DesignSystem;
 using Harbor.Hosting.Rendering;
