@@ -236,12 +236,15 @@ public class TabStripKeyBindingTests
     public async Task TabStrip_SurvivesClearScreen()
     {
         // Workspace chrome, not transcript: clearing the feed must not close
-        // the user's tabs (pinned in #388, re-asserted here because #389 makes
-        // the strip visible enough to notice).
+        // the user's tabs. Asserted through the real clear-screen path — the
+        // Ctrl+L key action, which routes to UiState.ClearTranscript — because
+        // AppMsg.Reset is a different, deliberate full reset that rebuilds a
+        // bare state and is not what "clear the transcript" means.
         var store = StoreWithTabs(2);
-        _ = store.Dispatch(new AppMsg.Reset());
+        _ = store.Dispatch(new AppMsg.KeyInput(ChatAction.Clear, UiKey.ForChar('l', KeyModifierSet.Ctrl)));
 
         await Assert.That(store.State.Chat.TabStrip.Tabs.Length).IsEqualTo(2);
+        await Assert.That(store.State.Chat.TabStrip.ActiveTabId!.Value).IsEqualTo("s0");
     }
 
     // Named MakeSession, not Session: a method called `Session` would shadow the
