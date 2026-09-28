@@ -111,6 +111,15 @@ public sealed class HarborComposeOptions
     /// <summary>Load mcp.json overlays and register McpToolTool (default: true).</summary>
     public bool IncludeMcpTools { get; init; } = true;
 
+    /// <summary>
+    ///     Remote MCP transports beyond the builtin <c>http</c>/<c>sse</c> (#477).
+    ///     Each is matched by its <see cref="Harbor.Tools.Mcp.IMcpTransportFactory.Name" />
+    ///     against the mcp.json <c>transport</c> field, so a new transport kind is
+    ///     a registration here rather than an edit to the MCP registry. Null →
+    ///     builtins only. A name that shadows a builtin is rejected at composition.
+    /// </summary>
+    public IReadOnlyList<Harbor.Tools.Mcp.IMcpTransportFactory>? McpTransports { get; init; }
+
     /// <summary>Where the agent registry reads its default model (default: HarborConfig).</summary>
     public HarborAgentModelSource ModelSource { get; init; } = HarborAgentModelSource.HarborConfig;
 

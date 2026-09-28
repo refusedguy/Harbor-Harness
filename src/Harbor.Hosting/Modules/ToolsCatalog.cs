@@ -42,7 +42,12 @@ internal static class ToolsCatalog
             : prefix + model;
     }
 
-    internal static IMcpRegistry CreateMcpRegistry(HarborCompositionContext ctx)
+    /// <param name="ctx">Composition context (options + logger factory).</param>
+    /// <param name="transports">
+    ///     Remote transport strategies (#477). Null → <see cref="McpTransportResolver.Default" />.
+    /// </param>
+    internal static IMcpRegistry CreateMcpRegistry(
+        HarborCompositionContext ctx, McpTransportResolver? transports = null)
     {
         if (!ctx.Options.IncludeMcpTools)
         {
@@ -50,7 +55,7 @@ internal static class ToolsCatalog
             return new InMemoryMcpRegistry(ctx.LoggerFactory.CreateLogger<InMemoryMcpRegistry>());
         }
 
-        var mcpRegistry = new McpRegistry(ctx.LoggerFactory.CreateLogger<McpRegistry>());
+        var mcpRegistry = new McpRegistry(ctx.LoggerFactory.CreateLogger<McpRegistry>(), transports);
 
         // Load MCP servers from the standard mcp.json files in overlay order
         // (later wins): an explicit HARBOR_MCP_CONFIG, then ~/.harbor/mcp.json,
