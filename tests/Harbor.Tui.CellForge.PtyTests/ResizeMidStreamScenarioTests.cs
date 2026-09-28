@@ -33,8 +33,16 @@ public sealed class ResizeMidStreamScenarioTests : CellForgePtyScenarioBase
         // Shrink WHILE the turn is streaming.
         await Session.ResizeAsync(76, 30).ConfigureAwait(false);
 
-        // [UX2] #262: the long answer settles collapsed, so wait for idle and
-        // expand it with the unified gesture before asserting full text.
+        // [UX2] #262: the long answer settles collapsed, so wait for the turn
+        // to really start (bridge-processed Running — the composer "…"
+        // shows earlier while the status still reports startup idle) and
+        // then for idle, and only then expand it with the unified gesture
+        // before asserting full text. Without the Running gate the idle
+        // predicate matches the startup status and Enter lands mid-stream,
+        // toggling the user block while the answer finalizes collapsed.
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("running", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("idle", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(20)).ConfigureAwait(false);
