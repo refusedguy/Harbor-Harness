@@ -519,6 +519,50 @@ public static class UnicodeWidth
         return total;
     }
 
+    // ── Per-run width cache (ENG5, issue #276) ──────────────────────────
+    //
+    // Status rows and markdown lines re-measure the same run texts every
+    // frame (StatusBarLayout.Fit even re-sums all segments per dropped
+    // victim — O(n²) rune decodes). Runs are immutable strings, so widths
+    // memoize exactly: a tiny direct-mapped table (256 slots, hash-indexed,
+    // collision = evict, never grows) keyed by reference-then-value equality.
+    // Hits allocate nothing; misses measure once and store. Bounded by
+    // construction — at most 256 retained strings, no eviction bookkeeping.
+
+    private const int WidthCacheSize = 256;
+
+    private static readonly WidthCacheEntry[] _widthCache = new WidthCacheEntry[WidthCacheSize];
+    private static readonly object _widthCacheLock = new();
+
+    private struct WidthCacheEntry
+    {
+        public string? Text;
+        public int CellWidth;
+    }
+
+    /// <summary>
+    /// Display width of a text run with per-run memoization. Same result as
+    /// <c>Width(ReadOnlySpan)</c>; use for immutable run texts
+    /// that are measured repeatedly (status segments, markdown spans).
+    /// </summary>
+    public static int WidthCached(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        int index = (text.GetHashCode() & int.MaxValue) & (WidthCacheSize - 1);
+        lock (_widthCacheLock)
+        {
+            var slot = _widthCache[index];
+            if (slot.Text is not null && (ReferenceEquals(slot.Text, text) || slot.Text.Equals(text, StringComparison.Ordinal)))
+            {
+                return slot.CellWidth;
+            }
+
+            int cellWidth = Width(text.AsSpan());
+            _widthCache[index] = new WidthCacheEntry { Text = text, CellWidth = cellWidth };
+            return cellWidth;
+        }
+    }
+
     private static (int Lo, int Hi)[] Merge((int Lo, int Hi)[] ranges)
     {
         Array.Sort(ranges);

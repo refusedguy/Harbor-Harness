@@ -34,6 +34,14 @@ public enum StatusBarMode : byte
 internal static class SegWidth
 {
     public static int Of(ReadOnlySpan<char> text) => UnicodeWidth.Width(text);
+
+    /// <summary>
+    /// ENG5: run texts are immutable and re-measured every frame
+    /// (<see cref="StatusBarLayout.Fit"/> re-sums per dropped victim), so the
+    /// string path memoizes per run. Same value, fewer rune decodes.
+    /// Null mirrors the legacy span path (a null run measures 0).
+    /// </summary>
+    public static int Of(string? text) => text is null ? 0 : UnicodeWidth.WidthCached(text);
 }
 
 /// <summary>

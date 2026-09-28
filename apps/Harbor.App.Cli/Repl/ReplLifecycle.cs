@@ -89,12 +89,20 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             _ => host._wake.Writer.TryWrite(null),
             null, Timeout.Infinite, Timeout.Infinite);
 
+        // ENG5 (issue #276): background ~10 Hz animation clock for the status
+        // spinner/reactions — wall-clock ticks instead of frame-driven ones.
+        // Runs exactly while the heartbeat does (see ArmSpinner); the panel
+        // falls back to per-paint ticks when it is stopped.
+        using var animationClock = new AnimationClock();
+        host.Screen.Status.AnimationClock = animationClock;
+
         try
         {
-            await LoopAsync(inputTask, spinnerTimer, ct).ConfigureAwait(false);
+            await LoopAsync(inputTask, spinnerTimer, animationClock, ct).ConfigureAwait(false);
         }
         finally
         {
+            host.Screen.Status.AnimationClock = null;
             host.DisposePipeline();
             host._themeWatcher?.Dispose();
             try
@@ -119,12 +127,12 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
 
     // ── Frame loop ─────────────────────────────────────────────────────────
 
-    internal async Task LoopAsync(Task inputTask, Timer spinnerTimer, CancellationToken ct)
+    internal async Task LoopAsync(Task inputTask, Timer spinnerTimer, AnimationClock animationClock, CancellationToken ct)
     {
         var inputReader = host.InputSource.Events;
 
         await RenderFrameAsync(ct).ConfigureAwait(false);
-        ArmSpinner(spinnerTimer);
+        ArmSpinner(spinnerTimer, animationClock);
 
         // EOF (pipe closed / Ctrl+D) stops INPUT waiting but must not cut off
         // an in-flight turn: the loop exits only when the queue is quiet.
@@ -200,7 +208,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             }
 
             await RenderFrameAsync(ct).ConfigureAwait(false);
-            ArmSpinner(spinnerTimer);
+            ArmSpinner(spinnerTimer, animationClock);
 
             if (inputClosed && !host.Pipeline.IsBusy)
             {
@@ -267,9 +275,21 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     }
 
     /// <summary>80 ms heartbeat only while an animation is on screen.</summary>
-    private void ArmSpinner(Timer spinnerTimer)
+    private void ArmSpinner(Timer spinnerTimer, AnimationClock animationClock)
     {
-        spinnerTimer.Change(ShouldKeepHeartbeat(host._status.Mode, host.Bridge.IsMascotAnimating) ? 80 : Timeout.Infinite, Timeout.Infinite);
+        bool keep = ShouldKeepHeartbeat(host._status.Mode, host.Bridge.IsMascotAnimating);
+        spinnerTimer.Change(keep ? 80 : Timeout.Infinite, Timeout.Infinite);
+
+        // ENG5: the background animation clock lives exactly as long as the
+        // frame heartbeat — no timer thread in quiet Idle. Start is idempotent.
+        if (keep)
+        {
+            animationClock.Start();
+        }
+        else
+        {
+            animationClock.Stop();
+        }
     }
 
     /// <summary>

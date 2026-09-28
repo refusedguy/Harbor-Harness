@@ -689,7 +689,7 @@ internal sealed class FullscreenRenderContext : ITuiRenderContext
     public void Write(string text) => AnsiConsole.Write(Markup.Escape(text));
     public void WriteLine(string? text = null) => AnsiConsole.WriteLine(text ?? string.Empty);
     public void WriteColored(string text, TuiColor foreground, TuiColor? background = null)
-        => AnsiConsole.Write(new Markup($"[{foreground.ToString()[1..]}]{Markup.Escape(text)}[/]"));
+        => AnsiConsole.Write(MarkupCache.GetOrParse($"[{foreground.ToString()[1..]}]{Markup.Escape(text)}[/]"));
     public void WriteStyled(string text, TuiStyle style) => AnsiConsole.Write(Markup.Escape(text));
     public void SetCursorPosition(int row, int col) { }
     public void ClearLine() { }

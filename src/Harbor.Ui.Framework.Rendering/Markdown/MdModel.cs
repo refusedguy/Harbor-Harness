@@ -38,7 +38,8 @@ public sealed class MdLine
             int total = 0;
             for (int i = 0; i < Spans.Count; i++)
             {
-                total += Rendering.UnicodeWidth.Width(Spans[i].Text);
+                // ENG5: spans are immutable runs re-measured per frame — memoize.
+                total += Rendering.UnicodeWidth.WidthCached(Spans[i].Text);
             }
 
             return total;

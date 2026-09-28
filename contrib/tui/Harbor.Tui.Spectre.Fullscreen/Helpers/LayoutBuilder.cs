@@ -85,9 +85,9 @@ internal sealed class LayoutBuilder
         grid.AddColumn(new GridColumn().RightAligned());
 
         grid.AddRow(
-            new Markup($"[bold cyan]⚓ Harbor[/] [grey]»[/] [bold white]{Markup.Escape(Provider)}/{Markup.Escape(Model)}[/]"),
-            new Markup($"[grey]agent:[/] [bold silver]{Markup.Escape(Agent)}[/]  [grey]•[/]  [{statusColor}]{statusIcon} {Markup.Escape(Status)}[/]{scrollIndicator}"),
-            new Markup($"[bold green]${Cost:F4}[/] [grey]({TokensIn}↑ / {TokensOut}↓)[/]")
+            MarkupCache.GetOrParse($"[bold cyan]⚓ Harbor[/] [grey]»[/] [bold white]{Markup.Escape(Provider)}/{Markup.Escape(Model)}[/]"),
+            MarkupCache.GetOrParse($"[grey]agent:[/] [bold silver]{Markup.Escape(Agent)}[/]  [grey]•[/]  [{statusColor}]{statusIcon} {Markup.Escape(Status)}[/]{scrollIndicator}"),
+            MarkupCache.GetOrParse($"[bold green]${Cost:F4}[/] [grey]({TokensIn}↑ / {TokensOut}↓)[/]")
         );
 
         return new Panel(grid)
@@ -152,7 +152,7 @@ internal sealed class LayoutBuilder
         if (truncatedBottom)
             bodyBuilder.AppendLine($"[dim grey]▼ {_scroll.Offset} lines below (PageDown/wheel to scroll) ▼[/]");
 
-        return new Panel(new Markup(bodyBuilder.ToString().TrimEnd()))
+        return new Panel(MarkupCache.GetOrParse(bodyBuilder.ToString().TrimEnd()))
         {
             Border = BoxBorder.None,
             Padding = new Padding(1, 0),
@@ -222,7 +222,7 @@ internal sealed class LayoutBuilder
     {
         if (!IsReadingInput)
         {
-            return new Panel(new Markup(Footer))
+            return new Panel(MarkupCache.GetOrParse(Footer))
             {
                 Border = BoxBorder.Rounded,
                 BorderStyle = Style.Parse("grey"),
@@ -265,7 +265,7 @@ internal sealed class LayoutBuilder
             display = $"[green]›[/] [white]{typedText}[/]\n[dim grey]  ↑↓ = history  Enter = send  Alt+Enter = newline  Esc = quit[/]";
         }
 
-        return new Panel(new Markup(display))
+        return new Panel(MarkupCache.GetOrParse(display))
         {
             Border = BoxBorder.Rounded,
             BorderStyle = Style.Parse("green"),
