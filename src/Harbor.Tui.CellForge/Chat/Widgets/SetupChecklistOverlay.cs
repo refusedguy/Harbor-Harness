@@ -1,3 +1,4 @@
+using System.Text;
 using Harbor.Ui.Framework.Projection;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -178,7 +179,7 @@ public sealed class SetupChecklistOverlay
         {
             SetupTaskState task = model.Tasks[i];
             CellStyle markerStyle = task.IsDone
-                ? new CellStyle(ChatPalette.ToolOk, attrs: StyleAttr.Bold)
+                ? new CellStyle(ChatPalette.Success, attrs: StyleAttr.Bold)
                 : ChatPalette.Dim;
             buffer.SetText(x, y, Truncate(task.Marker, innerW), markerStyle);
             buffer.SetText(x + 2, y, Truncate(task.Label, Math.Max(0, innerW - 2)), new CellStyle(ChatPalette.Text));
