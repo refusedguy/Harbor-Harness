@@ -339,9 +339,17 @@ public static class PanelRows
 
         string file = path[slash..];
         string dir = path[..slash];
-        if (dir.Length > max - file.Length - 3)
+
+        // #482: `budget` is the width left for the directory hint and may legitimately
+        // reach 0 (a long file name eats the whole row), which drives the slice length
+        // to -1. `dir[^(-1)..]` builds an Index from a negative value and throws
+        // ArgumentOutOfRangeException, so clamp the length. 0 stays 0: `^0` is
+        // Index.End (empty suffix), i.e. the bare "…" form.
+        int budget = max - file.Length - 3;
+        if (dir.Length > budget)
         {
-            dir = "…" + dir[^(max - file.Length - 4)..];
+            int keep = Math.Max(0, budget - 1);
+            dir = keep == 0 ? "…" : "…" + dir[^keep..];
         }
 
         return dir + file;

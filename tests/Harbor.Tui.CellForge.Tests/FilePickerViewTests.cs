@@ -198,4 +198,25 @@ public class FilePickerViewTests
 
         await Assert.That(art.Trim()).IsEqualTo(string.Empty);
     }
+
+    /// <summary>
+    /// #482: the preview header shortened the path with a from-end slice length of
+    /// <c>width - file.Length - 4</c>, which reaches <c>-1</c> once a long file name
+    /// fills the pane — <see cref="Index.FromEnd" /> rejects negative values with
+    /// <see cref="ArgumentOutOfRangeException" />. A 42-wide rect yields a 17-column
+    /// preview pane, the narrowest that still splits into list | preview, so
+    /// "srcd/abcdefghijklm" (file part 14) is the exact off-by-one input.
+    /// </summary>
+    [Test]
+    public async Task Paint_PreviewHeader_ZeroDirectoryBudget_DoesNotThrow()
+    {
+        var picker = new FilePickerView();
+        picker.Show([new FilePickerItem("srcd/abcdefghijklm", "deep", PreviewLines: ["class AgentLoop"])]);
+
+        var buffer = new ScreenBuffer(50, 10);
+        picker.Paint(buffer, new Rect(0, 0, 42, 8));
+        string art = GridDump.Art(buffer);
+
+        await Assert.That(art).Contains("…/abcdefghijklm");
+    }
 }
