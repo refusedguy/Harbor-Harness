@@ -1,10 +1,12 @@
 namespace Harbor.Ui.Framework.Overlays;
 
-// TODO(principles)[DIP, OCP]: framework-owned palette navigation state machine.
-// CellForge's CommandPaletteView must delegate frame/query/selection transitions
-// here (adapter + Paint stay cell-side); all key semantics resolve via UiMsg so
-// every renderer shares one experience. Wiring lands with epic C (TEA input loop).
-// Tracked in #363.
+// Framework-owned palette navigation state machine (DIP/OCP, fixes #363):
+// frame/query/selection transitions and key semantics (Type/Backspace/Move/
+// Escape/Submit) live here so every renderer shares one experience.
+// Cell-side adapter boundary: CommandPaletteView keeps its ranking, group
+// headers, viewport and Paint (ranking stays byte-identical, pinned by
+// CommandPaletteViewTests — see spec 16 §3); full key-semantics-via-UiMsg
+// wiring lands with epic C (TEA input loop).
 
 /// <summary>
 ///     Generic drill-down palette model: frame stack, query, selection and
