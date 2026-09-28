@@ -56,6 +56,10 @@ internal static class ServiceRegistration
     ///     AFTER the host is built (in <c>AppHost.BuildAsync</c>) so VMs
     ///     that resolve the adapter can subscribe to OnUiThread without
     ///     racing with a Bind call from another VM's constructor.
+    ///     Thread-affinity contract ([G9] #196): every singleton below is
+    ///     UI-thread-affine. Concurrent background producers must go through
+    ///     <c>UiStore</c> / <c>IDispatcherAdapter</c>, not through direct
+    ///     member access — see <c>ViewModelRegistration</c> for the VM side.
     /// </summary>
     /// <param name="services">The DI container.</param>
     public static void RegisterAppServices(IServiceCollection services)

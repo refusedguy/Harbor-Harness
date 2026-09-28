@@ -41,6 +41,15 @@ namespace Harbor.App.Avalonia.Hosting;
 ///         shell view-models so <see cref="MainViewModel"/> no longer needs
 ///         11 individual constructor parameters.
 ///     </para>
+///     <para>
+///         Thread-affinity contract ([G9] #196): these singletons live on the
+///         Avalonia UI thread. Background events (agent/tool/session) arrive
+///         via the <c>UiStore</c> subscription marshalled by
+///         <c>IDispatcherAdapter</c> (bound post-build in
+///         <c>AppHost.BuildAsync</c>), never by direct cross-thread mutation.
+///         Keep VM state UI-thread-confined or marshal through the adapter;
+///         do not add shared mutable state without the same treatment.
+///     </para>
 /// </remarks>
 internal static class ViewModelRegistration
 {
