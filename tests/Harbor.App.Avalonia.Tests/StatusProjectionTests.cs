@@ -33,7 +33,7 @@ public class StatusProjectionTests
         var model = StatusProjector.ProjectStatusBar(state);
 
         var left = model.Segments.First(s => s.Align == Alignment.Left);
-        await Assert.That(left.Text).IsEqualTo("ollama/");
+        await Assert.That(left.Text).IsEqualTo("ollama");
 
         var center = model.Segments.First(s => s.Align == Alignment.Center);
         await Assert.That(center.Text).IsEqualTo("○ idle");
@@ -97,7 +97,9 @@ public class StatusProjectionTests
 
         var model = StatusProjector.ProjectStatusBar(state);
 
-        var tokens = model.Segments.First(s => s.Text == "1234↑ 5678↓");
+        // #488: the compact rule is now the only rule, shared with the
+        // CellForge footer — the bare counts this used to emit are gone.
+        var tokens = model.Segments.First(s => s.Text == "1.2K↑ 5.7K↓");
         await Assert.That(tokens.Align).IsEqualTo(Alignment.Right);
         await Assert.That(tokens.Style).IsEqualTo(UiSpanStyle.Dim);
         await Assert.That(tokens.Importance).IsEqualTo(2);
@@ -127,7 +129,9 @@ public class StatusProjectionTests
 
         var model = StatusProjector.ProjectStatusBar(state);
 
-        var cost = model.Segments.First(s => s.Text == "0.0123");
+        // #488: the same "$0.0123" cell the CellForge footer paints — this
+        // surface used to emit a bare, currency-less "0.0123".
+        var cost = model.Segments.First(s => s.Text == "$0.0123");
         await Assert.That(cost.Align).IsEqualTo(Alignment.Right);
         await Assert.That(cost.Style).IsEqualTo(UiSpanStyle.Dim);
         await Assert.That(cost.Importance).IsEqualTo(1);

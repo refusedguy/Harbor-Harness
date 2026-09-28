@@ -129,18 +129,20 @@ public sealed class ComposerPanel : Panel
 /// <summary>
 /// CF-D-002 projector seam: builds <see cref="StatusSeg"/> rows from the
 /// shared <see cref="UiState"/> source of truth instead of hand-assembled
-/// view-model strings. Glyphs (<c>▌/◐/✗/○</c>) and the <c>live</c>/<c>scroll N%</c>
-/// segment come verbatim from <see cref="StatusProjector.ProjectStatusBar"/>
-/// (classified by its stable <c>(Align, Importance)</c> contract, never by
-/// text sniffing); numbers are reformatted through
-/// <see cref="FrameworkStatusMappers"/> (<c>TokensToCompact</c> /
-/// <c>CostToUsd</c> / <c>DurationToText</c>). Zero cost is hidden (no data ⇒
-/// no segment, never <c>$0.0000</c>). The spinner (<see cref="SpinnerStrip"/>)
-/// and retry (<see cref="RetryCountdown"/>) slots stay tick-/host-driven —
-/// this projector only owns their segment placement, not their clocks.
-/// #384: the default-on <c>skills ●N changed</c> freshness pill is a fixed
-/// segment between the retry warning and the scroll percentage; a clean
-/// snapshot passes <see langword="null" /> and costs the row nothing.
+/// view-model strings. #488: every cell comes from
+/// <see cref="StatusBarFacts"/> — the same derivation
+/// <see cref="StatusProjector.ProjectStatusBar"/> packs for the
+/// <c>UiStatusBarModel</c> surface — so the two status bars cannot disagree and
+/// the row allocates no segment it will not paint. Only <c>elapsed</c> is
+/// formatted here (<c>StatusMappers.DurationToText</c>), since the run
+/// duration is not part of <see cref="UiState"/>. The spinner
+/// (<see cref="SpinnerStrip"/>) and retry (<see cref="RetryCountdown"/>) slots
+/// stay tick-/host-driven — this projector only owns their segment placement,
+/// not their clocks. Zero cost and zero tokens are hidden (no data ⇒ no
+/// segment, never <c>$0.0000</c>). #384: the default-on
+/// <c>skills ●N changed</c> freshness pill is a fixed segment between the
+/// retry warning and the scroll percentage; a clean snapshot passes
+/// <see langword="null" /> and costs the row nothing.
 /// </summary>
 public static class StatusProjectorPanel
 {
@@ -175,7 +177,7 @@ public static class StatusProjectorPanel
 
     /// <summary>
     /// Fills <paramref name="workspace"/> left-to-right from
-    /// <see cref="StatusProjector.ProjectStatusBar"/>; returns segment count.
+    /// <see cref="StatusBarFacts"/>; returns segment count.
     /// Order keeps the documented truncation contract (tokens/cost rightmost,
     /// die first): chrome, status, agent, retry, skills, scroll, elapsed,
     /// tokens, cost.
@@ -196,62 +198,11 @@ public static class StatusProjectorPanel
         TimeSpan? elapsed = null,
         SkillFreshnessSummary? skills = null)
     {
-        var bar = StatusProjector.ProjectStatusBar(state);
-
-        string? chrome = null;
-        string? statusText = null;
-        StatusAccent statusAccent = StatusAccent.Neutral;
-        string? agent = null;
-        StatusAccent agentAccent = StatusAccent.Neutral;
-        string? scroll = null;
-        StatusAccent scrollAccent = StatusAccent.Dim;
-
-        foreach (var seg in bar.Segments)
-        {
-            switch (seg.Align, seg.Importance)
-            {
-                case (Alignment.Left, 1):
-                    chrome = seg.Text;
-                    break;
-                case (Alignment.Center, 2):
-                    statusText = seg.Text;
-                    statusAccent = MapAccent(seg.Style);
-                    break;
-                case (Alignment.Right, 3):
-                    agent = seg.Text;
-                    agentAccent = MapAccent(seg.Style);
-                    break;
-                case (Alignment.Right, 0):
-                    scroll = seg.Text;
-                    scrollAccent = MapAccent(seg.Style);
-                    break;
-            }
-        }
-
-        // The projector always emits "provider/model" verbatim — even "/" when
-        // both are unknown. No data ⇒ no segment, never a bare separator.
-        if (string.IsNullOrEmpty(state.Chat.Provider) && string.IsNullOrEmpty(state.Chat.Model))
-        {
-            chrome = null;
-        }
-        else if (chrome is not null && (string.IsNullOrEmpty(state.Chat.Provider) || string.IsNullOrEmpty(state.Chat.Model)))
-        {
-            chrome = string.IsNullOrEmpty(state.Chat.Provider) ? state.Chat.Model : state.Chat.Provider;
-        }
-
-        string? tokens = null;
-        if (state.Chat.Cost.TokensIn > 0 || state.Chat.Cost.TokensOut > 0)
-        {
-            tokens = FrameworkStatusMappers.TokensToCompact(state.Chat.Cost.TokensIn)
-                + "↑ "
-                + FrameworkStatusMappers.TokensToCompact(state.Chat.Cost.TokensOut)
-                + "↓";
-        }
-
-        // Zero/negative cost hides (grok None-semantics) instead of "$0.0000".
-        string? cost = state.Chat.Cost.CostUsd > 0
-            ? FrameworkStatusMappers.CostToUsd(state.Chat.Cost.CostUsd)
-            : null;
+        // #488: read the cells, don't rebuild them. Going through
+        // StatusProjector.ProjectStatusBar here allocated an ImmutableArray and
+        // two interpolated strings per frame only to drop the token/cost pair
+        // on the floor and re-derive them under a second formatting rule.
+        var facts = StatusBarFacts.Of(state);
 
         string? elapsedText = elapsed.HasValue
             ? FrameworkStatusMappers.DurationToText(elapsed.Value)
@@ -262,19 +213,19 @@ public static class StatusProjectorPanel
         }
 
         int n = 0;
-        if (chrome is not null && n < workspace.Length)
+        if (facts.Chrome is not null && n < workspace.Length)
         {
-            workspace[n++] = new StatusSeg(chrome, StatusAccent.Accent, FixedPriority: true);
+            workspace[n++] = new StatusSeg(facts.Chrome, StatusAccent.Accent, FixedPriority: true);
         }
 
-        if (statusText is not null && n < workspace.Length)
+        if (n < workspace.Length)
         {
-            workspace[n++] = new StatusSeg(statusText, statusAccent, FixedPriority: true);
+            workspace[n++] = new StatusSeg(facts.Status, MapAccent(facts.StatusStyle), FixedPriority: true);
         }
 
-        if (agent is not null && n < workspace.Length)
+        if (facts.Agent is not null && n < workspace.Length)
         {
-            workspace[n++] = new StatusSeg(agent, agentAccent, FixedPriority: false);
+            workspace[n++] = new StatusSeg(facts.Agent, StatusAccent.Neutral, FixedPriority: false);
         }
 
         if (!string.IsNullOrEmpty(retryLine) && n < workspace.Length)
@@ -289,9 +240,9 @@ public static class StatusProjectorPanel
             workspace[n++] = new StatusSeg(skills.Text, MapAccent(skills.Style), FixedPriority: true);
         }
 
-        if (scroll is not null && n < workspace.Length)
+        if (n < workspace.Length)
         {
-            workspace[n++] = new StatusSeg(scroll, scrollAccent, FixedPriority: false);
+            workspace[n++] = new StatusSeg(facts.Scroll, StatusAccent.Dim, FixedPriority: false);
         }
 
         if (elapsedText is not null && n < workspace.Length)
@@ -299,14 +250,14 @@ public static class StatusProjectorPanel
             workspace[n++] = new StatusSeg(elapsedText, StatusAccent.Dim, FixedPriority: false);
         }
 
-        if (tokens is not null && n < workspace.Length)
+        if (facts.Tokens is not null && n < workspace.Length)
         {
-            workspace[n++] = new StatusSeg(tokens, StatusAccent.Dim, FixedPriority: false);
+            workspace[n++] = new StatusSeg(facts.Tokens, StatusAccent.Dim, FixedPriority: false);
         }
 
-        if (cost is not null && n < workspace.Length)
+        if (facts.Cost is not null && n < workspace.Length)
         {
-            workspace[n++] = new StatusSeg(cost, StatusAccent.Dim, FixedPriority: false);
+            workspace[n++] = new StatusSeg(facts.Cost, StatusAccent.Dim, FixedPriority: false);
         }
 
         return n;
