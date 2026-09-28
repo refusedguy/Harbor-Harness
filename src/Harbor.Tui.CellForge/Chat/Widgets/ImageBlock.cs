@@ -50,6 +50,11 @@ public sealed class ImageBlock : IChatBlock
 {
     private const int LeftPad = 2;
 
+    // ENG10 #282: transition-computed paint lines (all inputs immutable) —
+    // Paint only slices spans over these, no per-frame interpolation.
+    private readonly string _line1;
+    private readonly string _summary;
+
     public ImageBlock(string path, string mimeType, long sizeBytes, byte[]? data)
     {
         Name = Path.GetFileName(string.IsNullOrWhiteSpace(path) ? "?" : path);
@@ -65,6 +70,8 @@ public sealed class ImageBlock : IChatBlock
         }
 
         Dimensions = w > 0 ? $"{w}×{h}" : null;
+        _line1 = (IsImage ? "◉ " : "≣ ") + Name;
+        _summary = (Dimensions ?? MimeType) + " · " + FormatSize(SizeBytes);
     }
 
     /// <summary>Имя файла без директорий.</summary>
@@ -104,19 +111,23 @@ public sealed class ImageBlock : IChatBlock
             return;
         }
 
-        buffer.SetText(ctx.Rect.X + LeftPad, ctx.Rect.Y,
-            Truncate(IsImage ? $"◉ {Name}" : $"≣ {Name}", ctx.Rect.Width - LeftPad),
-            IsImage ? ChatPalette.ToolOk : ChatPalette.ToolArgs);
+        // ENG10 #282: span slices over ctor-cached lines — identical cells to
+        // the former Truncate($"…", …) paints, no per-frame strings.
+        int avail = ctx.Rect.Width - LeftPad;
+        if (avail > 0)
+        {
+            var line1 = _line1.AsSpan();
+            buffer.SetText(ctx.Rect.X + LeftPad, ctx.Rect.Y,
+                line1.Slice(0, Math.Min(avail, line1.Length)),
+                IsImage ? ChatPalette.ToolOk : ChatPalette.ToolArgs);
 
-        buffer.SetText(ctx.Rect.X + LeftPad, ctx.Rect.Y + 1,
-            Truncate(SummaryLine(), ctx.Rect.Width - LeftPad), ChatPalette.Dim);
+            var line2 = _summary.AsSpan();
+            buffer.SetText(ctx.Rect.X + LeftPad, ctx.Rect.Y + 1,
+                line2.Slice(0, Math.Min(avail, line2.Length)), ChatPalette.Dim);
+        }
     }
 
-    internal string SummaryLine()
-    {
-        string dims = Dimensions ?? MimeType;
-        return $"{dims} · {FormatSize(SizeBytes)}";
-    }
+    internal string SummaryLine() => _summary;
 
     private static string FormatSize(long bytes) => bytes switch
     {
@@ -128,7 +139,4 @@ public sealed class ImageBlock : IChatBlock
     public string RawText() =>
         new StringBuilder(Name.Length + MimeType.Length + 32)
             .Append(Name).Append(' ').AppendLine(MimeType).Append(SummaryLine()).ToString();
-
-    private static string Truncate(string s, int max) =>
-        max <= 0 ? string.Empty : s.Length <= max ? s : s[..max];
 }
