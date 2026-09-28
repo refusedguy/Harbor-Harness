@@ -86,7 +86,13 @@ public class SqliteSourceGenCodecTests
         await Assert.That(toolCall.Args.GetProperty("limit").GetInt32()).IsEqualTo(10);
         var file = (FilePart)assistant.Parts[3];
         await Assert.That(file.Path).IsEqualTo("img.png");
-        await Assert.That(file.Data is not null && file.Data.SequenceEqual(new byte[] { 1, 2, 3 })).IsTrue();
+        await Assert.That(file.MimeType).IsEqualTo("image/png");
+        await Assert.That(file.SizeBytes).IsEqualTo(42);
+        // Legacy format drops FilePart.Data on write (the hand converter has no Data
+        // branch; the JSONL FilePartPayload DTO likewise) — pin the drop, and the
+        // absence of the member in the payload, instead of a round-trip that never existed.
+        await Assert.That(file.Data).IsNull();
+        await Assert.That(json.Contains("\"data\"")).IsFalse();
         await Assert.That(assistant.StopReason).IsEqualTo(StopReason.ToolUse);
         await Assert.That(assistant.Usage.InputTokens).IsEqualTo(10);
         await Assert.That(assistant.Usage.OutputTokens).IsEqualTo(20);

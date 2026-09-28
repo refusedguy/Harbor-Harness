@@ -28,13 +28,18 @@ internal static class SqliteMappers
         // options-level converters win, so ContentPart keeps its legacy shape and
         // StopReason stays a string. TypeInfoResolver stays the context alone — no
         // reflection fallback, so missing metadata fails loudly instead of silently.
+        // The Web-equivalent naming settings are materialized explicitly: the copied
+        // context options bake property names at generation time, so a parameterless
+        // enum factory would fall back to a missing policy and write PascalCase.
         var options = new JsonSerializerOptions(SqliteJsonContext.Default.Options)
         {
             TypeInfoResolver = SqliteJsonContext.Default,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = true,
         };
         options.Converters.Add(new ContentPartJsonConverter());
         options.Converters.Add(ContentPartListJsonConverter.Instance);
-        options.Converters.Add(new JsonStringEnumConverter());
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
         return options;
     }
 
