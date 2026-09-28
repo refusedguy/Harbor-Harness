@@ -139,7 +139,7 @@ public class InlineImageRenderTests
         session.Images.Kind = InlineImageKind.KittyApc;
 
         var timeline = new VirtualizedChatTimeline { InlineImages = session.Images };
-        timeline.Append(new ImageBlock("shot.png", "image/png", 2048, ImageBlockTests.PngHeader(640, 480)));
+        timeline.Append(new ImageBlock("shot.png", "image/png", 2048, ImageBlockTests.PngHeader(640, 480), graphicsAvailable: true));
 
         session.BeginFrame();
         _ = timeline.PrepareFrame(40, 20);
@@ -168,7 +168,7 @@ public class InlineImageRenderTests
         session.Images.Kind = InlineImageKind.KittyApc;
 
         var timeline = new VirtualizedChatTimeline { InlineImages = session.Images };
-        timeline.Append(new ImageBlock("shot.png", "image/png", 2048, ImageBlockTests.PngHeader(640, 480)));
+        timeline.Append(new ImageBlock("shot.png", "image/png", 2048, ImageBlockTests.PngHeader(640, 480), graphicsAvailable: true));
 
         session.BeginFrame();
         _ = timeline.PrepareFrame(40, 20);
@@ -319,7 +319,7 @@ public class InlineImageRenderTests
     public async Task Viewer_OpenZoomClose_RoundTrips()
     {
         var layer = new InlineImageLayer { Kind = InlineImageKind.KittyApc, FrameBounds = new Rect(0, 0, 80, 24) };
-        var block = new ImageBlock("shot.png", "image/png", 2048, ImageBlockTests.PngHeader(640, 480));
+        var block = new ImageBlock("shot.png", "image/png", 2048, ImageBlockTests.PngHeader(640, 480), graphicsAvailable: true);
         var viewer = new ImageViewerOverlay();
 
         await Assert.That(viewer.Visible).IsFalse();
@@ -390,7 +390,7 @@ public class InlineImageRenderTests
     public async Task Viewer_PaintsAFrame_AndPlacesTheImage()
     {
         var layer = new InlineImageLayer { Kind = InlineImageKind.KittyApc, FrameBounds = new Rect(0, 0, 60, 20) };
-        var block = new ImageBlock("shot.png", "image/png", 2048, ImageBlockTests.PngHeader(640, 480));
+        var block = new ImageBlock("shot.png", "image/png", 2048, ImageBlockTests.PngHeader(640, 480), graphicsAvailable: true);
         var viewer = new ImageViewerOverlay();
         viewer.Show(block, layer);
 
@@ -437,7 +437,7 @@ public class InlineImageRenderTests
         string artBefore = GridDump.Art(PaintTimeline(timeline, 60, 20));
 
         var viewer = new ImageViewerOverlay();
-        viewer.Show(new ImageBlock("shot.png", "image/png", 10, ImageBlockTests.PngHeader(640, 480)), layer);
+        viewer.Show(new ImageBlock("shot.png", "image/png", 10, ImageBlockTests.PngHeader(640, 480), graphicsAvailable: true), layer);
 
         var viewerBuffer = new ScreenBuffer(60, 20);
         viewer.Paint(viewerBuffer, new Rect(0, 0, 60, 20));

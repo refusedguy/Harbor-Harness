@@ -221,7 +221,12 @@ internal sealed class ToolCardTracker
 
     public void AppendImageCard(string path, string mime, long sizeBytes, byte[]? data)
     {
-        _panel.Timeline.Append(new ImageBlock(path, mime, sizeBytes, data));
+        // #387: sample the timeline's inline-image capability at construction so
+        // the block reserves graphic height only when it will actually draw one.
+        // A text-only session (pipes, CI, tmux/screen) then reserves the
+        // two-line card exactly as before — no hole in the feed.
+        bool graphics = _panel.Timeline.InlineImages is { Enabled: true };
+        _panel.Timeline.Append(new ImageBlock(path, mime, sizeBytes, data, graphics));
         if (data is { Length: > 0 })
         {
             // Inline-image hand-off (osc-sprint §1337): the host frame loop

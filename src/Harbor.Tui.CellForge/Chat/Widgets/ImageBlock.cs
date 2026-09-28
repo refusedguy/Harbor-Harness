@@ -108,11 +108,28 @@ public sealed class ImageBlock : IChatBlock
     private int _payloadCols = -1;
     private int _payloadRows = -1;
 
-    public ImageBlock(string path, string mimeType, long sizeBytes, byte[]? data)
+    /// <summary>
+    /// The session's inline-image capability, sampled ONCE at construction.
+    /// <para><b>Why a constructor argument and not a paint-time probe.</b>
+    /// <see cref="Measure" /> is the layout's only input and must stay pure —
+    /// it is cached per width by the timeline. If the block reserved graphic
+    /// height unconditionally, a text-only session (pipes, CI, tmux/screen)
+    /// would reserve ~15 rows per screenshot and paint a 2-line card, leaving a
+    /// hole in the feed. Sampling the sink here makes the reserved height and
+    /// the painted content agree by construction, and keeps
+    /// <see cref="Measure" /> a pure function of immutable state.
+    /// </para>
+    /// <para>The host sets the timeline's sink once at startup, before any
+    /// block is appended, so the sample is never stale. The paint path still
+    /// re-checks the live sink, so a late-wired host degrades to the card
+    /// rather than to a hole.</para>
+    /// </summary>
+    public ImageBlock(string path, string mimeType, long sizeBytes, byte[]? data, bool graphicsAvailable = false)
     {
         Name = Path.GetFileName(string.IsNullOrWhiteSpace(path) ? "?" : path);
         MimeType = string.IsNullOrWhiteSpace(mimeType) ? "?" : mimeType;
         SizeBytes = Math.Max(0, sizeBytes);
+        GraphicsAvailable = graphicsAvailable;
 
         IsImage = MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
         int w = 0, h = 0;
@@ -181,6 +198,13 @@ public sealed class ImageBlock : IChatBlock
 
     /// <summary>Строка «W×H», когда заголовок распознан.</summary>
     public string? Dimensions { get; }
+
+    /// <summary>
+    /// True when the session sampled as graphics-capable at construction —
+    /// the switch that decides whether this block reserves graphic height
+    /// (<see cref="Measure" />) or stays a two-line card. See the ctor.
+    /// </summary>
+    public bool GraphicsAvailable { get; }
 
     public string Kind => "image";
 
@@ -265,11 +289,20 @@ public sealed class ImageBlock : IChatBlock
 
     /// <summary>
     /// Height in rows the image itself occupies at <paramref name="width" />,
-    /// or 0 when this block has nothing to draw graphically (text-only session,
-    /// non-image mime, no bytes, damaged header, or a protocol that cannot
-    /// carry this format — kitty speaks PNG only).
+    /// or 0 when this block has nothing to draw graphically: a text-only
+    /// session (see <see cref="GraphicsAvailable" />), a non-image mime, no
+    /// bytes, or a header that did not parse.
     /// </summary>
-    public int GraphicHeight(int width)
+    public int GraphicHeight(int width) =>
+        GraphicsAvailable ? FittedGraphicHeight(width) : 0;
+
+    /// <summary>
+    /// The aspect-fitted graphic height for <paramref name="width" />,
+    /// independent of whether this session can draw it. The fullscreen viewer
+    /// uses this (it has its own box, not the feed's), while
+    /// <see cref="GraphicHeight" /> gates the feed reservation.
+    /// </summary>
+    internal int FittedGraphicHeight(int width)
     {
         if (PixelWidth <= 0 || PixelHeight <= 0 || width <= LeftPad)
         {

@@ -102,13 +102,20 @@ public class ImageBlockTests
     /// through the same block, so a regression in the fallback shows up here
     /// rather than only in a graphics terminal.
     /// </summary>
+    /// <summary>
+    /// Test double for the session's image sink. <see cref="Enabled" /> derives
+    /// from the protocol by default — exactly like the real
+    /// <c>InlineImageLayer</c> — so a "None protocol" fixture is genuinely
+    /// disabled instead of merely claiming to be. The settable property exists
+    /// only to exercise the block's own guard.
+    /// </summary>
     private sealed class RecordingSink : IInlineImageSink
     {
         private readonly InlineImageKind _kind;
 
         public RecordingSink(InlineImageKind kind) => _kind = kind;
 
-        public bool Enabled { get; set; } = true;
+        public bool Enabled { get; set; }
 
         public Rect FrameBounds { get; set; } = new(0, 0, 10_000, 10_000);
 
@@ -133,7 +140,7 @@ public class ImageBlockTests
     public async Task Graphics_Off_KeepsTheTwoLineTextCard()
     {
         var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480));
-        var sink = new RecordingSink(InlineImageKind.KittyApc) { Enabled = false };
+        var sink = new RecordingSink(InlineImageKind.None);
         var buffer = new ScreenBuffer(40, 6);
         block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 6), 0, inlineImages: sink));
 
@@ -145,10 +152,38 @@ public class ImageBlockTests
         await Assert.That(block.Measure(40).MinLines).IsEqualTo(2);
     }
 
+    /// <summary>
+    /// Regression guard for the layout hole this slice nearly shipped: a
+    /// block that reserved GRAPHIC height while painting the two-line card
+    /// left a dozen blank rows in the feed of every text-only terminal
+    /// (pipes, CI, tmux/screen). Reserved height and painted content must
+    /// agree, and the only thing that may change the reservation is the
+    /// capability sampled at construction.
+    /// </summary>
+    [Test]
+    public async Task Measure_ReservesGraphicHeightOnlyWhenTheSessionCanDrawIt()
+    {
+        var textCard = new ImageBlock("a.png", "image/png", 2048, PngHeader(640, 480));
+        var graphics = new ImageBlock("b.png", "image/png", 2048, PngHeader(640, 480), graphicsAvailable: true);
+
+        await Assert.That(textCard.GraphicsAvailable).IsFalse();
+        await Assert.That(textCard.GraphicHeight(40)).IsEqualTo(0);
+        await Assert.That(textCard.Measure(40).MinLines).IsEqualTo(2);
+
+        await Assert.That(graphics.GraphicsAvailable).IsTrue();
+        int rows = graphics.GraphicHeight(40);
+        await Assert.That(rows).IsGreaterThan(2);
+        await Assert.That(graphics.Measure(40).MinLines).IsEqualTo(rows + 1);
+
+        // The raw fit is protocol-independent — the viewer uses it so a
+        // card-sized hole in the feed can never cap the zoom.
+        await Assert.That(textCard.FittedGraphicHeight(40)).IsEqualTo(rows);
+    }
+
     [Test]
     public async Task Graphics_On_PlacesScaledPayload_AndKeepsTheCaption()
     {
-        var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480));
+        var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480), graphicsAvailable: true);
         var sink = new RecordingSink(InlineImageKind.KittyApc);
         const int H = 20;
         var buffer = new ScreenBuffer(40, H);
@@ -177,7 +212,7 @@ public class ImageBlockTests
     [Test]
     public async Task Graphics_On_ReusesTheEncodedPayload_AcrossFrames()
     {
-        var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480));
+        var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480), graphicsAvailable: true);
         var sink = new RecordingSink(InlineImageKind.Osc1337);
         var buffer = new ScreenBuffer(40, 20);
 
@@ -210,14 +245,17 @@ public class ImageBlockTests
         await Assert.That(sink.Enabled).IsFalse();
         await Assert.That(sink.Placed).IsEmpty();
         await Assert.That(GridDump.Art(buffer)).Contains("◉ screenshot.png");
+        // ...and it reserves the card height, not a graphic-sized hole.
+        await Assert.That(block.Measure(40).MinLines).IsEqualTo(2);
     }
 
     [Test]
     public async Task Graphics_On_CorruptHeader_DegradesToCardWithWarningMarker()
     {
         // A .png whose bytes are not a PNG: mime claims an image, no header
-        // parses. Must degrade to the card, never throw.
-        var block = new ImageBlock("shots/broken.png", "image/png", 900, [0x00, 0x01, 0x02, 0x03, 0x04]);
+        // parses. Must degrade to the card, never throw. Graphics are AVAILABLE
+        // here, so the bad header — not the protocol — is what forces the card.
+        var block = new ImageBlock("shots/broken.png", "image/png", 900, [0x00, 0x01, 0x02, 0x03, 0x04], graphicsAvailable: true);
         await Assert.That(block.IsDamaged).IsTrue();
         await Assert.That(block.PixelWidth).IsEqualTo(0);
 
@@ -239,7 +277,7 @@ public class ImageBlockTests
         // box is TALL enough for the graphic path, so the mime — not the
         // geometry — is what forces the fallback.
         byte[] jpeg = JpegProbeTests.Jpeg(800, 600);
-        var block = new ImageBlock("shots/photo.jpg", "image/jpeg", 4096, jpeg);
+        var block = new ImageBlock("shots/photo.jpg", "image/jpeg", 4096, jpeg, graphicsAvailable: true);
         var sink = new RecordingSink(InlineImageKind.KittyApc);
         var buffer = new ScreenBuffer(40, 20);
         block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 20), 0, inlineImages: sink));
@@ -253,7 +291,7 @@ public class ImageBlockTests
     public async Task Graphics_On_FailedEncodeIsMemoized_NotRetriedEveryFrame()
     {
         byte[] jpeg = JpegProbeTests.Jpeg(800, 600);
-        var block = new ImageBlock("shots/photo.jpg", "image/jpeg", 4096, jpeg);
+        var block = new ImageBlock("shots/photo.jpg", "image/jpeg", 4096, jpeg, graphicsAvailable: true);
         var sink = new RecordingSink(InlineImageKind.KittyApc);
         var buffer = new ScreenBuffer(40, 20);
 
@@ -270,15 +308,15 @@ public class ImageBlockTests
     [Test]
     public async Task GraphicHeight_DerivesFromProbedPixels_AndClamps()
     {
-        var wide = new ImageBlock("a.png", "image/png", 100, PngHeader(1000, 100));
+        var wide = new ImageBlock("a.png", "image/png", 100, PngHeader(1000, 100), graphicsAvailable: true);
         await Assert.That(wide.GraphicHeight(60)).IsEqualTo(3); // 58 × 0.1 / 2 ≈ 2.9
         await Assert.That(wide.GraphicHeight(60)).IsLessThanOrEqualTo(ImageBlock.MaxGraphicRows);
 
-        var tall = new ImageBlock("b.png", "image/png", 100, PngHeader(100, 4000));
+        var tall = new ImageBlock("b.png", "image/png", 100, PngHeader(100, 4000), graphicsAvailable: true);
         await Assert.That(tall.GraphicHeight(60)).IsEqualTo(ImageBlock.MaxGraphicRows);
 
-        // No probed pixels ⇒ no graphic, whatever the sink says.
-        var corrupt = new ImageBlock("c.png", "image/png", 100, [1, 2, 3]);
+        // No probed pixels ⇒ no graphic, whatever the session can draw.
+        var corrupt = new ImageBlock("c.png", "image/png", 100, [1, 2, 3], graphicsAvailable: true);
         await Assert.That(corrupt.GraphicHeight(60)).IsEqualTo(0);
     }
 }

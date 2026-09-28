@@ -10,7 +10,7 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// <para><b>Contract.</b> Modal and opaque — it occludes the chat beneath it
 /// and forms an input barrier, so keys never reach the agent while it is open
 /// (the host routes through <see cref="ImageViewerOverlayLayer.OnKey" /> and
-/// swallows the rest). <see cref="Show" /> snapshots nothing but the block;
+/// swallows the rest). <see cref="Show" /> snapshots nothing but the block,
 /// the viewer owns no scroll, no selection and no <c>UiState</c> field, so
 /// closing it restores the feed by construction — the timeline never moved.</para>
 ///
@@ -222,9 +222,11 @@ public sealed class ImageViewerOverlay
 
         // The block fits itself to the same inner width the timeline used, so
         // 100% means "exactly as the feed drew it" and every zoom step scales
-        // BOTH axes by the same factor — the aspect ratio never drifts.
+        // BOTH axes by the same factor — the aspect ratio never drifts. The
+        // viewer has its own box, so it uses the UNGATED fit: a card-sized
+        // hole in the feed must not cap how big the picture can get.
         int fitW = Math.Max(1, availW - ImageBlock.LeftPad);
-        int fitRows = block.GraphicHeight(fitW);
+        int fitRows = block.FittedGraphicHeight(fitW);
         if (fitRows <= 0)
         {
             return default;
