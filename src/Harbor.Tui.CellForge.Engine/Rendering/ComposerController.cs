@@ -5,11 +5,6 @@ using Harbor.Abstractions.Models;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
-// TODO(principles)[TEA, SRP]: Enter/Shift+Enter/newline decisions belong to UiReducer
-// (UiMsg.KeyInput → AppState); the composer must become a pure executor of store
-// state, otherwise key behavior diverges per renderer (epic C).
-// Tracked in #359.
-
 /// <summary>What the composer did with the key.</summary>
 public enum ComposerAction : byte
 {
@@ -132,20 +127,37 @@ public sealed class ComposerController
         Func<KeyEvent, bool> Matches,
         Func<ComposerController, KeyEvent, ComposerAction> Run);
 
-    /// <summary>Enter split: Ctrl+Enter ignored, Shift/Alt+Enter newline, plain Enter submit.</summary>
+    /// <summary>
+    ///     Enter split, executed from the store-owned decision (#359):
+    ///     <see cref="EnterKeyPolicy"/> maps the modifiers to
+    ///     <see cref="ChatAction"/> (Ctrl+Enter → ignore, Shift/Alt+Enter →
+    ///     newline, plain Enter → submit) and the composer only applies the
+    ///     buffer effect — the same transition <see cref="UiReducer.Update"/>
+    ///     performs for <see cref="UiMsg.KeyInput"/> so key behavior cannot
+    ///     diverge per renderer.
+    /// </summary>
     private ComposerAction HandleEnter(KeyModifiers mods)
     {
-        if ((mods & KeyModifiers.Ctrl) != 0)
+        return EnterKeyPolicy.Resolve(
+            (mods & KeyModifiers.Ctrl) != 0,
+            (mods & KeyModifiers.Shift) != 0,
+            (mods & KeyModifiers.Alt) != 0,
+            (mods & KeyModifiers.Meta) != 0) switch
         {
-            return ComposerAction.Ignored;
-        }
+            ChatAction.InsertNewline => InsertNewline(),
+            ChatAction.Submit => SubmitDraft(),
+            _ => ComposerAction.Ignored,
+        };
+    }
 
-        if ((mods & (KeyModifiers.Shift | KeyModifiers.Alt)) != 0)
-        {
-            _ = Buffer.Insert(new Rune('\n'));
-            return ComposerAction.Edited;
-        }
+    private ComposerAction InsertNewline()
+    {
+        _ = Buffer.Insert(new Rune('\n'));
+        return ComposerAction.Edited;
+    }
 
+    private ComposerAction SubmitDraft()
+    {
         History.PushSubmitted(Buffer.SnapshotText());
         return ComposerAction.Submitted;
     }

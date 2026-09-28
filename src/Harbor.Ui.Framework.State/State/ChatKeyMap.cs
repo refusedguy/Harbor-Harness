@@ -19,6 +19,14 @@ public sealed class ChatKeyMap
             new Binding(UiKeyCode.Escape),
             new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 'c')),
         new(ChatAction.Submit, "send", new Binding(UiKeyCode.Enter)),
+        // Shift+Enter / Alt+Enter — newline, not submit (kitty disambiguate
+        // flags; see EnterKeyPolicy). Ctrl+Enter stays unbound → None
+        // (ignored), matching the composer. Subset semantics: Shift also
+        // matches Shift+Alt, Alt also matches Alt+Shift; Ctrl combos are
+        // dropped by the reducer guard.
+        new(ChatAction.InsertNewline, "newline",
+            new Binding(UiKeyCode.Enter, KeyModifierSet.Shift),
+            new Binding(UiKeyCode.Enter, KeyModifierSet.Alt)),
         new(ChatAction.ToggleFocus, "focus", new Binding(UiKeyCode.F2)),
         new(ChatAction.ScrollUpLine, "up", new Binding(UiKeyCode.Up)),
         new(ChatAction.ScrollDownLine, "down", new Binding(UiKeyCode.Down)),
