@@ -20,8 +20,8 @@
     <Product>Harbor</Product>
     <Copyright>MIT</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/harbor-sh/harbor</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/harbor-sh/harbor</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/refusedguy/Harbor-Harness</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/refusedguy/Harbor-Harness</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
 
     <!-- Build features -->

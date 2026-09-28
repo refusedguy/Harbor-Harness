@@ -52,6 +52,7 @@ TEA (The Elm Architecture) state machine and panel system for the Harbor UI Fram
 |---------|---------|
 | `Harbor.Abstractions` | `AgentEvent`, `SessionId`, `KeyPress` |
 | `Harbor.Ui.Framework.Abstractions` | Contracts |
+| `Harbor.Ui.Framework.Rendering` | BCL-only key vocabulary (`UiKeyDto`) via `KeyEventAdapter` (issue #33 T1) |
 
 ## Tests
 
