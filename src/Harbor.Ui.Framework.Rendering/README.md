@@ -178,6 +178,14 @@ set is pinned by `tests/Harbor.Architecture.Tests`.
 - **`UnicodeWidth` and `TextWrap` follow a fixed-width terminal model.** Cells
   have a single `Width` byte; grapheme-cluster and emoji-ZWJ sequences that need
   more than two columns are not representable.
+- **`UnicodeWidth.WidthCached` memoizes per thread, not per process.** The table
+  is `[ThreadStatic]` (256 slots, ~4 KB) so a measurement never takes a
+  process-global monitor — the in-process renderer, the IPC client and a plugin
+  renderer can measure text at the same time. The trade is one rune decode per
+  distinct run *per thread* instead of per process, and 4 KB retained by every
+  thread that ever measures text; both are start-up-scale, not frame-scale.
+  `StatusBarLayout.Fit` (#487) measures each segment exactly once per call, so
+  the per-thread cache sees a flat one-lookup-per-segment cost.
 - `IsAotCompatible` means no reflection-based JSON and no
   `JsonSerializer` without a source-generated context.
 - `PerformanceContracts/` are budgets, not enforcement: they are asserted by

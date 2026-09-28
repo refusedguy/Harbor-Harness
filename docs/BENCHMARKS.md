@@ -50,6 +50,7 @@
 | OK | `DefaultUiProjector` инкремент | 1000 дельт → 1001 проекция: **962 no-op reuse, 38 tail (флаши), 1 history**; markdown-парсов на store-пути 0; итого 475 µs / 1.03 MB (2026-09-10, `StreamingDeltaFrequencyBenchmark`, регрессия — `StreamingFrequencyTests`) | пожара нет; следить за transcript-композицией при росте history |
 | P3 | `SessionId` Dictionary key | медленнее string (7.9 vs 6.3 µs), HashSet быстрее — проверить GetHashCode | override hash |
 | P3 | `OpenAiWire.TryParseChatChunkLine` | плоские ~10 µs floor на любой чанк | Utf8JsonReader поверх span без ToString() |
+| OK | `StatusBarLayout.Fit` (per painted frame) | ✅ resolved: O(n²) width lookups under a process-global monitor → **exactly one lookup per segment, per-thread cache, no lock** (#487, §5.6). Machine-independent count, stopwatch rows pending a BDN run | — |
 
 ## Key numbers — local full runs (2026-08-22, i5-8250U, Release JIT; UiStore streaming rows 2026-09-10, machine n/a)
 
@@ -553,6 +554,48 @@ Which production compositions actually qualify is measured per preset in
 [`docs/EVENT_BUS_SINKS.md`](./EVENT_BUS_SINKS.md) §5 (today: 0 % for every shipped preset — the
 mandatory/optional verdict, not the guard, is what keeps them out).
 
+### 5.6 Status-bar packing (`StatusBarLayoutFitBenchmark`, #487) ⏳ not yet measured
+
+`Fit` is the status bar's packing pass: it runs on **every painted status frame**, i.e. while
+tokens stream, so its cost is part of the frame budget and not a startup cost. #487 changed its
+shape from "re-sum the whole row inside the shrink loop" to "measure every segment once, carry
+the running total", and moved the per-run width cache it reads from a process-global table
+behind a lock to a per-thread one.
+
+```bash
+dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*StatusBarLayoutFit*'
+```
+
+> **Numbers pending.** The row table below is filled from the first BDN run of
+> `StatusBarLayout_Fit_TwelveSegments` on the CI `benchmark` job; until then the
+> machine-independent gate is the one that counts, and it is already enforced —
+> see the tripwire table below. Do not quote a figure here that is not in a
+> BDN run.
+
+The measurement contract is in the class doc (`Operation` / `Payload` / `StateReset` / `Drain` /
+`RetainedState` / `AwaitSemantics` / `AllocAttribution`, per #408). Two properties of the payload
+are worth knowing before reading any number off it:
+
+- the row is **model + mode hint (fixed) + N flexible segments**, packed to a width that leaves the
+  fixed pair plus three flexible ones — the shape where the shrink loop actually iterates. A row
+  that already fits measures almost nothing and would flatter the old code;
+- the row is **restored from a pristine template inside the measured region**, because `Fit`
+  mutates the span in place. That copy is a `Span`-typed `Array.CopyTo` into a preallocated
+  buffer: 0 B, and identical per segment in every row, so the segment-count slope is not an
+  artefact of the harness.
+
+`StatusBarLayout_Fit_TwelveSegments` is the row the CellForge footer actually composes
+(`ChatScreenLayout` sizes its compose buffer at 12); the `Segments` sweep carries the pathological
+24-segment row that exposed the quadratic.
+
+**Why a stopwatch is not the gate.** The load-bearing claim — a `Fit` call measures each segment
+exactly once, whatever the outcome — is a property of the algorithm, so
+`StatusBarFitPerfTests.Fit_MeasuresEachSegmentOnce_*` asserts it through
+`UnicodeWidth.BeginWidthLookupTracking`, which counts `WidthCached` calls on the calling thread
+only. Before the fix a 24-segment row packed down to its 2-segment fixed pair issued 323 of them;
+it now issues 24, and the assertion holds on any machine. This is the #465 lesson applied: a
+wall-clock assertion only fails on a machine slow enough to notice.
+
 ### Allocation-budget tripwires (#186, CI-enforced)
 
 Steady-state allocation coverage for paths the microbenchmarks above don't
@@ -587,6 +630,22 @@ dotnet run -c Release --project tests/Harbor.Registries.Tests -- --treenode-filt
 | `LegacyDecode_StillCopiesPayload_TripwireIsNotVacuous` (#467) | the pre-#467 chain kept verbatim (`Substring` → `TrimStart` → `Trim().Equals("[DONE]")`) on the same 4 KB line — keeps the zero-alloc gate from passing vacuously | > 2 bytes/char |
 | `ExtractDiff_NonDiffTool_IsAllocationFree` (`Harbor.Tui.CellForge.Tests`) | `DiffPreview.ExtractDiff` non-diff guard | 0 B |
 | `ExtractDiff_Edit_StaysBounded` | `DiffPreview.ExtractDiff` edit path | ≤ 32 KB/call |
+| `Fit_AllocatesNothing_WhenTheRowIsResolvedByDroppingSegments` (`Harbor.Ui.Framework.Tests`, #487) | `StatusBarLayout.Fit` drop path (8 segments → 5) | 0 B |
+| `StatusAndSpinner_SteadyState_AllocationFree` (`Harbor.Tui.CellForge.Tests`) | `BuildSegments` + `Fit` + `StatusBarWidget.Paint` + spinner, 79 cells | 0 B |
+
+### #487 tripwires — status-bar packing (`Harbor.Ui.Framework.Tests.StatusBarFitPerfTests`)
+
+| Test | Claim | Gate |
+|---|---|---|
+| `Fit_MeasuresEachSegmentOnce_NoMatterHowManyAreDropped` | width lookups per call, 24 segments → 2 kept | exactly 24 (pre-#487: 323, each a monitor acquisition) |
+| `Fit_MeasuresEachSegmentOnce_AtEveryWidth` | same, across 12 widths incl. the character-cut path | exactly 12 per width |
+| `Fit_Cost_GrowsLinearly_WithSegmentCount` | 4× the segments, same survivor count — min-of-3, linux-gated | ratio < 8 (linear ~4; re-summing 17 → 314 lookups, 18.5×) |
+| `WidthCache_LookupsFromFourThreads_AreNotSerialised` | 4 threads × a full cold pass, min-of-3, self-calibrating skip | ratio < 2.0 (a shared monitor: ~4.0) |
+| `Fit_AllocatesNothing_WhenTheRowIsResolvedByDroppingSegments` | drop-only packing is allocation-free | 0 B |
+
+The fourth row is the lock half of #487. It calibrates first: if the runner cannot get 2× out of
+four threads on pure CPU work, the test prints `SKIPPED` instead of failing, because that outcome
+says nothing about the code.
 
 ### ConsoleEx cell-diff core (`DiffEngineBenchmark`, 2026-08-26, Release)
 
