@@ -1,5 +1,6 @@
 using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
+using Harbor.Telemetry;
 using Harbor.Desktop.Abstractions.Configuration;
 
 using Harbor.Abstractions.Events;
@@ -75,6 +76,17 @@ public sealed class HarborComposeOptions
     /// <summary>Event bus scrollback capacity (CLI: 1000, Avalonia: library default).</summary>
     public int? EventBusScrollback { get; init; }
 
+    /// <summary>
+    ///     Cadence at which the event-bus queue-age snapshot (p50/p95/p99/max
+    ///     dispatch duration, oldest-pending age, inflight, published — #47/S2)
+    ///     is exported to the metrics surface and written to the per-run log
+    ///     (<c>harbor logs --last</c>). <c>null</c> registers the reporter with no
+    ///     background cadence, leaving <c>Report()</c> to the caller — the
+    ///     default for embedded hosts and tests, so no timer starts behind their
+    ///     back.
+    /// </summary>
+    public TimeSpan? EventBusQueueAgeReportInterval { get; init; }
+
     /// <summary>Override for config.json location; defaults to &lt;HarborDir&gt;/config.json.</summary>
     public string? ConfigPath { get; init; }
 
@@ -125,12 +137,14 @@ public sealed class HarborComposeOptions
     {
         DefaultStorageBackend = "jsonl",
         EventBusScrollback = 1000,
+        EventBusQueueAgeReportInterval = EventBusQueueAgeReporter.DefaultReportInterval,
     };
 
     /// <summary>Desktop preset: memory storage by default, no middlewares, no scrollback override.</summary>
     public static HarborComposeOptions DesktopDefault() => new()
     {
         DefaultStorageBackend = "memory",
+        EventBusQueueAgeReportInterval = EventBusQueueAgeReporter.DefaultReportInterval,
     };
 
     private static string DefaultHarborDir() => HarborPaths.GetHarborHome();
