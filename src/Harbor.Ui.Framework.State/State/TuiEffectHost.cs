@@ -33,6 +33,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
     private readonly ILogger<TuiEffectHost>? _logger;
     private readonly Func<string, Task>? _slash;
     private readonly IApprovalCoordinator? _coordinator;
+    private readonly Func<string, Task>? _activateSession;
 
     // #91: rebindable mid-flight via RebindStore. Every async effect captures
     // its store once at entry (a volatile read) and dispatches the whole run
@@ -46,7 +47,8 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         Func<string, Task>? slash = null,
         CancellationToken appCt = default,
         ILogger<TuiEffectHost>? logger = null,
-        IApprovalCoordinator? coordinator = null)
+        IApprovalCoordinator? coordinator = null,
+        Func<string, Task>? activateSession = null)
     {
         _agent = agent;
         _store = store;
@@ -54,6 +56,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         _appCt = appCt;
         _logger = logger;
         _coordinator = coordinator;
+        _activateSession = activateSession;
     }
 
     public void RebindStore(UiStore newStore)
@@ -100,6 +103,20 @@ public sealed class TuiEffectHost : ITuiEffectRunner
                 break;
             case TuiEffect.QuitApp:
                 _store.Dispatch(new UiMsg.Quit());
+                break;
+            case TuiEffect.ActivateSession act:
+                // Tab-strip activate (#388). The session switch itself lives in
+                // the composition root (ISessionManager.OpenSessionAsync) and
+                // arrives as a delegate; hosts that never switch sessions leave
+                // it null and the tab focus is then a pure state change.
+                if (_activateSession is null)
+                {
+                    _logger?.LogDebug("ActivateSession({SessionId}) ignored: no activator wired", act.SessionId.Value);
+                    break;
+                }
+                TaskFireAndForget.Forget(
+                    _activateSession(act.SessionId.Value),
+                    ex => _logger?.LogError(ex, "ActivateSession failed for {SessionId}", act.SessionId.Value));
                 break;
         }
     }

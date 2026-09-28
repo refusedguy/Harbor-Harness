@@ -1092,6 +1092,19 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** L (16 hours — Avalonia drag-drop is finicky)
 - **Priority:** P1
 - **Dependencies:** None
+- **Status:** Slice 1/3 landed (`feat/tabstate-388`, issue #388) — state only, no
+  widget: `SessionTab` + `TabStripState`
+  (`src/Harbor.Ui.Framework.State/Tabs/`, order = array index, panel ownership per
+  tab) in the `UiState` chat slice, `UiMsg.OpenTab/ActivateTab/CloseTab/
+  CloseOtherTabs/CloseTabsToRight/PinTab/ReorderTab/CycleNextTab/CyclePreviousTab`
+  folded by `UiReducer`, and a `TuiEffect.ActivateSession` the host routes to
+  `ISessionManager.OpenSessionAsync` (optional `TuiEffectHost` delegate — the
+  reducer never touches DI). TUnit coverage in
+  `tests/Harbor.Ui.Framework.Tests/TabStripReducerTests.cs`. Documented rules:
+  closing the active tab focuses next → else previous → else none; a panel dies
+  with its tab only when the closed tab was its sole owner, otherwise it is
+  reassigned. Pending: slice 2/3 (tab-strip widget + gestures/keys) and a
+  `UiMsg` to refresh tab title/status/dirty, which lands with the renderer.
 
 ---
 

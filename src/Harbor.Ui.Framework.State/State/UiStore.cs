@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Models.Identifiers;
 namespace Harbor.Ui.Framework.State;
 /// <summary>
 ///     Declarative UI-driven side-effect. Renderers never call <c>IAgent</c>
@@ -22,6 +23,16 @@ public abstract record TuiEffect
 
     /// <summary>Leave the interactive loop.</summary>
     public sealed record QuitApp : TuiEffect;
+
+    /// <summary>
+    ///     Make a session the active one — the tab-strip's "activate" contract
+    ///     (#388). The host routes it to the existing session-switch path
+    ///     (<c>ISessionManager.OpenSessionAsync</c>); the reducer itself never
+    ///     resolves DI, it only asks (see <see cref="UiReducer.ActivateTab" />).
+    ///     Pure state-only hosts that never switch sessions may ignore it.
+    /// </summary>
+    /// <param name="SessionId">The session the host must open.</param>
+    public sealed record ActivateSession(SessionId SessionId) : TuiEffect;
 }
 
 /// <summary>

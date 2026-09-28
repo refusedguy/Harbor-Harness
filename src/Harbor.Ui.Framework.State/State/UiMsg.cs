@@ -196,4 +196,67 @@ public abstract record UiMsg
     /// <param name="Id">The panel id (e.g. <c>"file-tree"</c>).</param>
     /// <param name="Directory">The new directory (full path, or empty for CWD).</param>
     public sealed record SetPanelDirectory(string Id, string Directory) : UiMsg;
+
+    // ── tab strip (#388, slice 1/3 — state + transitions only, no renderer) ──
+
+    /// <summary>
+    ///     Open a tab for a session, at the right end of the strip.
+    ///     <b>Idempotent:</b> when the session already has a tab this activates
+    ///     it instead of appending a duplicate, and leaves its order and fields
+    ///     alone (metadata refresh is a follow-up, not an open).
+    /// </summary>
+    /// <param name="Tab">The descriptor to append — ignored when the session is already open.</param>
+    public sealed record OpenTab(SessionTab Tab) : UiMsg;
+
+    /// <summary>
+    ///     Focus an open tab and ask the host to switch to its session
+    ///     (emits <see cref="TuiEffect.ActivateSession" />). Never reorders.
+    /// </summary>
+    /// <param name="SessionId">The tab's session id.</param>
+    public sealed record ActivateTab(SessionId SessionId) : UiMsg;
+
+    /// <summary>
+    ///     Close a tab. When the active tab closes, focus moves to a
+    ///     deterministic neighbour — next, else previous, else none.
+    /// </summary>
+    /// <param name="SessionId">The tab's session id.</param>
+    public sealed record CloseTab(SessionId SessionId) : UiMsg;
+
+    /// <summary>
+    ///     Close every tab except <paramref name="Keep" /> (the context-menu
+    ///     "close others"), then focus the survivor.
+    /// </summary>
+    /// <param name="Keep">The tab that stays open and becomes active.</param>
+    public sealed record CloseOtherTabs(SessionId Keep) : UiMsg;
+
+    /// <summary>
+    ///     Close every tab to the right of <paramref name="From" /> ("close
+    ///     right"), then focus <paramref name="From" />. Strictly to the right:
+    ///     <paramref name="From" /> itself always survives.
+    /// </summary>
+    /// <param name="From">The leftmost tab that survives.</param>
+    public sealed record CloseTabsToRight(SessionId From) : UiMsg;
+
+    /// <summary>
+    ///     Pin or unpin a tab. Flag only — pinning never reorders, so the tab
+    ///     the user is looking at cannot jump.
+    /// </summary>
+    /// <param name="SessionId">The tab's session id.</param>
+    /// <param name="Pinned">Target pin state.</param>
+    public sealed record PinTab(SessionId SessionId, bool Pinned) : UiMsg;
+
+    /// <summary>
+    ///     Move a tab to <paramref name="ToIndex" /> in tab order (drag-reorder /
+    ///     move-to-index), clamped to the current range. The active tab never
+    ///     changes: reordering is presentation, not focus.
+    /// </summary>
+    /// <param name="SessionId">The tab to move.</param>
+    /// <param name="ToIndex">Target index, clamped to <c>[0 .. Tabs.Length - 1]</c>.</param>
+    public sealed record ReorderTab(SessionId SessionId, int ToIndex) : UiMsg;
+
+    /// <summary>Focus the next tab in tab order (wraps; no-op with fewer than two tabs).</summary>
+    public sealed record CycleNextTab : UiMsg;
+
+    /// <summary>Focus the previous tab in tab order (wraps; no-op with fewer than two tabs).</summary>
+    public sealed record CyclePreviousTab : UiMsg;
 }

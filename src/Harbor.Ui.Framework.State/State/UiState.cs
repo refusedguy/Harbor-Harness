@@ -230,7 +230,10 @@ public sealed record UiState
             WasRunning = WasRunning,
             Sessions = Sessions,
             ActiveSessionId = ActiveSessionId,
-            IsLoading = IsLoading
+            IsLoading = IsLoading,
+            // The open tabs are workspace chrome, not transcript: a clear-screen
+            // must not close them (#388).
+            Tabs = Tabs
         },
         Ui = Ui with
         {
