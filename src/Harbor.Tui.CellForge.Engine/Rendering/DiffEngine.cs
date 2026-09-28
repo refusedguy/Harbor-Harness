@@ -5,9 +5,12 @@ using Harbor.Ui.Framework.Rendering.Protocol;
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
-/// Cell-diff core (celldiff §2): fused full-scan prev→next that emits ANSI
-/// straight into the writer — no intermediate change lists, zero steady-state
-/// allocations. Three cooperating accelerations:
+/// Cell-diff core (celldiff §2): ENG1 split of the fused full-scan prev→next
+/// into a zero-alloc diff iterator (<see cref="FrameDiff"/>, Ratatui
+/// <c>diff.rs</c> pattern) plus a delta draw through the writer (Terminal.Gui
+/// <c>OutputBase</c> pattern: cached fg/bg via the SGR automaton, skipped
+/// <c>MoveTo</c> on adjacent cells, single backend write per frame at
+/// <c>EndFrame</c>). Three cooperating accelerations:
 /// <list type="bullet">
 ///   <item><description>row-hash fast-path — silent rows cost O(1) instead of
 ///     O(cols);</description></item>
@@ -104,165 +107,78 @@ public sealed class DiffEngine
     }
 
     /// <summary>
-    /// Syncs the terminal to <paramref name="next"/>: emits the changed cells
-    /// through the writer and advances FRONT. Geometry must match. When hints
-    /// are registered and their clipped area stays under
+    /// Syncs the terminal to <paramref name="next"/>: diffs through the
+    /// zero-alloc <see cref="FrameDiff"/> iterator, draws the delta into the
+    /// writer, and advances FRONT. Geometry must match. When hints are
+    /// registered and their clipped area stays under
     /// <see cref="HintAreaThreshold"/> of the screen, only hinted regions are
-    /// scanned; any other frame runs the fused full scan.
+    /// scanned; any other frame runs the full scan. The frame leaves the
+    /// process through the writer's single backend write at
+    /// <c>EndFrame</c> — <see cref="Flush"/> itself never touches the backend.
     /// </summary>
     public void Flush(ScreenBuffer next, AnsiWriter writer)
     {
-        ArgumentOutOfRangeException.ThrowIfNotEqual(next.Cols, _front.Cols);
-        ArgumentOutOfRangeException.ThrowIfNotEqual(next.Rows, _front.Rows);
+        var cursor = Diff(next).GetEnumerator();
 
-        bool useHints = _hints.Count > 0
-            && HintArea() < (long)_front.Cols * _front.Rows * HintAreaThreshold;
-
-        if (useHints)
+        // Adjacent-cell MoveTo skip (OutputBase pattern): after a drawn cell
+        // the writer's pen already sits on the next column, so a MoveTo there
+        // would elide inside the writer. Skipping the call outright is
+        // byte-identical — MoveTo's pre-elision SGR flush is a no-op here
+        // because SetStyle always leaves zero pending SGR params.
+        int lastX = int.MinValue;
+        int lastY = int.MinValue;
+        while (cursor.MoveNext())
         {
-            // ScanRange never re-enters FrameHint, so the live list can be
-            // scanned directly and dropped afterwards — no snapshot alloc.
-            // Sorting row-major keeps the hinted emission order identical to
-            // the fused full scan (top→bottom, left→right per row), so both
-            // paths serialize the same changed cells into the same ANSI
-            // stream — the byte-identical golden contract.
-            var hints = _hints;
-            if (hints.Count > 1)
+            int x = cursor.X;
+            int y = cursor.Y;
+            Cell target = cursor.Target;
+            if (x != lastX + 1 || y != lastY)
             {
-                hints.Sort(static (a, b) => a.Y != b.Y
-                    ? a.Y.CompareTo(b.Y)
-                    : a.X.CompareTo(b.X));
+                writer.MoveTo(x, y);
             }
 
-            for (int i = 0; i < hints.Count; i++)
-            {
-                var rect = hints[i];
-                ScanRange(rect.X, rect.Y, rect.Right, rect.Bottom, next, writer);
-            }
-        }
-        else
-        {
-            ScanRange(0, 0, _front.Cols, _front.Rows, next, writer);
+            writer.SetStyle(target.Style);
+            writer.PutRune(new Rune(target.Rune));
+            lastX = x;
+            lastY = y;
         }
 
         _hints.Clear();
     }
 
-    // ── Core scan ──────────────────────────────────────────────────────────
-
     /// <summary>
-    /// Fused compare-and-emit over [x1..x2) × [y1..y2). With an armed effect
-    /// pipeline the comparison runs against the TRANSFORMED next cell and
-    /// FRONT mirrors the transformed cell (it mirrors the terminal, which the
-    /// effects have recolored) — so disarming converges in one plain repaint.
-    /// The unarmed path is the exact classic scan: same compares, same bytes,
-    /// zero added work.
+    /// Opens the zero-alloc diff of FRONT against <paramref name="next"/>
+    /// (mode <see cref="FrameDiffMode.Delta"/> by default). Draining the
+    /// returned <see cref="FrameDiff"/> yields each changed cell as
+    /// <c>(X, Y, Target)</c> and mirrors FRONT as it goes — a full drain
+    /// upholds <c>FRONT == BACK</c>. Hint lifecycle stays with
+    /// <see cref="Flush"/>: this method sorts the registered hints
+    /// row-major (no allocation) but does NOT clear them.
     /// </summary>
-    private void ScanRange(int x1, int y1, int x2, int y2, ScreenBuffer next, AnsiWriter writer)
+    public FrameDiff Diff(ScreenBuffer next, FrameDiffMode mode = FrameDiffMode.Delta)
     {
-        int cols = _front.Cols;
-        int rows = _front.Rows;
-        int right = Math.Min(x2, cols);
-        int bottom = Math.Min(y2, rows);
-        var pipeline = Effects;
-        bool armed = pipeline is { Count: > 0 };
+        ArgumentOutOfRangeException.ThrowIfNotEqual(next.Cols, _front.Cols);
+        ArgumentOutOfRangeException.ThrowIfNotEqual(next.Rows, _front.Rows);
 
-        for (int y = Math.Max(0, y1); y < bottom; y++)
+        // Sorting row-major keeps the hinted emission order identical to the
+        // full scan (top→bottom, left→right per row), so both paths serialize
+        // the same changed cells into the same ANSI stream — the byte-identical
+        // golden contract. List.Sort is allocation-free (introsort, no closure).
+        bool useHints = _hints.Count > 0
+            && HintArea() < (long)_front.Cols * _front.Rows * HintAreaThreshold;
+        if (useHints && _hints.Count > 1)
         {
-            // Row-hash fast path: both sides validated & identical → nothing
-            // to do; adopt next's hash into front (they are equal). Safe with
-            // effects armed too: equal hashes mean FRONT's transformed cells
-            // already equal BACK's raw cells (identity transform on the row).
-            if (_front.IsRowHashValid(y) && next.IsRowHashValid(y)
-                && _front.RowHash[y] == next.RowHash[y])
-            {
-                continue;
-            }
-
-            for (int x = Math.Max(0, x1); x < right; )
-            {
-                ref readonly Cell n = ref next.At(x, y);
-                Cell f = _front.At(x, y);
-                int width = n.Width;
-
-                if (width == Cell.WSkip)
-                {
-                    // Tail half: never emitted (terminal advances by itself),
-                    // but FRONT must mirror it silently. A hint boundary can
-                    // enter the row ON the tail half; repair the lead too so
-                    // a wide pair is never half-mirrored (no ghost glyphs).
-                    if (f != n)
-                    {
-                        _front.At(x, y) = n;
-                    }
-
-                    if (x > 0)
-                    {
-                        ref readonly Cell leadNext = ref next.At(x - 1, y);
-                        var leadTarget = Fx(pipeline, x - 1, y, in leadNext);
-                        if (_front.At(x - 1, y) != leadTarget)
-                        {
-                            writer.MoveTo(x - 1, y);
-                            writer.SetStyle(leadTarget.Style);
-                            writer.PutRune(new Rune(leadTarget.Rune));
-                            _front.At(x - 1, y) = leadTarget;
-                            if (leadNext.Width == Cell.Wide)
-                            {
-                                _front.At(x, y) = Cell.WideTail;
-                            }
-                        }
-                    }
-
-                    x += 1;
-                    continue;
-                }
-
-                // Post-render stage (renderer-moat T3): the diff-selected cell
-                // passes through the effect transform — after cell selection,
-                // before SGR encoding. Identity results emit no bytes (SGR
-                // automaton dedupes).
-                var target = Fx(pipeline, x, y, in n);
-
-                if (f == target)
-                {
-                    x += width;
-                    continue;
-                }
-
-                writer.MoveTo(x, y);
-                writer.SetStyle(target.Style);
-                writer.PutRune(new Rune(target.Rune));
-
-                _front.At(x, y) = target;
-                if (width == Cell.Wide)
-                {
-                    _front.At(x + 1, y) = Cell.WideTail;
-                }
-
-                x += width;
-            }
-
-            // Row is now identical to next across the scanned span. Adopt
-            // next's authoritative hash only when the span covered the whole
-            // row; a partial-row (hinted) scan must invalidate FRONT's cache
-            // instead — cells outside the span may still differ, and next's
-            // stored hash may be stale from before this frame's paint. With
-            // effects armed FRONT holds transformed cells whose hashes differ
-            // from BACK's raw hashes — invalidate instead of adopting.
-            if (x1 <= 0 && right >= cols && !armed)
-            {
-                _front.AdoptRowHash(next, y);
-            }
-            else
-            {
-                _front.MarkRowDirty(y);
-            }
+            _hints.Sort(static (a, b) => a.Y != b.Y
+                ? a.Y.CompareTo(b.Y)
+                : a.X.CompareTo(b.X));
         }
+
+        return new FrameDiff(_front, next, useHints ? _hints : null, Effects, mode);
     }
 
     /// <summary>Applies the armed pipeline (null → identity) to one cell.
     /// JIT-inlined null check keeps the unarmed hot path at zero added cost.</summary>
-    private static Cell Fx(PostFxPipeline? pipeline, int x, int y, in Cell cell) =>
+    internal static Cell ApplyFx(PostFxPipeline? pipeline, int x, int y, in Cell cell) =>
         pipeline is null ? cell : pipeline.Transform(x, y, in cell);
 
     /// <summary>Smallest rect covering both inputs (hint-union merge).</summary>
