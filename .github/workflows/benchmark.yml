@@ -97,6 +97,18 @@ jobs:
           sudo systemctl stop snapd.service snapd.socket || true
           taskset -c 1 dotnet run -c Release --no-build -- --filter '*EventBusFastPath*' --job Short
 
+      # #487: the status bar's packing pass runs on every painted frame, and a
+      # benchmark no CI job invokes produces no BENCHMARKS.md row — the doc would
+      # stay permanently "pending" and the class would rot. One Short run over 4
+      # rows (a 6/8/24 segment sweep + the 12-segment footer row) costs ~2 min of
+      # the 45-min budget. The machine-independent claim is enforced separately by
+      # StatusBarFitPerfTests; this step is the wall-clock row.
+      - name: Bench StatusBarLayout Fit
+        working-directory: tests/Harbor.Benchmarks
+        run: |
+          sudo systemctl stop snapd.service snapd.socket || true
+          taskset -c 1 dotnet run -c Release --no-build -- --filter '*StatusBarLayoutFit*' --job Short
+
       - name: Publish results to job summary
         if: always()
         shell: bash
