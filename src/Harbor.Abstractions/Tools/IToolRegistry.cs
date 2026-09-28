@@ -17,6 +17,12 @@ namespace Harbor.Abstractions.Tools;
 ///         <see cref="FrozenDictionary{TKey, TValue}" /> snapshot for O(1) reads after
 ///         <see cref="ToolRegistry.Freeze" /> is called.
 ///     </para>
+///     <para>
+///         The lists returned by <see cref="IToolRegistry.GetAllTools" /> and
+///         <see cref="IToolRegistry.ResolveTools" /> are snapshots: after
+///         <c>Freeze()</c> implementations may return a shared cached array, so
+///         callers MUST treat the result as read-only and never mutate it.
+///     </para>
 /// </remarks>
 public interface IToolRegistry
 {

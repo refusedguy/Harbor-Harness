@@ -36,6 +36,14 @@ public sealed record PermissionRuleset
     private readonly PermissionRule[] _sortedRules;
 
     /// <summary>
+    ///     Cached read-only view over <see cref="_sortedRules" /> returned by
+    ///     <see cref="Rules" /> (#183): repeat accesses allocate nothing.
+    ///     Mutation attempts throw <see cref="NotSupportedException" /> instead
+    ///     of silently forking a copy.
+    /// </summary>
+    private readonly IReadOnlyList<PermissionRule> _rulesView;
+
+    /// <summary>
     ///     Argument-safety strategies consulted by <see cref="Evaluate" />. Defaults to
     ///     <see cref="DefaultSafetyPolicies" />; inject a custom list to guard a new
     ///     path-like or exec-style tool without editing the contract.
@@ -76,22 +84,17 @@ public sealed record PermissionRuleset
         });
 
         _sortedRules = arr;
+        _rulesView = Array.AsReadOnly(arr);
         _safetyPolicies = safetyPolicies ?? DefaultSafetyPolicies;
     }
 
     /// <summary>
     ///     The rules in this ruleset, pre-sorted by specificity (most-specific first, Deny-first
-    ///     on ties). The returned list is a defensive copy so callers cannot mutate the cached sort.
+    ///     on ties). The returned list is a cached read-only view over the internal sort —
+    ///     repeat accesses allocate nothing. Do not mutate it: mutation attempts throw
+    ///     <see cref="NotSupportedException" />.
     /// </summary>
-    public IReadOnlyList<PermissionRule> Rules
-    {
-        get
-        {
-            var copy = new PermissionRule[_sortedRules.Length];
-            Array.Copy(_sortedRules, copy, _sortedRules.Length);
-            return copy;
-        }
-    }
+    public IReadOnlyList<PermissionRule> Rules => _rulesView;
 
     /// <summary>
     ///     The argument-safety strategies consulted by <see cref="Evaluate" />.

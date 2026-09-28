@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Harbor.Registries.Tools;
 using Microsoft.Extensions.Logging;
 using NonBlocking;
 namespace Harbor.Abstractions.Tools;
@@ -27,22 +28,19 @@ public sealed class ToolRegistry : IToolRegistry
     // (например, lazy-loaded tools из плагинов), придётся ещё раз дублировать.
     // Лучше — CompositeToolRegistry, делегирующий в один из IToolSource. См. §OOP-005.
     private readonly ConcurrentDictionary<ToolName, ITool> _tools = new();
-    private volatile FrozenDictionary<ToolName, ITool>? _frozenTools;
+    // #183: single volatile publish-once snapshot (frozen map + cached descriptor
+    // arrays + per-ruleset filtered cache). One reference swap per Freeze(), so
+    // readers never observe a torn view; dropping it drops the filtered cache too.
+    private volatile FrozenToolView? _frozenView;
 
     /// <inheritdoc />
     public IReadOnlyList<ToolDescriptor> GetAllTools()
     {
-        // Prefer frozen snapshot (lock-free, smaller memory footprint).
-        var frozen = _frozenTools;
-        if (frozen is not null)
+        // Prefer frozen snapshot: the cached array is returned as-is (zero alloc).
+        var view = _frozenView;
+        if (view is not null)
         {
-            var result = new ToolDescriptor[frozen.Count];
-            int i = 0;
-            foreach (var kv in frozen)
-            {
-                result[i++] = ToDescriptor(kv.Value);
-            }
-            return result;
+            return view.GetAll();
         }
 
         // Fallback: iterate concurrent dictionary directly (no intermediate array via ToArray()).
@@ -63,12 +61,12 @@ public sealed class ToolRegistry : IToolRegistry
     /// <inheritdoc />
     public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
     {
-        var frozen = _frozenTools;
-        if (frozen is not null)
+        // Frozen snapshot: cached array (unfiltered) or memoized per-ruleset
+        // array (filtered) — zero alloc on repeat calls. Treat as read-only.
+        var view = _frozenView;
+        if (view is not null)
         {
-            return sessionPermission is null
-                ? ResolveAllFromFrozen(frozen)
-                : ResolveFilteredFromFrozen(frozen, sessionPermission);
+            return view.Resolve(sessionPermission);
         }
 
         var snapshot = _tools.Values;
@@ -99,8 +97,8 @@ public sealed class ToolRegistry : IToolRegistry
     public Result<ITool> GetTool(ToolName name)
     {
         // Try frozen snapshot first (fast path)
-        var frozen = _frozenTools;
-        if (frozen is not null && frozen.TryGetValue(name, out var tool))
+        var view = _frozenView;
+        if (view is not null && view.TryGetTool(name, out var tool) && tool is not null)
         {
             return Result.Success(tool);
         }
@@ -138,33 +136,6 @@ public sealed class ToolRegistry : IToolRegistry
         return Result.Failure($"Tool '{name}' is not registered.");
     }
 
-    private static ToolDescriptor[] ResolveAllFromFrozen(FrozenDictionary<ToolName, ITool> frozen)
-    {
-        var result = new ToolDescriptor[frozen.Count];
-        int i = 0;
-        foreach (var kv in frozen)
-        {
-            result[i++] = ToDescriptor(kv.Value);
-        }
-        return result;
-    }
-
-    private static List<ToolDescriptor> ResolveFilteredFromFrozen(
-        FrozenDictionary<ToolName, ITool> frozen,
-        PermissionRuleset sessionPermission)
-    {
-        // Upper-bound the capacity; filtering happens after.
-        var result = new List<ToolDescriptor>(frozen.Count);
-        foreach (var t in frozen.Values)
-        {
-            if (sessionPermission.Evaluate(t.Name.Value, "*") == PermissionAction.Allow)
-            {
-                result.Add(ToDescriptor(t));
-            }
-        }
-        return result;
-    }
-
     /// <summary>
     ///     Freeze the current tool set for fast lock-free lookups.
     ///     Call after all tools are registered at startup.
@@ -173,9 +144,9 @@ public sealed class ToolRegistry : IToolRegistry
     {
         // Atomic publish: readers observe either the prior snapshot or the new
         // one — never a half-built dictionary. The volatile write on
-        // _frozenTools has release semantics so the frozen dictionary is fully
+        // _frozenView has release semantics so the frozen view is fully
         // visible before the reference is published.
-        _frozenTools = _tools.ToFrozenDictionary();
+        _frozenView = FrozenToolView.Build(_tools.ToFrozenDictionary(), ToDescriptor);
     }
 
     private void InvalidateFrozenSnapshot()
@@ -184,8 +155,9 @@ public sealed class ToolRegistry : IToolRegistry
         // GetTool/ResolveTools readers may observe either the prior snapshot
         // (still valid — they just continue using the stale-but-consistent
         // frozen view until the next Freeze()) or null (and fall through to
-        // the ConcurrentDictionary slow path). Both outcomes are safe.
-        Interlocked.Exchange(ref _frozenTools, null);
+        // the ConcurrentDictionary slow path). Both outcomes are safe. Dropping
+        // the snapshot also drops its memoized per-ruleset arrays.
+        Interlocked.Exchange(ref _frozenView, null);
     }
 
     private static ToolDescriptor ToDescriptor(ITool t) => new(

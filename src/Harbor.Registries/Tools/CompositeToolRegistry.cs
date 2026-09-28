@@ -6,7 +6,8 @@ namespace Harbor.Registries.Tools;
 public sealed class CompositeToolRegistry : IToolRegistry
 {
     private readonly List<IToolSource> _sources = new();
-    private volatile FrozenDictionary<ToolName, ITool>? _frozenTools;
+    // #183: single volatile publish-once snapshot — see FrozenToolView.
+    private volatile FrozenToolView? _frozenView;
 
     public void AddSource(IToolSource source)
     {
@@ -16,16 +17,11 @@ public sealed class CompositeToolRegistry : IToolRegistry
 
     public IReadOnlyList<ToolDescriptor> GetAllTools()
     {
-        var frozen = _frozenTools;
-        if (frozen is not null)
+        // Frozen snapshot: the cached array is returned as-is (zero alloc).
+        var view = _frozenView;
+        if (view is not null)
         {
-            var result = new ToolDescriptor[frozen.Count];
-            int i = 0;
-            foreach (var kv in frozen)
-            {
-                result[i++] = ToDescriptor(kv.Value);
-            }
-            return result;
+            return view.GetAll();
         }
 
         int count = 0;
@@ -52,15 +48,12 @@ public sealed class CompositeToolRegistry : IToolRegistry
 
     public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
     {
-        var frozen = _frozenTools;
-        if (frozen is not null)
+        // Frozen snapshot: cached array (unfiltered) or memoized per-ruleset
+        // array (filtered) — zero alloc on repeat calls. Treat as read-only.
+        var view = _frozenView;
+        if (view is not null)
         {
-            if (sessionPermission is null)
-            {
-                return ResolveAllFromFrozen(frozen);
-            }
-
-            return ResolveFilteredFromFrozen(frozen, sessionPermission);
+            return view.Resolve(sessionPermission);
         }
 
         var list = new List<ToolDescriptor>();
@@ -76,8 +69,8 @@ public sealed class CompositeToolRegistry : IToolRegistry
 
     public Result<ITool> GetTool(ToolName name)
     {
-        var frozen = _frozenTools;
-        if (frozen is not null && frozen.TryGetValue(name, out var tool))
+        var view = _frozenView;
+        if (view is not null && view.TryGetTool(name, out var tool) && tool is not null)
         {
             return Result.Success(tool);
         }
@@ -115,38 +108,12 @@ public sealed class CompositeToolRegistry : IToolRegistry
             }
         }
 
-        _frozenTools = dict.ToFrozenDictionary();
+        _frozenView = FrozenToolView.Build(dict.ToFrozenDictionary(), ToDescriptor);
     }
 
     private void InvalidateFrozenSnapshot()
     {
-        Interlocked.Exchange(ref _frozenTools, null);
-    }
-
-    private static ToolDescriptor[] ResolveAllFromFrozen(FrozenDictionary<ToolName, ITool> frozen)
-    {
-        var result = new ToolDescriptor[frozen.Count];
-        int i = 0;
-        foreach (var kv in frozen)
-        {
-            result[i++] = ToDescriptor(kv.Value);
-        }
-        return result;
-    }
-
-    private static List<ToolDescriptor> ResolveFilteredFromFrozen(
-        FrozenDictionary<ToolName, ITool> frozen,
-        PermissionRuleset sessionPermission)
-    {
-        var result = new List<ToolDescriptor>(frozen.Count);
-        foreach (var t in frozen.Values)
-        {
-            if (sessionPermission.Evaluate(t.Name.Value, "*") == PermissionAction.Allow)
-            {
-                result.Add(ToDescriptor(t));
-            }
-        }
-        return result;
+        Interlocked.Exchange(ref _frozenView, null);
     }
 
     private static ToolDescriptor ToDescriptor(ITool t) => new(
