@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Reflection;
 using System.Text;
 using Harbor.Abstractions.Models;
@@ -38,8 +39,8 @@ namespace Harbor.Application.Tests;
 ///         mutation.</b> <c>MaterializeToolCalls</c> is the only consumer of the
 ///         table, and
 ///         <c>ToolCallDelta_AppendsEveryFragment_AndTheOnlyReaderStillSeesThemAll</c>
-///         pins that it still sees every fragment in order, across a call that
-///         never writes to the table.
+///         pins that it still sees every fragment in order and still materializes
+///         the call, on a code path that never writes to the table.
 ///         <c>EntryHeldFromBeforeTheFragments_SeesThemAll_WithoutAWriteBack</c>
 ///         is the same claim from the other side: a copy of the entry taken
 ///         <i>before</i> the fragments arrived observes all of them anyway,
@@ -71,12 +72,17 @@ public class StreamingCoalescerNoStoreTests
 {
     private const string CallId = "call-1";
     private const int Fragments = 64;
-
-    /// <summary>The two args fragments, interleaved: together they are one valid args JSON.</summary>
-    private const string OpenArgs = "{\"path\":";
-
-    private const string CloseArgs = "\"src/Harbor/README.md\"}";
     private const string SingleCharFragment = "x";
+
+    /// <summary>
+    ///     One valid args object, long enough to be cut into
+    ///     <see cref="Fragments" /> realistic deltas. Reassembling the fragments
+    ///     must yield it byte for byte: <c>MaterializeToolCalls</c> parses the
+    ///     accumulation exactly once, and a split that does not round-trip would
+    ///     silently drop the call as malformed instead of failing here.
+    /// </summary>
+    private static readonly string ArgsJson =
+        "{\"path\":\"src/Harbor/README.md\",\"pad\":\"" + new string('x', 512) + "\"}";
 
     private static readonly Type CoalescerType =
         typeof(AgentLoop).Assembly.GetType("Harbor.Application.Agents.StreamingCoalescer", throwOnError: true)!;
@@ -131,20 +137,25 @@ public class StreamingCoalescerNoStoreTests
         // MaterializeToolCalls is the table's only consumer. The per-delta
         // write-back is gone, and this is the property it was not protecting:
         // the accumulated args are still the fragments, in order, byte for
-        // byte — no fragment lost, duplicated or reordered on the way to the
-        // single parse the materialization does.
+        // byte, and the call still materializes instead of being reported
+        // malformed — no fragment lost, duplicated or reordered on the way to
+        // the single parse the materialization does.
+        string[] fragments = FragmentsOf();
         object coalescer = NewCoalescer();
         try
         {
             StartToolCallMethod.Invoke(coalescer, new object?[] { CallId, "read" });
 
             var expected = new StringBuilder();
-            for (int i = 0; i < Fragments; i++)
+            foreach (string fragment in fragments)
             {
-                string fragment = (i & 1) == 0 ? OpenArgs : CloseArgs;
                 AppendToolCallDeltaMethod.Invoke(coalescer, new object?[] { CallId, fragment });
                 expected.Append(fragment);
             }
+
+            // The split itself must be lossless, or the parse below would be
+            // testing a broken fixture rather than the coalescer.
+            await Assert.That(expected.ToString()).IsEqualTo(ArgsJson);
 
             // One call, one entry: a fragment never smuggled a second pending
             // call (or a replacement builder) in under cover of the append.
@@ -153,7 +164,7 @@ public class StreamingCoalescerNoStoreTests
             await Assert.That(calls!.Count).IsEqualTo(1);
             await Assert.That(calls[0].Id).IsEqualTo(CallId);
             await Assert.That(calls[0].ToolName).IsEqualTo("read");
-            await Assert.That(calls[0].Args.GetRawText()).IsEqualTo(expected.ToString());
+            await Assert.That(calls[0].Args.GetRawText()).IsEqualTo(ArgsJson);
         }
         finally
         {
@@ -211,11 +222,11 @@ public class StreamingCoalescerNoStoreTests
         var replica = new Dictionary<string, (string Name, StringBuilder Args)>(capacity: 4);
         replica[CallId] = ("read", new StringBuilder());
 
-        System.Collections.IEnumerator probe = ((System.Collections.IEnumerable)replica).GetEnumerator();
+        IEnumerator probe = ((IEnumerable)replica).GetEnumerator();
         await Assert.That(probe.MoveNext()).IsTrue();
 
         var acc = replica[CallId];
-        acc.Args.Append("""{"path":"README.md"}""");
+        acc.Args.Append(ArgsJson);
         replica[CallId] = acc; // the write-back #493 removed
 
         // Still valid: the second MoveNext simply reports the end of the table.
@@ -223,10 +234,28 @@ public class StreamingCoalescerNoStoreTests
 
         // ...and the mutation is visible through the entry all the same,
         // which is the whole point — it is reference mutation, not a store.
-        await Assert.That(replica[CallId].Args.ToString()).IsEqualTo("""{"path":"README.md"}""");
+        await Assert.That(replica[CallId].Args.ToString()).IsEqualTo(ArgsJson);
     }
 
     private static object NewCoalescer() => Activator.CreateInstance(CoalescerType, nonPublic: true)!;
+
+    /// <summary>
+    ///     <see cref="ArgsJson" /> cut into <see cref="Fragments" /> deltas,
+    ///     the shape a provider actually streams. The last fragment absorbs
+    ///     the remainder so the split always round-trips.
+    /// </summary>
+    private static string[] FragmentsOf()
+    {
+        var fragments = new string[Fragments];
+        int chunk = ArgsJson.Length / Fragments;
+        for (int i = 0; i < Fragments; i++)
+        {
+            int start = i * chunk;
+            fragments[i] = ArgsJson.Substring(start, i == Fragments - 1 ? ArgsJson.Length - start : chunk);
+        }
+
+        return fragments;
+    }
 
     /// <summary>Whether a member is callable from outside the class (public or internal).</summary>
     private static bool VisibleOutside(MemberInfo member) => member switch
@@ -252,11 +281,7 @@ public class StreamingCoalescerNoStoreTests
             || type.GetGenericTypeDefinition() == typeof(IDictionary<,>));
 
     /// <summary>
-    ///     The <see cref="StringBuilder" /> the (single) pending entry points
-    ///     at, reached through the boxed
-    ///     <c>KeyValuePair&lt;string, (string Name, PooledStringBuilder Args)&gt;</c>
-    ///     the table's enumerator hands out: pair &rarr; tuple &rarr; pooled
-    ///     wrapper &rarr; builder.
+    ///     The <see cref="StringBuilder" /> the pending call's entry points at.
     /// </summary>
     private static StringBuilder ArgsBuilderOf(object table)
     {
@@ -267,33 +292,23 @@ public class StreamingCoalescerNoStoreTests
         return (StringBuilder)builder.GetValue(pooled)!;
     }
 
-    /// <summary>The tool name the (single) pending entry was started with.</summary>
-    private static string NameOf(object table)
+    /// <summary>The tool name the pending call was started with.</summary>
+    private static string NameOf(object table) => (string)EntryPart(table, "Item1")!;
+
+    /// <summary>The <c>PooledStringBuilder</c> the pending call's entry holds.</summary>
+    private static object PooledWrapperOf(object table) => EntryPart(table, "Item2")!;
+
+    /// <summary>
+    ///     One field of the pending call's entry, read through the non-generic
+    ///     <see cref="IDictionary" /> so no private BCL field is involved. The
+    ///     entry is a <c>ValueTuple&lt;string, PooledStringBuilder&gt;</c>, whose
+    ///     <c>Item1</c>/<c>Item2</c> names are fixed by the language.
+    /// </summary>
+    private static object? EntryPart(object table, string itemField)
     {
-        foreach (object? entry in (System.Collections.IEnumerable)table)
-        {
-            object tuple = EntryTuple(entry!);
-            return (string)tuple.GetType().GetField("Item1")!.GetValue(tuple)!;
-        }
-
-        throw EmptyTable();
+        object entry = ((IDictionary)table)[CallId]
+            ?? throw new InvalidOperationException($"The pending-call table has no entry for {CallId}.");
+        return entry.GetType().GetField(itemField)?.GetValue(entry)
+            ?? throw new InvalidOperationException($"The pending-call entry no longer has a {itemField} field.");
     }
-
-    /// <summary>The <c>PooledStringBuilder</c> the (single) pending entry holds.</summary>
-    private static object PooledWrapperOf(object table)
-    {
-        foreach (object? entry in (System.Collections.IEnumerable)table)
-        {
-            object tuple = EntryTuple(entry!);
-            return tuple.GetType().GetField("Item2")!.GetValue(tuple)!;
-        }
-
-        throw EmptyTable();
-    }
-
-    private static object EntryTuple(object keyValuePair) =>
-        keyValuePair.GetType().GetField("Item2")!.GetValue(keyValuePair)!;
-
-    private static InvalidOperationException EmptyTable() =>
-        new("The pending-call table is empty — the #493 test under it is broken.");
 }
