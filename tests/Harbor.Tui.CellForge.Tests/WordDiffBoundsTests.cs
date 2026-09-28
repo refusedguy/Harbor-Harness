@@ -144,8 +144,14 @@ public class WordDiffBoundsTests
         // 2 801 × 6 = 16 806 cells, just past 16 384, so the pair is declined.
         // A square cap of 128 would have declined this too — what the product
         // cap buys is the lopsided case ABOVE, not this one.
-        const string shared = "keep these five words";
-        string longRow = shared + " " + string.Join(' ', Enumerable.Repeat("x", 2_800));
+        // Single-character tokens on BOTH sides, because the character cap and
+        // the cell cap are different axes: 2 802 tokens need 2 803 cells, and
+        // 5 562 chars do not fit in 4 KiB. So the other side carries 6 tokens
+        // and 6 048 cells with 6 chars — over the cap on the cells, well under
+        // it on the characters. That is the only way to sit just past a product
+        // cap with a row short enough for PairRun to consider at all.
+        string longRow = string.Join(' ', Enumerable.Repeat("x", 2_802));
+        string shortRow = string.Join(' ', Enumerable.Repeat("y", 6));
         await Assert.That(longRow.Length).IsLessThan(WordDiff.MaxPairableLineChars);
 
         IReadOnlyList<DiffLine> lines =

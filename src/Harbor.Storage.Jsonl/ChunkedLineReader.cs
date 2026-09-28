@@ -285,6 +285,10 @@ internal sealed class ChunkedLineReader : IDisposable
                 return;
             }
 
+            // The block is refilled from the front, so the cursor resets with
+            // it. Leaving it at the old _filled skips the whole block when the
+            // new read is no larger than the old one — which is every block.
+            _cursor = 0;
             _filled = n;
             BytesRead += n;
         }

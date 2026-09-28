@@ -484,17 +484,55 @@ public class JsonlUnboundedAllocationTests
     // ------------------------------------------------------------ rewrite paths
 
     [Test]
+    public async Task CopyRemainderTo_PipesEveryByteExactlyOnce()
+    {
+        // The verbatim path's own contract, and it is a byte-counting contract:
+        // no gap, no duplication, no reordering. The cursor has to reset with
+        // each refill or every block after the first is skipped, which looks
+        // from the outside exactly like a lost record.
+        //
+        // The payload is several refills' worth so the bug cannot hide behind a
+        // single-block pass, and the trailing LF is a separate byte so a dropped
+        // terminator is caught too.
+        byte[] payload = new byte[3 * ChunkedLineReader.ChunkBytes + 977];
+        for (int i = 0; i < payload.Length; i++)
+        {
+            payload[i] = (byte)(i % 251);
+        }
+
+        using var source = new MemoryStream();
+        source.Write("head\n"u8);
+        source.Write(payload, 0, payload.Length);
+        source.WriteByte((byte)'\n');
+        source.Position = 0;
+
+        using var reader = new ChunkedLineReader(source);
+        await Assert.That(reader.TryGetRecord(out var head)).IsTrue();
+        await Assert.That(head.Length).IsEqualTo(4);
+
+        using var sink = new MemoryStream();
+        reader.CopyRemainderTo(sink);
+
+        byte[] piped = sink.ToArray();
+        await Assert.That(piped.Length).IsEqualTo(payload.Length + 1);
+        await Assert.That(piped[^1]).IsEqualTo((byte)'\n');
+        await Assert.That(piped.AsSpan(0, payload.Length).SequenceEqual(payload)).IsTrue();
+    }
+
+    [Test]
     public async Task Update_HeaderEditOnABigSession_CopiesBytesWithoutMaterializingThem()
     {
         // The rewrite half of the issue: every title/status/git-branch change
         // did File.ReadAllLines(...).ToList() plus a full rewrite under the
         // per-session semaphore, to change line 1. Here the session holds a
-        // 24 MiB record, and the operation allocates a few hundred KiB.
+        // 24 MiB record, and the operation allocates single-digit MiB.
         //
         // A single big record is the right fixture HERE (and not in the read
         // test): the header plan keeps every record after the first verbatim,
         // so the rewrite pipes them straight through without assembling one —
-        // the fat record is not merely cheap, it is never even a record.
+        // the fat record is not merely cheap, it never becomes a record. What
+        // IS assembled is the head, and the head is the session header: one
+        // line. So the memory is bounded by the header, not by the file.
         var (store, sessionId) = await SeedAsync(1);
         try
         {
@@ -522,7 +560,8 @@ public class JsonlUnboundedAllocationTests
             // the block, two FileStream buffers and the small header record.
             await Assert.That(allocated).IsLessThan(4 * MiB);
 
-            // And the payload survived the rewrite, byte for byte.
+            // And every record survived the rewrite — the count first, because a
+            // byte-piping bug shows up as a missing record, not as a wrong one.
             var reread = await store.GetMessagesAsync(sessionId);
             await Assert.That(reread.IsSuccess).IsTrue();
             await Assert.That(reread.Value.Count).IsEqualTo(2);
