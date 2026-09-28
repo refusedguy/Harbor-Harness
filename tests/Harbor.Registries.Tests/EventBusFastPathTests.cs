@@ -8,9 +8,11 @@ namespace Harbor.Registries.Tests;
 ///     through <see cref="InMemoryEventBus.PublishAsync" /> (#391).
 /// </summary>
 /// <remarks>
-///     The fast path is an early return guarded by
-///     <c>_middlewares.Count == 0 &amp;&amp; _maxScrollback == 0 &amp;&amp;
-///     _subscriptions.IsEmpty</c> (src/Harbor.Registries/Events/InMemoryEventBus.cs:224).
+///     The fast path is an early return guarded by the composition-time constant
+///     <c>_fastPathEligible</c> (<c>maxScrollback == 0 &amp;&amp; no mandatory sink</c>)
+///     plus a lock-free read of <c>_subscriptions.IsEmpty</c>; the no-middleware
+///     case then hands back the cached <c>Task.CompletedTask</c> instead of entering
+///     <c>DrainOptionalSinksAsync</c> (src/Harbor.Registries/Events/InMemoryEventBus.cs).
 ///     Nothing observable distinguishes it from the slow path except that it never
 ///     reaches the <c>#47</c> queue-age envelope, whose <c>PublishedCount</c>
 ///     increment sits strictly below the return. That gives an exact, allocation-free
