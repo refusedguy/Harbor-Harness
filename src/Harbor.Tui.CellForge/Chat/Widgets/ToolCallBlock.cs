@@ -81,8 +81,8 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     private ToolResultBody? _body;
 
     // ENG10 #282: one-shot paints — transition-computed strings, never
-    // per-frame heap objects. Set once (ctor / first Complete wins);
-    // Paint only slices spans over them.
+    // per-frame heap objects. Assigned once at construction or first
+    // completion; Paint only slices spans over them.
     private readonly string _argsRowText;
     private string _durationText = string.Empty;
     private string _pillText = string.Empty;
