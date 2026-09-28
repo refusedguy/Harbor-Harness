@@ -12,8 +12,14 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// header accent-bold, body plain — instead of preformatted strings.
 /// Height is width-independent (columns truncate, never wrap):
 /// top rule + header + mid rule + body rows + bottom rule.
+/// Collapsible per the <c>ICollapsibleChatBlock</c> mixin ([UX2] #262):
+/// tables over <see cref="MaxBodyLines"/> (universal 10) total rows render
+/// collapsed — top slice + <c>"... (N hidden)"</c> tail + bottom rule, so the
+/// frame survives the cut; shorter tables paint fully, so the
+/// default-collapsed state stays byte-identical to the pre-collapse layout.
+/// Feed Enter/click/space toggles via <see cref="ToggleExpanded"/>.
 /// </summary>
-public sealed class TableBlock : IChatBlock
+public sealed class TableBlock : ICollapsibleChatBlock
 {
     private const int MinCell = 3;
     private const int Pad = 1;
@@ -74,6 +80,44 @@ public sealed class TableBlock : IChatBlock
     public int Columns => _table.Headers.Count;
 
     /// <summary>
+    /// Collapsed-body row budget ([UX2] #262: universal 10-line policy).
+    /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291);
+    /// this property satisfies the mixin contract.
+    /// </summary>
+    public int MaxBodyLines { get; set; } = ICollapsibleChatBlock.DefaultUniversalBodyLines;
+
+    /// <summary>
+    /// Whether the block is expanded (feed Enter/click/space toggles via
+    /// <see cref="ToggleExpanded"/>). Defaults to <c>false</c> so tables over
+    /// the budget collapse structurally — no ingestion changes needed; short
+    /// tables paint fully either way, keeping existing goldens byte-identical.
+    /// </summary>
+    public bool IsExpanded { get; private set; }
+
+    /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click/space path).</summary>
+    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
+    public void SetExpanded(bool expanded) => IsExpanded = expanded;
+
+    private Rect? _lastPaintRect;
+    private int _lastSkipRows;
+
+    /// <summary>
+    /// Click hit-test for the top-rule row (unified expand gesture, [UX2] #262;
+    /// mirrors <c>ToolCallBlock.TryHitHeader</c>).
+    /// </summary>
+    public bool TryHitHeader(int col, int row)
+    {
+        if (_lastPaintRect is not { } rect || _lastSkipRows != 0)
+        {
+            return false;
+        }
+
+        return row == rect.Y && col >= rect.X && col < rect.X + rect.Width;
+    }
+
+    /// <summary>
     /// Parses the table block at <paramref name="lines" />[<paramref name="index" />]
     /// via <see cref="GfmTableParser" />. Returns false (null block) when the
     /// lines do not open a GFM table.
@@ -92,13 +136,35 @@ public sealed class TableBlock : IChatBlock
         return true;
     }
 
-    public BlockMeasure Measure(int width) =>
-        BlockMeasure.Exact(4 + _table.Rows.Count);
+    public BlockMeasure Measure(int width)
+    {
+        int total = 4 + _table.Rows.Count;
+        if (!IsExpanded && MaxBodyLines > 0 && total > MaxBodyLines)
+        {
+            // Collapsed overflow ([UX2] #262): top slice + one
+            // overflow-marker row + bottom rule (the frame survives the cut).
+            return BlockMeasure.Exact(MaxBodyLines + 1);
+        }
 
-    public int CheapEstimate(int width) => 4 + _table.Rows.Count;
+        return BlockMeasure.Exact(total);
+    }
+
+    public int CheapEstimate(int width)
+    {
+        int total = 4 + _table.Rows.Count;
+        if (!IsExpanded && MaxBodyLines > 0 && total > MaxBodyLines)
+        {
+            return MaxBodyLines + 1;
+        }
+
+        return total;
+    }
 
     public void Paint(in BlockPaintContext ctx)
     {
+        _lastPaintRect = ctx.Rect;
+        _lastSkipRows = ctx.SkipRows;
+
         var buffer = ctx.Buffer;
         int width = ctx.Rect.Width;
         int height = ctx.Rect.Height;
@@ -114,13 +180,38 @@ public sealed class TableBlock : IChatBlock
         var headerStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
 
         int total = 4 + _table.Rows.Count;
-        int start = Math.Min(ctx.SkipRows, total);
-        int count = Math.Min(height, total - start);
+        bool overflow = !IsExpanded && MaxBodyLines > 0 && total > MaxBodyLines;
+        int hidden = 0;
+        if (overflow)
+        {
+            // Sliced rows 0..MaxBodyLines-2 stay; rows 3.. are body rows.
+            int slicedBody = Math.Max(0, (MaxBodyLines - 1) - 3);
+            hidden = Math.Max(0, _table.Rows.Count - slicedBody);
+        }
+
+        int visible = overflow ? MaxBodyLines + 1 : total;
+        int start = Math.Min(ctx.SkipRows, visible);
+        int count = Math.Min(height, visible - start);
 
         for (int i = 0; i < count; i++)
         {
             int row = start + i;
             int y = ctx.Rect.Y + i;
+            if (overflow && row == MaxBodyLines - 1)
+            {
+                // Collapsed overflow tail ([UX2] #262): dim "... (N hidden)"
+                // between the last shown body row and the bottom rule.
+                string tail = ICollapsibleChatBlock.OverflowTail(hidden);
+                buffer.SetText(ctx.Rect.X, y, tail.AsSpan(0, Math.Min(width, tail.Length)), ChatPalette.Dim);
+                continue;
+            }
+
+            if (overflow && row == MaxBodyLines)
+            {
+                PaintRule(buffer, ctx.Rect.X, y, widths, Bl, Br, X, width, border);
+                continue;
+            }
+
             switch (row)
             {
                 case 0:

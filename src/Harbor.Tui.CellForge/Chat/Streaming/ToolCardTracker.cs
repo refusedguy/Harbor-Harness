@@ -560,17 +560,27 @@ internal sealed class ToolCardTracker
     }
 
     /// <summary>
-    /// Routes a plain Enter press to the newest tool card on the feed (toggles
-    /// expand/collapse). Hosts call this after approval routing and before the
-    /// composer so feed-Enter expands cards while composer-Enter still submits
+    /// Routes a plain Enter or Space press to the newest collapsible block on
+    /// the feed ([UX2] #262: single expand gesture — Enter/click/space —
+    /// everywhere). Hosts call this after approval routing and before the
+    /// composer so feed-Enter expands blocks while composer-Enter still submits
     /// — ordering stays host-side. Returns false when the key is not a plain
-    /// Enter press or the feed holds no tool card.
+    /// Enter/Space press or the feed holds no collapsible block. Space arrives
+    /// as <c>KeyCode.Char(' ')</c> (there is no dedicated Space code); the
+    /// <c>ChatKeyMap</c> submit binding is untouched — this stays the single
+    /// feed-level expand ingress, as before.
     /// </summary>
     public bool TryRouteToolCardKey(in KeyEvent key)
     {
         if (key.EventType is not (KeyEventType.Press or KeyEventType.Repeat)
-            || key.Key != KeyCode.Enter
             || key.Modifiers != KeyModifiers.None)
+        {
+            return false;
+        }
+
+        bool isEnter = key.Key == KeyCode.Enter;
+        bool isSpace = key.Key == KeyCode.Char && key.Character == new Rune(' ');
+        if (!isEnter && !isSpace)
         {
             return false;
         }
@@ -578,12 +588,11 @@ internal sealed class ToolCardTracker
         var tl = _panel.Timeline;
         for (int i = tl.Count - 1; i >= 0; i--)
         {
-            var block = tl.BlockAt(i);
-            // [UX3] #263: the read group expands like any tool card (no policy
-            // change — the same newest-card Enter toggles it).
-            if (block is ToolCallBlock or ReadGroupBlock)
+            // [UX3] #263: ReadGroupBlock implements the mixin, so the generic
+            // route covers tool cards and read groups alike.
+            if (tl.BlockAt(i) is ICollapsibleChatBlock collapsible)
             {
-                ((ICollapsibleChatBlock)block).ToggleExpanded();
+                collapsible.ToggleExpanded();
                 tl.MarkLastDirty();
                 return true;
             }
@@ -593,9 +602,10 @@ internal sealed class ToolCardTracker
     }
 
     /// <summary>
-    /// Routes a left-button press/click on a tool-card header to
-    /// expand/collapse (mirrors approval-click routing).
-    /// Returns false when the click lands outside every card header —
+    /// Routes a left-button press/click on a collapsible block's header to
+    /// expand/collapse ([UX2] #262: single expand gesture — Enter/click/space —
+    /// everywhere; mirrors approval-click routing).
+    /// Returns false when the click lands outside every collapsible header —
     /// callers keep normal scroll/selection behavior.
     /// </summary>
     public bool TryRouteToolCardClick(in Input.MouseEvent mouse)
@@ -609,17 +619,11 @@ internal sealed class ToolCardTracker
         var tl = _panel.Timeline;
         for (int i = tl.Count - 1; i >= 0; i--)
         {
-            var block = tl.BlockAt(i);
-            // [UX3] #263: group headers toggle like card headers.
-            bool hit = block switch
+            // [UX3] #263: group headers toggle like card headers via the mixin.
+            if (tl.BlockAt(i) is ICollapsibleChatBlock collapsible
+                && collapsible.TryHitHeader(mouse.Column, mouse.Row))
             {
-                ToolCallBlock card => card.TryHitHeader(mouse.Column, mouse.Row),
-                ReadGroupBlock group => group.TryHitHeader(mouse.Column, mouse.Row),
-                _ => false,
-            };
-            if (hit)
-            {
-                ((ICollapsibleChatBlock)block).ToggleExpanded();
+                collapsible.ToggleExpanded();
                 tl.MarkLastDirty();
                 return true;
             }

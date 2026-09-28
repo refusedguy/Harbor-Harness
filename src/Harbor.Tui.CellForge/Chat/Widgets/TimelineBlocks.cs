@@ -139,6 +139,24 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
     private int EffectiveBudget =>
         !IsExpanded ? MaxBodyLines : IsFullyExpanded ? int.MaxValue : ExpandedBodyLines;
 
+    private Rect? _lastPaintRect;
+    private int _lastSkipRows;
+
+    /// <summary>
+    /// Click hit-test for the first row (unified expand gesture, [UX2] #262;
+    /// mirrors <c>ToolCallBlock.TryHitHeader</c> — thinking blocks have no
+    /// header, so the first body row claims the click).
+    /// </summary>
+    public bool TryHitHeader(int col, int row)
+    {
+        if (_lastPaintRect is not { } rect || _lastSkipRows != 0)
+        {
+            return false;
+        }
+
+        return row == rect.Y && col >= rect.X && col < rect.X + rect.Width;
+    }
+
     public void Append(string delta)
     {
         if (string.IsNullOrEmpty(delta))
@@ -200,6 +218,9 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
 
     public void Paint(in BlockPaintContext ctx)
     {
+        _lastPaintRect = ctx.Rect;
+        _lastSkipRows = ctx.SkipRows;
+
         EnsureWrapped(ctx.Rect.Width);
         var buffer = ctx.Buffer;
         var style = new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic);
@@ -414,6 +435,24 @@ public sealed class ThinkingBlock : ICollapsibleChatBlock
     private int EffectiveBudget =>
         !IsExpanded ? MaxBodyLines : IsFullyExpanded ? int.MaxValue : ExpandedBodyLines;
 
+    private Rect? _lastPaintRect;
+    private int _lastSkipRows;
+
+    /// <summary>
+    /// Click hit-test for the first row (unified expand gesture, [UX2] #262;
+    /// mirrors <c>ToolCallBlock.TryHitHeader</c> — thinking blocks have no
+    /// header, so the first body row claims the click).
+    /// </summary>
+    public bool TryHitHeader(int col, int row)
+    {
+        if (_lastPaintRect is not { } rect || _lastSkipRows != 0)
+        {
+            return false;
+        }
+
+        return row == rect.Y && col >= rect.X && col < rect.X + rect.Width;
+    }
+
     public BlockMeasure Measure(int width) =>
         BlockMeasure.Exact(Math.Max(1, ClampLineCount(_text.GetLines(Math.Max(1, width)).Length)));
 
@@ -422,6 +461,9 @@ public sealed class ThinkingBlock : ICollapsibleChatBlock
 
     public void Paint(in BlockPaintContext ctx)
     {
+        _lastPaintRect = ctx.Rect;
+        _lastSkipRows = ctx.SkipRows;
+
         var buffer = ctx.Buffer;
         var lines = _text.GetLines(Math.Max(1, ctx.Rect.Width));
         var style = new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic);
