@@ -18,7 +18,7 @@
 | P0 | `MessageConverter` large msgs | serialize 2.35 ms / 1.2 MB per msg; 100×large round-trip **545 ms** | Utf8Json source-gen (audit §PERF-002) |
 | P1 | `CompactionService.ShouldCompact` | 598 µs @1000 msgs **каждый turn** | incremental token counter |
 | P1 | `EventBroadcaster` | 9–11 ms / **8 MB** per 1000 events, не зависит от числа клиентов | serialize once, reuse buffers |
-| P1 | `EventBus.PublishAsync` | фикс. 8.1 KB alloc даже при 0 подписчиков | ring-buffer scrollback |
+| P1 | `EventBus.PublishAsync` | ~~фикс. 8.1 KB alloc даже при 0 подписчиков~~ ✅ resolved: 0-sub fast path returns before scrollback/fan-out (zero alloc, locked by `PublishAsync_ZeroSubscribers_IsAllocationFree`); 1/10-sub fan-out covered by bounded tripwires (#186) | ring-buffer scrollback (landed) |
 | P2 | `StreamingCoalescer` tool-call Materialize | 481 µs @1000 дельт (35–48× медленнее текста) | кэш разобранных аргументов |
 | P2 | `PatchTool` apply | 10.1 ms / **9.3 MB** @5000 hunks | стримить вместо List<string>+Join |
 | P2 | `DefaultUiProjector` | 20.8 ms @5000 строк за кадр (холодный полный проход; инкрементальный кэш уже влито — см. ниже) | инкрементальная проекция по revision |
@@ -253,6 +253,34 @@ dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
 | `TokenEstimator.Estimate` (1k chars) | 0.8 µs | 0.1 µs | 0 B |
 | `MessageConverter.ToLlmMessages` (10 msgs) | 2.5 µs | 0.3 µs | 1.5 KB |
 
+### Allocation-budget tripwires (#186, CI-enforced)
+
+Steady-state allocation coverage for paths the microbenchmarks above don't
+pin. Zero-alloc cells assert `GC.GetAllocatedBytesForCurrentThread() == 0`
+after warmup (thread-scoped, parallel-safe); bounded cells are generous
+tripwires in the `SpanParserTests` tradition — per-op averages are printed
+to stdout for the next BENCHMARKS refresh, hard failures only on
+pathological growth. Run per project, e.g.:
+
+```bash
+dotnet run -c Release --project tests/Harbor.Registries.Tests -- --treenode-filter "*/*/*Allocation*"
+```
+
+| Test | Path | Ceiling |
+|---|---|---|
+| `PublishAsync_ZeroSubscribers_IsAllocationFree` (`Harbor.Registries.Tests`) | `InMemoryEventBus` 0-sub fast path | 0 B |
+| `PublishAsync_SingleSubscriber_StaysBounded` | `InMemoryEventBus` 1-sub fan-out | ≤ 1 KB/publish |
+| `PublishAsync_TenSubscribers_StaysBounded` | `InMemoryEventBus` 10-sub fan-out | ≤ 2 KB/publish |
+| `ResolveTools_FrozenUnfiltered_IsAllocationFree` | frozen `ToolRegistry.ResolveTools` (no permission, cached array) | 0 B |
+| `ResolveTools_FrozenWithPermission_IsAllocationFree` | frozen `ToolRegistry.ResolveTools` (same ruleset, memoized) | 0 B |
+| `TextOnly_Turn_StaysBounded` (`Harbor.Application.Tests`) | `AgentLoop` text-only turn | ≤ 64 KB/turn |
+| `ToolCall_Turn_StaysBounded` | `AgentLoop` tool turn incl. `StreamingCoalescer` materialize/`TryParseArgs` | ≤ 256 KB/turn |
+| `Parse_UserLine_StaysBounded` (`Harbor.Storage.Jsonl.Tests`) | `JsonlLineParser.Parse` per line | ≤ 8 KB/line |
+| `GetMessages_SeededStore_StaysBounded` | `JsonlSessionStore.GetMessagesAsync` (100 msgs) | ≤ 512 KB/read |
+| `TryParseChatChunkLine_TextDelta_StaysBounded` (`Harbor.Providers.Tests`) | `OpenAiWire.TryParseChatChunkLine` text chunk | ≤ 4 KB/chunk |
+| `ExtractDiff_NonDiffTool_IsAllocationFree` (`Harbor.Tui.CellForge.Tests`) | `DiffPreview.ExtractDiff` non-diff guard | 0 B |
+| `ExtractDiff_Edit_StaysBounded` | `DiffPreview.ExtractDiff` edit path | ≤ 32 KB/call |
+
 ### ConsoleEx cell-diff core (`DiffEngineBenchmark`, 2026-08-26, Release)
 
 Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 — all met with an order of magnitude of headroom. Flush = real DiffEngine scan + AnsiWriter SGR/cursor encoding into a discarding backend (no tty I/O).
@@ -267,7 +295,7 @@ Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 —
 
 ¹ Allocation comes solely from the layout solver's cache-replay snapshot; all diff/encode paths are zero-alloc steady-state.
 
-> All zero-allocation benchmarks (`0 B`) confirm the `ArrayPool` / `StringBuilderPool` / `FrozenDictionary` / `StringPool` strategy is working. The `JsonlSessionStore.GetMessages` is the biggest allocation hot spot — the `Utf8JsonReader` rewrite (planned) will cut this by ~80%.
+> All zero-allocation benchmarks (`0 B`) confirm the `ArrayPool` / `StringBuilderPool` / `FrozenDictionary` / `StringPool` strategy is working. The `JsonlSessionStore.GetMessages` row above predates the `Utf8JsonReader` span rewrite (landed as `JsonlLineParser`); current read-path behavior is locked by the #186 tripwires (`Parse_UserLine_StaysBounded`, `GetMessages_SeededStore_StaysBounded`) — re-measure before quoting.
 
 ### Renderer-moat probes (`RendererMoatPerfTests`, 2026-08-31, Release)
 
@@ -310,15 +338,28 @@ Machine: Linux x64, .NET 10 Release JIT, no tty I/O (discarding backend).
 | `Harbor.Tui.E2E.Tests` | (requires terminal) | — | — | — |
 | **Total (measured)** | **~493** | **0** | **2** | **~12 s** |
 
+> +12 allocation-budget tripwires added in #186 (this change): 5 in
+> `Harbor.Registries.Tests`, 2 in `Harbor.Application.Tests`, 2 in
+> `Harbor.Storage.Jsonl.Tests`, 1 in `Harbor.Providers.Tests`, 2 in
+> `Harbor.Tui.CellForge.Tests`. Counts above predate them.
+
 ### 6.2 Test execution
 
-```bash
-# Run all tests (Debug)
-time dotnet test
-# Real time: ~25-30 s including build
+> `dotnet test` discovers ZERO tests in this repo (broken MTP bridge: the
+> host exits 5 with a silent discovery error). Run test projects as plain
+> executables, one project at a time — never whole-solution, never
+> `dotnet test`.
 
-# Run a single project
-dotnet test tests/Harbor.Core.Tests --no-build
+```bash
+# Build first, then run a single project (Release, no-build)
+dotnet build -c Release
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
+
+# Filter to one class (TUnit treenode-filter, forwarded after --)
+dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --treenode-filter "/*/*/DefaultUiProjectorTests/*"
+
+# Allocation-budget tripwires (#186)
+dotnet run --project tests/Harbor.Registries.Tests -c Release --no-build -- --treenode-filter "*/*/*Allocation*"
 ```
 
 ## 7. Comparison with previous (inflated) numbers
@@ -388,7 +429,7 @@ dotnet test tests/Harbor.Core.Tests --no-build
 
 - **Cold start 966 ms**: dominated by `dotnet` host + assembly load. NativeAOT would fix this (target <100 ms).
 - **Publish folder 109 MB**: Roslyn (30+ MB for plugin compilation) is the elephant. Moving plugin host out-of-process would cut ~30 MB.
-- **`JsonlSessionStore.GetMessages`**: 850 µs for 100 messages, 28 KB allocated — `Utf8JsonReader` rewrite planned.
+- **`JsonlSessionStore.GetMessages`**: 850 µs for 100 messages, 28 KB allocated — measured before the `Utf8JsonReader` span rewrite (`JsonlLineParser`); current behavior locked by #186 tripwires, re-measure before quoting.
 - **No AOT**: Spectre.Console reflection + Roslyn dynamic compilation block NativeAOT today.
 
 ### What was misleading in old benchmarks
@@ -437,8 +478,9 @@ done
 # Microbenchmarks
 dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
 
-# Tests
-dotnet test --no-build -c Release
+# Tests (per project as plain executables — never `dotnet test`, see §6.2)
+dotnet build -c Release
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 ## 11. See also
