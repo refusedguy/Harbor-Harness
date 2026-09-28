@@ -75,4 +75,35 @@ public class AnimationClockTests
         clock.Dispose();
         await Assert.That(clock.IsRunning).IsFalse();
     }
+
+    [Test]
+    public async Task Repeated_Start_Does_Not_Starve_Ticks()
+    {
+        // #344: the REPL heartbeat re-starts the clock on every frame (≥12 Hz
+        // while a run is active). Re-arming the 100 ms timer on every Start
+        // reset its phase faster than it could elapse, so OnTimer never fired
+        // and the spinner/mascot painted frozen cells. Start is
+        // phase-preserving now: ticks land on the original cadence.
+        using var clock = new AnimationClock();
+        clock.Start();
+        try
+        {
+            // Re-start every 20 ms (faster than the 100 ms period — the #344
+            // pattern). Buggy code yields zero ticks in the whole budget;
+            // fixed code ticks at ~100 ms intervals. 10 s budget matches the
+            // generous loaded-CI pattern used above.
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (clock.Tick < 2 && DateTime.UtcNow < deadline)
+            {
+                clock.Start();
+                await Task.Delay(20);
+            }
+
+            await Assert.That(clock.Tick).IsGreaterThan(1);
+        }
+        finally
+        {
+            clock.Stop();
+        }
+    }
 }
