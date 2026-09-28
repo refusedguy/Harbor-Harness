@@ -495,11 +495,13 @@ internal static class OpenAiWire
         try
         {
             int remapsBefore = state.RemappedToolCalls;
-            int byteCount = Encoding.UTF8.GetByteCount(data);
-            byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
+            // #171: single-pass transcode — GetMaxByteCount rent + one
+            // GetBytes (was GetByteCount + GetBytes: two passes per delta).
+            byte[] rented = ArrayPool<byte>.Shared.Rent(Encoding.UTF8.GetMaxByteCount(data.Length));
+            int byteCount;
             try
             {
-                Encoding.UTF8.GetBytes(data, rented);
+                byteCount = Encoding.UTF8.GetBytes(data, rented);
                 var parsed = ParseChatChunk(rented.AsSpan(0, byteCount), state.IndexToId, state);
                 SsePump.WarnOnceOnRemap(state, remapsBefore, logger);
                 return parsed;

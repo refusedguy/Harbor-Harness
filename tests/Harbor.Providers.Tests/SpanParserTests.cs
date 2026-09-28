@@ -233,6 +233,58 @@ public class SpanParserTests
         await Assert.That(after - before).IsLessThanOrEqualTo(50 * 2048);
     }
 
+    [Test]
+    public async Task SpanParse_AllCores_JunkPayload_StaysBounded()
+    {
+        // #171: same tripwire as SpanParse_JunkPayload_StaysBounded for the
+        // three remaining span cores. A 5KB unknown blob must be skipped
+        // without materializing; a JsonDocument-per-chunk revert allocates
+        // ~6KB+/parse and blows the per-core budget.
+        string xs = new string('x', 5000);
+        byte[] anthropic = Utf8("{\"type\":\"content_block_delta\",\"index\":0,"
+            + "\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"},\"unknown_blob\":\"" + xs + "\"}");
+        byte[] responses = Utf8("{\"type\":\"response.output_text.delta\",\"output_index\":0,"
+            + "\"delta\":\"hello\",\"unknown_blob\":\"" + xs + "\"}");
+        byte[] ollama = Utf8("{\"message\":{\"content\":\"yo\"},\"done\":false,\"unknown_blob\":\"" + xs + "\"}");
+        var map = new Dictionary<int, string>();
+
+        for (int i = 0; i < 20; i++)
+        {
+            _ = AnthropicEventMapper.MapAnthropicEvents(anthropic);
+            _ = OpenAiResponsesMapper.MapResponsesChunk(responses);
+            map.Clear();
+            _ = OllamaLlmClient.MapNdjsonChunk(ollama, map);
+        }
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 50; i++)
+        {
+            _ = AnthropicEventMapper.MapAnthropicEvents(anthropic);
+        }
+
+        long mid1 = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 50; i++)
+        {
+            _ = OpenAiResponsesMapper.MapResponsesChunk(responses);
+        }
+
+        long mid2 = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 50; i++)
+        {
+            map.Clear();
+            _ = OllamaLlmClient.MapNdjsonChunk(ollama, map);
+        }
+
+        long after = GC.GetAllocatedBytesForCurrentThread();
+        await Assert.That(mid1 - before).IsLessThanOrEqualTo(50 * 2048);
+        await Assert.That(mid2 - mid1).IsLessThanOrEqualTo(50 * 2048);
+        await Assert.That(after - mid2).IsLessThanOrEqualTo(50 * 2048);
+    }
+
     // ── #203: unattached usage + remap diagnostics ───────────────────
 
     [Test]
