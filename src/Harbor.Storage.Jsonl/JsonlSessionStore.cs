@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
 using Harbor.Storage.Shared;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Storage.Jsonl;
@@ -310,25 +309,6 @@ public sealed class JsonlSessionStore : ISessionStore
             {
                 ct.ThrowIfCancellationRequested();
 
-                string[] lines = File.ReadAllLines(sessionFile);
-                var kept = new List<string>(lines.Length + 1);
-                bool found = false;
-
-                foreach (var line in lines)
-                {
-                    if (SessionFileReader.IsMessageEntryWithId(line, message.Id))
-                    {
-                        found = true;
-                        continue;
-                    }
-                    kept.Add(line);
-                }
-
-                // #199: absence is a Result outcome, not a throw — the Bind
-                // below maps it to "not found" with the session + message ids.
-                if (!found)
-                    return false;
-
                 var entry = new MessageEntry(
                     "message",
                     message.Id,
@@ -337,11 +317,20 @@ public sealed class JsonlSessionStore : ISessionStore
                     message.CreatedAt,
                     JsonlMessageCodec.SerializeMessagePayload(message));
 
-                // #177: pre-serialized UTF-8 entry + line-wise atomic rewrite — no
-                // List<string> join of the new entry.
+                // #177: pre-serialized UTF-8 entry + line-wise atomic rewrite —
+                // no List<string> join of the new entry.
                 byte[] entryBytes = JsonSerializer.SerializeToUtf8Bytes(entry, JsonlCodecContext.Default.MessageEntry);
-                SessionFileIO.WriteLinesAtomic(sessionFile, kept, entryBytes);
-                return true;
+
+                // #460: streamed record by record into the temp sibling, so
+                // dropping the stale entry no longer reads the whole session
+                // into a List<string> (twice) under this semaphore. False means
+                // the id was not in the file: the temp copy is discarded and
+                // the original left exactly as it was, which is what made this
+                // a "not found" outcome instead of an appended duplicate.
+                return SessionFileIO.RewriteRecordsAtomic(
+                    sessionFile,
+                    new DropMessagePlan(message.Id),
+                    trailer: entryBytes);
             }
             finally
             {
@@ -521,53 +510,22 @@ public sealed class JsonlSessionStore : ISessionStore
             await semaphore.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                string[] lines = File.ReadAllLines(sessionFile);
+                // #460: streamed. The plan walks the file once, keeping every
+                // record up to the anchor and dropping every message record
+                // after it, so nothing but the current record is ever in
+                // memory. The anchor is the FIRST id match and file order is
+                // insertion order for this store, which makes a single pass
+                // exact — the old code got the same answer from an index scan
+                // over a List<string> of the whole file, held under this
+                // semaphore.
+                var plan = new DeleteAfterAnchorPlan(messageId);
+                SessionFileIO.RewriteRecordsAtomic(sessionFile, plan);
 
-                int anchorLine = -1;
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    // The id matcher doubles as a "message entry" filter: only
-                    // message-kind lines with that exact id match, headers never do.
-                    if (SessionFileReader.IsMessageEntryWithId(lines[i], messageId))
-                    {
-                        anchorLine = i;
-                        break;
-                    }
-                }
-
-                // #199: absence is a Result outcome, not a throw — the Bind
-                // below maps it to "not found" with the session + message ids.
-                if (anchorLine < 0)
-                    return (Found: false, Removed: 0);
-
-                // Messages append chronologically and rewrites keep relative
-                // order, so file order IS insertion order — dropping every
-                // message-kind line strictly after the anchor is the rewind.
-                // Header/session lines are kept regardless of position.
-                var kept = new List<string>(lines.Length);
-                for (int i = 0; i <= anchorLine; i++)
-                {
-                    kept.Add(lines[i]);
-                }
-
-                int removed = 0;
-                for (int i = anchorLine + 1; i < lines.Length; i++)
-                {
-                    if (SessionFileReader.IsAnyMessageEntry(lines[i]))
-                    {
-                        removed++;
-                        continue;
-                    }
-
-                    kept.Add(lines[i]);
-                }
-
-                if (removed > 0)
-                {
-                    SessionFileIO.WriteAllLinesAtomic(sessionFile, kept);
-                }
-
-                return (Found: true, Removed: removed);
+                // Reported from the plan whether or not the rewrite committed:
+                // reaching the last message leaves the file (and its mtime)
+                // alone, and that is still a successful rewind of zero
+                // messages.
+                return (Found: plan.Found, Removed: plan.Removed);
             }
             finally
             {
@@ -631,12 +589,10 @@ public sealed class JsonlSessionStore : ISessionStore
             try
             {
                 ct.ThrowIfCancellationRequested();
-                var lines = File.ReadAllLines(sessionFile).ToList();
+
                 // #199: an empty file is a Result outcome, not a throw — the
                 // Bind below maps it to a failure naming the session + path.
-                if (lines.Count == 0)
-                    return false;
-
+                // The plan reports it by never seeing a record to replace.
                 var header = new SessionHeaderEntry(
                     "session",
                     1,
@@ -655,9 +611,13 @@ public sealed class JsonlSessionStore : ISessionStore
                     session.GitIsDirty,
                     session.Kind);
 
-                lines[0] = JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry);
-                SessionFileIO.WriteAllLinesAtomic(sessionFile, lines);
-                return true;
+                // #460: streamed. Only the first record is replaced; every
+                // record after it is copied through byte for byte, so a
+                // title/status/git-branch edit no longer materializes the
+                // session twice inside this semaphore.
+                byte[] headerRecord = JsonSerializer.SerializeToUtf8Bytes(
+                    header, JsonlCodecContext.Default.SessionHeaderEntry);
+                return SessionFileIO.RewriteRecordsAtomic(sessionFile, new HeaderRewritePlan(headerRecord));
             }
             finally
             {

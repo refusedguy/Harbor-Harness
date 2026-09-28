@@ -5,7 +5,6 @@
 // records: header decode, full-file message parse, and the line classifiers
 // the rewrite paths reuse.
 
-using System.Buffers;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Storage.Jsonl;
@@ -28,21 +27,30 @@ internal static class SessionFileReader
     private const int MaxSnapshotAttempts = 3;
 
     /// <summary>
-    ///     True when the line is a <c>"message"</c> entry carrying the given id.
-    ///     Header lines and unparseable lines are never matched, so a rewrite
-    ///     cannot accidentally drop them. Malformed lines are left untouched on
-    ///     disk — the read path already reports them as parse warnings.
+    ///     True when the record is a <c>"message"</c> entry carrying the given
+    ///     id. Header lines and unparseable records are never matched, so a
+    ///     rewrite cannot accidentally drop them. Malformed lines are left
+    ///     untouched on disk — the read path already reports them as parse
+    ///     warnings.
     /// </summary>
-    internal static bool IsMessageEntryWithId(string line, string messageId)
+    /// <remarks>
+    ///     <paramref name="idNeedle" /> is the UTF-8 form of
+    ///     <c>"id":"&lt;messageId&gt;"</c>, built once per rewrite. Searching
+    ///     the raw bytes is what keeps a streaming rewrite from decoding every
+    ///     record into a <see cref="string" /> just to answer this question.
+    /// </remarks>
+    internal static bool IsMessageEntryWithId(ReadOnlySpan<byte> record, string messageId, byte[] idNeedle)
     {
-        if (string.IsNullOrWhiteSpace(line) || !line.Contains($"\"id\":\"{messageId}\"", StringComparison.Ordinal))
+        // (ReadOnlySpan<byte>) so this binds the sequence overload below rather
+        // than a byte[] one — same helper the "type" probes use.
+        if (record.IndexOf((ReadOnlySpan<byte>)idNeedle) < 0)
         {
             return false;
         }
 
         try
         {
-            var entry = JsonSerializer.Deserialize(line, JsonlCodecContext.Default.MessageEntry);
+            var entry = JsonSerializer.Deserialize(record, JsonlCodecContext.Default.MessageEntry);
             return entry is { Type: "message", Id: var id } && id == messageId;
         }
         catch (JsonException)
@@ -58,9 +66,9 @@ internal static class SessionFileReader
     }
 
     /// <summary>True when the line is a <c>"message"</c> entry with any id.</summary>
-    internal static bool IsAnyMessageEntry(string line)
+    internal static bool IsAnyMessageEntry(ReadOnlySpan<byte> line)
     {
-        if (string.IsNullOrWhiteSpace(line) || !line.Contains("\"type\":\"message\"", StringComparison.Ordinal))
+        if (line.IndexOf("\"type\":\"message\""u8) < 0)
         {
             return false;
         }
@@ -80,9 +88,10 @@ internal static class SessionFileReader
     ///     Parse the JSONL session file from disk into a chronological message
     ///     list, together with the <see cref="SessionFileStat" /> the parse was
     ///     taken from and whether that pairing is provable. Per-line JSON parse
-    ///     errors are aggregated into a <c>List&lt;string&gt;</c> and surfaced
-    ///     via <see cref="ILogger.LogWarning" />, while still returning the
-    ///     successfully deserialized messages (§ROP-001 resolved).
+    ///     errors are aggregated (bounded — see <see cref="ParseErrors" />) and
+    ///     surfaced via <see cref="ILogger.LogWarning" />, while still
+    ///     returning the successfully deserialized messages (§ROP-001
+    ///     resolved).
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -95,15 +104,29 @@ internal static class SessionFileReader
     ///     </para>
     ///     <para>
     ///         <b>Snapshot integrity (#459):</b> the read is bounded by the
-    ///         length measured on the <em>open handle</em> — never by the pooled
-    ///         buffer's capacity and never by a stat taken before the open. The
-    ///         old shape measured a <see cref="FileInfo" /> length, then read
-    ///         <c>while (read &lt; buffer.Length)</c>; since the pool returns an
-    ///         array <em>larger</em> than requested, an append landing in that
-    ///         window extended the read past the measured end and cut the new
-    ///         record mid-line. The truncated line was then merely
+    ///         length measured on the <em>open handle</em> — never by the
+    ///         pooled buffer's capacity and never by a stat taken before the
+    ///         open. The old shape measured a <see cref="FileInfo" /> length,
+    ///         then read <c>while (read &lt; buffer.Length)</c>; since the pool
+    ///         returns an array <em>larger</em> than requested, an append landing
+    ///         in that window extended the read past the measured end and cut
+    ///         the new record mid-line. The truncated line was then merely
     ///         <c>LogWarning</c>ed, and the short list was published to the
     ///         store's cache as if it were the whole session.
+    ///     </para>
+    ///     <para>
+    ///         <b>Bounded allocation (#460):</b> the buffer used to be
+    ///         <c>ArrayPool&lt;byte&gt;.Shared.Rent((int)fileLength)</c>, so a
+    ///         300 MB session bought a 300 MB LOH array on every cache miss and
+    ///         the "~2 GiB" guard in front of it was a size the pool cannot
+    ///         serve anyway. The file is now streamed through
+    ///         <see cref="ChunkedLineReader" />: one pooled
+    ///         <see cref="ChunkedLineReader.ChunkBytes" /> block plus the record
+    ///         being assembled, with a hard
+    ///         <see cref="ChunkedLineReader.MaxRecordBytes" /> ceiling per
+    ///         record. The measured length still bounds how much is
+    ///         <em>read</em> — it is what makes the snapshot provable — it no
+    ///         longer decides how much is held.
     ///     </para>
     /// </remarks>
     /// <param name="sessionFile">Absolute path to the .jsonl file.</param>
@@ -112,7 +135,7 @@ internal static class SessionFileReader
     /// <param name="ct">Cancellation token observed by the file read.</param>
     /// <returns>
     ///     The chronological message list plus its provenance, or failure when
-    ///     the file is too large to read into a single buffer.
+    ///     the file is too large to read at all.
     /// </returns>
     internal static async Task<Result<MessageReadSnapshot>> ParseMessagesFromDiskAsync(
         string sessionFile,
@@ -121,7 +144,7 @@ internal static class SessionFileReader
         CancellationToken ct)
     {
         var messages = new Dictionary<string, AgentMessage>();
-        var errors = new List<string>(capacity: 0);
+        var errors = new ParseErrors();
 
         // Taken BEFORE the open: paired with the post-read stat it proves the
         // bytes we parsed are exactly the file state this stat names.
@@ -129,155 +152,202 @@ internal static class SessionFileReader
         if (stat.Length > int.MaxValue)
             return TooLarge<MessageReadSnapshot>(stat.Length);
 
-        byte[] buffer = ArrayPool<byte>.Shared.Rent((int)Math.Max(stat.Length, 1));
-        try
+        bool stable = false;
+        bool sawOversized = false;
+        long lastRead = 0;
+        long budget = 0;
+
+        // A single concurrent append is the common case and the retry resolves
+        // it: the next attempt measures the grown file and reads it whole. The
+        // bound keeps a writer streaming faster than we read from turning into
+        // an unbounded spin — the last attempt is returned as an explicitly
+        // unstable snapshot instead.
+        for (int attempt = 1; attempt <= MaxSnapshotAttempts; attempt++)
         {
-            int read = 0;
-            bool stable = false;
+            ct.ThrowIfCancellationRequested();
 
-            // A single concurrent append is the common case and the retry
-            // resolves it: the next attempt measures the grown file and reads
-            // it whole. The bound keeps a writer streaming faster than we read
-            // from turning into an unbounded spin — the last attempt is then
-            // returned as an explicitly unstable snapshot instead.
-            for (int attempt = 1; attempt <= MaxSnapshotAttempts; attempt++)
+            // Re-measure every attempt; the previous one may be stale.
+            stat = SessionFileStat.Read(sessionFile);
+            if (stat.Length > int.MaxValue)
+                return TooLarge<MessageReadSnapshot>(stat.Length);
+
+            // Only the last attempt's records are kept, and the previous
+            // attempt's are dropped here rather than folded in — the parse is
+            // the expensive half, so a retry re-does it, exactly as it re-did
+            // the read before.
+            messages.Clear();
+            errors.Clear();
+            sawOversized = false;
+
+            using (var fs = new FileStream(
+                       sessionFile, FileMode.Open, FileAccess.Read, FileShare.Read,
+                       bufferSize: 64 * 1024, useAsync: true))
             {
-                ct.ThrowIfCancellationRequested();
+                // Budget from the OPEN handle, not from a pre-open stat. It
+                // bounds the read; ChunkedLineReader bounds the memory.
+                budget = fs.Length;
+                if (budget > int.MaxValue)
+                    return TooLarge<MessageReadSnapshot>(budget);
 
-                // Re-measure every attempt; the previous one may be stale.
-                stat = SessionFileStat.Read(sessionFile);
-                if (stat.Length > int.MaxValue)
-                    return TooLarge<MessageReadSnapshot>(stat.Length);
-                buffer = EnsureCapacity(buffer, stat.Length);
-
-                long budget;
-                using (var fs = new FileStream(
-                           sessionFile, FileMode.Open, FileAccess.Read, FileShare.Read,
-                           bufferSize: 64 * 1024, useAsync: true))
+                using var reader = new ChunkedLineReader(fs) { ByteCeiling = budget };
+                while (await reader.FillAsync(ct).ConfigureAwait(false))
                 {
-                    // Budget from the OPEN handle, not from a pre-open stat.
-                    budget = fs.Length;
-                    if (budget > int.MaxValue)
-                        return TooLarge<MessageReadSnapshot>(budget);
-                    buffer = EnsureCapacity(buffer, budget);
-
-                    // Bounded by the measured length — NOT by buffer.Length,
-                    // which the pool rounds up and which is therefore larger
-                    // than the file. That overshoot is the truncation (#459).
-                    read = 0;
-                    while (read < budget)
-                    {
-                        int n = await fs.ReadAsync(buffer.AsMemory(read, (int)(budget - read)), ct).ConfigureAwait(false);
-                        if (n == 0) break;
-                        read += n;
-                    }
+                    FoldRecords(reader, sessionId, messages, errors);
                 }
 
-                // Unchanged mtime across the read, unchanged length, and every
-                // measured byte actually read == the parsed content is the whole
-                // file for that stat. An append moves the length; an atomic
-                // rewrite (temp + rename) moves the path's mtime.
-                var after = SessionFileStat.Read(sessionFile);
-                stable = read == budget && after.Matches(stat) && after.Length == budget;
-                if (stable)
-                    break;
+                FoldTrailingRecord(reader, sessionId, messages, errors);
+                lastRead = reader.BytesRead;
+                sawOversized = reader.SawOversizedRecord;
             }
 
-            ParseLines(buffer.AsSpan(0, read), sessionId, messages, errors);
-
-            if (errors.Count > 0)
-            {
-                logger.LogWarning("Encountered {ErrorCount} malformed line(s) reading session {SessionId}: {Errors}",
-                    errors.Count, sessionId, string.Join("; ", errors));
-            }
-
-            if (!stable)
-            {
-                // Loud, because the caller is deliberately NOT caching this and
-                // the next read will re-parse.
-                logger.LogWarning(
-                    "Session {SessionId} was being appended to while it was read; returning {MessageCount} message(s) from a partial snapshot (not cached).",
-                    sessionId, messages.Count);
-            }
-
-            var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
-            return Result.Success<MessageReadSnapshot>(new MessageReadSnapshot(ordered, stat, stable));
+            // Unchanged mtime across the read, unchanged length, and every
+            // measured byte actually read == the parsed content is the whole
+            // file for that stat. An append moves the length; an atomic
+            // rewrite (temp + rename) moves the path's mtime. A short read
+            // means the file shrank under us, and what we hold is not it.
+            var after = SessionFileStat.Read(sessionFile);
+            stable = lastRead == budget && after.Matches(stat) && after.Length == budget;
+            if (stable)
+                break;
         }
-        finally
+
+        if (errors.Total > 0)
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            logger.LogWarning("Encountered {ErrorCount} malformed line(s) reading session {SessionId}: {Errors}",
+                errors.Total, sessionId, errors.Summary());
         }
-    }
 
-    /// <summary>
-    ///     Rounds a pooled buffer up to at least <paramref name="required" />
-    ///     bytes, returning the old one to the pool when it had to grow. The
-    ///     caller keeps ownership of whichever buffer comes back.
-    /// </summary>
-    private static byte[] EnsureCapacity(byte[] buffer, long required)
-    {
-        if (required <= buffer.Length)
-            return buffer;
+        if (sawOversized)
+        {
+            logger.LogWarning(
+                "Session {SessionId} holds a record over the {MaxBytes} byte ceiling; " +
+                "it was skipped and the rest of the session was read.",
+                sessionId, ChunkedLineReader.MaxRecordBytes);
+        }
 
-        // Rent before returning, so a throw from the pool cannot leave the
-        // caller's finally returning the same array twice.
-        var grown = ArrayPool<byte>.Shared.Rent((int)Math.Max(required, 1));
-        ArrayPool<byte>.Shared.Return(buffer);
-        return grown;
+        if (!stable)
+        {
+            // Loud, because the caller is deliberately NOT caching this and
+            // the next read will re-parse.
+            logger.LogWarning(
+                "Session {SessionId} was being appended to while it was read; returning {MessageCount} message(s) from a partial snapshot (not cached).",
+                sessionId, messages.Count);
+        }
+
+        var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
+        return Result.Success<MessageReadSnapshot>(new MessageReadSnapshot(ordered, stat, stable));
     }
 
     private static Result<T> TooLarge<T>(long length) =>
         Result.Failure<T>($"Session file too large ({length} bytes); refusing unbounded read.");
 
     /// <summary>
-    ///     Split <paramref name="content" /> on LF and fold every parseable
-    ///     message entry into <paramref name="messages" /> (latest id wins);
-    ///     header lines, blank lines and per-line parse failures are routed to
-    ///     <paramref name="errors" /> or dropped.
+    ///     Folds every complete record the reader's current block holds. Split
+    ///     out of the async method on purpose: a <c>ReadOnlySpan&lt;byte&gt;</c>
+    ///     local cannot be declared inside an async method (CS4012), and the
+    ///     parser wants one per record.
     /// </summary>
-    private static void ParseLines(
-        ReadOnlySpan<byte> content,
+    private static void FoldRecords(
+        ChunkedLineReader reader,
         string sessionId,
         Dictionary<string, AgentMessage> messages,
-        List<string> errors)
+        ParseErrors errors)
     {
-        ReadOnlySpan<byte> rest = content;
-        if (rest.StartsWith("\xEF\xBB\xBF"u8))
+        while (reader.TryGetRecord(out var record))
         {
-            rest = rest[3..];
+            FoldRecord(record, sessionId, messages, errors);
+        }
+    }
+
+    /// <summary>
+    ///     Folds the last record of a file that does not end in LF — the same
+    ///     record the single-buffer reader used to pick up with
+    ///     <c>nl &lt; 0 ? rest : …</c>.
+    /// </summary>
+    private static void FoldTrailingRecord(
+        ChunkedLineReader reader,
+        string sessionId,
+        Dictionary<string, AgentMessage> messages,
+        ParseErrors errors)
+    {
+        if (reader.TryGetTrailingRecord(out var record))
+        {
+            FoldRecord(record, sessionId, messages, errors);
+        }
+    }
+
+    /// <summary>
+    ///     Fold one record into <paramref name="messages" /> (latest id wins).
+    ///     Header lines and blank lines are dropped; a per-line parse failure is
+    ///     routed to <paramref name="errors" /> and the record is skipped.
+    /// </summary>
+    private static void FoldRecord(
+        ReadOnlySpan<byte> record,
+        string sessionId,
+        Dictionary<string, AgentMessage> messages,
+        ParseErrors errors)
+    {
+        if (record.IsEmpty || record.IndexOfAnyExcept((byte)' ', (byte)'\t') < 0)
+        {
+            return;
         }
 
-        while (!rest.IsEmpty)
+        if (IsSessionHeaderLine(record))
         {
-            int nl = rest.IndexOf((byte)'\n');
-            ReadOnlySpan<byte> line = nl < 0 ? rest : rest[..nl];
-            rest = nl < 0 ? default : rest[(nl + 1)..];
+            return;
+        }
 
-            if (line.Length > 0 && line[^1] == (byte)'\r')
-            {
-                line = line[..^1];
-            }
+        var msgResult = JsonlLineParser.Parse(record, sessionId);
+        if (msgResult.IsSuccess)
+        {
+            messages[msgResult.Value.Id] = msgResult.Value;
+        }
+        else
+        {
+            errors.Add($"Line parse failed: {msgResult.Error}");
+        }
+    }
 
-            if (line.IsEmpty || line.IndexOfAnyExcept((byte)' ', (byte)'\t') < 0)
-            {
-                continue;
-            }
+    /// <summary>
+    ///     Bounded collector for per-line parse failures. A corrupt or crafted
+    ///     file is nothing <em>but</em> parse failures, and one string per
+    ///     failed line puts the unbounded allocation straight back — so the
+    ///     first <see cref="MaxRecorded" /> are kept verbatim and the rest are
+    ///     only counted, and the warning carries the total either way.
+    /// </summary>
+    private sealed class ParseErrors
+    {
+        private const int MaxRecorded = 20;
 
-            if (IsSessionHeaderLine(line))
-            {
-                continue;
-            }
+        private readonly List<string> _recorded = [];
 
-            var msgResult = JsonlLineParser.Parse(line, sessionId);
-            if (msgResult.IsSuccess)
+        /// <summary>Every failure seen, recorded or not.</summary>
+        internal int Total { get; private set; }
+
+        internal void Clear()
+        {
+            Total = 0;
+            _recorded.Clear();
+        }
+
+        internal void Add(string error)
+        {
+            Total++;
+            if (_recorded.Count < MaxRecorded)
             {
-                messages[msgResult.Value.Id] = msgResult.Value;
-            }
-            else
-            {
-                errors.Add($"Line parse failed: {msgResult.Error}");
+                _recorded.Add(error);
             }
         }
+
+        /// <summary>
+        ///     The recorded failures joined, with a count of the overflow when
+        ///     there was one. For a file with at most <see cref="MaxRecorded" />
+        ///     bad lines this is exactly the old message, unchanged.
+        /// </summary>
+        internal string Summary() =>
+            Total <= _recorded.Count
+                ? string.Join("; ", _recorded)
+                : $"{string.Join("; ", _recorded)} (+{Total - _recorded.Count} more)";
     }
 
     /// <summary>
