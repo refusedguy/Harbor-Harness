@@ -47,12 +47,6 @@ public sealed class JsonThemeLoader : IThemeService
 
     public event EventHandler<string>? ThemeJsonApplied;
 
-    /// <summary>
-    ///     Raised on non-fatal theme file watcher errors (parse failures, IO).
-    ///     Live-reload resumes on the next write.
-    /// </summary>
-    public event EventHandler<string>? ThemeWatchError;
-
     public Result<string> LoadJson(string path)
     {
         try
@@ -135,7 +129,6 @@ public sealed class JsonThemeLoader : IThemeService
         {
             // Non-fatal: live-reload resumes on next write. Surfaced via the
             // Watch error channel so callers can render the error line.
-            ThemeWatchError?.Invoke(this, error);
             onError?.Invoke(error);
         }
     }
