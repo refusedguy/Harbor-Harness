@@ -70,17 +70,8 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         => _slashHandler = handler;
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
-    {
-        try
-        {
-            // Spectre owns the alternate screen — no raw banner writes.
-            return base.InitializeAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(Result.Failure(ex.Message));
-        }
-    }
+        // Spectre owns the alternate screen — no raw banner writes.
+        => base.InitializeAsync(ct);
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {

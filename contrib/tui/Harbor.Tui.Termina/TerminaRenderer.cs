@@ -39,10 +39,7 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
     void IInteractiveTuiRenderer.SetSlashHandler(Func<string, Task> handler) => _slashHandler = handler;
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
-    {
-        try { return base.InitializeAsync(ct); }
-        catch (Exception ex) { return Task.FromResult(Result.Failure(ex.Message)); }
-    }
+        => base.InitializeAsync(ct);
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {

@@ -1,13 +1,14 @@
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Events;
-using Harbor.Providers.OpenAiCompatible;
+using Harbor.Providers.Internal;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks <see cref=\"OpenAiSseParser.ParseChunk\" /> — the SSE
+///     Benchmarks <see cref="OpenAiWire.TryParseChatChunkLine"/> — the SSE
 ///     chunk parser used by OpenAI-compatible providers. Measures the cost
-///     of parsing server-sent event data lines into <see cref=\"LlmEvent\" />
+///     of parsing server-sent event data lines into <see cref="LlmEvent" />
 ///     sequences, focusing on zero-allocation span-based extraction of the
 ///     <c>content</c> and <c>tool_calls</c> fields.
 /// </summary>
@@ -33,13 +34,24 @@ public class OpenAiSseParserBenchmark
     }
 
     [Benchmark(Description = "ParseChunk small (32B)", Baseline = true)]
-    public int Parse_Small() => OpenAiSseParser.ParseChunk(_smallChunk, _indexToId, NullLogger.Instance).Count();
+    public int Parse_Small() => ParseChunk(_smallChunk, _indexToId, NullLogger.Instance).Count;
 
     [Benchmark(Description = "ParseChunk medium (256B)")]
-    public int Parse_Medium() => OpenAiSseParser.ParseChunk(_mediumChunk, _indexToId, NullLogger.Instance).Count();
+    public int Parse_Medium() => ParseChunk(_mediumChunk, _indexToId, NullLogger.Instance).Count;
 
     [Benchmark(Description = "ParseChunk large with tool_calls (4KB)")]
-    public int Parse_Large() => OpenAiSseParser.ParseChunk(_largeChunk, _indexToId, NullLogger.Instance).Count();
+    public int Parse_Large() => ParseChunk(_largeChunk, _indexToId, NullLogger.Instance).Count;
+
+    private static IReadOnlyList<LlmEvent> ParseChunk(string data, Dictionary<int, string> indexToId, ILogger logger)
+    {
+        var state = new ChunkStreamState();
+        foreach ((int index, string id) in indexToId)
+        {
+            state.IndexToId[index] = id;
+        }
+
+        return OpenAiWire.TryParseChatChunkLine(data, state, logger);
+    }
 
     private static string BuildSseChunk(string content, int toolCalls = 0, int tokenCount = 32)
     {

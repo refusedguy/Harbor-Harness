@@ -73,16 +73,48 @@ public abstract class BaseTuiRenderer : ITuiRenderer
 
     /// <summary>
     ///     Registers the four builtin views (unless already overridden by a plugin) and binds
-    ///     each view to its view model. Subclasses that override this MUST call
-    ///     <see cref="RegisterBuiltinViews" />, <see cref="BindViewModelsToViews" />, and freeze
-    ///     the registry, or simply call <c>base.InitializeAsync</c>.
+    ///     each view to its view model. Subclasses with a setup prelude (banner, cursor,
+    ///     encoding, store subscription) should call <see cref="InitializeGuardedAsync" />;
+    ///     subclasses without one call <c>base.InitializeAsync</c> directly.
     /// </summary>
     public virtual Task<Result> InitializeAsync(CancellationToken ct = default)
     {
-        RegisterBuiltinViews();
-        BindViewModelsToViews();
-        Views.Freeze();
-        return Task.FromResult(Result.Success());
+        return InitializeGuardedAsync(static () => { }, ct: ct);
+    }
+
+    /// <summary>
+    ///     Guarded initialize shared by all renderers (issue #192): runs the
+    ///     renderer-specific <paramref name="setup"/> prelude, then the shared
+    ///     builtin-view registration. Any exception becomes
+    ///     <c>Result.Failure</c> instead of crashing the host — collapsing the
+    ///     copied try/catch that every renderer carried.
+    /// </summary>
+    /// <param name="setup">Renderer prelude (banner, cursor, encoding, store).</param>
+    /// <param name="errorLogMessage">
+    ///     Optional message logged with the exception before returning failure
+    ///     (e.g. backend-specific diagnostics).
+    /// </param>
+    /// <param name="ct">Cancellation token (unused; kept for signature symmetry).</param>
+    protected Task<Result> InitializeGuardedAsync(Action setup, string? errorLogMessage = null, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(setup);
+        try
+        {
+            setup();
+            RegisterBuiltinViews();
+            BindViewModelsToViews();
+            Views.Freeze();
+            return Task.FromResult(Result.Success());
+        }
+        catch (Exception ex)
+        {
+            if (errorLogMessage is not null)
+            {
+                Logger.LogError(ex, errorLogMessage);
+            }
+
+            return Task.FromResult(Result.Failure(ex.Message));
+        }
     }
 
     /// <summary>

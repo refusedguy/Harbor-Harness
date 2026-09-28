@@ -168,18 +168,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     // CellForge fallback painter is needed.
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
-    {
-        try
+        => InitializeGuardedAsync(() =>
         {
             EnsureSubscribedToActiveStore();
             Context.HideCursor();
-            return base.InitializeAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(Result.Failure(ex.Message));
-        }
-    }
+        }, ct: ct);
 
     /// <summary>
     ///     The store this renderer currently reads and writes: the active

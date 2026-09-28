@@ -65,21 +65,14 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
     // ═══════════════════════════════════════════════════════════════
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
-    {
-        try
+        => InitializeGuardedAsync(() =>
         {
             AnsiConsole.Write(new Rule("[bold cyan]⚓ Harbor[/] [grey]— modular AI coding agent[/]")
             {
                 Style = Style.Parse("grey")
             });
             AnsiConsole.WriteLine();
-            return base.InitializeAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(Result.Failure(ex.Message));
-        }
-    }
+        }, ct: ct);
 
     public override async Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {

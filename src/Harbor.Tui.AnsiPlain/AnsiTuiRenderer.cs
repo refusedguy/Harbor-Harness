@@ -41,16 +41,9 @@ public partial class AnsiTuiRenderer : AnsiPlainTuiRenderer
     }
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
-    {
-        try
+        => InitializeGuardedAsync(() =>
         {
             Console.OutputEncoding = Encoding.UTF8;
             Context.HideCursor();
-            return base.InitializeAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(Result.Failure(ex.Message));
-        }
-    }
+        }, ct: ct);
 }
