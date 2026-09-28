@@ -50,7 +50,7 @@ public sealed class DialogToastSeatingTests
     public async Task VisibleDialog_StackPaint_EqualsManualBlit()
     {
         var screen = BuildScreen();
-        screen.Dialog.ShowAlert("Hi", "hello world");
+        screen.Dialog.ShowAlert("Hi", "helloworld");
         screen.SyncOverlays(Viewport);
 
         await Assert.That(screen.Tree.Overlays.Count).IsEqualTo(1);
@@ -66,7 +66,7 @@ public sealed class DialogToastSeatingTests
         screen.Dialog.Paint(manual, Viewport);
 
         await Assert.That(stacked).IsEqualTo(GridDump.Art(manual));
-        await Assert.That(stacked.Contains("hello world")).IsTrue();
+        await Assert.That(stacked.Contains("helloworld")).IsTrue();
     }
 
     [Test]
