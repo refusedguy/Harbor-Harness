@@ -78,3 +78,77 @@ public sealed class CellForgePanelRegistry
             sizesBuilder.ToImmutable()));
     }
 }
+
+/// <summary>
+/// UX1 (#261, part of epic #260): single-active-panel arbiter for the fixed
+/// slot layout (feed / composer / ONE active panel / statusline).
+/// Resolves at most one winner across all visible providers: the focused panel
+/// first, then the first pinned panel, then the first visible panel — ties
+/// break in registration order (same order as Alt+1..9 hotkeys and
+/// <c>CycleFocus</c>). Everything secondary stays mounted in
+/// <see cref="UiState"/> for the future modal layer; the dock simply does not
+/// paint it. Pure: reads only the provider list + snapshot, never mutates.
+/// </summary>
+public static class PanelArbiter
+{
+    /// <summary>Resolve the single active panel from a registry + snapshot.</summary>
+    public static IPanelProvider? ResolveActive(PanelRegistry registry, UiState state)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        ArgumentNullException.ThrowIfNull(state);
+        return ResolveActive(registry.All, state);
+    }
+
+    /// <summary>
+    /// Resolve the single active panel from an ordered provider list + snapshot.
+    /// Order is significant: pinned/visible fallbacks pick the first match.
+    /// </summary>
+    public static IPanelProvider? ResolveActive(IReadOnlyList<IPanelProvider> providers, UiState state)
+    {
+        ArgumentNullException.ThrowIfNull(providers);
+        ArgumentNullException.ThrowIfNull(state);
+
+        // FocusedPanelId is authoritative when its state agrees.
+        string? focusedId = state.FocusedPanelId;
+        if (!string.IsNullOrEmpty(focusedId)
+            && state.PanelStates.TryGetValue(focusedId, out var focusedState)
+            && focusedState == TuiPanelState.Focused)
+        {
+            for (int i = 0; i < providers.Count; i++)
+            {
+                if (string.Equals(providers[i].Id, focusedId, StringComparison.Ordinal))
+                {
+                    return providers[i];
+                }
+            }
+        }
+
+        IPanelProvider? firstPinned = null;
+        IPanelProvider? firstVisible = null;
+        for (int i = 0; i < providers.Count; i++)
+        {
+            var provider = providers[i];
+            if (!state.PanelStates.TryGetValue(provider.Id, out var panelState)
+                || panelState == TuiPanelState.Hidden)
+            {
+                continue;
+            }
+
+            if (panelState == TuiPanelState.Focused)
+            {
+                return provider;
+            }
+
+            if (panelState == TuiPanelState.Pinned)
+            {
+                firstPinned ??= provider;
+            }
+            else
+            {
+                firstVisible ??= provider;
+            }
+        }
+
+        return firstPinned ?? firstVisible;
+    }
+}
