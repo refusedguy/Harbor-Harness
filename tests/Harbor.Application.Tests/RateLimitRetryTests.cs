@@ -11,6 +11,7 @@ using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
+using FakeSessionStore = Harbor.Application.Tests.Fakes.FakeSessionStore;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
@@ -98,7 +99,6 @@ public class RateLimitRetryTests
                 _ => throw RateLimited(new Dictionary<string, object?> { ["RetryAfter"] = TimeSpan.FromHours(10) }),
                 new RetryOptions(3, TimeSpan.FromMilliseconds(20), UseJitter: false, MaxRetryAfter: TimeSpan.FromSeconds(60)),
                 CancellationToken.None);
-            await Assert.That(false).IsTrue();
         }
         catch (HttpRequestException)
         {
@@ -122,7 +122,6 @@ public class RateLimitRetryTests
                 _ => throw RateLimited(new Dictionary<string, object?> { ["Retry-After"] = "45" }),
                 new RetryOptions(2, TimeSpan.FromMilliseconds(20), UseJitter: false),
                 CancellationToken.None);
-            await Assert.That(false).IsTrue();
         }
         catch (HttpRequestException)
         {
@@ -157,9 +156,21 @@ public class RateLimitRetryTests
             new HttpRequestException("429", inner: null, HttpStatusCode.TooManyRequests), out _)).IsFalse();
     }
 
-    private sealed class HintedException(TimeSpan hint) : HttpRequestException("429", inner: null, HttpStatusCode.TooManyRequests), IRetryAfterHint
+    private sealed class HintedException : HttpRequestException, IRetryAfterHint
     {
-        public TimeSpan? RetryAfter { get; } = hint;
+        public HintedException(TimeSpan hint)
+            : base("429", inner: null, HttpStatusCode.TooManyRequests) => RetryAfter = hint;
+
+        public HintedException()
+            : base("429", inner: null, HttpStatusCode.TooManyRequests) => RetryAfter = null;
+
+        public HintedException(string? message)
+            : base(message, inner: null, HttpStatusCode.TooManyRequests) => RetryAfter = null;
+
+        public HintedException(string? message, Exception? inner)
+            : base(message, inner, HttpStatusCode.TooManyRequests) => RetryAfter = null;
+
+        public TimeSpan? RetryAfter { get; }
     }
 
     [Test]
