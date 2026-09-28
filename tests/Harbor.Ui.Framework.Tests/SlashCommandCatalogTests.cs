@@ -106,4 +106,26 @@ public class SlashCommandCatalogTests
         await Assert.That(SlashCommandCatalog.Find("storage")!.ArgSuggestions).IsNotNull();
         await Assert.That(SlashCommandCatalog.Find("/help")!.ArgSuggestions).IsNull();
     }
+
+    /// <summary>
+    /// The three argument-taking commands keep their verbs in
+    /// <c>ArgSuggestions</c>, never in <c>Aliases</c>. Listing them as aliases would
+    /// make "/ansi" a top-level alias of "/tui" and "/jsonl" of "/storage" while
+    /// emptying the second-step arg picker — a real bug this suite must prevent.
+    /// </summary>
+    [Test]
+    public async Task ArgumentTakingCommands_KeepVerbsOutOfAliases()
+    {
+        foreach (string name in new[] { "tui", "storage", "skills" })
+        {
+            SlashCommandDefinition def = SlashCommandCatalog.Find(name)!;
+
+            await Assert.That(def.ArgSuggestions).IsNotNull();
+            foreach (string verb in def.ArgSuggestions!)
+            {
+                await Assert.That(def.Aliases.Contains(verb)).IsFalse();
+                await Assert.That(SlashCommandCatalog.All.Any(d => d.Name == verb)).IsFalse();
+            }
+        }
+    }
 }

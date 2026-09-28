@@ -255,6 +255,24 @@ public class PaletteCatalogTests
         }
     }
 
+    /// <summary>
+    /// The exact-lookup index must be keyed by the canonical name, so every registry
+    /// entry resolves to its own palette item (#462: it was keyed by "/help" while
+    /// lookups went through the catalog, so every FindSlash call missed).
+    /// </summary>
+    [Test]
+    public async Task FindSlash_ResolvesEveryRegistryEntryByCanonicalName()
+    {
+        foreach (SlashCommandDefinition def in SlashCommandCatalog.All)
+        {
+            CommandItem? item = CommandPaletteCatalog.FindSlash(def.Name);
+
+            await Assert.That(item).IsNotNull().Because($"the palette is missing /{def.Name}.");
+            await Assert.That(item!.Id).IsEqualTo(def.Name);
+            await Assert.That(item.Title).IsEqualTo(def.Invocation);
+        }
+    }
+
     [Test]
     public async Task Palette_ShowDefaultCatalog_ListsTwenty_WithNavigationAndCommit()
     {

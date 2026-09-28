@@ -231,12 +231,18 @@ public static class CommandPaletteCatalog
         return items;
     }
 
+    /// <summary>
+    ///     Exact-lookup index, keyed by the canonical command name (no leading
+    ///     <c>/</c>) — which is <see cref="CommandItem.Id" /> — so
+    ///     <see cref="FindSlash" /> can go straight from a
+    ///     <see cref="SlashCommandDefinition" /> to its item.
+    /// </summary>
     private static Dictionary<string, CommandItem> BuildSlashLookup()
     {
-        var lookup = new Dictionary<string, CommandItem>(SlashDefs.Length, StringComparer.OrdinalIgnoreCase);
-        for (int i = 0; i < SlashDefs.Length; i++)
+        var lookup = new Dictionary<string, CommandItem>(SlashItems.Length, StringComparer.OrdinalIgnoreCase);
+        foreach (CommandItem item in SlashItems)
         {
-            lookup[SlashDefs[i].Name] = SlashItems[i];
+            lookup[item.Id] = item;
         }
 
         return lookup;

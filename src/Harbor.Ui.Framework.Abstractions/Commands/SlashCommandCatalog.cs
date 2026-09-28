@@ -89,8 +89,8 @@ public static class SlashCommandCatalog
         new("agent", "Switch the active agent", ["mode", "a"], Group: GroupRuntime),
         new("providers", "List configured providers", [], Group: GroupRuntime),
         new("plugins", "Reload plugins from disk", [], Group: GroupRuntime),
-        new("tui", "List available TUI backends", ["ansi", "plain", "spectre", "consoleex", "notifications"], Group: GroupRuntime),
-        new("storage", "Show the session storage backend", ["jsonl", "memory", "sqlite"], Group: GroupRuntime),
+        new("tui", "List available TUI backends", [], ["ansi", "plain", "spectre", "consoleex", "notifications"], Group: GroupRuntime),
+        new("storage", "Show the session storage backend", [], ["jsonl", "memory", "sqlite"], Group: GroupRuntime),
         new("renderer", "Show or switch the renderer backend", [], Group: GroupRuntime),
         new("skills", "Check skill freshness", ["skill"], ["refresh", "update"], Group: GroupRuntime),
     ];
