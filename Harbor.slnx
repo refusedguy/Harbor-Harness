@@ -27,7 +27,6 @@
         <Project Path="src/Harbor.Application/Harbor.Application.csproj"/>
         <Project Path="src/Harbor.Extensions/Harbor.Extensions.csproj"/>
         <Project Path="src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj"/>
-        <Project Path="src/Harbor.Tui.Abstractions/Harbor.Tui.Abstractions.csproj"/>
         <Project Path="src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj"/>
     </Folder>
 

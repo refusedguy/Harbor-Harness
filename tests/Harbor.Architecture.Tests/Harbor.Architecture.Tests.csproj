@@ -63,7 +63,6 @@
     <ProjectReference Include="..\..\src\Harbor.Transport.Remote\Harbor.Transport.Remote.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Telemetry.Core\Harbor.Telemetry.Core.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Telemetry.Otlp\Harbor.Telemetry.Otlp.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Notifications\Harbor.Tui.Notifications.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ipc.Client\Harbor.Ipc.Client.csproj"/>

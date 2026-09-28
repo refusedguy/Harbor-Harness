@@ -8,7 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Compilation\Harbor.Plugins.Compilation.csproj"/>

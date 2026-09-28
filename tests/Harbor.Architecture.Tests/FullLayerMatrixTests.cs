@@ -61,7 +61,6 @@ public class FullLayerMatrixTests
         "Harbor.Ui.Framework.Abstractions",
         // Presentation
         "Harbor.Terminal.Abstractions",
-        "Harbor.Tui.Abstractions",
         "Harbor.Ui.Framework",
         "Harbor.Ui.Framework.State",
         "Harbor.Ui.Framework.Reducers",
@@ -158,8 +157,6 @@ public class FullLayerMatrixTests
 
         // ---- Presentation -------------------------------------------------
         ["Harbor.Terminal.Abstractions"] = new(Layer.Presentation, ["Harbor.Abstractions", "Harbor.Ui.Framework"]),
-        ["Harbor.Tui.Abstractions"] = new(Layer.Presentation,
-            ["Harbor.Ui.Framework", "Harbor.Terminal.Abstractions"]),
         ["Harbor.Ui.Framework"] = new(Layer.Presentation,
         [
             "Harbor.Ui.Framework.Abstractions", "Harbor.Ui.Framework.State",

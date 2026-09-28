@@ -85,7 +85,6 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(HarborWithPlugins)' == 'true'">
-    <ProjectReference Include="..\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
     <ProjectReference Include="..\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
     <ProjectReference Include="..\Harbor.Plugins.Compilation\Harbor.Plugins.Compilation.csproj"/>
     <ProjectReference Include="..\Harbor.Plugins.Instantiation\Harbor.Plugins.Instantiation.csproj"/>

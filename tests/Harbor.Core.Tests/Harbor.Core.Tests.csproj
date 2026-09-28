@@ -7,7 +7,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="../../src/Harbor.Core/Harbor.Core.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Registries/Harbor.Registries.csproj"/>
     <ProjectReference Include="../../src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj"/>
     <ProjectReference Include="../../tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
   </ItemGroup>

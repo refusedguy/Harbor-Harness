@@ -7,7 +7,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAI\Harbor.Providers.OpenAI.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
