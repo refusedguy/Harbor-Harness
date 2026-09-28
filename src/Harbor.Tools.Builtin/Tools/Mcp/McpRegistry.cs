@@ -108,6 +108,11 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     /// </param>
     /// <param name="headers">Extra headers (an explicit Authorization wins over OAuth).</param>
     /// <param name="oauth">Optional OAuth2 settings (else the HARBOR_MCP_OAUTH_TOKEN env fallback applies).</param>
+    /// <remarks>
+    ///     A two-argument <c>Register(name, value)</c> call binds to the stdio
+    ///     overload (a candidate that needs no default arguments wins), so a
+    ///     remote server must name its transport or come from <c>mcp.json</c>.
+    /// </remarks>
     public Result Register(
         string name,
         string url,

@@ -174,16 +174,46 @@ public class McpTransportFactoryTests
     }
 
     [Test]
-    public async Task Register_OmittedTransport_DefaultsToHttp()
+    public async Task RegisterFromConfig_OmittedTransport_DefaultsToHttp()
     {
+        string tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(tempFile, """
+            {
+                "mcpServers": {
+                    "plain": { "url": "https://example.com/mcp" }
+                }
+            }
+            """);
+
+            var registry = new McpRegistry();
+            Result loaded = registry.RegisterFromConfig(tempFile);
+            Result<McpRemoteRegistration> view = registry.GetRemoteRegistration("plain");
+
+            await Assert.That(loaded.IsSuccess).IsTrue();
+            await Assert.That(view.IsSuccess).IsTrue();
+            await Assert.That(view.Value.Transport).IsEqualTo(McpTransportNames.Http);
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Test]
+    public async Task Register_TwoStringArgs_BindsToTheStdioOverload()
+    {
+        // Overload trap, pinned deliberately: Register(name, string) resolves to
+        // the stdio form (a candidate needing no default arguments wins), so a
+        // remote server must name its transport — or come from mcp.json.
         var registry = new McpRegistry();
 
         Result registered = registry.Register("srv", "https://example.com/mcp");
-        Result<McpRemoteRegistration> view = registry.GetRemoteRegistration("srv");
 
         await Assert.That(registered.IsSuccess).IsTrue();
-        await Assert.That(view.IsSuccess).IsTrue();
-        await Assert.That(view.Value.Transport).IsEqualTo(McpTransportNames.Http);
+        await Assert.That(registry.GetRemoteRegistration("srv").IsFailure).IsTrue();
+        await Assert.That(registry.GetServerNames().ToArray()).IsEquivalentTo(new[] { "srv" });
     }
 
     [Test]
