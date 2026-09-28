@@ -62,6 +62,22 @@ internal static class MarkdownBlockParser
     public static List<MdBlock> Parse(ReadOnlySpan<char> source)
     {
         var blocks = new List<MdBlock>(8);
+        ParseInto(source, blocks);
+        return blocks;
+    }
+
+    /// <summary>
+    /// Allocation-free <see cref="Parse"/> for hot paths: fills and clears a
+    /// caller-owned list so a per-frame parse costs no garbage (#463).
+    /// </summary>
+    public static void ParseInto(ReadOnlySpan<char> source, List<MdBlock> blocks)
+    {
+        blocks.Clear();
+        ParseCore(source, blocks);
+    }
+
+    private static void ParseCore(ReadOnlySpan<char> source, List<MdBlock> blocks)
+    {
         int pos = 0;
 
         while (pos < source.Length)
@@ -90,7 +106,7 @@ internal static class MarkdownBlockParser
                         else
                         {
                             blocks.Add(new MdBlock(MdBlockKind.Fence, pos, source.Length, false, 0));
-                            return blocks;
+                            return;
                         }
 
                         break;
@@ -109,7 +125,7 @@ internal static class MarkdownBlockParser
                         else
                         {
                             blocks.Add(new MdBlock(MdBlockKind.Math, pos, source.Length, false, 0));
-                            return blocks;
+                            return;
                         }
 
                         break;
@@ -241,8 +257,6 @@ internal static class MarkdownBlockParser
                     }
             }
         }
-
-        return blocks;
     }
 
     private static (int LineEnd, bool Terminated) LineBounds(ReadOnlySpan<char> source, int start)
