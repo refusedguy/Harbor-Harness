@@ -20,10 +20,6 @@ on:
         description: "Test projects to regenerate (space-separated, empty = all golden suites)"
         required: false
         default: ""
-      filter:
-        description: "Extra --treenode-filter pattern (single, empty = the default golden globs)"
-        required: false
-        default: ""
 
 permissions:
   contents: write
@@ -57,21 +53,11 @@ jobs:
           else
             suites="${{ inputs.suites }}"
           fi
-          # TUnit --treenode-filter matches whole path segments, so the default
-          # globs only reach suites whose CLASS name carries the marker. A
-          # baseline whose marker sits on the method (e.g. the ce4 REPL smoke
-          # frame) needs the explicit pattern below.
-          if [ -z "${{ inputs.filter }}" ]; then
-            filters=("*Golden*" "*ScreenshotHash*")
-          else
-            filters=("${{ inputs.filter }}")
-          fi
           for p in $suites; do
-            for f in "${filters[@]}"; do
-              echo "::group::goldens $p $f"
-              dotnet run --project "$p" -c Release -- --treenode-filter "$f" || true
-              echo "::endgroup::"
-            done
+            echo "::group::goldens $p"
+            dotnet run --project "$p" -c Release -- --treenode-filter "*Golden*" || true
+            dotnet run --project "$p" -c Release -- --treenode-filter "*ScreenshotHash*" || true
+            echo "::endgroup::"
           done
           exit 0
 
