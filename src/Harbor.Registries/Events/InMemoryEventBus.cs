@@ -82,6 +82,20 @@ public sealed class InMemoryEventBus : IEventBus
     /// <summary>Per-dispatch budget; TimeSpan.Zero disables the budget entirely.</summary>
     private readonly TimeSpan _handlerBudget;
 
+    /// <summary>
+    ///     Single-slot cache of spare budget <see cref="CancellationTokenSource" />
+    ///     instances (#249). The 1/N-subscriber publish path used to allocate a
+    ///     fresh CTS per publish even when every handler completed synchronously;
+    ///     publishes now rent this instance (allocating one on first use or
+    ///     contention) and return it through <c>TryReset</c>-gated caching. The
+    ///     cached instance is always unlinked — linkage to the publisher's token
+    ///     is emulated per publish with a registration (see
+    ///     <see cref="DispatchToSubscribersAsync" />). Exchanged with
+    ///     <c>Interlocked</c> only: contention losers dispose their spare
+    ///     instead of blocking.
+    /// </summary>
+    private CancellationTokenSource? _pooledBudgetCts;
+
     private readonly ILogger<InMemoryEventBus> _logger;
 
     /// <summary>
@@ -556,18 +570,30 @@ public sealed class InMemoryEventBus : IEventBus
     {
         Subscription[]? dead = null;
         int deadCount = 0;
+        CancellationTokenSource? budgetCts = null;
+        CancellationTokenRegistration budgetLink = default;
         try
         {
             int snapshotLength = snapshot.Length;
             bool budgetEnabled = _handlerBudget > TimeSpan.Zero;
-            // No linked registration when the outer token can never fire:
-            // a fresh CTS behaves identically (CancelAfter still applies)
-            // and skips the linked-cancellation allocation (#47).
-            using CancellationTokenSource? budgetCts = budgetEnabled
-                ? (ct.CanBeCanceled
-                    ? CancellationTokenSource.CreateLinkedTokenSource(ct)
-                    : new CancellationTokenSource())
-                : null;
+            if (budgetEnabled)
+            {
+                // #249: rent the per-handler budget CTS from the single-slot
+                // pool instead of allocating one per publish. The cached
+                // instance is always unlinked; when the outer token can fire,
+                // the link is emulated with a registration that cancels the
+                // rented source (torn down in the finally below — the same
+                // lifetime the per-publish linked CTS had under `using`).
+                // No linked registration when the outer token can never fire:
+                // the rented CTS behaves identically (CancelAfter still
+                // applies) and skips the linked-cancellation allocation (#47).
+                budgetCts = RentBudgetCts();
+                if (ct.CanBeCanceled)
+                {
+                    budgetLink = ct.Register(
+                        static state => ((CancellationTokenSource)state!).Cancel(), budgetCts);
+                }
+            }
 
             void MarkDead(Subscription sub)
             {
@@ -627,6 +653,14 @@ public sealed class InMemoryEventBus : IEventBus
         }
         finally
         {
+            // Unlink before pool-return: a live registration would make
+            // TryReset refuse the instance and silently drain the pool.
+            budgetLink.Dispose();
+            if (budgetCts is not null)
+            {
+                ReturnBudgetCts(budgetCts);
+            }
+
             if (dead is not null)
             {
                 // Clear references so the pooled array doesn't keep the Subscription
@@ -634,6 +668,34 @@ public sealed class InMemoryEventBus : IEventBus
                 Array.Clear(dead, 0, deadCount);
                 ArrayPool<Subscription>.Shared.Return(dead);
             }
+        }
+    }
+
+    /// <summary>
+    ///     Rent a spare budget <see cref="CancellationTokenSource" /> (#249).
+    ///     Returns the cached instance when a previous publish left one behind,
+    ///     otherwise allocates. The rented instance is always unlinked and
+    ///     reset — ready for <c>CancelAfter</c>.
+    /// </summary>
+    private CancellationTokenSource RentBudgetCts() =>
+        Interlocked.Exchange(ref _pooledBudgetCts, null) ?? new CancellationTokenSource();
+
+    /// <summary>
+    ///     Return a rented budget <see cref="CancellationTokenSource" /> to the
+    ///     single-slot cache (#249). <c>TryReset</c> refuses instances with live
+    ///     callback registrations (a non-cooperative orphan still holding the
+    ///     token) — those are disposed instead of poisoning the pool. On
+    ///     contention the spare is likewise disposed rather than retained.
+    /// </summary>
+    private void ReturnBudgetCts(CancellationTokenSource cts)
+    {
+        if (cts.TryReset())
+        {
+            Interlocked.Exchange(ref _pooledBudgetCts, cts)?.Dispose();
+        }
+        else
+        {
+            cts.Dispose();
         }
     }
 
