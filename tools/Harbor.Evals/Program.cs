@@ -14,6 +14,17 @@ internal static class Program
         string repoRoot = FindRepoRoot();
         var profile = EvalProfile.Load(Path.GetFullPath(profilePath), repoRoot);
         string resultsRoot = Path.GetFullPath("evals/results");
+
+        // Re-summarize a finished batch (e.g. after manual agentClaim
+        // annotation of verdict.json files). No Harbor run, no verifier.
+        string? summarize = Arg(args, "--summarize");
+        if (summarize is not null)
+        {
+            int count = SummaryBuilder.Resummarize(resultsRoot, summarize);
+            Console.WriteLine($"Resummarized {summarize}: {count} attempts.");
+            return 0;
+        }
+
         string batchDir = Path.Combine(resultsRoot, batchId);
         Directory.CreateDirectory(batchDir);
 
@@ -54,7 +65,7 @@ internal static class Program
                 catch (Exception ex)
                 {
                     Console.WriteLine($"HARNESS-ERROR {task.Id} attempt {i}: {ex.Message}");
-                    summaries.Add(new SummaryBuilder.AttemptSummary(task.Id, i, "inconclusive", "not_evaluated", "harness_error", "harness_or_crash", 0));
+                    summaries.Add(new SummaryBuilder.AttemptSummary(task.Id, i, "inconclusive", "not_evaluated", "error", "harness_error", "harness_or_crash", 0));
                 }
             }
         }
@@ -87,7 +98,7 @@ internal static class Program
 
         Console.WriteLine($"   {verdict.TaskOutcome} (exec={verdict.Execution}, verify={verdict.Verification}, constraints={verdict.ConstraintsOutcome})");
         return new SummaryBuilder.AttemptSummary(task.Id, attempt, verdict.TaskOutcome,
-            verdict.ConstraintsOutcome, verdict.Execution, verdict.PrimaryFailure,
+            verdict.ConstraintsOutcome, verdict.Verification, verdict.Execution, verdict.PrimaryFailure,
             (drive.EndedUtc - drive.StartedUtc).TotalSeconds);
     }
 

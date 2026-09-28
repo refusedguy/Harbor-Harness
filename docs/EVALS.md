@@ -63,4 +63,21 @@ never zero); failure classes (`incorrect_change`, `broke_existing`,
   diagnostic (3 tasks fine), not statistical proof.
 - Live-model runs are a signal, not a gate; deterministic scripted-provider
   E2E stays the engineering gate.
+
+## Live-run disclaimer (adopted verbatim, issue #40)
+
+Live evals on a rotating endpoint measure Harbor together with the
+provider's current routing policy. Results are diagnostic/descriptive;
+single runs and small samples prove neither improvement nor non-regression.
+Scripted runs check runtime on a controlled stream but do not replace
+measuring the model's task-solving. Interleaved A/B (alternating versions
+close in time, randomized order, no cherry-picking, model id recorded,
+timeouts counted) only for behavioral changes; no automatic live
+non-regression gate.
+
+## Open (v1 / follow-ups, not v0)
+
+- `usage.json` cost wiring (full cost to success stays `unknown` until then).
+- Windows verifiers (`task.json → verifier.windows` is empty; Unix only).
+- Short-lane timeouts (per-task 240 s, suite deadline 12 min) for live CI.
 - v1 plugs the same tasks into RunId/budgets/recovery when Run exists.
