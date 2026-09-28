@@ -432,13 +432,14 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
         ICollapsibleChatBlock.PaintBodyLines(buffer, x, y, rows, _body.Output, maxLines, style, ChatPalette.Dim);
     }
 
+    /// <summary>
+    /// Collapsed body rows via the <c>ICollapsibleChatBlock</c> mixin
+    /// (PRIM1d #294): the [UX5] #265 zero-budget law for task cards
+    /// (<c>MaxBodyLines == 0</c> → pure one-liner, not even a marker) lives
+    /// in <c>ClampedBodyLineCount</c> — no local guard, byte-identical.
+    /// </summary>
     private int BodyLineCount()
     {
-        if (MaxBodyLines <= 0)
-        {
-            return 0; // [UX5] #265: zero collapse budget = pure one-liner, not even a marker.
-        }
-
         var output = _body!.Output.AsSpan().TrimEnd('\n');
         return ICollapsibleChatBlock.ClampedBodyLineCount(output, MaxBodyLines);
     }
