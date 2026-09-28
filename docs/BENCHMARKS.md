@@ -2,10 +2,15 @@
 
 > **Sources.** Numbers below come from two environments — do not compare raw values across them:
 > - **CI-short** — PR `benchmark` job (`.github/workflows/benchmark.yml`, `ubuntu-latest`, `taskset -c 1`,
->   `--job Short`), latest 2026-09-09 (AMD EPYC 9V74, .NET 10.0.12, BenchmarkDotNet 0.15.8).
->   Covers `*PermissionRuleset*` + `*Registry*` filters only — marked **[CI-short]** in the tables.
->   Those two globs match exactly three classes: `PermissionRulesetBenchmark`, `ProviderRegistryBenchmark`,
->   `ToolRegistryBenchmark`. No other row in this file is produced by that job.
+>   `--job Short`). Three runs on three different runners, so do not compare raw means across them:
+>   2026-09-09 (AMD EPYC 9V74, .NET 10.0.12, BDN 0.15.8) for `*PermissionRuleset*` + `*Registry*`;
+>   2026-09-28 (AMD EPYC 7763, .NET SDK 10.0.401, runtime 10.0.12, BDN 0.15.8) for
+>   `*EventBusBenchmark*` (§5.4, #391). The allocation column is runner-independent; the
+>   time column is not. Marked **[CI-short]** in the tables.
+>   `*PermissionRuleset*` + `*Registry*` match exactly three classes: `PermissionRulesetBenchmark`,
+>   `ProviderRegistryBenchmark`, `ToolRegistryBenchmark`. `*EventBusBenchmark*` matches two more:
+>   `EventBusBenchmark` and `EventBusBenchmarkFanout`. No other row in this file is produced by that
+>   job — in particular the `*Delivery*` rows of §5.3 are still code-only, the job does not run them.
 > - **Local full runs** — 2026-08-22 (i5-8250U, .NET 10.0.10) plus UiStore/streaming rows from 2026-09-10
 >   (machine n/a). Since #46 all classes use unified `[SimpleJob(warmup 3 / iter 5)]`; older rows were
 >   measured with mixed configs (2/3 or 3/10), so absolute values will shift on re-measure.
@@ -17,7 +22,8 @@
 > date and the job, or it carries an explicit `⏳ not yet measured` / `⚠️ retracted` marker. There is
 > no unattributed row — that is the litmus for #408.
 >
-> Suite: `tests/Harbor.Benchmarks` — 39 benchmark classes (after the #408 split), `[MemoryDiagnoser]`, Release, 0 warnings.
+> Suite: `tests/Harbor.Benchmarks` — 40 benchmark classes (after the #408 split and the #391
+> EventBus rewrite), `[MemoryDiagnoser]`, Release, 0 warnings.
 > Since #408 every class carries its own 7-field measurement contract (Operation / Payload /
 > StateReset / Drain / RetainedState / AwaitSemantics / AllocAttribution), enforced by
 > `BenchmarkContractTests` in `tests/Harbor.Architecture.Tests`. Read the class doc before quoting its number.
@@ -37,7 +43,7 @@
 | P0 | `MessageConverter` large msgs | serialize 2.35 ms / 1.2 MB per msg; 100×large round-trip **545 ms** | Utf8Json source-gen (audit §PERF-002) |
 | P1 | `CompactionService.ShouldCompact` | 598 µs @1000 msgs **каждый turn** | incremental token counter |
 | P1 | `EventBroadcaster` | 9–11 ms / **8 MB** per 1000 events, не зависит от числа клиентов ⚠️ undated pre-#408 run | serialize once, reuse buffers |
-| P1 | `EventBus.PublishAsync` | ~~фикс. 8.1 KB alloc даже при 0 подписчиков~~ ✅ resolved: 0-sub fast path returns before scrollback/fan-out (zero alloc, locked by `PublishAsync_ZeroSubscribers_IsAllocationFree`); 1/10-sub fan-out covered by bounded tripwires (#186) | ring-buffer scrollback (landed) |
+| P1 | `EventBus.PublishAsync` | ~~фикс. 8.1 KB alloc даже при 0 подписчиков~~ ✅ resolved: 0-sub fast path returns before scrollback/fan-out (**measured 8.15 ns / 0 B** by #391, §5.4; zero alloc locked by `PublishAsync_ZeroSubscribers_IsAllocationFree`, reachability by `EventBusFastPathTests`); 1/10-sub fan-out covered by bounded tripwires (#186) | ring-buffer scrollback (landed) |
 | P2 | `StreamingCoalescer` tool-call Materialize | 481 µs @1000 дельт (35–48× медленнее текста) | кэш разобранных аргументов |
 | P2 | `PatchTool` apply | 10.1 ms / **9.3 MB** @5000 hunks | стримить вместо List<string>+Join |
 | P2 | `DefaultUiProjector` | 20.8 ms @5000 строк за кадр (холодный полный проход; инкрементальный кэш уже влито — см. ниже) | инкрементальная проекция по revision |
@@ -51,7 +57,7 @@
 |---|--:|--:|
 | AgentLoop turn (no tool) | 10.2–11.8 µs | 5.5 KB |
 | AgentLoop turn (+tool) | 16.6–26.6 µs | 7.5 KB |
-| EventBus.PublishAsync (0 sub) | 8.1 µs | 8.1 KB |
+| EventBus.PublishAsync (0 sub) ⚠️ retracted, pre-ring — §5.4.4 | 8.1 µs | 8.1 KB |
 | WireCodec roundtrip 64B / raw frame 64B | 6.2 µs / 0.25 µs | 1.8 KB / 0 |
 | OpenAiSse.ParseChunk 32B→4KB | 10.2–10.6 µs | 3.9–6.8 KB |
 | JsonlSessionStore.Append ×100 | 1.74 ms | 187 KB |
@@ -291,8 +297,8 @@ ruleset resolves exactly the unfiltered descriptor set.
 
 | Benchmark | Mean | StdDev | Allocations |
 |---|---:|---:|---:|
-| `EventBus.PublishAsync` (1 subscriber) | 0.35 µs | 0.04 µs | 0 B |
-| `EventBus.PublishAsync` (10 subscribers) | 2.80 µs | 0.20 µs | 0 B |
+| `EventBusBenchmark.PublishAsync_1Sub` ⚠️ retracted, see §5.4.4 | 0.35 µs | 0.04 µs | 0 B |
+| `EventBusBenchmark.PublishAsync_NSub` (10 subscribers) ⚠️ retracted, see §5.4.4 | 2.80 µs | 0.20 µs | 0 B |
 | `UiStore.Dispatch` (lock-free CAS) | 0.15 µs | 0.02 µs | 0 B |
 | `JsonlSessionStore.AppendMessage` | 12 µs | 1.5 µs | 480 B |
 | `JsonlSessionStore.GetMessages` (100 msgs) | 850 µs | 90 µs | 28 KB |
@@ -318,19 +324,137 @@ separately-named rows:
 | | `EnqueueAndDrainConsumer` | + drain every client pipe (bounded passes) | drained to completion |
 | | `SteadyState` | 4 warm burst+drain rounds | drained to completion |
 
-⏳ **No numbers yet.** These rows are code-only as of #408: no local full run and no CI-short run
-(the CI `benchmark` job filters on `*PermissionRuleset*` / `*Registry*`, so it never touches the bus
-classes). Fill them in with machine + date on the next local pass:
+⏳ **No numbers yet.** These rows are code-only as of #408: no local full run and no CI-short run.
+#391 added a `*EventBusBenchmark*` step to the CI `benchmark` job, but that glob deliberately does
+**not** match the `*Delivery*` classes, so the job still does not run them. Fill them in with
+machine + date on the next local pass:
 
 ```bash
 dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*Delivery*'
 ```
 
-The pre-#408 blended rows that remain valid are the `EventBus.PublishAsync` fan-out curve in §5.2
-(1 / 10 subscribers) and the P1 `EventBroadcaster` bottleneck row at the top of this file — both are
-attributed there. `InMemoryEventBus` exposes no way to empty its scrollback ring, so the enqueue rows
+The pre-#408 blended rows that remain valid are the P1 `EventBroadcaster` bottleneck row at the top
+of this file. The `EventBus.PublishAsync` fan-out curve that used to live in §5.2 (1 / 10
+subscribers) is **superseded** by §5.4: #391 replaced the single `[Params(0, 1, 10, 100)]` method
+with per-case rows that also vary scrollback capacity, because that one method could never reach the
+fast path. §5.4.4 records the old cells as retracted rather than comparable. `InMemoryEventBus` exposes no way to empty its scrollback ring, so the enqueue rows
 run against a ring that saturates; slot overwrite costs the same as a fresh slot, which each class doc
 records under `RetainedState:`.
+
+### 5.4 EventBus publish path — retention × drain **[CI-short]** (PR `benchmark` job, `#391`)
+
+The bus rows in §5.2 are **retracted**, not merely stale. They come from 2026-08-22, one day
+before the ring-buffer landing (`2f9debf`, 2026-08-23) that replaced the `ImmutableArray`
+scrollback copy, and they were produced by a single `[Params(0, 1, 10, 100)]` method that built
+`new InMemoryEventBus(maxScrollback: 1024)` — scrollback on for every case. The zero-allocation
+fast path in `InMemoryEventBus.PublishAsync`
+(`src/Harbor.Registries/Events/InMemoryEventBus.cs:224`) requires
+`_maxScrollback == 0 && _middlewares.Count == 0 && _subscriptions.IsEmpty`, so that method could
+never reach it. The "8.1 KB @0 subscribers" figure is the pre-ring copy (1024 refs × 8 B ≈
+8 KB), not a live allocation.
+
+#391 replaced it with one row per (retention × drain) point, each carrying the 7-field contract
+`BenchmarkContractTests` requires. §5.3's `*Delivery*` rows are a different, still-unmeasured
+split and are not touched by this section.
+
+#### 5.4.1 Measured — run [36452709074](https://github.com/refusedguy/Harbor-Harness/actions/runs/36452709074), 2026-09-28
+
+Commit `752196c` · `benchmark` job, `--filter '*EventBusBenchmark*' --job Short` ·
+`ubuntu-latest` pinned with `taskset -c 1` · **AMD EPYC 7763 @ 2.45 GHz (2 physical cores)**,
+Ubuntu 24.04.5, .NET SDK 10.0.401, runtime 10.0.12, BDN 0.15.8.
+Artifact: `benchmarkdotnet-results` (`*-report-github.md`).
+
+> Machine class note: this runner is an EPYC **7763**, not the 9V74 quoted for the
+> 2026-09-09 CI-short rows. Do not compare mean times across the two — the
+> allocation column is exact and runner-independent, the time column is not.
+
+Reproducibility: a second CI run of the same branch
+([36456334807](https://github.com/refusedguy/Harbor-Harness/actions/runs/36456334807),
+independent runner, no code change between them) returns the **allocation column byte-for-byte
+identical** — `0 / 80 / 200 / 200 / 760 / 920 / 8120 B` — and the fast path again at
+8.27 ns. Means move within noise (`1Sub` 242.7 → 244.2 ns; `0Sub_ScrollbackOn` 107.5 →
+106.2 ns). Treat the allocation column as the measurement and the mean as an order of magnitude.
+
+`ShortRun` rows (the `--job Short` job; the paired `Job-NTRUNJ` pass agrees):
+
+| Case | retention | drain | Mean | StdDev | Ratio | Allocated |
+|---|---|---|--:|--:|--:|--:|
+| `PublishAsync_0Sub_ScrollbackOff` | off | none | **8.15 ns** | 0.01 ns | 1.00 | **0 B** |
+| `PublishAsync_0Sub_ScrollbackOn` | on | none | 107.5 ns | 0.5 ns | 13.19 | 80 B |
+| `PublishAsync_1Sub` | on | 1 sync | 242.7 ns | 0.4 ns | 29.78 | 200 B |
+| `PublishAsync_1Sub_ScrollbackOff` | off | 1 sync | 226.2 ns | 1.1 ns | 27.76 | 200 B |
+| `PublishAsync_1Sub_AsyncDrain` | on | 1 async | 8.06 µs | 0.5 µs | 989.43 | 760 B |
+| `PublishAsync_NSub` (10) | on | 10 sync | 803.5 ns | 3.2 ns | — | 920 B |
+| `PublishAsync_NSub_ScrollbackOff` (10) | off | 10 sync | 824.1 ns | 58.4 ns | — | 920 B |
+| `PublishAsync_NSub` (100) | on | 100 sync | 6.36 µs | 12.8 ns | — | 8120 B |
+| `PublishAsync_NSub_ScrollbackOff` (100) | off | 100 sync | 25.5 µs | 69.8 ns | — | 8120 B |
+
+#### 5.4.2 The fast path is real: 0 B/op at 8.1 ns
+
+`PublishAsync_0Sub_ScrollbackOff` allocates **nothing** — BDN prints `-` for both `Gen0` and
+`Allocated` because not a single Gen0 collection happened during the iteration, so the per-op
+allocation is below the measurement threshold rather than merely small. At 8.15 ns/op a single
+byte per publish would have produced hundreds of megabytes of Gen0 traffic. The exact `0 B` claim
+is asserted merge-gated, not inferred from absence, by `PublishAsync_ZeroSubscribers_IsAllocationFree`
+(`GC.GetAllocatedBytesForCurrentThread() == 0`), and *reachability* of that path is asserted by
+`EventBusFastPathTests` (#391) — the benchmark alone cannot tell a fast path from a slow one
+that happens to be cheap.
+
+This also corrects the `AllocAttribution` of the fan-out contract: it claimed "fan-out to
+`ValueTask.CompletedTask` handlers allocates nothing". It does — 80 B per subscriber
+(§5.4.3).
+
+#### 5.4.3 Residual allocations, attributed
+
+The pre-ring `8.1 KB @0 subscribers` row is **resolved**: 8 KB was the `ImmutableArray`
+scrollback copy, replaced by the fixed ring (`AppendScrollback`, `InMemoryEventBus.cs:380`). The
+same bus shape now measures **107.5 ns / 80 B** — 75× faster and 100× less allocated.
+
+The remaining bytes are fully accounted for, and the arithmetic is exact (`10 → 100`
+subscribers adds exactly 80 B/subscriber; `920 = 80 + 120`; `8120 = 80 + 120 + 100 × 80`):
+
+| B/op | Type | Site | Present when |
+|---:|---|---|---|
+| 80 | `Task<ValueTuple<bool, AgentEvent>>` | `RunMiddlewareAsync` — declared `InMemoryEventBus.cs:521`, result set at `:553` | any publish off the fast path (`Task.FromResult` does not cache non-primitive result types) |
+| 80 | `Task<ValueTuple<DispatchOutcome, Task?>>` | `DispatchToOneAsync` — declared `InMemoryEventBus.cs:706`, result set at `:716`/`:723` | **per subscriber** |
+| 40 | `CancellationTokenSource` | `RentBudgetCts` — `InMemoryEventBus.cs:680` | once per publish that fans out, with the default 250 ms `handlerBudget` enabled |
+
+That 40 B row is a real finding, not a rounding artifact: it is constant per fan-out publish
+(identical at 1, 10 and 100 subscribers) and absent from the 0-subscriber rows, which never reach
+the budget. The mechanism is that `DispatchToOneAsync` calls
+`budgetCts.CancelAfter(_handlerBudget)` (`:719`) on the #249 single-slot pooled instance, and
+`CancellationTokenSource.TryReset()` refuses a source whose timer has ever been queued
+(`!timer._everQueued`) — so `ReturnBudgetCts` (`:690`) disposes it and the next `RentBudgetCts`
+allocates a fresh one. No `TimerQueueTimer` bytes appear in the column (that object is recycled by
+.NET's `TimerQueue`), which is why the whole residual is the 40 B CTS. Removing it is a follow-up;
+this slice changes no `PublishAsync` semantics.
+
+Two rows carry zero bus signal and are annotated so nobody reads them as regressions:
+
+- **`PublishAsync_1Sub_AsyncDrain` (8.06 µs / 760 B)** — the suspending handler is the
+  benchmark's own `await Task.Yield()`, so ~7.9 µs of thread-pool post latency and most of
+  the extra 560 B (`ValueTask.AsTask()` at `:726` plus the continuation/`ExecutionContext`
+  machinery of a real suspension) are handler cost, not bus cost.
+- **`PublishAsync_NSub_ScrollbackOff` @100 (25.5 µs vs 6.36 µs for the ring-on twin)** —
+  the two rows are *identical work* minus the ring append, so the 4× spread is shared-runner noise
+  on a 2-physical-core runner, not a property of scrollback. The allocation column (8120 B,
+  identical in both jobs and in both rows) is the trustworthy part.
+
+Instability watch, in the spirit of the §5.1 note: `NSub` @100 means ranged 6.4–25.5 µs across
+the two job passes (`Error` up to 22 µs). Re-measure on a quiet runner before quoting a
+100-subscriber mean.
+
+#### 5.4.4 What this replaces
+
+| Old row (2026-08-22, i5-8250U) | Was | Now (2026-09-28, EPYC 7763) |
+|---|---|---|
+| `EventBus.PublishAsync` (0 sub) — 8.1 µs / 8.1 KB | pre-ring, scrollback always on | 107.5 ns / 80 B (`PublishAsync_0Sub_ScrollbackOn`) — and **8.15 ns / 0 B** with scrollback off |
+| `EventBus.PublishAsync` (1 subscriber) — 0.35 µs / 0 B | ⚠️ retracted: a fan-out to a completed handler *does* allocate | 242.7 ns / 200 B |
+| `EventBus.PublishAsync` (10 subscribers) — 2.80 µs / 0 B | ⚠️ retracted, same reason | 803.5 ns / 920 B |
+
+The old `0 B` cells were wrong before this slice: they predate #47/#152/#249, and a benchmark
+that always ran with scrollback on could not have seen a per-subscriber result `Task`. They are
+kept above only as a visual diff and are not comparable row-for-row (also different machine class).
 
 ### Allocation-budget tripwires (#186, CI-enforced)
 
@@ -348,6 +472,9 @@ dotnet run -c Release --project tests/Harbor.Registries.Tests -- --treenode-filt
 | Test | Path | Ceiling |
 |---|---|---|
 | `PublishAsync_ZeroSubscribers_IsAllocationFree` (`Harbor.Registries.Tests`) | `InMemoryEventBus` 0-sub fast path | 0 B |
+| `PublishAsync_ZeroSubscribersNoScrollback_TakesFastPath` (`Harbor.Registries.Tests`, #391) | fast-path *reachability* — `PublishedCount` stays 0, no scrollback/no subs | exact |
+| `PublishAsync_ZeroSubscribersWithScrollback_LeavesFastPath` (#391) | scrollback on ⇒ slow path (`PublishedCount` advances) | exact |
+| `PublishAsync_OneSubscriberNoScrollback_LeavesFastPath` (#391) | one subscriber ⇒ slow path | exact |
 | `PublishAsync_SingleSubscriber_StaysBounded` | `InMemoryEventBus` 1-sub fan-out | ≤ 1 KB/publish |
 | `PublishAsync_TenSubscribers_StaysBounded` | `InMemoryEventBus` 10-sub fan-out | ≤ 2 KB/publish |
 | `ResolveTools_FrozenUnfiltered_IsAllocationFree` | frozen `ToolRegistry.ResolveTools` (no permission, cached array) | 0 B |
