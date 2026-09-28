@@ -82,8 +82,13 @@ public static class ChatAppReducer
         // the After hook only ever sees that already-reset state — never the one
         // that still held the tabs. Phase 1 is the last point where they are
         // reachable, so the chat half re-attaches them itself.
+        //
+        // ONLY the strip is carried over. Everything else must still reset, or
+        // \"reset to a fresh empty state\" stops being true: the transcript, the
+        // session chrome and the agent binding are all part of what a clear
+        // is meant to drop.
         AppMsg.Reset => ReduceResult.NoOp(
-            new UiState { Chat = state.Chat with { TabStrip = state.Chat.TabStrip } }),
+            new UiState { Chat = ChatDomainState.Empty with { TabStrip = state.Chat.TabStrip } }),
 
         AppMsg.KeyInput k => OnKeyInput(state, k),
         _ => null
