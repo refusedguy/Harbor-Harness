@@ -223,6 +223,57 @@ public class SubAgentRunnerTests
         await Assert.That(runner.CanSpawn).IsTrue();
     }
 
+    /// <summary>Store faking a synchronous failure (thrown before the first
+    /// await): the nesting depth must unwind so later top-level calls keep
+    /// working instead of dying with the nesting error forever.</summary>
+    private sealed class SyncThrowStore(FakeSessionStore inner) : ISessionStore
+    {
+        public Task<Result<Session>> CreateAsync(
+            string directory, string agentName, string providerId, string modelId, CancellationToken ct = default) =>
+            throw new InvalidOperationException("sync store boom");
+        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default) =>
+            inner.GetAsync(sessionId, ct);
+        public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default) =>
+            inner.ListAsync(projectId, ct);
+        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
+            inner.AppendMessageAsync(sessionId, message, ct);
+        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
+            inner.UpdateMessageAsync(sessionId, message, ct);
+        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default) =>
+            inner.GetMessagesAsync(sessionId, ct);
+        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) =>
+            inner.DeleteAsync(sessionId, ct);
+        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default) =>
+            inner.UpdateAsync(session, ct);
+        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default) =>
+            inner.GetStatsAsync(sessionId, ct);
+        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default) =>
+            inner.UpdateStatsAsync(sessionId, metadata, ct);
+        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default) =>
+            inner.DeleteMessagesAfterAsync(sessionId, messageId, ct);
+    }
+
+    [Test]
+    public async Task RunAsync_SyncThrowInStore_DoesNotLeakNestingDepth()
+    {
+        var runner = new SubAgentRunner(
+            new SyncThrowStore(new FakeSessionStore(NewSession())),
+            new ScriptedLoop(),
+            NullLogger<SubAgentRunner>.Instance);
+
+        try
+        {
+            await runner.RunAsync(SubAgent(), new SubAgentRunRequest("boom"));
+            await Assert.That(false).IsTrue();
+        }
+        catch (InvalidOperationException)
+        {
+            // Expected: the point is the depth unwind below, not the throw.
+        }
+
+        await Assert.That(runner.CanSpawn).IsTrue();
+    }
+
     [Test]
     public async Task DeferredRunner_Detached_CanSpawnFalseAndFailsHonestly()
     {
