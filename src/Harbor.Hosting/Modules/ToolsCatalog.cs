@@ -2,6 +2,7 @@ using Harbor.Application.Agents;
 using Harbor.Tools.Builtin;
 using Harbor.Tools.Mcp;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;
@@ -87,7 +88,8 @@ internal static class ToolsCatalog
         HarborCompositionContext ctx, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry,
         Harbor.Abstractions.Agents.ISubAgentRunner subAgentRunner,
         Harbor.Abstractions.Agents.IBackgroundTaskRegistry? backgroundTasks = null,
-        Harbor.Abstractions.Lsp.ILspService? lspService = null)
+        Harbor.Abstractions.Lsp.ILspService? lspService = null,
+        ISessionStore? sessionStore = null)
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);
@@ -106,6 +108,14 @@ internal static class ToolsCatalog
         {
             tb.AddTool(lf => new TaskTool(agentRegistry, lf.CreateLogger<TaskTool>(), subAgentRunner, backgroundTasks));
             tb.AddTool(lf => new WebFetchTool(lf.CreateLogger<WebFetchTool>()));
+        }
+        if (full && sessionStore is not null)
+        {
+            // #165: peer supervision. The store arrives as a deferred forwarder
+            // (built eagerly, attached once the container can build the real
+            // store) — same gap as DeferredSubAgentRunner above.
+            tb.AddTool(lf => new SessionReadTool(sessionStore, lf.CreateLogger<SessionReadTool>()));
+            tb.AddTool(lf => new SessionSteerTool(sessionStore, lf.CreateLogger<SessionSteerTool>()));
         }
         tb.AddTool(lf => new PatchTool(lf.CreateLogger<PatchTool>()));
         tb.AddTool(lf => new NotebookTool(lf.CreateLogger<NotebookTool>()));
