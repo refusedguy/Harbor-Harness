@@ -50,7 +50,7 @@
 | OK | `DefaultUiProjector` инкремент | 1000 дельт → 1001 проекция: **962 no-op reuse, 38 tail (флаши), 1 history**; markdown-парсов на store-пути 0; итого 475 µs / 1.03 MB (2026-09-10, `StreamingDeltaFrequencyBenchmark`, регрессия — `StreamingFrequencyTests`) | пожара нет; следить за transcript-композицией при росте history |
 | P3 | `SessionId` Dictionary key | медленнее string (7.9 vs 6.3 µs), HashSet быстрее — проверить GetHashCode | override hash |
 | P3 | `OpenAiWire.TryParseChatChunkLine` | плоские ~10 µs floor на любой чанк | Utf8JsonReader поверх span без ToString() |
-| OK | `StatusBarLayout.Fit` (per painted frame) | ✅ resolved: O(n²) width lookups under a process-global monitor → **exactly one lookup per segment, per-thread cache, no lock** (#487, §5.6). Machine-independent count, stopwatch rows pending a BDN run | — |
+| OK | `StatusBarLayout.Fit` (per painted frame) | ✅ resolved: O(n²) width lookups under a process-global monitor → **exactly one lookup per segment, per-thread cache, no lock** (#487, §5.6). 12-segment footer row **154 ns / 0 B**; machine-independent count, wall-clock rows pending a re-measure on dedicated hardware | — |
 
 ## Key numbers — local full runs (2026-08-22, i5-8250U, Release JIT; UiStore streaming rows 2026-09-10, machine n/a)
 
@@ -554,7 +554,7 @@ Which production compositions actually qualify is measured per preset in
 [`docs/EVENT_BUS_SINKS.md`](./EVENT_BUS_SINKS.md) §5 (today: 0 % for every shipped preset — the
 mandatory/optional verdict, not the guard, is what keeps them out).
 
-### 5.6 Status-bar packing (`StatusBarLayoutFitBenchmark`, #487) ⏳ not yet measured
+### 5.6 Status-bar packing (`StatusBarLayoutFitBenchmark`, #487) ✅ measured in CI
 
 `Fit` is the status bar's packing pass: it runs on **every painted status frame**, i.e. while
 tokens stream, so its cost is part of the frame budget and not a startup cost. #487 changed its
@@ -566,27 +566,49 @@ behind a lock to a per-thread one.
 dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*StatusBarLayoutFit*'
 ```
 
-> **Numbers pending.** The row table below is filled from the first BDN run of
-> `StatusBarLayout_Fit_TwelveSegments` on the CI `benchmark` job; until then the
-> machine-independent gate is the one that counts, and it is already enforced —
-> see the tripwire table below. Do not quote a figure here that is not in a
-> BDN run.
+CI runs it on every PR (`benchmark.yml` → `Bench StatusBarLayout Fit`).
+
+Measured 2026-09-28 on the CI runner (ubuntu-latest, `taskset -c 1`), BDN `Job-NTRUNJ`
+(5 iterations, 3 warmup) + `[MemoryDiagnoser]`, commit `b908adc`, run
+[36496631297](https://github.com/refusedguy/Harbor-Harness/actions/runs/36496631297):
+
+| Row | Segments | Mean | Error (99.9 % CI) | Allocated |
+|---|--:|--:|--:|--:|
+| `StatusBarLayout_Fit_SixSegments` | 6 | **85.7 ns** | ± 2.6 ns | **0 B** |
+| `StatusBarLayout_Fit_EightSegments` ¹ | 8 | 178.3 ns | ± 234 ns | **0 B** |
+| `StatusBarLayout_Fit_TwelveSegments` ² | 12 | **154.0 ns** | ± 2.3 ns | **0 B** |
+| `StatusBarLayout_Fit_TwentyFourSegments` | 24 | 330.0 ns | ± 14.6 ns | **0 B** |
+
+¹ That row's CI is degenerate in this run (one outlier iteration out of five); its `ShortRun`
+pass in the same job gives **108.5 ns ± 5.3 ns**, which is where the spread between the two
+passes comes from — the shared-runner caveat below, not the code.
+² The row the CellForge footer actually composes: `ChatScreenLayout` sizes its compose buffer at
+12. Kept as its own named row rather than a `[Params]` point, because a `[Params]` field
+parameterises *every* method in the class and would have reported this fixed 12-segment row as
+"twelve segments" at `Segments: 6`.
+
+> **The shared-runner caveat is load-bearing here.** A first run of the same commit series
+> reported the 24-segment row at 1271 ns with a ±2656 ns CI against 330 ns ± 15 ns in this one.
+> That is the repo's documented ±20 %-class runner noise, at the small end of the scale where a
+> 300 ns measurement lives. Treat these rows as an order of magnitude and a slope, not as a
+> budget — which is why the gate below is not one of them.
 
 The measurement contract is in the class doc (`Operation` / `Payload` / `StateReset` / `Drain` /
-`RetainedState` / `AwaitSemantics` / `AllocAttribution`, per #408). Two properties of the payload
-are worth knowing before reading any number off it:
+`RetainedState` / `AwaitSemantics` / `AllocAttribution`, per #408). Three properties of the
+payload matter before reading any number off it:
 
-- the row is **model + mode hint (fixed) + N flexible segments**, packed to a width that leaves the
-  fixed pair plus three flexible ones — the shape where the shrink loop actually iterates. A row
-  that already fits measures almost nothing and would flatter the old code;
+- the row is **model + mode hint (fixed) + N flexible segments**, packed to a width that leaves
+  the fixed pair plus three flexible ones — the shape where the shrink loop actually iterates. A
+  row that already fits measures a no-op and would flatter the old code;
 - the row is **restored from a pristine template inside the measured region**, because `Fit`
-  mutates the span in place. That copy is a `Span`-typed `Array.CopyTo` into a preallocated
-  buffer: 0 B, and identical per segment in every row, so the segment-count slope is not an
-  artefact of the harness.
-
-`StatusBarLayout_Fit_TwelveSegments` is the row the CellForge footer actually composes
-(`ChatScreenLayout` sizes its compose buffer at 12); the `Segments` sweep carries the pathological
-24-segment row that exposed the quadratic.
+  mutates the span in place. That copy is an array `CopyTo` into a preallocated buffer: 0 B, and
+  identical per segment in every row, so the segment-count slope is not a harness artefact;
+- **the wall clock still grows faster than linearly, and the remainder is not the width
+  measurement.** It is the in-place compaction: every dropped victim shifts one 16-byte struct
+  plus one int per surviving slot. That term is inherent to the "mutate the caller's span,
+  allocate nothing" contract, costs roughly 30× less per byte than the lock + hash +
+  string-compare it replaced, and takes no monitor. 24 segments → 330 ns is 4× the work of
+  6 segments → 86 ns, against exactly 4× the width lookups: the extra 2× is the shift.
 
 **Why a stopwatch is not the gate.** The load-bearing claim — a `Fit` call measures each segment
 exactly once, whatever the outcome — is a property of the algorithm, so
