@@ -23,7 +23,7 @@ namespace Harbor.Registries.Tools;
 ///         cache with it, so stale entries cannot survive invalidation.
 ///     </para>
 /// </remarks>
-internal sealed class FrozenToolView
+internal sealed class FrozenToolView : IToolSource
 {
     private readonly FrozenDictionary<ToolName, ITool> _tools;
     private readonly ToolDescriptor[] _all;
@@ -129,4 +129,17 @@ internal sealed class FrozenToolView
     }
 
     public bool TryGetTool(ToolName name, out ITool? tool) => _tools.TryGetValue(name, out tool);
+
+    // IToolSource: single-path delegation target for ToolRegistry (#358).
+    // agentName is intentionally ignored — permission filtering uses only the
+    // session ruleset, identical to ToolRegistry.ResolveTools semantics.
+    public IReadOnlyList<ToolDescriptor> GetAllTools() => GetAll();
+
+    public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
+        => Resolve(sessionPermission);
+
+    public Result<ITool> GetTool(ToolName name)
+        => TryGetTool(name, out var tool) && tool is not null
+            ? Result.Success(tool)
+            : Result.Failure<ITool>($"Tool '{name}' is not registered.");
 }
