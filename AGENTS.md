@@ -9,8 +9,6 @@
 > - CellForge (+ Engine — fullscreen cell-diff terminal renderer) is the canonical interactive backend (`HARBOR_TUI=cellforge`, `consoleex` kept as legacy alias); AnsiPlain covers ANSI-streaming + plain pipes/CI; MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
 >
 > **Связанные документы:**
-> - [.ai-factory/DESCRIPTION.md](./.ai-factory/DESCRIPTION.md) — спецификация проекта и стек
-> - [.ai-factory/rules/base.md](./.ai-factory/rules/base.md) — базовые правила и конвенции
 > - [docs/ROADMAP.md](./docs/ROADMAP.md) — full roadmap with priorities + tech-debt backlog
 > - [docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md) — reusable UI components (Avalonia/Blazor/WPF)
 > - [docs/PATTERNS.md](./docs/PATTERNS.md) — 18 pattern catalog with real code.
@@ -72,8 +70,9 @@ src/Harbor.Ui.Framework{,.Abstractions,.State,.Reducers,.ViewModels,.Rendering,.
 src/Harbor.Desktop.{Abstractions,Shared,Animations} — desktop app support
 src/Harbor.Storage.{Jsonl,Memory,Sqlite}/ — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
 src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible}/ — LLM clients; Harbor.Providers.Shared/ is linked-source (no .csproj, compiled into each provider)
-src/Harbor.Tools.Builtin/             — 18 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
-                                        ls/task/webfetch/patch/notebook/ripgrep/tree/mcp/skill/read_mcp_resource/mcp_prompt/lsp)
+src/Harbor.Tools.Builtin/             — 20 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
+                                        ls/skill/patch/notebook/tree/lsp/task/webfetch/ripgrep/mcp/
+                                        read_mcp_resource/mcp_prompt/session_read/session_steer)
 src/Harbor.Plugins.*                  — plugin hosting split: Abstractions, Compilation (Roslyn),
                                         Instantiation, Registration, Hosting, Runtime (CS loader),
                                         Host, Storage
@@ -94,7 +93,8 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 19 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 60 docs (architecture, tools catalog, roadmap, patterns, ...)
+docs/                                 — 136 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+                                        + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 36 test/bench project directories
                                         incl. shared Harbor.TestKit and Harbor.Benchmarks
 ```
@@ -212,7 +212,7 @@ I want to...
 │
 ├── ...understand what NOT to do
 │   └─→ docs/ANTIPATTERNS.md (38 antipatterns with before/after code)
-│      Then docs/CODE_PRINCIPLES_AUDIT.md (41 known violations to not repeat)
+│      Then docs/CODE_PRINCIPLES_AUDIT.md (45 known violations to not repeat)
 │
 ├── ...debug a failing test
 │   └─→ docs/DEVELOPMENT.md §Workflow: debug a failing test
@@ -531,7 +531,14 @@ When making changes to:
 
 ## Benchmarks
 
-Harbor benchmarks live in `docs/BENCHMARKS.md`. Key numbers:
+**`docs/BENCHMARKS.md` is the single source of truth for every measured number in
+this repo.** If a figure appears here it is a copy of a row there — never
+independently typed. When you re-measure, update BENCHMARKS.md first, then this
+table in the same commit; a stale headline number in AGENTS.md/CLAUDE.md is a
+doc bug, not a rounding difference.
+
+Key numbers (2026-09-09 CI-short run, AMD EPYC 9V74 — full table and provenance
+in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md)):
 
 | Metric | Value |
 |---|---|
@@ -543,7 +550,9 @@ Harbor benchmarks live in `docs/BENCHMARKS.md`. Key numbers:
 | `ToolRegistry.ResolveTools` (4 tools, with permission) | **2.3 µs** |
 | `PermissionRuleset.Evaluate` | **0.35 µs** |
 
-2026-09-09 PR run (AMD EPYC); full table in `docs/BENCHMARKS.md`. Historical spot-checks there; re-measure before quoting on hot-path PRs.
+Do not quote these on a hot-path PR without re-measuring — historical
+spot-checks from other machines live in BENCHMARKS.md §5 and are not
+comparable to the CI-short rows above.
 
 ### Adding a benchmark
 
@@ -580,7 +589,7 @@ dotnet run --project tools/Harbor.Evals -c Release -- --tasks evals/tasks --prof
 
 Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный аудит и чек-лист для PR:
 
-- **[docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md)** — 41 нарушение, 11 критических, приоритизированный план рефакторинга.
+- **[docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md)** — 45 нарушений, 11 критических, приоритизированный план рефакторинга.
 - **[docs/DEVELOPMENT.md §Principles checklist](./docs/DEVELOPMENT.md#principles-checklist)** — чек-лист для PR по 8 категориям.
 - **[CLAUDE.md §Code review checklist](./CLAUDE.md#code-review-checklist)** — расширенный чек-лист (там же).
 

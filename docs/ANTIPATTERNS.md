@@ -5,7 +5,7 @@
 
 Связанные документы:
 - [PATTERNS.md](./PATTERNS.md) — что мы ДЕЛАЕМ (каталог паттернов).
-- [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 41 known violation.
+- [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 45 known violations.
 - [CLAUDE.md](../CLAUDE.md) §Code review checklist — что проверять в PR.
 
 ---
@@ -1179,6 +1179,6 @@ public async Task Add_TwoPlusTwo_EqualsFour()
 ## See also
 
 - [PATTERNS.md](./PATTERNS.md) — что мы ДЕЛАЕМ (18 паттернов).
-- [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 41 known violation в Harbor.
+- [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 45 known violations в Harbor.
 - [CLAUDE.md](../CLAUDE.md) §Code review checklist — что проверять в PR.
 - [DEVELOPMENT.md](./DEVELOPMENT.md) §Principles checklist — расширенный чек-лист.

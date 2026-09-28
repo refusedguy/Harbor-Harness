@@ -126,7 +126,7 @@ dotnet run --project contrib/apps/Harbor.App.Blazor
 # MTP-bridge: хост выходит с кодом 5 и одной silent-ошибкой discovery).
 # Прогоняйте per-project как обычные exe:
 dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
-dotnet run --project tests/Harbor.Tui.ConsoleEx.PtyTests -c Release --no-build   # CE-5 PTY e2e
+dotnet run --project tests/Harbor.Tui.CellForge.PtyTests -c Release --no-build   # CE-5 PTY e2e
 
 # Run plugin tests (the ones that were broken in R29 and fixed in R30)
 dotnet run --project tests/Harbor.Plugins.Runtime.Tests -c Release --no-build -- --minimum-expected-tests 1

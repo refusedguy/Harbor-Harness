@@ -14,18 +14,25 @@
 
 ## TL;DR
 
-Harbor — зрелый, продуманный .NET 10 AI-агент harness. SOLID + ROP + паттерны GoF применяются последовательно, performance-оптимизации (ArrayPool, StringBuilderPool, FrozenDictionary, StringPool) — на месте. Однако есть ~30 конкретных нарушений, распределённых по категориям:
+Harbor — зрелый, продуманный .NET 10 AI-агент harness. SOLID + ROP + паттерны GoF применяются последовательно, performance-оптимизации (ArrayPool, StringBuilderPool, FrozenDictionary, StringPool) — на месте. Однако есть 45 конкретных нарушений, распределённых по категориям:
 
 | Категория | Нарушений | Критических | Median severity |
 |---|---:|---:|:---:|
-| OOP / SOLID | 8 | 2 | medium |
+| OOP | 8 | 2 | medium |
+| SOLID | 2 | 0 | medium |
 | GoF (паттерны) | 3 | 0 | low |
 | FP (functional) | 7 | 1 | medium |
 | ROP (railway) | 4 | 2 | **high** |
 | Performance | 9 | 3 | **high** |
 | Low-level (байтоебля) | 6 | 2 | medium |
 | Concurrency | 4 | 1 | medium |
-| **Всего** | **41** | **11** | |
+| AOT | 2 | 0 | medium |
+| **Всего** | **45** | **11** | |
+
+> Category counts re-measured 2026-09-28 against the `### §CAT-NNN` headings in
+> this file (`grep -c '^### §' docs/CODE_PRINCIPLES_AUDIT.md` → 45). The previous
+> "41" omitted the two `§AOT-*` sections and folded `§SOLID-*` into the OOP row.
+> The critical count (11) is a severity judgement, not a section count, and is unchanged.
 
 Топ-3 критических:
 1. **§ROP-002**: `PermissionService.CheckAsync` бросает исключение на expected failure (invalid agent name) — краш под нагрузкой.

@@ -334,7 +334,7 @@ the `HARBOR_STORAGE` env var (`jsonl` / `memory` / `sqlite`) selects the backend
 export HARBOR_TUI=plain      # no colors, for pipes
 export HARBOR_TUI=ansi       # default streaming
 export HARBOR_TUI=spectre    # rich interactive shell (contrib renderer, compiled in by default)
-export HARBOR_TUI=consoleex  # second in-process interactive shell (raw mode, cell-diff)
+export HARBOR_TUI=cellforge # second in-process interactive shell (raw mode, cell-diff)
 ```
 
 > `HARBOR_MINIMAL=true` / `-p:HarborWithSpectreTui=false` excludes the contrib
@@ -731,4 +731,4 @@ var list = new List<ToolDescriptor>(capacity: frozen.Count);
 - [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 30+ "не делайте так" с примерами.
 - [PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md) — глубокий разбор плагинов.
 - [DEVELOPMENT.md](./DEVELOPMENT.md) — workflow add-feature / debug / profile.
-- [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 41 known violation.
+- [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 45 known violations.

@@ -1,6 +1,6 @@
 # Последняя миля ROP: каждый оставшийся try/catch, IsFailure-лесенка, switch-by-string
 
-> **СТАТУС (2026-08-27): план выполнен** волнами ROP-B/C/D — см. ADR-002 в [DECISIONS.md](../DECISIONS.md).
+> **СТАТУС (2026-08-27): план выполнен** волнами ROP-B/C/D — см. ADR-002 в [DECISIONS.md](../adr/DECISIONS.md).
 > `ResultGuard` удалён как дубликат канона (`9e954a5`); канон = CSE `Result.Try` + `ResultErrors.Message`,
 > legacy `.GetResult()` запрещены BannedApi (`be81e42`). Легитимные (c)-сайты из оси 1 зафиксированы
 > как осознанные отказы. Дальше файл — исторический снимок @ dev/5b01b2d.

@@ -72,7 +72,7 @@ Ship `Harbor.Tui.ConsoleEx` as a **second** render path inside the existing CLI 
 ## Consequences
 - Legacy renderers unchanged; fallback path keeps consoleex non-breaking.
 - Raw-mode platform differences (termios, VMIN=1, Ctrl+C windows, lifetime bootstrap DI) are covered by PTY e2e rather than unit mocks.
-- Remaining gaps documented in `src/Harbor.Tui.ConsoleEx/README.md` (MVP limitations) before graduation to default.
+- Remaining gaps documented in `src/Harbor.Tui.CellForge/README.md` (project renamed from `Harbor.Tui.ConsoleEx`; the `consoleex` id remains a backend alias) — MVP limitations before graduation to default.
 
 # ADR-004: Sub-agent execution behind the `task` tool
 

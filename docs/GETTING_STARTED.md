@@ -264,7 +264,7 @@ export HARBOR_TUI=plain
 export HARBOR_TUI=spectre
 
 # Second interactive shell (raw mode, cell-diff output) — opt-in
-export HARBOR_TUI=consoleex
+export HARBOR_TUI=cellforge   # `consoleex` still works as a legacy alias
 ```
 
 > The rich renderers (`spectre-tui`, `spectre`, `fullscreen`, `termina`,

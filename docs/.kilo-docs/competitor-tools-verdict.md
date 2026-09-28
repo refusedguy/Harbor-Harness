@@ -3,7 +3,7 @@
 > **СТАТУС (2026-08-27): частично внедрено.**
 > - ✅ **SSRF-guard webfetch** — сделан: `WebFetchTool` блокирует loopback/link-local/RFC1918/IPv6-UL + metadata-endpoint;
 > - ❌ todo/plan tool, question tool, MCP annotations, admission control субагентов — ещё НЕ реализованы
->   (toolset по-прежнему 14 builtin; актуальный план — [ROADMAP v0.5–v0.7](../docs/ROADMAP.md)).
+>   (toolset по-прежнему 14 builtin; актуальный план — [ROADMAP v0.5–v0.7](../ROADMAP.md)).
 >
 > Ниже — point-in-time вердикт по клонам конкурентов от 25.08.2026; перед стартом нового спринта сверяйте пункты с ROADMAP.
 

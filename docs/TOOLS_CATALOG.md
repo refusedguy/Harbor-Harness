@@ -43,15 +43,19 @@
 
 ## 1. Inventory
 
-Harbor ships **18 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **20 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> registers all 18 tools (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt`); `Standard10` omits the six heavier ones (`task`, `webfetch`,
-> `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`). The CLI defaults to `Full14`; the Avalonia desktop app uses
-> `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
+> (the CLI default — the enum name predates the tool count) registers all 20 tools
+> (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt` + `session_read` +
+> `session_steer`); `Standard10` omits the eight heavier ones (`task`, `webfetch`,
+> `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`).
+> The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
+> `session_read` / `session_steer` also require a wired `ISessionStore`; without one the
+> catalog registers 18.
 
 | # | Tool | Mode | Permission | Purpose |
 |---|------|------|------------|---------|
@@ -73,6 +77,8 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 16 | `read_mcp_resource` | Parallel | Ask | Read an MCP server resource by URI |
 | 17 | `mcp_prompt` | Parallel | Ask | Render an MCP server prompt by name |
 | 18 | `lsp` | Sequential | Allow | Language-server diagnostics / references / definition |
+| 19 | `session_read` | Parallel | Allow | Inspect a peer session's status, outcome and recent transcript |
+| 20 | `session_steer` | Sequential | Ask | Send a message / redirect / restart directive to a peer session |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
@@ -924,6 +930,99 @@ parts (images, embedded resources) are skipped with a note.
 
 ---
 
+### `session_read`
+
+**Description.** Reads a *peer* session — one spawned earlier by `task` or
+otherwise running alongside the current one — and reports its status, its
+outcome (if finished) and, optionally, the tail of its transcript. Read-only;
+it never mutates the peer. Peer supervision was added in #165.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "id":                  { "type": "string",  "description": "Id of the peer session to inspect" },
+    "limit":               { "type": "integer", "description": "Max transcript messages to return (default 20, max 50)" },
+    "include_transcript":  { "type": "boolean", "description": "Include the recent transcript (default true)" }
+  },
+  "required": ["id"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. Status only, no transcript
+{"id": "01HN8QK2M4P7R9T3V6X0Z5B1CDE", "include_transcript": false}
+
+// 2. Status + last 10 transcript messages
+{"id": "01HN8QK2M4P7R9T3V6X0Z5B1CDE", "limit": 10}
+
+// 3. Poll after spawning a sub-agent with `task`
+{"id": "01HN8QK2M4P7R9T3V6X0Z5B1CDE"}
+```
+
+**Permissions.** Allow (default) — read-only, same sandbox class as `read`.
+
+**Mode.** `Parallel` (read-only).
+
+**Tips.**
+- Only registered when a `ISessionStore` is wired into the host; without one
+  the tool is absent and the call fails as an unknown tool name.
+- Poll rather than re-`task` — a running peer keeps its context, a fresh `task` does not.
+- `limit` is clamped to 50; the transcript is returned newest-first.
+
+---
+
+### `session_steer`
+
+**Description.** Sends a directive to a *peer* session: a plain `message` to
+inject, a `redirect` to change its current objective, or a `restart` to re-run
+it with fresh input. The counterpart to `session_read` — same peer supervision
+feature (#165).
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "id":          { "type": "string", "description": "Id of the peer session to steer" },
+    "instruction": { "type": "string", "description": "The directive for the peer session" },
+    "operation":   { "type": "string", "enum": ["message", "redirect", "restart"], "description": "Peer operation (default message)" }
+  },
+  "required": ["id", "instruction"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. Inject a follow-up into a running peer
+{"id": "01HN8QK2M4P7R9T3V6X0Z5B1CDE", "instruction": "Also check the retry paths."}
+
+// 2. Redirect a peer that went down the wrong path
+{"id": "01HN8QK2M4P7R9T3V6X0Z5B1CDE", "operation": "redirect", "instruction": "Stop refactoring; just report the failing tests."}
+
+// 3. Restart a finished peer with a refined brief
+{"id": "01HN8QK2M4P7R9T3V6X0Z5B1CDE", "operation": "restart", "instruction": "Same audit, but only under src/Harbor.Storage."}
+```
+
+**Permissions.** Ask (default) — it mutates a live peer session, which is a
+side effect the user has not explicitly requested.
+
+**Mode.** `Sequential` (mutates peer state).
+
+**Tips.**
+- Pair with `session_read`: poll first, steer only when the peer is off-track.
+- `redirect` changes the objective mid-run; `restart` discards the peer's
+  accumulated context — prefer `redirect` if the peer's findings are still useful.
+- Same `ISessionStore` requirement as `session_read`.
+
+---
+
 ## 3. "When to use X vs Y" matrix
 
 | You want to… | Use | Not | Why |
@@ -942,6 +1041,8 @@ parts (images, embedded resources) are skipped with a note.
 | Remember something across turns | `notebook` | (nothing) | Persistent per-session JSON storage |
 | Parallelize exploration | `task` | (nothing) | Spawns a sub-agent with its own context |
 | Call an external MCP server | `mcp` | (nothing) | Only MCP bridge in the builtin set |
+| Check on a sub-agent you spawned | `session_read` | a new `task` | Reuses the peer's live context instead of restarting it |
+| Nudge a sub-agent off the wrong path | `session_steer` | (nothing) | Injects/redirects without discarding what the peer found |
 
 ---
 

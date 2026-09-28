@@ -225,7 +225,12 @@ public sealed class SetupChecklistOverlayTests
 
         // Read-only guide: it occludes the panels under its box but raises no
         // modal barrier, so keys keep flowing to the composer.
-        await Assert.That(layer.IsModal).IsFalse();
+        //
+        // Read IsModal through the interface: the layer no longer declares it
+        // (#383 made the guide non-modal so it never traps input) and inherits
+        // the `false` default from IOverlayLayer. A default interface member is
+        // not reachable through the concrete type, hence the cast.
+        await Assert.That(((IOverlayLayer)layer).IsModal).IsFalse();
         await Assert.That(stack.HasModalBarrier).IsFalse();
         await Assert.That(GridDump.Art(buffer)).Contains("Setup guide");
     }

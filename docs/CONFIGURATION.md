@@ -109,11 +109,13 @@ live on `CommonConfig` itself (`CommonConfig.cs`):
 | `CompactionTailTurns` | `int` | `2` | Minimum recent turns to keep verbatim. |
 | `ConfigDirectory` | `string` (init) | `~/.harbor` | Absolute dir. Init-only so tests can override. |
 
-#### `ui.consoleEx` (ConsoleEx renderer tuning)
+#### `ui.consoleEx` (CellForge renderer tuning)
 
-The ConsoleEx path is selected by `tui: "consoleex"` or the
-`HARBOR_TUI=consoleex` env var; this nested section is its kill-switch and
-frame-wrapper knob (`Harbor.Application.Configuration.ConfigSections.cs`):
+The CellForge path is selected by `tui: "cellforge"` or the
+`HARBOR_TUI=cellforge` env var (`consoleex` remains a legacy alias for both);
+this nested section keeps its original `consoleEx` JSON key and is the
+kill-switch and frame-wrapper knob
+(`Harbor.Application.Configuration.ConfigSections.cs`):
 
 ```jsonc
 // ~/.harbor/config.json
