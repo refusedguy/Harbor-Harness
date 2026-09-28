@@ -5,7 +5,7 @@ namespace Harbor.Tui.Termina.Handlers;
 /// <summary>
 ///     Maps a raw <see cref="ConsoleKeyInfo" /> into the framework-neutral
 ///     <see cref="UiKey" />, resolves the <see cref="ChatAction" /> via
-///     <see cref="ChatKeyMap" />, and dispatches a <see cref="UiMsg.KeyInput" />
+///     <see cref="ChatKeyMap" />, and dispatches a <see cref="AppMsg.KeyInput" />
 ///     through the supplied <see cref="UiStore" />. Returns the resulting
 ///     <see cref="TuiEffect" /> so the caller can execute side-effects via
 ///     <c>TuiEffectHost</c>.
@@ -35,7 +35,7 @@ public sealed class KeyHandler
             return new TuiEffect.None();
 
         _logger?.LogTrace("Key {Key} → {Action}", info.Key, action);
-        return _store.Dispatch(new UiMsg.KeyInput(action, key));
+        return _store.Dispatch(new AppMsg.KeyInput(action, key));
     }
 
     /// <summary>Map a <see cref="ConsoleKeyInfo" /> to a framework-neutral <see cref="UiKey" />.</summary>

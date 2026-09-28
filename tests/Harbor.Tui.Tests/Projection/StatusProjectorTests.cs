@@ -26,7 +26,7 @@ public class StatusProjectorTests
     [Test]
     public async Task ProjectStatusBar_RunningState_GlyphIsAccent()
     {
-        var state = new UiState() with { Status = "running" };
+        var state = new UiState { Chat = ChatDomainState.Empty with { Status = "running" } };
         var model = StatusProjector.ProjectStatusBar(state);
 
         var statusSegment = model.Segments.First(s => s.Text.StartsWith("▌"));
@@ -36,7 +36,7 @@ public class StatusProjectorTests
     [Test]
     public async Task ProjectStatusBar_ErrorState_GlyphIsDanger()
     {
-        var state = new UiState() with { Status = "error" };
+        var state = new UiState { Chat = ChatDomainState.Empty with { Status = "error" } };
         var model = StatusProjector.ProjectStatusBar(state);
 
         var statusSegment = model.Segments.First(s => s.Text.StartsWith("✗"));
@@ -46,7 +46,7 @@ public class StatusProjectorTests
     [Test]
     public async Task ProjectStatusBar_CompactingState_GlyphIsDefault()
     {
-        var state = new UiState() with { Status = "compacting" };
+        var state = new UiState { Chat = ChatDomainState.Empty with { Status = "compacting" } };
         var model = StatusProjector.ProjectStatusBar(state);
 
         var statusSegment = model.Segments.First(s => s.Text.StartsWith("◐"));
@@ -56,7 +56,7 @@ public class StatusProjectorTests
     [Test]
     public async Task ProjectStatusBar_WithAgentName_ContainsAgentSegment()
     {
-        var state = new UiState() with { AgentName = "code" };
+        var state = new UiState { Chat = ChatDomainState.Empty with { AgentName = "code" } };
         var model = StatusProjector.ProjectStatusBar(state);
 
         await Assert.That(model.Segments.Any(s => s.Text == "agent code" && s.Align == Alignment.Right)).IsTrue();
@@ -65,7 +65,7 @@ public class StatusProjectorTests
     [Test]
     public async Task ProjectStatusBar_WithTokens_ContainsTokenSegment()
     {
-        var state = new UiState() with { Cost = new CostSnapshot(123, 456, 0) };
+        var state = new UiState { Chat = ChatDomainState.Empty with { Cost = new CostSnapshot(123, 456, 0) } };
         var model = StatusProjector.ProjectStatusBar(state);
 
         await Assert.That(model.Segments.Any(s => s.Text == "123↑ 456↓")).IsTrue();
@@ -74,7 +74,7 @@ public class StatusProjectorTests
     [Test]
     public async Task ProjectStatusBar_WithCost_FormatsCostAsF4()
     {
-        var state = new UiState() with { Cost = new CostSnapshot(0, 0, 1.5m) };
+        var state = new UiState { Chat = ChatDomainState.Empty with { Cost = new CostSnapshot(0, 0, 1.5m) } };
         var model = StatusProjector.ProjectStatusBar(state);
 
         await Assert.That(model.Segments.Any(s => s.Text == "1.5000")).IsTrue();
@@ -83,11 +83,11 @@ public class StatusProjectorTests
     [Test]
     public async Task ProjectStatusBar_WithScroll_ShowsPercentageOrLive()
     {
-        var scrolledState = new UiState() with { TotalLines = 10, ViewportLines = 5, ScrollOffset = 5 };
+        var scrolledState = new UiState { Ui = TerminalUiState.Empty with { TotalLines = 10, ViewportLines = 5, ScrollOffset = 5 } };
         var scrolledModel = StatusProjector.ProjectStatusBar(scrolledState);
         await Assert.That(scrolledModel.Segments.Any(s => s.Text == "scroll 100%")).IsTrue();
 
-        var liveState = new UiState() with { TotalLines = 5, ViewportLines = 5 };
+        var liveState = new UiState { Ui = TerminalUiState.Empty with { TotalLines = 5, ViewportLines = 5 } };
         var liveModel = StatusProjector.ProjectStatusBar(liveState);
         await Assert.That(liveModel.Segments.Any(s => s.Text == "live")).IsTrue();
     }

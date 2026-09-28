@@ -28,7 +28,7 @@ public abstract record TuiEffect
     ///     Make a session the active one — the tab-strip's "activate" contract
     ///     (#388). The host routes it to the existing session-switch path
     ///     (<c>ISessionManager.OpenSessionAsync</c>); the reducer itself never
-    ///     resolves DI, it only asks (see <see cref="UiReducer.ActivateTab" />).
+    ///     resolves DI, it only asks (see <see cref="ChatAppReducer.ActivateTab" />).
     ///     Pure state-only hosts that never switch sessions may ignore it.
     /// </summary>
     /// <param name="SessionId">The session the host must open.</param>
@@ -62,8 +62,8 @@ public sealed class UiStore
     //
     // §FP-007 (RESOLVED): the old `Transition(Func<UiState,UiState>)` escape
     // hatch is gone — every fold (session chrome, resets, agent events, host
-    // messages) rides the same CAS + UiReducer.Update path via
-    // Dispatch(UiMsg). Concurrent agents therefore cannot corrupt each
+    // messages) rides the same CAS + AppReducer.Update path via
+    // Dispatch(AppMsg). Concurrent agents therefore cannot corrupt each
     // other's state via shared mutation.
     private volatile UiState _state;
 
@@ -89,12 +89,15 @@ public sealed class UiStore
 
     /// <summary>
     ///     The unified TEA dispatch — the single entry point for every state
-    ///     change: route any <see cref="UiMsg" /> through the single
-    ///     <see cref="UiReducer.Update(UiState, UiMsg)" />, apply the resulting state,
-    ///     and return the effect for the host to run. Renderers call this and run the
-    ///     returned effect — they never mutate state or call <c>IAgent</c> themselves.
+    ///     change: route any <see cref="AppMsg" /> (generic) or
+    ///     <see cref="ChatAppMsg" /> (Harbor chat) through the composed
+    ///     <see cref="ChatAppReducer.Update" /> — which is
+    ///     <see cref="AppReducer.Update" /> plus the chat extension — apply the
+    ///     resulting state, and return the effect for the host to run. Renderers
+    ///     call this and run the returned effect — they never mutate state or call
+    ///     <c>IAgent</c> themselves.
     /// </summary>
-    public TuiEffect Dispatch(UiMsg msg)
+    public TuiEffect Dispatch(AppMsg msg)
     {
         UiState original;
         UiState next;
@@ -102,7 +105,7 @@ public sealed class UiStore
         do
         {
             original = _state; // volatile read
-            (next, effect) = UiReducer.Update(original, msg);
+            (next, effect) = ChatAppReducer.Update(original, msg);
             // No-op short-circuit: state unchanged, no event.
             if (ReferenceEquals(original, next))
                 return effect;

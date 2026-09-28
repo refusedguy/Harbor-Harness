@@ -46,7 +46,7 @@ public sealed class UiRenderEngine
     }
 
     /// <summary>
-    ///     Ф-A1b: project state.Lines into the single chronological
+    ///     Ф-A1b: project state.Chat.Lines into the single chronological
     ///     <see cref="ChatViewModelBase.Timeline" /> — chat rows and tool-call
     ///     cards interleaved in true order. Instances are REUSED positionally
     ///     (same role/text for chat lines, same tool id for cards) so a flush
@@ -65,9 +65,9 @@ public sealed class UiRenderEngine
         int written = 0;
 
         var consumed = new HashSet<ToolCallViewModel>();
-        for (int i = 0; i < state.Lines.Length; i++)
+        for (int i = 0; i < state.Chat.Lines.Length; i++)
         {
-            var src = state.Lines[i];
+            var src = state.Chat.Lines[i];
 
             if (src.ToolCallId is not null &&
                 toolById.TryGetValue(src.ToolCallId, out var card) &&
@@ -118,11 +118,11 @@ public sealed class UiRenderEngine
         for (int i = 0; i < vm.ToolCalls.Count; i++)
             existingById[vm.ToolCalls[i].Id] = vm.ToolCalls[i];
 
-        var ordered = new List<ToolCallViewModel>(state.Lines.Length);
+        var ordered = new List<ToolCallViewModel>(state.Chat.Lines.Length);
 
-        for (int i = 0; i < state.Lines.Length; i++)
+        for (int i = 0; i < state.Chat.Lines.Length; i++)
         {
-            var line = state.Lines[i];
+            var line = state.Chat.Lines[i];
             if (line.ToolCallId is null) continue;
 
             if (line.Role == ChatRole.Tool)
@@ -180,11 +180,11 @@ public sealed class UiRenderEngine
     private static void ReconcileLines(UiState state, ChatViewModel vm)
     {
         var lines = vm.Lines;
-        int n = state.Lines.Length;
+        int n = state.Chat.Lines.Length;
 
         for (int i = 0; i < n; i++)
         {
-            var src = state.Lines[i];
+            var src = state.Chat.Lines[i];
             if (i < lines.Count)
             {
                 var cur = lines[i];

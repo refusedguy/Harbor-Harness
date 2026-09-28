@@ -96,8 +96,8 @@ public class SessionStoreBindingTests
 
         await renderer.RenderAsync(StartWithUser("a", "hello session a"));
 
-        await Assert.That(sessions.ActiveContext!.Store.State.Lines.Any(l => l.Text.Contains("hello session a"))).IsTrue();
-        await Assert.That(renderer.Store.State.Lines.Length).IsEqualTo(0);
+        await Assert.That(sessions.ActiveContext!.Store.State.Chat.Lines.Any(l => l.Text.Contains("hello session a"))).IsTrue();
+        await Assert.That(renderer.Store.State.Chat.Lines.Length).IsEqualTo(0);
     }
 
     [Test]
@@ -116,10 +116,10 @@ public class SessionStoreBindingTests
         sessions.ActiveContext = ctxB;
         await renderer.RenderAsync(StartWithUser("b", "second"));
 
-        await Assert.That(ctxB.Store.State.Lines.Any(l => l.Text.Contains("second"))).IsTrue();
-        await Assert.That(sessions.GetContext("b")!.Store.State.RegisteredPanelIds.Length).IsGreaterThan(0);
+        await Assert.That(ctxB.Store.State.Chat.Lines.Any(l => l.Text.Contains("second"))).IsTrue();
+        await Assert.That(sessions.GetContext("b")!.Store.State.Ui.RegisteredPanelIds.Length).IsGreaterThan(0);
         // The old session store sees nothing from the new session.
-        await Assert.That(ctxB.Store.State.Lines.Any(l => l.Text.Contains("first"))).IsFalse();
+        await Assert.That(ctxB.Store.State.Chat.Lines.Any(l => l.Text.Contains("first"))).IsFalse();
         // Projection follows the switch: the new store's running state lands in the shared VM.
         await Assert.That(inputVm.Placeholder).IsEqualTo(CellForgeTuiRenderer.BusyPlaceholder);
     }
@@ -133,7 +133,7 @@ public class SessionStoreBindingTests
 
         await renderer.RenderAsync(StartWithUser("s1", "fallback hello"));
 
-        await Assert.That(renderer.Store.State.Lines.Any(l => l.Text.Contains("fallback hello"))).IsTrue();
+        await Assert.That(renderer.Store.State.Chat.Lines.Any(l => l.Text.Contains("fallback hello"))).IsTrue();
     }
 
     [Test]
@@ -146,6 +146,6 @@ public class SessionStoreBindingTests
 
         await renderer.RenderAsync(StartWithUser("s1", "no active ctx"));
 
-        await Assert.That(renderer.Store.State.Lines.Any(l => l.Text.Contains("no active ctx"))).IsTrue();
+        await Assert.That(renderer.Store.State.Chat.Lines.Any(l => l.Text.Contains("no active ctx"))).IsTrue();
     }
 }

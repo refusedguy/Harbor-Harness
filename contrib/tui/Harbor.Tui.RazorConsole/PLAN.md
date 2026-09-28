@@ -8,15 +8,15 @@
 - [x] **Role headers** — `─ user ─`, `─ assistant ─` etc. via `RazorMarkdownRenderer.RenderHeader` (Spectre markup).
 - [x] **Markdown rendering** — headings, bold, italic, inline code, bullet/numbered lists, horizontal rule. Output is Spectre markup with proper `[color]…[/]` wrapping + `[[` / `]]` escaping for `[`/`]` in user text.
 - [x] **GFM table rendering** — pipe-separated tables with alignment via shared `GfmTableParser`/`GfmTableFormatter`, each row wrapped in `[grey]…[/]`.
-- [x] **Scrollable history** — `ScrollHandler.VisibleSlice` reads `UiState.ScrollOffset`; `ChatTui.razor` uses `<ViewHeightScrollable LinesToRender="20">` for the viewport.
+- [x] **Scrollable history** — `ScrollHandler.VisibleSlice` reads `UiState.Ui.ScrollOffset`; `ChatTui.razor` uses `<ViewHeightScrollable LinesToRender="20">` for the viewport.
 - [x] **Input box** — `InputView` projects `InputModel`; the `ChatTui.razor` `<TextInput @bind-Value="_input" OnSubmit="Submit"/>` handles multi-line + submit. Slash autocomplete marker rendered inline.
 - [x] **Status bar** — `StatusBarView` shows provider/model/agent/tokens-in/tokens-out/$cost/status/scroll% in Spectre markup.
 - [x] **Stream bar** — `ChatView.StreamBar` returns "▌ generating... N chars" or "▌ thinking... N chars".
 - [x] **Hotkeys** — Enter/Esc/Ctrl+L/Ctrl+C/F2/↑↓/PgUp/PgDn/Home/End/Alt+↑↓/Tab via `KeyHandler`.
-- [x] **Session sidebar** — `SessionSidebarView` lists `PanelRegistry.All` with `UiState.PanelStates` visibility.
+- [x] **Session sidebar** — `SessionSidebarView` lists `PanelRegistry.All` with `UiState.Ui.PanelStates` visibility.
 - [x] **Command palette** — `CommandPaletteView` Ctrl+P popup over slash commands + panels + sessions.
 - [x] **Toast notifications** — `RazorConsoleTeaBridge.Toast` / `DequeueToast` queue with auto-dismiss contract.
-- [x] **TEA integration** — `RazorConsoleTeaBridge` wraps `UiStore`/`UiReducer`/`TuiEffectHost`; renderer dispatches `UiMsg.KeyInput` and runs returned effects via the host.
+- [x] **TEA integration** — `RazorConsoleTeaBridge` wraps `UiStore`/`AppReducer`/`TuiEffectHost`; renderer dispatches `AppMsg.KeyInput` and runs returned effects via the host.
 
 ## Done — RazorConsole-specific stretch (partial)
 

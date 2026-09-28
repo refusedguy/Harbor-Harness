@@ -148,10 +148,10 @@ public sealed class CellForgeJumpPaletteOverlayLayer : IOverlayLayer
     ///     The palette is open when its panel is anything but
     ///     <see cref="TuiPanelState.Hidden" /> in the snapshot — the same
     ///     reducer-driven signal the dock uses, so Ctrl+J and Esc keep toggling
-    ///     it through <c>UiMsg.TogglePanel</c>.
+    ///     it through <c>AppMsg.TogglePanel</c>.
     /// </summary>
     private static bool IsOpenIn(UiState state) =>
-        state.PanelStates.TryGetValue(OverlayIds.JumpPalette, out var panelState)
+        state.Ui.PanelStates.TryGetValue(OverlayIds.JumpPalette, out var panelState)
         && panelState != TuiPanelState.Hidden;
 
     /// <summary>

@@ -98,7 +98,7 @@ public class RazorConsoleTeaBridgeTests
         var agent = TestAgentFactory.Create();
         using var bridge = new RazorConsoleTeaBridge(agent, null, NullLogger.Instance);
         bridge.Push(new AgentEndEvent(Array.Empty<AgentMessage>()));
-        await Assert.That(bridge.Store.State.Status).IsEqualTo("idle");
+        await Assert.That(bridge.Store.State.Chat.Status).IsEqualTo("idle");
     }
 
     [Test]
@@ -108,8 +108,8 @@ public class RazorConsoleTeaBridgeTests
         using var bridge = new RazorConsoleTeaBridge(agent, null, NullLogger.Instance);
         bridge.PushLine("test line");
         var state = bridge.Store.State;
-        await Assert.That(state.Lines.Length).IsGreaterThan(0);
-        await Assert.That(state.Lines[^1].Text).IsEqualTo("test line");
+        await Assert.That(state.Chat.Lines.Length).IsGreaterThan(0);
+        await Assert.That(state.Chat.Lines[^1].Text).IsEqualTo("test line");
     }
 }
 

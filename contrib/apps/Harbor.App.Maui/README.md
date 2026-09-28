@@ -13,7 +13,7 @@ Composition Root — depends on `Harbor.Abstractions`, `Harbor.Core`, `Harbor.St
 - `Harbor.Abstractions` (Domain)
 - `Harbor.Core` (AgentLoop, registries)
 - `Harbor.Storage.Memory` (ephemeral)
-- `Harbor.Tui.Abstractions` (UiStore + UiReducer)
+- `Harbor.Tui.Abstractions` (UiStore + AppReducer)
 - `Microsoft.Maui.Controls` + `Microsoft.Maui.Controls.Xaml`
 - `Microsoft.Maui.Essentials`
 - `Microsoft.Maui.Core`

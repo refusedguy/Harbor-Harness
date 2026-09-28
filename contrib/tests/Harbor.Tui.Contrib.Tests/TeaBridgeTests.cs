@@ -44,16 +44,16 @@ public class TeaBridgeTests
         try
         {
             await Assert.That(bridge.Store).IsNotNull();
-            await Assert.That(bridge.Store.State.Model).IsEqualTo("claude-3-5-sonnet");
-            await Assert.That(bridge.Store.State.Provider).IsEqualTo("anthropic");
+            await Assert.That(bridge.Store.State.Chat.Model).IsEqualTo("claude-3-5-sonnet");
+            await Assert.That(bridge.Store.State.Chat.Provider).IsEqualTo("anthropic");
 
             bridge.Push(new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
             bridge.Push(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), AssistantMessage.Empty("s1", "m")));
             bridge.Push(new MessageEndEvent(AssistantMessage.Empty("s1", "m")));
 
-            await Assert.That(bridge.Store.State.Lines.Length).IsEqualTo(1);
-            await Assert.That(bridge.Store.State.Lines[0].Role).IsEqualTo(ChatRole.Assistant);
-            await Assert.That(bridge.Store.State.Lines[0].Text).IsEqualTo("Hello");
+            await Assert.That(bridge.Store.State.Chat.Lines.Length).IsEqualTo(1);
+            await Assert.That(bridge.Store.State.Chat.Lines[0].Role).IsEqualTo(ChatRole.Assistant);
+            await Assert.That(bridge.Store.State.Chat.Lines[0].Text).IsEqualTo("Hello");
         }
         finally { bridge.Dispose(); }
     }
@@ -67,7 +67,7 @@ public class TeaBridgeTests
         {
             bridge.HandleKey(new ConsoleKeyInfo('h', ConsoleKey.H, false, false, false));
             bridge.HandleKey(new ConsoleKeyInfo('i', ConsoleKey.I, false, false, false));
-            await Assert.That(bridge.Store.State.Input.Text).IsEqualTo("hi");
+            await Assert.That(bridge.Store.State.Ui.Input.Text).IsEqualTo("hi");
         }
         finally { bridge.Dispose(); }
     }
@@ -101,12 +101,12 @@ public class TeaBridgeTests
         try
         {
             await Assert.That(bridge.Store).IsNotNull();
-            await Assert.That(bridge.Store.State.AgentName).IsEqualTo("code");
+            await Assert.That(bridge.Store.State.Chat.AgentName).IsEqualTo("code");
 
             bridge.Push(new MessageUpdateEvent(new TextDeltaEvent("0", "Test"), AssistantMessage.Empty("s1", "m")));
             bridge.Push(new MessageEndEvent(AssistantMessage.Empty("s1", "m")));
-            await Assert.That(bridge.Store.State.Lines.Length).IsEqualTo(1);
-            await Assert.That(bridge.Store.State.Lines[0].Text).IsEqualTo("Test");
+            await Assert.That(bridge.Store.State.Chat.Lines.Length).IsEqualTo(1);
+            await Assert.That(bridge.Store.State.Chat.Lines[0].Text).IsEqualTo("Test");
         }
         finally { bridge.Dispose(); }
     }
@@ -142,8 +142,8 @@ public class TeaBridgeTests
 
             bridge.Push(new MessageUpdateEvent(new TextDeltaEvent("0", "Razor"), AssistantMessage.Empty("s1", "m")));
             bridge.Push(new MessageEndEvent(AssistantMessage.Empty("s1", "m")));
-            await Assert.That(bridge.Store.State.Lines.Length).IsEqualTo(1);
-            await Assert.That(bridge.Store.State.Lines[0].Text).IsEqualTo("Razor");
+            await Assert.That(bridge.Store.State.Chat.Lines.Length).IsEqualTo(1);
+            await Assert.That(bridge.Store.State.Chat.Lines[0].Text).IsEqualTo("Razor");
         }
         finally { bridge.Dispose(); }
     }

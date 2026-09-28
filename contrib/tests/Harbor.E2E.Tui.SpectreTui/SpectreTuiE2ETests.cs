@@ -285,7 +285,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
 
         await driver.SendInputAsync("read the file\r").ConfigureAwait(false);
 
-        // The tool-call card is formatted by UiReducer.FormatToolStart as
+        // The tool-call card is formatted by ChatAppReducer.FormatToolStart as
         // "→ {toolName}  {args}" — assert on the arrow-prefixed tool name to
         // avoid matching the generic word "read" in the user's own prompt echo.
         bool sawTool = await driver.WaitForTextAsync("→ read", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
@@ -427,7 +427,7 @@ public class SpectreTuiE2ETests : TuiE2eTestBase
         await using var driver = await StartTuiAsync().ConfigureAwait(false);
         await WaitForBootAsync(driver).ConfigureAwait(false);
 
-        // Ctrl+Tab cycles focus between *visible* panels (UiReducer.CycleFocus).
+        // Ctrl+Tab cycles focus between *visible* panels (AppReducer.CycleFocus).
         // With all panels hidden it's a no-op, so first toggle the 1st panel
         // (HelpPanel) visible via Alt+1.
         await driver.SendKeyAsync(ConsoleKey.D1, ConsoleModifiers.Alt).ConfigureAwait(false);

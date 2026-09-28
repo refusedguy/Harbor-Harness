@@ -5,7 +5,7 @@ namespace Harbor.Ui.Framework.State;
 /// <summary>
 ///     Thin DTO→State bridge (epic #33 T1): converts the BCL-only
 ///     <see cref="UiKeyDto" /> produced by <see cref="KeyEventMapper" /> into
-///     <see cref="UiKey" /> / <see cref="UiMsg.KeyInput" />. The mapping is
+///     <see cref="UiKey" /> / <see cref="AppMsg.KeyInput" />. The mapping is
 ///     explicit and 1:1 with the mapper table — no behavior change, no
 ///     renderer-side branches. This is the ONLY place where the Rendering key
 ///     vocabulary crosses into State.
@@ -20,19 +20,19 @@ public static class KeyEventAdapter
     ///     Resolve a mapped DTO through <paramref name="keyMap" /> into the
     ///     store message.
     /// </summary>
-    public static UiMsg.KeyInput ToKeyInput(UiKeyDto dto, ChatKeyMap keyMap)
+    public static AppMsg.KeyInput ToKeyInput(UiKeyDto dto, ChatKeyMap keyMap)
     {
         ArgumentNullException.ThrowIfNull(keyMap);
         var key = ToUiKey(dto);
-        return new UiMsg.KeyInput(keyMap.Resolve(key), key);
+        return new AppMsg.KeyInput(keyMap.Resolve(key), key);
     }
 
     /// <summary>
     ///     Nullable overload: a null DTO (release / unmapped code) becomes a
     ///     <see cref="ChatAction.None" /> no-op the reducer drops.
     /// </summary>
-    public static UiMsg.KeyInput ToKeyInput(UiKeyDto? dto, ChatKeyMap keyMap) =>
-        dto is { } mapped ? ToKeyInput(mapped, keyMap) : new UiMsg.KeyInput(ChatAction.None, UiKey.Unknown);
+    public static AppMsg.KeyInput ToKeyInput(UiKeyDto? dto, ChatKeyMap keyMap) =>
+        dto is { } mapped ? ToKeyInput(mapped, keyMap) : new AppMsg.KeyInput(ChatAction.None, UiKey.Unknown);
 
     /// <summary>
     ///     Full path for hosts holding a raw <see cref="KeyEvent" />: map via
@@ -40,12 +40,12 @@ public static class KeyEventAdapter
     ///     Returns false (with a <see cref="ChatAction.None" /> message) when the
     ///     event carries no key meaning.
     /// </summary>
-    public static bool TryConvert(in KeyEvent evt, ChatKeyMap keyMap, out UiMsg.KeyInput msg)
+    public static bool TryConvert(in KeyEvent evt, ChatKeyMap keyMap, out AppMsg.KeyInput msg)
     {
         ArgumentNullException.ThrowIfNull(keyMap);
         if (!KeyEventMapper.TryMap(evt, out var dto))
         {
-            msg = new UiMsg.KeyInput(ChatAction.None, UiKey.Unknown);
+            msg = new AppMsg.KeyInput(ChatAction.None, UiKey.Unknown);
             return false;
         }
 

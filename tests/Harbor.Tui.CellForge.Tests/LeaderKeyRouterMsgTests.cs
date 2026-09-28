@@ -7,7 +7,7 @@ namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
 /// Epic C: leader chords carry store meaning — msg-bound chords stage a
-/// <see cref="UiMsg"/> the host dispatches, while legacy action-only chords
+/// <see cref="AppMsg"/> the host dispatches, while legacy action-only chords
 /// keep firing bare actions with no staged message.
 /// </summary>
 public class LeaderKeyRouterMsgTests
@@ -29,7 +29,7 @@ public class LeaderKeyRouterMsgTests
         await Assert.That(ran).IsEqualTo(1);
 
         var staged = router.TakePendingMsg();
-        await Assert.That(staged is UiMsg.KeyInput k && k.Action == ChatAction.ScrollTop).IsTrue();
+        await Assert.That(staged is AppMsg.KeyInput k && k.Action == ChatAction.ScrollTop).IsTrue();
         await Assert.That(router.TakePendingMsg()).IsNull();
     }
 
@@ -70,6 +70,6 @@ public class LeaderKeyRouterMsgTests
         _ = router.HandleKey(Plain('g'), nowMs: 100);
 
         var staged = router.TakePendingMsg();
-        await Assert.That(staged is UiMsg.KeyInput k && k.Action == ChatAction.ScrollBottom).IsTrue();
+        await Assert.That(staged is AppMsg.KeyInput k && k.Action == ChatAction.ScrollBottom).IsTrue();
     }
 }

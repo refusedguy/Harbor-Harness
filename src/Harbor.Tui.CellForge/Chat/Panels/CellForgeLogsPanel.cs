@@ -9,7 +9,7 @@ namespace Harbor.Tui.CellForge.Panels;
 /// <summary>
 ///     Cell-native logs panel: live <c>ILogger</c> output surfaced from
 ///     <see cref="IDiagnosticsPanel"/> in <c>ctx.Services</c>. <c>F12</c> while
-///     focused dispatches <c>UiMsg.TogglePanel("logs")</c>.
+///     focused dispatches <c>AppMsg.TogglePanel("logs")</c>.
 /// </summary>
 public sealed class CellForgeLogsPanel : CellForgePanelBase
 {
@@ -58,7 +58,7 @@ public sealed class CellForgeLogsPanel : CellForgePanelBase
             // #63: explicit store from the host (no Services lookup).
             if (ctx.Store is UiStore store)
             {
-                _ = store.Dispatch(new UiMsg.TogglePanel(Id));
+                _ = store.Dispatch(new AppMsg.TogglePanel(Id));
             }
 
             return true;

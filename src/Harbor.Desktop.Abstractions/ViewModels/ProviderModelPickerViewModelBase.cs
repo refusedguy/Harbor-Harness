@@ -60,7 +60,7 @@ public abstract partial class ProviderModelPickerViewModelBase : StoreSubscriber
     protected ProviderModelPickerViewModelBase(IDispatcherAdapter dispatcher, ILogger logger)
         : base(dispatcher, logger)
     {
-        Select(state => state.Model, v => CurrentModelLabel = v);
+        Select(state => state.Chat.Model, v => CurrentModelLabel = v);
     }
 
     /// <summary>

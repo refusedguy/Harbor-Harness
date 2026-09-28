@@ -27,10 +27,10 @@ public sealed class ChatStreamingPresenter
     /// <returns>The derived <see cref="SessionStatus" />.</returns>
     public SessionStatus DeriveStatus(UiState state)
     {
-        if (state.IsAgentRunning) return SessionStatus.Working;
-        if (string.Equals(state.Status, "error", StringComparison.OrdinalIgnoreCase))
+        if (state.Chat.IsAgentRunning) return SessionStatus.Working;
+        if (string.Equals(state.Chat.Status, "error", StringComparison.OrdinalIgnoreCase))
             return SessionStatus.Error;
-        if (state.Lines.Length > 0 && state.Lines[^1].Role == ChatRole.Assistant)
+        if (state.Chat.Lines.Length > 0 && state.Chat.Lines[^1].Role == ChatRole.Assistant)
             return SessionStatus.Done;
         return SessionStatus.Idle;
     }

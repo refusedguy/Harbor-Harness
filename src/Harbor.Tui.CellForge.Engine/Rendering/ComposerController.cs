@@ -132,8 +132,8 @@ public sealed class ComposerController
     ///     <see cref="EnterKeyPolicy"/> maps the modifiers to
     ///     <see cref="ChatAction"/> (Ctrl+Enter → ignore, Shift/Alt+Enter →
     ///     newline, plain Enter → submit) and the composer only applies the
-    ///     buffer effect — the same transition <see cref="UiReducer.Update"/>
-    ///     performs for <see cref="UiMsg.KeyInput"/> so key behavior cannot
+    ///     buffer effect — the same transition <see cref="ChatAppReducer.Update"/>
+    ///     performs for <see cref="AppMsg.KeyInput"/> so key behavior cannot
     ///     diverge per renderer.
     /// </summary>
     private ComposerAction HandleEnter(KeyModifiers mods)

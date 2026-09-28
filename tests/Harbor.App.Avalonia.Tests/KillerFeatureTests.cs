@@ -196,7 +196,10 @@ public class KillerFeatureTests
         {
             var state = new UiState
             {
-                Cost = new CostSnapshot(0, i * 100, 0m)
+                Chat = ChatDomainState.Empty with
+                {
+                    Cost = new CostSnapshot(0, i * 100, 0m)
+                }
             };
             vm.RecordUsage(state);
         }
@@ -210,7 +213,13 @@ public class KillerFeatureTests
     public async Task TokenUsageViewModel_Clear_ResetsRecentOutputTokens()
     {
         var vm = new TokenUsageViewModel(NullLogger<TokenUsageViewModel>.Instance);
-        vm.RecordUsage(new UiState { Cost = new CostSnapshot(0, 100, 0m) });
+        vm.RecordUsage(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Cost = new CostSnapshot(0, 100, 0m)
+            }
+        });
         vm.ClearCommand.Execute(null);
         await Assert.That(vm.RecentOutputTokens.Count).IsEqualTo(0);
     }

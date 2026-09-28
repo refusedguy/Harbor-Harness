@@ -55,10 +55,10 @@ src/Harbor.Tui.TerminalGui/
 │   ├── ChatView.cs                ← UiState → role-colored transcript (with markdown + GFM tables)
 │   ├── InputView.cs               ← input box with caret + slash autocomplete
 │   ├── StatusBarView.cs           ← provider/model/agent/tokens/cost/status/scroll%
-│   ├── SessionSidebarView.cs      ← panel list (uses IPanelRegistry + UiState.PanelStates)
+│   ├── SessionSidebarView.cs      ← panel list (uses IPanelRegistry + UiState.Ui.PanelStates)
 │   └── CommandPaletteView.cs      ← Ctrl+P fuzzy search popup
 ├── Handlers/
-│   ├── KeyHandler.cs              ← ConsoleKeyInfo → UiKey → ChatAction → UiMsg dispatch
+│   ├── KeyHandler.cs              ← ConsoleKeyInfo → UiKey → ChatAction → AppMsg dispatch
 │   └── ScrollHandler.cs           ← pure scroll math (rows-from-bottom)
 └── Rendering/
     ├── TerminalGuiColorMapper.cs  ← ChatRole → Terminal.Gui Color + label

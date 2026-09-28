@@ -5,7 +5,7 @@ namespace Harbor.Tui.RazorConsole.Handlers;
 /// <summary>
 ///     Maps a raw <see cref="ConsoleKeyInfo" /> into the framework-neutral
 ///     <see cref="UiKey" />, resolves the <see cref="ChatAction" /> via
-///     <see cref="ChatKeyMap" />, and dispatches a <see cref="UiMsg.KeyInput" />
+///     <see cref="ChatKeyMap" />, and dispatches a <see cref="AppMsg.KeyInput" />
 ///     through the supplied <see cref="UiStore" />. RazorConsole doesn't
 ///     expose a public key event in its component pipeline, so the bridge
 ///     reads from <see cref="Console.ReadKey" /> in its input loop and
@@ -36,7 +36,7 @@ public sealed class KeyHandler
             return new TuiEffect.None();
 
         _logger?.LogTrace("Key {Key} → {Action}", info.Key, action);
-        return _store.Dispatch(new UiMsg.KeyInput(action, key));
+        return _store.Dispatch(new AppMsg.KeyInput(action, key));
     }
 
     /// <summary>Map a <see cref="ConsoleKeyInfo" /> to a framework-neutral <see cref="UiKey" />.</summary>

@@ -207,7 +207,13 @@ public class CellForgeSubagentsPanelTests
         new(state, 120, 40, services);
 
     private static UiState StateWithActive(string activeSessionId) =>
-        new UiState { ActiveSessionId = SessionId.Create(activeSessionId) };
+        new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                ActiveSessionId = SessionId.Create(activeSessionId)
+            }
+        };
 
     private static string Joined(object? widget) => widget switch
     {
@@ -219,7 +225,7 @@ public class CellForgeSubagentsPanelTests
     private static UiStore SeededSubagentsStore()
     {
         var store = new UiStore();
-        _ = store.Dispatch(new UiMsg.SeedPanels(
+        _ = store.Dispatch(new AppMsg.SeedPanels(
             ImmutableArray.Create(OverlayIds.Subagents),
             ImmutableDictionary<string, TuiPanelState>.Empty.Add(OverlayIds.Subagents, TuiPanelState.Visible),
             ImmutableDictionary<string, int>.Empty.Add(OverlayIds.Subagents, 48)));
@@ -372,7 +378,7 @@ public class CellForgeSubagentsPanelTests
         var services = new FakeServices().Add<ISessionStore>(store).Add<UiStore>(uiStore);
         var panel = new CellForgeSubagentsPanel();
         var ctx = Ctx(StateWithActive("parent"), services);
-        var inputBefore = uiStore.State.Input;
+        var inputBefore = uiStore.State.Ui.Input;
         long revisionBefore = uiStore.State.Revision;
 
         // List mode: navigation, transcript entry, refresh.
@@ -396,7 +402,7 @@ public class CellForgeSubagentsPanelTests
         await Assert.That(store.Updates).IsEqualTo(0);
         await Assert.That(store.MessageUpdates).IsEqualTo(0);
         await Assert.That(store.Deletes).IsEqualTo(0);
-        await Assert.That(uiStore.State.Input).IsEqualTo(inputBefore);
+        await Assert.That(uiStore.State.Ui.Input).IsEqualTo(inputBefore);
         await Assert.That(uiStore.State.Revision).IsEqualTo(revisionBefore);
     }
 
@@ -418,7 +424,7 @@ public class CellForgeSubagentsPanelTests
         _ = panel.Build(ctx);
         await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Escape), ctx)).IsTrue();
 
-        await Assert.That(uiStore.State.PanelStates[OverlayIds.Subagents]).IsEqualTo(TuiPanelState.Hidden);
+        await Assert.That(uiStore.State.Ui.PanelStates[OverlayIds.Subagents]).IsEqualTo(TuiPanelState.Hidden);
         await Assert.That(store.Appends).IsEqualTo(0);
         await Assert.That(store.Updates).IsEqualTo(0);
     }

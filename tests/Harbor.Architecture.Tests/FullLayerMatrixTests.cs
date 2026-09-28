@@ -225,7 +225,7 @@ public class FullLayerMatrixTests
         ["Harbor.Tui.AnsiPlain"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State"]),
         // CellForge engine (issue #33 split): input/parsing/capabilities/cell
-        // primitives. No Chat vocabulary: wheel ticks surface as UiMsg via
+        // primitives. No Chat vocabulary: wheel ticks surface as AppMsg via
         // the State KeyEventAdapter over the shared UiKeyDto vocabulary, cell
         // styles via DesignSystem tokens, shared blocks via Ui.Framework.Rendering.
         ["Harbor.Tui.CellForge.Engine"] = new(Layer.Presentation,

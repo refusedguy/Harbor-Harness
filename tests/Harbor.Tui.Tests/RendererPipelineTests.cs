@@ -37,7 +37,7 @@ public class RendererPipelineTests
         await Assert.That(swapped).IsTrue();
         var next = (CountingRenderer)pipeline.Current;
         // Both streamed lines were replayed into the new renderer — no token
-        // lost across the swap (UiState.Lines.Length invariant).
+        // lost across the swap (UiState.Chat.Lines.Length invariant).
         await Assert.That(next.WrittenLines.Count).IsEqualTo(2);
         await Assert.That(next.WrittenLines[0]).IsEqualTo("Hello");
         await Assert.That(next.WrittenLines[1]).IsEqualTo("World");
@@ -105,10 +105,10 @@ public class RendererPipelineTests
     /// <summary>Drives a real MessageStart → TextDelta → MessageEnd round trip so the store's reducer commits a chat line.</summary>
     private static void StreamAssistantLine(UiStore store, string text)
     {
-        var partial = AssistantMessage.Empty("s1", $"stub-{store.State.Lines.Length}");
-        store.Dispatch(new UiMsg.Agent(new MessageStartEvent(partial)));
-        store.Dispatch(new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("0", text), partial)));
-        store.Dispatch(new UiMsg.Agent(new MessageEndEvent(partial)));
+        var partial = AssistantMessage.Empty("s1", $"stub-{store.State.Chat.Lines.Length}");
+        store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
+        store.Dispatch(new ChatAppMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("0", text), partial)));
+        store.Dispatch(new ChatAppMsg.Agent(new MessageEndEvent(partial)));
     }
 
     /// <summary>Minimal renderer double recording WriteLineAsync traffic.</summary>

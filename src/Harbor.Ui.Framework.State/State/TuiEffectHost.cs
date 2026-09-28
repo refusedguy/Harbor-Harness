@@ -102,7 +102,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
                     ex => _logger?.LogError(ex, "AbortAsync failed"));
                 break;
             case TuiEffect.QuitApp:
-                _store.Dispatch(new UiMsg.Quit());
+                _store.Dispatch(new AppMsg.Quit());
                 break;
             case TuiEffect.ActivateSession act:
                 // Tab-strip activate (#388). The session switch itself lives in
@@ -127,7 +127,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         // #91: per-run store capture — a RebindStore landing mid-flight must
         // not redirect this run's dispatches into the new session's store.
         var store = Volatile.Read(ref _store);
-        store.Dispatch(new UiMsg.AgentStarted());
+        store.Dispatch(new ChatAppMsg.AgentStarted());
 
         // #91: single terminal end. The failure branches used to dispatch
         // AgentEnded("error", ...) AND fall through into the finally's
@@ -137,7 +137,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         // (The cancel branch keeps its StatusChanged("idle") shape — the abort
         // ingress in AbortAsync owns the terminal AgentEnded("idle") there.)
         var ended = false;
-        void EndOnce(UiMsg.AgentEnded msg)
+        void EndOnce(ChatAppMsg.AgentEnded msg)
         {
             if (!ended)
             {
@@ -155,7 +155,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
             if (result.IsFailure)
             {
                 _logger?.LogError("Agent failed: {Error}", result.Error);
-                EndOnce(new UiMsg.AgentEnded("error", result.Error));
+                EndOnce(new ChatAppMsg.AgentEnded("error", result.Error));
             }
         }
         catch (OperationCanceledException) when (_appCt.IsCancellationRequested)
@@ -166,18 +166,18 @@ public sealed class TuiEffectHost : ITuiEffectRunner
             // catch treated this as an error and set the status bar to
             // "error". The user just wanted to abort — route to a clean
             // "idle" transition instead.
-            store.Dispatch(new UiMsg.StatusChanged("idle"));
+            store.Dispatch(new ChatAppMsg.StatusChanged("idle"));
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "PromptAsync failed");
-            EndOnce(new UiMsg.AgentEnded("error"));
+            EndOnce(new ChatAppMsg.AgentEnded("error"));
         }
         finally
         {
             // Ensure IsAgentRunning is always reset — even on success path
             // where the agent loop might not have published AgentEndEvent yet.
-            EndOnce(new UiMsg.AgentEnded());
+            EndOnce(new ChatAppMsg.AgentEnded());
         }
     }
 
@@ -187,7 +187,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         var store = Volatile.Read(ref _store);
         if (_slash is null)
         {
-            store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, $"no handler for {command}"));
+            store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.Error, $"no handler for {command}"));
             return;
         }
 
@@ -198,11 +198,11 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         catch (OperationCanceledException) when (_appCt.IsCancellationRequested)
         {
             // §3.4: same rationale as PromptAsync — abort ≠ error.
-            store.Dispatch(new UiMsg.StatusChanged("idle"));
+            store.Dispatch(new ChatAppMsg.StatusChanged("idle"));
         }
         catch (Exception ex)
         {
-            store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, ex.Message));
+            store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.Error, ex.Message));
         }
     }
 
@@ -239,7 +239,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         }
         catch (Exception ex)
         {
-            store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, ex.Message));
+            store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.Error, ex.Message));
         }
 
         // Recreate the abort source so the next PromptAsync call observes a
@@ -252,6 +252,6 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         // PromptAsync self-heals once idle instead of orphaning the zombie run.
         _agent.ResetAbortSource();
 
-        store.Dispatch(new UiMsg.AgentEnded("idle"));
+        store.Dispatch(new ChatAppMsg.AgentEnded("idle"));
     }
 }

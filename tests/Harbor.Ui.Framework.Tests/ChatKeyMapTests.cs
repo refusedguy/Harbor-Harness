@@ -129,12 +129,15 @@ public class ChatKeyMapTests
     {
         var state = new UiState
         {
-            RegisteredPanelIds = ["jump"],
-            PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty.SetItem("jump", TuiPanelState.Hidden)
+            Ui = TerminalUiState.Empty with
+            {
+                RegisteredPanelIds = ["jump"],
+                PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty.SetItem("jump", TuiPanelState.Hidden)
+            }
         };
         var action = Map.Resolve(UiKey.ForChar('j', KeyModifierSet.Ctrl));
-        var result = UiReducer.Update(state, new UiMsg.KeyInput(action, UiKey.ForChar('j', KeyModifierSet.Ctrl)));
-        await Assert.That(result.State.PanelStates["jump"]).IsEqualTo(TuiPanelState.Visible);
+        var result = ChatAppReducer.Update(state, new AppMsg.KeyInput(action, UiKey.ForChar('j', KeyModifierSet.Ctrl)));
+        await Assert.That(result.State.Ui.PanelStates["jump"]).IsEqualTo(TuiPanelState.Visible);
     }
 
     [Test]
@@ -142,7 +145,7 @@ public class ChatKeyMapTests
     {
         var state = new UiState();
         var action = Map.Resolve(new UiKey(UiKeyCode.Char, KeyModifierSet.None, '\n'));
-        var result = UiReducer.Update(state, new UiMsg.KeyInput(action, new UiKey(UiKeyCode.Char, KeyModifierSet.None, '\n')));
-        await Assert.That(result.State.PanelStates.ContainsKey("jump")).IsFalse();
+        var result = ChatAppReducer.Update(state, new AppMsg.KeyInput(action, new UiKey(UiKeyCode.Char, KeyModifierSet.None, '\n')));
+        await Assert.That(result.State.Ui.PanelStates.ContainsKey("jump")).IsFalse();
     }
 }

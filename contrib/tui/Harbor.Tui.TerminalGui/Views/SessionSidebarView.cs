@@ -28,8 +28,8 @@ public sealed class SessionSidebarView
             if (filter is not null && !id.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var state = s.PanelStates.TryGetValue(id, out var st) ? st : TuiPanelState.Hidden;
-            bool focused = s.FocusedPanelId == id;
+            var state = s.Ui.PanelStates.TryGetValue(id, out var st) ? st : TuiPanelState.Hidden;
+            bool focused = s.Ui.FocusedPanelId == id;
             string glyph = state == TuiPanelState.Hidden ? " " : focused ? "▸" : "·";
             sb.Append($"  Alt+{slot} {glyph} {id}\n");
             slot++;

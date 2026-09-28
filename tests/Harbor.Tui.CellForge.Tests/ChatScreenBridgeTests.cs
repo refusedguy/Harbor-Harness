@@ -537,10 +537,13 @@ public class ChatScreenBridgeTests
         var screen = ChatScreen.Build(composer, status, includeSidebar: false);
         screen.Status.ProjectedState = new UiState
         {
-            Status = "running",
-            Provider = "prov",
-            Model = "m",
-            AgentName = "code",
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "running",
+                Provider = "prov",
+                Model = "m",
+                AgentName = "code"
+            }
         };
         screen.Status.SetProjectedRetry(1, 3, 1);
 

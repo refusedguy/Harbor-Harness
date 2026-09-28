@@ -14,7 +14,7 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 /// <remarks>
 ///     <para>
 ///         <b>Decoupling:</b> like <see cref="TodoListPanel" />, this panel reads only
-///         from <see cref="UiState.Lines" />. It does not call <c>git</c> or open files
+///         from <see cref="UiState.Chat.Lines" />. It does not call <c>git</c> or open files
 ///         itself — that's the responsibility of the agent via tool calls.
 ///     </para>
 ///     <para>

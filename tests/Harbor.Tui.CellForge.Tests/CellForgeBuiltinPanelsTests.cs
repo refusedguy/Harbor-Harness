@@ -50,7 +50,13 @@ public class CellForgeBuiltinPanelsTests
         new(state, width, height, services, store);
 
     private static UiState StateWithLines(params ChatLine[] lines) =>
-        new UiState { Lines = ImmutableArray.Create(lines) };
+        new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = ImmutableArray.Create(lines)
+            }
+        };
 
     private static IReadOnlyList<string> Rows(object? widget) => widget switch
     {
@@ -66,7 +72,7 @@ public class CellForgeBuiltinPanelsTests
     private static UiStore SeededStore(string id, int size)
     {
         var store = new UiStore();
-        _ = store.Dispatch(new UiMsg.SeedPanels(
+        _ = store.Dispatch(new AppMsg.SeedPanels(
             ImmutableArray.Create(id),
             ImmutableDictionary<string, TuiPanelState>.Empty.Add(id, TuiPanelState.Hidden),
             ImmutableDictionary<string, int>.Empty.Add(id, size)));
@@ -330,7 +336,13 @@ public class CellForgeBuiltinPanelsTests
     [Test]
     public async Task TokenBreakdown_RendersBarsAndTotals()
     {
-        var state = new UiState { Cost = new CostSnapshot(1500, 300, 0.0042m) };
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Cost = new CostSnapshot(1500, 300, 0.0042m)
+            }
+        };
         string text = Joined(new CellForgeTokenBreakdownPanel().Build(Ctx(state)));
         await Assert.That(text).Contains("Token Breakdown");
         await Assert.That(text).Contains("1.5K");
@@ -398,7 +410,7 @@ public class CellForgeBuiltinPanelsTests
         var services = new FakeServices().Add<UiStore>(store);
         bool consumed = new CellForgeHelpPanel().OnKey(UiKey.ForChar('?'), Ctx(store.State, services: services, store: store));
         await Assert.That(consumed).IsTrue();
-        await Assert.That(store.State.PanelStates["help"]).IsEqualTo(TuiPanelState.Visible);
+        await Assert.That(store.State.Ui.PanelStates["help"]).IsEqualTo(TuiPanelState.Visible);
     }
 
     [Test]
@@ -449,7 +461,7 @@ public class CellForgeBuiltinPanelsTests
         var services = new FakeServices().Add<UiStore>(store);
         bool consumed = new CellForgeLogsPanel().OnKey(new UiKey(UiKeyCode.F12), Ctx(store.State, services: services, store: store));
         await Assert.That(consumed).IsTrue();
-        await Assert.That(store.State.PanelStates["logs"]).IsEqualTo(TuiPanelState.Visible);
+        await Assert.That(store.State.Ui.PanelStates["logs"]).IsEqualTo(TuiPanelState.Visible);
     }
 
     [Test]

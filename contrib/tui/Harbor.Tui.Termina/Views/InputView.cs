@@ -16,18 +16,18 @@ public sealed class InputView
     /// <summary>Render the input box body for the supplied state.</summary>
     public string Build(UiState s)
     {
-        var sb = new StringBuilder(64 + s.Input.Text.Length);
+        var sb = new StringBuilder(64 + s.Ui.Input.Text.Length);
         sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Cyan, "❯ "));
 
-        bool slash = s.Input.Text.StartsWith('/');
+        bool slash = s.Ui.Input.Text.StartsWith('/');
         var color = slash ? TerminaColor.Yellow : TerminaColor.White;
-        sb.Append(TerminaMarkdownRenderer.Ansi(color, s.Input.Text));
+        sb.Append(TerminaMarkdownRenderer.Ansi(color, s.Ui.Input.Text));
         sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Cyan, "▍"));
 
-        if (slash && !s.Input.Text.EndsWith(' '))
+        if (slash && !s.Ui.Input.Text.EndsWith(' '))
         {
             string? match = ChatCommands.Slash.FirstOrDefault(c =>
-                c.StartsWith(s.Input.Text, StringComparison.OrdinalIgnoreCase) && c != s.Input.Text);
+                c.StartsWith(s.Ui.Input.Text, StringComparison.OrdinalIgnoreCase) && c != s.Ui.Input.Text);
             if (match is not null)
                 sb.Append(' ').Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, $"↹ {match}"));
         }
@@ -36,7 +36,7 @@ public sealed class InputView
     }
 
     /// <summary>Hint line shown beneath the input box.</summary>
-    public static string Hint(UiState s) => s.Focus == FocusMode.Chat
+    public static string Hint(UiState s) => s.Ui.Focus == FocusMode.Chat
         ? "F2 → input  ↑/↓ scroll  PgUp/PgDn page  Home/End top/bottom  Esc quit"
         : "Enter send  Alt+↑/↓ history  Tab complete  Esc quit  F2 → chat";
 }

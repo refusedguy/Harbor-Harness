@@ -91,7 +91,7 @@ internal sealed class ModelCommand : IReplCommand
             {
                 host.SessionModel = host.SessionModel with { ProviderId = providerId, Model = modelId };
                 host.Agent.Initialize(host.SessionModel, agentDef.Value.WithModel(modelId, providerId));
-                _ = host.Store.Dispatch(new UiMsg.ConfigureRuntime(modelId, providerId, host.SessionModel.Agent));
+                _ = host.Store.Dispatch(new ChatAppMsg.ConfigureRuntime(modelId, providerId, host.SessionModel.Agent));
             }
         }
         else

@@ -8,7 +8,7 @@ namespace Harbor.App.Cli.Repl.Commands;
 ///     Panels picker: every registered panel as a title-first row (live
 ///     visible/hidden state dimmed in the detail), fuzzy-filtered as you
 ///     type. Enter toggles the highlighted panel through the TEA store
-///     (same <c>UiMsg.TogglePanel</c> the hotkeys route through) and closes
+///     (same <c>AppMsg.TogglePanel</c> the hotkeys route through) and closes
 ///     the picker. The hotkey-free entry point for terminals that swallow
 ///     panel chords. Non-interactive output stays textual
 ///     (<c>harbor panels</c> does not exist; the legacy dispatcher path is
@@ -53,7 +53,7 @@ internal sealed class PanelsCommand : IReplCommand
 
     private static Task ToggleAsync(IReplHost host, CommandItem selected, CancellationToken ct)
     {
-        host.Store.Dispatch(new UiMsg.TogglePanel(selected.Id));
+        host.Store.Dispatch(new AppMsg.TogglePanel(selected.Id));
         host.Palette.Hide();
         host.WakeUp();
         return Task.CompletedTask;

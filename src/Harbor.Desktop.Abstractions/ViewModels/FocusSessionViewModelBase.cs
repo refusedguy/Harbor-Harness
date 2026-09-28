@@ -44,18 +44,18 @@ public abstract partial class FocusSessionViewModelBase : StoreSubscriberViewMod
     protected FocusSessionViewModelBase(IDispatcherAdapter dispatcher, ILogger logger)
         : base(dispatcher, logger)
     {
-        Select(state => state.AgentName, v => Agent = v);
-        Select(state => state.Model, v => Model = v);
-        Select(state => state.Provider, v => Provider = v);
-        Select(state => state.Cost.TokensIn, v => TokensIn = v);
-        Select(state => state.Cost.TokensOut, v => TokensOut = v);
-        Select(state => state.Lines.Length, v => MessageCount = v);
+        Select(state => state.Chat.AgentName, v => Agent = v);
+        Select(state => state.Chat.Model, v => Model = v);
+        Select(state => state.Chat.Provider, v => Provider = v);
+        Select(state => state.Chat.Cost.TokensIn, v => TokensIn = v);
+        Select(state => state.Chat.Cost.TokensOut, v => TokensOut = v);
+        Select(state => state.Chat.Lines.Length, v => MessageCount = v);
         Select(state =>
         {
             var title = "Focus Session";
-            if (state.ActiveSessionId is SessionId id)
+            if (state.Chat.ActiveSessionId is SessionId id)
             {
-                var sessions = state.Sessions;
+                var sessions = state.Chat.Sessions;
                 for (int i = 0; i < sessions.Length; i++)
                 {
                     if (sessions[i].SessionId.Equals(id))

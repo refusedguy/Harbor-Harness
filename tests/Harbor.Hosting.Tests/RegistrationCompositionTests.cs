@@ -241,8 +241,8 @@ public class RegistrationCompositionTests
 
             // The write landed in the DI-shared instance — functional proof
             // the renderer no longer owns a private store.
-            await Assert.That(shared.State.Lines.Length).IsEqualTo(1);
-            await Assert.That(shared.State.Lines[0].Text).IsEqualTo("Hello");
+            await Assert.That(shared.State.Chat.Lines.Length).IsEqualTo(1);
+            await Assert.That(shared.State.Chat.Lines[0].Text).IsEqualTo("Hello");
 
             // Restore: swap to a capturing backend — the pipeline replays the
             // shared snapshot into it, so no streamed line is lost.
@@ -288,8 +288,8 @@ public class RegistrationCompositionTests
 
             // The write landed in the DI-shared instance — functional proof
             // the renderer no longer owns a private store.
-            await Assert.That(shared.State.Lines.Length).IsEqualTo(1);
-            await Assert.That(shared.State.Lines[0].Text).IsEqualTo("Hello");
+            await Assert.That(shared.State.Chat.Lines.Length).IsEqualTo(1);
+            await Assert.That(shared.State.Chat.Lines[0].Text).IsEqualTo("Hello");
 
             // Restore: swap to a capturing backend — the pipeline replays the
             // shared snapshot into it, so no streamed line is lost.

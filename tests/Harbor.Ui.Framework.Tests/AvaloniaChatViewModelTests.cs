@@ -101,7 +101,7 @@ public sealed class SelectorTrackingViewModel : StoreSubscriberViewModel
 
     public void RegisterStatusSelector()
     {
-        Select(state => state.Status, v => SelectorApplied = true);
+        Select(state => state.Chat.Status, v => SelectorApplied = true);
     }
 
     public void SimulateStateChange(UiState state)
@@ -121,7 +121,13 @@ public class AvaloniaChatViewModelHookTests
     public async Task OnAfterSelectorsApplied_IsCalled_WhenStateChanges()
     {
         var vm = new TestableHookTrackingViewModel();
-        var state = new UiState { Status = "running" };
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "running"
+            }
+        };
 
         vm.SimulateStateChange(state);
 
@@ -134,28 +140,37 @@ public class AvaloniaChatViewModelHookTests
         var vm = new TestableHookTrackingViewModel();
         var state = new UiState
         {
-            Status = "streaming",
-            IsAgentRunning = true,
-            IsStreaming = true,
-            Lines = ImmutableArray.Create(
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "streaming",
+                IsAgentRunning = true,
+                IsStreaming = true,
+                Lines = ImmutableArray.Create(
                 new ChatLine(ChatRole.User, "Hello"),
                 new ChatLine(ChatRole.Assistant, "World"))
+            }
         };
 
         vm.SimulateStateChange(state);
 
         await Assert.That(vm.OnAfterSelectorsAppliedStates).Count().IsEqualTo(1);
-        await Assert.That(vm.OnAfterSelectorsAppliedStates[0].Status).IsEqualTo("streaming");
-        await Assert.That(vm.OnAfterSelectorsAppliedStates[0].IsAgentRunning).IsTrue();
-        await Assert.That(vm.OnAfterSelectorsAppliedStates[0].IsStreaming).IsTrue();
-        await Assert.That(vm.OnAfterSelectorsAppliedStates[0].Lines.Length).IsEqualTo(2);
+        await Assert.That(vm.OnAfterSelectorsAppliedStates[0].Chat.Status).IsEqualTo("streaming");
+        await Assert.That(vm.OnAfterSelectorsAppliedStates[0].Chat.IsAgentRunning).IsTrue();
+        await Assert.That(vm.OnAfterSelectorsAppliedStates[0].Chat.IsStreaming).IsTrue();
+        await Assert.That(vm.OnAfterSelectorsAppliedStates[0].Chat.Lines.Length).IsEqualTo(2);
     }
 
     [Test]
     public async Task OnAfterSelectorsApplied_CalledAfterOnStoreChanged()
     {
         var vm = new TrackingOrderViewModel();
-        var state = new UiState { Status = "idle" };
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "idle"
+            }
+        };
 
         vm.SimulateStateChange(state);
 
@@ -167,12 +182,30 @@ public class AvaloniaChatViewModelHookTests
     {
         var vm = new TestableHookTrackingViewModel();
 
-        vm.SimulateStateChange(new UiState { Status = "idle" });
-        vm.SimulateStateChange(new UiState { Status = "running" });
-        vm.SimulateStateChange(new UiState { Status = "streaming" });
+        vm.SimulateStateChange(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "idle"
+            }
+        });
+        vm.SimulateStateChange(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "running"
+            }
+        });
+        vm.SimulateStateChange(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "streaming"
+            }
+        });
 
         await Assert.That(vm.OnAfterSelectorsAppliedCount).IsEqualTo(3);
-        await Assert.That(vm.OnAfterSelectorsAppliedStates.Select(s => s.Status))
+        await Assert.That(vm.OnAfterSelectorsAppliedStates.Select(s => s.Chat.Status))
             .IsEquivalentTo(new[] { "idle", "running", "streaming" });
     }
 
@@ -182,7 +215,13 @@ public class AvaloniaChatViewModelHookTests
         var vm = new SelectorTrackingViewModel();
         vm.RegisterStatusSelector();
 
-        vm.SimulateStateChange(new UiState { Status = "running" });
+        vm.SimulateStateChange(new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Status = "running"
+            }
+        });
 
         await Assert.That(vm.SelectorApplied).IsTrue();
         await Assert.That(vm.AfterHookCalled).IsTrue();

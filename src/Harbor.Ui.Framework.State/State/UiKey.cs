@@ -53,7 +53,7 @@ public enum KeyModifierSet : byte
 
 /// <summary>
 ///     Framework-neutral key press. Renderers translate their native key type into
-///     this before emitting <see cref="UiMsg.KeyInput" />, so the reducer never
+///     this before emitting <see cref="AppMsg.KeyInput" />, so the reducer never
 ///     depends on a concrete TUI library.
 /// </summary>
 /// <param name="Code">The abstract key code.</param>

@@ -87,16 +87,16 @@ public sealed class QuickSwitchSlots
     {
         Array.Clear(_slots, 0, Count);
 
-        if (state.ActiveSessionId is { } activeId)
+        if (state.Chat.ActiveSessionId is { } activeId)
         {
             _slots[0] = activeId.Value;
         }
 
         int slot = 1;
-        for (int i = state.Sessions.Length - 1; i >= 0 && slot < Count; i--)
+        for (int i = state.Chat.Sessions.Length - 1; i >= 0 && slot < Count; i--)
         {
-            var sid = state.Sessions[i].SessionId;
-            if (sid != state.ActiveSessionId)
+            var sid = state.Chat.Sessions[i].SessionId;
+            if (sid != state.Chat.ActiveSessionId)
             {
                 _slots[slot++] = sid.Value;
             }

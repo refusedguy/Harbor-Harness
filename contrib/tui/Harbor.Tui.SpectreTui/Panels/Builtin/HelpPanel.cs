@@ -63,8 +63,8 @@ public sealed class HelpPanel : IPanelProvider
                 foreach (var panel in registry.All)
                 {
                     // Read state directly from UiState — TEA single source of truth.
-                    bool isFocused = panel.Id == ctx.State.FocusedPanelId;
-                    var s = ctx.State.PanelStates.TryGetValue(panel.Id, out var ps)
+                    bool isFocused = panel.Id == ctx.State.Ui.FocusedPanelId;
+                    var s = ctx.State.Ui.PanelStates.TryGetValue(panel.Id, out var ps)
                         ? ps
                         : TuiPanelState.Hidden;
                     string state = isFocused
@@ -99,7 +99,7 @@ public sealed class HelpPanel : IPanelProvider
         if (key.Code == UiKeyCode.Char && key.Character == '?')
         {
             if (ctx.Services?.GetService(typeof(UiStore)) is UiStore store)
-                store.Dispatch(new UiMsg.TogglePanel(Id));
+                store.Dispatch(new AppMsg.TogglePanel(Id));
             return true;
         }
         return false;

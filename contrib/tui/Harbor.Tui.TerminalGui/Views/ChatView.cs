@@ -15,7 +15,7 @@ public sealed class ChatView
     /// <summary>Build the list of display strings for the supplied state.</summary>
     public IReadOnlyList<string> Build(UiState s, int historyWidth)
     {
-        var outp = new List<string>(s.Lines.Length + 8);
+        var outp = new List<string>(s.Chat.Lines.Length + 8);
         int bodyWidth = Math.Max(0, historyWidth - 2);
         foreach (var line in ScrollHandler.VisibleSlice(s))
         {
@@ -26,18 +26,18 @@ public sealed class ChatView
             outp.Add(" ");
         }
 
-        if (s.IsStreaming)
+        if (s.Chat.IsStreaming)
         {
-            if (!string.IsNullOrEmpty(s.Active.ThinkBuffer))
+            if (!string.IsNullOrEmpty(s.Chat.Active.ThinkBuffer))
             {
                 outp.Add(TerminalGuiMarkdownRenderer.RenderHeader(ChatRole.Thinking));
-                foreach (string b in TerminalGuiMarkdownRenderer.RenderBody(ChatRole.Thinking, s.Active.ThinkBuffer, bodyWidth))
+                foreach (string b in TerminalGuiMarkdownRenderer.RenderBody(ChatRole.Thinking, s.Chat.Active.ThinkBuffer, bodyWidth))
                     outp.Add("  " + b);
             }
-            if (!string.IsNullOrEmpty(s.Active.TextBuffer))
+            if (!string.IsNullOrEmpty(s.Chat.Active.TextBuffer))
             {
                 outp.Add(TerminalGuiMarkdownRenderer.RenderHeader(ChatRole.Assistant));
-                foreach (string b in TerminalGuiMarkdownRenderer.RenderBody(ChatRole.Assistant, s.Active.TextBuffer, bodyWidth))
+                foreach (string b in TerminalGuiMarkdownRenderer.RenderBody(ChatRole.Assistant, s.Chat.Active.TextBuffer, bodyWidth))
                     outp.Add("  " + b);
             }
         }
@@ -48,12 +48,12 @@ public sealed class ChatView
     /// <summary>Stream-bar text shown during streaming: <c>▌ generating... 1234 chars</c>.</summary>
     public static string StreamBar(UiState s)
     {
-        if (!s.IsStreaming)
+        if (!s.Chat.IsStreaming)
             return string.Empty;
-        if (!string.IsNullOrEmpty(s.Active.TextBuffer))
-            return $"▌ generating... {s.Active.TextBuffer.Length} chars";
-        if (!string.IsNullOrEmpty(s.Active.ThinkBuffer))
-            return $"▌ thinking... {s.Active.ThinkBuffer.Length} chars";
+        if (!string.IsNullOrEmpty(s.Chat.Active.TextBuffer))
+            return $"▌ generating... {s.Chat.Active.TextBuffer.Length} chars";
+        if (!string.IsNullOrEmpty(s.Chat.Active.ThinkBuffer))
+            return $"▌ thinking... {s.Chat.Active.ThinkBuffer.Length} chars";
         return "▌ thinking...";
     }
 }

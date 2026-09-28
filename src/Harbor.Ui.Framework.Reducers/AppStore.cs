@@ -22,7 +22,11 @@ public sealed class AppStore
     /// </summary>
     public void Dispatch(AgentEvent @event)
     {
-        _state = AppReducer.Reduce(@event, _state);
+        // Fully qualified: this file lives in the Harbor.Ui.Framework.State
+        // namespace, which also declares the generic TEA AppReducer (#33/T4).
+        // The unqualified name binds to the namespace member, not to the
+        // legacy flat-AppState reducer in Harbor.Ui.Framework.Reducers.
+        _state = Harbor.Ui.Framework.Reducers.AppReducer.Reduce(@event, _state);
         StateChanged?.Invoke(this, _state);
     }
 }

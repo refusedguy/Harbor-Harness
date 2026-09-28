@@ -63,7 +63,7 @@ public enum FocusMode
 {
     Input,
     Chat,
-    /// <summary>A panel owns focus; the specific panel id is in <c>UiState.FocusedPanelId</c>.</summary>
+    /// <summary>A panel owns focus; the specific panel id is in <c>UiState.Ui.FocusedPanelId</c>.</summary>
     Panel
 }
 

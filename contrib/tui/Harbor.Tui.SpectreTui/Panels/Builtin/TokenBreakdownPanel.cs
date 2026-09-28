@@ -8,7 +8,7 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 /// <summary>
 ///     Builtin panel that shows a horizontal bar chart of token usage per turn —
 ///     input, output, reasoning, cache-read, cache-write. Numbers come straight
-///     from <see cref="UiState.Cost" /> (cumulative) and the most recent
+///     from <see cref="UiState.Chat.Cost" /> (cumulative) and the most recent
 ///     <c>StepFinishEvent</c> usage if present in the transcript.
 /// </summary>
 public sealed class TokenBreakdownPanel : IPanelProvider
@@ -29,7 +29,7 @@ public sealed class TokenBreakdownPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         var rows = PanelRows.TokenRows(
-            ctx.State.Cost.TokensIn, ctx.State.Cost.TokensOut, ctx.State.Cost.CostUsd, ctx.Width);
+            ctx.State.Chat.Cost.TokensIn, ctx.State.Chat.Cost.TokensOut, ctx.State.Chat.Cost.CostUsd, ctx.Width);
 
         var p = new Paragraph().Alignment(Justify.Left);
         foreach (string row in rows)

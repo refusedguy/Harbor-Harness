@@ -180,10 +180,13 @@ public class SlashPanelsCommandTests
 
     private static UiState SeededPanelsState() => new()
     {
-        RegisteredPanelIds = ["todo", "logs"],
-        PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty
-            .SetItem("todo", TuiPanelState.Visible)
-            .SetItem("logs", TuiPanelState.Hidden),
+        Ui = TerminalUiState.Empty with
+        {
+            RegisteredPanelIds = ["todo", "logs"],
+            PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty
+                .SetItem("todo", TuiPanelState.Visible)
+                .SetItem("logs", TuiPanelState.Hidden)
+        }
     };
 
     private static FakeHost PanelsHost(FakeStore store, Session current)
@@ -225,13 +228,13 @@ public class SlashPanelsCommandTests
         await new PanelsCommand().ExecuteAsync(new ReplCommandContext(host, "panels"), CancellationToken.None);
 
         string firstId = host.Palette.Results[0].Id;
-        var before = host.Store.State.PanelStates[firstId];
+        var before = host.Store.State.Ui.PanelStates[firstId];
         _ = host.Palette.HandleKey(KeyEvent.Simple(KeyCode.Enter));
         var pending = host.Palette.TakePendingCommit();
         await Assert.That(pending).IsNotNull();
         await pending!.Value.Handler(pending.Value.Item, CancellationToken.None);
 
-        await Assert.That(host.Store.State.PanelStates[firstId]).IsNotEqualTo(before);
+        await Assert.That(host.Store.State.Ui.PanelStates[firstId]).IsNotEqualTo(before);
         await Assert.That(host.Palette.Visible).IsFalse();
     }
 

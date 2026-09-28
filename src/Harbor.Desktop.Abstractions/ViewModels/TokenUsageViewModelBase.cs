@@ -27,9 +27,9 @@ public abstract partial class TokenUsageViewModelBase : StoreSubscriberViewModel
     protected TokenUsageViewModelBase(IDispatcherAdapter dispatcher, ILogger logger)
         : base(dispatcher, logger)
     {
-        Select(state => (int)state.Cost.TokensIn, v => TotalInputTokens = v);
-        Select(state => (int)state.Cost.TokensOut, v => TotalOutputTokens = v);
-        Select(state => state.Cost.CostUsd, v => EstimatedCostUsd = v);
+        Select(state => (int)state.Chat.Cost.TokensIn, v => TotalInputTokens = v);
+        Select(state => (int)state.Chat.Cost.TokensOut, v => TotalOutputTokens = v);
+        Select(state => state.Chat.Cost.CostUsd, v => EstimatedCostUsd = v);
     }
 
     public ObservableCollection<TokenUsageRow> Rows { get; } = new();

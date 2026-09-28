@@ -52,9 +52,9 @@ Sprint 1 (critical) + Sprint 2 (high-perf) fixes were applied by Subagent #6 (`p
 | §OOP-003 | medium | ✅ RESOLVED | `DeserializeMessage` takes `sessionId`; no placeholder. |
 | §FP-003 | high | ✅ RESOLVED | `ReportProgress` is `async`/`await` with try/catch + log. |
 | §FP-004 | medium | ✅ PARTIAL | `Cache` is now `ConcurrentDictionary`; `Enabled` left as process-wide policy. |
-| §FP-005 | medium | ✅ RESOLVED | `ChatScreen._scroll`/`_viewport`/`_wasRunning` removed; state lives in `UiState` (incl. new `WasRunning`). `HandleLocalScroll` removed — all scroll via `UiReducer.Update` on `UiMsg.KeyInput(ScrollUpLine/...)`. New `UiMsg.ScrollResetToTail` + `UiMsg.ScrollClamp` for render→reducer measurement flow. `PanelRegistry` is registration-only (no `SetState`/`SetSize`/`FocusedPanelId` setter) — single source of truth in `UiState.PanelStates` / `PanelSizes` / `FocusedPanelId`. |
+| §FP-005 | medium | ✅ RESOLVED | `ChatScreen._scroll`/`_viewport`/`_wasRunning` removed; state lives in `UiState` (incl. new `WasRunning`). `HandleLocalScroll` removed — all scroll via `ChatAppReducer.Update` on `AppMsg.KeyInput(ScrollUpLine/...)`. New `AppMsg.ScrollResetToTail` + `AppMsg.ScrollClamp` for render→reducer measurement flow. `PanelRegistry` is registration-only (no `SetState`/`SetSize`/`FocusedPanelId` setter) — single source of truth in `UiState.Ui.PanelStates` / `PanelSizes` / `FocusedPanelId`. |
 | §FP-006 | high | ✅ RESOLVED | `ContinueWith(OnlyOnFaulted)` + `ILogger<TuiEffectHost>` injected. |
-| §FP-007 | medium | ✅ RESOLVED | `UiStore.Transition` is `internal`; only in-assembly callers are `TuiEffectHost` (fold-follow-up-state after async effects), `UiStore.BindSession`, `UiStore.Reset`. External renderers (incl. `SpectreTuiRenderer`) cannot call `Transition` — they `Dispatch(UiMsg)`. New `UiMsg.SeedPanels` replaces what used to be a `Transition` call from `SpectreTuiRenderer.SeedPanelRegistryIntoState`. |
+| §FP-007 | medium | ✅ RESOLVED | `UiStore.Transition` is `internal`; only in-assembly callers are `TuiEffectHost` (fold-follow-up-state after async effects), `UiStore.BindSession`, `UiStore.Reset`. External renderers (incl. `SpectreTuiRenderer`) cannot call `Transition` — they `Dispatch(AppMsg)`. New `AppMsg.SeedPanels` replaces what used to be a `Transition` call from `SpectreTuiRenderer.SeedPanelRegistryIntoState`. |
 | §ROP-001 | medium | ✅ RESOLVED | `DeserializeMessage` returns `Result<AgentMessage>`; per-line errors aggregated + logged. |
 | §ROP-002 | **high** | ✅ RESOLVED | `CheckAsync`/`GetRuleset` pattern-match `Result<AgentName>`. |
 | §ROP-004 | low | ✅ RESOLVED | `MapChunk` returns `ErrorEvent` on parse failure (no silent drop). |
@@ -466,16 +466,16 @@ public static bool Enabled { get; set; } = true;
 
 ### §FP-005 — ChatScreen: mutable `_scroll`, `_viewport`, `_wasRunning`
 
-> **Status:** ✅ RESOLVED (Sprint 3, subagent T / tea-restorer) — `ChatScreen`'s three mutable fields are gone. All scroll / viewport / was-running state lives in `UiState` (`ScrollOffset`, `ViewportLines`, `TotalLines`, plus new `WasRunning`). The reducer snapshots `WasRunning = state.IsAgentRunning` on `AgentStartEvent` / `AgentEndEvent` and pins `ScrollOffset = 0` on `AgentStartEvent` so streaming is always visible. `HandleLocalScroll` is removed — every scroll action (`ScrollUpLine`/`DownLine`/`UpPage`/`DownPage`/`Top`/`Bottom`) flows through `UiReducer.Update` via `UiMsg.KeyInput`. `ChatScreen.Render` is now pure: it reads `_store.State`, measures geometry, dispatches measurement msgs (`UiMsg.Viewport`, `UiMsg.HistoryMeasured`, `UiMsg.ScrollClamp`, `UiMsg.ScrollResetToTail`), and re-reads state. The `PanelRegistry` was also refactored to be registration-only — `SetState`/`SetSize`/`FocusedPanelId` setter/`ApplySnapshot`/`SnapshotStates`/`SnapshotSizes`/`CycleFocus` are all removed. Panel state lives only in `UiState.PanelStates` / `PanelSizes` / `FocusedPanelId`, mutated by the reducer on `UiMsg.TogglePanel` / `FocusPanel` / `CyclePanelsFocus` / `ResizePanel`. Renderers read state via the new read-only `PanelRegistryView` snapshot. Tests: `tests/Harbor.Tui.Tests/PanelRegistryTests.cs` → `TeaComplianceTests` (13 reflection-based tests assert the invariants hold).
+> **Status:** ✅ RESOLVED (Sprint 3, subagent T / tea-restorer) — `ChatScreen`'s three mutable fields are gone. All scroll / viewport / was-running state lives in `UiState` (`ScrollOffset`, `ViewportLines`, `TotalLines`, plus new `WasRunning`). The reducer snapshots `WasRunning = state.IsAgentRunning` on `AgentStartEvent` / `AgentEndEvent` and pins `ScrollOffset = 0` on `AgentStartEvent` so streaming is always visible. `HandleLocalScroll` is removed — every scroll action (`ScrollUpLine`/`DownLine`/`UpPage`/`DownPage`/`Top`/`Bottom`) flows through `ChatAppReducer.Update` via `AppMsg.KeyInput`. `ChatScreen.Render` is now pure: it reads `_store.State`, measures geometry, dispatches measurement msgs (`AppMsg.Viewport`, `AppMsg.HistoryMeasured`, `AppMsg.ScrollClamp`, `AppMsg.ScrollResetToTail`), and re-reads state. The `PanelRegistry` was also refactored to be registration-only — `SetState`/`SetSize`/`FocusedPanelId` setter/`ApplySnapshot`/`SnapshotStates`/`SnapshotSizes`/`CycleFocus` are all removed. Panel state lives only in `UiState.Ui.PanelStates` / `PanelSizes` / `FocusedPanelId`, mutated by the reducer on `AppMsg.TogglePanel` / `FocusPanel` / `CyclePanelsFocus` / `ResizePanel`. Renderers read state via the new read-only `PanelRegistryView` snapshot. Tests: `tests/Harbor.Tui.Tests/PanelRegistryTests.cs` → `TeaComplianceTests` (13 reflection-based tests assert the invariants hold).
 
 **Файл:** `contrib/tui/Harbor.Tui.SpectreTui/SpectreTuiRenderer.cs`  
 **Severity:** medium  
 
-`ChatScreen` объявляет себя "Thin TEA view" (The Elm Architecture), но на деле держит 3 mutable поля в render loop. В чистой TEA эти значения должны быть в `UiState` и обновляться через reducer. Сейчас **двойной source of truth**: `UiState.ScrollOffset` (через reducer) и `ChatScreen._scroll` (локально), которые расходятся.
+`ChatScreen` объявляет себя "Thin TEA view" (The Elm Architecture), но на деле держит 3 mutable поля в render loop. В чистой TEA эти значения должны быть в `UiState` и обновляться через reducer. Сейчас **двойной source of truth**: `UiState.Ui.ScrollOffset` (через reducer) и `ChatScreen._scroll` (локально), которые расходятся.
 
 `HandleLocalScroll` вообще отдельный scroll-mechanism, который не проходит через reducer.
 
-**Fix:** перенести `_scroll`/`_viewport`/`_wasRunning` в `UiState`, обновлять через `UiMsg.Viewport`, `UiMsg.HistoryMeasured`. Renderer только читает.
+**Fix:** перенести `_scroll`/`_viewport`/`_wasRunning` в `UiState`, обновлять через `AppMsg.Viewport`, `AppMsg.HistoryMeasured`. Renderer только читает.
 
 ---
 
@@ -509,7 +509,7 @@ case TuiEffect.PromptAgent p:
 
 ### §FP-007 — UiStore.Transition: escape hatch из pure reducer
 
-> **Status:** ✅ RESOLVED (Sprint 3, subagent T / tea-restorer) — `UiStore.Transition` remains `internal`, but the only in-assembly callers are now `TuiEffectHost` (legitimate fold-follow-up-state after async effects), `UiStore.BindSession`, and `UiStore.Reset`. External renderers — including `SpectreTuiRenderer` — cannot call `Transition` (it's `internal` to `Harbor.Tui.Abstractions`, no `InternalsVisibleTo` for renderer assemblies). A new `UiMsg.SeedPanels` case replaces what used to be a `Transition` call from `SpectreTuiRenderer.SeedPanelRegistryIntoState` — now dispatched through `UiReducer.Update` like every other state transition. The audit's original concern ("side-effect-host не должен менять state напрямую, только через Dispatch(UiMsg)") is addressed: `TuiEffectHost` still uses `Transition` for fold-follow-up-state (necessary because effects run async and fold state mid-flight), but this is a host-internal concern — external code goes through `Dispatch(UiMsg)`.
+> **Status:** ✅ RESOLVED (Sprint 3, subagent T / tea-restorer) — `UiStore.Transition` remains `internal`, but the only in-assembly callers are now `TuiEffectHost` (legitimate fold-follow-up-state after async effects), `UiStore.BindSession`, and `UiStore.Reset`. External renderers — including `SpectreTuiRenderer` — cannot call `Transition` (it's `internal` to `Harbor.Tui.Abstractions`, no `InternalsVisibleTo` for renderer assemblies). A new `AppMsg.SeedPanels` case replaces what used to be a `Transition` call from `SpectreTuiRenderer.SeedPanelRegistryIntoState` — now dispatched through `ChatAppReducer.Update` like every other state transition. The audit's original concern ("side-effect-host не должен менять state напрямую, только через Dispatch(AppMsg)") is addressed: `TuiEffectHost` still uses `Transition` for fold-follow-up-state (necessary because effects run async and fold state mid-flight), but this is a host-internal concern — external code goes through `Dispatch(AppMsg)`.
 
 **Файл:** `src/Harbor.Tui.Abstractions/State/UiStore.cs`  
 **Severity:** medium  
@@ -519,9 +519,9 @@ case TuiEffect.PromptAgent p:
 public void Transition(Func<UiState, UiState> reducer) { ... }
 ```
 
-Это **escape hatch** — любой код может подсунуть свою функцию перехода, обходя `UiReducer.Reduce`. Через него `TuiEffectHost` проталкивает follow-up state (`IsAgentRunning=true`, `Status="running"`), и `BindSession`, и `Reset`. Это нарушение TEA: side-effect-host не должен менять state напрямую, только через `Dispatch(UiMsg)`.
+Это **escape hatch** — любой код может подсунуть свою функцию перехода, обходя `ChatAppReducer.Reduce`. Через него `TuiEffectHost` проталкивает follow-up state (`IsAgentRunning=true`, `Status="running"`), и `BindSession`, и `Reset`. Это нарушение TEA: side-effect-host не должен менять state напрямую, только через `Dispatch(AppMsg)`.
 
-**Fix:** определить конкретные `UiMsg` для каждого случая (`UiMsg.AgentStarted`, `UiMsg.SessionBound(model, provider, agent)`, `UiMsg.ResetRequested`), и `Transition` сделать `internal` (только для reducer'а).
+**Fix:** определить конкретные `AppMsg` для каждого случая (`ChatAppMsg.AgentStarted`, `AppMsg.SessionBound(model, provider, agent)`, `AppMsg.ResetRequested`), и `Transition` сделать `internal` (только для reducer'а).
 
 ---
 
@@ -834,7 +834,7 @@ process.OutputDataReceived += (_, e) => {
 
 ### §PERF-007 — UiStore: lock на каждый Dispatch
 
-> **Status:** ✅ RESOLVED (Sprint 1) — `lock(_gate)` replaced with a lock-free CAS loop on the `volatile UiState _state` reference. `Dispatch(AgentEvent)`, `Dispatch(UiMsg)`, and `Transition` all use the same CAS pattern with a no-op short-circuit (skip the `Changed` event when `ReferenceEquals(original, next)`).
+> **Status:** ✅ RESOLVED (Sprint 1) — `lock(_gate)` replaced with a lock-free CAS loop on the `volatile UiState _state` reference. `Dispatch(AgentEvent)`, `Dispatch(AppMsg)`, and `Transition` all use the same CAS pattern with a no-op short-circuit (skip the `Changed` event when `ReferenceEquals(original, next)`).
 
 **Файл:** `src/Harbor.Tui.Abstractions/State/UiStore.cs`  
 **Severity:** medium  
@@ -853,12 +853,12 @@ public void Dispatch(...) { lock (_gate) { ... } }
 private UiState _state;  // volatile
 public UiState State => _state;  // plain read, atomic on reference types
 
-public void Dispatch(UiMsg msg) {
+public void Dispatch(AppMsg msg) {
     UiState original, updated;
     TuiEffect effect;
     do {
         original = _state;
-        (updated, effect) = UiReducer.Update(original, msg);
+        (updated, effect) = ChatAppReducer.Update(original, msg);
     } while (Interlocked.CompareExchange(ref _state, updated, original) != original);
     Changed?.Invoke(this, new UiStateChangedEventArgs(updated));
     return effect;
@@ -1159,9 +1159,9 @@ CLAUDE.md заявляет: "Core can be published as NativeAOT". Это зна�
 ### Sprint 3 (среднее, ~5 дней)
 - [ ] **§SOLID-001**: `AgentLoop` → разнести на 4 класса. (2 дня)
 - [ ] **§SOLID-002**: `ChatScreen` → вынести + разнести. (1 день)
-- [x] **§FP-005**: `_scroll`/`_viewport`/`_wasRunning` → `UiState`. (1 день) ✅ (subagent T / tea-restorer) — все 3 поля удалены, добавлены `UiMsg.ScrollResetToTail` + `UiMsg.ScrollClamp` + `UiState.WasRunning`; `HandleLocalScroll` удалён; `PanelRegistry` стал registration-only.
+- [x] **§FP-005**: `_scroll`/`_viewport`/`_wasRunning` → `UiState`. (1 день) ✅ (subagent T / tea-restorer) — все 3 поля удалены, добавлены `AppMsg.ScrollResetToTail` + `AppMsg.ScrollClamp` + `UiState.Chat.WasRunning`; `HandleLocalScroll` удалён; `PanelRegistry` стал registration-only.
 - [x] **§PERF-007**: `UiStore.Dispatch` → CAS loop. (4 часа) ✅ (pulled forward — same file as §FP-007)
-- [x] **§FP-007**: `UiStore.Transition` → `internal` only; `SpectreTuiRenderer` now goes through `Dispatch(UiMsg.SeedPanels)`. ✅ (subagent T / tea-restorer)
+- [x] **§FP-007**: `UiStore.Transition` → `internal` only; `SpectreTuiRenderer` now goes through `Dispatch(AppMsg.SeedPanels)`. ✅ (subagent T / tea-restorer)
 - [ ] **§PERF-004**: `JsonlSessionStore` → per-session lock. (4 часа)
 - [x] **§PERF-006**: `BashTool` → pooled StringBuilder + cap. (2 часа) ✅ (pulled forward — high perf, ~30 min)
 
@@ -1210,10 +1210,10 @@ CLAUDE.md заявляет: "Core can be published as NativeAOT". Это зна�
 - **Chain of Responsibility**: `AgentLoop` заявлен, но это не совсем CoR — это просто while-loop. CoR был бы если бы каждый turn-step был отдельным handler'ом.
 
 ### FP
-- **Pure functions**: `UiReducer.Reduce` — эталонно pure.
+- **Pure functions**: `ChatAppReducer.Reduce` — эталонно pure.
 - **Immutability**: `record` для всех доменных моделей — хорошо. Но mutable Dictionary в BuildRequest (§FP-001), static Cache в ChatMarkdown (§FP-004).
 - **Pattern matching**: switch expressions на discriminated unions — хорошо.
-- **Higher-order**: `Transition(Func<UiState,UiState>)` — `internal` escape hatch, only used in-assembly by `TuiEffectHost` / `BindSession` / `Reset`. External renderers go through `Dispatch(UiMsg)` (§FP-007 RESOLVED by subagent T).
+- **Higher-order**: `Transition(Func<UiState,UiState>)` — `internal` escape hatch, only used in-assembly by `TuiEffectHost` / `BindSession` / `Reset`. External renderers go through `Dispatch(AppMsg)` (§FP-007 RESOLVED by subagent T).
 
 ### ROP
 - **Result<T>**: применяется последовательно, но с дырками (§ROP-001, §ROP-002, §ROP-003, §ROP-004).

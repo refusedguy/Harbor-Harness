@@ -5,7 +5,7 @@ using Harbor.Ui.Framework.State;
 namespace Harbor.Tui.CellForge.Panels;
 
 /// <summary>
-///     Cell-native token-breakdown panel: cumulative <see cref="UiState.Cost"/>
+///     Cell-native token-breakdown panel: cumulative <see cref="UiState.Chat.Cost"/>
 ///     totals with <c>█</c> / <c>░</c> bars and K/M formatting.
 ///     Non-interactive.
 /// </summary>
@@ -28,7 +28,7 @@ public sealed class CellForgeTokenBreakdownPanel : CellForgePanelBase
     {
         ArgumentNullException.ThrowIfNull(ctx);
         return PanelText.Clip(
-            PanelRows.TokenRows(ctx.State.Cost.TokensIn, ctx.State.Cost.TokensOut, ctx.State.Cost.CostUsd, ctx.Width),
+            PanelRows.TokenRows(ctx.State.Chat.Cost.TokensIn, ctx.State.Chat.Cost.TokensOut, ctx.State.Chat.Cost.CostUsd, ctx.Width),
             ctx.Width,
             ctx.Height);
     }

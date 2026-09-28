@@ -60,7 +60,7 @@ internal sealed class AgentCommand : IReplCommand
             if (agentDef.IsSuccess)
             {
                 host.Agent.Initialize(host.SessionModel, agentDef.Value);
-                _ = host.Store.Dispatch(new UiMsg.ConfigureRuntime(host.SessionModel.Model, host.SessionModel.ProviderId, item.Id));
+                _ = host.Store.Dispatch(new ChatAppMsg.ConfigureRuntime(host.SessionModel.Model, host.SessionModel.ProviderId, item.Id));
                 if (host.Screen.Sidebar is { } sidebar)
                 {
                     sidebar.State = sidebar.State with { Agent = item.Id };

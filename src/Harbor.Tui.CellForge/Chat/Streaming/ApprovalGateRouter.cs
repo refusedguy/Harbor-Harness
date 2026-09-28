@@ -35,7 +35,7 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
 
     /// <summary>
     /// Optional TEA store (epic C contour): when set, diff-navigation steps
-    /// dispatch scroll <see cref="UiMsg.KeyInput"/> through the store instead of
+    /// dispatch scroll <see cref="AppMsg.KeyInput"/> through the store instead of
     /// executing the diff view-model commands directly — the reducer owns the
     /// meaning, every renderer shares one experience. Null keeps the legacy
     /// view-only path (tests, hosts without a composed store).
@@ -221,7 +221,7 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     /// Steps through the diff preview: down/next on
     /// <see cref="ChatAction.ScrollDownLine"/>, up/previous on
     /// <see cref="ChatAction.ScrollUpLine"/>. With <see cref="Store"/> set the
-    /// step travels as a store <see cref="UiMsg.KeyInput"/> (the diff
+    /// step travels as a store <see cref="AppMsg.KeyInput"/> (the diff
     /// view-model is untouched); otherwise it falls back to the legacy
     /// view-model commands. Other actions are ignored.
     /// A single <see cref="DiffNavigationStep"/> table owns the decision (#197) —
@@ -249,17 +249,17 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     ///     view-model command for the same <see cref="ChatAction" />.
     /// </summary>
     private sealed record DiffNavigationStep(
-        Func<UiMsg> ToStoreMessage,
+        Func<AppMsg> ToStoreMessage,
         Action<DiffPreviewViewModel> ApplyLegacy);
 
     private static readonly FrozenDictionary<ChatAction, DiffNavigationStep> DiffNavigationSteps =
         new Dictionary<ChatAction, DiffNavigationStep>
         {
             [ChatAction.ScrollDownLine] = new(
-                () => new UiMsg.KeyInput(ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down)),
+                () => new AppMsg.KeyInput(ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down)),
                 diffVm => diffVm.NextDiffCommand.Execute(null)),
             [ChatAction.ScrollUpLine] = new(
-                () => new UiMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up)),
+                () => new AppMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up)),
                 diffVm => diffVm.PreviousDiffCommand.Execute(null)),
         }.ToFrozenDictionary();
 

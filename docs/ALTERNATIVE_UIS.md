@@ -2,7 +2,7 @@
 
 Harbor ships with a pluggable UI strategy: every renderer implements
 `ITuiRenderer` (or `IInteractiveTuiRenderer` for renderers that own the input
-loop), reads from the same `UiStore` + `UiReducer`, and projects immutable
+loop), reads from the same `UiStore` + `AppReducer`, and projects immutable
 `UiState` snapshots to whatever output device the renderer targets. This doc
 catalogs every renderer — the original terminal-based set plus the new
 desktop / web / mobile / non-interactive renderers — so you can pick the right
@@ -53,7 +53,7 @@ All four interactive renderers implement the same 13-feature surface:
 streaming chat with role colors, role headers, markdown rendering, GFM
 tables, scrollable history, multi-line input with history + autocomplete,
 status bar, stream bar, hotkeys, session sidebar, command palette, toast
-notifications, and TEA integration via the shared `UiStore` / `UiReducer`
+notifications, and TEA integration via the shared `UiStore` / `AppReducer`
 / `TuiEffectHost`. Pick the one whose **killer feature** matches your
 workflow.
 
@@ -116,8 +116,8 @@ four. The **stream bar** shows `▌ generating... N chars` or
 │   ─────────────                                                      │
 │   State (immutable UiState snapshot)                                │
 │   event Changed                                                     │
-│   Dispatch(AgentEvent) ──► UiReducer.Reduce(state, event) ──► next  │
-│   Dispatch(UiMsg)       ──► UiReducer.Update(state, msg)  ──► (next,│
+│   Dispatch(AgentEvent) ──► ChatAppReducer.Reduce(state, event) ──► next  │
+│   Dispatch(AppMsg)       ──► ChatAppReducer.Update(state, msg)  ──► (next,│
 │                                                                  eff)│
 └───────────────────────────┬────────────────────────────────────────┘
                             │ fires Changed(next)

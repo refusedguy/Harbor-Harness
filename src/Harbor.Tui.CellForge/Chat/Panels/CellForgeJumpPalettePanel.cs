@@ -45,7 +45,7 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     <para>
 ///         <b>Seeding:</b> merges real worktrees (<c>git worktree list
 ///         --porcelain</c>, parsed by <see cref="WorktreeJumpSeeder" />) with
-///         the active sessions from <see cref="UiState.Sessions" /> enriched
+///         the active sessions from <see cref="UiState.Chat.Sessions" /> enriched
 ///         read-only via <c>ISessionManager.GetContext</c> / <c>GetGitInfo</c> —
 ///         provider-local structures are never mutated. The model + seed cache
 ///         are provider-local mutable state guarded by a small lock (same
@@ -264,7 +264,7 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
     {
         if (ctx.Services?.GetService<UiStore>() is UiStore store)
         {
-            _ = store.Dispatch(new UiMsg.TogglePanel(Id));
+            _ = store.Dispatch(new AppMsg.TogglePanel(Id));
         }
     }
 
@@ -302,7 +302,7 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
 
     private static List<SessionSeed> SessionSeeds(PanelContext ctx, ISessionManager? manager)
     {
-        var sessions = ctx.State.Sessions;
+        var sessions = ctx.State.Chat.Sessions;
         var seeds = new List<SessionSeed>(sessions.Length);
         for (int i = 0; i < sessions.Length; i++)
         {

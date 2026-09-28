@@ -37,7 +37,7 @@ public class StoreThreadSafetyTests
             tasks[w] = Task.Run(() =>
             {
                 for (int i = 0; i < PerWriter; i++)
-                    store.Dispatch(new UiMsg.AppendLine(ChatRole.User, $"w{writer}-l{i}"));
+                    store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.User, $"w{writer}-l{i}"));
             });
         }
 
@@ -45,7 +45,7 @@ public class StoreThreadSafetyTests
 
         // Every dispatch won exactly one CAS slot: revisions are dense 1..N.
         await Assert.That(store.State.Revision).IsEqualTo(Total);
-        await Assert.That(store.State.Lines.Length).IsEqualTo(Total);
+        await Assert.That(store.State.Chat.Lines.Length).IsEqualTo(Total);
         await Assert.That(revisions.Count).IsEqualTo(Total);
         await Assert.That(revisions.Max()).IsEqualTo(Total);
         await Assert.That(revisions.All(r => r is >= 1 and <= Total)).IsTrue();
@@ -78,7 +78,7 @@ public class StoreThreadSafetyTests
             tasks[w] = Task.Run(() =>
             {
                 for (int i = 0; i < PerWriter; i++)
-                    store.Dispatch(new UiMsg.AppendLine(ChatRole.User, $"w{writer}-l{i}"));
+                    store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.User, $"w{writer}-l{i}"));
             });
         }
 
@@ -109,7 +109,7 @@ public class StoreThreadSafetyTests
         store.Changed += (_, _) => throw new InvalidOperationException("renderer blew up");
         store.Changed += (_, _) => Interlocked.Increment(ref delivered);
 
-        store.Dispatch(new UiMsg.AppendLine(ChatRole.User, "hello"));
+        store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.User, "hello"));
 
         await Assert.That(delivered).IsEqualTo(1);
         await Assert.That(store.State.Revision).IsEqualTo(1);

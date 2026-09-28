@@ -398,7 +398,7 @@ CS plugins are compiled in-memory via Roslyn at startup. Cached by source SHA-25
 Если фича — в `contrib/tui/Harbor.Tui.SpectreTui/` (компилируется в дефолтную CLI-сборку; исходники физически в contrib после миграции sprint-2), **обязательно** прочтите [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) целиком. Краткий workflow:
 
 1. **State** для фичи → добавить в `UiState` (immutable record), обновлять через `with`.
-2. **Transitions** → в `UiReducer.Update` (pattern match на `UiMsg`). Не мутить state в renderer'е.
+2. **Transitions** → в `ChatAppReducer.Update` (pattern match на `AppMsg`). Не мутить state в renderer'е.
 3. **View** → `internal sealed class` в `View/`, не более 100 строк, не трогает `Harbor.Core`.
 4. **Layout slot** → в `ChatLayoutShell.Create()` добавить `new Layout("MySlot").Size(N)`, в `BuildWidgets()` возвращать виджет по ключу `"MySlot"`.
 5. **SyncLayout** → копировать из `UiState` в `ChatViewProjector` (pass-through property).

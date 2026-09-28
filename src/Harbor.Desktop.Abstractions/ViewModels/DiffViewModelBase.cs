@@ -48,7 +48,7 @@ public abstract partial class DiffViewModelBase : StoreSubscriberViewModel
 
     private static string? ExtractDiffFilePath(UiState state)
     {
-        foreach (var line in state.Lines)
+        foreach (var line in state.Chat.Lines)
         {
             if (line.ToolCallId is null) continue;
             var text = line.Text;
@@ -63,7 +63,7 @@ public abstract partial class DiffViewModelBase : StoreSubscriberViewModel
     private static string ExtractDiffText(UiState state)
     {
         var sb = new System.Text.StringBuilder();
-        foreach (var line in state.Lines)
+        foreach (var line in state.Chat.Lines)
         {
             if (line.ToolCallId is null) continue;
             if (line.Text.Contains("diff") || line.Text.Contains("---") || line.Text.Contains("+++") || line.Text.Contains("@@"))

@@ -110,7 +110,7 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
             return;
         }
 
-        _ = host.Store.Dispatch(new UiMsg.SyncSessions(
+        _ = host.Store.Dispatch(new ChatAppMsg.SyncSessions(
             listed.Value
                 .Select(s => new SessionInfo(SessionId.Create(s.Id), s.Title, s.CreatedAt, s.UpdatedAt, "active", s.IsSubagent()))
                 .ToImmutableArray(),

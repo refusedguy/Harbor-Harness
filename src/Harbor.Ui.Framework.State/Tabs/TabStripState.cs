@@ -15,11 +15,11 @@ namespace Harbor.Ui.Framework.State;
 ///         open set. Two sources of truth for "which session is active" would
 ///         drift, so this slice owns <see cref="ActiveTabId" /> only; the host
 ///         keeps <see cref="ChatDomainState.ActiveSessionId" /> in sync through
-///         <see cref="UiMsg.SyncSessions" /> once the activate effect has run.
+///         <see cref="ChatAppMsg.SyncSessions" /> once the activate effect has run.
 ///     </para>
 ///     <para>
 ///         Read-only queries live here; every transition is a pure function in
-///         <see cref="UiReducer" /> (TEA: state in, transitions in the reducer,
+///         <see cref="ChatAppReducer" /> (TEA: state in, transitions in the reducer,
 ///         no mutation anywhere else).
 ///     </para>
 /// </remarks>

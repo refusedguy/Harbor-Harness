@@ -127,7 +127,7 @@ public sealed class SessionLifecycleService : ISessionLifecycle
         var session = _router.ActiveContext.Session with { ProviderId = providerId, Model = modelId };
         _router.ActiveContext.Session = session;
         _agent.Initialize(session, agentDef);
-        _router.ActiveContext.Store.Dispatch(new UiMsg.ConfigureRuntime(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value));
+        _router.ActiveContext.Store.Dispatch(new ChatAppMsg.ConfigureRuntime(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value));
         _logger.LogInformation("Rebound session {Id} to provider={Provider} model={Model}",
             session.Id, providerId, modelId);
     }
@@ -188,7 +188,7 @@ public sealed class SessionLifecycleService : ISessionLifecycle
                            ?? _agents.GetAllAgents().First()
                            ?? throw new InvalidOperationException("No agents registered.");
             _agent.Initialize(session, agentDef);
-            // #89: hydrate-then-swap — same single-UiMsg atomic replay as
+            // #89: hydrate-then-swap — same single-AppMsg atomic replay as
             // SessionSwitcher.OpenAsync (see comment there).
             var messages = await _sessionStore.GetMessagesAsync(session.Id).ConfigureAwait(false);
             var lines = ImmutableArray.CreateBuilder<ChatLine>();
@@ -201,7 +201,7 @@ public sealed class SessionLifecycleService : ISessionLifecycle
                 }
             }
 
-            ctx.Store.Dispatch(new UiMsg.HydrateSession(
+            ctx.Store.Dispatch(new ChatAppMsg.HydrateSession(
                 session.Model, session.ProviderId, session.Agent, lines.ToImmutable()));
         }
 

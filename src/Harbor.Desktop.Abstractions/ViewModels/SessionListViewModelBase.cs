@@ -31,10 +31,10 @@ public abstract partial class SessionListViewModelBase : StoreSubscriberViewMode
     protected SessionListViewModelBase(IDispatcherAdapter dispatcher, ILogger logger)
         : base(dispatcher, logger)
     {
-        Select(state => state.Sessions, v => SyncCollection(Sessions,
+        Select(state => state.Chat.Sessions, v => SyncCollection(Sessions,
             v.Select(si => new SessionListItem(si.SessionId.Value, si.Title, si.LastActivityAt, 0)).ToImmutableArray()));
-        Select(state => state.ActiveSessionId, v => SelectedSessionId = v is SessionId id ? id.Value : null);
-        Select(state => state.IsLoading, v => IsLoading = v);
+        Select(state => state.Chat.ActiveSessionId, v => SelectedSessionId = v is SessionId id ? id.Value : null);
+        Select(state => state.Chat.IsLoading, v => IsLoading = v);
     }
 
     /// <summary>Visible sessions, projected for the view layer.</summary>

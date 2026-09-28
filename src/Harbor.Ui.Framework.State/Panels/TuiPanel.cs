@@ -26,8 +26,8 @@ public enum TuiPanelPlacement : byte
 
 /// <summary>
 ///     Runtime visibility / persistence state of a registered panel.
-///     Driven exclusively by <c>UiReducer</c> through <c>UiMsg.TogglePanel</c> /
-///     <c>UiMsg.FocusPanel</c> so it survives replay and stays identical across renderers.
+///     Driven exclusively by <c>AppReducer</c> through <c>AppMsg.TogglePanel</c> /
+///     <c>AppMsg.FocusPanel</c> so it survives replay and stays identical across renderers.
 /// </summary>
 public enum TuiPanelState : byte
 {

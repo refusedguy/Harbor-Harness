@@ -100,39 +100,39 @@ public sealed class StateTestRunner
         var parts = new List<string>(16);
 
         // Streaming buffer (live text being typed by the LLM).
-        if (!string.IsNullOrEmpty(state.Active.TextBuffer))
-            parts.Add(state.Active.TextBuffer);
+        if (!string.IsNullOrEmpty(state.Chat.Active.TextBuffer))
+            parts.Add(state.Chat.Active.TextBuffer);
 
         // Thinking buffer.
-        if (!string.IsNullOrEmpty(state.Active.ThinkBuffer))
-            parts.Add(state.Active.ThinkBuffer);
+        if (!string.IsNullOrEmpty(state.Chat.Active.ThinkBuffer))
+            parts.Add(state.Chat.Active.ThinkBuffer);
 
         // Transcript lines (user, assistant, tool, etc.).
-        foreach (var line in state.Lines)
+        foreach (var line in state.Chat.Lines)
         {
             if (!string.IsNullOrEmpty(line.Text))
                 parts.Add(line.Text);
         }
 
         // Input text (history navigation, slash autocomplete).
-        if (!string.IsNullOrEmpty(state.Input.Text))
-            parts.Add(state.Input.Text);
+        if (!string.IsNullOrEmpty(state.Ui.Input.Text))
+            parts.Add(state.Ui.Input.Text);
 
         // Focused panel id.
-        if (!string.IsNullOrEmpty(state.FocusedPanelId))
-            parts.Add(state.FocusedPanelId);
+        if (!string.IsNullOrEmpty(state.Ui.FocusedPanelId))
+            parts.Add(state.Ui.FocusedPanelId);
 
         // Status (idle / running / compacting / error).
-        if (!string.IsNullOrEmpty(state.Status))
-            parts.Add(state.Status);
+        if (!string.IsNullOrEmpty(state.Chat.Status))
+            parts.Add(state.Chat.Status);
 
         // Session chrome.
-        if (!string.IsNullOrEmpty(state.Model))
-            parts.Add(state.Model);
-        if (!string.IsNullOrEmpty(state.Provider))
-            parts.Add(state.Provider);
-        if (!string.IsNullOrEmpty(state.AgentName))
-            parts.Add(state.AgentName);
+        if (!string.IsNullOrEmpty(state.Chat.Model))
+            parts.Add(state.Chat.Model);
+        if (!string.IsNullOrEmpty(state.Chat.Provider))
+            parts.Add(state.Chat.Provider);
+        if (!string.IsNullOrEmpty(state.Chat.AgentName))
+            parts.Add(state.Chat.AgentName);
 
         return string.Join("\n", parts);
     }
@@ -147,14 +147,20 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            IsStreaming = true,
-            Active = new ActiveMessage(streamingText, string.Empty),
-            Model = model,
-            Provider = provider,
-            Status = "running",
-            IsAgentRunning = true,
-            ViewportLines = 20,
-            TotalLines = 5,
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 5
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = true,
+                Active = new ActiveMessage(streamingText, string.Empty),
+                Model = model,
+                Provider = provider,
+                Status = "running",
+                IsAgentRunning = true
+            }
         };
     }
 
@@ -167,14 +173,20 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            IsStreaming = false,
-            Active = new ActiveMessage(string.Empty, thinkingText),
-            Model = model,
-            Provider = provider,
-            Status = "running",
-            IsAgentRunning = true,
-            ViewportLines = 20,
-            TotalLines = 3,
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 3
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = false,
+                Active = new ActiveMessage(string.Empty, thinkingText),
+                Model = model,
+                Provider = provider,
+                Status = "running",
+                IsAgentRunning = true
+            }
         };
     }
 
@@ -186,14 +198,20 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            Lines = ImmutableArray.Create(new ChatLine(ChatRole.Tool, $"{toolName}: {argsPreview}")),
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "running",
-            IsAgentRunning = true,
-            ViewportLines = 20,
-            TotalLines = 2,
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 2
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = ImmutableArray.Create(new ChatLine(ChatRole.Tool, $"{toolName}: {argsPreview}")),
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "running",
+                IsAgentRunning = true
+            }
         };
     }
 
@@ -205,14 +223,20 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            Lines = ImmutableArray.Create(new ChatLine(ChatRole.ToolResult, resultText)),
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "running",
-            IsAgentRunning = true,
-            ViewportLines = 20,
-            TotalLines = 2,
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 2
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = ImmutableArray.Create(new ChatLine(ChatRole.ToolResult, resultText)),
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "running",
+                IsAgentRunning = true
+            }
         };
     }
 
@@ -224,14 +248,20 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            Lines = ImmutableArray.Create(new ChatLine(ChatRole.Error, errorMessage)),
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "error",
-            IsAgentRunning = false,
-            ViewportLines = 20,
-            TotalLines = 2,
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 2
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = ImmutableArray.Create(new ChatLine(ChatRole.Error, errorMessage)),
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "error",
+                IsAgentRunning = false
+            }
         };
     }
 
@@ -243,13 +273,19 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "compacting",
-            IsAgentRunning = true,
-            ViewportLines = 20,
-            TotalLines = 10,
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 10
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "compacting",
+                IsAgentRunning = true
+            }
         };
     }
 
@@ -262,14 +298,20 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "running",
-            IsAgentRunning = true,
-            WasRunning = false,
-            ViewportLines = 20,
-            TotalLines = 1,
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 1
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "running",
+                IsAgentRunning = true,
+                WasRunning = false
+            }
         };
     }
 
@@ -281,14 +323,20 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "idle",
-            IsAgentRunning = false,
-            WasRunning = true,
-            ViewportLines = 20,
-            TotalLines = 1,
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 1
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "idle",
+                IsAgentRunning = false,
+                WasRunning = true
+            }
         };
     }
 
@@ -300,18 +348,24 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "idle",
-            IsAgentRunning = false,
-            Focus = FocusMode.Panel,
-            FocusedPanelId = panelId,
-            PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty
-                .Add(panelId, TuiPanelState.Focused),
-            RegisteredPanelIds = ImmutableArray.Create(panelId),
-            ViewportLines = 20,
-            TotalLines = 1,
+            Ui = TerminalUiState.Empty with
+            {
+                Focus = FocusMode.Panel,
+                FocusedPanelId = panelId,
+                PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty
+                    .Add(panelId, TuiPanelState.Focused),
+                RegisteredPanelIds = ImmutableArray.Create(panelId),
+                ViewportLines = 20,
+                TotalLines = 1,
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "idle",
+                IsAgentRunning = false
+            }
         };
     }
 
@@ -323,14 +377,20 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "idle",
-            IsAgentRunning = false,
-            ScrollOffset = scrollOffset,
-            ViewportLines = viewportLines,
-            TotalLines = totalLines,
+            Ui = TerminalUiState.Empty with
+            {
+                ScrollOffset = scrollOffset,
+                ViewportLines = viewportLines,
+                TotalLines = totalLines
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "idle",
+                IsAgentRunning = false
+            }
         };
     }
 
@@ -343,14 +403,20 @@ public sealed class StateTestRunner
         var history = ImmutableArray.Create("first prompt", "second prompt", "third prompt");
         return new UiState
         {
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "idle",
-            IsAgentRunning = false,
-            Input = new InputModel(currentText, history, historyIndex),
-            ViewportLines = 20,
-            TotalLines = 1,
+            Ui = TerminalUiState.Empty with
+            {
+                Input = new InputModel(currentText, history, historyIndex),
+                ViewportLines = 20,
+                TotalLines = 1
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "idle",
+                IsAgentRunning = false
+            }
         };
     }
 
@@ -362,14 +428,20 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "idle",
-            IsAgentRunning = false,
-            Input = new InputModel(partialCommand, ImmutableArray<string>.Empty, -1),
-            ViewportLines = 20,
-            TotalLines = 1,
+            Ui = TerminalUiState.Empty with
+            {
+                Input = new InputModel(partialCommand, ImmutableArray<string>.Empty, -1),
+                ViewportLines = 20,
+                TotalLines = 1
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "idle",
+                IsAgentRunning = false
+            }
         };
     }
 
@@ -380,14 +452,20 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            Lines = ImmutableArray.Create(new ChatLine(ChatRole.User, message)),
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "idle",
-            IsAgentRunning = false,
-            ViewportLines = 20,
-            TotalLines = 1,
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 1
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = ImmutableArray.Create(new ChatLine(ChatRole.User, message)),
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "idle",
+                IsAgentRunning = false
+            }
         };
     }
 
@@ -398,14 +476,20 @@ public sealed class StateTestRunner
     {
         return new UiState
         {
-            Lines = ImmutableArray.Create(new ChatLine(ChatRole.Assistant, message)),
-            IsStreaming = false,
-            Model = model,
-            Provider = provider,
-            Status = "idle",
-            IsAgentRunning = false,
-            ViewportLines = 20,
-            TotalLines = 1,
+            Ui = TerminalUiState.Empty with
+            {
+                ViewportLines = 20,
+                TotalLines = 1
+            },
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = ImmutableArray.Create(new ChatLine(ChatRole.Assistant, message)),
+                IsStreaming = false,
+                Model = model,
+                Provider = provider,
+                Status = "idle",
+                IsAgentRunning = false
+            }
         };
     }
 }

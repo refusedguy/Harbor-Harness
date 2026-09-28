@@ -25,8 +25,11 @@ public class SingleActivePanelTests
     {
         var store = new UiStore(new UiState
         {
-            Lines = ImmutableArray.Create(new ChatLine(ChatRole.ToolResult, "[ ] Write code")),
-            Cost = new CostSnapshot(1500, 300, 0.0042m),
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = ImmutableArray.Create(new ChatLine(ChatRole.ToolResult, "[ ] Write code")),
+                Cost = new CostSnapshot(1500, 300, 0.0042m)
+            }
         });
         _ = owner.EnsureSeeded(store);
         return store;
@@ -86,9 +89,9 @@ public class SingleActivePanelTests
         owner.Register(new CellForgeTodoListPanel());
         owner.Register(new CellForgeTokenBreakdownPanel());
         var store = SeededStore(owner);
-        _ = store.Dispatch(new UiMsg.TogglePanel("todo-list"));
-        _ = store.Dispatch(new UiMsg.TogglePanel("token-breakdown"));
-        _ = store.Dispatch(new UiMsg.FocusPanel("token-breakdown"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("todo-list"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
+        _ = store.Dispatch(new AppMsg.FocusPanel("token-breakdown"));
 
         var winner = PanelArbiter.ResolveActive(owner.Registry, store.State);
 
@@ -104,9 +107,12 @@ public class SingleActivePanelTests
         owner.Register(new CellForgeTokenBreakdownPanel());
         var state = new UiState
         {
-            PanelStates = ImmutableDictionary.Create<string, TuiPanelState>(StringComparer.Ordinal)
-                .Add("todo-list", TuiPanelState.Pinned)
-                .Add("token-breakdown", TuiPanelState.Visible),
+            Ui = TerminalUiState.Empty with
+            {
+                PanelStates = ImmutableDictionary.Create<string, TuiPanelState>(StringComparer.Ordinal)
+                    .Add("todo-list", TuiPanelState.Pinned)
+                    .Add("token-breakdown", TuiPanelState.Visible)
+            }
         };
 
         var winner = PanelArbiter.ResolveActive(owner.Registry, state);
@@ -122,8 +128,8 @@ public class SingleActivePanelTests
         owner.Register(new CellForgeTodoListPanel());
         owner.Register(new CellForgeTokenBreakdownPanel());
         var store = SeededStore(owner);
-        _ = store.Dispatch(new UiMsg.TogglePanel("todo-list"));
-        _ = store.Dispatch(new UiMsg.TogglePanel("token-breakdown"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("todo-list"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
 
         var winner = PanelArbiter.ResolveActive(owner.Registry, store.State);
 
@@ -138,9 +144,9 @@ public class SingleActivePanelTests
         owner.Register(new CellForgeTodoListPanel());
         owner.Register(new CellForgeTokenBreakdownPanel());
         var store = SeededStore(owner);
-        _ = store.Dispatch(new UiMsg.TogglePanel("todo-list"));
-        _ = store.Dispatch(new UiMsg.TogglePanel("token-breakdown"));
-        _ = store.Dispatch(new UiMsg.FocusPanel("token-breakdown"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("todo-list"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
+        _ = store.Dispatch(new AppMsg.FocusPanel("token-breakdown"));
 
         var screen = BuildScreen();
         ChatScreenPanelDock.AttachPanels(
@@ -164,8 +170,8 @@ public class SingleActivePanelTests
         owner.Register(new CellForgeTodoListPanel());
         owner.Register(new CellForgeTokenBreakdownPanel());
         var store = SeededStore(owner);
-        _ = store.Dispatch(new UiMsg.TogglePanel("todo-list"));
-        _ = store.Dispatch(new UiMsg.TogglePanel("token-breakdown"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("todo-list"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
 
         var screen = BuildScreen();
         ChatScreenPanelDock.AttachPanels(
@@ -189,8 +195,8 @@ public class SingleActivePanelTests
         owner.Register(new CellForgeTodoListPanel());
         owner.Register(new CellForgeTokenBreakdownPanel());
         var store = SeededStore(owner);
-        _ = store.Dispatch(new UiMsg.TogglePanel("todo-list"));
-        _ = store.Dispatch(new UiMsg.TogglePanel("token-breakdown"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("todo-list"));
+        _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
 
         var screen = BuildScreen();
         screen.Tree.Solve(100, 40);

@@ -319,7 +319,13 @@ public class PanelExtractorsTests
             Tool("→ edit  {\"path\":\"a.cs\"}", "t2"),
             ToolResult("✓ done", "t2"),
         };
-        var state = new UiState { Lines = list.ToImmutableArray() };
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = list.ToImmutableArray()
+            }
+        };
 
         var todosList = PanelExtractors.ExtractTodos(list);
         var todosState = PanelExtractors.ExtractTodos(state);

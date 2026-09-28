@@ -9,7 +9,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// <see cref="KeyEventMapper"/>, cross into <see cref="UiKey"/> through
 /// <see cref="KeyEventAdapter"/>, resolve to <see cref="ChatAction"/> through
 /// the central <see cref="ChatKeyMap"/> (no shell-side branches), and the
-/// resulting <see cref="UiMsg.KeyInput"/> drives the store — including wheel,
+/// resulting <see cref="AppMsg.KeyInput"/> drives the store — including wheel,
 /// geometry-measure and scroll-anchor messages.
 /// </summary>
 public class CellForgeKeymapContourTests
@@ -54,31 +54,31 @@ public class CellForgeKeymapContourTests
     public async Task KeyInputDispatch_ScrollsSeededStore()
     {
         var store = new UiStore();
-        store.Dispatch(new UiMsg.Viewport(10));
-        store.Dispatch(new UiMsg.HistoryMeasured(100));
+        store.Dispatch(new AppMsg.Viewport(10));
+        store.Dispatch(new AppMsg.HistoryMeasured(100));
 
         _ = store.Dispatch(VirtualizedChatTimeline.LineUpMsg());
-        await Assert.That(store.State.ScrollOffset).IsEqualTo(1);
+        await Assert.That(store.State.Ui.ScrollOffset).IsEqualTo(1);
 
         _ = store.Dispatch(VirtualizedChatTimeline.PageUpMsg());
-        await Assert.That(store.State.ScrollOffset).IsEqualTo(1 + 8);
+        await Assert.That(store.State.Ui.ScrollOffset).IsEqualTo(1 + 8);
 
         _ = store.Dispatch(VirtualizedChatTimeline.LineDownMsg());
-        await Assert.That(store.State.ScrollOffset).IsEqualTo(8);
+        await Assert.That(store.State.Ui.ScrollOffset).IsEqualTo(8);
 
         _ = store.Dispatch(VirtualizedChatTimeline.ScrollTopMsg());
-        await Assert.That(store.State.ScrollOffset).IsEqualTo(90);
+        await Assert.That(store.State.Ui.ScrollOffset).IsEqualTo(90);
 
         _ = store.Dispatch(VirtualizedChatTimeline.ScrollBottomMsg());
-        await Assert.That(store.State.ScrollOffset).IsEqualTo(0);
+        await Assert.That(store.State.Ui.ScrollOffset).IsEqualTo(0);
     }
 
     [Test]
     public async Task WheelMsg_MapsSignToLineScroll()
     {
-        await Assert.That(VirtualizedChatTimeline.WheelMsg(1) is UiMsg.KeyInput k1 && k1.Action == ChatAction.ScrollUpLine).IsTrue();
-        await Assert.That(VirtualizedChatTimeline.WheelMsg(-1) is UiMsg.KeyInput k2 && k2.Action == ChatAction.ScrollDownLine).IsTrue();
-        await Assert.That(VirtualizedChatTimeline.WheelMsg(0) is UiMsg.KeyInput k3 && k3.Action == ChatAction.None).IsTrue();
+        await Assert.That(VirtualizedChatTimeline.WheelMsg(1) is AppMsg.KeyInput k1 && k1.Action == ChatAction.ScrollUpLine).IsTrue();
+        await Assert.That(VirtualizedChatTimeline.WheelMsg(-1) is AppMsg.KeyInput k2 && k2.Action == ChatAction.ScrollDownLine).IsTrue();
+        await Assert.That(VirtualizedChatTimeline.WheelMsg(0) is AppMsg.KeyInput k3 && k3.Action == ChatAction.None).IsTrue();
     }
 
     [Test]
@@ -88,8 +88,8 @@ public class CellForgeKeymapContourTests
         var msgs = timeline.MeasureMsgs(24);
 
         await Assert.That(msgs.Length).IsEqualTo(3);
-        await Assert.That(msgs[0] is UiMsg.Viewport v && v.HistoryHeight == 24).IsTrue();
-        await Assert.That(msgs[1] is UiMsg.HistoryMeasured).IsTrue();
-        await Assert.That(msgs[2] is UiMsg.ScrollClamp).IsTrue();
+        await Assert.That(msgs[0] is AppMsg.Viewport v && v.HistoryHeight == 24).IsTrue();
+        await Assert.That(msgs[1] is AppMsg.HistoryMeasured).IsTrue();
+        await Assert.That(msgs[2] is AppMsg.ScrollClamp).IsTrue();
     }
 }

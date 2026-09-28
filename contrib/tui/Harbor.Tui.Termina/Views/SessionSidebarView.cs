@@ -9,7 +9,7 @@ namespace Harbor.Tui.Termina.Views;
 /// <summary>
 ///     Session sidebar listing registered panels + a search filter and
 ///     new/branch/delete affordances. Visibility for any given panel comes
-///     from <see cref="UiState.PanelStates" /> (single source of truth); the
+///     from <see cref="UiState.Ui.PanelStates" /> (single source of truth); the
 ///     registry only contributes the provider list. Mirrors SpectreTui's
 ///     <c>SessionSidebarView</c> shape.
 /// </summary>
@@ -34,8 +34,8 @@ public sealed class SessionSidebarView
             if (filter is not null && !id.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var state = s.PanelStates.TryGetValue(id, out var st) ? st : TuiPanelState.Hidden;
-            bool focused = s.FocusedPanelId == id;
+            var state = s.Ui.PanelStates.TryGetValue(id, out var st) ? st : TuiPanelState.Hidden;
+            bool focused = s.Ui.FocusedPanelId == id;
             string glyph = state == TuiPanelState.Hidden ? " " : focused ? "▸" : "·";
             var color = state == TuiPanelState.Hidden ? TerminaColor.DarkGray
                 : focused ? TerminaColor.Yellow : TerminaColor.White;

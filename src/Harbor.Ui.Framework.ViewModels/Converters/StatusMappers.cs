@@ -32,7 +32,7 @@ public static class StatusMappers
     ///     "compacting", "error") to the resource key for the status-bar
     ///     accent brush.
     /// </summary>
-    /// <param name="statusText">Raw status text from <c>UiState.Status</c>.</param>
+    /// <param name="statusText">Raw status text from <c>UiState.Chat.Status</c>.</param>
     /// <returns>Resource key string. Defaults to <c>StatusIdleBrush</c>.</returns>
     public static string StatusToBrushKey(string? statusText) => statusText switch
     {

@@ -16,80 +16,80 @@ public class HostMsgReducerTests
     [Test]
     public async Task AgentStarted_MarksRunInProgress()
     {
-        var result = UiReducer.Update(new UiState(), new UiMsg.AgentStarted());
-        await Assert.That(result.State.IsAgentRunning).IsTrue();
-        await Assert.That(result.State.Status).IsEqualTo("running");
+        var result = ChatAppReducer.Update(new UiState(), new ChatAppMsg.AgentStarted());
+        await Assert.That(result.State.Chat.IsAgentRunning).IsTrue();
+        await Assert.That(result.State.Chat.Status).IsEqualTo("running");
     }
 
     [Test]
     public async Task AgentEnded_NoStatus_PreservesErrorStatus()
     {
-        var state = new UiState { IsAgentRunning = true, Status = "error" };
-        var result = UiReducer.Update(state, new UiMsg.AgentEnded());
-        await Assert.That(result.State.IsAgentRunning).IsFalse();
-        await Assert.That(result.State.IsStreaming).IsFalse();
-        await Assert.That(result.State.Active).IsEqualTo(ActiveMessage.Empty);
-        await Assert.That(result.State.Status).IsEqualTo("error");
+        var state = new UiState { Chat = ChatDomainState.Empty with { IsAgentRunning = true, Status = "error" } };
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.AgentEnded());
+        await Assert.That(result.State.Chat.IsAgentRunning).IsFalse();
+        await Assert.That(result.State.Chat.IsStreaming).IsFalse();
+        await Assert.That(result.State.Chat.Active).IsEqualTo(ActiveMessage.Empty);
+        await Assert.That(result.State.Chat.Status).IsEqualTo("error");
     }
 
     [Test]
     public async Task AgentEnded_NoStatus_FallsBackToIdle()
     {
-        var state = new UiState { IsAgentRunning = true, Status = "running" };
-        var result = UiReducer.Update(state, new UiMsg.AgentEnded());
-        await Assert.That(result.State.Status).IsEqualTo("idle");
+        var state = new UiState { Chat = ChatDomainState.Empty with { IsAgentRunning = true, Status = "running" } };
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.AgentEnded());
+        await Assert.That(result.State.Chat.Status).IsEqualTo("idle");
     }
 
     [Test]
     public async Task AgentEnded_WithError_AddsErrorLineAndErrorStatus()
     {
-        var result = UiReducer.Update(new UiState(), new UiMsg.AgentEnded("error", "boom"));
-        await Assert.That(result.State.Status).IsEqualTo("error");
-        await Assert.That(result.State.Lines.Length).IsEqualTo(1);
-        await Assert.That(result.State.Lines[0].Role).IsEqualTo(ChatRole.Error);
-        await Assert.That(result.State.Lines[0].Text).IsEqualTo("boom");
+        var result = ChatAppReducer.Update(new UiState(), new ChatAppMsg.AgentEnded("error", "boom"));
+        await Assert.That(result.State.Chat.Status).IsEqualTo("error");
+        await Assert.That(result.State.Chat.Lines.Length).IsEqualTo(1);
+        await Assert.That(result.State.Chat.Lines[0].Role).IsEqualTo(ChatRole.Error);
+        await Assert.That(result.State.Chat.Lines[0].Text).IsEqualTo("boom");
     }
 
     [Test]
     public async Task StatusChanged_SetsStatusOnly()
     {
-        var state = new UiState { IsAgentRunning = true, Status = "running" };
-        var result = UiReducer.Update(state, new UiMsg.StatusChanged("idle"));
-        await Assert.That(result.State.Status).IsEqualTo("idle");
-        await Assert.That(result.State.IsAgentRunning).IsTrue();
+        var state = new UiState { Chat = ChatDomainState.Empty with { IsAgentRunning = true, Status = "running" } };
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.StatusChanged("idle"));
+        await Assert.That(result.State.Chat.Status).IsEqualTo("idle");
+        await Assert.That(result.State.Chat.IsAgentRunning).IsTrue();
     }
 
     [Test]
     public async Task AppendLine_AppendsRoleAndToolCallId()
     {
-        var result = UiReducer.Update(new UiState(), new UiMsg.AppendLine(ChatRole.System, "note", "tc-1"));
-        await Assert.That(result.State.Lines.Length).IsEqualTo(1);
-        await Assert.That(result.State.Lines[0].Role).IsEqualTo(ChatRole.System);
-        await Assert.That(result.State.Lines[0].Text).IsEqualTo("note");
-        await Assert.That(result.State.Lines[0].ToolCallId).IsEqualTo("tc-1");
+        var result = ChatAppReducer.Update(new UiState(), new ChatAppMsg.AppendLine(ChatRole.System, "note", "tc-1"));
+        await Assert.That(result.State.Chat.Lines.Length).IsEqualTo(1);
+        await Assert.That(result.State.Chat.Lines[0].Role).IsEqualTo(ChatRole.System);
+        await Assert.That(result.State.Chat.Lines[0].Text).IsEqualTo("note");
+        await Assert.That(result.State.Chat.Lines[0].ToolCallId).IsEqualTo("tc-1");
     }
 
     [Test]
     public async Task InputText_ReplacesInputBoxContent()
     {
-        var result = UiReducer.Update(new UiState(), new UiMsg.InputText("/models"));
-        await Assert.That(result.State.Input.Text).IsEqualTo("/models");
+        var result = ChatAppReducer.Update(new UiState(), new AppMsg.InputText("/models"));
+        await Assert.That(result.State.Ui.Input.Text).IsEqualTo("/models");
     }
 
     [Test]
     public async Task Quit_SetsShouldQuitFlag()
     {
-        var result = UiReducer.Update(new UiState(), new UiMsg.Quit());
-        await Assert.That(result.State.ShouldQuit).IsTrue();
+        var result = ChatAppReducer.Update(new UiState(), new AppMsg.Quit());
+        await Assert.That(result.State.Ui.ShouldQuit).IsTrue();
     }
 
     [Test]
     public async Task Reset_ReturnsFreshState()
     {
-        var dirty = UiReducer.Update(new UiState(), new UiMsg.ConfigureRuntime("m", "p", "code")).State;
-        dirty = UiReducer.Update(dirty, new UiMsg.AppendLine(ChatRole.User, "hi")).State;
+        var dirty = ChatAppReducer.Update(new UiState(), new ChatAppMsg.ConfigureRuntime("m", "p", "code")).State;
+        dirty = ChatAppReducer.Update(dirty, new ChatAppMsg.AppendLine(ChatRole.User, "hi")).State;
 
-        var result = UiReducer.Update(dirty, new UiMsg.Reset());
+        var result = ChatAppReducer.Update(dirty, new AppMsg.Reset());
 
         await Assert.That(result.State).IsEqualTo(new UiState());
         await Assert.That(result.Effect).IsTypeOf<TuiEffect.None>();
@@ -98,10 +98,10 @@ public class HostMsgReducerTests
     [Test]
     public async Task ConfigureRuntime_BindsSessionChrome()
     {
-        var result = UiReducer.Update(new UiState(), new UiMsg.ConfigureRuntime("m", "p", "code"));
-        await Assert.That(result.State.Model).IsEqualTo("m");
-        await Assert.That(result.State.Provider).IsEqualTo("p");
-        await Assert.That(result.State.AgentName).IsEqualTo("code");
-        await Assert.That(result.State.Lines.Length).IsEqualTo(0);
+        var result = ChatAppReducer.Update(new UiState(), new ChatAppMsg.ConfigureRuntime("m", "p", "code"));
+        await Assert.That(result.State.Chat.Model).IsEqualTo("m");
+        await Assert.That(result.State.Chat.Provider).IsEqualTo("p");
+        await Assert.That(result.State.Chat.AgentName).IsEqualTo("code");
+        await Assert.That(result.State.Chat.Lines.Length).IsEqualTo(0);
     }
 }

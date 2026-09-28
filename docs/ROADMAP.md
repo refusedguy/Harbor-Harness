@@ -14,7 +14,7 @@
 ### ✅ Completed — Core
 
 - **Architecture**: Clean/Hexagonal/Onion layering enforced via analyzers
-- **TEA state machine** (`UiStore` + `UiReducer` + `UiMsg`): Elm-style unidirectional data flow
+- **TEA state machine** (`UiStore` + `AppReducer` + `AppMsg`): Elm-style unidirectional data flow
 - **EventBus**: pub/sub decoupling between agent loop and UI
 - **Result<T>**: Railway Oriented Programming throughout, no exceptions for expected failures
 - **Zero unsafe code**: 100% safe, no `unsafe` blocks

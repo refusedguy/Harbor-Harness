@@ -17,7 +17,7 @@ namespace Harbor.Tui.SpectreTui.Panels;
 ///         <b>TEA compliance:</b> all panel visibility / size reads come from the
 ///         supplied <see cref="UiState" /> via <see cref="PanelRegistryView" />. This
 ///         projector never mutates panel state — it only builds widgets from a
-///         snapshot. State transitions flow through <see cref="UiReducer" />.
+///         snapshot. State transitions flow through <see cref="AppReducer" />.
 ///     </para>
 /// </remarks>
 internal sealed class PanelViewProjector
@@ -104,7 +104,7 @@ private static IWidget BuildTabStrip(
     for (int i = 0; i < panels.Count; i++)
     {
         var panel = panels[i];
-        bool focused = state.FocusedPanelId == panel.Id;
+        bool focused = state.Ui.FocusedPanelId == panel.Id;
         string label = $" {i + 1}:{panel.Title} ";
         var style = focused
             ? new Style(Color.Aqua, null, Decoration.Bold)

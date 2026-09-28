@@ -102,7 +102,7 @@ inward only. The innermost layer (Domain) references nothing but the BCL.
 │  - Harbor.Abstractions.Contracts (models; namespace            │
 │    `Harbor.Abstractions.Models`; бывший Harbor.Domain.dll —     │
 │    переименован в F1 decoupling, ADR-007, commit fa8d3ae)       │
-│  - Harbor.Tui.Abstractions (TUI interfaces, UiState, UiReducer, │
+│  - Harbor.Tui.Abstractions (TUI interfaces, UiState, AppReducer, │
 │    ViewRegistry, IPanels, ITuiViewModel, ITuiView, ITuiPlugin)  │
 │  Depends on: NOTHING (only BCL + CSharpFunctionalExtensions +   │
 │              Microsoft.Extensions.Logging.Abstractions etc.)    │
@@ -264,13 +264,13 @@ Harbor следует строгим принципам OOP/SOLID/GoF/FP/ROP/per
 
 | Принцип | Где применять | Эталонные реализации |
 |---|---|---|
-| **S**RP | Все классы | `UiReducer`, `MessageConverter`, `PermissionRuleset` |
+| **S**RP | Все классы | `AppReducer`, `MessageConverter`, `PermissionRuleset` |
 | **O**CP | Все switch-dispatch | Strategy-паттерн (`ITool`, `ILlmClient`) |
 | **L**SP | Все interface-impls | `JsonlSessionStore`, `MemorySessionStore`, `SqliteSessionStore` — взаимозаменяемы |
 | **I**SP | Все интерфейсы | `ITool` (8 методов, все нужны) |
 | **D**IP | Все ссылки на модули | Только `Harbor.Abstractions` в зависимостях |
 | **FP** — immutability | Доменные модели | `record Session`, `record AgentMessage`, `record UiState` |
-| **FP** — pure functions | Reducers | `UiReducer.Reduce`, `Pricing.CalculateCost` |
+| **FP** — pure functions | Reducers | `ChatAppReducer.Reduce`, `Pricing.CalculateCost` |
 | **ROP** | Все public APIs что могут ошибиться | `Result<Session>`, `Result<ITool>`, `Result<ProviderId>` |
 | **Perf** — pools | Hot paths | `ArrayPool<byte>`, `StringBuilderPool`, `StringPool.Shared` |
 | **Perf** — frozen | Read-only collections | `FrozenDictionary` после `Freeze()` |

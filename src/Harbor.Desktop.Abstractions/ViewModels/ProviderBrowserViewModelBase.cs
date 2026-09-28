@@ -27,7 +27,7 @@ public abstract partial class ProviderBrowserViewModelBase : StoreSubscriberView
         ILogger logger)
         : base(dispatcher, logger)
     {
-        Select(state => state.Provider, v => SelectedProviderId = v);
+        Select(state => state.Chat.Provider, v => SelectedProviderId = v);
     }
 
     /// <summary>Visible providers, projected for the view layer.</summary>

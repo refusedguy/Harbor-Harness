@@ -141,7 +141,7 @@ public sealed class CellForgeViewport : IUiViewport
 
     /// <summary>
     /// How far the history is scrolled, as a percentage (0 = bottom/live,
-    /// 100 = top). Same formula as <c>UiState.ScrollPercent</c>.
+    /// 100 = top). Same formula as <c>UiState.Ui.ScrollPercent</c>.
     /// </summary>
     public int ScrollPercent
     {

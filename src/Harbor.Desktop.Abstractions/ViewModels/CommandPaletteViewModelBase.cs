@@ -22,8 +22,8 @@ public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewM
     protected CommandPaletteViewModelBase(IDispatcherAdapter dispatcher, ILogger logger)
         : base(dispatcher, logger)
     {
-        Select(state => state.IsAgentRunning, v => IsAgentRunning = v);
-        Select(state => state.Status, v => Status = v);
+        Select(state => state.Chat.IsAgentRunning, v => IsAgentRunning = v);
+        Select(state => state.Chat.Status, v => Status = v);
     }
 
     public ObservableCollection<CommandResultViewModel> Results { get; } = new();

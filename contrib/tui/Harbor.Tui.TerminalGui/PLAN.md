@@ -13,10 +13,10 @@
 - [x] **Status bar** — `StatusBarView` shows provider/model/agent/tokens-in/tokens-out/$cost/status/scroll%.
 - [x] **Stream bar** — `ChatView.StreamBar` returns "▌ generating... N chars" or "▌ thinking... N chars".
 - [x] **Hotkeys** — Enter/Shift+Enter/Esc/Ctrl+L/Ctrl+C/F2/↑↓/PgUp/PgDn/Home/End/Alt+↑↓/Tab via `KeyHandler`.
-- [x] **Session sidebar** — `SessionSidebarView` lists `PanelRegistry.All` with `UiState.PanelStates` visibility.
+- [x] **Session sidebar** — `SessionSidebarView` lists `PanelRegistry.All` with `UiState.Ui.PanelStates` visibility.
 - [x] **Command palette** — `CommandPaletteView` Ctrl+P popup over slash commands + panels + sessions.
 - [x] **Toast notifications** — `TerminalGuiTeaBridge.Toast` / `DequeueToast` queue with auto-dismiss contract.
-- [x] **TEA integration** — `TerminalGuiTeaBridge` wraps `UiStore`/`UiReducer`/`TuiEffectHost`; renderer dispatches `UiMsg.KeyInput` and runs returned effects via the host.
+- [x] **TEA integration** — `TerminalGuiTeaBridge` wraps `UiStore`/`AppReducer`/`TuiEffectHost`; renderer dispatches `AppMsg.KeyInput` and runs returned effects via the host.
 
 ## Done — Terminal.Gui-specific stretch (partial)
 
@@ -30,7 +30,7 @@
 - [ ] **Sub-windows** — pop up a `Dialog` for `/permissions`, `/sessions`, `/tui` instead of inline rendering.
 - [ ] **MenuBar** — top-of-screen `MenuBar` with File / Edit / Session / Help menus exposing every slash command.
 - [ ] **TextView → UiStore projection** — replace `_finalizedText` StringBuilder with a `TextView` that reads `UiStore.State.Lines` directly + applies role colors via `Attribute` runs.
-- [ ] **Mouse support** — Terminal.Gui v2 ships mouse handling out of the box; wire scroll-wheel → `UiMsg.ScrollUpLine` / `ScrollDownLine`, click-on-panel → `UiMsg.FocusPanel(id)`.
+- [ ] **Mouse support** — Terminal.Gui v2 ships mouse handling out of the box; wire scroll-wheel → `AppMsg.ScrollUpLine` / `ScrollDownLine`, click-on-panel → `AppMsg.FocusPanel(id)`.
 - [ ] **Toast timer** — render-side 4s timer that calls `DequeueToast` and renders bottom-right.
 
 ## Known issues

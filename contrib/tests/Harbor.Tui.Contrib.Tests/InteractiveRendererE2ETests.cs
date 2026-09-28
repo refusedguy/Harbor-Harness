@@ -80,13 +80,13 @@ public class InteractiveRendererE2ETests
         var store = new UiStore();
 
         foreach (var evt in BuildHelloStream())
-            store.Dispatch(new UiMsg.Agent(evt));
+            store.Dispatch(new ChatAppMsg.Agent(evt));
 
         var state = store.State;
-        await Assert.That(state.IsAgentRunning).IsFalse();
-        await Assert.That(state.Status).IsEqualTo("idle");
-        await Assert.That(state.Lines.Length).IsGreaterThan(0);
-        var allText = string.Join("", state.Lines.Select(l => l.Text));
+        await Assert.That(state.Chat.IsAgentRunning).IsFalse();
+        await Assert.That(state.Chat.Status).IsEqualTo("idle");
+        await Assert.That(state.Chat.Lines.Length).IsGreaterThan(0);
+        var allText = string.Join("", state.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("Hello");
     }
 
@@ -96,12 +96,12 @@ public class InteractiveRendererE2ETests
         var store = new UiStore();
 
         foreach (var evt in BuildToolCallStream())
-            store.Dispatch(new UiMsg.Agent(evt));
+            store.Dispatch(new ChatAppMsg.Agent(evt));
 
         var state = store.State;
-        await Assert.That(state.IsAgentRunning).IsFalse();
-        await Assert.That(state.Lines.Length).IsGreaterThan(0);
-        var allText = string.Join("", state.Lines.Select(l => l.Text));
+        await Assert.That(state.Chat.IsAgentRunning).IsFalse();
+        await Assert.That(state.Chat.Lines.Length).IsGreaterThan(0);
+        var allText = string.Join("", state.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("read");
         await Assert.That(allText).Contains("Here is the file.");
     }
@@ -112,11 +112,11 @@ public class InteractiveRendererE2ETests
         var store = new UiStore();
 
         foreach (var evt in BuildErrorStream())
-            store.Dispatch(new UiMsg.Agent(evt));
+            store.Dispatch(new ChatAppMsg.Agent(evt));
 
         var state = store.State;
-        await Assert.That(state.IsAgentRunning).IsFalse();
-        var allText = string.Join("", state.Lines.Select(l => l.Text));
+        await Assert.That(state.Chat.IsAgentRunning).IsFalse();
+        var allText = string.Join("", state.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("something went wrong");
     }
 
@@ -126,17 +126,17 @@ public class InteractiveRendererE2ETests
         var store = new UiStore();
         var partial = AssistantMessage.Empty("s1", "stub-1");
 
-        store.Dispatch(new UiMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>())));
-        await Assert.That(store.State.IsAgentRunning).IsTrue();
+        store.Dispatch(new ChatAppMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>())));
+        await Assert.That(store.State.Chat.IsAgentRunning).IsTrue();
 
-        store.Dispatch(new UiMsg.Agent(new MessageStartEvent(partial)));
-        await Assert.That(store.State.IsStreaming).IsTrue();
+        store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
+        await Assert.That(store.State.Chat.IsStreaming).IsTrue();
 
-        store.Dispatch(new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("0", "tok"), partial)));
-        await Assert.That(store.State.Active.TextBuffer).Contains("tok");
+        store.Dispatch(new ChatAppMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("0", "tok"), partial)));
+        await Assert.That(store.State.Chat.Active.TextBuffer).Contains("tok");
 
-        store.Dispatch(new UiMsg.Agent(new MessageEndEvent(partial)));
-        await Assert.That(store.State.IsStreaming).IsFalse();
+        store.Dispatch(new ChatAppMsg.Agent(new MessageEndEvent(partial)));
+        await Assert.That(store.State.Chat.IsStreaming).IsFalse();
     }
 
     [Test]
@@ -242,12 +242,12 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildHelloStream())
-            store.Dispatch(new UiMsg.Agent(evt));
+            store.Dispatch(new ChatAppMsg.Agent(evt));
 
         var state = store.State;
-        await Assert.That(state.Status).IsEqualTo("idle");
-        await Assert.That(state.Lines.Length).IsGreaterThan(0);
-        var allText = string.Join("", state.Lines.Select(l => l.Text));
+        await Assert.That(state.Chat.Status).IsEqualTo("idle");
+        await Assert.That(state.Chat.Lines.Length).IsGreaterThan(0);
+        var allText = string.Join("", state.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("Hello");
     }
 
@@ -256,10 +256,10 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildToolCallStream())
-            store.Dispatch(new UiMsg.Agent(evt));
+            store.Dispatch(new ChatAppMsg.Agent(evt));
 
         var state = store.State;
-        var allText = string.Join("", state.Lines.Select(l => l.Text));
+        var allText = string.Join("", state.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("read");
         await Assert.That(allText).Contains("Here is the file.");
     }
@@ -269,10 +269,10 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildErrorStream())
-            store.Dispatch(new UiMsg.Agent(evt));
+            store.Dispatch(new ChatAppMsg.Agent(evt));
 
         var state = store.State;
-        var allText = string.Join("", state.Lines.Select(l => l.Text));
+        var allText = string.Join("", state.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("something went wrong");
     }
 
@@ -312,12 +312,12 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildHelloStream())
-            store.Dispatch(new UiMsg.Agent(evt));
+            store.Dispatch(new ChatAppMsg.Agent(evt));
 
         var state = store.State;
-        await Assert.That(state.Status).IsEqualTo("idle");
-        await Assert.That(state.Lines.Length).IsGreaterThan(0);
-        var allText = string.Join("", state.Lines.Select(l => l.Text));
+        await Assert.That(state.Chat.Status).IsEqualTo("idle");
+        await Assert.That(state.Chat.Lines.Length).IsGreaterThan(0);
+        var allText = string.Join("", state.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("Hello");
     }
 
@@ -326,10 +326,10 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildToolCallStream())
-            store.Dispatch(new UiMsg.Agent(evt));
+            store.Dispatch(new ChatAppMsg.Agent(evt));
 
         var state = store.State;
-        var allText = string.Join("", state.Lines.Select(l => l.Text));
+        var allText = string.Join("", state.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("read");
         await Assert.That(allText).Contains("Here is the file.");
     }
@@ -339,10 +339,10 @@ public class InteractiveRendererE2ETests
     {
         var store = new UiStore();
         foreach (var evt in BuildErrorStream())
-            store.Dispatch(new UiMsg.Agent(evt));
+            store.Dispatch(new ChatAppMsg.Agent(evt));
 
         var state = store.State;
-        var allText = string.Join("", state.Lines.Select(l => l.Text));
+        var allText = string.Join("", state.Chat.Lines.Select(l => l.Text));
         await Assert.That(allText).Contains("something went wrong");
     }
 
@@ -352,17 +352,17 @@ public class InteractiveRendererE2ETests
         var store = new UiStore();
         var partial = AssistantMessage.Empty("s1", "stub-1");
 
-        store.Dispatch(new UiMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>())));
-        await Assert.That(store.State.Status).IsEqualTo("running");
+        store.Dispatch(new ChatAppMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>())));
+        await Assert.That(store.State.Chat.Status).IsEqualTo("running");
 
-        store.Dispatch(new UiMsg.Agent(new MessageStartEvent(partial)));
-        await Assert.That(store.State.IsStreaming).IsTrue();
+        store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
+        await Assert.That(store.State.Chat.IsStreaming).IsTrue();
 
-        store.Dispatch(new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("0", "partial"), partial)));
-        await Assert.That(store.State.Active.TextBuffer).IsEqualTo("partial");
+        store.Dispatch(new ChatAppMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("0", "partial"), partial)));
+        await Assert.That(store.State.Chat.Active.TextBuffer).IsEqualTo("partial");
 
-        store.Dispatch(new UiMsg.Agent(new MessageEndEvent(partial)));
-        await Assert.That(store.State.IsStreaming).IsFalse();
+        store.Dispatch(new ChatAppMsg.Agent(new MessageEndEvent(partial)));
+        await Assert.That(store.State.Chat.IsStreaming).IsFalse();
     }
 
     [Test]

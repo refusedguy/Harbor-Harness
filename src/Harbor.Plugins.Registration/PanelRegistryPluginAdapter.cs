@@ -20,7 +20,7 @@ namespace Harbor.Plugins.Registration;
 ///         <b>Registration-only:</b> this adapter exposes just <see cref="Register" /> /
 ///         <see cref="Unregister" /> / <see cref="All" /> / <see cref="Get" />. There is
 ///         no state mutation surface — visibility / focus / size transitions flow
-///         through <c>UiStore.Dispatch(UiMsg.*)</c> and live in <c>UiState</c> (TEA
+///         through <c>UiStore.Dispatch(AppMsg.*)</c> and live in <c>UiState</c> (TEA
 ///         compliance, §FP-005).
 ///     </para>
 /// </remarks>

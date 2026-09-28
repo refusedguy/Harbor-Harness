@@ -19,20 +19,20 @@ public class StreamingFrequencyTests
         var store = new UiStore();
         var projector = new DefaultUiProjector();
         var partial = AssistantMessage.Empty("s", "m");
-        store.Dispatch(new UiMsg.Agent(new MessageStartEvent(partial)));
+        store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
 
         int projects = 0;
         int fast = 0;
         int tail = 0;
         int history = 0;
         UiScreenModel? prevScreen = null;
-        var prevLines = store.State.Lines;
-        string? prevBuffer = store.State.Active.TextBuffer;
+        var prevLines = store.State.Chat.Lines;
+        string? prevBuffer = store.State.Chat.Active.TextBuffer;
         string chunk = new('x', 24);
 
         for (int i = 0; i < deltaCount; i++)
         {
-            store.Dispatch(new UiMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial)));
+            store.Dispatch(new ChatAppMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial)));
             var state = store.State;
             var screen = projector.Project(state);
             projects++;
@@ -42,22 +42,22 @@ public class StreamingFrequencyTests
                 fast++;
             }
 
-            if (!state.Lines.Equals(prevLines))
+            if (!state.Chat.Lines.Equals(prevLines))
             {
                 history++;
-                prevLines = state.Lines;
+                prevLines = state.Chat.Lines;
             }
 
-            if (!ReferenceEquals(state.Active.TextBuffer, prevBuffer))
+            if (!ReferenceEquals(state.Chat.Active.TextBuffer, prevBuffer))
             {
                 tail++;
-                prevBuffer = state.Active.TextBuffer;
+                prevBuffer = state.Chat.Active.TextBuffer;
             }
 
             prevScreen = screen;
         }
 
-        store.Dispatch(new UiMsg.Agent(new MessageEndEvent(partial)));
+        store.Dispatch(new ChatAppMsg.Agent(new MessageEndEvent(partial)));
         var endScreen = projector.Project(store.State);
         projects++;
         if (ReferenceEquals(endScreen, prevScreen))
@@ -65,7 +65,7 @@ public class StreamingFrequencyTests
             fast++;
         }
 
-        if (!store.State.Lines.Equals(prevLines))
+        if (!store.State.Chat.Lines.Equals(prevLines))
         {
             history++;
         }

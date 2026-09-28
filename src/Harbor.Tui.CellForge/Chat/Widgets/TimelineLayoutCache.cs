@@ -63,7 +63,7 @@ public sealed class TimelineLayoutCache
     /// <summary>
     /// Largest legal timeline-space scroll offset for the given viewport height
     /// (CF-B-006 store bridge): <c>max(0, TotalHeight - viewportH)</c>. The host
-    /// feeds this into <c>UiMsg.ScrollClamp</c> after layout so the store's
+    /// feeds this into <c>AppMsg.ScrollClamp</c> after layout so the store's
     /// <c>ScrollOffset</c> stays inside the freshly measured range. Pure and
     /// allocation-free; never mutates layout state. Delegates to
     /// <see cref="ScrollableViewport.MaxOffsetFor"/> so every widget shares

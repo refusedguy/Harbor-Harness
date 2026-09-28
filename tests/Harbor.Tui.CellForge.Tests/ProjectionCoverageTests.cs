@@ -51,7 +51,7 @@ public class ProjectionCoverageTests
     {
         var field = typeof(CellForgeTuiRenderer).GetField("_store", BindingFlags.Instance | BindingFlags.NonPublic)!;
         var store = (UiStore)field.GetValue(harness.Renderer)!;
-        store.Dispatch(new UiMsg.ConfigureRuntime(model, provider, agent));
+        store.Dispatch(new ChatAppMsg.ConfigureRuntime(model, provider, agent));
     }
 
     [Test]
@@ -169,24 +169,24 @@ public class ProjectionCoverageTests
         }
 
         var expected = new UiStore();
-        expected.Dispatch(new UiMsg.ConfigureRuntime("m-9", "prov-9", "code"));
+        expected.Dispatch(new ChatAppMsg.ConfigureRuntime("m-9", "prov-9", "code"));
         foreach (var evt in stream)
         {
-            expected.Dispatch(new UiMsg.Agent(evt));
+            expected.Dispatch(new ChatAppMsg.Agent(evt));
         }
 
         var want = expected.State;
-        await Assert.That(harness.Status.Status).IsEqualTo(want.Status);
-        await Assert.That(harness.Status.Model).IsEqualTo(want.Model);
-        await Assert.That(harness.Status.Provider).IsEqualTo(want.Provider);
-        await Assert.That(harness.Status.Agent).IsEqualTo(want.AgentName);
-        await Assert.That(harness.Status.TokensIn).IsEqualTo((int)want.Cost.TokensIn);
-        await Assert.That(harness.Status.TokensOut).IsEqualTo((int)want.Cost.TokensOut);
-        await Assert.That(harness.Status.Cost).IsEqualTo(want.Cost.CostUsd);
-        await Assert.That(harness.Chat.IsStreaming).IsEqualTo(want.IsStreaming);
-        await Assert.That(harness.Chat.StreamingText).IsEqualTo(want.Active.TextBuffer);
-        await Assert.That(harness.Chat.ThinkingText).IsEqualTo(want.Active.ThinkBuffer);
-        await Assert.That(harness.Chat.IsThinking).IsEqualTo(want.Active.ThinkBuffer.Length != 0);
+        await Assert.That(harness.Status.Status).IsEqualTo(want.Chat.Status);
+        await Assert.That(harness.Status.Model).IsEqualTo(want.Chat.Model);
+        await Assert.That(harness.Status.Provider).IsEqualTo(want.Chat.Provider);
+        await Assert.That(harness.Status.Agent).IsEqualTo(want.Chat.AgentName);
+        await Assert.That(harness.Status.TokensIn).IsEqualTo((int)want.Chat.Cost.TokensIn);
+        await Assert.That(harness.Status.TokensOut).IsEqualTo((int)want.Chat.Cost.TokensOut);
+        await Assert.That(harness.Status.Cost).IsEqualTo(want.Chat.Cost.CostUsd);
+        await Assert.That(harness.Chat.IsStreaming).IsEqualTo(want.Chat.IsStreaming);
+        await Assert.That(harness.Chat.StreamingText).IsEqualTo(want.Chat.Active.TextBuffer);
+        await Assert.That(harness.Chat.ThinkingText).IsEqualTo(want.Chat.Active.ThinkBuffer);
+        await Assert.That(harness.Chat.IsThinking).IsEqualTo(want.Chat.Active.ThinkBuffer.Length != 0);
     }
 
     [Test]

@@ -6,7 +6,7 @@ namespace Harbor.Ui.Framework.Rendering.Input;
 ///     Single translation point from decoded terminal keys (<see cref="KeyEvent" />)
 ///     to the BCL-only key vocabulary (<see cref="UiKeyDto" />). Every renderer maps
 ///     through here before the State-side <c>KeyEventAdapter</c> turns the DTO into
-///     <c>UiKey</c> / <c>UiMsg.KeyInput</c>, so one physical key means the same
+///     <c>UiKey</c> / <c>AppMsg.KeyInput</c>, so one physical key means the same
 ///     action in all renderers (epic C). Deliberately free of any
 ///     <c>Harbor.Ui.Framework.State</c> reference (epic #33 T1): this assembly is a
 ///     leaf over DesignSystem / Desktop.Animations / Abstractions.Contracts.

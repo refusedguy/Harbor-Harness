@@ -45,9 +45,9 @@ public class AnsiPlainUiStoreTests
         // Dispatch happened: five folds bumped the monotonic revision.
         await Assert.That(store.State.Revision).IsEqualTo(5);
         // State converged: the deltas folded into one assistant transcript line.
-        await Assert.That(store.State.Lines.Length).IsEqualTo(1);
-        await Assert.That(store.State.Lines[0].Role).IsEqualTo(ChatRole.Assistant);
-        await Assert.That(store.State.Lines[0].Text).IsEqualTo("Hello, world!");
+        await Assert.That(store.State.Chat.Lines.Length).IsEqualTo(1);
+        await Assert.That(store.State.Chat.Lines[0].Role).IsEqualTo(ChatRole.Assistant);
+        await Assert.That(store.State.Chat.Lines[0].Text).IsEqualTo("Hello, world!");
     }
 
     [Test]
@@ -69,13 +69,13 @@ public class AnsiPlainUiStoreTests
         }
 
         await Assert.That(store.State.Revision).IsEqualTo(2);
-        await Assert.That(store.State.Lines.Length).IsEqualTo(2);
-        await Assert.That(store.State.Lines[0].Role).IsEqualTo(ChatRole.Tool);
-        await Assert.That(store.State.Lines[0].ToolCallId).IsEqualTo("tc_1");
-        await Assert.That(store.State.Lines[0].Text).Contains("read");
-        await Assert.That(store.State.Lines[1].Role).IsEqualTo(ChatRole.ToolResult);
-        await Assert.That(store.State.Lines[1].ToolCallId).IsEqualTo("tc_1");
-        await Assert.That(store.State.Lines[1].Text).Contains("[0001] # Harbor");
+        await Assert.That(store.State.Chat.Lines.Length).IsEqualTo(2);
+        await Assert.That(store.State.Chat.Lines[0].Role).IsEqualTo(ChatRole.Tool);
+        await Assert.That(store.State.Chat.Lines[0].ToolCallId).IsEqualTo("tc_1");
+        await Assert.That(store.State.Chat.Lines[0].Text).Contains("read");
+        await Assert.That(store.State.Chat.Lines[1].Role).IsEqualTo(ChatRole.ToolResult);
+        await Assert.That(store.State.Chat.Lines[1].ToolCallId).IsEqualTo("tc_1");
+        await Assert.That(store.State.Chat.Lines[1].Text).Contains("[0001] # Harbor");
     }
 
     [Test]
@@ -104,11 +104,11 @@ public class AnsiPlainUiStoreTests
         }
 
         await Assert.That(plainStore.State.Revision).IsEqualTo(ansiStore.State.Revision);
-        await Assert.That(plainStore.State.Lines.Length).IsEqualTo(ansiStore.State.Lines.Length);
-        for (int i = 0; i < ansiStore.State.Lines.Length; i++)
+        await Assert.That(plainStore.State.Chat.Lines.Length).IsEqualTo(ansiStore.State.Chat.Lines.Length);
+        for (int i = 0; i < ansiStore.State.Chat.Lines.Length; i++)
         {
-            await Assert.That(plainStore.State.Lines[i].Role).IsEqualTo(ansiStore.State.Lines[i].Role);
-            await Assert.That(plainStore.State.Lines[i].Text).IsEqualTo(ansiStore.State.Lines[i].Text);
+            await Assert.That(plainStore.State.Chat.Lines[i].Role).IsEqualTo(ansiStore.State.Chat.Lines[i].Role);
+            await Assert.That(plainStore.State.Chat.Lines[i].Text).IsEqualTo(ansiStore.State.Chat.Lines[i].Text);
         }
     }
 }

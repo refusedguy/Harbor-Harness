@@ -26,7 +26,7 @@ public sealed class RazorConsoleTeaBridge : IDisposable
         Store = store ?? new UiStore();
         Effects = new TuiEffectHost(agent, Store, slash, appCt);
         Keys = new KeyHandler(Store, logger);
-        Store.Dispatch(new UiMsg.ConfigureRuntime(agent.State.Agent.Model, agent.State.Agent.ProviderId, agent.State.Agent.Name.Value));
+        Store.Dispatch(new ChatAppMsg.ConfigureRuntime(agent.State.Agent.Model, agent.State.Agent.ProviderId, agent.State.Agent.Name.Value));
     }
 
     /// <summary>The single source of truth for the UI.</summary>
@@ -41,7 +41,7 @@ public sealed class RazorConsoleTeaBridge : IDisposable
         get;
     }
 
-    /// <summary>Key handler that turns ConsoleKeyInfo into UiMsg dispatches.</summary>
+    /// <summary>Key handler that turns ConsoleKeyInfo into AppMsg dispatches.</summary>
     public KeyHandler Keys
     {
         get;
@@ -54,11 +54,11 @@ public sealed class RazorConsoleTeaBridge : IDisposable
     }
 
     /// <summary>Dispatch an agent event into the store (data path).</summary>
-    public void Push(AgentEvent @event) => Store.Dispatch(new UiMsg.Agent(@event));
+    public void Push(AgentEvent @event) => Store.Dispatch(new ChatAppMsg.Agent(@event));
 
     /// <summary>Dispatch a synthesized system line.</summary>
     public void PushLine(string text) =>
-        Store.Dispatch(new UiMsg.AppendLine(ChatRole.System, text));
+        Store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.System, text));
 
     /// <summary>Enqueue a toast (auto-dismissed by the renderer after 4s).</summary>
     public void Toast(string message) => _toastQueue.Enqueue(message);
@@ -80,7 +80,7 @@ public sealed class RazorConsoleTeaBridge : IDisposable
         }
         var view = new DiagnosticsView();
         foreach (string line in view.Render(DiagnosticsPanel, 10))
-            Store.Dispatch(new UiMsg.AppendLine(ChatRole.System, line));
+            Store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.System, line));
     }
 
     /// <summary>Submit a prompt through the TEA reducer (runs PromptAgent effect).</summary>
@@ -88,8 +88,8 @@ public sealed class RazorConsoleTeaBridge : IDisposable
     {
         if (string.IsNullOrWhiteSpace(text))
             return;
-        Store.Dispatch(new UiMsg.InputText(text));
-        var effect = Store.Dispatch(new UiMsg.KeyInput(ChatAction.Submit, UiKey.ForChar('\r')));
+        Store.Dispatch(new AppMsg.InputText(text));
+        var effect = Store.Dispatch(new AppMsg.KeyInput(ChatAction.Submit, UiKey.ForChar('\r')));
         Effects.Run(effect);
     }
 

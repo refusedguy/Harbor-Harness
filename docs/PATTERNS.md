@@ -31,7 +31,7 @@
 | 14 | Object Pool | `StringBuilderPool`, `ArrayPool<T>.Shared` | `src/Harbor.Extensions/ArrayPoolExtensions.cs` |
 | 15 | MVVM | `ObservableObject`, `[ObservableProperty]`, `[RelayCommand]` | `src/Harbor.Terminal.Abstractions/ViewModels/TuiViewModels.cs` |
 | 16 | Decorator | `BaseTuiRenderer` decorates concrete renderers | `src/Harbor.Terminal.Abstractions/BaseTuiRenderer.cs` |
-| 17 | TEA (The Elm Architecture) | `UiReducer` / `UiState` / `UiMsg` | `src/Harbor.Ui.Framework.State/State/UiReducer.cs` |
+| 17 | TEA (The Elm Architecture) | `AppReducer` / `UiState` / `AppMsg` | `src/Harbor.Ui.Framework.State/State/AppReducer.cs` |
 | 18 | Discriminated Union | `AgentEvent`, `LlmEvent` (16 + 12 variants) | `src/Harbor.Abstractions.Contracts/Events/AgentEvent.cs` |
 
 ---
@@ -856,12 +856,12 @@ separate Effect runner.
 **Where in Harbor.** `Harbor.Tui.Abstractions/State/`:
 
 - **Model**: `UiState` (immutable record).
-- **Update**: `UiReducer.Reduce(UiState, AgentEvent) → UiState`.
+- **Update**: `ChatAppReducer.Reduce(UiState, AgentEvent) → UiState`.
 - **View**: `BaseTuiRenderer` reads `UiState`, calls `RenderAsync`.
 - **Effect**: `TuiEffectHost` runs side-effects asynchronously (scroll, file
   reads for diff preview).
 
-**Code snippet** (`src/Harbor.Tui.Abstractions/State/UiReducer.cs:31`):
+**Code snippet** (`src/Harbor.Tui.Abstractions/State/AppReducer.cs:31`):
 
 ```csharp
 public static UiState Reduce(UiState state, AgentEvent @event) => @event switch
@@ -896,7 +896,7 @@ private static UiState OnMessageUpdate(UiState state, MessageUpdateEvent mu) => 
 **Why this pattern.**
 - Pure reducer = trivially testable, no mocks needed.
 - Single source of truth: every interactive renderer funnels events through
-  `UiReducer` — no per-renderer `switch (AgentEvent)`.
+  `AppReducer` — no per-renderer `switch (AgentEvent)`.
 - Time-travel debugging: log every `(state, event)` pair, replay.
 
 **Alternative considered.** Imperative UI updates (`if event.X: statusLabel.Text = ...`).

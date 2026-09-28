@@ -13,7 +13,7 @@ namespace Harbor.App.Cli.Tests;
 ///     used to be hardcoded there (<c>0m</c> / <c>0</c>), so the value the
 ///     reducer accumulates per finished step never reached the projection and
 ///     the scroll segment stayed pinned. These tests drive the real store
-///     (dispatch → <see cref="UiReducer" /> → snapshot → <see cref="StatusProjector" />)
+///     (dispatch → <see cref="ChatAppReducer" /> → snapshot → <see cref="StatusProjector" />)
 ///     so a regression in any of those four hops fails here.
 /// </summary>
 public class StatusSnapshotTests
@@ -28,12 +28,12 @@ public class StatusSnapshotTests
     public async Task AccumulatedCost_ReachesFooterProjection()
     {
         var store = new UiStore();
-        _ = store.Dispatch(new UiMsg.ConfigureRuntime("kilo-auto/free", "kilocode", "code"));
+        _ = store.Dispatch(new ChatAppMsg.ConfigureRuntime("kilo-auto/free", "kilocode", "code"));
         StepFinished(store, 1_000, 500);
 
         var snapshot = ReplLifecycle.BuildStatusSnapshot(null, store.State, 1_000, 500, Rows, Total);
 
-        await Assert.That(snapshot.Cost.CostUsd).IsEqualTo(OneStepCost);
+        await Assert.That(snapshot.Chat.Cost.CostUsd).IsEqualTo(OneStepCost);
         await Assert.That(Footer(snapshot)).Contains("0.0105");
     }
 
@@ -42,7 +42,7 @@ public class StatusSnapshotTests
     {
         var store = new UiStore();
         var before = ReplLifecycle.BuildStatusSnapshot(null, store.State, 1_000, 500, Rows, Total);
-        await Assert.That(before.Cost.CostUsd).IsEqualTo(0m);
+        await Assert.That(before.Chat.Cost.CostUsd).IsEqualTo(0m);
 
         // Same chrome, same token counts, same geometry — the accumulated cost
         // is the only input that moved. This is exactly what the old memo
@@ -52,7 +52,7 @@ public class StatusSnapshotTests
         var after = ReplLifecycle.BuildStatusSnapshot(before, store.State, 1_000, 500, Rows, Total);
 
         await Assert.That(ReferenceEquals(before, after)).IsFalse();
-        await Assert.That(after.Cost.CostUsd).IsEqualTo(OneStepCost);
+        await Assert.That(after.Chat.Cost.CostUsd).IsEqualTo(OneStepCost);
         await Assert.That(Footer(after)).Contains("0.0105");
     }
 
@@ -62,15 +62,15 @@ public class StatusSnapshotTests
         var store = new UiStore();
         StepFinished(store, 1_000, 500);
         var afterOne = ReplLifecycle.BuildStatusSnapshot(null, store.State, 1_000, 500, Rows, Total);
-        await Assert.That(afterOne.Cost.CostUsd).IsEqualTo(OneStepCost);
+        await Assert.That(afterOne.Chat.Cost.CostUsd).IsEqualTo(OneStepCost);
 
         StepFinished(store, 1_000, 500);
         var storeState = store.State;
         var second = ReplLifecycle.BuildStatusSnapshot(
-            afterOne, storeState, storeState.Cost.TokensIn, storeState.Cost.TokensOut, Rows, Total);
+            afterOne, storeState, storeState.Chat.Cost.TokensIn, storeState.Chat.Cost.TokensOut, Rows, Total);
 
         await Assert.That(ReferenceEquals(afterOne, second)).IsFalse();
-        await Assert.That(second.Cost.CostUsd).IsEqualTo(OneStepCost * 2);
+        await Assert.That(second.Chat.Cost.CostUsd).IsEqualTo(OneStepCost * 2);
         await Assert.That(Footer(second)).Contains("0.0210");
     }
 
@@ -94,7 +94,7 @@ public class StatusSnapshotTests
 
         // Offset 0 = live tail ⇒ the bottom of the range, not its start.
         var atTail = ReplLifecycle.BuildStatusSnapshot(null, store.State, 0, 0, Rows, Total);
-        await Assert.That(atTail.ScrollOffset).IsEqualTo(Total - Rows);
+        await Assert.That(atTail.Ui.ScrollOffset).IsEqualTo(Total - Rows);
         await Assert.That(Footer(atTail)).Contains("scroll 100%");
 
         for (int i = 0; i < 4; i++)
@@ -105,7 +105,7 @@ public class StatusSnapshotTests
         // 4 of 16 rows lifted off the tail ⇒ 12/16 through the range.
         var lifted = ReplLifecycle.BuildStatusSnapshot(atTail, store.State, 0, 0, Rows, Total);
         await Assert.That(ReferenceEquals(atTail, lifted)).IsFalse();
-        await Assert.That(lifted.ScrollOffset).IsEqualTo(Total - Rows - 4);
+        await Assert.That(lifted.Ui.ScrollOffset).IsEqualTo(Total - Rows - 4);
         await Assert.That(Footer(lifted)).Contains("scroll 75%");
     }
 
@@ -117,7 +117,7 @@ public class StatusSnapshotTests
 
         var snapshot = ReplLifecycle.BuildStatusSnapshot(null, store.State, 0, 0, Rows, Rows);
 
-        await Assert.That(snapshot.ScrollOffset).IsEqualTo(0);
+        await Assert.That(snapshot.Ui.ScrollOffset).IsEqualTo(0);
         await Assert.That(Footer(snapshot)).Contains("live");
     }
 
@@ -125,26 +125,26 @@ public class StatusSnapshotTests
     public async Task StoreChrome_FlowsIntoSnapshot()
     {
         var store = new UiStore();
-        _ = store.Dispatch(new UiMsg.ConfigureRuntime("kilo-auto/free", "kilocode", "code"));
+        _ = store.Dispatch(new ChatAppMsg.ConfigureRuntime("kilo-auto/free", "kilocode", "code"));
 
         var snapshot = ReplLifecycle.BuildStatusSnapshot(null, store.State, 0, 0, Rows, Total);
 
-        await Assert.That(snapshot.Provider).IsEqualTo("kilocode");
-        await Assert.That(snapshot.Model).IsEqualTo("kilo-auto/free");
-        await Assert.That(snapshot.AgentName).IsEqualTo("code");
+        await Assert.That(snapshot.Chat.Provider).IsEqualTo("kilocode");
+        await Assert.That(snapshot.Chat.Model).IsEqualTo("kilo-auto/free");
+        await Assert.That(snapshot.Chat.AgentName).IsEqualTo("code");
         await Assert.That(Footer(snapshot)).Contains("agent code");
     }
 
     /// <summary>Geometry handshake the frame loop performs before reading scroll.</summary>
     private static void Measure(UiStore store, int rows, int total) =>
-        Apply(store, new UiMsg.Viewport(rows), new UiMsg.HistoryMeasured(total));
+        Apply(store, new AppMsg.Viewport(rows), new AppMsg.HistoryMeasured(total));
 
     private static void StepFinished(UiStore store, int inputTokens, int outputTokens) =>
-        Apply(store, new UiMsg.Agent(new MessageUpdateEvent(
+        Apply(store, new ChatAppMsg.Agent(new MessageUpdateEvent(
             new StepFinishEvent(0, "stop", new Usage(inputTokens, outputTokens)),
             AssistantMessage.Empty("s", "m"))));
 
-    private static void Apply(UiStore store, params UiMsg[] msgs)
+    private static void Apply(UiStore store, params AppMsg[] msgs)
     {
         foreach (var msg in msgs)
         {

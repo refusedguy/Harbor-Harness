@@ -839,7 +839,7 @@ public sealed class AvaloniaUiTests
     ///     C1: the flag is driven through the REAL production path — an
     ///     <see cref="AgentStartEvent" /> published on the DI event bus,
     ///     routed to the session store, reduced into
-    ///     <c>UiState.IsAgentRunning</c>. Setting the VM property directly is
+    ///     <c>UiState.Chat.IsAgentRunning</c>. Setting the VM property directly is
     ///     stomped back by the selector pipeline on the next store transition.
     /// </remarks>
     [Test]

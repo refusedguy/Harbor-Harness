@@ -33,7 +33,7 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     <para>
 ///         Read-only by construction: <see cref="OnKey" /> only moves the
 ///         cursor, switches between list and transcript modes, and refreshes
-///         snapshots — it never dispatches <c>UiMsg.KeyInput</c> and never
+///         snapshots — it never dispatches <c>AppMsg.KeyInput</c> and never
 ///         calls any mutating store method. The transcript has no composer and
 ///         accepts no input at all.
 ///     </para>
@@ -184,7 +184,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
         }
 
         var rows = new List<SubagentRow>(SubagentsModel.BuildRows(
-            snapshot, ctx.State.ActiveSessionId?.Value, DateTimeOffset.UtcNow));
+            snapshot, ctx.State.Chat.ActiveSessionId?.Value, DateTimeOffset.UtcNow));
 
         // Live override: a session opened in this app run reports its
         // real-time status instead of the last persisted one.
@@ -206,7 +206,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
     {
         // Row count without manager enrichment (cursor clamping only).
         var snapshot = new List<Session>(_snapshot);
-        return SubagentsModel.BuildRows(snapshot, ctx.State.ActiveSessionId?.Value, DateTimeOffset.UtcNow).Count - 1;
+        return SubagentsModel.BuildRows(snapshot, ctx.State.Chat.ActiveSessionId?.Value, DateTimeOffset.UtcNow).Count - 1;
     }
 
     /// <summary>Note a new store revision and kick a refresh when due. Call only under <c>_gate</c>.</summary>
@@ -278,7 +278,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
     private void EnterTranscriptLocked(PanelContext ctx)
     {
         var snapshot = new List<Session>(_snapshot);
-        var rows = SubagentsModel.BuildRows(snapshot, ctx.State.ActiveSessionId?.Value, DateTimeOffset.UtcNow);
+        var rows = SubagentsModel.BuildRows(snapshot, ctx.State.Chat.ActiveSessionId?.Value, DateTimeOffset.UtcNow);
         if (_cursor < 0 || _cursor >= rows.Count)
             return;
         var row = rows[_cursor];
@@ -474,7 +474,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
     {
         if ((ctx.Store ?? ctx.Services?.GetService<UiStore>()) is UiStore store)
         {
-            _ = store.Dispatch(new UiMsg.TogglePanel(OverlayIds.Subagents));
+            _ = store.Dispatch(new AppMsg.TogglePanel(OverlayIds.Subagents));
         }
     }
 }
