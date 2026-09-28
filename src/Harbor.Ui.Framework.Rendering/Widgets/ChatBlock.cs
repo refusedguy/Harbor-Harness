@@ -88,3 +88,133 @@ public interface IChatBlock
     /// <summary>Copy-friendly plain text (codex raw_lines).</summary>
     string RawText();
 }
+
+/// <summary>
+/// Collapse mixin for <see cref="IChatBlock"/> implementers (PRIM1a, issue #291;
+/// parent #286): the canonical home of the collapse protocol extracted verbatim
+/// from <c>ToolCallBlock</c> — collapsed line budget (<see cref="MaxBodyLines"/>),
+/// expand state (<see cref="IsExpanded"/> / <see cref="SetExpanded"/> /
+/// <see cref="ToggleExpanded"/>) and truncated body paint
+/// (<see cref="PaintBodyLines"/>).
+/// Byte-identical semantics: <c>ToolCallBlock</c> delegates to these members,
+/// so existing block goldens stay green. Foundation for the sibling collapse
+/// slices (assistant markdown, timeline blocks, task card) — keep this API
+/// stable and documented.
+/// Geometry lives here; colors stay caller-side (renderer palette passed in),
+/// so this assembly keeps its BCL-only / AOT-clean contract.
+/// </summary>
+public interface ICollapsibleChatBlock : IChatBlock
+{
+    /// <summary>Collapsed-body line budget (continuation marker when exceeded).</summary>
+    int MaxBodyLines { get; set; }
+
+    /// <summary>Whether the card is expanded (feed Enter/click toggles).</summary>
+    bool IsExpanded { get; }
+
+    /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
+    void SetExpanded(bool expanded);
+
+    /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click path).</summary>
+    void ToggleExpanded() => SetExpanded(!IsExpanded);
+
+    /// <summary>Default collapsed-body budget (the pre-mixin ToolCallBlock value).</summary>
+    static int DefaultCollapsedBodyLines => 4;
+
+    /// <summary>Default expanded-result budget (the pre-mixin ToolCallBlock value).</summary>
+    static int DefaultExpandedBodyLines => 20;
+
+    /// <summary>Counts logical (<c>'\n'</c>-separated) lines in <paramref name="text"/>.</summary>
+    static int CountLogicalLines(ReadOnlySpan<char> text)
+    {
+        int count = 1;
+        foreach (char c in text)
+        {
+            if (c == '\n')
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Visible body rows for <paramref name="trimmedOutput"/> (already
+    /// <c>TrimEnd('\n')</c>'d) under <paramref name="budget"/>: capped lines
+    /// plus one continuation-marker row on overflow.
+    /// </summary>
+    static int ClampedBodyLineCount(ReadOnlySpan<char> trimmedOutput, int budget)
+    {
+        // [UX5] #265: zero collapse budget = pure one-liner, not even a marker.
+        if (budget <= 0)
+        {
+            return 0;
+        }
+
+        if (trimmedOutput.IsEmpty)
+        {
+            return 0;
+        }
+
+        int logical = CountLogicalLines(trimmedOutput);
+        return Math.Min(logical, budget) + (logical > budget ? 1 : 0);
+    }
+
+    /// <summary>
+    /// Paints up to <paramref name="maxLines"/> (and <paramref name="rows"/>
+    /// viewport rows) of <paramref name="output"/> starting at
+    /// (<paramref name="x"/>, <paramref name="y"/>), then a trailing
+    /// <c>…</c> overflow marker when the budget or the viewport cut content.
+    /// Long lines are hard-truncated to the buffer width (no wrapping).
+    /// </summary>
+    static void PaintBodyLines(
+        ScreenBuffer buffer,
+        int x,
+        int y,
+        int rows,
+        ReadOnlySpan<char> output,
+        int maxLines,
+        CellStyle bodyStyle,
+        CellStyle overflowStyle)
+    {
+        // [UX5] #265: zero collapse budget = pure one-liner, not even a marker.
+        if (maxLines <= 0)
+        {
+            return;
+        }
+
+        var trimmed = output.TrimEnd('\n');
+        if (trimmed.IsEmpty || rows <= 0)
+        {
+            return;
+        }
+
+        int shown = 0;
+        int cursorY = y;
+        var rest = trimmed;
+        while (!rest.IsEmpty && shown < maxLines && shown < rows)
+        {
+            int nl = rest.IndexOf('\n');
+            var line = nl < 0 ? rest : rest[..nl];
+            rest = nl < 0 ? default : rest[(nl + 1)..];
+
+            int avail = Math.Max(0, buffer.Cols - x);
+            if (line.Length > avail)
+            {
+                line = line[..avail];
+            }
+
+            buffer.SetText(x, cursorY, line, bodyStyle);
+            cursorY++;
+            shown++;
+        }
+
+        // Continuation marker when both the collapse budget and truncation cut content.
+        bool moreLines = !rest.IsEmpty;
+        bool moreCols = trimmed.Length > 0 && CountLogicalLines(trimmed) > shown;
+        if ((moreLines || moreCols) && shown < rows)
+        {
+            buffer.SetText(x, cursorY, "…", overflowStyle);
+        }
+    }
+}

@@ -71,12 +71,11 @@ public sealed class ToolResultBody
 /// completed Ok/Error with duration on ToolExecutionEnd. The timeline marks
 /// its slot dirty after each mutation — paint itself is pure over fields.
 /// </summary>
-public sealed class ToolCallBlock : IChatBlock
+public sealed class ToolCallBlock : ICollapsibleChatBlock
 {
     private const char RunningGlyph = '⚙';
     private const char OkGlyph = '✔';
     private const char ErrorGlyph = '✖';
-    private const int DefaultBodyLines = 4;
 
     private ToolCallStatus _status;
     private ToolResultBody? _body;
@@ -85,7 +84,7 @@ public sealed class ToolCallBlock : IChatBlock
     {
         Info = info;
         _status = ToolCallStatus.Running;
-        MaxBodyLines = DefaultBodyLines;
+        MaxBodyLines = ICollapsibleChatBlock.DefaultCollapsedBodyLines;
     }
 
     public ToolCallInfo Info { get; }
@@ -147,15 +146,24 @@ public sealed class ToolCallBlock : IChatBlock
     /// </summary>
     public string StatusBrushKey => FrameworkStatusMappers.ToolCallStatusToBrushKey(ViewModelStatus);
 
-    /// <summary>Collapsed-body line budget (continuation marker when exceeded).</summary>
+    /// <summary>
+    /// Collapsed-body line budget (continuation marker when exceeded).
+    /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291);
+    /// this property satisfies the mixin contract.
+    /// </summary>
     public int MaxBodyLines { get; set; }
 
-    /// <summary>Expanded result line budget (overflow marker when exceeded).</summary>
+    /// <summary>
+    /// Expanded result line budget (overflow marker when exceeded).
+    /// Mirrors <c>ICollapsibleChatBlock.DefaultExpandedBodyLines</c> (kept as
+    /// a const: <c>ToolCallCardTests</c> pins it for buffer sizing).
+    /// </summary>
     public const int ExpandedBodyLines = 20;
 
     /// <summary>
     /// Whether the card is expanded (feed Enter/click toggles via
-    /// <see cref="ToggleExpanded"/>). Collapsed paint stays byte-identical to
+    /// <see cref="ToggleExpanded"/>). Satisfies the <c>ICollapsibleChatBlock</c>
+    /// mixin contract; collapsed paint stays byte-identical to
     /// the pre-card layout (header + <see cref="MaxBodyLines"/> body preview);
     /// expanded adds the full-args row plus the result up to
     /// <see cref="ExpandedBodyLines"/> lines with a <c>…</c> overflow marker.
@@ -412,62 +420,16 @@ public sealed class ToolCallBlock : IChatBlock
         buffer.SetText(x, y, text, ChatPalette.ToolArgs);
     }
 
+    /// <summary>
+    /// Body paint delegated to the <c>ICollapsibleChatBlock</c> mixin
+    /// (PRIM1a #291): geometry in <c>PaintBodyLines</c> (incl. the
+    /// [UX5] #265 zero-budget law), colors caller-side.
+    /// Byte-identical to the pre-mixin loop.
+    /// </summary>
     private void PaintOutputBody(ScreenBuffer buffer, int x, int y, int rows, int maxLines)
     {
-        // [UX5] #265: zero collapse budget = pure one-liner, not even a marker.
-        if (maxLines <= 0)
-        {
-            return;
-        }
-
-        var output = _body!.Output.AsSpan().TrimEnd('\n');
-        if (output.IsEmpty || rows <= 0)
-        {
-            return;
-        }
-
-        var style = _body.IsError ? ChatPalette.ToolError : ChatPalette.ToolBody;
-        int shown = 0;
-        int cursorY = y;
-        var rest = output;
-        while (!rest.IsEmpty && shown < maxLines && shown < rows)
-        {
-            int nl = rest.IndexOf('\n');
-            var line = nl < 0 ? rest : rest[..nl];
-            rest = nl < 0 ? default : rest[(nl + 1)..];
-
-            int avail = Math.Max(0, buffer.Cols - x);
-            if (line.Length > avail)
-            {
-                line = line[..avail];
-            }
-
-            buffer.SetText(x, cursorY, line, style);
-            cursorY++;
-            shown++;
-        }
-
-        // Continuation marker when both the collapse budget and truncation cut content.
-        bool moreLines = !rest.IsEmpty;
-        bool moreCols = output.Length > 0 && CountLogicalLines(output) > shown;
-        if ((moreLines || moreCols) && shown < rows)
-        {
-            buffer.SetText(x, cursorY, "…", ChatPalette.Dim);
-        }
-    }
-
-    private static int CountLogicalLines(ReadOnlySpan<char> text)
-    {
-        int count = 1;
-        foreach (char c in text)
-        {
-            if (c == '\n')
-            {
-                count++;
-            }
-        }
-
-        return count;
+        var style = _body!.IsError ? ChatPalette.ToolError : ChatPalette.ToolBody;
+        ICollapsibleChatBlock.PaintBodyLines(buffer, x, y, rows, _body.Output, maxLines, style, ChatPalette.Dim);
     }
 
     private int BodyLineCount()
@@ -478,25 +440,13 @@ public sealed class ToolCallBlock : IChatBlock
         }
 
         var output = _body!.Output.AsSpan().TrimEnd('\n');
-        if (output.IsEmpty)
-        {
-            return 0;
-        }
-
-        int logical = CountLogicalLines(output);
-        return Math.Min(logical, MaxBodyLines) + (logical > MaxBodyLines ? 1 : 0);
+        return ICollapsibleChatBlock.ClampedBodyLineCount(output, MaxBodyLines);
     }
 
     private int ExpandedBodyLineCount()
     {
         var output = _body!.Output.AsSpan().TrimEnd('\n');
-        if (output.IsEmpty)
-        {
-            return 0;
-        }
-
-        int logical = CountLogicalLines(output);
-        return Math.Min(logical, ExpandedBodyLines) + (logical > ExpandedBodyLines ? 1 : 0);
+        return ICollapsibleChatBlock.ClampedBodyLineCount(output, ExpandedBodyLines);
     }
 
     private int DiffLineCount() => DiffRenderer.CountLines(_body!.DiffText!);
