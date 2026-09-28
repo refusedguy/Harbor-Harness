@@ -82,4 +82,48 @@ public static class ProviderErrors
             _ => ProviderErrorKind.Unknown
         };
     }
+
+    /// <summary>
+    ///     Maximum provider error-body characters surfaced on the user-facing
+    ///     message (#259). A single 429 JSON body carries KBs of nested detail;
+    ///     past the head it carries no actionable signal, while every renderer
+    ///     paints <c>ErrorEvent.Message</c> inline (<c>[error]</c> lines in
+    ///     plain/ANSI, <c>!</c> lines inline, chat lines in Spectre) and only
+    ///     CellForge routes <c>AgentErrorEvent</c> through a collapsed card.
+    ///     Bounding here keeps every backend single-screen; the full body is
+    ///     retained on <see cref="ErrorEvent.Exception" /> for diagnostics.
+    /// </summary>
+    public const int MaxProviderErrorBodyChars = 1000;
+
+    /// <summary>
+    ///     Trims <paramref name="body" /> head-kept / tail-cut: the actionable
+    ///     head (status line, first error detail) is preserved verbatim, the tail
+    ///     is replaced by a marker carrying the original length. Short payloads
+    ///     pass through untouched (same reference, zero allocation).
+    /// </summary>
+    /// <param name="body">Full provider error body text.</param>
+    /// <returns>Original text when within budget, otherwise head + marker.</returns>
+    public static string TruncateErrorBody(string body)
+    {
+        if (body.Length <= MaxProviderErrorBodyChars)
+        {
+            return body;
+        }
+
+        return string.Concat(
+            body.AsSpan(0, MaxProviderErrorBodyChars),
+            $"\n…[truncated {body.Length - MaxProviderErrorBodyChars} chars; showing first {MaxProviderErrorBodyChars}]");
+    }
+
+    /// <summary>
+    ///     Builds the user-facing wire-error message for a non-success HTTP
+    ///     response (#259): <c>"{label} error {status}: {truncated body}"</c>.
+    ///     Single choke point so every provider bounds the blob identically.
+    /// </summary>
+    /// <param name="apiErrorLabel">Provider label, e.g. <c>"OpenAI API"</c>.</param>
+    /// <param name="statusCode">HTTP status code of the failed response.</param>
+    /// <param name="errorBody">Full raw response body.</param>
+    /// <returns>Bounded user-facing message.</returns>
+    public static string BuildProviderErrorMessage(string apiErrorLabel, int statusCode, string errorBody) =>
+        $"{apiErrorLabel} error {statusCode}: {TruncateErrorBody(errorBody)}";
 }
