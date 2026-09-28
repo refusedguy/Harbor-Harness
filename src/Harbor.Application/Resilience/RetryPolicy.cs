@@ -138,7 +138,7 @@ public sealed class RetryPolicy : IRetryPolicy
     /// <summary>
     ///     Strategy contract for one transient-failure family. Returns
     ///     <see langword="true" /> when the exception belongs to the family
-    ///     (verdict in <paramref name="transient" />); <see langword="false" />
+    ///     (verdict in the out transient flag); <see langword="false" />
     ///     declines so the next classifier is consulted.
     /// </summary>
     internal interface IExceptionClassifier
