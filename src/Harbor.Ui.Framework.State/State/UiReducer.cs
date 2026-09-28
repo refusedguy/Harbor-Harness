@@ -361,6 +361,8 @@ public static class UiReducer
                 ActiveSessionId = ss.ActiveSessionId
             }
         }, new TuiEffect.None()),
+        UiMsg.SetPanelCursor pc => (SetPanelCursor(state, pc.Id, pc.Cursor), new TuiEffect.None()),
+        UiMsg.SetPanelDirectory pd => (SetPanelDirectory(state, pd.Id, pd.Directory), new TuiEffect.None()),
         _ => (state, new TuiEffect.None())
     };
 
@@ -478,6 +480,47 @@ public static class UiReducer
         int current = state.PanelSizes.TryGetValue(id, out int s) ? s : 0;
         int next = Math.Clamp(current + delta, PanelRegistry.MinSize, PanelRegistry.MaxSize);
         return state with { Ui = state.Ui with { PanelSizes = state.PanelSizes.SetItem(id, next) } };
+    }
+
+    /// <summary>
+    ///     Store a panel-local cursor keyed by panel id (#360). Pure: no I/O,
+    ///     no clamping against content (the provider clamps for display and on
+    ///     write using the live item count). Unknown/empty ids still record so
+    ///     null-store-degraded providers converge on the next seeded frame.
+    /// </summary>
+    public static UiState SetPanelCursor(UiState state, string id, int cursor)
+    {
+        if (string.IsNullOrEmpty(id))
+            return state;
+        int next = Math.Max(0, cursor);
+        if (state.Ui.PanelCursors.TryGetValue(id, out int current) && current == next)
+            return state;
+        return state with { Ui = state.Ui with { PanelCursors = state.Ui.PanelCursors.SetItem(id, next) } };
+    }
+
+    /// <summary>
+    ///     Store a panel-local directory keyed by panel id and reset its cursor
+    ///     to 0 atomically (#360). The filesystem listing itself stays a
+    ///     provider-local cache — the reducer never touches the disk.
+    /// </summary>
+    public static UiState SetPanelDirectory(UiState state, string id, string directory)
+    {
+        if (string.IsNullOrEmpty(id))
+            return state;
+        string dir = directory ?? string.Empty;
+        var ui = state.Ui;
+        bool sameDir = ui.PanelDirs.TryGetValue(id, out string? current) ? current == dir : dir == string.Empty;
+        bool cursorZero = !ui.PanelCursors.TryGetValue(id, out int cur) || cur == 0;
+        if (sameDir && cursorZero)
+            return state;
+        return state with
+        {
+            Ui = ui with
+            {
+                PanelDirs = ui.PanelDirs.SetItem(id, dir),
+                PanelCursors = ui.PanelCursors.SetItem(id, 0)
+            }
+        };
     }
 
     private static (UiState State, TuiEffect Effect) UpdateKey(UiState state, UiMsg.KeyInput k)
