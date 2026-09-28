@@ -414,6 +414,12 @@ public sealed class ToolCallBlock : IChatBlock
 
     private void PaintOutputBody(ScreenBuffer buffer, int x, int y, int rows, int maxLines)
     {
+        // [UX5] #265: zero collapse budget = pure one-liner, not even a marker.
+        if (maxLines <= 0)
+        {
+            return;
+        }
+
         var output = _body!.Output.AsSpan().TrimEnd('\n');
         if (output.IsEmpty || rows <= 0)
         {
@@ -466,6 +472,11 @@ public sealed class ToolCallBlock : IChatBlock
 
     private int BodyLineCount()
     {
+        if (MaxBodyLines <= 0)
+        {
+            return 0; // [UX5] #265: zero collapse budget = pure one-liner, not even a marker.
+        }
+
         var output = _body!.Output.AsSpan().TrimEnd('\n');
         if (output.IsEmpty)
         {
