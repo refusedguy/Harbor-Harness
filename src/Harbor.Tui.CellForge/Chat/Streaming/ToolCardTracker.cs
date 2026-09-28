@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -32,6 +33,39 @@ internal sealed class ToolCardTracker
         public long StartedMs { get; set; } = long.MinValue;
     }
 
+    /// <summary>Tool name carrying a sub-agent run ([UX5] #265).</summary>
+    internal const string TaskToolName = "task";
+
+    internal static bool IsTaskTool(string toolName) =>
+        string.Equals(toolName, TaskToolName, StringComparison.Ordinal);
+
+    private const int MaxTranscriptChars = 8000;
+    private const int MaxTranscriptLines = 200;
+    private const string TranscriptTruncatedMarker = "…[transcript truncated]";
+    private const string TranscriptSeparator = "\n───\n";
+
+    /// <summary>Live display state of one running <c>task</c> card ([UX5] #265):
+    /// child-tool tallies for the finish suffix, the currently running child
+    /// (or retry) for the live header suffix, and the buffered child
+    /// transcript revealed on expand. The child run itself is untouched —
+    /// this only observes bus events.</summary>
+    private sealed class TaskState
+    {
+        public int CompletedChildCalls;
+        public readonly Dictionary<string, ChildRun> Running = new(StringComparer.Ordinal);
+        public string LastChildTool = string.Empty;
+        public int? RetryAttempt;
+        public int? RetryMax;
+        public readonly StringBuilder Transcript = new();
+        public int TranscriptLines;
+        public bool TranscriptTruncated;
+        public readonly StringBuilder PendingText = new();
+    }
+
+    private sealed record ChildRun(string ToolName, string Summary, long StartedMs);
+
+    private readonly Dictionary<string, TaskState> _tasks = new(StringComparer.Ordinal);
+
     /// <summary>Returns the live card, creating and appending it on first sight.
     /// With <paramref name="restampStarted"/> the start timestamp is refreshed
     /// even for an existing card (ToolExecutionStart arrives after
@@ -49,6 +83,15 @@ internal sealed class ToolCardTracker
         }
 
         var block = new ToolCallBlock(new ToolCallInfo(id, toolName, argsSummary ?? string.Empty, ArgsFull: argsFull));
+        if (IsTaskTool(toolName))
+        {
+            // [UX5] #265: a task card is always exactly one collapsed line —
+            // the live suffix in the header carries progress, the full child
+            // transcript waits in the expanded body.
+            block.MaxBodyLines = 0;
+            _tasks.TryAdd(id, new TaskState());
+        }
+
         _panel.Timeline.Append(block);
         _panel.Timeline.MarkLastDirty();
         var card = new ToolCard { Block = block, StartedMs = NowMs };
@@ -68,6 +111,13 @@ internal sealed class ToolCardTracker
             return;
         }
 
+        // [UX5] #265: a failed task keeps its transcript + tally, collapsed.
+        if (_tasks.TryGetValue(id, out var taskState))
+        {
+            FinishTaskCard(id, taskState, output, isError: true, duration: TimeSpan.Zero, diffText: null);
+            return;
+        }
+
         card.Block.Complete(new ToolResultBody(output, true, TimeSpan.Zero));
         card.Block.SetExpanded(false);
         _cards.Remove(id);
@@ -76,6 +126,13 @@ internal sealed class ToolCardTracker
 
     public void CompleteCard(ToolExecutionEndEvent e)
     {
+        // [UX5] #265: the task's own end composes the transcript + tally.
+        if (_tasks.TryGetValue(e.ToolCallId, out var taskState))
+        {
+            FinishTaskCard(e.ToolCallId, taskState, e.Result.Output, e.Result.IsError, duration: null, diffText: TryExtractDiff(e.Result));
+            return;
+        }
+
         if (!_cards.TryGetValue(e.ToolCallId, out var card))
         {
             return;
@@ -120,6 +177,255 @@ internal sealed class ToolCardTracker
     /// <summary>Dequeues the next image attachment awaiting inline emission
     /// (kitty APC / OSC 1337 per terminal capability); false when drained.</summary>
     public bool TryTakePendingImage(out ChatScreenBridge.InlineImage image) => _pendingImages.TryDequeue(out image!);
+
+    // ── Task cards ([UX5] #265) ────────────────────────────────────────────
+
+    /// <summary>True while a <c>task</c> card is live on the feed.</summary>
+    public bool TryGetRunningTask(out string taskCallId)
+    {
+        foreach (var (id, card) in _cards)
+        {
+            if (IsTaskTool(card.Block.Info.ToolName))
+            {
+                taskCallId = id;
+                return true;
+            }
+        }
+
+        taskCallId = string.Empty;
+        return false;
+    }
+
+    /// <summary>True when <paramref name="id"/> already owns a timeline card
+    /// (lets the bridge tell a retrying parent tool apart from a retrying
+    /// child tool — children never open their own cards).</summary>
+    public bool IsKnownCard(string id) => _cards.ContainsKey(id);
+
+    /// <summary>Child sub-agent session announced itself — never a timeline
+    /// block of its own, just a transcript header line on the task card.</summary>
+    public void NoteSubagentStart(string taskId, string sessionId)
+    {
+        if (_tasks.TryGetValue(taskId, out var ts))
+        {
+            AppendTranscript(ts, $"◇ sub-agent {ShortId(sessionId)} started");
+            RefreshTaskSuffix(taskId, ts);
+        }
+    }
+
+    /// <summary>A child tool started inside the task window: no card of its
+    /// own — it becomes the live header suffix and (on end) one transcript
+    /// line.</summary>
+    public void NoteTaskChildStart(string taskId, string childId, string toolName, string? summary)
+    {
+        if (!_tasks.TryGetValue(taskId, out var ts))
+        {
+            return;
+        }
+
+        FlushPendingText(ts);
+        ts.Running[childId] = new ChildRun(toolName, summary ?? string.Empty, NowMs);
+        ts.LastChildTool = toolName;
+        ts.RetryAttempt = null;
+        ts.RetryMax = null;
+        RefreshTaskSuffix(taskId, ts);
+    }
+
+    /// <summary>Closes one child transcript line (<c>⚙ tool args → ok · 12ms</c>).
+    /// False when the child was never tracked — the caller then falls back to
+    /// the ordinary card path.</summary>
+    public bool NoteTaskChildEnd(string taskId, string childId, bool isError)
+    {
+        if (!_tasks.TryGetValue(taskId, out var ts) || !ts.Running.Remove(childId, out var run))
+        {
+            return false;
+        }
+
+        FlushPendingText(ts);
+        long durationMs = Math.Max(0, NowMs - run.StartedMs);
+        string outcome = isError ? "error" : "ok";
+        string duration = ToolResultBody.FormatDuration(TimeSpan.FromMilliseconds(durationMs));
+        AppendTranscript(ts, string.IsNullOrEmpty(run.Summary)
+            ? $"⚙ {run.ToolName} → {outcome} · {duration}"
+            : $"⚙ {run.ToolName} {run.Summary} → {outcome} · {duration}");
+        ts.CompletedChildCalls++;
+        ts.RetryAttempt = null;
+        ts.RetryMax = null;
+        RefreshTaskSuffix(taskId, ts);
+        return true;
+    }
+
+    /// <summary>A retry scheduled inside the task window — red suffix
+    /// (<c>↻ read 1/3</c>) plus a transcript marker.</summary>
+    public void NoteTaskRetry(string taskId, int attempt, int maxAttempts)
+    {
+        if (!_tasks.TryGetValue(taskId, out var ts))
+        {
+            return;
+        }
+
+        ts.RetryAttempt = attempt;
+        ts.RetryMax = maxAttempts;
+        AppendTranscript(ts, ts.LastChildTool.Length > 0
+            ? $"↻ retry {attempt}/{maxAttempts} {ts.LastChildTool}"
+            : $"↻ retry {attempt}/{maxAttempts}");
+        RefreshTaskSuffix(taskId, ts);
+    }
+
+    /// <summary>Buffers one child text delta for the expand transcript —
+    /// flushed as a paragraph on the next child boundary.</summary>
+    public void AppendTaskText(string taskId, string text)
+    {
+        if (string.IsNullOrEmpty(text) || !_tasks.TryGetValue(taskId, out var ts) || ts.TranscriptTruncated)
+        {
+            return;
+        }
+
+        int room = MaxTranscriptChars - ts.Transcript.Length - ts.PendingText.Length;
+        if (room <= 0)
+        {
+            MarkTranscriptTruncated(ts);
+            return;
+        }
+
+        ts.PendingText.Append(text.Length <= room ? text : text[..room]);
+        if (text.Length > room)
+        {
+            MarkTranscriptTruncated(ts);
+        }
+    }
+
+    /// <summary>Flushes buffered child text as one transcript paragraph.</summary>
+    public void FlushTaskText(string taskId)
+    {
+        if (_tasks.TryGetValue(taskId, out var ts))
+        {
+            FlushPendingText(ts);
+            RefreshTaskSuffix(taskId, ts);
+        }
+    }
+
+    private void FinishTaskCard(string taskId, TaskState ts, string output, bool isError, TimeSpan? duration, string? diffText)
+    {
+        if (!_cards.TryGetValue(taskId, out var card))
+        {
+            _tasks.Remove(taskId);
+            return;
+        }
+
+        FlushPendingText(ts);
+        TimeSpan elapsed = duration ?? (card.StartedMs > long.MinValue
+            ? TimeSpan.FromMilliseconds(Math.Max(0, NowMs - card.StartedMs))
+            : TimeSpan.Zero);
+        string body = ts.Transcript.Length > 0
+            ? ts.Transcript.ToString().TrimEnd('\n') + TranscriptSeparator + output
+            : output;
+        card.Block.Complete(new ToolResultBody(body, isError, elapsed, diffText));
+        card.Block.LiveSuffix = ts.CompletedChildCalls > 0
+            ? $"· {ts.CompletedChildCalls} toolcall{(ts.CompletedChildCalls == 1 ? string.Empty : "s")}"
+            : null;
+        card.Block.LiveSuffixIsError = false;
+        card.Block.SetExpanded(false);
+        _cards.Remove(taskId);
+        _tasks.Remove(taskId);
+        _panel.Timeline.MarkLastDirty();
+    }
+
+    private void RefreshTaskSuffix(string taskId, TaskState ts)
+    {
+        if (!_cards.TryGetValue(taskId, out var card))
+        {
+            return;
+        }
+
+        if (ts.RetryAttempt is { } attempt && ts.RetryMax is { } max)
+        {
+            string tool = ts.LastChildTool.Length > 0 ? ts.LastChildTool : TaskToolName;
+            card.Block.LiveSuffix = $"↻ {tool} {attempt}/{max}";
+            card.Block.LiveSuffixIsError = true;
+        }
+        else if (ts.Running.Count == 1)
+        {
+            var run = ts.Running.Values.First();
+            card.Block.LiveSuffix = string.IsNullOrEmpty(run.Summary)
+                ? $"› {run.ToolName}"
+                : $"› {run.ToolName} {TrimSuffix(run.Summary, 32)}";
+            card.Block.LiveSuffixIsError = false;
+        }
+        else if (ts.Running.Count > 1)
+        {
+            card.Block.LiveSuffix = $"› {ts.LastChildTool} +{ts.Running.Count - 1}";
+            card.Block.LiveSuffixIsError = false;
+        }
+        else if (ts.CompletedChildCalls > 0)
+        {
+            card.Block.LiveSuffix = $"· {ts.CompletedChildCalls} toolcall{(ts.CompletedChildCalls == 1 ? string.Empty : "s")}";
+            card.Block.LiveSuffixIsError = false;
+        }
+        else
+        {
+            card.Block.LiveSuffix = null;
+            card.Block.LiveSuffixIsError = false;
+        }
+
+        _panel.Timeline.MarkLastDirty();
+    }
+
+    private static void FlushPendingText(TaskState ts)
+    {
+        if (ts.PendingText.Length == 0)
+        {
+            return;
+        }
+
+        string text = ts.PendingText.ToString().Trim();
+        ts.PendingText.Clear();
+        if (text.Length > 0)
+        {
+            AppendTranscript(ts, text);
+        }
+    }
+
+    private static void AppendTranscript(TaskState ts, string line)
+    {
+        if (ts.TranscriptTruncated)
+        {
+            return;
+        }
+
+        if (ts.TranscriptLines >= MaxTranscriptLines || ts.Transcript.Length + line.Length + 1 > MaxTranscriptChars)
+        {
+            MarkTranscriptTruncated(ts);
+            return;
+        }
+
+        ts.Transcript.AppendLine(line);
+        ts.TranscriptLines++;
+    }
+
+    private static void MarkTranscriptTruncated(TaskState ts)
+    {
+        if (ts.TranscriptTruncated)
+        {
+            return;
+        }
+
+        ts.TranscriptTruncated = true;
+        ts.Transcript.AppendLine(TranscriptTruncatedMarker);
+        ts.TranscriptLines++;
+    }
+
+    private static string TrimSuffix(string text, int max)
+    {
+        if (text.Length <= max)
+        {
+            return text;
+        }
+
+        return text[..(max - 1)] + "…";
+    }
+
+    private static string ShortId(string sessionId) =>
+        sessionId.Length <= 8 ? sessionId : sessionId[..8];
 
     /// <summary>Typed-ish diff extraction (widgets §5): tools that attach a
     /// unified diff in Metadata win; otherwise a raw diff-shaped Output is

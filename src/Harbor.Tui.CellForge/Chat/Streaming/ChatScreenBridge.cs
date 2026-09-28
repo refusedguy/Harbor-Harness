@@ -58,6 +58,13 @@ public sealed class ChatScreenBridge : IDisposable
 
     private readonly HashSet<string> _displayedMessageIds = new();
 
+    /// <summary>[UX5] #265: owning session of the current parent run, pinned
+    /// on every non-subagent <see cref="AgentStartEvent"/> (and refreshed on
+    /// <see cref="SessionChangedEvent"/>). Any message/turn event from another
+    /// session while a <c>task</c> card runs is child traffic: it feeds the
+    /// task transcript and never the parent feed.</summary>
+    private string? _parentSessionId;
+
     /// <summary>AgentErrorEvent seen since the last AgentStart — decides
     /// whether AgentEnd flags the run as errored or succeeded (mascot moods).</summary>
     private bool _runHadError;
@@ -120,6 +127,20 @@ public sealed class ChatScreenBridge : IDisposable
         switch (evt)
         {
             case AgentStartEvent started:
+                // [UX5] #265: a child sub-agent announces on the same bus —
+                // it never replays into the parent timeline; its session just
+                // opens a transcript header on the running task card.
+                if (started.Kind == SessionKind.Subagent)
+                {
+                    if (_cards.TryGetRunningTask(out var subTaskId))
+                    {
+                        _cards.NoteSubagentStart(subTaskId, started.SessionId);
+                    }
+
+                    break;
+                }
+
+                _parentSessionId = started.SessionId;
                 ReplayHistory(started.Messages);
                 _context.RememberContextWindow(started.Model);
                 _runHadError = false;
@@ -128,11 +149,24 @@ public sealed class ChatScreenBridge : IDisposable
                 break;
 
             case MessageStartEvent started:
+                // [UX5] #265: child text never streams into the parent feed.
+                if (IsForeignChild(started.Message.SessionId))
+                {
+                    break;
+                }
+
                 MarkSeen(started.Message);
                 _streams.StartStream();
                 break;
 
             case MessageUpdateEvent update:
+                // [UX5] #265: child deltas buffer into the task transcript.
+                if (IsForeignChild(update.Partial.SessionId))
+                {
+                    RouteChildUpdate(update);
+                    break;
+                }
+
                 switch (update.LlmEvent)
                 {
                     case TextDeltaEvent delta:
@@ -159,6 +193,16 @@ public sealed class ChatScreenBridge : IDisposable
 
             case ToolExecutionStartEvent execStart:
                 {
+                    // [UX5] #265: while a task card runs, non-task executions
+                    // are its child tools — they feed the live suffix and the
+                    // transcript instead of opening their own cards.
+                    if (_cards.TryGetRunningTask(out var ownerTaskId)
+                        && !ToolCardTracker.IsTaskTool(execStart.ToolName))
+                    {
+                        _cards.NoteTaskChildStart(ownerTaskId, execStart.ToolCallId, execStart.ToolName, Summarize(execStart.Args));
+                        break;
+                    }
+
                     _cards.EnsureCard(execStart.ToolCallId, execStart.ToolName, Summarize(execStart.Args), FullArgs(execStart.Args), restampStarted: true);
                     _status.Phase = AgentPhase.ToolCall;
                     _status.Mode = StatusBarMode.Running;
@@ -173,9 +217,29 @@ public sealed class ChatScreenBridge : IDisposable
                     retry.RetryMaxAttempts.Value,
                     Math.Max(0, (int)Math.Ceiling(retry.RetryBackoffSeconds ?? 0)));
                 _toolRetryShown = true;
+
+                // [UX5] #265: retries also surface on the task suffix in red —
+                // the task's own id, or any id without a card (live children
+                // never open their own cards) while a task card runs.
+                if (_cards.TryGetRunningTask(out var retryTaskId)
+                    && (string.Equals(retry.ToolCallId, retryTaskId, StringComparison.Ordinal)
+                        || !_cards.IsKnownCard(retry.ToolCallId)))
+                {
+                    _cards.NoteTaskRetry(retryTaskId, retry.RetryAttempt.Value, retry.RetryMaxAttempts.Value);
+                }
+
                 break;
 
             case ToolExecutionEndEvent execEnd:
+                // [UX5] #265: a live child end only closes its transcript line.
+                // Only the task's own end completes the card.
+                if (_cards.TryGetRunningTask(out var finishedOwnerId)
+                    && !string.Equals(execEnd.ToolCallId, finishedOwnerId, StringComparison.Ordinal)
+                    && _cards.NoteTaskChildEnd(finishedOwnerId, execEnd.ToolCallId, execEnd.IsError))
+                {
+                    break;
+                }
+
                 _cards.CompleteCard(execEnd);
                 if (_toolRetryShown)
                 {
@@ -186,11 +250,29 @@ public sealed class ChatScreenBridge : IDisposable
                 break;
 
             case MessageEndEvent ended:
+                // [UX5] #265: a child message close flushes its buffered text
+                // as one transcript paragraph — never a parent stream block.
+                if (IsForeignChild(ended.Message.SessionId))
+                {
+                    if (_cards.TryGetRunningTask(out var textTaskId))
+                    {
+                        _cards.FlushTaskText(textTaskId);
+                    }
+
+                    break;
+                }
+
                 MarkSeen(ended.Message);
                 _streams.FinishStream();
                 break;
 
             case TurnEndEvent turnEnd:
+                // [UX5] #265: child turns never mark parent history.
+                if (IsForeignTurn(turnEnd))
+                {
+                    break;
+                }
+
                 MarkSeen(turnEnd.AssistantMessage);
                 foreach (var toolResults in turnEnd.ToolResults)
                 {
@@ -214,6 +296,12 @@ public sealed class ChatScreenBridge : IDisposable
                 _context.NoteUsage(stats.Metadata.TokensInput, stats.Metadata.TokensOutput);
                 break;
 
+            case SessionChangedEvent changed:
+                // [UX5] #265: keep the child-traffic filter aligned when the
+                // user switches sessions.
+                _parentSessionId = changed.SessionId;
+                break;
+
             case AgentErrorEvent error:
                 _streams.FlushStreamNow();
                 _cards.CompleteError(NewErrorCardId(), "error", ErrorBlurb(error.Message), error.Message);
@@ -224,6 +312,13 @@ public sealed class ChatScreenBridge : IDisposable
                 break;
 
             case AgentEndEvent agentEnd:
+                // [UX5] #265: the child run's AgentEnd must not idle the
+                // parent footer, bounce the mascot, or flush parent streams.
+                if (IsForeignAgentEnd(agentEnd))
+                {
+                    break;
+                }
+
                 foreach (var message in agentEnd.NewMessages)
                 {
                     MarkSeen(message);
@@ -241,6 +336,59 @@ public sealed class ChatScreenBridge : IDisposable
         }
 
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>[UX5] #265: true for traffic from a non-parent session while a
+    /// <c>task</c> card runs. Gated on a known parent (late attach degrades to
+    /// the legacy pass-through) and on a live task (no task, no children).</summary>
+    private bool IsForeignChild(string? sessionId) =>
+        _parentSessionId is not null
+        && sessionId is not null
+        && !string.Equals(sessionId, _parentSessionId, StringComparison.Ordinal)
+        && _cards.TryGetRunningTask(out _);
+
+    private bool IsForeignTurn(TurnEndEvent turnEnd) =>
+        turnEnd.SessionId is not null && IsForeignChild(turnEnd.SessionId);
+
+    private bool IsForeignAgentEnd(AgentEndEvent agentEnd)
+    {
+        if (agentEnd.NewMessages.Count == 0 || _parentSessionId is null)
+        {
+            return false;
+        }
+
+        if (!_cards.TryGetRunningTask(out _))
+        {
+            return false;
+        }
+
+        foreach (var message in agentEnd.NewMessages)
+        {
+            if (string.Equals(message.SessionId, _parentSessionId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>[UX5] #265: foreign (child-session) LLM traffic never touches
+    /// the parent stream — text deltas buffer into the running task card for
+    /// its expand view, tool announcements are dropped (the execution pair
+    /// carries the transcript line), child token usage never rewrites the
+    /// parent footer.</summary>
+    private void RouteChildUpdate(MessageUpdateEvent update)
+    {
+        if (!_cards.TryGetRunningTask(out var taskId))
+        {
+            return;
+        }
+
+        if (update.LlmEvent is TextDeltaEvent text)
+        {
+            _cards.AppendTaskText(taskId, text.Delta);
+        }
     }
 
     // ── History replay ───────────────────────────────────────────────────────
