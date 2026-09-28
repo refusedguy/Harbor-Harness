@@ -56,7 +56,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
             Version: SchemaVersion,
             Session: session.Value,
             Metadata: stats.IsSuccess ? stats.Value : null);
-        await output.WriteLineAsync(JsonSerializer.Serialize(envelope, JsonlCodecContext.JsonOptions)).ConfigureAwait(false);
+        await output.WriteLineAsync(JsonSerializer.Serialize(envelope, JsonlCodecContext.Default.ExportEnvelope)).ConfigureAwait(false);
 
         var messages = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
         if (messages.IsFailure) // §4.6-ok: header written → surface a clear partial-export failure.
@@ -71,7 +71,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
                 Role: message.Role,
                 CreatedAt: message.CreatedAt,
                 Payload: JsonlMessageCodec.SerializeMessagePayload(message));
-            await output.WriteLineAsync(JsonSerializer.Serialize(entry, JsonlCodecContext.JsonOptions)).ConfigureAwait(false);
+            await output.WriteLineAsync(JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry)).ConfigureAwait(false);
         }
 
         _logger.LogInformation("Exported session {SessionId}: {Count} message(s)",
@@ -98,7 +98,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
             return Result.Failure<string>("Import failed: payload is empty.");
 
         var envelopeResult = Result.Try(
-            () => JsonSerializer.Deserialize<ExportEnvelope>(headerLine, JsonlCodecContext.JsonOptions),
+            () => JsonSerializer.Deserialize(headerLine, JsonlCodecContext.Default.ExportEnvelope),
             ex => $"Invalid export header: {ex.Message}");
         if (envelopeResult.IsFailure)
             return Result.Failure<string>(envelopeResult.Error);
