@@ -6,7 +6,8 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 namespace Harbor.Terminal.Abstractions.ViewModels;
 /// <summary>
-///     Status bar view model — shows model, agent, cost, tokens, status.
+///     Status bar view model — codex <c>/statusline</c> pattern: one collapsed
+///     line of <c>model | ctx% | cost | queue</c> with a status tail.
 ///     Uses CommunityToolkit.Mvvm source generators for INPC.
 /// </summary>
 public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
@@ -47,6 +48,18 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     private int _tokensOut;
 
     /// <summary>
+    ///     Queued tool-call depth (codex <c>/statusline</c> queue segment):
+    ///     incremented on <see cref="ToolExecutionStartEvent" />, decremented on
+    ///     <see cref="ToolExecutionEndEvent" /> (floors at 0), cleared on
+    ///     <see cref="AgentEndEvent" /> and <c>Reset</c>. Rendered as
+    ///     <c>queue: N</c> only while non-zero so the idle line stays clean.
+    /// </summary>
+    [ObservableProperty]
+    private int _queuedCount;
+
+    private Pricing? _pricing;
+
+    /// <summary>
     ///     Context usage as a percentage of <see cref="_contextWindow" />. 0 when unknown.
     ///     Canonical #75 definition: accumulated input+output over the window
     ///     (see <see cref="ContextUsage" />) — consistent with the accumulated
@@ -55,14 +68,28 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     public int ContextPct => ContextUsage.PercentUsed(TokensIn, TokensOut, ContextWindow);
 
     /// <summary>
-    ///     Formatted status line for rendering. Cost is formatted with the
-    ///     invariant culture: golden-frame tests pin exact strings, and a
-    ///     locale decimal separator (ru-RU "$0,0000") must not leak into
-    ///     renderer output.
+    ///     Codex-style collapsed status line: model, context-%, cost, queue.
+    ///     Segment order is <c>provider/model | agent | ctx% | cost | tokens | queue? | status</c>:
+    ///     context-% sits right after the model (codex <c>/statusline</c> order),
+    ///     the queue segment appears only while tool calls are in flight.
+    ///     Cost is formatted with the invariant culture: golden-frame tests pin
+    ///     exact strings, and a locale decimal separator (ru-RU "$0,0000") must
+    ///     not leak into renderer output. When the context window is unknown
+    ///     and no tools are queued the shape is byte-identical to the legacy
+    ///     line, so existing golden frames are unaffected.
     /// </summary>
-    public string Formatted => ContextWindow > 0
-        ? $"{Provider}/{Model} | agent: {Agent} | {CostText} | {TokensIn}↑ {TokensOut}↓ | ctx: {((long)TokensIn + TokensOut) / 1000}k/{ContextPct}% | {Status}"
-        : $"{Provider}/{Model} | agent: {Agent} | {CostText} | {TokensIn}↑ {TokensOut}↓ | {Status}";
+    public string Formatted
+    {
+        get
+        {
+            string head = $"{Provider}/{Model} | agent: {Agent}";
+            string ctx = ContextWindow > 0
+                ? $" | ctx: {((long)TokensIn + TokensOut) / 1000}k/{ContextPct}%"
+                : string.Empty;
+            string queue = QueuedCount > 0 ? $" | queue: {QueuedCount}" : string.Empty;
+            return $"{head}{ctx} | {CostText} | {TokensIn}↑ {TokensOut}↓{queue} | {Status}";
+        }
+    }
 
     private string CostText => "$" + Cost.ToString("F4", CultureInfo.InvariantCulture);
 
@@ -80,11 +107,26 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
                 break;
             case AgentEndEvent:
                 Status = "idle";
+                QueuedCount = 0;
                 break;
             case MessageUpdateEvent mu when mu.LlmEvent is StepFinishEvent sf && sf.Usage is not null:
                 TokensIn += sf.Usage.InputTokens;
                 TokensOut += sf.Usage.OutputTokens;
                 ContextTokens = sf.Usage.InputTokens;
+                if (_pricing is not null)
+                    Cost += _pricing.CalculateCost(sf.Usage);
+                break;
+            case ToolExecutionStartEvent:
+                QueuedCount++;
+                break;
+            case ToolExecutionEndEvent:
+                if (QueuedCount > 0)
+                    QueuedCount--;
+                break;
+            case SessionStatsEvent ss:
+                Cost = ss.Metadata.Cost;
+                TokensIn = ss.Metadata.TokensInput;
+                TokensOut = ss.Metadata.TokensOutput;
                 break;
             case AgentErrorEvent:
                 Status = "error";
@@ -100,10 +142,15 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     }
 
     /// <summary>
-    ///     Set the active model so the view model can compute context usage.
+    ///     Set the active model so the view model can compute context usage and
+    ///     accumulate step cost via the model's <see cref="Pricing" />.
     /// </summary>
     /// <param name="model">The resolved model info (may be null).</param>
-    public void SetModel(ModelInfo? model) => ContextWindow = model?.ContextWindow ?? 0;
+    public void SetModel(ModelInfo? model)
+    {
+        ContextWindow = model?.ContextWindow ?? 0;
+        _pricing = model?.Pricing;
+    }
 
     /// <summary>
     ///     Reset all counters to zero. Bound to the <c>Reset</c> command.
@@ -115,6 +162,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
         TokensIn = 0;
         TokensOut = 0;
         ContextTokens = 0;
+        QueuedCount = 0;
         Status = "idle";
     }
 }
