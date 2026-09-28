@@ -39,8 +39,8 @@ public class TabStripReducerTests
 
         await Assert.That(Ids(result.State)).IsEqualTo("s1,s2");
         await Assert.That(ActiveId(result.State)).IsEqualTo("s1");
-        await Assert.That(result.State.Chat.Tabs.Find(Id("s1"))!.Title).IsEqualTo("first");
-        await Assert.That(result.State.Chat.Tabs.Find(Id("s1"))!.IsDirty).IsFalse();
+        await Assert.That(result.State.Chat.TabStrip.Find(Id("s1"))!.Title).IsEqualTo("first");
+        await Assert.That(result.State.Chat.TabStrip.Find(Id("s1"))!.IsDirty).IsFalse();
         await Assert.That(ActivatedSession(result.Effect)).IsEqualTo("s1");
     }
 
@@ -121,7 +121,7 @@ public class TabStripReducerTests
         var result = UiReducer.Update(state, new UiMsg.CloseTab(Id("s1")));
 
         await Assert.That(Ids(result.State)).IsEqualTo(string.Empty);
-        await Assert.That(result.State.Chat.Tabs.ActiveTabId).IsNull();
+        await Assert.That(result.State.Chat.TabStrip.ActiveTabId).IsNull();
         await Assert.That(result.Effect).IsTypeOf<TuiEffect.None>();
     }
 
@@ -195,9 +195,9 @@ public class TabStripReducerTests
         var unpinned = UiReducer.Update(pinned.State, new UiMsg.PinTab(Id("s1"), false));
 
         await Assert.That(Ids(pinned.State)).IsEqualTo("s1,s2,s3");
-        await Assert.That(pinned.State.Chat.Tabs.Find(Id("s1"))!.IsPinned).IsTrue();
+        await Assert.That(pinned.State.Chat.TabStrip.Find(Id("s1"))!.IsPinned).IsTrue();
         await Assert.That(again.State).IsSameReferenceAs(pinned.State);
-        await Assert.That(unpinned.State.Chat.Tabs.Find(Id("s1"))!.IsPinned).IsFalse();
+        await Assert.That(unpinned.State.Chat.TabStrip.Find(Id("s1"))!.IsPinned).IsFalse();
     }
 
     [Test]
@@ -255,7 +255,7 @@ public class TabStripReducerTests
         // tab, backward on the last.
         var state = new UiState
         {
-            Chat = new ChatDomainState { Tabs = TabStripState.Empty with { Tabs = [Tab("s1"), Tab("s2")] } }
+            Chat = new ChatDomainState { TabStrip = TabStripState.Empty with { Tabs = [Tab("s1"), Tab("s2")] } }
         };
 
         var next = UiReducer.Update(state, new UiMsg.CycleNextTab());
@@ -388,10 +388,10 @@ public class TabStripReducerTests
 
         await Assert.That(store.State).IsSameReferenceAs(snapshot);
         await Assert.That(Ids(snapshot)).IsEqualTo("s2,s1");
-        await Assert.That(snapshot.Chat.Tabs.Find(Id("s1"))!.IsDirty).IsTrue();
-        await Assert.That(snapshot.Chat.Tabs.Find(Id("s1"))!.PanelIds.Length).IsEqualTo(1);
-        await Assert.That(snapshot.Chat.Tabs.Find(Id("s2"))!.IsPinned).IsTrue();
-        await Assert.That(snapshot.Chat.Tabs.Find(Id("s2"))!.WorkingDirectory).IsEqualTo("/w");
+        await Assert.That(snapshot.Chat.TabStrip.Find(Id("s1"))!.IsDirty).IsTrue();
+        await Assert.That(snapshot.Chat.TabStrip.Find(Id("s1"))!.PanelIds.Length).IsEqualTo(1);
+        await Assert.That(snapshot.Chat.TabStrip.Find(Id("s2"))!.IsPinned).IsTrue();
+        await Assert.That(snapshot.Chat.TabStrip.Find(Id("s2"))!.WorkingDirectory).IsEqualTo("/w");
     }
 
     // ── helpers ────────────────────────────────────────────────────────────
@@ -445,9 +445,9 @@ public class TabStripReducerTests
     }
 
     private static string Ids(UiState state) =>
-        string.Join(",", state.Chat.Tabs.Select(t => t.SessionId.Value));
+        string.Join(",", state.Chat.TabStrip.Tabs.Select(t => t.SessionId.Value));
 
-    private static string ActiveId(UiState state) => state.Chat.Tabs.ActiveTabId?.Value ?? "<none>";
+    private static string ActiveId(UiState state) => state.Chat.TabStrip.ActiveTabId?.Value ?? "<none>";
 
     private static string ActivatedSession(TuiEffect effect) =>
         effect is TuiEffect.ActivateSession activate ? activate.SessionId.Value : "<none>";

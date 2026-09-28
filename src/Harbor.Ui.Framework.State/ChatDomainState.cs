@@ -72,7 +72,7 @@ public sealed record ChatDomainState
     ///     <see cref="UiReducer" /> (<c>OpenTab</c> / <c>ActivateTab</c> /
     ///     <c>CloseTab</c> / <c>ReorderTab</c> / …) — nothing mutates it here.
     /// </summary>
-    public TabStripState Tabs { get; init; } = TabStripState.Empty;
+    public TabStripState TabStrip { get; init; } = TabStripState.Empty;
 
     /// <summary>Whether the session list is currently loading.</summary>
     public bool IsLoading { get; init; }

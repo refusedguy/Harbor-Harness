@@ -1095,7 +1095,7 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Status:** Slice 1/3 landed (`feat/tabstate-388`, issue #388) — state only, no
   widget: `SessionTab` + `TabStripState`
   (`src/Harbor.Ui.Framework.State/Tabs/`, order = array index, panel ownership per
-  tab) in the `UiState` chat slice, `UiMsg.OpenTab/ActivateTab/CloseTab/
+  tab) held by `ChatDomainState.TabStrip`, `UiMsg.OpenTab/ActivateTab/CloseTab/
   CloseOtherTabs/CloseTabsToRight/PinTab/ReorderTab/CycleNextTab/CyclePreviousTab`
   folded by `UiReducer`, and a `TuiEffect.ActivateSession` the host routes to
   `ISessionManager.OpenSessionAsync` (optional `TuiEffectHost` delegate — the

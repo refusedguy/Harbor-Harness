@@ -233,7 +233,7 @@ public sealed record UiState
             IsLoading = IsLoading,
             // The open tabs are workspace chrome, not transcript: a clear-screen
             // must not close them (#388).
-            Tabs = Tabs
+            TabStrip = Chat.TabStrip
         },
         Ui = Ui with
         {

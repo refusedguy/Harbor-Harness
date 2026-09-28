@@ -395,7 +395,7 @@ public static class UiReducer
                 AgentName = h.AgentName,
                 // The tab strip is workspace chrome, not transcript: hydrating a
                 // session (i.e. switching to it) must not close the open tabs.
-                Tabs = state.Chat.Tabs,
+                TabStrip = state.Chat.TabStrip,
             },
         };
         foreach (var line in h.Lines)
@@ -547,15 +547,15 @@ public static class UiReducer
     /// </summary>
     public static (UiState State, TuiEffect Effect) OpenTab(UiState state, SessionTab tab)
     {
-        if (state.Chat.Tabs.Contains(tab.SessionId))
+        var strip = state.Chat.TabStrip;
+        if (strip.Contains(tab.SessionId))
             return ActivateTab(state, tab.SessionId);
 
         var next = state with
         {
             Chat = state.Chat with
             {
-                Tabs = state.Chat.Tabs.Add(tab),
-                ActiveTabId = tab.SessionId
+                TabStrip = strip with { Tabs = strip.Tabs.Add(tab), ActiveTabId = tab.SessionId }
             }
         };
         return (next, new TuiEffect.ActivateSession(tab.SessionId));
@@ -569,12 +569,13 @@ public static class UiReducer
     /// </summary>
     public static (UiState State, TuiEffect Effect) ActivateTab(UiState state, SessionId sessionId)
     {
-        if (state.Chat.Tabs.IndexOf(sessionId) < 0)
+        var strip = state.Chat.TabStrip;
+        if (strip.IndexOf(sessionId) < 0)
             return (state, new TuiEffect.None());
-        if (SameSession(state.Chat.Tabs.ActiveTabId, sessionId))
+        if (SameSession(strip.ActiveTabId, sessionId))
             return (state, new TuiEffect.None());
 
-        var next = state with { Chat = state.Chat with { ActiveTabId = sessionId } };
+        var next = state with { Chat = state.Chat with { TabStrip = strip with { ActiveTabId = sessionId } } };
         return (next, new TuiEffect.ActivateSession(sessionId));
     }
 
@@ -586,20 +587,24 @@ public static class UiReducer
     /// </summary>
     public static (UiState State, TuiEffect Effect) CloseTab(UiState state, SessionId sessionId)
     {
-        var tabs = state.Chat.Tabs;
-        int index = tabs.IndexOf(sessionId);
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
+        int index = strip.IndexOf(sessionId);
         if (index < 0)
             return (state, new TuiEffect.None());
 
         var remaining = tabs.RemoveAt(index);
-        bool closedActive = SameSession(tabs.ActiveTabId, sessionId);
+        bool closedActive = SameSession(strip.ActiveTabId, sessionId);
 
         var released = ReleaseOwnedPanels(state, tabs[index], remaining);
-        var activeId = closedActive ? TabNeighbourAfterClose(remaining, index) : tabs.ActiveTabId;
+        var activeId = closedActive ? TabNeighbourAfterClose(remaining, index) : strip.ActiveTabId;
 
-        var next = released with { Chat = released.Chat with { Tabs = remaining, ActiveTabId = activeId } };
+        var next = released with
+        {
+            Chat = released.Chat with { TabStrip = strip with { Tabs = remaining, ActiveTabId = activeId } }
+        };
         // The neighbour (if any) is the session the host must now open.
-        var effect = activeId is { } target && closedActive
+        TuiEffect effect = activeId is { } target && closedActive
             ? new TuiEffect.ActivateSession(target)
             : new TuiEffect.None();
         return (next, effect);
@@ -614,8 +619,9 @@ public static class UiReducer
     /// </summary>
     public static (UiState State, TuiEffect Effect) CloseOtherTabs(UiState state, SessionId keep)
     {
-        var tabs = state.Chat.Tabs;
-        int keepIndex = tabs.IndexOf(keep);
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
+        int keepIndex = strip.IndexOf(keep);
         if (keepIndex < 0 || tabs.Length == 1)
             return (state, new TuiEffect.None());
 
@@ -629,9 +635,9 @@ public static class UiReducer
 
         var next = released with
         {
-            Chat = released.Chat with { Tabs = remaining, ActiveTabId = keep }
+            Chat = released.Chat with { TabStrip = strip with { Tabs = remaining, ActiveTabId = keep } }
         };
-        var effect = SameSession(tabs.ActiveTabId, keep)
+        TuiEffect effect = SameSession(strip.ActiveTabId, keep)
             ? new TuiEffect.None()
             : new TuiEffect.ActivateSession(keep);
         return (next, effect);
@@ -645,8 +651,9 @@ public static class UiReducer
     /// </summary>
     public static (UiState State, TuiEffect Effect) CloseTabsToRight(UiState state, SessionId from)
     {
-        var tabs = state.Chat.Tabs;
-        int index = tabs.IndexOf(from);
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
+        int index = strip.IndexOf(from);
         if (index < 0 || index == tabs.Length - 1)
             return (state, new TuiEffect.None());
 
@@ -657,9 +664,9 @@ public static class UiReducer
 
         var next = released with
         {
-            Chat = released.Chat with { Tabs = remaining, ActiveTabId = from }
+            Chat = released.Chat with { TabStrip = strip with { Tabs = remaining, ActiveTabId = from } }
         };
-        var effect = SameSession(tabs.ActiveTabId, from)
+        TuiEffect effect = SameSession(strip.ActiveTabId, from)
             ? new TuiEffect.None()
             : new TuiEffect.ActivateSession(from);
         return (next, effect);
@@ -671,15 +678,19 @@ public static class UiReducer
     /// </summary>
     public static UiState PinTab(UiState state, SessionId sessionId, bool pinned)
     {
-        var tabs = state.Chat.Tabs;
-        int index = tabs.IndexOf(sessionId);
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
+        int index = strip.IndexOf(sessionId);
         if (index < 0)
             return state;
 
         var tab = tabs[index];
         if (tab.IsPinned == pinned)
             return state;
-        return state with { Chat = state.Chat with { Tabs = tabs.SetItem(index, tab with { IsPinned = pinned }) } };
+        return state with
+        {
+            Chat = state.Chat with { TabStrip = strip with { Tabs = tabs.SetItem(index, tab with { IsPinned = pinned }) } }
+        };
     }
 
     /// <summary>
@@ -690,15 +701,19 @@ public static class UiReducer
     /// </summary>
     public static UiState ReorderTab(UiState state, SessionId sessionId, int toIndex)
     {
-        var tabs = state.Chat.Tabs;
-        int from = tabs.IndexOf(sessionId);
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
+        int from = strip.IndexOf(sessionId);
         if (from < 0 || tabs.Length < 2)
             return state;
 
         int to = Math.Clamp(toIndex, 0, tabs.Length - 1);
         if (to == from)
             return state;
-        return state with { Chat = state.Chat with { Tabs = tabs.RemoveAt(from).Insert(to, tabs[from]) } };
+        return state with
+        {
+            Chat = state.Chat with { TabStrip = strip with { Tabs = tabs.RemoveAt(from).Insert(to, tabs[from]) } }
+        };
     }
 
     /// <summary>Focus the next tab in tab order (wraps around; no-op with fewer than two tabs).</summary>
@@ -725,12 +740,13 @@ public static class UiReducer
 
     private static (UiState State, TuiEffect Effect) CycleTab(UiState state, bool forward)
     {
-        var tabs = state.Chat.Tabs;
+        var strip = state.Chat.TabStrip;
+        var tabs = strip.Tabs;
         if (tabs.Length < 2)
             return (state, new TuiEffect.None());
 
         // No active tab yet → the first tab going forward, the last going back.
-        int current = tabs.ActiveTabId is { } active ? tabs.IndexOf(active) : -1;
+        int current = strip.ActiveTabId is { } active ? strip.IndexOf(active) : -1;
         int target = current < 0
             ? (forward ? 0 : tabs.Length - 1)
             : (forward ? current + 1 : current - 1 + tabs.Length) % tabs.Length;
@@ -796,7 +812,7 @@ public static class UiReducer
     }
 
     /// <summary>
-    ///     Session-id equality by value. <see cref="SessionId" /> is a
+    ///     Session-id equality by value — <see cref="SessionId" /> is a
     ///     reference-typed value object, so <c>==</c> would compare references and
     ///     miss a tab built from an equal-but-distinct id.
     /// </summary>
