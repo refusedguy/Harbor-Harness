@@ -124,7 +124,13 @@ public class JsonlUnboundedAllocationTests
 
         await Assert.That(seen).IsEqualTo(repeats);
         await Assert.That(reader.BytesRead).IsEqualTo(stream.Length);
-        await Assert.That(reader.BufferSize).IsLessThanOrEqualTo(ChunkedLineReader.ChunkBytes);
+
+        // 24 MiB of records through a block the size of the CONSTANT — this is
+        // the whole #460 claim for the read path, and it is checked against a
+        // 24 MiB stream rather than a 24 MiB allocation total, so it cannot
+        // drift with a JIT or a GC tweak.
+        await Assert.That(reader.BufferSize).IsLessThanOrEqualTo(ChunkedLineReader.InitialBlockBytes);
+        await Assert.That(stream.Length).IsGreaterThan(20L * MiB);
     }
 
     [Test]
@@ -160,19 +166,32 @@ public class JsonlUnboundedAllocationTests
 
         await Assert.That(records.Count).IsEqualTo(3);
         await Assert.That(records[0]).IsEqualTo("{\"type\":\"session\"}");
-        await Assert.That(records[1].Length).IsEqualTo(line.Length - 1);
+
+        // Byte-identical, not just the right length: the carry has to
+        // reassemble the record exactly, and it has to stop at its own LF
+        // rather than running on into the next record.
+        await Assert.That(records[1]).IsEqualTo(Encoding.UTF8.GetString(line).TrimEnd('\n'));
+
+        // And the unterminated tail is exactly the bytes that followed it — no
+        // stale pool memory from the previous tenant of the block, which is
+        // what an unbounded AsSpan(_cursor) here would have produced.
         await Assert.That(records[2]).IsEqualTo("trailing record with no terminator");
 
-        // It grew past the default rent to carry the record, and no further
+        // It grew past the initial block to carry the record, and no further
         // (the bound is loose on purpose: ArrayPool rounds to a power of two,
         // so an exact figure would be testing the pool, not the reader).
-        await Assert.That(reader.BufferSize).IsGreaterThan(ChunkedLineReader.ChunkBytes);
+        await Assert.That(reader.BufferSize).IsGreaterThan(ChunkedLineReader.InitialBlockBytes);
         await Assert.That(reader.BufferSize).IsLessThan(line.Length * 2);
     }
 
-    /// <summary>One well-formed message record, terminated, of the requested size.</summary>
-    private static byte[] SampleRecord(int payloadBytes) => Encoding.UTF8.GetBytes(
-        "{\"type\":\"message\",\"id\":\"m0\",\"createdAt\":\"2026-01-01T00:00:00+00:00\"," +
+    /// <summary>
+    ///     One well-formed message record, terminated, of the requested size.
+    ///     <paramref name="id" /> is part of it because the reader keys messages
+    ///     by id, so a fixture that repeats one id would collapse 1 000 records
+    ///     into 1 and quietly stop testing anything.
+    /// </summary>
+    private static byte[] SampleRecord(int payloadBytes, string id = "m0") => Encoding.UTF8.GetBytes(
+        $"{{\"type\":\"message\",\"id\":\"{id}\",\"createdAt\":\"2026-01-01T00:00:00+00:00\"," +
         "\"role\":\"user\",\"payload\":{\"content\":\"" + new string('x', payloadBytes) +
         "\",\"agent\":\"code\",\"model\":\"test-model\"}}\n");
 
@@ -194,9 +213,9 @@ public class JsonlUnboundedAllocationTests
             string path = Path.Combine(store.GetRootDirectory(), $"{sessionId}.jsonl");
             using (var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read))
             {
-                byte[] line = SampleRecord(payloadBytes);
                 for (int i = 0; i < records; i++)
                 {
+                    byte[] line = SampleRecord(payloadBytes, $"m{i}");
                     fs.Write(line, 0, line.Length);
                 }
             }
@@ -408,6 +427,43 @@ public class JsonlUnboundedAllocationTests
     }
 
     [Test]
+    public async Task UpdateMessage_SeveralMessagesWithTheSameId_DropsThemAll()
+    {
+        // The read path is "latest id wins", so a file can legitimately hold
+        // several records for one id (an update that raced an append). Every one
+        // of them is stale, so every one of them has to go — a plan that dropped
+        // only the first would leave a duplicate that the reader then silently
+        // picks between.
+        var (store, sessionId) = await SeedAsync(2);
+        try
+        {
+            string path = Path.Combine(store.GetRootDirectory(), $"{sessionId}.jsonl");
+
+            // Same id as the seeded m1, appended twice more, out of order.
+            await AppendFatMessageAsync(store, sessionId, "m1", 11);
+            await AppendFatMessageAsync(store, sessionId, "m1", 22);
+            await AppendFatMessageAsync(store, sessionId, "m1", 33);
+
+            var updated = await store.UpdateMessageAsync(sessionId, new UserMessage(
+                "m1", sessionId, Epoch.AddSeconds(99), "final body", "code", "claude-opus-4"));
+            await Assert.That(updated.IsSuccess).IsTrue();
+
+            var reread = await store.GetMessagesAsync(sessionId);
+            await Assert.That(reread.IsSuccess).IsTrue();
+
+            // Exactly one m1, and it is the one we just wrote.
+            await Assert.That(reread.Value.Count(m => m.Id == "m1")).IsEqualTo(1);
+            await Assert.That(((UserMessage)reread.Value.Single(m => m.Id == "m1")).Content)
+                .IsEqualTo("final body");
+            await Assert.That(reread.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m2", "m1" });
+        }
+        finally
+        {
+            Drop(store);
+        }
+    }
+
+    [Test]
     public async Task UpdateMessage_DropsTheStaleEntryAndLeavesTheRestReadable()
     {
         // The rewrite's correctness contract, unchanged by streaming: the old
@@ -445,12 +501,18 @@ public class JsonlUnboundedAllocationTests
             string before = await File.ReadAllTextAsync(path);
             DateTime stampBefore = File.GetLastWriteTimeUtc(path);
 
+            // The directory too: the rewrite stages through a temp sibling, so
+            // creating and deleting one would move the directory's mtime even
+            // with the file untouched. "Not found" must not create a temp at all.
+            DateTime dirStampBefore = File.GetLastWriteTimeUtc(store.GetRootDirectory());
+
             var updated = await store.UpdateMessageAsync(sessionId, new UserMessage(
                 "does-not-exist", sessionId, Epoch, "nope", "code", "claude-opus-4"));
 
             await Assert.That(updated.IsFailure).IsTrue();
             await Assert.That(await File.ReadAllTextAsync(path)).IsEqualTo(before);
             await Assert.That(File.GetLastWriteTimeUtc(path)).IsEqualTo(stampBefore);
+            await Assert.That(File.GetLastWriteTimeUtc(store.GetRootDirectory())).IsEqualTo(dirStampBefore);
             await Assert.That(LeftoverTemps(store)).IsEmpty();
         }
         finally
@@ -477,6 +539,37 @@ public class JsonlUnboundedAllocationTests
             await Assert.That(updated.IsFailure).IsTrue();
             await Assert.That(updated.Error).Contains("is empty");
             await Assert.That(LeftoverTemps(store)).IsEmpty();
+        }
+        finally
+        {
+            Drop(store);
+        }
+    }
+
+    [Test]
+    public async Task DeleteMessagesAfter_AnchorsOnTheFirstMatchingId()
+    {
+        // A duplicate id makes "which record is the anchor" ambiguous, and the
+        // pre-#460 code resolved it by index-scan order: the FIRST match. The
+        // streaming plan has to land on the same one, or a rewind would drop a
+        // different set of messages than it used to for the same input.
+        var (store, sessionId) = await SeedAsync(4);
+        try
+        {
+            // A second record for m1, after m2 and m3 — so anchoring on the
+            // first m1 keeps m2/m3 and the second m1, while anchoring on the
+            // second would keep one more message.
+            await AppendFatMessageAsync(store, sessionId, "m1", 8);
+
+            var result = await store.DeleteMessagesAfterAsync(sessionId, "m1");
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value).IsEqualTo(3); // m2, m3, and the dup m1
+
+            var reread = await store.GetMessagesAsync(sessionId);
+            await Assert.That(reread.IsSuccess).IsTrue();
+            await Assert.That(reread.Value.Select(m => m.Id))
+                .IsEquivalentTo(new[] { "m0", "m1", "m2", "m3" });
         }
         finally
         {

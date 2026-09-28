@@ -324,13 +324,14 @@ public sealed class JsonlSessionStore : ISessionStore
                 // #460: streamed record by record into the temp sibling, so
                 // dropping the stale entry no longer reads the whole session
                 // into a List<string> (twice) under this semaphore. False means
-                // the id was not in the file: the temp copy is discarded and
-                // the original left exactly as it was, which is what made this
-                // a "not found" outcome instead of an appended duplicate.
+                // the id was not in the file: the rewrite is decided before any
+                // temp is created, so the original — and its directory's mtime —
+                // are left exactly as they were, which is what makes this a
+                // "not found" outcome instead of an appended duplicate.
                 return SessionFileIO.RewriteRecordsAtomic(
                     sessionFile,
                     new DropMessagePlan(message.Id),
-                    trailer: entryBytes);
+                    entryBytes);
             }
             finally
             {
@@ -510,21 +511,20 @@ public sealed class JsonlSessionStore : ISessionStore
             await semaphore.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                // #460: streamed. The plan walks the file once, keeping every
-                // record up to the anchor and dropping every message record
-                // after it, so nothing but the current record is ever in
-                // memory. The anchor is the FIRST id match and file order is
-                // insertion order for this store, which makes a single pass
-                // exact — the old code got the same answer from an index scan
-                // over a List<string> of the whole file, held under this
-                // semaphore.
-                var plan = new DeleteAfterAnchorPlan(messageId);
-                SessionFileIO.RewriteRecordsAtomic(sessionFile, plan);
-
-                // Reported from the plan whether or not the rewrite committed:
-                // reaching the last message leaves the file (and its mtime)
-                // alone, and that is still a successful rewind of zero
-                // messages.
+                // #460: streamed. The plan walks the file, keeping every record
+                // up to the anchor and dropping every message record after it,
+                // so nothing but the current record is ever in memory. The
+                // anchor is the FIRST id match and file order is insertion
+                // order for this store, which makes a single pass exact — the
+                // old code got the same answer from an index scan over a
+                // List<string> of the whole file, held under this semaphore.
+                //
+                // The rewrite hands back the plan that carried the counts, so
+                // these are read off the object the decision was made on:
+                // reaching the last message reports a successful rewind of zero
+                // messages, exactly as the pre-#460 `if (removed > 0)` did.
+                var plan = SessionFileIO.RewriteRecords(
+                    sessionFile, new DeleteAfterAnchorPlan(messageId));
                 return (Found: plan.Found, Removed: plan.Removed);
             }
             finally
@@ -617,7 +617,8 @@ public sealed class JsonlSessionStore : ISessionStore
                 // session twice inside this semaphore.
                 byte[] headerRecord = JsonSerializer.SerializeToUtf8Bytes(
                     header, JsonlCodecContext.Default.SessionHeaderEntry);
-                return SessionFileIO.RewriteRecordsAtomic(sessionFile, new HeaderRewritePlan(headerRecord));
+                return SessionFileIO.RewriteRecordsAtomic(
+                    sessionFile, new HeaderRewritePlan(headerRecord));
             }
             finally
             {

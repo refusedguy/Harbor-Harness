@@ -29,11 +29,22 @@ internal sealed class ChunkedLineReader : IDisposable
 {
     /// <summary>
     ///     Bytes pulled per refill. Big enough that an ordinary session is a
-    ///     couple of refills, small enough to stay inside
+    ///     couple of refills, small enough that two of them still fit inside
     ///     <see cref="ArrayPool{T}" />.Shared's 1 MiB poolable tier, so the
     ///     common case really is a pooled array and not a fresh LOH one.
     /// </summary>
     internal const int ChunkBytes = 256 * 1024;
+
+    /// <summary>
+    ///     Size the block starts at: two chunks, so the first refill always
+    ///     leaves a whole chunk of slack behind it. A block of exactly
+    ///     <see cref="ChunkBytes" /> would have zero slack, and the very first
+    ///     record that did not end on a chunk boundary would look like a carry
+    ///     and force a grow — i.e. the block would double for nothing on
+    ///     ordinary input. The slack is what makes "the block never grows"
+    ///     true in practice rather than only in theory.
+    /// </summary>
+    internal const int InitialBlockBytes = 2 * ChunkBytes;
 
     /// <summary>
     ///     Ceiling on a single JSONL record. The largest payload a message can
@@ -47,7 +58,7 @@ internal sealed class ChunkedLineReader : IDisposable
     internal const long MaxRecordBytes = 32L * 1024 * 1024;
 
     private readonly Stream _stream;
-    private byte[] _buffer = ArrayPool<byte>.Shared.Rent(ChunkBytes);
+    private byte[] _buffer = ArrayPool<byte>.Shared.Rent(InitialBlockBytes);
     private int _filled; // valid bytes in _buffer
     private int _cursor; // first unconsumed byte
     private bool _overflow; // the record in progress already blew MaxRecordBytes
@@ -133,11 +144,16 @@ internal sealed class ChunkedLineReader : IDisposable
             _cursor = 0;
         }
 
-        // A carried record can fill the block; grow to hold it plus one chunk.
-        // Never grow past what the ceiling still owes us, or a long carry plus
-        // a long remainder would walk the block up by a chunk per refill. The
-        // carry itself is dropped the moment it passes MaxRecordBytes, so the
-        // block never exceeds that plus one chunk.
+        // Only the CARRY makes free space genuinely scarce: a record ending
+        // mid-block is the normal case and must not grow anything, which is why
+        // the block starts with a second chunk's worth of slack. When the carry
+        // really is most of the block, grow to carry + one chunk so the rest of
+        // an oversized record arrives in a single read rather than a trickle.
+        //
+        // Never grow past what the ceiling still owes, or a long carry plus a
+        // long remainder would walk the block up a chunk per refill. The carry
+        // is itself dropped the moment it passes MaxRecordBytes, so the block
+        // never exceeds that plus one chunk.
         int want = (int)Math.Min(ChunkBytes, ByteCeiling - BytesRead);
         if (_buffer.Length - _filled >= want)
             return true;
@@ -233,7 +249,10 @@ internal sealed class ChunkedLineReader : IDisposable
             return false;
         }
 
-        ReadOnlySpan<byte> tail = _buffer.AsSpan(_cursor);
+        // Bounded by _filled, NOT by the block: the tail of a block is whatever
+        // the pool handed back past the bytes we actually read, and those bytes
+        // are stale from a previous tenant.
+        ReadOnlySpan<byte> tail = _buffer.AsSpan(_cursor, _filled - _cursor);
         _cursor = _filled;
         record = Trim(tail);
         return true;

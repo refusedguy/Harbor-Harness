@@ -17,8 +17,8 @@ internal static class SessionFileIO
     /// <summary>
     ///     Crash-safe streaming rewrite (#460). The source is copied to a temp
     ///     sibling one record at a time — each record's verdict coming from
-    ///     <paramref name="plan" /> — and the temp is renamed over the target,
-    ///     so a crash leaves either the old file or the new one, never a
+    ///     <paramref name="plan" /> — and the temp is renamed over the target, so
+    ///     a crash leaves either the old file or the new one, never a
     ///     half-written one, exactly as before.
     /// </summary>
     /// <remarks>
@@ -35,17 +35,50 @@ internal static class SessionFileIO
     ///     decode, but the file is now uniformly LF.
     /// </para>
     /// <para>
-    ///     Returns false with the original file untouched when the plan never
-    ///     found its target or had nothing to change; a leftover temp is
-    ///     removed. <paramref name="trailer" /> is written after the last
-    ///     record, if given.
+    ///     <b>Why two passes.</b> "Nothing to do" has to be decided BEFORE the
+    ///     temp file is created, because creating and deleting it moves the
+    ///     containing directory's mtime — and an unknown-id update is
+    ///     contractually a no-op on disk. Deciding needs the records, so a plan
+    ///     that cannot answer from the file's length alone
+    ///     (<see cref="SessionRewritePlan.DecideFromLength" />) gets a dry scan
+    ///     first; only if that says "go" is a temp created and a second pass
+    ///     writes it. The header rename can answer from the length, so it skips
+    ///     the scan and stays a single pass. The cost when the scan does run is
+    ///     one extra sequential read of a file that is about to be rewritten
+    ///     anyway — in exchange for never materializing it.
+    /// </para>
+    /// <para>
+    ///     Returns false when nothing changed; the original file and its
+    ///     directory are then untouched and no temp is left behind.
+    ///     <paramref name="trailer" /> is written after the last record, if
+    ///     given.
     /// </para>
     /// </remarks>
     internal static bool RewriteRecordsAtomic(
         string targetPath,
         SessionRewritePlan plan,
-        byte[]? trailer = null)
+        byte[]? trailer = null) =>
+        RewriteRecords(targetPath, plan, trailer).Found;
+
+    /// <summary>
+    ///     <see cref="RewriteRecordsAtomic" /> returning the plan that carried
+    ///     the counts, so a caller whose <c>Result</c> reports a number (how many
+    ///     messages a rewind removed) reads it off the same object the decision
+    ///     was made on rather than re-deriving it.
+    /// </summary>
+    internal static T RewriteRecords<T>(string targetPath, T plan, byte[]? trailer = null)
+        where T : SessionRewritePlan
     {
+        if (!MayRewrite(targetPath, plan))
+        {
+            return plan;
+        }
+
+        // The dry pass left counts on the plan; the writing pass must not add
+        // to them, so start it from clean. Both passes see the same records, so
+        // the counts come out the same — and they are the caller's to report.
+        plan.Reset();
+
         string directory = Path.GetDirectoryName(targetPath)!;
         string tempPath = Path.Combine(directory, $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
         bool committed = false;
@@ -59,15 +92,9 @@ internal static class SessionFileIO
                 StreamRecords(source, sink, plan, trailer);
             }
 
-            if (!plan.Found || !plan.Changed)
-            {
-                // Nothing to do: leave the original alone and drop the copy.
-                return false;
-            }
-
             File.Move(tempPath, targetPath, overwrite: true);
             committed = true;
-            return true;
+            return plan;
         }
         finally
         {
@@ -75,6 +102,52 @@ internal static class SessionFileIO
             {
                 TryDeleteTemp(tempPath);
             }
+        }
+    }
+
+    /// <summary>
+    ///     Whether <paramref name="plan" /> ends up changing the file, decided
+    ///     without writing anything. Uses a dry scan only when the plan cannot
+    ///     answer from the file's length alone.
+    /// </summary>
+    private static bool MayRewrite(string targetPath, SessionRewritePlan plan)
+    {
+        var info = new FileInfo(targetPath);
+        if (!info.Exists)
+        {
+            return false;
+        }
+
+        if (!plan.DecideFromLength(info.Length))
+        {
+            // Could not decide from the length: ask the records — without
+            // writing. Cheap next to what the writing pass costs.
+            using var source = new FileStream(
+                targetPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 64 * 1024);
+            Scan(source, plan);
+        }
+
+        return plan.Found && plan.Changed;
+    }
+
+    /// <summary>
+    ///     One pass over the file that only asks the plan questions and never
+    ///     writes — the dry half of <see cref="RewriteRecordsAtomic" />.
+    /// </summary>
+    private static void Scan(Stream source, SessionRewritePlan plan)
+    {
+        using var reader = new ChunkedLineReader(source);
+        while (reader.Fill())
+        {
+            while (reader.TryGetRecord(out var record))
+            {
+                _ = plan.Decide(record);
+            }
+        }
+
+        if (reader.TryGetTrailingRecord(out var trailing))
+        {
+            _ = plan.Decide(trailing);
         }
     }
 

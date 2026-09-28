@@ -49,6 +49,9 @@ internal abstract class SessionRewritePlan
     /// <summary>Called by a plan once its target turns up.</summary>
     protected void MarkFound() => Found = true;
 
+    /// <summary>Clears <see cref="Found" />, for a fresh pass over the same file.</summary>
+    internal void ClearFound() => Found = false;
+
     /// <summary>
     ///     True when committing would alter the file. Finding the target
     ///     normally implies that; a plan that can find its target and still
@@ -64,6 +67,29 @@ internal abstract class SessionRewritePlan
 
     /// <summary>Verdict for one record, terminator already stripped.</summary>
     internal abstract LineAction Decide(ReadOnlySpan<byte> record);
+
+    /// <summary>
+    ///     Sets <see cref="Found" /> from the file's length alone, without
+    ///     reading a record. Returns true when it could decide — the caller then
+    ///     skips the dry scan and goes straight to writing. Returns false when
+    ///     only the records can answer, and the caller scans.
+    /// </summary>
+    /// <remarks>
+    ///     Default: cannot decide, so the caller scans. This exists so the
+    ///     common rewrite (a header rename) does not read the file twice.
+    /// </remarks>
+    internal virtual bool DecideFromLength(long fileBytes)
+    {
+        _ = fileBytes;
+        return false;
+    }
+
+    /// <summary>
+    ///     Returns the plan to its just-constructed state, so the same instance
+    ///     can be dry-scanned and then walked for real without its counters
+    ///     accumulating across the two passes.
+    /// </summary>
+    internal abstract void Reset();
 }
 
 /// <summary>
@@ -80,6 +106,29 @@ internal sealed class HeaderRewritePlan : SessionRewritePlan
     internal HeaderRewritePlan(byte[] headerRecord) => _headerRecord = headerRecord;
 
     internal override byte[] Replacement => _headerRecord;
+
+    /// <summary>
+    ///     Answerable from the length alone: any file with at least one byte has
+    ///     a first record to replace, and one with none has no header to update.
+    ///     So the header rename — the rewrite the issue is about, and the one on
+    ///     the interactive path — decides in O(1) and reads the file once.
+    /// </summary>
+    internal override bool DecideFromLength(long fileBytes)
+    {
+        if (fileBytes <= 0)
+        {
+            return true; // decided: no records, so Found stays false
+        }
+
+        MarkFound();
+        return true;
+    }
+
+    internal override void Reset()
+    {
+        ClearFound();
+        _rewritten = false;
+    }
 
     internal override LineAction Decide(ReadOnlySpan<byte> record)
     {
@@ -112,6 +161,8 @@ internal sealed class DropMessagePlan : SessionRewritePlan
         _messageId = messageId;
         _idNeedle = Encoding.UTF8.GetBytes($"\"id\":\"{messageId}\"");
     }
+
+    internal override void Reset() => ClearFound();
 
     internal override LineAction Decide(ReadOnlySpan<byte> record)
     {
@@ -149,7 +200,7 @@ internal sealed class DeleteAfterAnchorPlan : SessionRewritePlan
     }
 
     /// <summary>Message records dropped after the anchor.</summary>
-    internal int Removed { get; private set; }
+    internal int Removed { get; set; }
 
     /// <summary>
     ///     Reaching the anchor is not itself a change — the old code only
@@ -157,6 +208,13 @@ internal sealed class DeleteAfterAnchorPlan : SessionRewritePlan
     ///     message left the file (and its mtime) alone.
     /// </summary>
     internal override bool Changed => Removed > 0;
+
+    internal override void Reset()
+    {
+        ClearFound();
+        _pastAnchor = false;
+        Removed = 0;
+    }
 
     internal override LineAction Decide(ReadOnlySpan<byte> record)
     {

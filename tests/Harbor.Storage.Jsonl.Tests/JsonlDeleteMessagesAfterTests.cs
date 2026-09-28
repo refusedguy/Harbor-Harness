@@ -99,6 +99,11 @@ public class JsonlDeleteMessagesAfterTests
             var message = Msg(session.Id, 0);
             await store.AppendMessageAsync(session.Id, message);
 
+            // The DIRECTORY's mtime, not the file's: #460 rewrites through a
+            // temp sibling, and creating then deleting that temp moves the
+            // directory even when the file itself is untouched. A no-op update
+            // has to decide "nothing to do" BEFORE any temp exists, or this
+            // contract quietly breaks.
             long before = File.GetLastWriteTimeUtc(store.GetRootDirectory()).Ticks;
             var result = await store.DeleteMessagesAfterAsync(session.Id, "no-such-message");
             long after = File.GetLastWriteTimeUtc(store.GetRootDirectory()).Ticks;
