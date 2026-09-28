@@ -1,0 +1,73 @@
+# Regenerate TUI golden baselines on demand and commit them back.
+#
+# Golden tests (ScreenshotHashTests, GoldenGridDumpTests, ce3-*) fail when
+# painted output intentionally changes. Regeneration requires a full test run
+# with HARBOR_UPDATE_GOLDENS=1 — agents and reviewers without a local .NET
+# setup use this workflow instead:
+#
+#   gh workflow run goldens.yml --ref <branch>   (-PR branch, not dev)
+#
+# The job runs the CellForge golden suites with the flag set and commits any
+# changed baselines straight back to the same branch, so the PR's CI re-runs
+# green. Only baseline files (*.golden.txt, *.verified.*, hashes manifest)
+# are committed — never source changes. Manual dispatch only, never a gate.
+name: goldens
+
+on:
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: "Test projects to regenerate (space-separated, empty = all golden suites)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      - name: Regenerate goldens
+        env:
+          HARBOR_UPDATE_GOLDENS: 1
+          DOTNET_NOLOGO: true
+          DOTNET_CLI_TELEMETRY_OPTOUT: true
+        run: |
+          set -uo pipefail
+          if [ -z "${{ inputs.suites }}" ]; then
+            suites="tests/Harbor.Tui.CellForge.Tests"
+          else
+            suites="${{ inputs.suites }}"
+          fi
+          for p in $suites; do
+            echo "::group::goldens $p"
+            dotnet run --project "$p" -c Release -- --treenode-filter "*Golden*" --treenode-filter "*ScreenshotHash*" || true
+            echo "::endgroup::"
+          done
+          exit 0
+
+      - name: Commit baselines back
+        run: |
+          git config user.name "harbor-goldens"
+          git config user.email "harbor-goldens@users.noreply.github.com"
+          git add -A -- '*.golden.txt' '*.verified.*' '*hashes*.json' '*Hashes*.json'
+          if git diff --cached --quiet; then
+            echo "No baseline changes."
+          else
+            git commit -m "chore(goldens): regenerate baselines via workflow dispatch" --no-verify
+            git push origin "HEAD:${{ github.ref_name }}"
+          fi
