@@ -734,10 +734,8 @@ public sealed class DialogOverlay
 
     private bool HandleApprovalKey(ConsoleKeyInfo key)
     {
-        // Fixed choice row navigates like Radio (Up/Down are aliases);
-        // printable text edits the reject-reason field like Multiline.
-        // Arrows stay on the choice row, so reason edits are append +
-        // Backspace/Delete (the field is capped at MaxApprovalReasonRows).
+        // Choice navigation mirrors the radio row, including vertical arrows.
+        // Typing edits the reject reason, since arrows never leave the choices.
         switch (key.Key)
         {
             case ConsoleKey.UpArrow:
@@ -923,7 +921,7 @@ public sealed class DialogOverlay
                 string path = _approvalFile.Length > innerW
                     ? "…" + _approvalFile[^Math.Max(1, innerW - 1)..]
                     : _approvalFile;
-                buffer.SetText(x, y, path, ChatPalette.Muted);
+                buffer.SetText(x, y, path, new CellStyle(ChatPalette.Muted));
                 y++;
             }
             for (int i = 0; i < _approvalDiff.Count && y < bottom; i++)
@@ -960,7 +958,7 @@ public sealed class DialogOverlay
             string caption = ApprovalReasonCaption.Length > innerW
                 ? ApprovalReasonCaption[..Math.Max(0, innerW - 1)] + "…"
                 : ApprovalReasonCaption;
-            buffer.SetText(x, y, caption, ChatPalette.Muted);
+            buffer.SetText(x, y, caption, new CellStyle(ChatPalette.Muted));
             y++;
         }
         string[] reason = _editor.Text.Split('\n');
