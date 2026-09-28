@@ -396,13 +396,13 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
         body.Add(new Row(focusRail + HeaderLabel + $" · {q + 1}/{_questions.Count} · {item.Title}", headerStyle));
         if (StripRows() == 1)
         {
-            body.Add(new Row(BuildStrip(), ChatPalette.Dim, isStrip: true));
+            body.Add(new Row(BuildStrip(), ChatPalette.Dim, IsStrip: true));
         }
 
         EnsurePromptWrapped(q, Math.Max(8, width));
         for (int i = 0; i < _wrappedPrompt.Count; i++)
         {
-            body.Add(new Row(_wrappedPrompt[i], promptStyle, pad: true));
+            body.Add(new Row(_wrappedPrompt[i], promptStyle, Pad: true));
         }
 
         int cursor = state.Cursor;
@@ -413,7 +413,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
             body.Add(new Row(
                 $"{(i == cursor ? "▸" : " ")} {(state.Selected.Contains(i) ? "[x]" : "[ ]")} {text}",
                 i == cursor ? cursorStyle : optionStyle,
-                optionIndex: i));
+                OptionIndex: i));
         }
 
         if (item.AllowCustom)
