@@ -26,7 +26,7 @@ Platform service abstractions and implementations for the Harbor UI Framework �
 ## Public API summary
 
 - **`EventBusAppStoreDispatcher`**: `Start()`, `DisposeAsync` — pumps `AgentEvent`s into the app store.
-- **`OverlayController`**: `Register(id, setter)`, `Open(id)`, `Close(id)`, `CloseTop()`, `HasOverlay`.
+- **`OverlayController`**: `Register(id, setter)`, `Open(id)`, `Close(id)`, `CloseTop()`, `HasOverlay`, `IsDisposed`, `Dispose()`. `Dispose` detaches from the singleton `IOverlayStack` (both `Changed` and `Popped`) — required because `IOverlayStack` outlives every renderer swap. After disposal the controller is inert: `Open`/`Register` throw `ObjectDisposedException`, `Close` no-ops, `CloseTop` returns `false`, and late stack events do not paint.
 - **Platform services**: `IDialogService`, `IDispatcherAdapter`, `IFilePicker`, `IThemeService`, `IToastService`, `IOverlayStack` — all renderer-agnostic contracts.
 - **`GitService`**: `GetGitStatus(directory)` → `GitSessionInfo`.
 - **`SessionStatusTracker`**: `Get/SetStatus`, `NotifyMessageCount`, events for status/count changes.

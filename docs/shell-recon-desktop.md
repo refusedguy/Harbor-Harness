@@ -186,11 +186,13 @@ _overlayController.Register("focusSession", v => IsFocusSessionOpen = v);
 
 | Method | Signature | Behavior |
 |--------|-----------|----------|
-| `Register` | `void Register(string id, Action<bool> setter)` | Maps overlay id to boolean flag setter. Throws `ArgumentException` if id is empty, `ArgumentNullException` if setter is null. |
-| `Open` | `void Open(string id)` | Calls the setter with `true`, then pushes id onto `IOverlayStack`. No-op if id is empty or not registered. |
-| `Close` | `void Close(string id)` | Calls the setter with `false`. No-op if id is empty or not registered. |
-| `CloseTop` | `bool CloseTop()` | Peeks top id from stack, calls `Close(top)`, then `PopTop()`. Returns `true` if an overlay was closed, `false` if stack empty. |
-| `HasOverlay` | `bool` (property) | True when stack has a current overlay. |
+| `Register` | `void Register(string id, Action<bool> setter)` | Maps overlay id to boolean flag setter. Throws `ArgumentException` if id is empty, `ArgumentNullException` if setter is null, `ObjectDisposedException` after `Dispose`. |
+| `Open` | `void Open(string id)` | Calls the setter with `true`, then pushes id onto `IOverlayStack`. No-op if id is empty or not registered. Throws `ObjectDisposedException` after `Dispose`. |
+| `Close` | `void Close(string id)` | Calls the setter with `false`. No-op if id is empty or not registered, or after `Dispose` (teardown races). |
+| `CloseTop` | `bool CloseTop()` | Peeks top id from stack, calls `Close(top)`, then `PopTop()`. Returns `true` if an overlay was closed, `false` if stack empty or after `Dispose`. |
+| `HasOverlay` | `bool` (property) | True when stack has a current overlay. Pinned to `false` after `Dispose`. |
+| `IsDisposed` | `bool` (property) | True once `Dispose` has run and the controller detached from the stack. |
+| `Dispose` | `void Dispose()` | Detaches both `Changed` and `Popped` from the singleton `IOverlayStack` (#476) and drops the id→setter map. Idempotent. |
 
 ### Overlay Flag Mapping
 | Overlay Id | Boolean Flag | Property |
