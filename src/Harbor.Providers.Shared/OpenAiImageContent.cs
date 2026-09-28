@@ -7,9 +7,8 @@
 // had no way to put an image in front of a model. The provider-SPECIFIC wire
 // difference (Anthropic's `type: "image"` + `source.media_type` vs OpenAI's
 // `image_url` data URL) lives in the provider builders, never in a shared
-// `switch (ProviderId.Value)` (§OOP-002).
+// provider-id switch (§OOP-002).
 
-using System.Buffers;
 using System.Text.Json;
 using Harbor.Abstractions.Providers;
 using Microsoft.Extensions.Logging;
@@ -42,37 +41,20 @@ internal static class OpenAiImageContent
     ///     Build the <c>data:&lt;mime&gt;;base64,&lt;payload&gt;</c> URL for one image.
     /// </summary>
     /// <remarks>
-    ///     §PERF-002: the base64 is produced explicitly here, over an exact-size
-    ///     rented char buffer, and handed to the writer as a plain string — a
-    ///     <c>byte[]</c> is never routed through a reflection-based
-    ///     <c>JsonSerializer.Serialize(Dictionary&lt;string, object?&gt;)</c> hot path.
+    ///     §PERF-002: the base64 is produced explicitly here, and only the
+    ///     finished string reaches the serializer — a <c>byte[]</c> is never
+    ///     handed to the reflection-based
+    ///     <c>JsonSerializer.Serialize(Dictionary&lt;string, object?&gt;)</c>
+    ///     payload path, which would resolve the array's element type at
+    ///     runtime. The compat client writes straight to its
+    ///     <see cref="Utf8JsonWriter" />, so nothing here is serialised twice.
     /// </remarks>
     public static string ToDataUrl(string mimeType, ReadOnlySpan<byte> data)
     {
         const string Scheme = "data:";
         const string Marker = ";base64,";
 
-        string mime = mimeType ?? string.Empty;
-        int prefixLength = Scheme.Length + mime.Length + Marker.Length;
-        char[] rented = ArrayPool<char>.Shared.Rent(prefixLength + Convert.GetBase64CharCount(data.Length));
-        try
-        {
-            Span<char> buffer = rented.AsSpan();
-            Scheme.AsSpan().CopyTo(buffer);
-            int written = Scheme.Length;
-            mime.AsSpan().CopyTo(buffer[written..]);
-            written += mime.Length;
-            Marker.AsSpan().CopyTo(buffer[written..]);
-            written += Marker.Length;
-            Convert.TryWriteBase64Chars(buffer[written..], data, out int charsWritten);
-            written += charsWritten;
-
-            return new string(buffer[..written]);
-        }
-        finally
-        {
-            ArrayPool<char>.Shared.Return(rented);
-        }
+        return string.Concat(Scheme, mimeType, Marker, Convert.ToBase64String(data));
     }
 
     /// <summary>

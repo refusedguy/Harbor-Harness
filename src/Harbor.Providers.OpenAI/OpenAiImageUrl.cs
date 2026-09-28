@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 
 namespace Harbor.Providers.OpenAI;
 
@@ -28,14 +27,4 @@ internal sealed record OpenAiImageUrl(
 /// </summary>
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(OpenAiImageUrl))]
-internal sealed partial class OpenAiWireContext : JsonSerializerContext
-{
-    /// <summary>
-    ///     Resolver used by <see cref="OpenAiRequestBuilder" />: the
-    ///     source-generated metadata FIRST, reflection as the fallback for the
-    ///     remaining anonymous payload shapes (tools, tool_choice, …), so this
-    ///     changes no existing wire output.
-    /// </summary>
-    public static JsonTypeInfoResolver Resolver { get; } =
-        JsonTypeInfoResolver.Combine(Default, new DefaultJsonTypeInfoResolver());
-}
+internal sealed partial class OpenAiWireContext : JsonSerializerContext;

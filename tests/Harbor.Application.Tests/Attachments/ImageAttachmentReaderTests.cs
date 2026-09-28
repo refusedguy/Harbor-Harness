@@ -252,7 +252,7 @@ public class ImageAttachmentReaderTests
             string path = Path.Combine(dir, "shot.png");
             await File.WriteAllBytesAsync(path, OnePixelPng());
 
-            var reader = new ImageAttachmentReader(new StubProviderRegistry(failCatalog: true));
+            var reader = new ImageAttachmentReader(new StubProviderRegistry([], failCatalog: true));
             var result = await reader.ReadAsync(path, "kilocode", "any-model");
 
             await Assert.That(result.IsSuccess).IsTrue();

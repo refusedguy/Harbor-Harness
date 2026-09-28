@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Internal;
@@ -19,9 +20,11 @@ internal static class OpenAiRequestBuilder
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        // #386: the image_url DTO resolves through source-generated metadata, the
-        // rest of the payload keeps its reflection fallback — no wire change.
-        TypeInfoResolver = OpenAiWireContext.Resolver
+        // #386 (§PERF-002): the image_url DTO resolves through source-generated
+        // metadata, the rest of the payload keeps its reflection fallback — so no
+        // existing wire output changes.
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            OpenAiWireContext.Default, new DefaultJsonTypeInfoResolver())
     };
 
     public static bool IsReasoningModel(string modelId)
