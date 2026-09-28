@@ -600,12 +600,18 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
     /// <summary>Toast queue; seated on <see cref="LayoutTree.Overlays"/> by <see cref="SyncOverlays"/> (PRIM2c).</summary>
     public ToastOverlay Toasts { get; } = new();
 
+    /// <summary>Fullscreen diff viewer state; seated on <see cref="LayoutTree.Overlays"/> by <see cref="SyncOverlays"/> (PRIM12 #308).</summary>
+    public DiffViewerOverlay DiffViewer { get; } = new();
+
     private DialogOverlayLayer? _dialogLayer;
     private ToastOverlayLayer? _toastLayer;
+    private DiffViewerOverlayLayer? _diffLayer;
 
     /// <summary>
     /// PRIM2c seating: reconciles the dialog/toast overlay layers with
-    /// <paramref name="viewport"/> (typically the full screen). Visible layers
+    /// <paramref name="viewport"/> (typically the full screen). PRIM12 seats
+    /// the fullscreen diff viewer between them (dialog below, toasts on top).
+    /// Visible layers
     /// are pushed (dialog below, toast on top); hidden ones are removed so the
     /// stack stays empty and frames paint byte-identically to the panels-only
     /// path. Idempotent — safe to call every frame before
@@ -615,8 +621,10 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
     {
         _dialogLayer ??= new DialogOverlayLayer(Dialog);
         _toastLayer ??= new ToastOverlayLayer(Toasts);
+        _diffLayer ??= new DiffViewerOverlayLayer(DiffViewer);
         _dialogLayer.Sync(viewport);
         _toastLayer.Sync(viewport);
+        _diffLayer.Sync(viewport);
         if (_dialogLayer.Visible)
         {
             Tree.Overlays.Push(_dialogLayer);
@@ -624,6 +632,14 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
         else
         {
             Tree.Overlays.Remove(DialogOverlayLayer.LayerId);
+        }
+        if (_diffLayer.Visible)
+        {
+            Tree.Overlays.Push(_diffLayer);
+        }
+        else
+        {
+            Tree.Overlays.Remove(DiffViewerOverlayLayer.LayerId);
         }
         if (_toastLayer.Visible)
         {
