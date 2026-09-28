@@ -33,6 +33,7 @@ internal static class SqliteMappers
             TypeInfoResolver = SqliteJsonContext.Default,
         };
         options.Converters.Add(new ContentPartJsonConverter());
+        options.Converters.Add(ContentPartListJsonConverter.Instance);
         options.Converters.Add(new JsonStringEnumConverter());
         return options;
     }
@@ -169,6 +170,8 @@ internal static class SqliteMappers
 
     internal sealed class ContentPartJsonConverter : JsonConverter<ContentPart>
     {
+        internal static readonly ContentPartJsonConverter Instance = new();
+
         public override ContentPart? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             using var doc = JsonDocument.ParseValue(ref reader);

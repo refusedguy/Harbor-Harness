@@ -36,14 +36,17 @@ namespace Harbor.Storage.Sqlite;
 ///     <para>
 ///         <b>Polymorphic root exclusion:</b> <c>ContentPart</c> is deliberately
 ///         NOT registered even though <c>AssistantMessage.Parts</c> references it.
-///         Registering the root makes the runtime build a polymorphic type
-///         resolver whose derived-type converter lookup hits the options-level
+///         Registering the root is not even the whole story: the
+///         <c>[JsonPolymorphic]</c> attributes on the base force a polymorphic
+///         type resolver for the <c>Parts</c> property itself, whose derived-type
+///         converter lookup hits the options-level
 ///         <c>ContentPartJsonConverter</c>, which does not support metadata
 ///         reads/writes (<c>NotSupportedException</c> at first serialization).
-///         Without the registration, elements resolve through the options-level
-///         converter for the declared base type (same mechanism as the config
-///         stores' immutable-collection converters). The concrete part types stay
-///         registered for direct (non-polymorphic) use.
+///         Instead <c>ContentPartListJsonConverter</c> (exact match for the
+///         property type) takes precedence, so element type info is never
+///         requested and the resolver is never built; every element still goes
+///         through the hand-written per-element converter. The concrete part
+///         types stay registered for direct (non-polymorphic) use.
 ///     </para>
 ///     <para>
 ///         <b>Metadata:</b> <see cref="ToolResultEntry.Metadata" /> is
