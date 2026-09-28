@@ -157,7 +157,30 @@ public sealed class ProviderConfig
             return Result.Failure<ProviderConfig>("Provider config is missing 'baseUrl'.");
         }
 
-        return Result.Success(c.SealedWith(c.Quirks));
+        // #195 follow-up: STJ source-gen with init-only setters overwrites
+        // property defaults for JSON-absent members (0/null instead of the
+        // declared 60/24/"openai-compatible"/...). Rebuild through the Create
+        // factory so absent stays default; explicit values (even 0/"") pass
+        // through exactly as before.
+        return Create(
+            id: c.Id,
+            baseUrl: c.BaseUrl,
+            displayName: c.DisplayName ?? "",
+            description: c.Description ?? "",
+            apiType: c.ApiType ?? "openai-compatible",
+            apiVersion: c.ApiVersion,
+            authType: c.AuthType ?? "bearer",
+            authHeader: c.AuthHeader,
+            authEnvVar: c.AuthEnvVar,
+            modelsUrl: c.ModelsUrl,
+            modelsRefreshHours: c.ModelsRefreshHours == 0 ? 24 : c.ModelsRefreshHours,
+            modelsPath: c.ModelsPath,
+            modelMapping: c.ModelMapping,
+            models: c.Models,
+            headers: c.Headers,
+            capabilities: c.Capabilities,
+            timeout: c.Timeout == 0 ? 60 : c.Timeout,
+            quirks: c.Quirks);
     }
 
     /// <summary>
