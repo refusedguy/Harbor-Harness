@@ -235,11 +235,24 @@ public class TabStripKeyBindingTests
     [Test]
     public async Task TabStrip_SurvivesClearScreen()
     {
-        // Workspace chrome, not transcript: clearing the feed must not close
-        // the user's tabs. Asserted through the real clear-screen path — the
-        // Ctrl+L key action, which routes to UiState.ClearTranscript — because
-        // AppMsg.Reset is a different, deliberate full reset that rebuilds a
-        // bare state and is not what "clear the transcript" means.
+        // Workspace chrome, not transcript: clearing the feed must not close the
+        // user's tabs (#388). Asserted through AppMsg.Reset, which is the arm
+        // that documents itself as the clear-screen path and that the Avalonia
+        // host's Ctrl+L actually dispatches.
+        var store = StoreWithTabs(2);
+        _ = store.Dispatch(new AppMsg.Reset());
+
+        await Assert.That(store.State.Chat.TabStrip.Tabs.Length).IsEqualTo(2);
+        await Assert.That(store.State.Chat.TabStrip.ActiveTabId!.Value).IsEqualTo("s0");
+    }
+
+    [Test]
+    public async Task TabStrip_SurvivesTheClearKeyPathToo()
+    {
+        // The other clear-screen route: Ctrl+L through the key action, which
+        // lands on UiState.ClearTranscript. Both routes must keep the strip —
+        // they are separate arms and only agreeing by accident is not a
+        // guarantee.
         var store = StoreWithTabs(2);
         _ = store.Dispatch(new AppMsg.KeyInput(ChatAction.Clear, UiKey.ForChar('l', KeyModifierSet.Ctrl)));
 

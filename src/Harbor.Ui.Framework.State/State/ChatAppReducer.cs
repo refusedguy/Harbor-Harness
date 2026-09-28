@@ -70,6 +70,21 @@ public static class ChatAppReducer
         ChatAppMsg.ReorderTab ro => ReduceResult.NoOp(ReorderTab(state, ro.SessionId, ro.ToIndex)),
         ChatAppMsg.CycleNextTab => CycleNextTab(state),
         ChatAppMsg.CyclePreviousTab => CyclePreviousTab(state),
+
+        // A clear-screen must not close the user's tabs — the strip is workspace
+        // chrome, not transcript (#388), and UiState.ClearTranscript already
+        // honours that for the key path.
+        //
+        // AppMsg.Reset needs the same rule, and it needs it HERE rather than in
+        // After: the message documents itself as the clear-screen arm ("reset to
+        // a fresh empty state, e.g. clear-screen") and the Avalonia host's Ctrl+L
+        // dispatches exactly it, but the generic arm rebuilds a bare UiState and
+        // the After hook only ever sees that already-reset state — never the one
+        // that still held the tabs. Phase 1 is the last point where they are
+        // reachable, so the chat half re-attaches them itself.
+        AppMsg.Reset => ReduceResult.NoOp(
+            new UiState { Chat = state.Chat with { TabStrip = state.Chat.TabStrip } }),
+
         AppMsg.KeyInput k => OnKeyInput(state, k),
         _ => null
     };
