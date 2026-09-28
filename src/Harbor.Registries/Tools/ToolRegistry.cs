@@ -23,94 +23,52 @@ public sealed class ToolRegistry : IToolRegistry
     // CAS guarantees the next read sees null (volatile-read acquire) so the slow
     // path is taken at most once per invalidation cycle.
     //
-    // TODO(principles)[OCP, ROP]: двойной путь — frozen vs concurrent — дублирует
-    // логику в GetAllTools / ResolveTools / GetTool. Если добавить третий источник
-    // (например, lazy-loaded tools из плагинов), придётся ещё раз дублировать.
-    // Лучше — CompositeToolRegistry, делегирующий в один из IToolSource. См. §OOP-005.
-    // Tracked in #358.
+    // #358 (RESOLVED, §OOP-005): reads go through a single IToolSource path.
+    // _frozenSource (when set by Freeze()) is the fast path; otherwise the
+    // shared _concurrentSource reads the live ConcurrentDictionary. A third
+    // source (e.g. lazy-loaded plugin tools) plugs in as another IToolSource
+    // (or a composite) without touching GetAllTools / ResolveTools / GetTool.
     private readonly ConcurrentDictionary<ToolName, ITool> _tools = new();
+    private readonly ConcurrentToolSource _concurrentSource;
     // #183: single volatile publish-once snapshot (frozen map + cached descriptor
     // arrays + per-ruleset filtered cache). One reference swap per Freeze(), so
     // readers never observe a torn view; dropping it drops the filtered cache too.
-    private volatile FrozenToolView? _frozenView;
+    private volatile IToolSource? _frozenSource;
+
+    /// <summary>
+    ///     Construct an empty registry reading from the live dictionary until
+    ///     <see cref="Freeze" /> publishes a frozen snapshot.
+    /// </summary>
+    public ToolRegistry()
+    {
+        _concurrentSource = new ConcurrentToolSource(_tools, ToDescriptor);
+    }
 
     /// <inheritdoc />
     public IReadOnlyList<ToolDescriptor> GetAllTools()
     {
-        // Prefer frozen snapshot: the cached array is returned as-is (zero alloc).
-        var view = _frozenView;
-        if (view is not null)
-        {
-            return view.GetAll();
-        }
-
-        // Fallback: iterate concurrent dictionary directly (no intermediate array via ToArray()).
-        int count = _tools.Count;
-        if (count == 0)
-        {
-            return Array.Empty<ToolDescriptor>();
-        }
-
-        var list = new List<ToolDescriptor>(count);
-        foreach (var t in _tools.Values)
-        {
-            list.Add(ToDescriptor(t));
-        }
-        return list;
+        // Single path: one volatile read selects the active source; the cached
+        // frozen array is returned as-is (zero alloc) when frozen.
+        IToolSource source = _frozenSource ?? (IToolSource)_concurrentSource;
+        return source.GetAllTools();
     }
 
     /// <inheritdoc />
     public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
     {
-        // Frozen snapshot: cached array (unfiltered) or memoized per-ruleset
-        // array (filtered) — zero alloc on repeat calls. Treat as read-only.
-        var view = _frozenView;
-        if (view is not null)
-        {
-            return view.Resolve(sessionPermission);
-        }
-
-        var snapshot = _tools.Values;
-        if (sessionPermission is null)
-        {
-            var result = new List<ToolDescriptor>(snapshot.Count);
-            foreach (var t in snapshot)
-            {
-                result.Add(ToDescriptor(t));
-            }
-            return result;
-        }
-        else
-        {
-            var result = new List<ToolDescriptor>(snapshot.Count);
-            foreach (var t in snapshot)
-            {
-                if (sessionPermission.Evaluate(t.Name.Value, "*") == PermissionAction.Allow)
-                {
-                    result.Add(ToDescriptor(t));
-                }
-            }
-            return result;
-        }
+        // Single path: frozen snapshot serves cached/memoized arrays (zero alloc
+        // on repeat calls); unfrozen reads filter the live dictionary. Treat as read-only.
+        IToolSource source = _frozenSource ?? (IToolSource)_concurrentSource;
+        return source.ResolveTools(agentName, sessionPermission);
     }
 
     /// <inheritdoc />
     public Result<ITool> GetTool(ToolName name)
     {
-        // Try frozen snapshot first (fast path)
-        var view = _frozenView;
-        if (view is not null && view.TryGetTool(name, out var tool) && tool is not null)
-        {
-            return Result.Success(tool);
-        }
-
-        // Fallback to concurrent dictionary
-        if (_tools.TryGetValue(name, out var t))
-        {
-            return Result.Success(t);
-        }
-
-        return Result.Failure<ITool>($"Tool '{name}' is not registered.");
+        // Single path: frozen fast path first, live dictionary fallback inside
+        // the source selection (no duplicated lookup logic here).
+        IToolSource source = _frozenSource ?? (IToolSource)_concurrentSource;
+        return source.GetTool(name);
     }
 
     /// <inheritdoc />
@@ -145,9 +103,9 @@ public sealed class ToolRegistry : IToolRegistry
     {
         // Atomic publish: readers observe either the prior snapshot or the new
         // one — never a half-built dictionary. The volatile write on
-        // _frozenView has release semantics so the frozen view is fully
+        // _frozenSource has release semantics so the frozen view is fully
         // visible before the reference is published.
-        _frozenView = FrozenToolView.Build(_tools.ToFrozenDictionary(), ToDescriptor);
+        _frozenSource = FrozenToolView.Build(_tools.ToFrozenDictionary(), ToDescriptor);
     }
 
     private void InvalidateFrozenSnapshot()
@@ -158,7 +116,79 @@ public sealed class ToolRegistry : IToolRegistry
         // frozen view until the next Freeze()) or null (and fall through to
         // the ConcurrentDictionary slow path). Both outcomes are safe. Dropping
         // the snapshot also drops its memoized per-ruleset arrays.
-        Interlocked.Exchange(ref _frozenView, null);
+        Interlocked.Exchange(ref _frozenSource, (IToolSource?)null);
+    }
+
+    /// <summary>
+    ///     Live-dictionary <see cref="IToolSource" />: the unfrozen read path.
+    ///     Shares one instance per registry (holds the dictionary reference, no
+    ///     per-call allocation for the source itself). Semantics mirror the
+    ///     frozen view: agentName is ignored, a tool is included exactly when
+    ///     <c>permission.Evaluate(name, "*")</c> allows it.
+    /// </summary>
+    private sealed class ConcurrentToolSource : IToolSource
+    {
+        private readonly ConcurrentDictionary<ToolName, ITool> _tools;
+        private readonly Func<ITool, ToolDescriptor> _describe;
+
+        public ConcurrentToolSource(ConcurrentDictionary<ToolName, ITool> tools, Func<ITool, ToolDescriptor> describe)
+        {
+            _tools = tools;
+            _describe = describe;
+        }
+
+        public IReadOnlyList<ToolDescriptor> GetAllTools()
+        {
+            // Iterate concurrent dictionary directly (no intermediate array via ToArray()).
+            int count = _tools.Count;
+            if (count == 0)
+            {
+                return Array.Empty<ToolDescriptor>();
+            }
+
+            var list = new List<ToolDescriptor>(count);
+            foreach (var t in _tools.Values)
+            {
+                list.Add(_describe(t));
+            }
+            return list;
+        }
+
+        public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
+        {
+            var snapshot = _tools.Values;
+            if (sessionPermission is null)
+            {
+                var result = new List<ToolDescriptor>(snapshot.Count);
+                foreach (var t in snapshot)
+                {
+                    result.Add(_describe(t));
+                }
+                return result;
+            }
+            else
+            {
+                var result = new List<ToolDescriptor>(snapshot.Count);
+                foreach (var t in snapshot)
+                {
+                    if (sessionPermission.Evaluate(t.Name.Value, "*") == PermissionAction.Allow)
+                    {
+                        result.Add(_describe(t));
+                    }
+                }
+                return result;
+            }
+        }
+
+        public Result<ITool> GetTool(ToolName name)
+        {
+            if (_tools.TryGetValue(name, out var t))
+            {
+                return Result.Success(t);
+            }
+
+            return Result.Failure<ITool>($"Tool '{name}' is not registered.");
+        }
     }
 
     private static ToolDescriptor ToDescriptor(ITool t) => new(
