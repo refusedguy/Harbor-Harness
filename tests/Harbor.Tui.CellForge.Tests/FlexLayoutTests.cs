@@ -18,12 +18,11 @@ public sealed class FlexLayoutTests
             [FlexTrack.Fixed(10), FlexTrack.Fill(1), FlexTrack.Fixed(6)],
             gap: 1);
 
-        await Assert.That(rects).IsEqualTo(new[]
-        {
+        await Assert.That(rects).IsEquivalentTo([
             new Rect(0, 0, 10, 10),
             new Rect(11, 0, 22, 10),
             new Rect(34, 0, 6, 10),
-        });
+        ]);
     }
 
     [Test]
@@ -35,12 +34,11 @@ public sealed class FlexLayoutTests
             [FlexTrack.Fixed(10), FlexTrack.Fill(1), FlexTrack.Fixed(6)],
             gap: 1);
 
-        await Assert.That(rects).IsEqualTo(new[]
-        {
+        await Assert.That(rects).IsEquivalentTo([
             new Rect(0, 0, 10, 10),
             new Rect(0, 11, 10, 22),
             new Rect(0, 34, 10, 6),
-        });
+        ]);
     }
 
     [Test]
@@ -52,11 +50,10 @@ public sealed class FlexLayoutTests
             [FlexTrack.Percent(0.25f), FlexTrack.Percent(0.75f)],
             gap: 2);
 
-        await Assert.That(rects).IsEqualTo(new[]
-        {
+        await Assert.That(rects).IsEquivalentTo([
             new Rect(5, 2, 30, 4),
             new Rect(5, 8, 30, 13),
-        });
+        ]);
     }
 
     [Test]
@@ -67,11 +64,10 @@ public sealed class FlexLayoutTests
             new Rect(0, 0, 31, 6),
             [FlexTrack.Fill(1), FlexTrack.Fill(2)]);
 
-        await Assert.That(rects).IsEqualTo(new[]
-        {
+        await Assert.That(rects).IsEquivalentTo([
             new Rect(0, 0, 10, 6),
             new Rect(10, 0, 21, 6),
-        });
+        ]);
     }
 
     [Test]
@@ -81,18 +77,16 @@ public sealed class FlexLayoutTests
         FlexTrack[] tracks = [FlexTrack.Fixed(6), FlexTrack.Fixed(4)];
 
         var centered = FlexLayout.Solve(SplitDir.Horizontal, avail, tracks, gap: 2, justify: FlexJustify.Center);
-        await Assert.That(centered).IsEqualTo(new[]
-        {
+        await Assert.That(centered).IsEquivalentTo([
             new Rect(4, 0, 6, 4),
             new Rect(12, 0, 4, 4),
-        });
+        ]);
 
         var end = FlexLayout.Solve(SplitDir.Horizontal, avail, tracks, gap: 2, justify: FlexJustify.End);
-        await Assert.That(end).IsEqualTo(new[]
-        {
+        await Assert.That(end).IsEquivalentTo([
             new Rect(8, 0, 6, 4),
             new Rect(16, 0, 4, 4),
-        });
+        ]);
     }
 
     [Test]
@@ -104,12 +98,11 @@ public sealed class FlexLayoutTests
             [FlexTrack.Fixed(6), FlexTrack.Fixed(4), FlexTrack.Fixed(2)],
             justify: FlexJustify.SpaceBetween);
 
-        await Assert.That(rects).IsEqualTo(new[]
-        {
+        await Assert.That(rects).IsEquivalentTo([
             new Rect(0, 0, 6, 4),
             new Rect(10, 0, 4, 4),
             new Rect(18, 0, 2, 4),
-        });
+        ]);
     }
 
     [Test]
@@ -121,11 +114,10 @@ public sealed class FlexLayoutTests
             [FlexTrack.Fixed(4), FlexTrack.Fixed(4)],
             justify: FlexJustify.SpaceAround);
 
-        await Assert.That(rects).IsEqualTo(new[]
-        {
+        await Assert.That(rects).IsEquivalentTo([
             new Rect(3, 0, 4, 4),
             new Rect(13, 0, 4, 4),
-        });
+        ]);
     }
 
     [Test]
@@ -137,7 +129,7 @@ public sealed class FlexLayoutTests
             [FlexTrack.Fixed(6)],
             justify: FlexJustify.SpaceBetween);
 
-        await Assert.That(rects).IsEqualTo(new[] { new Rect(0, 0, 6, 4) });
+        await Assert.That(rects).IsEquivalentTo([new Rect(0, 0, 6, 4)]);
     }
 
     [Test]
@@ -148,11 +140,10 @@ public sealed class FlexLayoutTests
             new Rect(0, 0, 20, 4),
             [FlexTrack.Min(14), FlexTrack.Fill(1)]);
 
-        await Assert.That(rects).IsEqualTo(new[]
-        {
+        await Assert.That(rects).IsEquivalentTo([
             new Rect(0, 0, 14, 4),
             new Rect(14, 0, 6, 4),
-        });
+        ]);
     }
 
     [Test]
@@ -163,11 +154,10 @@ public sealed class FlexLayoutTests
             new Rect(0, 0, 20, 4),
             [FlexTrack.Max(6), FlexTrack.Fill(1)]);
 
-        await Assert.That(rects).IsEqualTo(new[]
-        {
+        await Assert.That(rects).IsEquivalentTo([
             new Rect(0, 0, 6, 4),
             new Rect(6, 0, 10, 4),
-        });
+        ]);
     }
 
     [Test]
@@ -178,11 +168,10 @@ public sealed class FlexLayoutTests
             new Rect(0, 0, 30, 4),
             [FlexTrack.Fixed(21), FlexTrack.Fixed(20)]);
 
-        await Assert.That(rects).IsEqualTo(new[]
-        {
+        await Assert.That(rects).IsEquivalentTo([
             new Rect(0, 0, 15, 4),
             new Rect(15, 0, 15, 4),
-        });
+        ]);
     }
 
     [Test]
@@ -194,11 +183,10 @@ public sealed class FlexLayoutTests
             [FlexTrack.Fixed(2), FlexTrack.Fixed(2)],
             gap: 5);
 
-        await Assert.That(rects).IsEqualTo(new[]
-        {
+        await Assert.That(rects).IsEquivalentTo([
             new Rect(0, 0, 0, 4),
             new Rect(0, 0, 0, 4),
-        });
+        ]);
     }
 
     [Test]
@@ -209,11 +197,10 @@ public sealed class FlexLayoutTests
             new Rect(0, 0, 20, 4),
             [FlexTrack.Percent(float.NaN), FlexTrack.Fill(1)]);
 
-        await Assert.That(rects).IsEqualTo(new[]
-        {
+        await Assert.That(rects).IsEquivalentTo([
             new Rect(0, 0, 0, 4),
             new Rect(0, 0, 20, 4),
-        });
+        ]);
     }
 
     [Test]
@@ -268,7 +255,7 @@ public sealed class FlexLayoutTests
 
         var rects = StackLayout.Solve(avail, 3);
 
-        await Assert.That(rects).IsEqualTo(new[] { avail, avail, avail });
+        await Assert.That(rects).IsEquivalentTo([avail, avail, avail]);
     }
 
     [Test]
