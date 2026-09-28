@@ -17,7 +17,7 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// </summary>
 public abstract partial class SettingsViewModelBase : StoreSubscriberViewModel
 {
-    private readonly IThemeService _themeService;
+    private readonly IThemeReader _themeReader;
     private readonly IProviderRegistry _providers;
 
     /// <summary>Code font size in px. Default 13.</summary>
@@ -36,7 +36,7 @@ public abstract partial class SettingsViewModelBase : StoreSubscriberViewModel
     [ObservableProperty]
     private bool _isSaving;
 
-    /// <summary>Selected theme kind. Persisted via <see cref="IThemeService" />.</summary>
+    /// <summary>Selected theme kind. Persisted via <see cref="IThemeApplier" />.</summary>
     [ObservableProperty]
     private ThemeKind _theme;
 
@@ -44,7 +44,7 @@ public abstract partial class SettingsViewModelBase : StoreSubscriberViewModel
     [ObservableProperty]
     private int _uiFontSize = 13;
 
-    /// <summary>Whether dark theme is currently active. Projected from <see cref="IThemeService" />.</summary>
+    /// <summary>Whether dark theme is currently active. Projected from <see cref="IThemeReader" />.</summary>
     [ObservableProperty]
     private bool _isDarkTheme;
 
@@ -59,19 +59,19 @@ public abstract partial class SettingsViewModelBase : StoreSubscriberViewModel
     /// <summary>Construct a <see cref="SettingsViewModelBase" />.</summary>
     /// <param name="dispatcher">UI-thread marshaller / store binder.</param>
     /// <param name="logger">Logger.</param>
-    /// <param name="themeService">Theme service for projecting <see cref="IsDarkTheme" />.</param>
+    /// <param name="themeReader">Theme reader for projecting <see cref="IsDarkTheme" />.</param>
     /// <param name="providers">Provider registry for projecting <see cref="AvailableProviders" />.</param>
     protected SettingsViewModelBase(
         IDispatcherAdapter dispatcher,
         ILogger logger,
-        IThemeService themeService,
+        IThemeReader themeReader,
         IProviderRegistry providers)
         : base(dispatcher, logger)
     {
-        _themeService = themeService;
+        _themeReader = themeReader;
         _providers = providers;
 
-        Select(state => _themeService.IsDark, v => IsDarkTheme = v);
+        Select(state => _themeReader.IsDark, v => IsDarkTheme = v);
         Select(state => _providers.GetRegisteredProviderIds()
             .Select(p => p.Value)
             .ToImmutableArray(), v => AvailableProviders = v);

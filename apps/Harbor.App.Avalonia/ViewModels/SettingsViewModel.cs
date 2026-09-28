@@ -43,7 +43,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ILogger<SettingsViewModel> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IProviderRegistry _providers;
-    private readonly IThemeService _themeService;
     private readonly IToastService _toasts;
     private AvaloniaConfig _app;
     private CommonConfig _common;
@@ -67,8 +66,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string _storageBackend = "jsonl";
 
     /// <summary>Construct the settings view-model and load the persisted config.</summary>
+    /// <param name="themeReader">Read-only view of the active theme (for <c>ThemeSettings</c>).</param>
+    /// <param name="themeApplier">Theme applier forwarded to <c>ThemeSettings</c>.</param>
     public SettingsViewModel(
-        IThemeService theme,
+        IThemeReader themeReader,
+        IThemeApplier themeApplier,
         ILogger<SettingsViewModel> logger,
         ILoggerFactory loggerFactory,
         IToastService toasts,
@@ -77,7 +79,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         IProviderRegistry providers,
         IAuthResolver authResolver)
     {
-        _themeService = theme;
         _logger = logger;
         _loggerFactory = loggerFactory;
         _toasts = toasts;
@@ -94,7 +95,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _app = _appStore.LoadAsync().GetAwaiter().GetResult().Value;
 #pragma warning restore RS0030
 
-        ThemeSettings = new ThemeSettingsViewModel(theme)
+        ThemeSettings = new ThemeSettingsViewModel(themeReader, themeApplier)
         {
             Theme = string.IsNullOrEmpty(_common.Theme) ? "system" : _common.Theme
         };

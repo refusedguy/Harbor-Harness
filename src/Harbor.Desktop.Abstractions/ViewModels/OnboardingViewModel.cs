@@ -34,15 +34,20 @@ public static class OnboardingThemeParser
     };
 }
 
-/// <summary>Applies the chosen onboarding theme (strategy seam, #197).</summary>
-public interface IThemeApplier
+/// <summary>
+///     Applies the chosen onboarding theme (strategy seam, #197). Named after
+///     the wizard step, not the theme stack: the theme-stack apply role is
+///     <see cref="IThemeApplier" /> in <c>Harbor.Ui.Framework.Services</c>
+///     (#469), which is what the default implementation delegates to.
+/// </summary>
+public interface IOnboardingThemeApplier
 {
     /// <summary>Apply the theme immediately.</summary>
     void Apply(OnboardingTheme theme);
 }
 
-/// <summary>Default <see cref="IThemeApplier" /> over <see cref="IThemeService" />.</summary>
-public sealed class ThemeServiceApplier(IThemeService themeService, ILogger logger) : IThemeApplier
+/// <summary>Default <see cref="IOnboardingThemeApplier" /> over <see cref="IThemeApplier" />.</summary>
+public sealed class OnboardingThemeServiceApplier(IThemeApplier themeApplier, ILogger logger) : IOnboardingThemeApplier
 {
     /// <inheritdoc />
     public void Apply(OnboardingTheme theme)
@@ -50,13 +55,13 @@ public sealed class ThemeServiceApplier(IThemeService themeService, ILogger logg
         switch (theme)
         {
             case OnboardingTheme.Light:
-                themeService.ApplyLight();
+                themeApplier.ApplyLight();
                 break;
             case OnboardingTheme.System:
                 logger.LogInformation("Onboarding theme 'system' — leaving default (dark) active.");
                 break;
             default:
-                themeService.ApplyDark();
+                themeApplier.ApplyDark();
                 break;
         }
     }
@@ -120,7 +125,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     private readonly Harbor.Abstractions.Providers.IProviderHealthCheck? _healthCheck;
     private readonly Harbor.Abstractions.Providers.IProviderRegistry? _providers;
     private readonly IToastService _toasts;
-    private readonly IThemeApplier _themeApplier;
+    private readonly IOnboardingThemeApplier _themeApplier;
     private readonly IOnboardingPersister _persister;
     private readonly CancellationTokenSource _wizardCts = new();
 
@@ -212,17 +217,17 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     ///     Optional provider registry (PROD-UI-0 З.4) — enables the live model
     ///     picker on step 4 with explicit free-text fallback.
     /// </param>
-    /// <param name="themeApplier">Theme strategy (defaults to <see cref="ThemeServiceApplier" />).</param>
+    /// <param name="themeApplier">Theme strategy (defaults to <see cref="OnboardingThemeServiceApplier" />).</param>
     /// <param name="persister">Persistence strategy (defaults to <see cref="ConfigStoreOnboardingPersister" />).</param>
     public OnboardingViewModel(
         ICommonConfigStore configStore,
-        IThemeService theme,
+        IThemeApplier theme,
         IToastService toasts,
         ILogger<OnboardingViewModel> logger,
         IMessenger messenger,
         Harbor.Abstractions.Providers.IProviderHealthCheck? healthCheck = null,
         Harbor.Abstractions.Providers.IProviderRegistry? providers = null,
-        IThemeApplier? themeApplier = null,
+        IOnboardingThemeApplier? themeApplier = null,
         IOnboardingPersister? persister = null)
     {
         _toasts = toasts;
@@ -230,7 +235,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         _messenger = messenger;
         _healthCheck = healthCheck;
         _providers = providers;
-        _themeApplier = themeApplier ?? new ThemeServiceApplier(theme, logger);
+        _themeApplier = themeApplier ?? new OnboardingThemeServiceApplier(theme, logger);
         _persister = persister ?? new ConfigStoreOnboardingPersister(configStore);
 
         // PROD-UI-0 З.1: single source of truth — the wizard catalogue is

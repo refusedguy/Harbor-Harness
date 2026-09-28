@@ -81,7 +81,7 @@ internal static class ViewModelRegistration
         services.AddSingleton(sp => new ShellInfrastructure(
             sp.GetRequiredService<IDispatcherAdapter>(),
             sp.GetRequiredService<ILogger<MainViewModel>>(),
-            sp.GetRequiredService<IThemeService>(),
+            sp.GetRequiredService<IThemeApplier>(),
             sp.GetRequiredService<IToastService>(),
             sp.GetRequiredService<TuiEffectHost>(),
             sp.GetRequiredService<OverlayController>(),

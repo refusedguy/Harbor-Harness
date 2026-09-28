@@ -10,7 +10,7 @@ namespace Harbor.App.Avalonia.ViewModels;
 ///     from <c>SettingsViewModel</c> so the theme-switch code path is
 ///     unit-testable in isolation (construct a
 ///     <see cref="ThemeSettingsViewModel" /> with a fake
-///     <see cref="IThemeService" /> and assert that <c>ApplyTheme</c>
+///     <see cref="IThemeApplier" /> and assert that <c>ApplyTheme</c>
 ///     forwards the right theme string).
 /// </summary>
 /// <remarks>
@@ -28,7 +28,8 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </remarks>
 public sealed partial class ThemeSettingsViewModel : ObservableObject
 {
-    private readonly IThemeService _themeService;
+    private readonly IThemeReader _themeReader;
+    private readonly IThemeApplier _themeApplier;
 
     /// <summary>
     ///     Mini preview model for one HDS palette. Exposes static brushes
@@ -73,10 +74,12 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
     private string _theme = "system";
 
     /// <summary>Construct a <see cref="ThemeSettingsViewModel" />.</summary>
-    /// <param name="themeService">The theme service that applies the theme to the running app.</param>
-    public ThemeSettingsViewModel(IThemeService themeService)
+    /// <param name="themeReader">Read-only view of the active theme.</param>
+    /// <param name="themeApplier">The theme applier that switches the running app.</param>
+    public ThemeSettingsViewModel(IThemeReader themeReader, IThemeApplier themeApplier)
     {
-        _themeService = themeService;
+        _themeReader = themeReader;
+        _themeApplier = themeApplier;
 
         AvailableThemes.Add(new ThemePreviewModel("CatppuccinMocha", "Catppuccin Mocha",
             new SolidColorBrush(Color.Parse("#1E1E2E")),
@@ -112,8 +115,8 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
     [RelayCommand]
     private void ApplyTheme()
     {
-        _themeService.Apply(Theme);
-        IsDarkTheme = _themeService.IsDark;
+        _themeApplier.Apply(Theme);
+        IsDarkTheme = _themeReader.IsDark;
     }
 
     /// <summary>
@@ -124,9 +127,9 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
     [RelayCommand]
     private void ApplyHdsTheme(string themeName)
     {
-        _themeService.ApplyHds(themeName);
+        _themeApplier.ApplyHds(themeName);
         bool isDark = themeName is "CatppuccinMocha" or "Mono" or "Vapor";
-        _themeService.SetThemeVariant(isDark);
+        _themeApplier.SetThemeVariant(isDark);
         IsDarkTheme = isDark;
     }
 
@@ -138,7 +141,7 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
     /// <param name="theme">The theme to apply (<c>"dark"</c> / <c>"light"</c> / <c>"system"</c>).</param>
     public void Apply(string theme)
     {
-        _themeService.Apply(theme);
-        IsDarkTheme = _themeService.IsDark;
+        _themeApplier.Apply(theme);
+        IsDarkTheme = _themeReader.IsDark;
     }
 }
