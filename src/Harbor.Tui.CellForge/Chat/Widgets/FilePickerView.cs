@@ -377,9 +377,15 @@ public sealed class FilePickerView
 
         string file = path[slash..];
         string dir = path[..slash];
-        if (dir.Length > max - file.Length - 3)
+
+        // #482: same clamping rationale as PanelRows.ShortenPath — the directory budget
+        // can reach 0, driving the from-end slice length to -1, and
+        // Index.FromEnd(-1) throws ArgumentOutOfRangeException.
+        int budget = max - file.Length - 3;
+        if (dir.Length > budget)
         {
-            dir = "…" + dir[^(max - file.Length - 4)..];
+            int keep = Math.Max(0, budget - 1);
+            dir = keep == 0 ? "…" : "…" + dir[^keep..];
         }
 
         return dir + file;
