@@ -4,12 +4,13 @@ using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
-///     In-memory <see cref="ITerminalBackend"/> capturing every frame the
+///     In-memory <see cref="ISyncTerminalBackend"/> capturing every frame the
 ///     CellForge pipeline emits — the golden-frame capture seam the
 ///     <c>ITerminalBackend</c> doc comment anticipated ("tests capture frames
-///     with an in-memory backend").
+///     with an in-memory backend"). Sync-capable because the CellForge render
+///     context flushes synchronously (issue #468).
 /// </summary>
-public sealed class InMemoryTerminalBackend : ITerminalBackend
+public sealed class InMemoryTerminalBackend : ISyncTerminalBackend
 {
     private readonly StringBuilder _buffer = new();
 

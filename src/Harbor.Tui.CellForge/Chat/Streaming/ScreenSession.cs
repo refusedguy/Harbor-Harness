@@ -41,6 +41,16 @@ public sealed class ScreenSession
 
     public DiffEngine Engine => _engine;
 
+    /// <summary>
+    /// True when the writer's backend can ship a frame synchronously, i.e.
+    /// when <see cref="FlushFrame"/> is usable. False means this session is
+    /// async-only and must be flushed with <see cref="FlushFrameAsync"/> —
+    /// an <see cref="ITerminalBackend"/> that is not an
+    /// <see cref="ISyncTerminalBackend"/> cannot back the sync twin (issue
+    /// #468).
+    /// </summary>
+    public bool SupportsSyncFlush => _writer.SupportsSyncWrites;
+
     /// <summary>Lock-free buffer handoff used by <see cref="OfferSwap"/> /
     /// <see cref="AdoptPendingSwap"/> (renderer-moat hot-swap runtime).</summary>
     public BufferSwapChain SwapChain => _swapChain;
@@ -280,11 +290,28 @@ public sealed class ScreenSession
     /// contexts and perf probes: same diff + empty-frame + sync-update
     /// semantics, no async machinery on the steady-state path.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The writer's backend is async-only (see <see cref="SupportsSyncFlush"/>).
+    /// Thrown BEFORE the diff runs: mutating FRONT for a frame that then fails
+    /// to ship would leave the engine diffing against a terminal state that
+    /// never existed (issue #468).
+    /// </exception>
     public void FlushFrame()
     {
         bool shipped = false;
         try
         {
+            // Inside the try on purpose: the guard throws, so `finally` must
+            // still run CloseFrame(false) to unpin the palette and invalidate
+            // the grids. Checking before ArmEffects/_engine.Flush keeps FRONT
+            // from advancing for a frame that can never ship (#468).
+            if (!SupportsSyncFlush)
+            {
+                throw new InvalidOperationException(
+                    $"{_writer.Backend.GetType().Name} is an async-only terminal backend; " +
+                    "ScreenSession.FlushFrame needs an ISyncTerminalBackend. Use FlushFrameAsync instead.");
+            }
+
             ArmEffects();
             _engine.Flush(_back, _writer);
             _writer.EndFrame();

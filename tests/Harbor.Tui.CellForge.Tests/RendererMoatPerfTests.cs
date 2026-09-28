@@ -17,7 +17,7 @@ public class RendererMoatPerfTests
 {
     /// <summary>Backend that counts bytes without copying — keeps allocation
     /// probes clean while still exercising the full write path.</summary>
-    private sealed class CountingBackend : ITerminalBackend
+    private sealed class CountingBackend : ISyncTerminalBackend
     {
         public long Bytes { get; private set; }
 

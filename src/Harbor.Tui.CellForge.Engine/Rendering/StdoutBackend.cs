@@ -5,7 +5,7 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// once (never through <c>Console.Write</c>, which locks and auto-flushes per
 /// call) and reused for the lifetime of the renderer.
 /// </summary>
-public sealed class StdoutBackend : ITerminalBackend
+public sealed class StdoutBackend : ISyncTerminalBackend
 {
     private Stream? _stdout;
 
