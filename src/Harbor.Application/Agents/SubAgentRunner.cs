@@ -239,7 +239,7 @@ public sealed class SubAgentRunner(
         }
         catch (Exception ex)
         {
-            logger.LogDebug("Failed to extract degraded sub-agent output for session {SessionId}: {Error}", sessionId, ex.Message);
+            logger.LogDebug(ex, "Failed to extract degraded sub-agent output for session {SessionId}", sessionId);
             return string.Empty;
         }
     }

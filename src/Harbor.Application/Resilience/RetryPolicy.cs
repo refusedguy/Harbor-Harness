@@ -101,9 +101,8 @@ public sealed class RetryPolicy : IRetryPolicy
                 when (!ct.IsCancellationRequested
                       && IsTransient(ex, out TimeSpan? retryAfter))
             {
-                // #270: rate limits draw from their own minutes-scale budget;
-                // every other transient draws from the general budget. Either
-                // budget exhausted rethrows the original failure to the caller.
+                // Rate limits use a dedicated minutes-scale budget while all other
+                // transients share the general one (see #270).
                 bool rateLimited = IsRateLimit(ex);
                 int consumed;
                 int limit;
