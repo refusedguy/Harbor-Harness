@@ -35,7 +35,7 @@ namespace Harbor.Benchmarks;
 ///         <item><c>RetainedState:</c> the scrollback ring on the three retention-on buses,
 ///         pre-filled to <c>ScrollbackCapacity</c> in <c>Setup</c> so measured iterations take
 ///         the steady in-place overwrite branch
-///         (<c>InMemoryEventBus.cs:380</c>) rather than the "ring still filling" one.
+///         (<c>InMemoryEventBus.cs:413</c>) rather than the "ring still filling" one.
 ///         <c>InMemoryEventBus</c> exposes no drain, so the ring stays warm by design —
 ///         its warm-vs-cold state is part of the cost under measurement and is not
 ///         reset between iterations.</item>
@@ -51,8 +51,14 @@ namespace Harbor.Benchmarks;
 ///         see <c>docs/BENCHMARKS.md</c> §5.4. The class-wide rule: buses are built with
 ///         the production defaults (<c>NullLogger</c>,
 ///         <see cref="InMemoryEventBus.DefaultHandlerBudget" /> = 250 ms), so every drain
-///         row also rents the #249 single-slot pooled budget CTS and schedules a
-///         <c>CancelAfter</c> on it.</item>
+///         row rents the #249 single-slot pooled budget CTS — and, since #507, arms no
+///         <c>CancelAfter</c> on it for a handler that completed synchronously, because
+///         such a handler can never observe cancellation. The pool therefore hands the same
+///         instance to the next publish and the CTS contributes <b>0 B</b> to every row
+///         here; the column is made of <c>Task</c>s (per-row attributions below). Do not
+///         explain a fan-out residual with a CTS: <c>TryReset</c> disarms a still-pending
+///         timer and refuses only once that timer reached <c>TimerQueue</c>'s fire loop, so
+///         a 250 ms budget returned microseconds later is reusable (#513).</item>
 ///     </list>
 ///     <para>
 ///         <b>Why this file was rewritten.</b> The pre-#391 version had a single
@@ -60,7 +66,7 @@ namespace Harbor.Benchmarks;
 ///         built as <c>new InMemoryEventBus(maxScrollback: 1024)</c>. That shape
 ///         <i>structurally cannot</i> measure the fast path: the zero-allocation early
 ///         return in <see cref="InMemoryEventBus.PublishAsync" />
-///         (src/Harbor.Registries/Events/InMemoryEventBus.cs:224) requires
+///         (src/Harbor.Registries/Events/InMemoryEventBus.cs:274) requires
 ///         <c>_maxScrollback == 0 &amp;&amp; _middlewares.Count == 0 &amp;&amp; _subscriptions.IsEmpty</c>,
 ///         so with scrollback enabled every "0 subscriber" case fell through to the
 ///         slow path. "The fast path works" was untested by construction, and the
@@ -149,7 +155,7 @@ public class EventBusBenchmark
     ///     scrollback, no middleware and no subscribers. This is the
     ///     <c>_maxScrollback == 0 &amp;&amp; _middlewares.Count == 0 &amp;&amp;
     ///     _subscriptions.IsEmpty</c> early return
-    ///     (src/Harbor.Registries/Events/InMemoryEventBus.cs:224) — the only
+    ///     (src/Harbor.Registries/Events/InMemoryEventBus.cs:274) — the only
     ///     configuration in which the fast-path claim is testable at all.
     ///     <para>
     ///         Await semantics: completes synchronously; the returned task is the
@@ -161,7 +167,7 @@ public class EventBusBenchmark
     ///         (<c>Stopwatch.GetTimestamp</c> + 3 <c>Interlocked</c> ops, no
     ///         allocation), <c>RunMiddlewareAsync</c>'s
     ///         <c>Task&lt;ValueTuple&lt;bool, AgentEvent&gt;&gt;</c>
-    ///         (InMemoryEventBus.cs:521) and the ring append are all strictly below
+    ///         (InMemoryEventBus.cs:661) and the ring append are all strictly below
     ///         the return, which is the whole point of the case. The #186 tripwire
     ///         <c>PublishAsync_ZeroSubscribers_IsAllocationFree</c> pins the same
     ///         claim merge-gated.
@@ -191,11 +197,11 @@ public class EventBusBenchmark
     ///         Allocation attribution: <b>non-zero</b> and to grow if this case is ever
     ///         changed to await a real suspension. The resident allocation is the
     ///         <c>Task&lt;ValueTuple&lt;bool, AgentEvent&gt;&gt;</c> produced by
-    ///         <c>RunMiddlewareAsync</c> (InMemoryEventBus.cs:521, result set at :553) —
+    ///         <c>RunMiddlewareAsync</c> (InMemoryEventBus.cs:661, result set at :693) —
     ///         <c>Task.FromResult</c> does not cache non-primitive result types, so one
     ///         task escapes per publish. The pre-ring scrollback copy (1024 refs × 8 B ≈
     ///         8 KB) is gone with 2f9debf: <c>AppendScrollback</c> now overwrites a fixed
-    ///         slot (InMemoryEventBus.cs:380) and allocates nothing.
+    ///         slot (InMemoryEventBus.cs:413) and allocates nothing.
     ///     </para>
     ///     <para>
     ///         Measured 2026-09-28 in CI (run 36452709074): <b>107.5 ns, 80 B</b> — the
@@ -214,24 +220,31 @@ public class EventBusBenchmark
     ///     <para>
     ///         Await semantics: synchronous throughout
     ///         (<c>DispatchToOneAsync</c> takes the <c>IsCompletedSuccessfully</c>
-    ///         branch, InMemoryEventBus.cs:721); nothing suspends.
+    ///         branch, InMemoryEventBus.cs:865); nothing suspends.
     ///     </para>
     ///     <para>
     ///         Allocation attribution: one <c>Task&lt;ValueTuple&lt;bool,
-    ///         AgentEvent&gt;&gt;</c> from <c>RunMiddlewareAsync</c> plus one
+    ///         AgentEvent&gt;&gt;</c> from <c>RunMiddlewareAsync</c>
+    ///         (InMemoryEventBus.cs:661, result set at :693) plus one
     ///         <c>Task&lt;ValueTuple&lt;DispatchOutcome, Task?&gt;&gt;</c> from
-    ///         <c>DispatchToOneAsync</c> (InMemoryEventBus.cs:706, result set at
-    ///         :716/:723) — the <c>Task</c> state machines themselves are structs and
-    ///         never box because nothing suspends. The handler budget CTS is rented
-    ///         from the <c>#249</c> single-slot pool (InMemoryEventBus.cs:680) and
-    ///         returned at :690; the per-publish <c>CancelAfter</c> (:719) makes
-    ///         <c>CancellationTokenSource.TryReset</c> refuse the instance, so the pool
-    ///         does not recycle it and one CTS is allocated per fan-out publish.
+    ///         <c>DispatchToOneAsync</c> (InMemoryEventBus.cs:850, result set at :874)
+    ///         plus the fan-out method's own <c>Task</c>
+    ///         (<c>DispatchToSubscribersAsync</c>, InMemoryEventBus.cs:708) — the
+    ///         <c>Task</c> state machines themselves are structs and never box because
+    ///         nothing suspends. The handler budget CTS is rented from the <c>#249</c>
+    ///         single-slot pool (InMemoryEventBus.cs:823) and returned at :834, and since
+    ///         #507 this row arms no <c>CancelAfter</c> on it at all, so the pool recycles
+    ///         one instance and the CTS adds <b>0 B</b>. An earlier revision of this
+    ///         comment blamed the 40 B on <c>TryReset</c> refusing that instance (#513);
+    ///         it does not — a still-pending timer is disarmed, and only a timer that
+    ///         reached <c>TimerQueue</c>'s fire loop makes <c>TryReset</c> fail.
     ///     </para>
     ///     <para>
     ///         Measured 2026-09-28 in CI (run 36452709074): <b>242.7 ns, 200 B</b>
-    ///         = 80 (middleware result task) + 40 (CTS) + 80 (dispatch result task).
-    ///         See docs/BENCHMARKS.md §5.3.3.
+    ///         = 80 (middleware result task) + 80 (dispatch result task) + 40 (fan-out
+    ///         task). The #507 re-run (36469490918) reports the same 200 B with 189.7 ns —
+    ///         the fix bought a recycling guarantee and time, not bytes. See
+    ///         docs/BENCHMARKS.md §5.4.3.
     ///     </para>
     /// </summary>
     [Benchmark(Description = "PublishAsync_1Sub")]
@@ -264,18 +277,18 @@ public class EventBusBenchmark
     ///     separate "the awaited work was already done" from "the await cost a real
     ///     suspension". This is the only case here that enters
     ///     <c>DispatchToOneAsync</c>'s <c>!IsCompletedSuccessfully</c> branch
-    ///     (InMemoryEventBus.cs:721) and its <c>dispatch.AsTask()</c> conversion.
+    ///     (InMemoryEventBus.cs:865) and its <c>dispatch.AsTask()</c> conversion.
     ///     <para>
     ///         Await semantics: one real suspension + thread-pool resumption per
     ///         publish. The drain is still fully awaited before
     ///         <see cref="InMemoryEventBus.PublishAsync" /> returns (the
     ///         <c>ct.CanBeCanceled == false</c> direct-await branch,
-    ///         InMemoryEventBus.cs:727) — no handler outlives the measured region,
+    ///         InMemoryEventBus.cs:891) — no handler outlives the measured region,
     ///         so the next iteration cannot overlap the previous one.
     ///     </para>
     ///     <para>
     ///         Allocation attribution: adds the <c>Task</c> materialised by
-    ///         <c>ValueTask.AsTask()</c> (InMemoryEventBus.cs:726) on top of the
+    ///         <c>ValueTask.AsTask()</c> (InMemoryEventBus.cs:877) on top of the
     ///         <see cref="PublishAsync_1Sub" /> attribution. This row is the input
     ///         #47/S4 needs for the <c>ValueTask</c>-shape question; do not read it as
     ///         a regression against the synchronous rows. Measured 2026-09-28 in CI
@@ -342,12 +355,17 @@ public class EventBusBenchmark
 ///         <item><c>AllocAttribution:</c> one
 ///         <c>Task&lt;ValueTuple&lt;bool, AgentEvent&gt;&gt;</c> per publish plus one
 ///         <c>Task&lt;ValueTuple&lt;DispatchOutcome, Task?&gt;&gt;</c> per subscriber
-///         plus the per-publish budget CTS — i.e. the measured column scales with
-///         <c>SubscriberCount</c>. The dead-subscriber buffer is
+///         plus the fan-out method's own 40 B <c>Task</c>
+///         (<c>DispatchToSubscribersAsync</c>) — i.e. the measured column scales with
+///         <c>SubscriberCount</c> over a constant 120 B per publish. The pooled budget
+///         CTS (#249) is rented and returned without ever arming its timer on these
+///         synchronous rows, so it adds 0 B; see <c>EventBusBenchmark</c>'s
+///         <c>AllocAttribution</c> and #513 for why the CTS is not the fan-out residual.
+///         The dead-subscriber buffer is
 ///         <c>ArrayPool</c>-rented and only taken when a subscriber actually dies
-///         (<c>MarkDead</c>, <c>InMemoryEventBus.cs:598</c>), and
-///         <c>DispatchToSubscribersAsync</c>'s local functions are struct closures, so
-///         neither contributes here. Measured values: <c>docs/BENCHMARKS.md</c> §5.4.</item>
+///         (<c>MarkDead</c>, <c>InMemoryEventBus.cs:739</c>), and
+///         <c>DispatchToSubscribersAsync</c>'s local functions are struct
+///         closures, so neither contributes here. Measured values: <c>docs/BENCHMARKS.md</c> §5.4.</item>
 ///     </list>
 /// </summary>
 [MemoryDiagnoser]
@@ -401,20 +419,23 @@ public class EventBusBenchmarkFanout
     ///         Await semantics: synchronous throughout (handlers return a completed
     ///         <see cref="ValueTask" />, so <c>DispatchToOneAsync</c> never leaves its
     ///         <c>IsCompletedSuccessfully</c> branch). The immutable-array snapshot
-    ///         taken at InMemoryEventBus.cs:263 is a struct copy — no allocation.
+    ///         taken at InMemoryEventBus.cs:313 is a struct copy — no allocation.
     ///     </para>
     ///     <para>
     ///         Allocation attribution: one
     ///         <c>Task&lt;ValueTuple&lt;bool, AgentEvent&gt;&gt;</c> for the whole
     ///         publish (<c>RunMiddlewareAsync</c>) plus <b>one</b>
     ///         <c>Task&lt;ValueTuple&lt;DispatchOutcome, Task?&gt;&gt;</c> per
-    ///         subscriber (<c>DispatchToOneAsync</c>) — i.e. the expected column
+    ///         subscriber (<c>DispatchToOneAsync</c>) plus the fan-out method's own
+    ///         40 B <c>Task</c> (<c>DispatchToSubscribersAsync</c>,
+    ///         InMemoryEventBus.cs:708) — i.e. the expected column
     ///         scales with <see cref="SubscriberCount" />, not with a fixed 8 KB. The
     ///         dead-subscriber buffer is <c>ArrayPool</c>-rented and only taken when a
     ///         subscriber actually dies
-    ///         (<c>MarkDead</c>, InMemoryEventBus.cs:598), and
+    ///         (<c>MarkDead</c>, InMemoryEventBus.cs:739), and
     ///         <c>DispatchToSubscribersAsync</c>'s own local functions are struct
-    ///         closures, so neither contributes here.
+    ///         closures, so neither contributes here. The pooled budget CTS adds 0 B
+    ///         on this row (#513: it was never the residual — see the class contract).
     ///     </para>
     ///     <para>
     ///         Measured 2026-09-28 in CI (run 36452709074): <b>920 B @10,

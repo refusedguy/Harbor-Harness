@@ -348,7 +348,7 @@ before the ring-buffer landing (`2f9debf`, 2026-08-23) that replaced the `Immuta
 scrollback copy, and they were produced by a single `[Params(0, 1, 10, 100)]` method that built
 `new InMemoryEventBus(maxScrollback: 1024)` — scrollback on for every case. The zero-allocation
 fast path in `InMemoryEventBus.PublishAsync`
-(`src/Harbor.Registries/Events/InMemoryEventBus.cs:224`) requires
+(`src/Harbor.Registries/Events/InMemoryEventBus.cs:274`) requires
 `_maxScrollback == 0 && _middlewares.Count == 0 && _subscriptions.IsEmpty`, so that method could
 never reach it. The "8.1 KB @0 subscribers" figure is the pre-ring copy (1024 refs × 8 B ≈
 8 KB), not a live allocation.
@@ -407,7 +407,7 @@ This also corrects the `AllocAttribution` of the fan-out contract: it claimed "f
 #### 5.4.3 Residual allocations, attributed
 
 The pre-ring `8.1 KB @0 subscribers` row is **resolved**: 8 KB was the `ImmutableArray`
-scrollback copy, replaced by the fixed ring (`AppendScrollback`, `InMemoryEventBus.cs:380`). The
+scrollback copy, replaced by the fixed ring (`AppendScrollback`, `InMemoryEventBus.cs:413`). The
 same bus shape now measures **107.5 ns / 80 B** — 75× faster and 100× less allocated.
 
 The remaining bytes are fully accounted for, and the arithmetic is exact (`10 → 100`
@@ -415,19 +415,57 @@ subscribers adds exactly 80 B/subscriber; `920 = 80 + 120`; `8120 = 80 + 120 + 1
 
 | B/op | Type | Site | Present when |
 |---:|---|---|---|
-| 80 | `Task<ValueTuple<bool, AgentEvent>>` | `RunMiddlewareAsync` — declared `InMemoryEventBus.cs:521`, result set at `:553` | any publish off the fast path (`Task.FromResult` does not cache non-primitive result types) |
-| 80 | `Task<ValueTuple<DispatchOutcome, Task?>>` | `DispatchToOneAsync` — declared `InMemoryEventBus.cs:706`, result set at `:716`/`:723` | **per subscriber** |
-| 40 | `CancellationTokenSource` | `RentBudgetCts` — `InMemoryEventBus.cs:680` | once per publish that fans out, with the default 250 ms `handlerBudget` enabled |
+| 80 | `Task<ValueTuple<bool, AgentEvent>>` | `RunMiddlewareAsync` — declared `InMemoryEventBus.cs:661`, result set at `:693` | any publish off the fast path (`Task.FromResult` does not cache non-primitive result types) |
+| 80 | `Task<ValueTuple<DispatchOutcome, Task?>>` | `DispatchToOneAsync` — declared `InMemoryEventBus.cs:850`, result set at `:860`/`:874`/`:901`/`:923` | **per subscriber** |
+| 40 | `Task` from the fan-out method | `DispatchToSubscribersAsync` — declared `InMemoryEventBus.cs:708`, awaited at `:342` | once per publish that actually fans out (identical at 1, 10 and 100 subscribers; absent from the 0-subscriber rows, which return before the fan-out) |
 
-That 40 B row is a real finding, not a rounding artifact: it is constant per fan-out publish
-(identical at 1, 10 and 100 subscribers) and absent from the 0-subscriber rows, which never reach
-the budget. The mechanism is that `DispatchToOneAsync` calls
-`budgetCts.CancelAfter(_handlerBudget)` (`:719`) on the #249 single-slot pooled instance, and
-`CancellationTokenSource.TryReset()` refuses a source whose timer has ever been queued
-(`!timer._everQueued`) — so `ReturnBudgetCts` (`:690`) disposes it and the next `RentBudgetCts`
-allocates a fresh one. No `TimerQueueTimer` bytes appear in the column (that object is recycled by
-.NET's `TimerQueue`), which is why the whole residual is the 40 B CTS. Removing it is a follow-up;
-this slice changes no `PublishAsync` semantics.
+**The 40 B row is a `Task`, not a `CancellationTokenSource` — and the CTS row this section used to
+carry was a false claim (#513).** The previous revision attributed the 40 B to the #249 pooled
+budget CTS and stated that `CancellationTokenSource.TryReset()` "refuses" the instance because a
+budget timer had been armed, so `ReturnBudgetCts` disposed it and every fan-out publish allocated
+a fresh source. Both halves were wrong, and because this file is the declared single source of
+truth for every measured number, the wrong attribution propagated: it sent a reader hunting for a
+defect that did not exist.
+
+On `release/10.0`, `TryReset()` **disarms a still-pending timer** and only then asks whether it
+ever fired. The source is reusable while it is not cancelled and
+
+```csharp
+_timer is null || (_timer is TimerQueueTimer t && t.Change(Infinite, Infinite) && !t._everQueued)
+```
+
+(`CancellationTokenSource.cs:481-507`, dotnet/runtime `release/10.0`). The `_everQueued` flag is set
+in `TimerQueue.FireNextTimers` (`Timer.cs:217` in the same release) — i.e. only when the timer
+actually **reached the fire loop**, not when it was scheduled. A 250 ms budget that goes back to the
+pool microseconds after the fan-out is done never fires, so `TryReset()` returned `true` and the
+#249 pool was recycling before #507 touched it. "Armed ⇒ not reusable" is the wrong model; if you
+see that shape of argument anywhere in this repo, this paragraph is the counter-example.
+
+The proof costs nothing to re-check, because the allocation column did not move when #507 made
+recycling a structural guarantee: `920 B @10` / `8120 B @100` in #391's run
+([36452709074](https://github.com/refusedguy/Harbor-Harness/actions/runs/36452709074), commit
+`752196c`) and again in #507's run
+([36469490918](https://github.com/refusedguy/Harbor-Harness/actions/runs/36469490918), commit
+`7f9b5c6`) — byte for byte, same rows, same `AMD EPYC 7763 @ 2.45 GHz` / `taskset -c 1` runner
+class. Had the 40 B been a CTS, the fix would have deleted it. It stayed, so it was never a CTS.
+
+**What #507 bought: a guarantee, not bytes.** `DispatchToOneAsync` now arms the budget timer only
+for a dispatch that outlives its synchronous part (`InMemoryEventBus.cs:865-889`), so a completed
+fan-out returns a pristine source and the next publish rents the same instance *by construction*
+instead of relying on the thin runtime behaviour cited above. Two regression tests hold that line —
+`Publish_AcrossManyPublishes_HandsOutOneRecycledBudgetSource` and
+`Publish_AcrossManyPublishes_AllocatesNoFreshBudgetSourcePerPublish`
+(`tests/Harbor.Core.Tests/EventBusBudgetCtsTests.cs`), which count distinct `CancellationToken`s
+over 200 publishes and therefore count `CancellationTokenSource`s, since token equality is source
+identity. The **time** column did move on that run (`NSub` @10 803.5 → 463.8 ns, @100 6.36 µs →
+2.88 µs — no timer arm + disarm per subscriber); the **allocation** column did not, and the
+arithmetic above is unchanged (`920 = 80 + 40 + 10×80`, `8120 = 80 + 40 + 100×80`).
+
+One honesty note, so this row is not promoted the same way twice: the 40 B is a **subtraction
+result** (measured column minus the two `Task` rows above), not a per-type allocation profile. The
+constant is solid; treat `DispatchToSubscribersAsync` as the current best attribution and
+re-derive it from a profile before building a *mechanism* on top of it. The row that was wrong here
+(#513) was wrong exactly because a subtraction result was written down as a proven mechanism.
 
 Two rows carry zero bus signal and are annotated so nobody reads them as regressions:
 
