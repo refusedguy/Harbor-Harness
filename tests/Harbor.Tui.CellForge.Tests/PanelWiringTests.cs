@@ -206,7 +206,7 @@ public class PanelWiringTests
 
         // A fresh snapshot (same visible set, new numbers) refreshes the leaf
         // payload in place — no re-attach, no tree surgery — and repaints.
-        var next = store.State with { Cost = new CostSnapshot(2500, 100, 0.01m) };
+        var next = store.State with { Chat = store.State.Chat with { Cost = new CostSnapshot(2500, 100, 0.01m) } };
         ChatScreenPanelDock.UpdatePanels(screen, owner.Registry, next, services: null);
 
         var after = new ScreenBuffer(100, 40);

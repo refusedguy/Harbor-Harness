@@ -180,10 +180,13 @@ public class SlashPanelsCommandTests
 
     private static UiState SeededPanelsState() => new()
     {
-        RegisteredPanelIds = ["todo", "logs"],
-        PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty
-            .SetItem("todo", TuiPanelState.Visible)
-            .SetItem("logs", TuiPanelState.Hidden),
+        Ui = TerminalUiState.Empty with
+        {
+            RegisteredPanelIds = ["todo", "logs"],
+            PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty
+                .SetItem("todo", TuiPanelState.Visible)
+                .SetItem("logs", TuiPanelState.Hidden)
+        }
     };
 
     private static FakeHost PanelsHost(FakeStore store, Session current)

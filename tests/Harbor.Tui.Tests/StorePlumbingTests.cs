@@ -69,9 +69,12 @@ public class StorePlumbingTests
         var line = new ChatLine(ChatRole.User, "hi", TimestampUtc: FixedTs);
         UiState Build() => new()
         {
-            Lines = ImmutableArray.Create(line),
-            IsStreaming = true,
-            Active = new ActiveMessage("streaming", string.Empty),
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = ImmutableArray.Create(line),
+                IsStreaming = true,
+                Active = new ActiveMessage("streaming", string.Empty)
+            }
         };
 
         var first = projector.Project(Build());
