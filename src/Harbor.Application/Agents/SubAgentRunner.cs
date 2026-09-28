@@ -150,8 +150,12 @@ public sealed class SubAgentRunner(
                     "Sub-agent run ended abnormally: agent={Agent} session={SessionId} error={Error}",
                     agent.Name.Value, session.Id, run.Error);
                 await MarkStatusAsync(session, SessionStatus.Error, ct).ConfigureAwait(false);
+                // #270: degrade — surface whatever the sub-run produced before
+                // failing, so the parent receives partial output, not just a
+                // session id to go look at.
+                string partialNote = await TryExtractPartialNoteAsync(store, session.Id, ct).ConfigureAwait(false);
                 return Result.Failure<SubAgentRunResult>(
-                    $"Sub-agent '{agent.Name.Value}' failed: {run.Error}. Its partial history is preserved in session {session.Id}.");
+                    $"Sub-agent '{agent.Name.Value}' failed: {run.Error}. Its partial history is preserved in session {session.Id}.{partialNote}");
             }
 
             var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
@@ -199,6 +203,45 @@ public sealed class SubAgentRunner(
             session with { Status = status, UpdatedAt = DateTimeOffset.UtcNow }, ct).ConfigureAwait(false);
         if (marked.IsFailure)
             logger.LogWarning("Failed to persist sub-session status {SessionId}: {Error}", session.Id, marked.Error);
+    }
+
+    /// <summary>
+    ///     Cap on the degraded partial-output excerpt surfaced inside a failure
+    ///     message (#270): enough for the parent to continue, small enough to
+    ///     never blow its context. The full text stays in the sub-session.
+    /// </summary>
+    private const int PartialExcerptChars = 2000;
+
+    /// <summary>
+    ///     Best-effort degraded excerpt of what the sub-run produced before
+    ///     failing (#270): the final assistant prose when present, otherwise an
+    ///     empty note. Storage failures and cancellation propagate — only
+    ///     diagnostics gathering is best-effort.
+    /// </summary>
+    private async Task<string> TryExtractPartialNoteAsync(ISessionStore store, string sessionId, CancellationToken ct)
+    {
+        try
+        {
+            var history = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
+            if (history.IsFailure)
+                return string.Empty;
+            string partial = ExtractFinalOutput(history.Value);
+            if (string.IsNullOrWhiteSpace(partial))
+                return string.Empty;
+            string excerpt = partial.Length <= PartialExcerptChars
+                ? partial
+                : partial[..PartialExcerptChars] + "\n…[truncated]";
+            return $" Partial output (degraded): {excerpt}";
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug("Failed to extract degraded sub-agent output for session {SessionId}: {Error}", sessionId, ex.Message);
+            return string.Empty;
+        }
     }
 
     /// <summary>
