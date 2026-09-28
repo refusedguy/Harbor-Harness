@@ -24,7 +24,8 @@ die() { echo "install-toolchain: $*" >&2; exit 1; }
 set -a; . "$LOCK"; set +a
 
 for required in VHS_URL VHS_SHA256 VHS_VERSION TTYD_URL TTYD_SHA256 TTYD_VERSION \
-                FONT_URL FONT_SHA256 FONT_VERSION FONT_FAMILY; do
+                FONT_URL FONT_SHA256 FONT_VERSION FONT_FAMILY \
+                FFMPEG_URL FFMPEG_SHA256 FFMPEG_VERSION; do
   [[ -n "${!required:-}" ]] || die "$required is not pinned in demo/toolchain.lock"
 done
 
@@ -90,6 +91,22 @@ if [[ ! -x "$INSTALL_DIR/bin/ttyd" ]]; then
   install -m 0755 "$(fetch "$TTYD_URL" "$TTYD_SHA256")" "$INSTALL_DIR/bin/ttyd"
 fi
 
+# --- ffmpeg -----------------------------------------------------------------
+# The recorder muxes with it and tools/demo_repro.py re-paces with it, so it is
+# pinned like everything else rather than taken from whatever the image ships (the
+# GitHub runner image ships none at all).
+if [[ -x "$INSTALL_DIR/bin/ffmpeg" ]]; then
+  ffmpeg_installed="$("$INSTALL_DIR/bin/ffmpeg" -version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)"
+  case "$ffmpeg_installed" in
+    "$FFMPEG_VERSION"*) ;;
+    *) echo "install-toolchain: replacing ffmpeg $ffmpeg_installed (lock wants $FFMPEG_VERSION)" >&2
+       rm -f "$INSTALL_DIR/bin/ffmpeg" ;;
+  esac
+fi
+if [[ ! -x "$INSTALL_DIR/bin/ffmpeg" ]]; then
+  install -m 0755 "$(fetch "$FFMPEG_URL" "$FFMPEG_SHA256")" "$INSTALL_DIR/bin/ffmpeg"
+fi
+
 # --- font --------------------------------------------------------------------
 # Only the one family the tapes ask for. The recorder must not pick up a
 # fallback: a different glyph set means a different line-wrap and a different
@@ -115,12 +132,8 @@ esac
 
 # --- provenance --------------------------------------------------------------
 export PATH="$INSTALL_DIR/bin:$PATH"
-echo "install-toolchain: vhs  $($INSTALL_DIR/bin/vhs --version 2>&1 | head -1)  (pinned $VHS_VERSION)"
-echo "install-toolchain: ttyd $($INSTALL_DIR/bin/ttyd --version 2>&1 | head -1)  (pinned $TTYD_VERSION)"
-echo "install-toolchain: font $resolved_font $FONT_VERSION ($FONT_DIR)"
-if command -v ffmpeg >/dev/null; then
-  echo "install-toolchain: ffmpeg $(ffmpeg -version 2>&1 | head -1 | cut -d' ' -f1-3)  (runner-provided, recorded in baseline.json)"
-else
-  die "ffmpeg is required by the recorder and is not on PATH"
-fi
+echo "install-toolchain: vhs    $($INSTALL_DIR/bin/vhs --version 2>&1 | head -1)  (pinned $VHS_VERSION)"
+echo "install-toolchain: ttyd   $($INSTALL_DIR/bin/ttyd --version 2>&1 | head -1)  (pinned $TTYD_VERSION)"
+echo "install-toolchain: ffmpeg $("$INSTALL_DIR/bin/ffmpeg" -version 2>&1 | head -1 | cut -d' ' -f1-3)  (pinned $FFMPEG_VERSION)"
+echo "install-toolchain: font   $resolved_font $FONT_VERSION ($FONT_DIR)"
 echo "install-toolchain: export PATH=\"$INSTALL_DIR/bin:\$PATH\""

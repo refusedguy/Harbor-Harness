@@ -11,10 +11,10 @@
 #
 #   vhs      — the recorder (drives ttyd + headless chromium + ffmpeg)
 #   ttyd     — the PTY server the recorder drives
-#   ffmpeg   — NOT installed: the runner image's ffmpeg is used, and its exact
-#              version is printed into the step summary + recorded in
-#              assets/demo/baseline.json, so a runner bump shows up as a visible
-#              provenance change instead of a silent byte-level diff.
+#   ffmpeg   — pinned like everything else. The GitHub runner image does not ship
+#              ffmpeg at all (vhs-action used to install the *latest* one on the
+#              fly), and `tools/demo_repro.py` needs it to re-pace the captures.
+#              Versioned, immutable release tag — not a rolling "latest".
 #   font     — the only font the tapes ask for; installed to
 #              ~/.local/share/fonts. No Google Fonts, no Nerd Fonts, no
 #              Liberation — the extra fontconfig candidates are what made the
@@ -47,6 +47,14 @@ TTYD_VERSION=1.7.7
 TTYD_ARCHIVE=ttyd.x86_64
 TTYD_URL=https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
 TTYD_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
+
+# The asset is the johnvansickle static build 7.0.2, republished under an immutable
+# release tag. `ffmpeg -version` still reports 7.0.2, which is what the step
+# summary and baseline.json record.
+FFMPEG_VERSION=7.0.2
+FFMPEG_ARCHIVE=ffmpeg-linux-x64
+FFMPEG_URL=https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64
+FFMPEG_SHA256=e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99
 
 FONT_FAMILY="JetBrains Mono"
 FONT_VERSION=2.304
