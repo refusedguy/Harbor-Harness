@@ -1,5 +1,5 @@
 using System.Net.WebSockets;
-using System.Text;
+using System.Text.Json;
 
 namespace Harbor.Transport.Remote;
 
@@ -22,8 +22,9 @@ public sealed class RemoteClient : IAsyncDisposable
 
     public async Task SendAsync(UiTransportPacket packet, CancellationToken ct)
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(packet);
-        var bytes = Encoding.UTF8.GetBytes(json);
+        // #177 (safe half): source-generated type info serializes straight to
+        // UTF-8 bytes — no reflection lookup, no intermediate string, AOT-safe.
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(packet, RemoteJsonContext.Default.UiTransportPacket);
         await _ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
     }
 
