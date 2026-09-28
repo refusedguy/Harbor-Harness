@@ -290,6 +290,8 @@ public sealed class DialogOverlay
     /// <param name="diffText">Optional unified diff; prefix-classified and capped at <see cref="MaxApprovalDiffRows"/> rows (null/blank hides the section).</param>
     /// <param name="filePath">Optional display path shown above the diff (ignored without <paramref name="diffText"/>).</param>
     /// <param name="selectedIndex">Initial choice (clamped; 0 = allow once).</param>
+    /// <param name="okLabel">Confirm button label.</param>
+    /// <param name="cancelLabel">Cancel button label.</param>
     /// <exception cref="ArgumentNullException">When a label is null.</exception>
     public void ShowApproval(
         string? toolName,
