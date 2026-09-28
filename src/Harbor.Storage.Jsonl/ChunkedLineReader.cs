@@ -144,19 +144,21 @@ internal sealed class ChunkedLineReader : IDisposable
             _cursor = 0;
         }
 
-        // Only the CARRY makes free space genuinely scarce: a record ending
-        // mid-block is the normal case and must not grow anything, which is why
-        // the block starts with a second chunk's worth of slack. When the carry
-        // really is most of the block, grow to carry + one chunk so the rest of
-        // an oversized record arrives in a single read rather than a trickle.
+        // Growth is for the CARRY only: a record ending mid-block is the normal
+        // case and must not grow anything, which is why the block starts with a
+        // second chunk's worth of slack. When the carry really is most of the
+        // block, grow to carry + one chunk so the rest of a legal-sized record
+        // arrives in a single read.
         //
-        // Never grow past what the ceiling still owes, or a long carry plus a
-        // long remainder would walk the block up a chunk per refill. The carry
-        // is itself dropped the moment it passes MaxRecordBytes, so the block
-        // never exceeds that plus one chunk.
-        int want = (int)Math.Min(ChunkBytes, ByteCeiling - BytesRead);
-        if (_buffer.Length - _filled >= want)
-            return true;
+        // The target is clamped to MaxRecordBytes, so the block's worst case is
+        // exactly that — never MaxRecordBytes + a chunk, and never a power of
+        // two above it. The clamp cannot strand the reader: a carry that
+        // REACHED the ceiling has already been handed to TryGetRecord, which
+        // drops it and frees the whole block, so _filled is 0 by the time we
+        // get back here.
+        int want = (int)Math.Min(ChunkBytes, Math.Min(MaxRecordBytes, ByteCeiling) - _filled);
+        if (want <= 0 || _buffer.Length - _filled >= want)
+            return _buffer.Length > _filled;
 
         var grown = ArrayPool<byte>.Shared.Rent(_filled + want);
         _buffer.AsSpan(0, _filled).CopyTo(grown);
@@ -230,6 +232,46 @@ internal sealed class ChunkedLineReader : IDisposable
 
         record = default;
         return false;
+    }
+
+    /// <summary>
+    ///     Pipes every byte not yet consumed straight to <paramref name="sink" />
+    ///     and drains the stream, without assembling a single record.
+    /// </summary>
+    /// <remarks>
+    ///     This is what lets a rewrite whose plan keeps the whole tail (the
+    ///     header rename) cost O(1) in memory instead of O(largest record): the
+    ///     record framing is irrelevant to it, so the bytes go across as they
+    ///     arrive. The last record's missing terminator is carried across
+    ///     verbatim too, so the file's exact shape is preserved.
+    /// </remarks>
+    internal void CopyRemainderTo(Stream sink)
+    {
+        while (true)
+        {
+            if (_cursor < _filled)
+            {
+                sink.Write(_buffer, _cursor, _filled - _cursor);
+                _cursor = _filled;
+            }
+
+            if (BytesRead >= ByteCeiling)
+            {
+                return;
+            }
+
+            // No record to carry, so the whole block is available as read
+            // space and the carry/room bookkeeping does not apply.
+            int want = (int)Math.Min(_buffer.Length, ByteCeiling - BytesRead);
+            int n = _stream.Read(_buffer, 0, want);
+            if (n <= 0)
+            {
+                return;
+            }
+
+            _filled = n;
+            BytesRead += n;
+        }
     }
 
     /// <summary>

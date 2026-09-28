@@ -179,6 +179,17 @@ internal static class SessionFileIO
     ///     per-session semaphore where parking a thread on a continuation would
     ///     be the wrong trade anyway.
     /// </summary>
+    /// <remarks>
+    ///     A plan that says <see cref="SessionRewritePlan.CopiesRemainderVerbatim" />
+    ///     only ever has an opinion about the first record, so the rest of the
+    ///     file is piped through in fixed-size pieces and never assembled at all
+    ///     — which is what makes the header rename cost the same on a 24 MiB
+    ///     session as on a 24 KiB one. Every other plan has to look at each
+    ///     record to classify it, so its peak is one block plus the largest
+    ///     record: bounded by
+    ///     <see cref="ChunkedLineReader.MaxRecordBytes" /> rather than by the
+    ///     file, but not constant.
+    /// </remarks>
     private static void StreamRecords(
         Stream source,
         Stream sink,
@@ -186,17 +197,38 @@ internal static class SessionFileIO
         byte[]? trailer)
     {
         using var reader = new ChunkedLineReader(source);
-        while (reader.Fill())
+
+        // The first record always gets a verdict, whatever the plan.
+        bool headDone = false;
+        while (!headDone && reader.Fill())
         {
-            while (reader.TryGetRecord(out var record))
+            if (!reader.TryGetRecord(out var head))
             {
-                ApplyVerdict(sink, plan, record);
+                continue; // the first record straddles this block
             }
+
+            ApplyVerdict(sink, plan, head);
+            headDone = true;
         }
 
-        if (reader.TryGetTrailingRecord(out var trailing))
+        if (headDone && plan.CopiesRemainderVerbatim)
         {
-            ApplyVerdict(sink, plan, trailing);
+            reader.CopyRemainderTo(sink);
+        }
+        else
+        {
+            while (reader.Fill())
+            {
+                while (reader.TryGetRecord(out var record))
+                {
+                    ApplyVerdict(sink, plan, record);
+                }
+            }
+
+            if (reader.TryGetTrailingRecord(out var trailing))
+            {
+                ApplyVerdict(sink, plan, trailing);
+            }
         }
 
         if (trailer is not null)

@@ -90,6 +90,14 @@ internal abstract class SessionRewritePlan
     ///     accumulating across the two passes.
     /// </summary>
     internal abstract void Reset();
+
+    /// <summary>
+    ///     True when every record after the first is kept verbatim, so the
+    ///     rewrite can pipe the rest of the file through without ever
+    ///     assembling a record. A plan that inspects records to classify them
+    ///     cannot say this. Default: no.
+    /// </summary>
+    internal virtual bool CopiesRemainderVerbatim => false;
 }
 
 /// <summary>
@@ -123,6 +131,14 @@ internal sealed class HeaderRewritePlan : SessionRewritePlan
         MarkFound();
         return true;
     }
+
+    /// <summary>
+    ///     Everything after the header is kept, always — so the rewrite streams
+    ///     the rest of the file straight through. That makes the header rename
+    ///     O(1) in memory: not one record of the session is ever assembled,
+    ///     however large a single message in it happens to be.
+    /// </summary>
+    internal override bool CopiesRemainderVerbatim => true;
 
     internal override void Reset()
     {

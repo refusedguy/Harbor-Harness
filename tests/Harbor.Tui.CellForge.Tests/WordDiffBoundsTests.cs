@@ -105,12 +105,16 @@ public class WordDiffBoundsTests
     [Test]
     public async Task PairRun_WideButLopsidedPair_StillDiffs()
     {
-        // The cap is on the product, not on either side: 2 000 tokens against 5
-        // is 2 001 × 6 cells, which fits. A per-side cap would have thrown this
-        // away for no reason — and a square cap of 2 000 would not have fitted
-        // in the character budget anyway, which is why 4 KiB is generous here.
-        string longRow = string.Join(' ', Enumerable.Repeat("x", 2_000)); // 3 999 chars
-        string shortRow = "keep these five words";
+        // The cap is on the PRODUCT, not on either side — which is the whole
+        // reason it is not simply "128 tokens a side". 2 005 tokens against 5
+        // is 2 006 × 6 = 12 036 cells, inside the 16 384 budget, so this pair
+        // gets a real word diff. A per-side cap would have thrown it away, and
+        // it is not a contrived shape: it is a generated row next to a one-line
+        // replacement.
+        const string shared = "keep these five words";
+        string longRow = shared + " " + string.Join(' ', Enumerable.Repeat("x", 2_000));
+        string shortRow = shared;
+
         await Assert.That(longRow.Length).IsLessThan(WordDiff.MaxPairableLineChars);
 
         IReadOnlyList<DiffLine> lines =
@@ -122,8 +126,35 @@ public class WordDiffBoundsTests
         var pairs = WordDiff.PairRun(lines, 0);
 
         await Assert.That(pairs.Count).IsEqualTo(1);
-        // And the shared words really are anchors, i.e. the table was built.
-        await Assert.That(pairs[0].Sides.Removed.Any(s => s.Kind == WordSegKind.Equal)).IsTrue();
+
+        // The shared words are real anchors, i.e. the table was built and
+        // walked — not just that a pair came out.
+        var anchor = pairs[0].Sides.Removed.Single(s => s.Kind == WordSegKind.Equal);
+        await Assert.That(anchor.Text).IsEqualTo(shared);
+
+        // And the 2 000 tokens that were dropped from the new row show up as
+        // one deleted run, which is the only sane way to paint them.
+        await Assert.That(pairs[0].Sides.Removed.Count(s => s.Kind == WordSegKind.Deleted)).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task PairRun_LopsidedPairJustOverTheProductCap_IsLeftUnpaired()
+    {
+        // The other side of the same boundary: 2 800 tokens against 5 is
+        // 2 801 × 6 = 16 806 cells, just past 16 384, so the pair is declined.
+        // A square cap of 128 would have declined this too — what the product
+        // cap buys is the lopsided case ABOVE, not this one.
+        const string shared = "keep these five words";
+        string longRow = shared + " " + string.Join(' ', Enumerable.Repeat("x", 2_800));
+        await Assert.That(longRow.Length).IsLessThan(WordDiff.MaxPairableLineChars);
+
+        IReadOnlyList<DiffLine> lines =
+        [
+            new(DiffLineKind.Delete, 1, 0, longRow),
+            new(DiffLineKind.Add, 0, 1, shared),
+        ];
+
+        await Assert.That(WordDiff.PairRun(lines, 0)).IsEmpty();
     }
 
     [Test]

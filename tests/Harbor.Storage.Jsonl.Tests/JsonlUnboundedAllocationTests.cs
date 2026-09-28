@@ -137,9 +137,10 @@ public class JsonlUnboundedAllocationTests
     public async Task ChunkedLineReader_RecordSpanningBlocks_IsCarriedWholeAndGrowsOnlyForIt()
     {
         // The block DOES grow for a record that does not fit — bounded by the
-        // record, and by MaxRecordBytes, which is the whole point of the design.
-        // A three-block record must come back byte-identical.
-        int payloadBytes = ChunkedLineReader.ChunkBytes * 3;
+        // record and, at the top end, by MaxRecordBytes, which is the point of
+        // the design. A record three times the block's initial size must come
+        // back byte-identical.
+        int payloadBytes = ChunkedLineReader.InitialBlockBytes * 3;
         byte[] line = SampleRecord(payloadBytes);
         byte[] header = Encoding.UTF8.GetBytes("{\"type\":\"session\"}\n");
         byte[] trailing = Encoding.UTF8.GetBytes("trailing record with no terminator");
@@ -177,11 +178,101 @@ public class JsonlUnboundedAllocationTests
         // what an unbounded AsSpan(_cursor) here would have produced.
         await Assert.That(records[2]).IsEqualTo("trailing record with no terminator");
 
-        // It grew past the initial block to carry the record, and no further
-        // (the bound is loose on purpose: ArrayPool rounds to a power of two,
-        // so an exact figure would be testing the pool, not the reader).
+        // It grew past the initial block to carry the record, and no further.
+        // The upper bound is loose on purpose: ArrayPool rounds to a power of
+        // two, so an exact figure would be testing the pool, not the reader.
         await Assert.That(reader.BufferSize).IsGreaterThan(ChunkedLineReader.InitialBlockBytes);
         await Assert.That(reader.BufferSize).IsLessThan(line.Length * 2);
+    }
+
+    [Test]
+    public async Task ChunkedLineReader_RecordAtTheCeiling_NeverExceedsIt()
+    {
+        // The hard bound itself, checked directly. A record right at
+        // MaxRecordBytes is still assembled (it is legal); one past it is
+        // dropped. Either way the block must not exceed the ceiling — which is
+        // what stops a hostile 2 GB single-line file from renting 2 GB. The
+        // stream is synthetic rather than a real file so the test does not have
+        // to write 32 MiB to disk.
+        long atCeiling = ChunkedLineReader.MaxRecordBytes;
+
+        using (var stream = SyntheticRecord(atCeiling))
+        {
+            using var reader = new ChunkedLineReader(stream);
+            int seen = Drain(reader);
+            await Assert.That(seen).IsEqualTo(1);
+            await Assert.That(reader.SawOversizedRecord).IsFalse();
+            await Assert.That(reader.BufferSize).IsLessThanOrEqualTo(atCeiling);
+        }
+
+        using (var stream = SyntheticRecord(atCeiling + 4096))
+        {
+            using var reader = new ChunkedLineReader(stream);
+            int seen = Drain(reader);
+            await Assert.That(seen).IsEqualTo(0);
+            await Assert.That(reader.SawOversizedRecord).IsTrue();
+            await Assert.That(reader.BufferSize).IsLessThanOrEqualTo(atCeiling);
+        }
+    }
+
+    /// <summary>Counts every record the reader yields, to EOF.</summary>
+    private static int Drain(ChunkedLineReader reader)
+    {
+        int seen = 0;
+        while (reader.Fill())
+        {
+            while (reader.TryGetRecord(out _))
+            {
+                seen++;
+            }
+        }
+
+        if (reader.TryGetTrailingRecord(out _))
+        {
+            seen++;
+        }
+
+        return seen;
+    }
+
+    /// <summary>
+    ///     A single <paramref name="bytes" />-long record with no LF in it. Only
+    ///     the length matters here — the reader never decodes.
+    /// </summary>
+    private static Stream SyntheticRecord(long bytes)
+    {
+        var stream = new SyntheticLengthStream(bytes);
+        stream.Position = 0;
+        return stream;
+    }
+
+    /// <summary>Reports <see cref="Length" /> without materializing a byte of it.</summary>
+    private sealed class SyntheticLengthStream(long length) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => true;
+        public override bool CanWrite => false;
+        public override long Length => length;
+        public override long Position { get; set; }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            long left = length - Position;
+            if (left <= 0)
+            {
+                return 0;
+            }
+
+            int n = (int)Math.Min(count, left);
+            Array.Clear(buffer, offset, n); // the content is irrelevant
+            Position += n;
+            return n;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void Flush() { }
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     /// <summary>
@@ -380,12 +471,12 @@ public class JsonlUnboundedAllocationTests
         // The rewrite half of the issue: every title/status/git-branch change
         // did File.ReadAllLines(...).ToList() plus a full rewrite under the
         // per-session semaphore, to change line 1. Here the session holds a
-        // 24 MB record and the whole operation allocates a few hundred KiB,
-        // because records are copied as raw bytes and never decoded.
+        // 24 MiB record, and the operation allocates a few hundred KiB.
         //
         // A single big record is the right fixture HERE (and not in the read
-        // test): the rewrite's whole claim is that it never materializes a
-        // record at all, so the fat record is invisible to it.
+        // test): the header plan keeps every record after the first verbatim,
+        // so the rewrite pipes them straight through without assembling one —
+        // the fat record is not merely cheap, it is never even a record.
         var (store, sessionId) = await SeedAsync(1);
         try
         {
@@ -408,10 +499,10 @@ public class JsonlUnboundedAllocationTests
 
             await Assert.That(updated.IsSuccess).IsTrue();
 
-            // Old shape: a 24 MB string[] plus a List over it plus a 24 MB
-            // re-encode — hundreds of MiB. New shape: the block, two FileStream
-            // buffers and the small header record.
-            await Assert.That(allocated).IsLessThan(8 * MiB);
+            // Old shape: a 24 MiB string[] plus a List over it plus a 24 MiB
+            // re-encode — tens of MiB of churn for a one-line change. New shape:
+            // the block, two FileStream buffers and the small header record.
+            await Assert.That(allocated).IsLessThan(4 * MiB);
 
             // And the payload survived the rewrite, byte for byte.
             var reread = await store.GetMessagesAsync(sessionId);
@@ -434,12 +525,13 @@ public class JsonlUnboundedAllocationTests
         // of them is stale, so every one of them has to go — a plan that dropped
         // only the first would leave a duplicate that the reader then silently
         // picks between.
-        var (store, sessionId) = await SeedAsync(2);
+        var (store, sessionId) = await SeedAsync(3);
         try
         {
             string path = Path.Combine(store.GetRootDirectory(), $"{sessionId}.jsonl");
 
-            // Same id as the seeded m1, appended twice more, out of order.
+            // Three more records for the seeded m1. The reader collapses these
+            // to one m1 (latest wins), so the file really does hold four.
             await AppendFatMessageAsync(store, sessionId, "m1", 11);
             await AppendFatMessageAsync(store, sessionId, "m1", 22);
             await AppendFatMessageAsync(store, sessionId, "m1", 33);
@@ -451,7 +543,8 @@ public class JsonlUnboundedAllocationTests
             var reread = await store.GetMessagesAsync(sessionId);
             await Assert.That(reread.IsSuccess).IsTrue();
 
-            // Exactly one m1, and it is the one we just wrote.
+            // Exactly one m1 — all four stale ones went, not just the first —
+            // and it is the one we just wrote.
             await Assert.That(reread.Value.Count(m => m.Id == "m1")).IsEqualTo(1);
             await Assert.That(((UserMessage)reread.Value.Single(m => m.Id == "m1")).Content)
                 .IsEqualTo("final body");
@@ -556,20 +649,22 @@ public class JsonlUnboundedAllocationTests
         var (store, sessionId) = await SeedAsync(4);
         try
         {
-            // A second record for m1, after m2 and m3 — so anchoring on the
-            // first m1 keeps m2/m3 and the second m1, while anchoring on the
-            // second would keep one more message.
+            // A second record for m1, at the END — past m2 and m3. Anchoring on
+            // the first m1 therefore drops m2, m3 and this duplicate, while
+            // anchoring on the last one would drop nothing. 3 vs 0 is the
+            // whole difference between the two readings.
             await AppendFatMessageAsync(store, sessionId, "m1", 8);
 
             var result = await store.DeleteMessagesAfterAsync(sessionId, "m1");
 
             await Assert.That(result.IsSuccess).IsTrue();
-            await Assert.That(result.Value).IsEqualTo(3); // m2, m3, and the dup m1
+            await Assert.That(result.Value).IsEqualTo(3); // m2, m3, and the duplicate
 
             var reread = await store.GetMessagesAsync(sessionId);
             await Assert.That(reread.IsSuccess).IsTrue();
-            await Assert.That(reread.Value.Select(m => m.Id))
-                .IsEquivalentTo(new[] { "m0", "m1", "m2", "m3" });
+
+            // The prefix up to and including the FIRST m1, and nothing after.
+            await Assert.That(reread.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m1" });
         }
         finally
         {
