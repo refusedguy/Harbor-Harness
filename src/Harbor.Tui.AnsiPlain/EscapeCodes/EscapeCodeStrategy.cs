@@ -111,7 +111,8 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
     ///     is no miss and therefore no fallback. <see cref="SgrParams" /> is a
     ///     single array read: the styled-run path no longer allocates a
     ///     <c>StringBuilder</c> and a result string per styled run, which a
-    ///     text-heavy frame paid for once per run.
+    ///     text-heavy frame paid for once per run. The zero only holds because
+    ///     <see cref="MapStyle" /> is box-free too.
     /// </summary>
     private static readonly string[] SgrParamTable = BuildSgrParamTable();
 
@@ -154,7 +155,7 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
 
     private static void AppendParam(Span<char> codes, ref int length, StyleFlag flags, StyleFlag flag, char code)
     {
-        if (!flags.HasFlag(flag))
+        if ((flags & flag) == 0)
             return;
         if (length > 0)
             codes[length++] = ';';
@@ -170,13 +171,18 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
 
     private static StyleFlag MapStyle(TuiStyle style)
     {
+        // Bit tests, not Enum.HasFlag. HasFlag takes an Enum, so every call
+        // boxes its argument — six boxes per styled run, which is what kept
+        // SgrParams allocating (288 B/run, measured) even after the parameter
+        // table removed the builder. For a [Flags] enum the two are equivalent.
+        int bits = (int)style;
         StyleFlag flags = StyleFlag.None;
-        if (style.HasFlag(TuiStyle.Bold)) flags |= StyleFlag.Bold;
-        if (style.HasFlag(TuiStyle.Dim)) flags |= StyleFlag.Dim;
-        if (style.HasFlag(TuiStyle.Italic)) flags |= StyleFlag.Italic;
-        if (style.HasFlag(TuiStyle.Underline)) flags |= StyleFlag.Underline;
-        if (style.HasFlag(TuiStyle.Strike)) flags |= StyleFlag.Strike;
-        if (style.HasFlag(TuiStyle.Reverse)) flags |= StyleFlag.Reverse;
+        if ((bits & (int)TuiStyle.Bold) != 0) flags |= StyleFlag.Bold;
+        if ((bits & (int)TuiStyle.Dim) != 0) flags |= StyleFlag.Dim;
+        if ((bits & (int)TuiStyle.Italic) != 0) flags |= StyleFlag.Italic;
+        if ((bits & (int)TuiStyle.Underline) != 0) flags |= StyleFlag.Underline;
+        if ((bits & (int)TuiStyle.Strike) != 0) flags |= StyleFlag.Strike;
+        if ((bits & (int)TuiStyle.Reverse) != 0) flags |= StyleFlag.Reverse;
         return flags;
     }
 }

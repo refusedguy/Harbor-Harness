@@ -79,12 +79,13 @@ public class AnsiEscapeStrategyAllocTests
         }
 
         Console.WriteLine(
-            $"ansi-sgr-alloc: Style() = {best} B over {StyleCombinations} style combinations x {Rounds} rounds (min of {Rounds})");
+            $"ansi-sgr-alloc: Style() = {best} B over {StyleCombinations} style combinations x {Rounds} rounds " +
+            $"({(double)best / StyleCombinations:F1} B/call, min of {Rounds})");
         await Assert.That(sink).IsEqualTo(expected);
-        // Exact zero, not a budget: every combination is one table read now.
-        // The chain the sibling test keeps spends two objects (builder + its
-        // result string) per non-empty run, so any revert blows this by
-        // orders of magnitude.
+        // Exact zero, not a budget: MapStyle's bit tests plus one table read
+        // per combination. The chain the sibling test keeps spends two objects
+        // (builder + its result string) per non-empty run on top of six
+        // HasFlag boxes, so any revert blows this by orders of magnitude.
         await Assert.That(best).IsEqualTo(0);
     }
 
