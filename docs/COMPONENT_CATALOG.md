@@ -568,14 +568,14 @@ render primitives shared across all TUI renderers.
 ### IChatBlock
 
 **Purpose:** One typed cell of the chat timeline. Implemented by `UserBlock`,
-`SystemBlock`, `DiffBlock`, `ApprovalGateView`, and streaming blocks.
+`SystemBlock`, `DiffBlock`, `ApprovalGateView`, `TreeView`, and streaming blocks.
 
 **File:** `src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs`
 
 **Contract:**
 | Member | Signature | Description |
 |---|---|---|
-| `Kind` | `string` | Stable kind tag ("user", "assistant", "tool-call", "system", "diff", "approval", ...) |
+| `Kind` | `string` | Stable kind tag ("user", "assistant", "tool-call", "system", "diff", "approval", "tree", ...) |
 | `IsStreamContinuation` | `bool` | True while the block is the live streaming tail |
 | `BudgetBytes` | `int` | Rough resident size for timeline eviction |
 | `Measure` | `BlockMeasure Measure(int width)` | Height in rows for `width` columns |
@@ -639,6 +639,39 @@ wants approval, what it targets, and the key bindings. Implements
 | `DecisionRecorded` | Raised exactly once when a decision is recorded |
 
 **Key bindings:** `y`/`Enter` approve, `n`/`Escape` deny, `a` always-allow.
+
+### TreeView
+
+**Purpose:** Expandable tree block (bubbles tree / Textual Tree pattern):
+pre-order visible rows over expandable nodes with a cursor, guide glyphs
+(`▾` expanded, `▸` collapsed, `·` leaf) and two-space indent per depth.
+Needed by the UX5 child transcript and the future file-tree. Implements
+`IFocusTarget` so the host `FocusRouter` can traverse it via Tab; Enter/Space
+on a leaf is NOT consumed so the host owns the open action.
+
+**File:** `src/Harbor.Ui.Framework.Rendering/Widgets/TreeView.cs`
+
+```csharp
+public sealed class TreeNode
+{
+    public TreeNode(string label, IEnumerable<TreeNode>? children = null, bool expanded = false);
+    public string Label { get; }
+    public IReadOnlyList<TreeNode> Children { get; }
+    public bool HasChildren { get; }
+    public bool IsExpanded { get; }
+}
+public readonly record struct TreeRow(TreeNode Node, int Depth);
+public sealed class TreeView : IChatBlock, IFocusTarget { public TreeView(IEnumerable<TreeNode>? roots = null); ... }
+```
+
+**Events:**
+| Event | Description |
+|---|---|
+| `Changed` | Raised on cursor moves and expand/collapse so the host can mark the slot dirty |
+
+**Key bindings:** `Up`/`Down`/`k`/`j` move, `Home`/`End` jump,
+`PageUp`/`PageDown` move a viewport, `Right`/`l` expands or descends,
+`Left`/`h` collapses or ascends, `Enter`/`Space` toggles a parent.
 
 ### DiffBlock / UnifiedDiffParser
 
