@@ -501,7 +501,7 @@ public class CellForgeJumpPalettePanelTests
         });
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
-        _ = store.Dispatch(new UiMsg.FocusPanel(OverlayIds.JumpPalette));
+        _ = store.Dispatch(new AppMsg.FocusPanel(OverlayIds.JumpPalette));
 
         var screen = ChatScreen.Build(new ComposerController(), new StatusViewModel(), includeSidebar: false);
         ChatScreenPanelDock.AttachPanels(
