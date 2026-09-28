@@ -41,10 +41,12 @@ namespace Harbor.App.Cli.Repl;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Кадры:</b> event-driven — кадр собирается только после пробуждения
-///         (ввод / событие агента / спиннер-тик 80 мс в Running), пустые кадры
-///         DiffEngine отбрасывает сам. Порядок кадра — как в golden-тестах:
-///         solve → prepare → begin → paint × panels → flush.
+///         <b>Кадры:</b> event-driven + ENG7-gate — пробуждение (ввод /
+///         событие агента / спиннер-тик 80 мс в Running) лишь запрашивает
+///         кадр; рендер идёт через 60 fps тикер при изменившейся модели
+///         (store revision + dirty seq + геометрия), идентичные кадры
+///         закорачиваются без записи в бэкенд. Порядок кадра — как в
+///         golden-тестах: solve → prepare → begin → paint × panels → flush.
 ///     </para>
 ///     <para>
 ///         <b>Ctrl+C:</b> во время хода агента — прерывание через существующий
@@ -221,6 +223,23 @@ internal sealed class CellForgeReplRunner(
 
     /// <summary>Memoized status snapshot (projector fast-path on quiet frames).</summary>
     internal UiState? _lastStatusSnapshot;
+
+    /// <summary>
+    /// ENG7 (issue #278) FPS ticker + frame short-circuit: the 60 fps gate
+    /// over the wake-driven loop (render on tick, not on event).
+    /// <see cref="_frameDirtySeq"/> is bumped once per loop iteration that
+    /// mutated paint state outside the TEA store; the pair
+    /// (store revision, dirty seq) plus geometry is the frame's model
+    /// version — a wake with an unchanged version renders nothing, so idle
+    /// produces zero backend writes. Animation/resize force through the
+    /// version check but still pace through the ticker.
+    /// </summary>
+    internal readonly FrameTicker _frameTicker = new();
+    internal long _frameDirtySeq;
+    internal long _lastFrameStoreRevision = -1;
+    internal long _lastFrameDirtySeq = -1;
+    internal int _lastFrameCols = -1;
+    internal int _lastFrameRows = -1;
 
     /// <summary>Last viewport geometry pushed to the TEA store (changed-only).</summary>
     internal int _lastStoreViewport = -1;
