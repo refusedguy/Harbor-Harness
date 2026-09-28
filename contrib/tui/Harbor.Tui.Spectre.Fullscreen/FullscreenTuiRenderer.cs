@@ -41,6 +41,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
     {
         Context = new FullscreenRenderContext();
         _layout = new LayoutBuilder(_chat, _scroll, _input);
+        RegisterEventHandlers();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -80,7 +81,18 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
 
     public override async Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        ApplyEvent(@event);
+        _layout.Status = "idle";
+
+        // Chat state is painted by the registered IAgentEventHandlers (issue
+        // #185 visitor registry); everything else renders through the builtin
+        // views in BaseTuiRenderer.
+        await DispatchToHandlersAsync(@event, ct).ConfigureAwait(false);
+
+        // Sync streaming state to layout
+        _layout.IsStreaming = _isStreaming;
+        _layout.StreamBuffer = _streamBuffer;
+        _layout.ThinkBuffer = _thinkBuffer;
+
         await base.RenderAsync(@event, ct).ConfigureAwait(false);
         Redraw();
     }
@@ -147,90 +159,160 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  Event handling — delegates to ChatState
+    //  Event handling — one IAgentEventHandler per event group (issue #185
+    //  visitor registry). Delegates to ChatState.
     // ═══════════════════════════════════════════════════════════════
 
-    private void ApplyEvent(AgentEvent @event)
+    private void RegisterEventHandlers()
     {
-        _layout.Status = "idle";
+        RegisterHandler(new SessionHandler(this));
+        RegisterHandler(new AssistantStreamHandler(this));
+        RegisterHandler(new ToolLifecycleHandler(this));
+        RegisterHandler(new CompactionHandler(this));
+        RegisterHandler(new AgentErrorHandler(this));
+    }
 
-        switch (@event)
+    /// <summary>Session lifecycle: seed history on start, idle on end.</summary>
+    private sealed class SessionHandler(FullscreenTuiRenderer owner) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is AgentStartEvent or AgentEndEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
-            case AgentStartEvent ase:
-                _layout.Status = "running";
-                if (_chat.Count == 0)
-                    foreach (var m in ase.Messages)
-                    {
-                        if (m is UserMessage u)
-                            _chat.Add("user", u.Content);
-                    }
-                _scroll.Reset();
-                break;
+            switch (@event)
+            {
+                case AgentStartEvent ase:
+                    owner._layout.Status = "running";
+                    if (owner._chat.Count == 0)
+                        foreach (var m in ase.Messages)
+                        {
+                            if (m is UserMessage u)
+                                owner._chat.Add("user", u.Content);
+                        }
+                    owner._scroll.Reset();
+                    break;
 
-            case MessageStartEvent:
-                _layout.Status = "running";
-                _isStreaming = true;
-                _streamBuffer = string.Empty;
-                _thinkBuffer = string.Empty;
-                break;
+                case AgentEndEvent:
+                    owner._layout.Status = "idle";
+                    break;
+            }
 
-            case MessageUpdateEvent mu:
-                switch (mu.LlmEvent)
-                {
-                    case TextDeltaEvent td: _streamBuffer += td.Delta; break;
-                    case ThinkingDeltaEvent thd: _thinkBuffer += thd.Delta; break;
-                    case ToolCallStartEvent tcs: _chat.Add("tool", $"→ {tcs.ToolName}"); break;
-                    case StepFinishEvent sf when sf.Usage is not null:
-                        _layout.TokensIn += sf.Usage.InputTokens;
-                        _layout.TokensOut += sf.Usage.OutputTokens;
-                        _cost += EstimateCost(sf.Usage.InputTokens, sf.Usage.OutputTokens);
-                        _layout.Cost = _cost;
-                        break;
-                }
-                break;
-
-            case MessageEndEvent:
-                if (!string.IsNullOrEmpty(_thinkBuffer)) _chat.Add("thinking", _thinkBuffer.Trim());
-                if (!string.IsNullOrEmpty(_streamBuffer)) _chat.Add("assistant", _streamBuffer.Trim());
-                _streamBuffer = string.Empty;
-                _thinkBuffer = string.Empty;
-                _isStreaming = false;
-                _scroll.Reset();
-                break;
-
-            case ToolExecutionStartEvent tes:
-                string args = tes.Args.GetRawText();
-                _chat.Add("tool", string.IsNullOrEmpty(args) || args == "{}"
-                    ? $"→ {tes.ToolName}"
-                    : $"→ {tes.ToolName}  [dim]{Markup.Escape(args)}[/]");
-                break;
-
-            case ToolExecutionEndEvent tee:
-                string label = tee.IsError ? "[red]✗[/]" : "[green]✓[/]";
-                string preview = tee.Result.Output.Length > 600
-                    ? tee.Result.Output[..600] + "..." : tee.Result.Output;
-                _chat.Add("tool-result", $"{label} {Markup.Escape(preview.Trim())}");
-                break;
-
-            case CompactionStartedEvent: _layout.Status = "compacting"; break;
-
-            case CompactionCompletedEvent cc:
-                _layout.Status = "running";
-                _chat.Add("system", $"[dim]compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s[/]");
-                break;
-
-            case AgentErrorEvent err:
-                _layout.Status = "error";
-                _chat.Add("error", err.Message);
-                break;
-
-            case AgentEndEvent: _layout.Status = "idle"; break;
+            return Task.CompletedTask;
         }
+    }
 
-        // Sync streaming state to layout
-        _layout.IsStreaming = _isStreaming;
-        _layout.StreamBuffer = _streamBuffer;
-        _layout.ThinkBuffer = _thinkBuffer;
+    /// <summary>Live assistant stream: buffers tokens, flushes on message end, tracks usage cost.</summary>
+    private sealed class AssistantStreamHandler(FullscreenTuiRenderer owner) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is MessageStartEvent or MessageUpdateEvent or MessageEndEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            switch (@event)
+            {
+                case MessageStartEvent:
+                    owner._layout.Status = "running";
+                    owner._isStreaming = true;
+                    owner._streamBuffer = string.Empty;
+                    owner._thinkBuffer = string.Empty;
+                    break;
+
+                case MessageUpdateEvent mu:
+                    switch (mu.LlmEvent)
+                    {
+                        case TextDeltaEvent td: owner._streamBuffer += td.Delta; break;
+                        case ThinkingDeltaEvent thd: owner._thinkBuffer += thd.Delta; break;
+                        case ToolCallStartEvent tcs: owner._chat.Add("tool", $"→ {tcs.ToolName}"); break;
+                        case StepFinishEvent sf when sf.Usage is not null:
+                            owner._layout.TokensIn += sf.Usage.InputTokens;
+                            owner._layout.TokensOut += sf.Usage.OutputTokens;
+                            owner._cost += EstimateCost(sf.Usage.InputTokens, sf.Usage.OutputTokens);
+                            owner._layout.Cost = owner._cost;
+                            break;
+                    }
+                    break;
+
+                case MessageEndEvent:
+                    if (!string.IsNullOrEmpty(owner._thinkBuffer)) owner._chat.Add("thinking", owner._thinkBuffer.Trim());
+                    if (!string.IsNullOrEmpty(owner._streamBuffer)) owner._chat.Add("assistant", owner._streamBuffer.Trim());
+                    owner._streamBuffer = string.Empty;
+                    owner._thinkBuffer = string.Empty;
+                    owner._isStreaming = false;
+                    owner._scroll.Reset();
+                    break;
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Tool-call lifecycle lines (start arrow, end check/cross).</summary>
+    private sealed class ToolLifecycleHandler(FullscreenTuiRenderer owner) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is ToolExecutionStartEvent or ToolExecutionEndEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            switch (@event)
+            {
+                case ToolExecutionStartEvent tes:
+                    string args = tes.Args.GetRawText();
+                    owner._chat.Add("tool", string.IsNullOrEmpty(args) || args == "{}"
+                        ? $"→ {tes.ToolName}"
+                        : $"→ {tes.ToolName}  [dim]{Markup.Escape(args)}[/]");
+                    break;
+
+                case ToolExecutionEndEvent tee:
+                    string label = tee.IsError ? "[red]✗[/]" : "[green]✓[/]";
+                    string preview = tee.Result.Output.Length > 600
+                        ? tee.Result.Output[..600] + "..." : tee.Result.Output;
+                    owner._chat.Add("tool-result", $"{label} {Markup.Escape(preview.Trim())}");
+                    break;
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Compaction lifecycle: status flag plus a system line on completion.</summary>
+    private sealed class CompactionHandler(FullscreenTuiRenderer owner) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is CompactionStartedEvent or CompactionCompletedEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            switch (@event)
+            {
+                case CompactionStartedEvent:
+                    owner._layout.Status = "compacting";
+                    break;
+
+                case CompactionCompletedEvent cc:
+                    owner._layout.Status = "running";
+                    owner._chat.Add("system", $"[dim]compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s[/]");
+                    break;
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Agent error line.</summary>
+    private sealed class AgentErrorHandler(FullscreenTuiRenderer owner) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) => @event is AgentErrorEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            var err = (AgentErrorEvent)@event;
+            owner._layout.Status = "error";
+            owner._chat.Add("error", err.Message);
+            return Task.CompletedTask;
+        }
     }
 
     private static decimal EstimateCost(int inTok, int outTok)

@@ -15,6 +15,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
     public SpectreTuiRenderer(ILogger<SpectreTuiRenderer> logger) : base(logger)
     {
         Context = new SpectreRenderContext();
+        RegisterEventHandlers();
     }
     public override ITuiRenderContext Context { get; }
 
@@ -40,49 +41,106 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
         }
     }
 
-    public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
+    public override async Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        switch (@event)
+        // Live output is painted by the registered IAgentEventHandlers (issue
+        // #185 visitor registry); everything else (status bar, finalized chat
+        // history, diff overlay) renders through the builtin views in
+        // BaseTuiRenderer.
+        await DispatchToHandlersAsync(@event, ct).ConfigureAwait(false);
+        await base.RenderAsync(@event, ct).ConfigureAwait(false);
+    }
+
+    private void RegisterEventHandlers()
+    {
+        RegisterHandler(new AssistantStreamHandler());
+        RegisterHandler(new ToolStartHandler());
+        RegisterHandler(new CompactionHandler());
+        RegisterHandler(new AgentErrorHandler());
+    }
+
+    /// <summary>Live assistant stream: start banner, token deltas, end newline.</summary>
+    private sealed class AssistantStreamHandler : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is MessageStartEvent or MessageUpdateEvent or MessageEndEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
-            case MessageStartEvent:
-                AnsiConsole.Write(new Markup("[cyan][[assistant]][/] "));
-                break;
+            switch (@event)
+            {
+                case MessageStartEvent:
+                    AnsiConsole.Write(new Markup("[cyan][[assistant]][/] "));
+                    break;
 
-            case MessageUpdateEvent mu:
-                RenderLiveToken(mu.LlmEvent);
-                break;
+                case MessageUpdateEvent mu:
+                    RenderLiveToken(mu.LlmEvent);
+                    break;
 
-            case MessageEndEvent:
-                AnsiConsole.WriteLine();
-                break;
+                case MessageEndEvent:
+                    AnsiConsole.WriteLine();
+                    break;
+            }
 
-            // The following are emitted as live lines (not accumulated in the chat
-            // history view) so they appear inline without repainting the whole log.
-            case ToolExecutionStartEvent tes:
-                AnsiConsole.WriteLine();
-                var panel = new Panel(new Markup($"[bold blue]→ {Markup.Escape(tes.ToolName)}[/] [dim]{Markup.Escape(tes.Args.GetRawText())}[/]"))
-                {
-                    Padding = new Padding(1, 0)
-                };
-                AnsiConsole.Write(panel);
-                break;
-
-            case CompactionStartedEvent:
-                AnsiConsole.Write(new Markup("[dim][compacting context...][/]\n"));
-                break;
-
-            case CompactionCompletedEvent cc:
-                AnsiConsole.Write(new Markup($"[dim][compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s][/]\n"));
-                break;
-
-            case AgentErrorEvent err:
-                AnsiConsole.Write(new Markup($"[red][[error]] {Markup.Escape(err.Message)}[/]\n"));
-                break;
+            return Task.CompletedTask;
         }
+    }
 
-        // Status bar, finalized chat history, and diff overlay are rendered through
-        // the builtin views in BaseTuiRenderer.
-        return base.RenderAsync(@event, ct);
+    /// <summary>
+    ///     Tool-call start line. Emitted as a live line (not accumulated in the
+    ///     chat history view) so it appears inline without repainting the whole log.
+    /// </summary>
+    private sealed class ToolStartHandler : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) => @event is ToolExecutionStartEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            var tes = (ToolExecutionStartEvent)@event;
+            AnsiConsole.WriteLine();
+            var panel = new Panel(new Markup($"[bold blue]→ {Markup.Escape(tes.ToolName)}[/] [dim]{Markup.Escape(tes.Args.GetRawText())}[/]"))
+            {
+                Padding = new Padding(1, 0)
+            };
+            AnsiConsole.Write(panel);
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Compaction lifecycle lines.</summary>
+    private sealed class CompactionHandler : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) =>
+            @event is CompactionStartedEvent or CompactionCompletedEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            switch (@event)
+            {
+                case CompactionStartedEvent:
+                    AnsiConsole.Write(new Markup("[dim][compacting context...][/]\n"));
+                    break;
+
+                case CompactionCompletedEvent cc:
+                    AnsiConsole.Write(new Markup($"[dim][compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s][/]\n"));
+                    break;
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Agent error line.</summary>
+    private sealed class AgentErrorHandler : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) => @event is AgentErrorEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            var err = (AgentErrorEvent)@event;
+            AnsiConsole.Write(new Markup($"[red][[error]] {Markup.Escape(err.Message)}[/]\n"));
+            return Task.CompletedTask;
+        }
     }
 
     private static void RenderLiveToken(LlmEvent evt)
