@@ -1,16 +1,26 @@
 using System.Text;
+using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
 /// Modal dialog kind. Drives button layout and default Enter behaviour.
+/// <see cref="Select"/>, <see cref="Radio"/> and <see cref="Multiline"/> are
+/// the [PRIM4] form kinds (#289): choice lists and the multiline editor hosted
+/// in the same centered box (seated on the z-stack since [PRIM2c]).
 /// </summary>
 public enum DialogKind
 {
     Alert,
     Confirm,
     Prompt,
+    /// <summary>Single-column option list (<see cref="DialogSelectList"/>).</summary>
+    Select,
+    /// <summary>Single-row mutually-exclusive options (<see cref="DialogRadioGroup"/>).</summary>
+    Radio,
+    /// <summary>Multiline text field (<see cref="DialogMultilineInput"/>).</summary>
+    Multiline,
 }
 
 /// <summary>
@@ -31,10 +41,18 @@ public sealed class DialogOverlay
     public const int MaxWidth = 72;
     public const int MinHeight = 5;
     public const int MaxHeight = 18;
+    /// <summary>Max option rows a select dialog reserves (the list scrolls past this).</summary>
+    public const int MaxSelectRows = 6;
+    /// <summary>Max editor rows a multiline dialog reserves (extra lines clip).</summary>
+    public const int MaxMultilineRows = 5;
     private const int Padding = 1;
     private const int ButtonRowHeight = 2;
+    private const int SelectPageRows = 5;
 
     private readonly List<DialogButton> _buttons = new();
+    private readonly DialogSelectList _select = new();
+    private readonly DialogRadioGroup _radio = new();
+    private readonly DialogMultilineInput _editor = new();
     private string _title = string.Empty;
     private string _message = string.Empty;
     private string _input = string.Empty;
@@ -51,7 +69,38 @@ public sealed class DialogOverlay
 
     public string Message => _message;
 
-    public string Input => _input;
+    /// <summary>
+    /// Text value: the prompt buffer for <see cref="DialogKind.Prompt"/>, the
+    /// multiline editor text for <see cref="DialogKind.Multiline"/>.
+    /// </summary>
+    public string Input => _kind == DialogKind.Multiline ? _editor.Text : _input;
+
+    /// <summary>Choice options for <see cref="DialogKind.Select"/> / <see cref="DialogKind.Radio"/> (empty otherwise).</summary>
+    public IReadOnlyList<string> Options =>
+        _kind == DialogKind.Select ? _select.Items :
+        _kind == DialogKind.Radio ? _radio.Options :
+        Array.Empty<string>();
+
+    /// <summary>Selected choice index (-1 when the kind has no options).</summary>
+    public int SelectedIndex =>
+        _kind == DialogKind.Select ? _select.SelectedIndex :
+        _kind == DialogKind.Radio ? _radio.SelectedIndex :
+        -1;
+
+    /// <summary>Selected choice text (empty when the kind has no options).</summary>
+    public string SelectedOption =>
+        _kind == DialogKind.Select ? _select.SelectedItem :
+        _kind == DialogKind.Radio ? _radio.SelectedOption :
+        string.Empty;
+
+    /// <summary>Multiline editor state (meaningful for <see cref="DialogKind.Multiline"/>).</summary>
+    public DialogMultilineInput Editor => _editor;
+
+    /// <summary>Select-list state (white-box scroll asserts; meaningful for <see cref="DialogKind.Select"/>).</summary>
+    internal DialogSelectList SelectList => _select;
+
+    /// <summary>Radio-group state (white-box asserts; meaningful for <see cref="DialogKind.Radio"/>).</summary>
+    internal DialogRadioGroup RadioGroup => _radio;
 
     public IReadOnlyList<DialogButton> Buttons => _buttons;
 
@@ -111,6 +160,103 @@ public sealed class DialogOverlay
         Visible = true;
     }
 
+    /// <summary>
+    /// Shows an option-list dialog ([PRIM4]). Enter commits via the host (same
+    /// contract as <see cref="DialogKind.Prompt"/>); the host reads
+    /// <see cref="SelectedOption"/> / <see cref="SelectedIndex"/>.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">When <paramref name="options"/> or a label is null.</exception>
+    /// <exception cref="ArgumentException">When <paramref name="options"/> is empty.</exception>
+    public void ShowSelect(
+        string title,
+        string message,
+        IReadOnlyList<string> options,
+        int selectedIndex = 0,
+        string okLabel = "OK",
+        string cancelLabel = "Cancel")
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(okLabel);
+        ArgumentNullException.ThrowIfNull(cancelLabel);
+        if (options.Count == 0)
+        {
+            throw new ArgumentException("Select dialog needs at least one option.", nameof(options));
+        }
+        _kind = DialogKind.Select;
+        _title = title ?? string.Empty;
+        _message = message ?? string.Empty;
+        _input = string.Empty;
+        _select.SetItems(options);
+        _select.MoveTo(selectedIndex);
+        _buttons.Clear();
+        _buttons.Add(new DialogButton(okLabel, "ok"));
+        _buttons.Add(new DialogButton(cancelLabel, "cancel"));
+        _focusedButton = 0;
+        Visible = true;
+    }
+
+    /// <summary>
+    /// Shows a radio-row dialog ([PRIM4]). Enter commits via the host; the host
+    /// reads <see cref="SelectedOption"/> / <see cref="SelectedIndex"/>.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">When <paramref name="options"/> or a label is null.</exception>
+    /// <exception cref="ArgumentException">When <paramref name="options"/> is empty.</exception>
+    public void ShowRadio(
+        string title,
+        string message,
+        IReadOnlyList<string> options,
+        int selectedIndex = 0,
+        string okLabel = "OK",
+        string cancelLabel = "Cancel")
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(okLabel);
+        ArgumentNullException.ThrowIfNull(cancelLabel);
+        if (options.Count == 0)
+        {
+            throw new ArgumentException("Radio dialog needs at least one option.", nameof(options));
+        }
+        _kind = DialogKind.Radio;
+        _title = title ?? string.Empty;
+        _message = message ?? string.Empty;
+        _input = string.Empty;
+        _radio.SetOptions(options, selectedIndex);
+        _buttons.Clear();
+        _buttons.Add(new DialogButton(okLabel, "ok"));
+        _buttons.Add(new DialogButton(cancelLabel, "cancel"));
+        _focusedButton = 0;
+        Visible = true;
+    }
+
+    /// <summary>
+    /// Shows a multiline editor dialog ([PRIM4]). The editor is the shared
+    /// <see cref="DialogMultilineInput"/> (<see cref="PromptBuffer"/> engine);
+    /// plain Enter still submits (uniform dialog contract — the host commits
+    /// and reads <see cref="Input"/>); newlines come from multiline prefill,
+    /// paste, or kitty Shift+Enter (see the <c>KeyEvent</c> overload).
+    /// </summary>
+    /// <exception cref="ArgumentNullException">When a label is null.</exception>
+    public void ShowMultiline(
+        string title,
+        string message,
+        string defaultValue = "",
+        string okLabel = "OK",
+        string cancelLabel = "Cancel")
+    {
+        ArgumentNullException.ThrowIfNull(okLabel);
+        ArgumentNullException.ThrowIfNull(cancelLabel);
+        _kind = DialogKind.Multiline;
+        _title = title ?? string.Empty;
+        _message = message ?? string.Empty;
+        _input = string.Empty;
+        _editor.SetText(defaultValue ?? string.Empty);
+        _buttons.Clear();
+        _buttons.Add(new DialogButton(okLabel, "ok"));
+        _buttons.Add(new DialogButton(cancelLabel, "cancel"));
+        _focusedButton = 0;
+        Visible = true;
+    }
+
     public void Dismiss()
     {
         Visible = false;
@@ -121,6 +267,14 @@ public sealed class DialogOverlay
         // Reserved for future spinner/animation integration.
     }
 
+    /// <summary>
+    /// Routes a legacy console key. Escape dismisses, Tab cycles buttons,
+    /// Enter submits to the host (returns false — the host commits and reads
+    /// <see cref="Input"/> / <see cref="SelectedOption"/>); navigation and
+    /// editing are kind-specific. The <see cref="DialogKind.Prompt"/> path is
+    /// frozen legacy (arrows cycle buttons); <see cref="DialogKind.Multiline"/>
+    /// owns the horizontal arrows as caret moves.
+    /// </summary>
     public bool HandleKey(ConsoleKeyInfo key)
     {
         if (!Visible)
@@ -137,17 +291,222 @@ public sealed class DialogOverlay
                 CycleFocus(forward: true);
                 return true;
             case ConsoleKey.LeftArrow:
-                CycleFocus(forward: false);
-                return true;
             case ConsoleKey.RightArrow:
+                bool forward = key.Key == ConsoleKey.RightArrow;
+                if (_kind == DialogKind.Radio)
+                {
+                    _radio.Move(forward ? 1 : -1);
+                    return true;
+                }
+                if (_kind == DialogKind.Multiline)
+                {
+                    if (forward)
+                    {
+                        _editor.MoveRight();
+                    }
+                    else
+                    {
+                        _editor.MoveLeft();
+                    }
+                    return true;
+                }
+                CycleFocus(forward);
+                return true;
+        }
+        return _kind switch
+        {
+            DialogKind.Prompt => HandlePromptKey(key),
+            DialogKind.Select => HandleSelectKey(key),
+            DialogKind.Radio => HandleRadioKey(key),
+            DialogKind.Multiline => HandleMultilineKey(key),
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// Routes a decoded key (kitty-capable hosts). Mirrors the
+    /// <see cref="ConsoleKeyInfo"/> contract, plus Shift/Alt+Enter inserts a
+    /// newline in <see cref="DialogKind.Multiline"/> (the composer Enter split:
+    /// Ctrl+Enter submits, Shift/Alt+Enter newline, plain Enter submit).
+    /// </summary>
+    public bool HandleKey(in KeyEvent key)
+    {
+        if (!Visible)
+        {
+            return false;
+        }
+
+        switch (key.Key)
+        {
+            case KeyCode.Escape:
+                Dismiss();
+                return true;
+            case KeyCode.Tab:
                 CycleFocus(forward: true);
                 return true;
+            case KeyCode.Left:
+            case KeyCode.Right:
+                bool forward = key.Key == KeyCode.Right;
+                if (_kind == DialogKind.Radio)
+                {
+                    _radio.Move(forward ? 1 : -1);
+                    return true;
+                }
+                if (_kind == DialogKind.Multiline)
+                {
+                    if (forward)
+                    {
+                        _editor.MoveRight();
+                    }
+                    else
+                    {
+                        _editor.MoveLeft();
+                    }
+                    return true;
+                }
+                CycleFocus(forward);
+                return true;
+            case KeyCode.Enter:
+                if (_kind == DialogKind.Multiline
+                    && (key.Modifiers & KeyModifiers.Ctrl) == 0
+                    && (key.Modifiers & (KeyModifiers.Shift | KeyModifiers.Alt)) != 0)
+                {
+                    _editor.InsertNewline();
+                    return true;
+                }
+                return false;
+            case KeyCode.Up:
+                if (_kind == DialogKind.Select)
+                {
+                    _select.Move(-1);
+                    return true;
+                }
+                if (_kind == DialogKind.Radio)
+                {
+                    _radio.Move(-1);
+                    return true;
+                }
+                if (_kind == DialogKind.Multiline)
+                {
+                    _editor.MoveUp();
+                    return true;
+                }
+                return false;
+            case KeyCode.Down:
+                if (_kind == DialogKind.Select)
+                {
+                    _select.Move(1);
+                    return true;
+                }
+                if (_kind == DialogKind.Radio)
+                {
+                    _radio.Move(1);
+                    return true;
+                }
+                if (_kind == DialogKind.Multiline)
+                {
+                    _editor.MoveDown();
+                    return true;
+                }
+                return false;
+            case KeyCode.PageUp:
+                if (_kind == DialogKind.Select)
+                {
+                    _select.Move(-SelectPageRows);
+                    return true;
+                }
+                return false;
+            case KeyCode.PageDown:
+                if (_kind == DialogKind.Select)
+                {
+                    _select.Move(SelectPageRows);
+                    return true;
+                }
+                return false;
+            case KeyCode.Home:
+                if (_kind == DialogKind.Select)
+                {
+                    _select.MoveTo(0);
+                    return true;
+                }
+                if (_kind == DialogKind.Radio)
+                {
+                    _radio.MoveTo(0);
+                    return true;
+                }
+                if (_kind == DialogKind.Multiline)
+                {
+                    _editor.MoveToLineStart();
+                    return true;
+                }
+                return false;
+            case KeyCode.End:
+                if (_kind == DialogKind.Select)
+                {
+                    _select.MoveTo(_select.Count - 1);
+                    return true;
+                }
+                if (_kind == DialogKind.Radio)
+                {
+                    _radio.MoveTo(_radio.Count - 1);
+                    return true;
+                }
+                if (_kind == DialogKind.Multiline)
+                {
+                    _editor.MoveToLineEnd();
+                    return true;
+                }
+                return false;
+            case KeyCode.Backspace:
+                if (_kind == DialogKind.Prompt)
+                {
+                    if (_input.Length > 0)
+                    {
+                        _input = _input[..^1];
+                    }
+                    return true;
+                }
+                if (_kind == DialogKind.Multiline)
+                {
+                    _editor.Backspace();
+                    return true;
+                }
+                return false;
+            case KeyCode.Delete:
+                if (_kind == DialogKind.Multiline)
+                {
+                    _editor.DeleteForward();
+                    return true;
+                }
+                return false;
+            case KeyCode.Char:
+                if ((key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta | KeyModifiers.Alt)) != 0)
+                {
+                    return false;
+                }
+                if (_kind == DialogKind.Multiline)
+                {
+                    string chars = key.Character.ToString();
+                    for (int i = 0; i < chars.Length; i++)
+                    {
+                        _editor.InsertChar(chars[i]);
+                    }
+                    return true;
+                }
+                if (_kind == DialogKind.Prompt)
+                {
+                    string text = key.Character.ToString();
+                    if (text.Length == 0 || char.IsControl(text[0]))
+                    {
+                        return false;
+                    }
+                    _input += text;
+                    return true;
+                }
+                return false;
+            default:
+                return false;
         }
-        if (_kind == DialogKind.Prompt)
-        {
-            return HandlePromptKey(key);
-        }
-        return false;
     }
 
     private bool HandlePromptKey(ConsoleKeyInfo key)
@@ -168,6 +527,93 @@ public sealed class DialogOverlay
         if (!char.IsControl(ch))
         {
             _input += ch;
+            return true;
+        }
+        return false;
+    }
+
+    private bool HandleSelectKey(ConsoleKeyInfo key)
+    {
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow:
+                _select.Move(-1);
+                return true;
+            case ConsoleKey.DownArrow:
+                _select.Move(1);
+                return true;
+            case ConsoleKey.PageUp:
+                _select.Move(-SelectPageRows);
+                return true;
+            case ConsoleKey.PageDown:
+                _select.Move(SelectPageRows);
+                return true;
+            case ConsoleKey.Home:
+                _select.MoveTo(0);
+                return true;
+            case ConsoleKey.End:
+                _select.MoveTo(_select.Count - 1);
+                return true;
+            case ConsoleKey.Enter:
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private bool HandleRadioKey(ConsoleKeyInfo key)
+    {
+        // Left/Right move in the shared arrow step above; Up/Down are aliases.
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow:
+                _radio.Move(-1);
+                return true;
+            case ConsoleKey.DownArrow:
+                _radio.Move(1);
+                return true;
+            case ConsoleKey.Home:
+                _radio.MoveTo(0);
+                return true;
+            case ConsoleKey.End:
+                _radio.MoveTo(_radio.Count - 1);
+                return true;
+            case ConsoleKey.Enter:
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private bool HandleMultilineKey(ConsoleKeyInfo key)
+    {
+        switch (key.Key)
+        {
+            case ConsoleKey.Enter:
+                return false;
+            case ConsoleKey.Backspace:
+                _editor.Backspace();
+                return true;
+            case ConsoleKey.Delete:
+                _editor.DeleteForward();
+                return true;
+            case ConsoleKey.UpArrow:
+                _editor.MoveUp();
+                return true;
+            case ConsoleKey.DownArrow:
+                _editor.MoveDown();
+                return true;
+            case ConsoleKey.Home:
+                _editor.MoveToLineStart();
+                return true;
+            case ConsoleKey.End:
+                _editor.MoveToLineEnd();
+                return true;
+        }
+        char ch = key.KeyChar;
+        if (!char.IsControl(ch))
+        {
+            _editor.InsertChar(ch);
             return true;
         }
         return false;
@@ -203,7 +649,7 @@ public sealed class DialogOverlay
         }
 
         int width = Math.Min(MaxWidth, viewport.Width - 2);
-        int contentRows = CountMessageRows(width) + ButtonRowHeight + (Padding * 2) + (_kind == DialogKind.Prompt ? 1 : 0);
+        int contentRows = CountMessageRows(width) + ButtonRowHeight + (Padding * 2) + ControlRows();
         int height = Math.Min(MaxHeight, Math.Max(MinHeight, Math.Min(viewport.Height - 2, contentRows + 2)));
         int x = viewport.X + (viewport.Width - width) / 2;
         int y = viewport.Y + (viewport.Height - height) / 2;
@@ -238,7 +684,8 @@ public sealed class DialogOverlay
         DrawTitle(buffer, textX, textY, innerW);
         textY += 1;
 
-        int messageRows = Math.Max(1, box.Height - (Padding * 2) - 2 - ButtonRowHeight - (_kind == DialogKind.Prompt ? 1 : 0));
+        int controlRows = ControlRows();
+        int messageRows = Math.Max(1, box.Height - (Padding * 2) - 2 - ButtonRowHeight - controlRows);
         string[] wrapped = WrapText(_message, innerW);
         int drawn = 0;
         for (int i = 0; i < wrapped.Length && drawn < messageRows; i++)
@@ -254,8 +701,114 @@ public sealed class DialogOverlay
             string input = _input.Length > innerW - 2 ? _input[(^Math.Max(1, innerW - 2))..] : _input;
             buffer.SetText(textX + 2, textY, input, new CellStyle(ChatPalette.Accent));
         }
+        else if (_kind == DialogKind.Select)
+        {
+            PaintSelectList(buffer, box, textX, textY, innerW);
+        }
+        else if (_kind == DialogKind.Radio)
+        {
+            PaintRadioRow(buffer, textX, textY, innerW, box);
+        }
+        else if (_kind == DialogKind.Multiline)
+        {
+            PaintMultiline(buffer, textX, textY, innerW, box);
+        }
 
         DrawButtons(buffer, textX, box.Bottom - ButtonRowHeight - 1, innerW);
+    }
+
+    /// <summary>
+    /// Control-block height: prompt/editor/select/radio rows below the message.
+    /// Alert/Confirm reserve none, so their boxes are unchanged by [PRIM4].
+    /// </summary>
+    private int ControlRows() => _kind switch
+    {
+        DialogKind.Prompt => 1,
+        DialogKind.Select => Math.Min(_select.Count, MaxSelectRows),
+        DialogKind.Radio => _radio.Count > 0 ? 1 : 0,
+        DialogKind.Multiline => Math.Clamp(_editor.LineCount, 1, MaxMultilineRows),
+        _ => 0,
+    };
+
+    private void PaintSelectList(ScreenBuffer buffer, Rect box, int x, int y, int innerW)
+    {
+        int available = Math.Max(0, box.Bottom - ButtonRowHeight - 1 - y);
+        if (available <= 0 || _select.Count == 0)
+        {
+            return;
+        }
+        _select.SyncViewport(available);
+        int selected = _select.SelectedIndex;
+        var selectedStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
+        int first = (int)_select.Viewport.Offset;
+        int painted = 0;
+        for (int i = first; i < _select.Count && painted < available; i++)
+        {
+            string row = (i == selected ? "› " : "  ") + _select.Items[i];
+            if (row.Length > innerW)
+            {
+                row = row[..Math.Max(0, innerW - 1)] + "…";
+            }
+            buffer.SetText(x, y + painted, row, i == selected ? selectedStyle : ChatPalette.ToolArgs);
+            painted++;
+        }
+        if (_select.Count > available)
+        {
+            _ = Scrollbar.TryPaint(buffer, new Rect(box.Right - 1, y, 1, available), _select.Viewport);
+        }
+    }
+
+    private void PaintRadioRow(ScreenBuffer buffer, int x, int y, int innerW, Rect box)
+    {
+        if (_radio.Count == 0 || y >= box.Bottom - ButtonRowHeight - 1)
+        {
+            return;
+        }
+        int selected = _radio.SelectedIndex;
+        var onStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
+        var offStyle = new CellStyle(ChatPalette.Muted);
+        // Two-tone pass: selected option accented, the rest muted.
+        int cursor = x;
+        for (int i = 0; i < _radio.Count && cursor < x + innerW; i++)
+        {
+            string chip = "(" + (i == selected ? "● " : "○ ") + _radio.Options[i] + ")";
+            if (i > 0)
+            {
+                if (cursor >= x + innerW)
+                {
+                    break;
+                }
+                buffer.SetText(cursor, y, " ", offStyle);
+                cursor++;
+            }
+            int len = Math.Min(chip.Length, x + innerW - cursor);
+            if (len <= 0)
+            {
+                break;
+            }
+            buffer.SetText(cursor, y, chip.AsSpan(0, len), i == selected ? onStyle : offStyle);
+            cursor += len;
+        }
+    }
+
+    private void PaintMultiline(ScreenBuffer buffer, int x, int y, int innerW, Rect box)
+    {
+        int available = Math.Max(0, box.Bottom - ButtonRowHeight - 1 - y);
+        if (available <= 0)
+        {
+            return;
+        }
+        string[] lines = _editor.Text.Split('\n');
+        var caretStyle = new CellStyle(ChatPalette.Accent);
+        for (int i = 0; i < lines.Length && i < available; i++)
+        {
+            string row = (i == 0 ? "› " : "  ") + lines[i];
+            if (row.Length > innerW)
+            {
+                row = row[..Math.Max(0, innerW - 1)] + "…";
+            }
+            buffer.SetText(x, y + i, row, i == 0 ? caretStyle : ChatPalette.ToolArgs);
+        }
     }
 
     private void DrawTitle(ScreenBuffer buffer, int x, int y, int innerW)
