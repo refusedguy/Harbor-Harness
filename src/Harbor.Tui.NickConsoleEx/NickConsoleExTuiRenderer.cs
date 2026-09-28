@@ -61,18 +61,7 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
     public override ITuiRenderContext Context { get; } = new NickConsoleExRenderContext();
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
-    {
-        try
-        {
-            EnsureWindowSystem();
-            return base.InitializeAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "NickConsoleEx backend failed to initialize");
-            return Task.FromResult(Result.Failure(ex.Message));
-        }
-    }
+        => InitializeGuardedAsync(EnsureWindowSystem, "NickConsoleEx backend failed to initialize", ct);
 
     protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event)
     {

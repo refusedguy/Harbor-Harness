@@ -51,10 +51,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
 
     /// <inheritdoc />
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
-    {
-        try { return base.InitializeAsync(ct); }
-        catch (Exception ex) { return Task.FromResult(Result.Failure(ex.Message)); }
-    }
+        => base.InitializeAsync(ct);
 
     /// <inheritdoc />
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)

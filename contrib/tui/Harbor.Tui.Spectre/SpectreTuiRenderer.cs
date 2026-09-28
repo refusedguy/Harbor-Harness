@@ -29,17 +29,9 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
     }
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
-    {
-        try
-        {
-            AnsiConsole.Write(new Rule("[bold cyan]Harbor[/] — AI coding agent"));
-            return base.InitializeAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(Result.Failure(ex.Message));
-        }
-    }
+        => InitializeGuardedAsync(
+            static () => AnsiConsole.Write(new Rule("[bold cyan]Harbor[/] — AI coding agent")),
+            ct: ct);
 
     public override async Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
