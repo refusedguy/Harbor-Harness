@@ -22,6 +22,7 @@ Two rules that keep this directory honest:
 | [`ui-hygiene.sh`](./ui-hygiene.sh) | Pre-build XAML gate: no bare class selectors, required `xmlns` on `MainWindow.axaml`, markdown renderer subscribed to theme changes. | [docs/CI_UI_TESTS.md](../docs/CI_UI_TESTS.md) |
 | [`kimodule-rules.sh`](./kimodule-rules.sh) | Standalone XAML style-selector linter (`Selector="Border.Card"` ok, `Selector=".Card"` not). Separated from `ui-hygiene.sh` so it can run on any `.axaml` dir via `--axaml-dir`. | self-documented |
 | [`create-harbor-issues.sh`](./create-harbor-issues.sh) | Bulk-creates the recommended issue set via `gh`. `--dry-run` prints without creating. | self-documented; one-shot bootstrap, not a recurring workflow |
+| [`check-md-links.py`](./check-md-links.py) | Verifies every internal markdown link and GitHub anchor in the tracked `.md` files. Stdlib-only Python 3 — no pip, no network, no dotnet. Exit 0 clean / 1 broken. | this README, [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md) |
 
 ## .NET tools
 
