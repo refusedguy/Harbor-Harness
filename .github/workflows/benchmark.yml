@@ -83,7 +83,7 @@ jobs:
 
       - name: Post Benchmark Comment to PR
         if: github.event_name == 'pull_request' && always()
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: benchmark-results
           path: tests/Harbor.Benchmarks/BenchmarkDotNet.Artifacts/results/*-report-github.md
