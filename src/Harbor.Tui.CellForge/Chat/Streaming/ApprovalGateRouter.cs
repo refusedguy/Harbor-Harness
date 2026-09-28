@@ -201,7 +201,9 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
             return false;
         }
 
-        if (effective == ApprovalChoice.Deny && !string.IsNullOrWhiteSpace(rejectReason))
+        // Only an explicit Deny carries a reason — fail-closed coercions
+        // (None / unknown) stamp Deny without audit text.
+        if (choice == ApprovalChoice.Deny && !string.IsNullOrWhiteSpace(rejectReason))
         {
             if (_rejectReasons.Count >= MaxRejectReasons)
             {

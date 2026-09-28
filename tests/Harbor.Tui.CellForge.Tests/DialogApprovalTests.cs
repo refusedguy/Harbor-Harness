@@ -73,7 +73,7 @@ public class DialogApprovalTests
         dialog.ShowApproval(
             "edit",
             "patch main.cs",
-            "--- a/main.cs\n+++ b/main.cs\n@@ -1,2 +1,2 @@\n- gone\n+ added-line\n context\n\\ No newline\n+ extra1\n+ extra2\n+ extra3\n+ extra4",
+            "--- a/main.cs\n+++ b/main.cs\n@@ -1,2 +1,2 @@\n-gone\n+added-line\n context\n\\ No newline\n+extra1\n+extra2\n+extra3\n+extra4",
             "main.cs");
 
         // Preamble skipped, rows capped at MaxApprovalDiffRows, kinds classified.
@@ -153,7 +153,7 @@ public class DialogApprovalTests
     public async Task Approval_Paint_ContainsChoices_Diff_File_AndReasonCaption()
     {
         var dialog = new DialogOverlay();
-        dialog.ShowApproval("edit", "patch main.cs", "- gone\n+ added-line", "main.cs");
+        dialog.ShowApproval("edit", "patch main.cs", "-gone\n+added-line", "main.cs");
         Type(dialog, "why");
 
         string art = PaintArt(dialog);
