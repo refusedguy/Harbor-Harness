@@ -52,6 +52,9 @@ public class ProjectionCoverageTests
         var field = typeof(CellForgeTuiRenderer).GetField("_store", BindingFlags.Instance | BindingFlags.NonPublic)!;
         var store = (UiStore)field.GetValue(harness.Renderer)!;
         store.Dispatch(new ChatAppMsg.ConfigureRuntime(model, provider, agent));
+        // #466: the store notification only parks the projection; the frame tick
+        // applies it. Mirrors what RenderAsync does between dispatch and paint.
+        _ = harness.Renderer.PumpProjection();
     }
 
     [Test]
