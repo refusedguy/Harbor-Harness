@@ -65,9 +65,14 @@ public sealed class SubAgentRunner(
             return Result.Failure<SubAgentRunResult>(
                 "Nesting limit reached: sub-agents cannot invoke 'task'. Finish your work with the available tools.");
 
-        Depth.Value++;
+        // The increment lives INSIDE the try: if the core throws
+        // synchronously (before its first await), the finally still restores
+        // the depth. Otherwise a single sync throw poisons CanSpawn for the
+        // whole session and every later 'task' call dies with the nesting
+        // error even on the top-level agent.
         try
         {
+            Depth.Value++;
             return await RunCoreAsync(agent, request, ct).ConfigureAwait(false);
         }
         finally
