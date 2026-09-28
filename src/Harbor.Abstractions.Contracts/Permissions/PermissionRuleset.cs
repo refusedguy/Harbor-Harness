@@ -159,7 +159,9 @@ public sealed record PermissionRuleset
         new("task", "*", PermissionAction.Allow),
         new("skill", "*", PermissionAction.Allow),
         new("session_read", "*", PermissionAction.Allow),
-        new("session_steer", "*", PermissionAction.Ask)
+        new("session_steer", "*", PermissionAction.Ask),
+        new("session_broadcast", "*", PermissionAction.Allow),
+        new("session_inbox", "*", PermissionAction.Allow)
     });
 
     /// <summary>
