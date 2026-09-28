@@ -134,6 +134,28 @@ public class ChatScreenBridgeTests
         await Assert.That(card.Body!.Duration).IsEqualTo(TimeSpan.FromMilliseconds(50));
     }
 
+    [Test]
+    public async Task AgentError_RendersCollapsedCard_WithFullTextOnExpand()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel();
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        string blob = "API error 429: " + new string('x', 2000);
+        await bus.PublishAsync(new AgentErrorEvent(blob));
+
+        var tl = panel.Timeline;
+        var card = (ToolCallBlock)tl.BlockAt(tl.Count - 1);
+        await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Error);
+        await Assert.That(card.IsExpanded).IsFalse();
+        await Assert.That(card.Body!.Output).IsEqualTo(blob);
+
+        card.ToggleExpanded();
+        await Assert.That(card.IsExpanded).IsTrue();
+        await Assert.That(card.Body.Output).IsEqualTo(blob);
+    }
+
     // ── CE-4 З.2: живой REPL ──────────────────────────────────────────────
 
     [Test]
