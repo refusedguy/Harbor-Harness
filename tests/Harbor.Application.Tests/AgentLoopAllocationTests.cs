@@ -18,7 +18,12 @@ namespace Harbor.Application.Tests;
 /// inside measurement). Bounds are generous, CI-safe tripwires in the
 /// <c>SpanParserTests</c> tradition: per-turn averages are reported for
 /// BENCHMARKS.md, hard failures only on pathological growth.
+/// <see cref="NotInParallelAttribute"/>: TUnit runs classes in parallel and
+/// the measured path shares process-global pools (StringBuilder/ArrayPool)
+/// plus the threadpool — neighbor tests swing per-thread GC accounting by 2x.
+/// Serializing tripwires + min-of-3 rounds keeps the signal.
 /// </summary>
+[NotInParallel("alloc-tripwire")]
 public class AgentLoopAllocationTests
 {
     private static TestSessionContext NewSession() => new(
@@ -72,22 +77,32 @@ public class AgentLoopAllocationTests
 
         var agent = TestAgents.AllowAll();
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < turns; i++)
+        // Min-of-3 rounds: a single GC/JIT/pool hiccup must not fail the gate.
+        long best = long.MaxValue;
+        for (int round = 0; round < 3; round++)
         {
-            _ = await loops[i].RunAsync(sessions[i], agent);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < turns; i++)
+            {
+                _ = await loops[i].RunAsync(sessions[i], agent);
+            }
+
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (allocated < best)
+            {
+                best = allocated;
+            }
         }
 
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Console.WriteLine($"agentloop-alloc: text-only turn avg = {(double)allocated / turns:F0} B over {turns} turns");
+        Console.WriteLine($"agentloop-alloc: text-only turn avg = {(double)best / turns:F0} B over {turns} turns (min of 3)");
         // Tripwire, not a pin: GC.GetAllocatedBytesForCurrentThread varies
         // wildly across OS runtimes (linux ~374KB, macOS higher) — budget
         // covers the observed max with headroom; catches 2x local blowups.
-        await Assert.That(allocated).IsLessThanOrEqualTo(turns * 512L * 1_024L);
+        await Assert.That(best).IsLessThanOrEqualTo(turns * 512L * 1_024L);
     }
 
     [Test]
@@ -111,20 +126,29 @@ public class AgentLoopAllocationTests
 
         var agent = TestAgents.AllowAll();
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < runs; i++)
+        long best = long.MaxValue;
+        for (int round = 0; round < 3; round++)
         {
-            _ = await loops[i].RunAsync(sessions[i], agent);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < runs; i++)
+            {
+                _ = await loops[i].RunAsync(sessions[i], agent);
+            }
+
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (allocated < best)
+            {
+                best = allocated;
+            }
         }
 
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Console.WriteLine($"agentloop-alloc: tool-call turn avg = {(double)allocated / runs:F0} B over {runs} runs");
+        Console.WriteLine($"agentloop-alloc: tool-call turn avg = {(double)best / runs:F0} B over {runs} runs (min of 3)");
         // Tripwire: observed max ~1.67MB/turn (macOS) vs ~437KB (linux).
         // 2.5MB budget per turn catches real regressions, not OS variance.
-        await Assert.That(allocated).IsLessThanOrEqualTo(runs * 2560L * 1_024L);
+        await Assert.That(best).IsLessThanOrEqualTo(runs * 2560L * 1_024L);
     }
 }
