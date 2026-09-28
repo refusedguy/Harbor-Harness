@@ -515,8 +515,28 @@ public sealed class VirtualizedChatTimeline
         buffer.Fill(rect, Cell.Blank);
 
         var (first, last) = _cache.VisibleRange(EffectiveScrollY, rect.Height);
-        for (int i = first; i <= last; i++)
+        // ENG12 #284 (TGui snapshot pattern): event-thread Append/Evict
+        // shifts cache indices mid-draw — snapshot the visible window's refs
+        // so BlockAt can never throw past the end. Geometry below is still
+        // read per index with a guard; a torn frame self-corrects next pass.
+        int lo = Math.Max(first, 0);
+        int hi = Math.Min(last, _cache.Count - 1);
+        int window = Math.Max(0, hi - lo + 1);
+        var snapshot = new IChatBlock[window];
+        for (int k = 0; k < window; k++)
         {
+            snapshot[k] = _cache.BlockAt(lo + k);
+        }
+        for (int i = first; i <= last && i <= hi; i++)
+        {
+            if (i < lo)
+            {
+                continue;
+            }
+            if (i >= _cache.Count)
+            {
+                break;
+            }
             long blockTop = _cache.BlockTop(i);
             long relTop = blockTop - EffectiveScrollY;
             int screenY = rect.Y + (int)Math.Max(0, relTop);
@@ -530,7 +550,7 @@ public sealed class VirtualizedChatTimeline
             }
 
             double alpha = 1.0;
-            var block = _cache.BlockAt(i);
+            var block = snapshot[i - lo];
             bool entrance = _entranceStarts.TryGetValue(block, out long startTick);
             bool animating = entrance;
             if (animating)

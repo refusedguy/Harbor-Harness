@@ -93,11 +93,14 @@ public sealed class ToastOverlay
 
         int width = Math.Min(MaxWidth, Math.Min(MinWidth, rect.Width - AccentWidth));
         int right = rect.X + width + AccentWidth - 1;
-        int bottom = Math.Min(rect.Y + _active.Count - 1, rect.Bottom - 1);
+        // ENG12 #284 (TGui snapshot pattern): Dismiss/Tick/Clear can run on
+        // the event thread while this draw pass runs — iterate a copy.
+        var snapshot = _active.ToArray();
+        int bottom = Math.Min(rect.Y + snapshot.Length - 1, rect.Bottom - 1);
         int painted = 0;
-        for (int i = 0; i < _active.Count && rect.Y + painted <= bottom; i++)
+        for (int i = 0; i < snapshot.Length && rect.Y + painted <= bottom; i++)
         {
-            PaintToast(buffer, rect.X, rect.Y + painted, right, _active[i]);
+            PaintToast(buffer, rect.X, rect.Y + painted, right, snapshot[i]);
             painted++;
             if (painted >= MaxVisible)
             {

@@ -27,6 +27,12 @@ public sealed class DifferentialRenderPipeline
 {
     private readonly ICellDiffEncoder _encoder;
     private readonly List<ICellDiffSink> _sinks = [];
+
+    /// <summary>
+    /// Guards <see cref="_sinks"/>: <see cref="Subscribe"/> vs the
+    /// <see cref="Render"/> fan-out (ENG12 #284, TGui snapshot pattern).
+    /// </summary>
+    private readonly object _sinksLock = new();
     private ScreenBuffer? _front;
     private long _sequence;
 
@@ -42,7 +48,13 @@ public sealed class DifferentialRenderPipeline
     public long Sequence => _sequence;
 
     /// <summary>Subscribes a backend to the pipeline.</summary>
-    public void Subscribe(ICellDiffSink sink) => _sinks.Add(sink);
+    public void Subscribe(ICellDiffSink sink)
+    {
+        lock (_sinksLock)
+        {
+            _sinks.Add(sink);
+        }
+    }
 
     /// <summary>
     ///     Differences the given frame against the previous one, publishes the
@@ -63,9 +75,16 @@ public sealed class DifferentialRenderPipeline
         CellDiffBatch batch = _encoder.Encode(_front, next, hints, sequence);
 
         _front = CloneBackToFront(next);
-        for (int i = 0; i < _sinks.Count; i++)
+        // ENG12 #284 (TGui snapshot pattern): fan out over a copy — a
+        // Subscribe racing this frame must not corrupt the dispatch.
+        ICellDiffSink[] sinks;
+        lock (_sinksLock)
         {
-            _sinks[i].Accept(batch);
+            sinks = _sinks.ToArray();
+        }
+        for (int i = 0; i < sinks.Length; i++)
+        {
+            sinks[i].Accept(batch);
         }
 
         return batch;

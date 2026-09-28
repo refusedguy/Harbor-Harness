@@ -209,7 +209,9 @@ public abstract class BaseTuiRenderer : ITuiRenderer
     /// </summary>
     protected async Task DispatchToHandlersAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        foreach (var handler in _eventHandlers)
+        // ENG12 #284 (TGui snapshot pattern): handler list is snapshotted —
+        // a late plugin registration mid-dispatch must not invalidate it.
+        foreach (var handler in _eventHandlers.ToArray())
         {
             bool handles;
             try

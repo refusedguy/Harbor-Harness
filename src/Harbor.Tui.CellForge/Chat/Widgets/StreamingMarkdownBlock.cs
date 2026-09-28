@@ -63,9 +63,18 @@ public sealed class StreamingMarkdownBlock : IChatBlock
         EnsureRendered(ctx.Rect.Width);
         int rows = ctx.Rect.Height;
         int skip = ctx.SkipRows;
-        for (int i = 0; i < rows && (skip + i) < _renderer.LineCount; i++)
+        // ENG12 #284: the streaming tail can re-render on the event thread
+        // mid-draw (Push → RenderTail shifts the frozen/tail split) — re-check
+        // the bound per row and hold each MdLine ref (immutable once built).
+        int total = _renderer.LineCount;
+        for (int i = 0; i < rows && (skip + i) < total; i++)
         {
-            AssistantMarkdownBlock.PaintLine(ctx.Buffer, ctx.Rect.X, ctx.Rect.Y + i, _renderer.LineAt(skip + i));
+            int idx = skip + i;
+            if (idx >= _renderer.LineCount)
+            {
+                break;
+            }
+            AssistantMarkdownBlock.PaintLine(ctx.Buffer, ctx.Rect.X, ctx.Rect.Y + i, _renderer.LineAt(idx));
         }
     }
 
@@ -73,9 +82,15 @@ public sealed class StreamingMarkdownBlock : IChatBlock
     {
         EnsureRendered(_lastRenderWidth);
         var sb = new System.Text.StringBuilder();
-        for (int i = 0; i < _renderer.LineCount; i++)
+        int count = _renderer.LineCount;
+        for (int i = 0; i < count; i++)
         {
-            foreach (var s in _renderer.LineAt(i).Spans)
+            if (i >= _renderer.LineCount)
+            {
+                break;
+            }
+            var line = _renderer.LineAt(i);
+            foreach (var s in line.Spans)
             {
                 sb.Append(s.Text);
             }

@@ -126,6 +126,13 @@ public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewMod
 {
     private readonly ObservableCollection<ChatEntry> _entries = new();
 
+    /// <summary>
+    /// Guards <see cref="_entries"/>: event-thread appends vs draw-thread
+    /// enumeration (ENG12 #284, TGui snapshot pattern — draw paths iterate
+    /// a copy taken under this lock, never the live collection).
+    /// </summary>
+    private readonly object _entriesLock = new();
+
     [ObservableProperty]
     private bool _isStreaming;
 
@@ -200,17 +207,39 @@ public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewMod
     }
 
     /// <summary>
+    ///     Snapshot of the accumulated chat entries for draw paths (ENG12 #284).
+    ///     Copies under <see cref="_entriesLock"/> so a mid-draw event-thread
+    ///     append cannot invalidate the draw iteration.
+    /// </summary>
+    public ChatEntry[] SnapshotEntries()
+    {
+        lock (_entriesLock)
+        {
+            return _entries.ToArray();
+        }
+    }
+
+    /// <summary>
     ///     Append a new chat entry. Called by event handlers when a message or tool result finalizes.
     /// </summary>
     /// <param name="entry">The entry to append.</param>
-    public void AddEntry(ChatEntry entry) => _entries.Add(entry);
+    public void AddEntry(ChatEntry entry)
+    {
+        lock (_entriesLock)
+        {
+            _entries.Add(entry);
+        }
+    }
 
     /// <summary>
     ///     Clear all entries and reset streaming state.
     /// </summary>
     public void Clear()
     {
-        _entries.Clear();
+        lock (_entriesLock)
+        {
+            _entries.Clear();
+        }
         StreamingText = string.Empty;
         IsStreaming = false;
         ThinkingText = string.Empty;
