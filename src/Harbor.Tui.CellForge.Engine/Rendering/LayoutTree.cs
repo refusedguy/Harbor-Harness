@@ -97,20 +97,32 @@ internal sealed class SplitNode
 
 /// <summary>
 /// Binary split tree with water-filling solver honoring per-panel minimums
-/// and priority-based collapse (celldiff §5.1). Results are cached by
-/// (width, height, capsVer) — repeated frames at the same geometry solve in
-/// O(1); any tree mutation bumps capsVer.
-/// </summary>
+/// and priority-based collapse (celldiff §5.1). Solved results are cached by
+/// (width, height, capsVer) in an LRU capped at <see cref="MaxCachedLayouts"/>
+/// entries (ENG3 #274, Ratatui lesson) — repeated frames at the same geometry
+/// replay in O(panels); any tree mutation bumps capsVer.</summary>
 public sealed class LayoutTree
 {
+    /// <summary>Maximum cached (layout, area) results (ENG3 #274).</summary>
+    public const int MaxCachedLayouts = 500;
+
     private readonly Dictionary<string, Panel> _panels = [];
     private readonly Dictionary<string, SpringFx> _ratioSprings = [];
     private readonly Dictionary<string, SpringFx> _minWidthSprings = [];
     private SplitNode? _root;
     private uint _capsVer = 1;
 
-    private (int W, int H, uint Ver)? _cacheKey;
-    private readonly List<Rect> _cachedRects = [];
+    private readonly Dictionary<(int W, int H, uint Ver), LinkedListNode<LayoutCacheEntry>> _layoutCache = [];
+    private readonly LinkedList<LayoutCacheEntry> _layoutLru = [];
+
+    /// <summary>Full solver runs since construction (cache misses).</summary>
+    public int FullSolveCount { get; private set; }
+
+    /// <summary>Cache replays since construction (cache hits).</summary>
+    public int CacheHitCount { get; private set; }
+
+    /// <summary>Currently cached (layout, area) results.</summary>
+    public int CacheCount => _layoutCache.Count;
 
     public IReadOnlyCollection<Panel> Panels => _panels.Values;
 
@@ -252,13 +264,19 @@ public sealed class LayoutTree
         ArgumentOutOfRangeException.ThrowIfNegative(height);
 
         bool animating = AdvanceSprings();
-        if (!animating && _cacheKey == (width, height, _capsVer))
+        var key = (width, height, _capsVer);
+        if (!animating && _layoutCache.TryGetValue(key, out var hit))
         {
+            CacheHitCount++;
+            _layoutLru.Remove(hit);
+            _layoutLru.AddFirst(hit);
+            _solvedOrder.Clear();
+            _solvedOrder.AddRange(hit.Value.Rects);
+            _focusedId = hit.Value.FocusedId;
             ApplyCached();
             return;
         }
 
-        _cachedRects.Clear();
         if (_root is not null && width > 0 && height > 0)
         {
             SolveNode(_root, new Rect(0, 0, width, height));
@@ -271,10 +289,39 @@ public sealed class LayoutTree
             _solvedOrder.Add(panel.Rect);
         }
 
-        _cacheKey = (width, height, _capsVer);
         ApplyCached();
         _focusedId = _panels.Values.FirstOrDefault(p => p.Focused)?.Id;
+        FullSolveCount++;
+        if (!animating)
+        {
+            // Mid-flight spring frames are not stored: the key carries no
+            // spring position, so caching them would poison the settled hit.
+            StoreLayout(key);
+        }
     }
+
+    private void StoreLayout((int W, int H, uint Ver) key)
+    {
+        if (_layoutCache.TryGetValue(key, out var existing))
+        {
+            _layoutLru.Remove(existing);
+            _layoutCache.Remove(key);
+        }
+
+        var node = new LinkedListNode<LayoutCacheEntry>(
+            new LayoutCacheEntry(key, _solvedOrder.ToArray(), _focusedId));
+        _layoutLru.AddFirst(node);
+        _layoutCache[key] = node;
+
+        while (_layoutCache.Count > MaxCachedLayouts)
+        {
+            var last = _layoutLru.Last!;
+            _layoutLru.RemoveLast();
+            _layoutCache.Remove(last.Value.Key);
+        }
+    }
+
+    private sealed record LayoutCacheEntry((int W, int H, uint Ver) Key, Rect[] Rects, string? FocusedId);
 
     private readonly List<Panel> _orderedBuffer = [];
     private readonly List<Rect> _solvedOrder = [];
