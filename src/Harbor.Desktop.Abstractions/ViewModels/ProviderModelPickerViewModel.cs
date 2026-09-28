@@ -30,10 +30,12 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 ///     <para>
 ///         <b>Async state management</b> uses <see cref="AsyncFeed{T}" /> instead
 ///         of manual <c>CTS + IsLoading + ErrorMessage</c>. The feed owns the
-///         cancellation token, timeout, and state transitions.
+///         cancellation token, timeout, and state transitions, and
+///         <see cref="AsyncDataBinder" /> owns the status → surface mapping
+///         shared with the provider browser (#484).
 ///     </para>
 /// </remarks>
-public partial class ProviderModelPickerViewModel : ObservableObject
+public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncDataSink<ProviderGroupViewModel>
 {
     public static readonly TimeSpan ModelFetchTimeout = TimeSpan.FromSeconds(5);
 
@@ -49,6 +51,14 @@ public partial class ProviderModelPickerViewModel : ObservableObject
 
     [ObservableProperty]
     private string _searchText = string.Empty;
+
+    /// <summary>Last load failure (empty when healthy). Bound to the error banner.</summary>
+    [ObservableProperty]
+    private string _errorMessage = string.Empty;
+
+    /// <summary>True while the provider/model catalog is loading.</summary>
+    [ObservableProperty]
+    private bool _isLoading;
 
     /// <summary>Construct the picker view-model.</summary>
     public ProviderModelPickerViewModel(
@@ -86,28 +96,53 @@ public partial class ProviderModelPickerViewModel : ObservableObject
         await _modelsFeed.RefreshAsync().ConfigureAwait(true);
     }
 
-    private void OnModelsChanged(AsyncData<IReadOnlyList<ProviderGroupViewModel>> data)
+    private void OnModelsChanged(AsyncData<IReadOnlyList<ProviderGroupViewModel>> data) =>
+        AsyncDataBinder.Apply(data, this);
+
+    /// <inheritdoc />
+    public void OnLoading()
     {
-        switch (data.Status)
+        IsLoading = true;
+        ErrorMessage = string.Empty;
+        AllProviders.Clear();
+        FilteredProviders.Clear();
+    }
+
+    /// <inheritdoc />
+    public void OnLoaded(IReadOnlyList<ProviderGroupViewModel> groups)
+    {
+        IsLoading = false;
+        ErrorMessage = string.Empty;
+
+        AllProviders.Clear();
+        for (int i = 0; i < groups.Count; i++)
+            AllProviders.Add(groups[i]);
+        ApplyFilter();
+
+        // A successful load that found nothing is still an answer the user must
+        // be able to read — otherwise "no provider reachable" and "no models
+        // published" collapse into the same blank list (#484).
+        if (!AnyProviderHasModels())
+            ErrorMessage = ProviderModelLoadMessages.NoModelsAnyProvider();
+    }
+
+    /// <inheritdoc />
+    public void OnError(string message)
+    {
+        IsLoading = false;
+        _logger.LogWarning("Picker load error: {Error}", message);
+        ErrorMessage = ProviderModelLoadMessages.LoadFailed(message);
+    }
+
+    private bool AnyProviderHasModels()
+    {
+        foreach (ProviderGroupViewModel group in AllProviders)
         {
-            case AsyncStatus.Loading:
-            case AsyncStatus.Refreshing:
-                AllProviders.Clear();
-                FilteredProviders.Clear();
-                break;
-            case AsyncStatus.Success:
-                if (data.HasValue)
-                {
-                    AllProviders.Clear();
-                    foreach (var group in data.Value!)
-                        AllProviders.Add(group);
-                    ApplyFilter();
-                }
-                break;
-            case AsyncStatus.Error:
-                _logger.LogWarning("Picker load error: {Error}", data.Error);
-                break;
+            if (group.HasModels)
+                return true;
         }
+
+        return false;
     }
 
     private async Task<Result<IReadOnlyList<ProviderGroupViewModel>>> LoadAllAsync(CancellationToken ct)

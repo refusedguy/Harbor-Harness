@@ -62,7 +62,7 @@
                             </StackPanel>
                             <Border Grid.Row="1" Background="{DynamicResource BgSubtleBrush}"
                                     CornerRadius="4" Padding="8" Margin="0,0,0,8"
-                                    IsVisible="{Binding ErrorMessage}">
+                                    IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                 <TextBlock Text="{Binding ErrorMessage}" FontSize="11"
                                            Foreground="{DynamicResource StateWarningBrush}"
                                            TextWrapping="Wrap" />
