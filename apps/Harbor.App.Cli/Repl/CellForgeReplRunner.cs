@@ -14,6 +14,7 @@ using Harbor.App.Cli.Commands;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Application.Attachments;
 using Harbor.Application.Configuration;
+using Harbor.Application.Onboarding;
 using Harbor.DesignSystem;
 using Harbor.Hosting.Rendering;
 using Harbor.Tui.CellForge.Capabilities;
@@ -169,7 +170,7 @@ internal sealed class CellForgeReplRunner(
     internal LegacySlashRunner LegacySlash => legacySlash;
     private PromptPipeline? _pipeline;
     internal PromptPipeline Pipeline => _pipeline ??= new PromptPipeline(
-        this, _catalog, logger, Tokens, new Lazy<LegacySlashRunner>(() => LegacySlash));
+        this, _catalog, logger, Tokens, new Lazy<LegacySlashRunner>(() => LegacySlash), Setup);
     internal void DisposePipeline() => _pipeline?.Dispose();
     private SessionSwitchManager? _sessions;
     internal SessionSwitchManager Sessions => _sessions ??= new SessionSwitchManager(this, Pipeline.ClearQueue);
@@ -182,6 +183,16 @@ internal sealed class CellForgeReplRunner(
     internal ReplCommandHost Commands => _commands ??= new ReplCommandHost(this);
     private ReplLifecycle? _lifecycle;
     internal ReplLifecycle Lifecycle => _lifecycle ??= new ReplLifecycle(this);
+
+    private SetupChecklistController? _setup;
+    /// <summary>
+    /// Setup-guide checklist (KILLER_FEATURES §2.7 Feature 9, issue #383):
+    /// detection → completion snapshot → the modal overlay seated on
+    /// <see cref="Screen.SetupChecklist" />, plus first-run gating.
+    /// </summary>
+    internal SetupChecklistController Setup => _setup ??= new SetupChecklistController(
+        this,
+        new SetupChecklistDetector(configStore, authStore, healthCheck));
 
     // ── Internal accessors for the collaborators (G2 split seam): captured
     // ctor parameters are invisible outside this class, so the input loop,
@@ -215,6 +226,18 @@ internal sealed class CellForgeReplRunner(
     /// writes the line, the frame loop drains and appends it — the bridge is
     /// touched from the frame thread only.</summary>
     internal volatile string? _themeReloadLine;
+
+    /// <summary>
+    /// Setup-checklist damage hand-off (issue #383): a completion detected off
+    /// the frame thread stages the checklist box rect behind the pending flag;
+    /// the frame loop applies it via <see cref="ScreenSession.Damage" /> — the
+    /// diff engine's hint list is render-thread owned and must never be touched
+    /// from the probe thread.
+    /// </summary>
+    internal volatile bool _setupChecklistDamagePending;
+
+    /// <summary>Staged checklist box rect (read only after the pending flag).</summary>
+    internal Rect _setupChecklistDamage;
 
     /// <summary>Inline-image protocol for this session (osc-sprint §1337):
     /// detected once at startup — kitty → APC, iTerm2/WezTerm/Konsole/mintty
