@@ -94,6 +94,7 @@ public abstract class BaseTuiRenderer : ITuiRenderer
     ///     Optional message logged with the exception before returning failure
     ///     (e.g. backend-specific diagnostics).
     /// </param>
+    /// <param name="ct">Cancellation token (unused; kept for signature symmetry).</param>
     protected Task<Result> InitializeGuardedAsync(Action setup, string? errorLogMessage = null, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(setup);
