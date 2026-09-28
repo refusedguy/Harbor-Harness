@@ -123,14 +123,14 @@ internal sealed class CellForgeReplRunner(
     ///     would double-fire them; this narrow runner is scoped to the session
     ///     effects only, which have no gesture equivalent.
     /// </summary>
-    internal readonly ReplTabEffectRunner _effects =
-        new(
-            // Issue #389: the activate effect lands on the very coordinator the
-            // sessions palette and the quick-switch chords already use, so a
-            // keyboard switch and a palette switch cannot drift apart.
-            id => Sessions.SwitchToSessionAsync(id, CancellationToken.None),
-            () => Sessions.OpenSessionsPalette(),
-            ex => logger.LogError(ex, "Tab-strip effect failed"));
+    private ReplTabEffectRunner? _effectsRunner;
+    internal ReplTabEffectRunner Effects => _effectsRunner ??= new ReplTabEffectRunner(
+        // Issue #389: the activate effect lands on the very coordinator the
+        // sessions palette and the quick-switch chords already use, so a
+        // keyboard switch and a palette switch cannot drift apart.
+        id => Sessions.SwitchToSessionAsync(id, CancellationToken.None),
+        () => Sessions.OpenSessionsPalette(),
+        ex => logger.LogError(ex, "Tab-strip effect failed"));
 
     // ── IReplHost (Command pattern seam; transitional, see IReplHost.cs) ──
     IAgent IReplHost.Agent => agent;

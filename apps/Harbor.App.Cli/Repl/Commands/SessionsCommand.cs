@@ -64,7 +64,7 @@ internal sealed class SessionsCommand : IReplCommand
     ///     <c>Ctrl+T</c> open/switch action (#389) can reach the very same
     ///     palette instead of growing a second session browser.
     /// </summary>
-    public static Task ShowSwitchListAsync(IReplHost host, CancellationToken ct)
+    public static async Task ShowSwitchListAsync(IReplHost host, CancellationToken ct)
     {
         var store = host.SessionStore;
         if (store is null)
