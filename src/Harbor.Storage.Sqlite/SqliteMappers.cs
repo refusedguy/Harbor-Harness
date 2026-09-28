@@ -3,6 +3,7 @@
 using System.Data.Common;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Results;
@@ -21,13 +22,80 @@ internal static class SqliteMappers
 
     internal static JsonSerializerOptions CreateJsonOptions()
     {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        // #177: copy the source-generated context options (camelCase, case-insensitive
+        // read, nulls omitted — parity with the former Web-defaults setup) and layer the
+        // hand-written converters on top (same pattern as ConfigJson.Options):
+        // options-level converters win, so ContentPart keeps its legacy shape and
+        // StopReason stays a string. TypeInfoResolver stays the context alone — no
+        // reflection fallback, so missing metadata fails loudly instead of silently.
+        var options = new JsonSerializerOptions(SqliteJsonContext.Default.Options)
         {
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            TypeInfoResolver = SqliteJsonContext.Default,
         };
         options.Converters.Add(new ContentPartJsonConverter());
         options.Converters.Add(new JsonStringEnumConverter());
         return options;
+    }
+
+    /// <summary>
+    ///     Pre-resolved, AOT-safe metadata for the persisted message subtypes and
+    ///     session stats. Pass to the <c>JsonTypeInfo&lt;T&gt;</c> serialization
+    ///     overloads — never to the reflection-based generic-options overloads.
+    /// </summary>
+    internal static readonly JsonTypeInfo<UserMessage> UserMessageInfo =
+        (JsonTypeInfo<UserMessage>)JsonOptions.GetTypeInfo(typeof(UserMessage));
+    internal static readonly JsonTypeInfo<AssistantMessage> AssistantMessageInfo =
+        (JsonTypeInfo<AssistantMessage>)JsonOptions.GetTypeInfo(typeof(AssistantMessage));
+    internal static readonly JsonTypeInfo<ToolResultMessage> ToolResultMessageInfo =
+        (JsonTypeInfo<ToolResultMessage>)JsonOptions.GetTypeInfo(typeof(ToolResultMessage));
+    internal static readonly JsonTypeInfo<SessionMetadata> SessionMetadataInfo =
+        (JsonTypeInfo<SessionMetadata>)JsonOptions.GetTypeInfo(typeof(SessionMetadata));
+
+    /// <summary>
+    ///     Serialize an <see cref="AgentMessage" /> via the source-generated,
+    ///     pre-resolved type info for its concrete subtype (#177: replaces the
+    ///     runtime-type <c>Serialize(message, message.GetType(), options)</c>
+    ///     overload). Output is byte-identical to the former reflection path
+    ///     (same options + same converters); the read side
+    ///     (<see cref="TryDeserializeMessage" />) is untouched and decodes both.
+    /// </summary>
+    internal static string SerializeMessage(AgentMessage message) => message switch
+    {
+        UserMessage u => JsonSerializer.Serialize(u, UserMessageInfo),
+        AssistantMessage a => JsonSerializer.Serialize(a, AssistantMessageInfo),
+        ToolResultMessage tr => JsonSerializer.Serialize(WithoutMetadata(tr), ToolResultMessageInfo),
+        _ => throw new InvalidOperationException(
+            $"Unsupported AgentMessage subtype '{message.GetType().FullName}'."),
+    };
+
+    /// <summary>
+    ///     Strip non-null <see cref="ToolResultEntry.Metadata" /> values: source-gen
+    ///     cannot serve <c>object?</c>-typed members, and serializing them would
+    ///     throw. Returns the original instance when nothing is stripped (zero
+    ///     alloc on the hot path). Same fidelity-neutral drop as the JSONL codec
+    ///     (#51) and MemoryPack (<c>[MemoryPackIgnore]</c>); the read side never
+    ///     required metadata.
+    /// </summary>
+    internal static ToolResultMessage WithoutMetadata(ToolResultMessage message)
+    {
+        var results = message.Results;
+        bool any = false;
+        for (int i = 0; i < results.Count; i++)
+        {
+            if (results[i].Metadata is not null)
+            {
+                any = true;
+                break;
+            }
+        }
+
+        if (!any)
+            return message;
+
+        var copy = new ToolResultEntry[results.Count];
+        for (int i = 0; i < results.Count; i++)
+            copy[i] = results[i] with { Metadata = null };
+        return message with { Results = copy };
     }
 
     /// <summary>
@@ -99,7 +167,7 @@ internal static class SqliteMappers
             meta);
     }
 
-    private sealed class ContentPartJsonConverter : JsonConverter<ContentPart>
+    internal sealed class ContentPartJsonConverter : JsonConverter<ContentPart>
     {
         public override ContentPart? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
