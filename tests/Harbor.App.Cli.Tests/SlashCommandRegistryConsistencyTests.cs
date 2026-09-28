@@ -1,4 +1,7 @@
+using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tui;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
@@ -21,6 +24,21 @@ namespace Harbor.App.Cli.Tests;
 /// </summary>
 public class SlashCommandRegistryConsistencyTests
 {
+    /// <summary>
+    ///     <see cref="FakeAgent" /> needs a bound agent definition; none of the commands
+    ///     exercised here read it, so a minimal one is enough.
+    /// </summary>
+    private static FakeAgent CreateAgent() => new(
+        AgentState.Idle(
+            "test-session",
+            new AgentDefinition(
+                Name: AgentName.Create("code"),
+                DisplayName: "Code",
+                Description: "default coding agent",
+                Model: "test-model",
+                ProviderId: "test-provider",
+                Permission: PermissionRuleset.Default)));
+
     private static SlashCommandDispatcher CreateDispatcher()
     {
         var configStore = new JsonConfigStore();
@@ -84,7 +102,7 @@ public class SlashCommandRegistryConsistencyTests
     {
         var dispatcher = CreateDispatcher();
         var session = Session.Create("/tmp/harbor-tests", "code", "test-provider", "test-model");
-        var agent = new FakeAgent();
+        var agent = CreateAgent();
         var agents = new FakeAgentRegistry();
         var config = new JsonConfigStore();
         var auth = new AuthStore(config);
@@ -126,7 +144,7 @@ public class SlashCommandRegistryConsistencyTests
             "/help",
             line => written.Add(line),
             _ => Task.FromResult(string.Empty),
-            new FakeAgent(),
+            CreateAgent(),
             new FakeAgentRegistry(),
             new JsonConfigStore(),
             new AuthStore(new JsonConfigStore()),
@@ -155,7 +173,7 @@ public class SlashCommandRegistryConsistencyTests
             "/definitely-not-a-command",
             line => written.Add(line),
             _ => Task.FromResult(string.Empty),
-            new FakeAgent(),
+            CreateAgent(),
             new FakeAgentRegistry(),
             new JsonConfigStore(),
             new AuthStore(new JsonConfigStore()),
