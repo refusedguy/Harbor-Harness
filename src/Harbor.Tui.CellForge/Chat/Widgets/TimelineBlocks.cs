@@ -21,18 +21,34 @@ public sealed class ChatTimelinePanel : Rendering.Panel
 }
 
 /// <summary>Live streaming thinking block: accumulates reasoning text and
-/// re-renders it with dim+italic styling on every layout pass.</summary>
+/// re-renders it with dim+italic styling on every layout pass.
+/// ENG11 #283 (crush stable-prefix): only newline-terminated logical lines
+/// are stable — the final partial line is the sole re-wrap per frame — and an
+/// incremental FNV-1a content hash short-circuits frames with no new text, so
+/// steady-state Measure/Paint is O(1) instead of O(document).</summary>
 public sealed class StreamingThinkingBlock : IChatBlock
 {
+    private const ulong FnvOffsetBasis = 14695981039346656037ul;
+    private const ulong FnvPrime = 1099511628211ul;
+
     private readonly StringBuilder _text = new();
+    private readonly List<string> _stable = [];
+    private string[] _tail = [];
     private int _width = -1;
-    private string[] _lines = [];
+    private int _stableSourceChars;
+    private int _lastNewlinePos = -1;
+    private ulong _contentHash = FnvOffsetBasis;
+    private ulong _wrappedHash = FnvOffsetBasis;
+    private int _wrappedLength;
 
     public string Kind => "thinking";
 
     public bool IsStreamContinuation => true;
 
     public int BudgetBytes => 48 + (_text.Length * 2);
+
+    /// <summary>Incremental FNV-1a hash of the accumulated text (crush pattern).</summary>
+    public ulong ContentHash => _contentHash;
 
     public void Append(string delta)
     {
@@ -41,17 +57,49 @@ public sealed class StreamingThinkingBlock : IChatBlock
             return;
         }
 
+        int baseLen = _text.Length;
         _text.Append(delta);
-        _width = -1;
+        for (int i = 0; i < delta.Length; i++)
+        {
+            char c = delta[i];
+            _contentHash = (_contentHash ^ (ulong)c) * FnvPrime;
+            if (c == '\n')
+            {
+                _lastNewlinePos = baseLen + i;
+            }
+        }
     }
 
     public BlockMeasure Measure(int width)
     {
         EnsureWrapped(width);
-        return BlockMeasure.Exact(Math.Max(1, _lines.Length));
+        return BlockMeasure.Exact(Math.Max(1, _stable.Count + _tail.Length));
     }
 
-    public int CheapEstimate(int width) => BlockMath.EstimateLines(_text.ToString(), Math.Max(1, width));
+    public int CheapEstimate(int width)
+    {
+        width = Math.Max(1, width);
+        int total = 0;
+        int run = 0;
+        foreach (var chunk in _text.GetChunks())
+        {
+            var span = chunk.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                if (span[i] == '\n')
+                {
+                    total += Math.Max(1, (run + width - 1) / width);
+                    run = 0;
+                    continue;
+                }
+
+                run++;
+            }
+        }
+
+        total += Math.Max(1, (run + width - 1) / width);
+        return Math.Max(1, total);
+    }
 
     public void Paint(in BlockPaintContext ctx)
     {
@@ -59,9 +107,12 @@ public sealed class StreamingThinkingBlock : IChatBlock
         var buffer = ctx.Buffer;
         int rows = ctx.Rect.Height;
         int skip = ctx.SkipRows;
-        for (int i = 0; i < _lines.Length && (skip + i) < _lines.Length && i < rows; i++)
+        int total = _stable.Count + _tail.Length;
+        for (int i = 0; i < rows && (skip + i) < total; i++)
         {
-            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, _lines[skip + i], new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
+            int idx = skip + i;
+            string line = idx < _stable.Count ? _stable[idx] : _tail[idx - _stable.Count];
+            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, line, new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
         }
     }
 
@@ -69,13 +120,67 @@ public sealed class StreamingThinkingBlock : IChatBlock
 
     private void EnsureWrapped(int width)
     {
-        if (_width != width || _lines.Length == 0 && _text.Length > 0)
+        width = Math.Max(1, width);
+        if (width == _width && _wrappedLength == _text.Length && _wrappedHash == _contentHash)
         {
-            _width = width;
-            var list = new List<string>(Math.Max(1, _lines.Length));
-            TextWrap.WrapDocument(_text.ToString(), Math.Max(1, width), list);
-            _lines = [.. list];
+            return; // steady state: hash proves nothing changed — O(1)
         }
+
+        if (width != _width)
+        {
+            _stable.Clear();
+            _stableSourceChars = 0;
+            _width = width;
+        }
+
+        int stableEnd = _lastNewlinePos + 1;
+        if (stableEnd > _text.Length)
+        {
+            stableEnd = _text.Length;
+        }
+
+        // Wrap only newly-completed logical lines; earlier rows are immutable.
+        int segStart = _stableSourceChars;
+        for (int i = _stableSourceChars; i < stableEnd; i++)
+        {
+            if (_text[i] == '\n')
+            {
+                WrapLogical(segStart, i - segStart);
+                segStart = i + 1;
+            }
+        }
+
+        _stableSourceChars = stableEnd;
+
+        if (stableEnd < _text.Length)
+        {
+            var tail = new List<string>(Math.Max(1, _tail.Length));
+            TextWrap.WrapTo(_text.ToString(stableEnd, _text.Length - stableEnd).AsSpan(), width, tail);
+            _tail = [.. tail];
+        }
+        else
+        {
+            // Mirror WrapDocument exactly: the segment after a trailing
+            // newline is one empty row; empty text paints no rows (Measure
+            // still reports MinLines=1).
+            _tail = _text.Length > 0 ? [""] : [];
+        }
+
+        _wrappedLength = _text.Length;
+        _wrappedHash = _contentHash;
+    }
+
+    private void WrapLogical(int start, int length)
+    {
+        if (length <= 0)
+        {
+            _stable.Add(string.Empty);
+            return;
+        }
+
+        var rows = new List<string>(1);
+        TextWrap.WrapTo(_text.ToString(start, length).AsSpan(), Math.Max(1, _width), rows);
+        _stable.AddRange(rows);
     }
 }
 

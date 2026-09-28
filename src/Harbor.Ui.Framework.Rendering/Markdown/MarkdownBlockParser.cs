@@ -6,6 +6,12 @@ internal enum MdBlockKind : byte
     Heading,
     Fence,
     ListItem,
+
+    /// <summary>GFM pipe-table run (| header | + | --- | + rows).</summary>
+    Table,
+
+    /// <summary>Display-math run delimited by «$$» lines (fence-like).</summary>
+    Math,
 }
 
 /// <summary>
@@ -33,14 +39,23 @@ internal enum LineKind : byte
     Heading,
     FenceOpen,
     ListItem,
+
+    /// <summary>«| cell |» candidate row of a GFM pipe table.</summary>
+    TableRow,
+
+    /// <summary>«$$» display-math delimiter (opens or closes).</summary>
+    MathFence,
 }
 
 /// <summary>
 /// Context-free line-oriented parser over the simplified CE-3 dialect:
-/// fenced code blocks, ATX headings, «- »/«1. » lists and blank-line
-/// separated paragraphs. A paragraph/list run also terminates cleanly when a
-/// new block type starts (heading/fence/list) so mid-document freezes never
-/// swallow later structure. Pure function of the input text.
+/// fenced code blocks, ATX headings, «- »/«1. » lists, GFM pipe tables,
+/// «$$» display math and blank-line separated paragraphs. A paragraph/list
+/// run also terminates cleanly when a new block type starts (heading/fence/
+/// list/table/math) so mid-document freezes never swallow later structure.
+/// A «|»-led run freezes as plain text rows once terminated by a blank line
+/// or a foreign block; at EOF it stays open so the holdback buffer keeps it
+/// until the structure settles. Pure function of the input text.
 /// </summary>
 internal static class MarkdownBlockParser
 {
@@ -64,7 +79,7 @@ internal static class MarkdownBlockParser
 
                 case LineKind.FenceOpen:
                     {
-                        int closePos = FindFenceClose(source, lineEnd);
+                        int closePos = FindFenceClose(source, lineEnd, "```");
                         if (closePos >= 0)
                         {
                             var (closeEnd, closeTerm) = LineBounds(source, closePos);
@@ -75,6 +90,25 @@ internal static class MarkdownBlockParser
                         else
                         {
                             blocks.Add(new MdBlock(MdBlockKind.Fence, pos, source.Length, false, 0));
+                            return blocks;
+                        }
+
+                        break;
+                    }
+
+                case LineKind.MathFence:
+                    {
+                        int closePos = FindFenceClose(source, lineEnd, "$$");
+                        if (closePos >= 0)
+                        {
+                            var (closeEnd, closeTerm) = LineBounds(source, closePos);
+                            _ = closeTerm;
+                            blocks.Add(new MdBlock(MdBlockKind.Math, pos, closeEnd, true, 0));
+                            pos = closeEnd < source.Length ? closeEnd + 1 : source.Length;
+                        }
+                        else
+                        {
+                            blocks.Add(new MdBlock(MdBlockKind.Math, pos, source.Length, false, 0));
                             return blocks;
                         }
 
@@ -124,6 +158,48 @@ internal static class MarkdownBlockParser
                         // not — a later chunk may still add its separator.
                         blocks.Add(new MdBlock(MdBlockKind.ListItem, pos, end, complete, 2));
                         pos = end;
+                        break;
+                    }
+
+                case LineKind.TableRow:
+                    {
+                        // ENG11 #283: gather the consecutive pipe-row run. A
+                        // blank/foreign terminator closes it (frozen as plain
+                        // text rows — the run can never grow again), while EOF
+                        // stays incomplete so the holdback buffer keeps it
+                        // until the structure settles (separator or more rows
+                        // may still stream in).
+                        int end = pos;
+                        bool terminated = false;
+                        int cursor = pos;
+                        while (cursor < source.Length)
+                        {
+                            var (le, term) = LineBounds(source, cursor);
+                            var t = source.Slice(cursor, le - cursor).TrimStart(' ');
+                            var k = Classify(t);
+
+                            if (k != LineKind.TableRow)
+                            {
+                                terminated = true;
+                                end = k == LineKind.Blank
+                                    ? (term ? le + 1 : le) // blank consumed as terminator
+                                    : cursor; // foreign block starts here — exclude
+                                break;
+                            }
+
+                            end = term ? le + 1 : le;
+                            if (!term)
+                            {
+                                break; // EOF mid-line: structurally uncertain
+                            }
+
+                            cursor = le + 1;
+                        }
+
+                        // EOF-with-newline still leaves the run open: the next
+                        // chunk may append rows (same strictness as lists).
+                        blocks.Add(new MdBlock(MdBlockKind.Table, pos, end, terminated, 0));
+                        pos = Math.Max(end, pos + 1);
                         break;
                     }
 
@@ -182,11 +258,17 @@ internal static class MarkdownBlockParser
             return LineKind.Blank;
         }
 
-        // Any «»»-prefixed line opens (or closes) a fence; at top level we
+        // Any «```»-prefixed line opens (or closes) a fence; at top level we
         // always enter fence-seeking mode from it.
         if (trimmedLine.StartsWith("```"))
         {
             return LineKind.FenceOpen;
+        }
+
+        // «$$» display-math delimiter (ENG11 #283: fence-like holdback).
+        if (trimmedLine.StartsWith("$$"))
+        {
+            return LineKind.MathFence;
         }
 
         if (HeadingLevel(trimmedLine) > 0)
@@ -199,18 +281,24 @@ internal static class MarkdownBlockParser
             return LineKind.ListItem;
         }
 
+        // «| cell |» pipe-row candidate (ENG11 #283: table holdback).
+        if (trimmedLine.StartsWith('|'))
+        {
+            return LineKind.TableRow;
+        }
+
         return LineKind.Text;
     }
 
-    /// <summary>Position of the line starting the closing fence, or -1 when open at EOF.</summary>
-    private static int FindFenceClose(ReadOnlySpan<char> source, int searchFrom)
+    /// <summary>Position of the line starting the closing marker, or -1 when open at EOF.</summary>
+    private static int FindFenceClose(ReadOnlySpan<char> source, int searchFrom, string marker)
     {
         int cursor = searchFrom;
         while (cursor < source.Length)
         {
             var (le, term) = LineBounds(source, cursor);
             var t = source.Slice(cursor, le - cursor).TrimStart(' ');
-            if (t.StartsWith("```"))
+            if (t.StartsWith(marker))
             {
                 return cursor;
             }
