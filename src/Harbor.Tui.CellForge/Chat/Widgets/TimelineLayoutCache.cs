@@ -65,16 +65,20 @@ public sealed class TimelineLayoutCache
     /// (CF-B-006 store bridge): <c>max(0, TotalHeight - viewportH)</c>. The host
     /// feeds this into <c>UiMsg.ScrollClamp</c> after layout so the store's
     /// <c>ScrollOffset</c> stays inside the freshly measured range. Pure and
-    /// allocation-free; never mutates layout state.
+    /// allocation-free; never mutates layout state. Delegates to
+    /// <see cref="ScrollableViewport.MaxOffsetFor"/> so every widget shares
+    /// one bounds formula.
     /// </summary>
-    public long MaxScrollFor(int viewportH) => Math.Max(0, TotalHeight - Math.Max(0, viewportH));
+    public long MaxScrollFor(int viewportH) => ScrollableViewport.MaxOffsetFor(TotalHeight, viewportH);
 
     /// <summary>
     /// Clamps a timeline-space scroll offset to <c>[0 .. MaxScrollFor(viewportH)]</c>.
     /// Same range the store enforces via <c>UiState.SetScroll</c>; kept here so the
     /// widget and the reducer can never disagree on the bounds formula.
+    /// Delegates to <see cref="ScrollableViewport.ClampOffsetFor"/>.
     /// </summary>
-    public long ClampScrollY(long scrollY, int viewportH) => Math.Clamp(scrollY, 0, MaxScrollFor(viewportH));
+    public long ClampScrollY(long scrollY, int viewportH) =>
+        ScrollableViewport.ClampOffsetFor(scrollY, TotalHeight, viewportH);
 
     public IChatBlock BlockAt(int index)
     {
