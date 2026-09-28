@@ -45,13 +45,14 @@ public class AbstractionsSplitLayerRules
     // The full set of Harbor assemblies that Harbor.Abstractions.Contracts must
     // NOT reference. The contract layer is the bottom of the pyramid — zero
     // Harbor project references are allowed.
+    // #451: the empty Harbor.Core facade was deleted; Harbor.Application and
+    // Harbor.Registries are the two real owners it forwarded to.
     private static readonly string[] NoHarborProjectRefs =
     [
         "Harbor.Domain",
         "Harbor.Extensions",
         "Harbor.Abstractions",
         "Harbor.Terminal.Abstractions",
-        "Harbor.Core",
         "Harbor.Application",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
@@ -89,7 +90,6 @@ public class AbstractionsSplitLayerRules
         "Harbor.Domain",
         "Harbor.Abstractions",
         "Harbor.Terminal.Abstractions",
-        "Harbor.Core",
         "Harbor.Application",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
@@ -126,7 +126,6 @@ public class AbstractionsSplitLayerRules
         "Harbor.Domain",
         "Harbor.Extensions",
         "Harbor.Terminal.Abstractions",
-        "Harbor.Core",
         "Harbor.Application",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",

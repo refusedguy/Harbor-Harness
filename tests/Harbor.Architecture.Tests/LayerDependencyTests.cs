@@ -15,7 +15,6 @@ using Harbor.Tui.AnsiPlain;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions.Renderers;
-using FacadeMarker = Harbor.Core.FacadeMarker;
 // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Application.Agents namespace for backward compat
 // InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Registries.Tools namespace for backward compat
 // Alternative TUI renderers (Spectre/Fullscreen/SpectreTui/TerminalGui/Termina/RazorConsole)
@@ -43,6 +42,13 @@ namespace Harbor.Architecture.Tests;
 ///         rule "Infrastructure depends on Domain only". The architecture tests
 ///         catch such regressions before they reach <c>main</c>.
 ///     </para>
+///     <para>
+///         The Harbor.Core assembly those stale entries pointed at was itself an
+///         empty facade and was deleted in #451 — the reason those references
+///         were vestigial in the first place. The names below therefore refer to
+///         the layer, not to a project: "Application layer" means
+///         Harbor.Application + Harbor.Registries.
+///     </para>
 /// </remarks>
 public class LayerDependencyTests
 {
@@ -52,7 +58,6 @@ public class LayerDependencyTests
     // that the Domain layer must also not reference.
     private static readonly string[] NonDomainHarborAssemblies =
     [
-        "Harbor.Core",
         "Harbor.Application",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
@@ -73,7 +78,6 @@ public class LayerDependencyTests
     // never Presentation.)
     private static readonly string[] NonDomainNonSelfHarborAssemblies =
     [
-        "Harbor.Core",
         "Harbor.Application",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
@@ -131,12 +135,10 @@ public class LayerDependencyTests
     }
 
     /// <summary>
-    ///     Harbor.Application (use-case layer, split out of Harbor.Core) may reference
-    ///     Harbor.Abstractions only — NOT Harbor.Registries, NOT Harbor.Core (would
-    ///     re-create the god-project), NOT Tui.Abstractions, NOT any Infrastructure /
-    ///     Presentation project, NOT sibling Application projects (Plugins.Runtime,
-    ///     Scripting). Verifies the Application-half of the Harbor.Core split keeps
-    ///     a clean outward-only dependency direction.
+    ///     Harbor.Application (use-case layer) may reference
+    ///     Harbor.Abstractions only — NOT Harbor.Registries, NOT Tui.Abstractions,
+    ///     NOT any Infrastructure / Presentation project, NOT sibling Application
+    ///     projects (Plugins.Runtime, Scripting).
     /// </summary>
     [Test]
     public async Task Application_ReferencesOnlyAbstractions()
@@ -144,7 +146,6 @@ public class LayerDependencyTests
         var asm = typeof(AgentLoop).Assembly;
         string[] forbidden =
         [
-            "Harbor.Core",
             "Harbor.Registries",
             "Harbor.Terminal.Abstractions",
             "Harbor.Plugins.Runtime",
@@ -176,12 +177,10 @@ public class LayerDependencyTests
     }
 
     /// <summary>
-    ///     Harbor.Registries (registry implementations, split out of Harbor.Core) may
+    ///     Harbor.Registries (registry implementations) may
     ///     reference Harbor.Abstractions only — NOT Harbor.Application, NOT
-    ///     Harbor.Core (would re-create the god-project), NOT Tui.Abstractions, NOT
-    ///     any Infrastructure / Presentation project, NOT sibling Application
-    ///     projects. Verifies the Infrastructure-half of the Harbor.Core split keeps
-    ///     a clean outward-only dependency direction.
+    ///     Tui.Abstractions, NOT any Infrastructure / Presentation project, NOT
+    ///     sibling Application projects.
     /// </summary>
     [Test]
     public async Task Registries_ReferencesOnlyAbstractions()
@@ -189,7 +188,6 @@ public class LayerDependencyTests
         var asm = typeof(InMemoryMcpRegistry).Assembly;
         string[] forbidden =
         [
-            "Harbor.Core",
             "Harbor.Application",
             "Harbor.Terminal.Abstractions",
             "Harbor.Plugins.Runtime",
@@ -220,59 +218,18 @@ public class LayerDependencyTests
         await Assert.That(violations).IsEmpty();
     }
 
-    /// <summary>
-    ///     Harbor.Core (now a thin backward-compat facade) may reference
-    ///     Harbor.Application + Harbor.Registries + Harbor.Abstractions but NOT
-    ///     Harbor.Terminal.Abstractions (TUI vocabulary stays out of the agent harness)
-    ///     and NOT any Infrastructure / Presentation project. The facade must not
-    ///     reach past the Application/Registries layers it forwards.
-    /// </summary>
-    [Test]
-    public async Task Core_ReferencesOnlyApplicationAndRegistriesAndAbstractions()
-    {
-        // Harbor.Core.dll itself no longer defines AgentLoop (it moved to
-        // Harbor.Application.dll), but it transitively references it. We probe
-        // the Harbor.Core assembly by name to avoid coupling this test to the
-        // type's new home.
-        var asm = ArchitectureTestHelpers.LoadHarborAssemblies()["Harbor.Core"]
-                  ?? throw new InvalidOperationException(
-                      "Harbor.Core assembly was not loaded into the AppDomain; " +
-                      "the test project's ProjectReference to Harbor.Core.csproj may be missing.");
-        string[] forbidden =
-        [
-            "Harbor.Terminal.Abstractions",
-            "Harbor.Plugins.Runtime",
-            "Harbor.Plugins.Abstractions",
-            "Harbor.Plugins.Storage",
-            "Harbor.Plugins.Compilation",
-            "Harbor.Plugins.Instantiation",
-            "Harbor.Plugins.Registration",
-            "Harbor.Plugins.Hosting",
-            "Harbor.Scripting",
-            "Harbor.Scripting.Abstractions",
-            "Harbor.Scripting.Storage",
-            "Harbor.Scripting.Compilation",
-            "Harbor.Scripting.Engines",
-            "Harbor.Scripting.Bridge",
-            "Harbor.Scripting.Hosting",
-            "Harbor.Providers.OpenAiCompatible",
-            "Harbor.Providers.Anthropic",
-            "Harbor.Providers.OpenAI",
-            "Harbor.Providers.Ollama",
-            "Harbor.Storage.Jsonl",
-            "Harbor.Storage.Memory",
-            "Harbor.Storage.Sqlite",
-            "Harbor.Tools.Builtin",
-            "Harbor.App.Cli"
-        ];
-        var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
-        await Assert.That(violations).IsEmpty();
-    }
+    // #451: Core_ReferencesOnlyApplicationAndRegistriesAndAbstractions was
+    // removed together with the empty Harbor.Core facade it guarded. A facade
+    // has no layers of its own to constrain, and the invariant it stood in for
+    // is now enforced directly — and more strictly — by FullLayerMatrixTests
+    // (per-assembly reference-set check + table-level layer-rule check over
+    // every src row) plus the NetArch_Application_* / NetArch_Registries_* rules
+    // in NetArchLayerRules.cs, which name both real owners instead of the facade.
 
     /// <summary>
     ///     Harbor.Plugins.Runtime (Application) may reference Harbor.Abstractions
     ///     and Harbor.Terminal.Abstractions (it needs ITuiPlugin for plugin-contributed
-    ///     panels) but NOT Harbor.Core / Harbor.Application / Harbor.Registries
+    ///     panels) but NOT Harbor.Application / Harbor.Registries
     ///     (Application must not cross-reference), NOT Harbor.Scripting, NOT
     ///     Infrastructure, NOT Presentation.
     /// </summary>
@@ -282,7 +239,6 @@ public class LayerDependencyTests
         var asm = typeof(PluginHost).Assembly;
         string[] forbidden =
         [
-            "Harbor.Core",
             "Harbor.Application",
             "Harbor.Registries",
             "Harbor.Scripting",
@@ -302,7 +258,7 @@ public class LayerDependencyTests
 
     /// <summary>
     ///     Every Harbor.Providers.* (Infrastructure) project may reference
-    ///     Harbor.Abstractions only — NOT Harbor.Core, NOT other Providers.
+    ///     Harbor.Abstractions only — NOT the Application layer, NOT other Providers.
     /// </summary>
     [Test]
     [MethodDataSource(nameof(ProviderAssemblies))]
@@ -330,7 +286,7 @@ public class LayerDependencyTests
 
     /// <summary>
     ///     Every Harbor.Storage.* (Infrastructure) project may reference
-    ///     Harbor.Abstractions only — NOT Harbor.Core, NOT other Storage.
+    ///     Harbor.Abstractions only — NOT the Application layer, NOT other Storage.
     /// </summary>
     [Test]
     [MethodDataSource(nameof(StorageAssemblies))]
@@ -358,7 +314,7 @@ public class LayerDependencyTests
 
     /// <summary>
     ///     Harbor.Tools.Builtin (Infrastructure) may reference Harbor.Abstractions
-    ///     only — NOT Harbor.Core.
+    ///     only — NOT the Application layer.
     /// </summary>
     [Test]
     public async Task ToolsBuiltin_ReferencesOnlyAbstractions()
@@ -384,8 +340,8 @@ public class LayerDependencyTests
 
     /// <summary>
     ///     Every concrete Harbor.Tui.* renderer (Presentation) may reference
-    ///     Harbor.Abstractions + Harbor.Terminal.Abstractions only — NOT Harbor.Core,
-    ///     NOT Harbor.Application / Harbor.Registries, NOT Infrastructure.
+    ///     Harbor.Abstractions + Harbor.Terminal.Abstractions only — NOT
+    ///     Harbor.Application / Harbor.Registries, NOT Infrastructure.
     /// </summary>
     [Test]
     [MethodDataSource(nameof(TuiRendererAssemblies))]
@@ -393,7 +349,6 @@ public class LayerDependencyTests
     {
         string[] forbidden =
         [
-            "Harbor.Core",
             "Harbor.Application",
             "Harbor.Registries",
             "Harbor.Plugins.Runtime",
@@ -426,12 +381,7 @@ public class LayerDependencyTests
         // typeof() probe in the per-assembly tests above; without this nudge
         // it may not yet be loaded when this sanity check runs.)
         _ = typeof(CompiledPlugin).Assembly.GetName().Name;
-        // Harbor.Core is now an empty facade (no types of its own — it forwards
-        // to Harbor.Application + Harbor.Registries). Touch its FacadeMarker
-        // type explicitly so the assembly is loaded into the AppDomain and
-        // shows up in the inventory below.
-        _ = typeof(FacadeMarker).Assembly.GetName().Name;
-        // Harbor.Tools.Builtin is similarly an empty facade after the S2 split —
+        // Harbor.Tools.Builtin is an empty facade after the S2 split —
         // it forwards to the 14 Harbor.Tools.<Name> leaf projects. Touch its
         // FacadeMarker so it shows up in the inventory below.
         _ = typeof(Tools.Builtin.FacadeMarker).Assembly.GetName().Name;
