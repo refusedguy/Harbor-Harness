@@ -1,5 +1,6 @@
 using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Spectre.Tui;
@@ -50,39 +51,33 @@ public sealed class FileTreePanel : IPanelProvider
     {
         EnsureEntries(ctx);
 
+        var rows = PanelRows.FileTreeRows(
+            _displayDir,
+            _entries.Select(e => new PanelRows.FileTreeRow(e.Name, e.IsDirectory, e.IsHidden)).ToList(),
+            _cursor,
+            ctx.Width,
+            ctx.Height);
+
         var p = new Paragraph().Alignment(Justify.Left);
-        p.Lines.Add(TextLine.FromMarkup("[bold cyan]File Tree[/]"));
-        p.Lines.Add(TextLine.FromMarkup($"[grey]{ChatMarkup.Escape(ShortenPath(_displayDir, ctx.Width - 2))}[/]"));
-        p.Lines.Add(TextLine.FromMarkup("[grey]─────────────────────[/]"));
-
-        if (_entries.Count == 0)
+        for (int i = 0; i < rows.Count; i++)
         {
-            p.Lines.Add(TextLine.FromMarkup("[grey](empty directory)[/]"));
-            return p;
+            string row = rows[i];
+            if (i == 0 && row == "File Tree")
+            {
+                p.Lines.Add(TextLine.FromMarkup("[bold cyan]File Tree[/]"));
+                continue;
+            }
+
+            if (i == 1)
+            {
+                // Shortened directory path row (not a literal).
+                p.Lines.Add(TextLine.FromMarkup("[grey]" + ChatMarkup.Escape(row) + "[/]"));
+                continue;
+            }
+
+            p.Lines.Add(TextLine.FromMarkup(StyleRow(row)));
         }
 
-        int maxVisible = Math.Max(2, ctx.Height - 4);
-        int start = Math.Max(0, _cursor - maxVisible + 1);
-        int end = Math.Min(_entries.Count, start + maxVisible);
-
-        if (start > 0)
-            p.Lines.Add(TextLine.FromMarkup("[grey]  ↑ more above[/]"));
-
-        for (int i = start; i < end; i++)
-        {
-            var entry = _entries[i];
-            bool selected = i == _cursor;
-            string icon = entry.IsDirectory ? "[blue]▸[/]" : entry.IsHidden ? "[grey]·[/]" : "[grey] [/]";
-            string name = ChatMarkup.Escape(Truncate(entry.Name, ctx.Width - 6));
-            string prefix = selected ? "[black on aqua] [/]" : " ";
-            p.Lines.Add(TextLine.FromMarkup($"{prefix} {icon} {name}"));
-        }
-
-        if (end < _entries.Count)
-            p.Lines.Add(TextLine.FromMarkup("[grey]  ↓ more below[/]"));
-
-        p.Lines.Add(TextLine.FromMarkup("[grey]─────────────────────[/]"));
-        p.Lines.Add(TextLine.FromMarkup("[grey]j/k move · Enter open · h parent · r refresh[/]"));
         return p;
     }
 
@@ -199,18 +194,29 @@ public sealed class FileTreePanel : IPanelProvider
             _cursor = 0;
     }
 
-    private static string ShortenPath(string path, int max)
+    private static string StyleRow(string row)
     {
-        if (string.IsNullOrEmpty(path) || path.Length <= max)
-            return path;
-        // Show the last `max` chars of the path, prefix with ellipsis.
-        return "…" + path[^(max - 1)..];
-    }
+        if (row == PanelText.Separator)
+            return "[grey]" + PanelText.Separator + "[/]";
 
-    private static string Truncate(string text, int max)
-    {
-        if (max <= 3) return text;
-        return text.Length <= max ? text : text[..(max - 1)] + "…";
+        if (row is "(empty directory)" or "  ↑ more above" or "  ↓ more below"
+            or "j/k move · Enter open · h parent · r refresh")
+            return "[grey]" + ChatMarkup.Escape(row) + "[/]";
+
+        if (row.Length >= 5 && (row[0] == '>' || row[0] == ' ') &&
+            (row[2] is '▸' or '·' or ' '))
+        {
+            string prefix = row[0] == '>' ? "[black on aqua] [/]" : " ";
+            string icon = row[2] switch
+            {
+                '▸' => "[blue]▸[/]",
+                '·' => "[grey]·[/]",
+                _ => "[grey] [/]",
+            };
+            return $"{prefix} {icon} {ChatMarkup.Escape(row.Length > 4 ? row[4..] : string.Empty)}";
+        }
+
+        return "[grey]" + ChatMarkup.Escape(row) + "[/]";
     }
 
     private sealed record Entry(string Name, string FullPath, bool IsDirectory, bool IsHidden);

@@ -43,63 +43,60 @@ public sealed class TodoListPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         var todos = PanelExtractors.ExtractTodos(ctx.State);
+        var rows = PanelRows.TodoRows(todos, ctx.Width);
 
         var p = new Paragraph().Alignment(Justify.Left);
-        p.Lines.Add(TextLine.FromMarkup("[bold cyan]Todo List[/] " +
-                                        $"[grey]({todos.Count} items)[/]"));
-        p.Lines.Add(TextLine.FromMarkup("[grey]─────────────────────[/]"));
-
-        if (todos.Count == 0)
-        {
-            p.Lines.Add(TextLine.FromMarkup("[grey]No todos yet.[/]"));
-            p.Lines.Add(TextLine.FromMarkup("[grey]Ask the agent to use the[/] [bold]todo[/] [grey]tool.[/]"));
-            return p;
-        }
-
-        int done = 0, inProgress = 0, pending = 0;
-        foreach ((string marker, string content) in todos)
-        {
-            string icon;
-            string color;
-            switch (marker)
-            {
-                case "[x]":
-                case "[X]":
-                    icon = "✓";
-                    color = "green";
-                    done++;
-                    break;
-                case "[~]":
-                    icon = "→";
-                    color = "yellow";
-                    inProgress++;
-                    break;
-                case "[ ]":
-                    icon = "○";
-                    color = "grey";
-                    pending++;
-                    break;
-                default:
-                    icon = "?";
-                    color = "red";
-                    break;
-            }
-            p.Lines.Add(TextLine.FromMarkup(
-                $"  [{color}]{icon}[/]  {ChatMarkup.Escape(Truncate(content, ctx.Width - 6))}"));
-        }
-
-        p.Lines.Add(TextLine.FromMarkup("[grey]─────────────────────[/]"));
-        p.Lines.Add(TextLine.FromMarkup(
-            $"[green]✓ {done}[/]  [yellow]→ {inProgress}[/]  [grey]○ {pending}[/]"));
+        foreach (string row in rows)
+            p.Lines.Add(TextLine.FromMarkup(StyleRow(row)));
         return p;
     }
 
     /// <inheritdoc />
     public bool OnKey(UiKey key, PanelContext ctx) => false;
 
-    private static string Truncate(string text, int max)
+    private static string StyleRow(string row)
     {
-        if (max <= 3) return text;
-        return text.Length <= max ? text : text[..(max - 1)] + "…";
+        if (row.StartsWith("Todo List (", StringComparison.Ordinal))
+        {
+            int paren = row.IndexOf('(');
+            string tail = paren >= 0 ? row[paren..] : string.Empty;
+            return "[bold cyan]Todo List[/] [grey]" + ChatMarkup.Escape(tail) + "[/]";
+        }
+
+        if (row == PanelText.Separator)
+            return "[grey]" + PanelText.Separator + "[/]";
+
+        string trimmed = row.TrimStart();
+        if (row.StartsWith("  ", StringComparison.Ordinal) &&
+            trimmed is ['✓', ..] or ['→', ..] or ['○', ..] or ['?', ..])
+        {
+            // Item row ("  <icon>  <content>"): color only the icon so
+            // "?" inside the content is not styled.
+            string icon = trimmed[0] switch
+            {
+                '✓' => "[green]✓[/]",
+                '→' => "[yellow]→[/]",
+                '○' => "[grey]○[/]",
+                _ => "[red]?[/]",
+            };
+            string content = row.Length > 5 ? row[5..] : string.Empty;
+            return $"  {icon}  {ChatMarkup.Escape(content)}";
+        }
+
+        if (trimmed.StartsWith("✓", StringComparison.Ordinal))
+        {
+            // Summary row ("✓ <d>  → <a>  ○ <p>"): numbers only, safe to colorize all icons.
+            string e = ChatMarkup.Escape(row);
+            e = e.Replace("✓", "[green]✓[/]", StringComparison.Ordinal)
+                .Replace("→", "[yellow]→[/]", StringComparison.Ordinal)
+                .Replace("○", "[grey]○[/]", StringComparison.Ordinal);
+            return e;
+        }
+
+        if (row.StartsWith("No todos yet.", StringComparison.Ordinal) ||
+            row.StartsWith("Ask the agent", StringComparison.Ordinal))
+            return "[grey]" + ChatMarkup.Escape(row) + "[/]";
+
+        return ChatMarkup.Escape(row);
     }
 }

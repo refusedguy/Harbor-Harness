@@ -41,96 +41,64 @@ public sealed class DiffPreviewPanel : IPanelProvider
     public object? Build(PanelContext ctx)
     {
         var changes = PanelExtractors.ExtractRecentChanges(ctx.State, 8);
+        var rows = PanelRows.DiffRows(changes, ctx.Width);
 
         var p = new Paragraph().Alignment(Justify.Left);
-        p.Lines.Add(TextLine.FromMarkup("[bold cyan]Diff Preview[/] " +
-                                        $"[grey]({changes.Count} recent change(s))[/]"));
-        p.Lines.Add(TextLine.FromMarkup("[grey]─────────────────────────────[/]"));
-
-        if (changes.Count == 0)
-        {
-            p.Lines.Add(TextLine.FromMarkup("[grey]No file edits yet.[/]"));
-            p.Lines.Add(TextLine.FromMarkup("[grey]Edits made by the agent will appear here.[/]"));
-            return p;
-        }
-
-        foreach (var change in changes)
-        {
-            string icon = change.ToolName switch
-            {
-                "edit" => "[yellow]✎[/]",
-                "write" => "[green]✚[/]",
-                "read" => "[grey]▸[/]",
-                "patch" => "[blue]⌥[/]",
-                _ => "[grey]·[/]"
-            };
-            string okIcon = change.IsError ? "[red]✗[/]" : "[green]✓[/]";
-            string path = ShortenPath(change.FilePath, ctx.Width - 12);
-            p.Lines.Add(TextLine.FromMarkup(
-                $"  {icon} {okIcon} [bold]{ChatMarkup.Escape(path)}[/]"));
-
-            if (!string.IsNullOrEmpty(change.DiffBody))
-            {
-                foreach (string diffLine in SplitLines(change.DiffBody, 4))
-                {
-                    string rendered = RenderDiffLine(diffLine);
-                    p.Lines.Add(TextLine.FromMarkup($"    {rendered}"));
-                }
-            }
-        }
+        foreach (string row in rows)
+            p.Lines.Add(TextLine.FromMarkup(StyleRow(row)));
         return p;
     }
 
     /// <inheritdoc />
     public bool OnKey(UiKey key, PanelContext ctx) => false;
 
-    private static string ShortenPath(string path, int max)
+    private static string StyleRow(string row)
     {
-        if (string.IsNullOrEmpty(path) || path.Length <= max)
-            return path;
-        // Keep the file name + a hint of the directory.
-        int slash = path.LastIndexOfAny(['/', '\\']);
-        if (slash < 0 || path.Length - slash > max - 3)
-            return path[^(max - 1)] + "…" + path[^1];
-        string file = path[slash..];
-        string dir = path[..slash];
-        if (dir.Length > max - file.Length - 3)
-            dir = "…" + dir[^(max - file.Length - 4)..];
-        return dir + file;
-    }
-
-    private static IEnumerable<string> SplitLines(string text, int maxLines)
-    {
-        if (string.IsNullOrEmpty(text))
-            yield break;
-        int count = 0;
-        int start = 0;
-        while (start < text.Length && count < maxLines)
+        if (row.StartsWith("Diff Preview (", StringComparison.Ordinal))
         {
-            int nl = text.IndexOf('\n', start);
-            if (nl < 0)
-            {
-                yield return text[start..];
-                yield break;
-            }
-            yield return text[start..nl];
-            start = nl + 1;
-            count++;
+            int paren = row.IndexOf('(');
+            string tail = paren >= 0 ? row[paren..] : string.Empty;
+            return "[bold cyan]Diff Preview[/] [grey]" + ChatMarkup.Escape(tail) + "[/]";
         }
-    }
 
-    private static string RenderDiffLine(string line)
-    {
-        if (string.IsNullOrEmpty(line))
-            return "[grey] [/]";
-        // Escape first to avoid markup injection from the diff body.
-        string e = ChatMarkup.Escape(line);
-        return line[0] switch
+        if (row == PanelText.Separator)
+            return "[grey]" + PanelText.Separator + "[/]";
+
+        if (row.StartsWith("No file edits yet.", StringComparison.Ordinal) ||
+            row.StartsWith("Edits made by the agent", StringComparison.Ordinal))
+            return "[grey]" + ChatMarkup.Escape(row) + "[/]";
+
+        string trimmed = row.TrimStart();
+        if (trimmed.Length >= 4 &&
+            (trimmed[0] is '✎' or '✚' or '▸' or '⌥' or '·') &&
+            (trimmed[2] is '✓' or '✗'))
         {
-            '+' => $"[green]{e}[/]",
-            '-' => $"[red]{e}[/]",
-            '@' => $"[cyan]{e}[/]",
-            _ => $"[grey]{e}[/]"
+            string icon = trimmed[0] switch
+            {
+                '✎' => "[yellow]✎[/]",
+                '✚' => "[green]✚[/]",
+                '▸' => "[grey]▸[/]",
+                '⌥' => "[blue]⌥[/]",
+                _ => "[grey]·[/]",
+            };
+            string ok = trimmed[2] == '✗' ? "[red]✗[/]" : "[green]✓[/]";
+            string path = trimmed.Length > 4 ? trimmed[4..] : string.Empty;
+            return $"{icon} {ok} [bold]{ChatMarkup.Escape(path)}[/]";
+        }
+
+        // Diff body row ("  <line>"): color by the diff marker, escape first
+        // to avoid markup injection from the diff body.
+        string body = row.StartsWith("  ", StringComparison.Ordinal) ? row[2..] : row;
+        if (body.Length == 0)
+            return "[grey] [/]";
+        string e = ChatMarkup.Escape(body);
+        string color = body[0] switch
+        {
+            '+' => "green",
+            '-' => "red",
+            '@' => "cyan",
+            _ => "grey",
         };
+        return $"  [{color}]{e}[/]";
     }
 }
