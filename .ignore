@@ -1,5 +1,21 @@
-# graft's cards are gitignored but should stay greppable: ripgrep reads
-# .ignore before .gitignore, so this re-admits the tree to search only.
+# .ignore — ripgrep-only re-admission (NOT a git ignore file)
+#
+# This is not `.gitignore` and git never reads it. It exists because ripgrep
+# applies `.ignore` *before* `.gitignore`, so `!graft/` here overrides the
+# `/graft/` rule in .gitignore and makes the graft graph searchable while it
+# stays untracked.
+#
+# Why that matters: `graft/` holds the repo context graph (INDEX.md + one card
+# per file, ~1290 files) that `graft ask` / `graft grep` and the AGENTS.md
+# workflow depend on. Verified: removing this file drops graft/ from ripgrep's
+# file list from 1290 files to 0.
+#
+# `.cache/` and `.graph/` stay excluded — they are the index/cache internals,
+# not documentation.
+#
+# See AGENTS.md §Graft and docs/PROJECT_STATUS.md.
+
+# graft's cards are gitignored but should stay greppable.
 !graft/
 graft/.cache/
 graft/.graph/
