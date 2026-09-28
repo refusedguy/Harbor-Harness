@@ -35,14 +35,24 @@ namespace Harbor.Abstractions.Events;
 ///         Performance characteristics:
 ///         <list type="bullet">
 ///             <item>
-///                 <see cref="PublishAsync" /> fast path: when no middleware is
-///                 registered, scrollback is disabled (<c>maxScrollback &lt;= 0</c>)
-///                 and there are zero subscribers, the method returns before
-///                 touching any collection — zero allocation, synchronous
-///                 completion. Otherwise: lock-free snapshot read of
-///                 subscriptions, one in-place slot write under a short lock
-///                 for scrollback, and a pooled buffer for dead-subscriber
-///                 collection.
+///                 <see cref="PublishAsync" /> fast path: when scrollback is
+///                 disabled (<c>maxScrollback &lt;= 0</c>), no sink registered
+///                 <see cref="EventBusSinkKind.Mandatory" />, and there are
+///                 zero subscribers, the method returns before touching any
+///                 collection — zero allocation, synchronous completion. The
+///                 mandatory/optional verdict is declared by each sink and
+///                 computed once in the constructor
+///                 (<see cref="HasMandatorySink" />,
+///                 <see cref="FastPathEligible" />), never sniffed per publish;
+///                 the enumeration behind it is
+///                 <c>docs/EVENT_BUS_SINKS.md</c> (#47/S3). Optional sinks that
+///                 are attached on this path are still drained, and both the
+///                 drain and any drop are counted
+///                 (<see cref="OptionalSinkDrainCount" />,
+///                 <see cref="OptionalSinkDropCount" />). Otherwise: lock-free
+///                 snapshot read of subscriptions, one in-place slot write under
+///                 a short lock for scrollback, and a pooled buffer for
+///                 dead-subscriber collection.
 ///             </item>
 ///             <item>
 ///                 Subscribe/Unsubscribe: lock-free atomic update of an
@@ -111,6 +121,25 @@ public sealed class InMemoryEventBus : IEventBus
     private readonly IReadOnlyList<IEventBusMiddleware> _middlewares = Array.Empty<IEventBusMiddleware>();
 
     /// <summary>
+    ///     Whether at least one registered sink declared
+    ///     <see cref="EventBusSinkKind.Mandatory" /> (#47/S3). Decided once, here,
+    ///     from the sinks' own verdicts — never re-derived per publish, because a
+    ///     per-publish sniff would be exactly the "bypass blindly" the slice
+    ///     forbids. Defaults to mandatory for any sink that does not declare a
+    ///     verdict, so an unconsidered sink always keeps the full path.
+    /// </summary>
+    private readonly bool _hasMandatorySink;
+
+    /// <summary>
+    ///     Whether this bus is <em>able</em> to take the zero-subscriber fast
+    ///     path: scrollback disabled and no mandatory sink (#47/S3). A
+    ///     composition-time constant, published as <see cref="FastPathEligible" />
+    ///     so the decision is observable from outside the class instead of being
+    ///     a claim buried in a boolean expression.
+    /// </summary>
+    private readonly bool _fastPathEligible;
+
+    /// <summary>
     ///     Pre-allocated scrollback slots. Fixed capacity
     ///     (<see cref="_maxScrollback" />); entries are overwritten oldest-first
     ///     and never reallocated, so steady-state publishing allocates nothing.
@@ -148,6 +177,29 @@ public sealed class InMemoryEventBus : IEventBus
     private long _inflightPublishCount;
     private long _oldestEnqueuedTicks;
     private long _maxDispatchTicks;
+
+    /// <summary>
+    ///     Publishes that took the fast path — nobody to notify, nothing to
+    ///     retain, no mandatory sink (#47/S3). The queue-age envelope is skipped
+    ///     there by design, so this counter is what keeps the skip visible:
+    ///     <c>FastPathCount + PublishedCount</c> is the total publish count, and
+    ///     the ratio is the fraction of publishes that qualified.
+    /// </summary>
+    private long _fastPathCount;
+
+    /// <summary>
+    ///     Fast-path publishes that had optional sinks attached and therefore
+    ///     ran the optional pipeline instead of short-circuiting (#47/S3).
+    ///     Proves the optional sinks were drained, not skipped.
+    /// </summary>
+    private long _optionalSinkDrainCount;
+
+    /// <summary>
+    ///     Optional sinks that dropped an event on the fast path (#47/S3).
+    ///     A drop is always counted and logged — the fast path is allowed to
+    ///     skip work, never to lose an event quietly.
+    /// </summary>
+    private long _optionalSinkDropCount;
 
     /// <summary>
     ///     Construct an <see cref="InMemoryEventBus" /> with a bounded scrollback buffer of the
@@ -207,25 +259,145 @@ public sealed class InMemoryEventBus : IEventBus
         _handlerBudget = handlerBudget < TimeSpan.Zero ? TimeSpan.Zero : handlerBudget;
         _scrollbackRing = _maxScrollback > 0 ? new AgentEvent[_maxScrollback] : Array.Empty<AgentEvent>();
         _middlewares = middlewares?.ToArray() ?? Array.Empty<IEventBusMiddleware>();
-    }
 
-    /// <inheritdoc />
-    public async Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
-    {
-        // ── Fast path: nothing to retain, nobody to notify, nothing to filter.
-        //    Returns before touching any collection — zero allocation, and the
-        //    async state machine completes synchronously (cached task).
-        //    NOTE (#97 per-delta): the Debug log below must stay AFTER this
-        //    check. LogDebug evaluates @event.GetType().Name + the params
-        //    object[] eagerly even when Debug is off, which allocated on EVERY
-        //    publish (one per streaming delta) and broke the zero-alloc claim.
-        //    Queue-age instrumentation (#47) likewise lives strictly below
-        //    this line so the fast path stays untouched.
-        if (_middlewares.Count == 0 && _maxScrollback == 0 && _subscriptions.IsEmpty)
+        // #47/S3: the mandatory set is computed ONCE, from each sink's own
+        // declared verdict, right here at composition time. Nothing on the
+        // publish path re-derives it, and no sink type is special-cased by
+        // name — a host that registers a mandatory sink keeps the full path
+        // without anyone editing this class.
+        IReadOnlyList<IEventBusMiddleware> sinks = _middlewares;
+        for (int i = 0; i < sinks.Count; i++)
         {
-            return;
+            if (sinks[i].SinkKind == EventBusSinkKind.Mandatory)
+            {
+                _hasMandatorySink = true;
+                break;
+            }
         }
 
+        _fastPathEligible = _maxScrollback == 0 && !_hasMandatorySink;
+    }
+
+    /// <summary>
+    ///     Whether a registered sink forces this bus off the fast path
+    ///     (#47/S3). True for any middleware that declared
+    ///     <see cref="EventBusSinkKind.Mandatory" />, and for every sink that
+    ///     did not declare a verdict at all (the interface default is
+    ///     mandatory). A composition-time constant.
+    /// </summary>
+    public bool HasMandatorySink => _hasMandatorySink;
+
+    /// <summary>
+    ///     Whether this bus is able to take the zero-subscriber fast path:
+    ///     scrollback disabled and no mandatory sink (#47/S3). A composition-time
+    ///     constant, not a per-publish guess — <see cref="FastPathCount" />
+    ///     divided by <c>FastPathCount + PublishedCount</c> is the measured
+    ///     fraction of publishes that actually qualified on this bus.
+    /// </summary>
+    public bool FastPathEligible => _fastPathEligible;
+
+    /// <inheritdoc />
+    public Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
+    {
+        // ── Fast path (#47/S3). Provable, not hopeful: the two terms below are
+        //    the complete list of reasons a publish can go unobserved, and each
+        //    one is either a composition-time constant or a lock-free snapshot
+        //    read. The verdict for every registered sink is enumerated in
+        //    docs/EVENT_BUS_SINKS.md — the guard was not tightened before that
+        //    table existed.
+        if (_fastPathEligible)
+        {
+            // Volatile-free read of the snapshot: ImmutableArray<T> is
+            // reference-sized, and the existing slow path reads the same field
+            // the same way (no torn reads are possible for a single reference).
+            var snapshot = _subscriptions;
+            if (snapshot.IsEmpty)
+            {
+                // Nothing can observe this publish: no subscriber, nothing to
+                // retain, no mandatory sink. The queue-age envelope is skipped
+                // and the skip is counted, so the total publish count stays
+                // exact (FastPathCount + PublishedCount) instead of quietly
+                // under-reporting.
+                //
+                // NOTE (#97 per-delta): the Debug log in PublishSlowAsync must
+                // stay AFTER this check. LogDebug evaluates
+                // @event.GetType().Name + the params object[] eagerly even when
+                // Debug is off, which allocated on EVERY publish (one per
+                // streaming delta) and broke the zero-alloc claim.
+                Interlocked.Increment(ref _fastPathCount);
+
+                var sinks = _middlewares;
+                if (sinks.Count == 0)
+                {
+                    return Task.CompletedTask;
+                }
+
+                // Reachable only with OPTIONAL sinks attached (a mandatory one
+                // would have made this bus ineligible). They are drained, not
+                // skipped: "optional" is a statement about what breaks, not a
+                // licence for silence. Synchronous sinks — the overwhelming
+                // majority — keep the whole call allocation-free.
+                Interlocked.Increment(ref _optionalSinkDrainCount);
+                return DrainOptionalSinksAsync(@event, sinks, ct);
+            }
+        }
+
+        return PublishSlowAsync(@event, ct);
+    }
+
+    /// <summary>
+    ///     Run the optional-sink pipeline on the fast path (#47/S3). No
+    ///     subscriber, no scrollback and no mandatory sink can observe the
+    ///     publish, so the optional sinks are the only consumers left and they
+    ///     still run — losing the event to a sampler costs observability, but
+    ///     the bus does not get to make that choice on their behalf. An
+    ///     explicit <c>false</c> (or a throw) is counted in
+    ///     <see cref="OptionalSinkDropCount" />, so even a drop is visible.
+    /// </summary>
+    private async Task DrainOptionalSinksAsync(
+        AgentEvent @event,
+        IReadOnlyList<IEventBusMiddleware> sinks,
+        CancellationToken ct)
+    {
+        for (int i = 0; i < sinks.Count; i++)
+        {
+            IEventBusMiddleware sink = sinks[i];
+            try
+            {
+                bool continuePipeline = await sink.ProcessAsync(ref @event, ct).ConfigureAwait(false);
+                if (!continuePipeline)
+                {
+                    Interlocked.Increment(ref _optionalSinkDropCount);
+
+                    // IsEnabled guard (#47): the drop path is cold, but the
+                    // params array + GetType().Name evaluate eagerly even when
+                    // Trace is off.
+                    if (_logger.IsEnabled(LogLevel.Trace))
+                    {
+                        _logger.LogTrace("Event {EventType} dropped by optional sink {Middleware}",
+                            @event.GetType().Name, sink.Name);
+                    }
+
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Interlocked.Increment(ref _optionalSinkDropCount);
+                _logger.LogWarning(ex, "Middleware {Middleware} threw — event dropped", sink.Name);
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     The full publish path: queue-age envelope, mandatory + optional sink
+    ///     pipeline, scrollback append, and awaited fan-out. Reached whenever
+    ///     there is a subscriber, something to retain, or a mandatory sink
+    ///     (#47/S3).
+    /// </summary>
+    private async Task PublishSlowAsync(AgentEvent @event, CancellationToken ct)
+    {
         // ── Queue-age envelope (#47): one monotonic submission timestamp per
         //    publish. Stopwatch.GetTimestamp is allocation-free; the
         //    in-flight/oldest bookkeeping in TrackEnqueued/TrackDequeued is
@@ -402,11 +574,35 @@ public sealed class InMemoryEventBus : IEventBus
     }
 
     /// <summary>
-    ///     Total slow-path publishes since construction. The zero-subscriber /
-    ///     zero-scrollback / zero-middleware fast path returns before this
-    ///     counter, so it counts exactly the publishes that entered the queue.
+    ///     Total slow-path publishes since construction — the publishes that
+    ///     entered the queue-age envelope. The fast path (#47/S3) returns before
+    ///     this counter, so the total publish count is
+    ///     <c>FastPathCount + PublishedCount</c> and never under-reports.
     /// </summary>
     public long PublishedCount => Interlocked.Read(ref _publishedCount);
+
+    /// <summary>
+    ///     Publishes that took the fast path: no subscriber, no scrollback, no
+    ///     mandatory sink (#47/S3). Paired with <see cref="PublishedCount" /> it
+    ///     yields the measured qualification fraction
+    ///     (<c>FastPathCount / (FastPathCount + PublishedCount)</c>) — the
+    ///     number #47/S3 asks for instead of an estimate.
+    /// </summary>
+    public long FastPathCount => Interlocked.Read(ref _fastPathCount);
+
+    /// <summary>
+    ///     Fast-path publishes that had optional sinks attached and ran them
+    ///     instead of short-circuiting (#47/S3). Proof that the optional sinks
+    ///     are drained, not skipped.
+    /// </summary>
+    public long OptionalSinkDrainCount => Interlocked.Read(ref _optionalSinkDrainCount);
+
+    /// <summary>
+    ///     Optional sinks that dropped an event on the fast path — an explicit
+    ///     <c>false</c> or a throw (#47/S3). Silent loss is not an option, so
+    ///     even this is counted; the path logs the drop too.
+    /// </summary>
+    public long OptionalSinkDropCount => Interlocked.Read(ref _optionalSinkDropCount);
 
     /// <summary>
     ///     Publishes currently inside <see cref="PublishAsync" /> (submitted

@@ -73,6 +73,15 @@ jobs:
           sudo systemctl stop snapd.service snapd.socket || true
           taskset -c 1 dotnet run -c Release --no-build -- --filter '*Registry*' --job Short
 
+      # #47/S3: the zero-subscriber fast path is only a claim until something
+      # measures it. This row is the one that must report 0 B/op — the other
+      # three exist to show what disqualifies a bus from taking it.
+      - name: Bench EventBus fast path
+        working-directory: tests/Harbor.Benchmarks
+        run: |
+          sudo systemctl stop snapd.service snapd.socket || true
+          taskset -c 1 dotnet run -c Release --no-build -- --filter '*EventBusFastPath*' --job Short
+
       - name: Publish results to job summary
         if: always()
         shell: bash

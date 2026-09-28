@@ -332,6 +332,31 @@ attributed there. `InMemoryEventBus` exposes no way to empty its scrollback ring
 run against a ring that saturates; slot overwrite costs the same as a fresh slot, which each class doc
 records under `RetainedState:`.
 
+### 5.4 Zero-subscriber fast path (#47/S3) ⏳ latency not yet measured, allocation pinned
+
+`EventBusFastPathBenchmark` measures acceptance cost for four compositions of the same publish, so the
+fast path is a number rather than a claim, and the near-misses that disqualify a bus are visible next
+to it. Run by the CI `benchmark` job (`--filter '*EventBusFastPath*'`, Short job); a local full run:
+
+```bash
+dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*EventBusFastPath*'
+```
+
+| Row | Composition | Expected allocation |
+|---|---|---|
+| `Qualifying_0Sub_NoSinks_ScrollbackOff` | 0 subscribers, 0 scrollback, no sinks | **0 B/op** |
+| `Qualifying_0Sub_OptionalSinkDrained_ScrollbackOff` | + one optional sink (sampler), drained inline | **0 B/op** |
+| `Disqualified_0Sub_MandatorySink_ScrollbackOff` | + one mandatory sink (type filter) | allocates by design |
+| `Disqualified_1Sub_NoSinks_ScrollbackOff` | one live subscriber | allocates by design |
+
+⏳ **Latency columns are not yet filled** — the rows are code-only, exactly like §5.3, and the honest
+number to quote until a CI run lands is the *allocation* one, which is asserted (not eyeballed) by
+`EventBusFastPathTests` in `tests/Harbor.Core.Tests` via
+`GC.GetAllocatedBytesForCurrentThread() == 0` over 5 000 publishes. Which production compositions
+actually qualify is measured per preset in `tests/Harbor.Hosting.Tests/EventBusSinkCompositionTests.cs`
+and tabulated in [`docs/EVENT_BUS_SINKS.md`](./EVENT_BUS_SINKS.md) §5 (today: 0 % for every shipped
+preset — the mandatory/optional verdict, not the guard, is what keeps them out).
+
 ### Allocation-budget tripwires (#186, CI-enforced)
 
 Steady-state allocation coverage for paths the microbenchmarks above don't
@@ -348,6 +373,8 @@ dotnet run -c Release --project tests/Harbor.Registries.Tests -- --treenode-filt
 | Test | Path | Ceiling |
 |---|---|---|
 | `PublishAsync_ZeroSubscribers_IsAllocationFree` (`Harbor.Registries.Tests`) | `InMemoryEventBus` 0-sub fast path | 0 B |
+| `QualifyingComposition_ReturnsCompletedTask_AndAllocatesNothing` (`Harbor.Core.Tests`, #47/S3) | 0-sub / 0-scrollback / no-sink fast path, under the mandatory-sink guard | 0 B |
+| `OptionalSink_IsDrainedOnTheFastPath_NotSkipped` (`Harbor.Core.Tests`, #47/S3) | same + an optional sink drained inline | 0 B |
 | `PublishAsync_SingleSubscriber_StaysBounded` | `InMemoryEventBus` 1-sub fan-out | ≤ 1 KB/publish |
 | `PublishAsync_TenSubscribers_StaysBounded` | `InMemoryEventBus` 10-sub fan-out | ≤ 2 KB/publish |
 | `ResolveTools_FrozenUnfiltered_IsAllocationFree` | frozen `ToolRegistry.ResolveTools` (no permission, cached array) | 0 B |
