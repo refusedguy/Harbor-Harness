@@ -11,29 +11,50 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Tui.CellForge.Panels;
 
-// ── jump (Right/48, Up/Down/Enter/Esc/r) ────────────────────────────────────
+// ── jump (centred modal overlay, type/Backspace/Up/Down/Enter/Esc/r) ─────────
 
 /// <summary>
-///     Cell-native worktree jump palette (KILLER_FEATURES §2.7 Feature 3, slice 2):
+///     Cell-native worktree jump palette (KILLER_FEATURES §2.7 Feature 3, slice 3):
 ///     lists <see cref="WorktreeJumpEntry.RowText" /> rows from
 ///     <see cref="WorktreeJumpPaletteModel" /> with the selected row marked
 ///     <c>▸</c> (same row-list idiom as the sibling builtin panels).
-///     <c>Up</c>/<c>Down</c> move the selection, <c>Enter</c> switches to the
-///     selected session via the existing <c>ISessionManager.OpenSessionAsync</c>
-///     (no new switching mechanics), <c>Esc</c> closes, <c>r</c> re-seeds.
+///     <c>Up</c>/<c>Down</c> move the selection, printable keys feed
+///     <see cref="WorktreeJumpPaletteModel.SetQuery" /> (the fuzzy filter was
+///     dead code until #381), <c>Backspace</c> trims the query,
+///     <c>Enter</c> switches to the selected session via the existing
+///     <c>ISessionManager.OpenSessionAsync</c> (no new switching mechanics),
+///     <c>Esc</c> closes and clears the query, <c>r</c> re-seeds.
 /// </summary>
 /// <remarks>
-///     Seeding merges real worktrees (<c>git worktree list --porcelain</c>,
-///     parsed by <see cref="WorktreeJumpSeeder" />) with the active sessions
-///     from <see cref="UiState.Sessions" /> enriched read-only via
-///     <c>ISessionManager.GetContext</c> / <c>GetGitInfo</c> — provider-local
-///     structures are never mutated. The model + seed cache are provider-local
-///     mutable state guarded by a small lock (same compromise as
-///     <see cref="CellForgeFileTreePanel" />) so <c>Build</c> (render thread)
-///     and <c>OnKey</c> (input thread) stay thread-safe; <c>Build</c> only
-///     seeds on the first frame after open (<c>!Visible</c>) or an explicit
-///     <c>r</c> refresh, never every frame (spawning git per frame would
-///     stall rendering).
+///     <para>
+///         <b>Presentation (#381):</b> <see cref="DefaultPlacement" /> is
+///         <see cref="TuiPanelPlacement.Center" />, so the palette no longer
+///         steals a Right dock slot — <c>ChatScreenPanelDock</c> skips
+///         Center-placed providers and the host seats
+///         <c>CellForgeJumpPaletteOverlayLayer</c> (an <c>IOverlayLayer</c>,
+///         <c>IsModal</c> ⇒ input barrier) on the existing
+///         <c>LayoutTree.Overlays</c> stack. No new z-layer system.
+///     </para>
+///     <para>
+///         <b>Input barrier:</b> every key <c>OnKey</c> handles returns
+///         <see langword="true" /> (consumed), so a host never lets palette
+///         typing reach the composer / transcript. Modified chars (Ctrl/Alt)
+///         and control chars are deliberately <em>not</em> consumed — the bare
+///         LF alias of Ctrl+J must keep toggling the palette closed.
+///     </para>
+///     <para>
+///         <b>Seeding:</b> merges real worktrees (<c>git worktree list
+///         --porcelain</c>, parsed by <see cref="WorktreeJumpSeeder" />) with
+///         the active sessions from <see cref="UiState.Sessions" /> enriched
+///         read-only via <c>ISessionManager.GetContext</c> / <c>GetGitInfo</c> —
+///         provider-local structures are never mutated. The model + seed cache
+///         are provider-local mutable state guarded by a small lock (same
+///         compromise as <see cref="CellForgeFileTreePanel" />) so
+///         <c>Build</c> (render thread) and <c>OnKey</c> (input thread) stay
+///         thread-safe; <c>Build</c> only seeds on the first frame after open
+///         (<c>!Visible</c>) or an explicit <c>r</c> refresh, never every frame
+///         (spawning git per frame would stall rendering).
+///     </para>
 /// </remarks>
 public sealed class CellForgeJumpPalettePanel : IPanelProvider
 {
@@ -65,10 +86,16 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
     /// <inheritdoc />
     public string Title => "Jump";
 
-    /// <inheritdoc />
-    public TuiPanelPlacement DefaultPlacement => TuiPanelPlacement.Right;
+    /// <summary>
+    ///     Centred modal overlay, not a dock leaf: the palette floats over the
+    ///     chat band (Cmd-J palette UX) and
+    ///     <see cref="CellForgeJumpPaletteOverlayLayer" /> seats it as a modal
+    ///     <c>IOverlayLayer</c>. <c>ChatScreenPanelDock</c> skips
+    ///     Center-placed providers, so the Right dock slot is released.
+    /// </summary>
+    public TuiPanelPlacement DefaultPlacement => TuiPanelPlacement.Center;
 
-    /// <inheritdoc />
+    /// <summary>Overlay width in columns (the centred box caps itself to the viewport).</summary>
     public int DefaultSize => 48;
 
     /// <inheritdoc />
@@ -77,6 +104,7 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
         ArgumentNullException.ThrowIfNull(ctx);
         List<WorktreeJumpEntry> snapshot;
         int selected;
+        string query;
         lock (_gate)
         {
             if (!_model.Visible)
@@ -86,14 +114,17 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
 
             snapshot = new List<WorktreeJumpEntry>(_model.Results);
             selected = _model.SelectedIndex;
+            query = _model.Query;
         }
 
         var rows = new List<string>(snapshot.Count + 4);
-        rows.Add($"Jump ({snapshot.Count})");
+        // The query is part of the header so the fuzzy filter is visible (#381)
+        // — an empty query keeps the pre-#381 "Jump (N)" shape byte-identical.
+        rows.Add(query.Length == 0 ? $"Jump ({snapshot.Count})" : $"Jump: {query} ({snapshot.Count})");
         rows.Add(PanelText.Separator);
         if (snapshot.Count == 0)
         {
-            rows.Add("No worktrees or sessions.");
+            rows.Add(query.Length == 0 ? "No worktrees or sessions." : "No match.");
             rows.Add("Open a session to jump between worktrees.");
         }
         else
@@ -106,7 +137,7 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
         }
 
         rows.Add(PanelText.Separator);
-        rows.Add("↑↓ move · Enter switch · Esc close · r refresh");
+        rows.Add("type to filter · ⌫ erase · ↑↓ move · Enter switch · Esc close · r refresh");
         return PanelText.Clip(rows, ctx.Width, ctx.Height);
     }
 
@@ -129,28 +160,79 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
                 }
 
                 return true;
+            case UiKeyCode.Backspace:
+                lock (_gate)
+                {
+                    _model.SetQuery(TrimLastChar(_model.Query));
+                }
+
+                return true;
             case UiKeyCode.Enter:
                 ConfirmLocked(ctx);
                 return true;
             case UiKeyCode.Escape:
                 lock (_gate)
                 {
+                    // Hide() drops the query too, so reopening starts empty.
                     _model.Hide();
                 }
 
                 HideViaStore(ctx);
                 return true;
-            case UiKeyCode.Char when key.Character is 'r' or 'R':
+            case UiKeyCode.Char when IsTypable(key):
+            {
+                char c = key.Character!.Value;
+
+                // 'r' stays the documented refresh chord AND types normally:
+                // re-seed first (preserving the typed prefix), then append.
+                if (c is 'r' or 'R')
+                {
+                    lock (_gate)
+                    {
+                        ReseedLocked(ctx);
+                    }
+                }
+
                 lock (_gate)
                 {
-                    _model.Hide();
-                    SeedLocked(ctx);
+                    _model.SetQuery(_model.Query + c);
                 }
 
                 return true;
+            }
+
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    ///     A key that belongs to the palette's query line: a <c>Char</c> with
+    ///     no Ctrl/Alt modifier and a non-control character. Ctrl/Alt chords stay
+    ///     unconsumed so the host keymap still sees them (the bare-LF alias of
+    ///     Ctrl+J must keep toggling the palette closed, Alt+<c>n</c> must keep
+    ///     switching panel slots).
+    /// </summary>
+    private static bool IsTypable(UiKey key) =>
+        key.Character is { } c
+        && key.Mods is KeyModifierSet.None or KeyModifierSet.Shift
+        && !char.IsControl(c);
+
+    /// <summary>Drops the last code point (surrogate-pair safe).</summary>
+    private static string TrimLastChar(string query)
+    {
+        if (query.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        int cut = query.Length - 1;
+        if (cut > 0 && char.IsLowSurrogate(query[cut]) && char.IsHighSurrogate(query[cut - 1]))
+        {
+            cut--;
+        }
+
+        return query[..cut];
     }
 
     private void ConfirmLocked(PanelContext ctx)
@@ -201,6 +283,21 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
         }
 
         _model.Show(WorktreeJumpSeeder.BuildEntries(SessionSeeds(ctx, manager), worktrees));
+    }
+
+    /// <summary>
+    ///     Explicit <c>r</c> refresh: re-read worktrees + live sessions while
+    ///     keeping the typed filter, so a refresh never throws away the query.
+    ///     Call only under <c>_gate</c>.
+    /// </summary>
+    private void ReseedLocked(PanelContext ctx)
+    {
+        string query = _model.Query;
+        SeedLocked(ctx);
+        if (query.Length > 0)
+        {
+            _model.SetQuery(query);
+        }
     }
 
     private static List<SessionSeed> SessionSeeds(PanelContext ctx, ISessionManager? manager)

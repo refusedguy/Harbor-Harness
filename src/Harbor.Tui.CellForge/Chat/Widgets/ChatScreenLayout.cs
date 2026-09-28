@@ -849,8 +849,10 @@ public sealed class CellForgeDockPanel : Panel
 /// pinned, else first visible in registration order); at most ONE
 /// <see cref="CellForgeDockPanel"/> leaf is attached at a time — side winners
 /// dock beside the timeline, every other winner docks between the timeline and
-/// the composer. Secondary visible panels stay mounted in <see cref="UiState"/>
-/// for the future modal layer and are never painted here.
+/// the composer. <see cref="TuiPanelPlacement.Center"/> providers are the
+/// exception (#381): they live on the modal overlay plane, painted by their own
+/// <c>IOverlayLayer</c>, and never take a dock slot. Secondary visible panels
+/// stay mounted in <see cref="UiState"/> and are never painted here.
 /// <see cref="StatusPanel"/> / <see cref="ComposerPanel"/> keep their ids,
 /// rects and paint path — the active leaf only splits the timeline band.
 /// Prefer <see cref="AttachPanels"/> (it reserves solver space so the panel
@@ -952,8 +954,11 @@ public static class ChatScreenPanelDock
         // UX1: exactly one panel owns the slot — everything secondary goes
         // modal (stays mounted in UiState, never painted by the dock).
         var active = PanelArbiter.ResolveActive(view.Providers, state);
-        if (active is null)
+        if (active is null || active.DefaultPlacement == TuiPanelPlacement.Center)
         {
+            // Center = modal overlay plane (#381): the provider is painted by its
+            // own IOverlayLayer (CellForgeJumpPaletteOverlayLayer), never by a
+            // dock leaf — the dock slot it used to occupy stays released.
             return;
         }
 
@@ -1073,14 +1078,16 @@ public static class ChatScreenPanelDock
     /// <summary>
     /// True when the leaf of <paramref name="leafPlacement"/> is the slot for a
     /// winner of <paramref name="winnerPlacement"/>: side leaves host their own
-    /// side, the bottom leaf hosts everything else (Bottom / Top / Center /
-    /// FloatingTab — one slot under the timeline, never a paint-over).
+    /// side, the bottom leaf hosts everything else (Bottom / Top / FloatingTab —
+    /// one slot under the timeline, never a paint-over). <c>Center</c> (#381) is
+    /// the modal overlay plane and never docks.
     /// </summary>
     private static bool HostsWinner(TuiPanelPlacement leafPlacement, TuiPanelPlacement winnerPlacement) =>
         leafPlacement == winnerPlacement
         || (leafPlacement == TuiPanelPlacement.Bottom
             && winnerPlacement != TuiPanelPlacement.Left
-            && winnerPlacement != TuiPanelPlacement.Right);
+            && winnerPlacement != TuiPanelPlacement.Right
+            && winnerPlacement != TuiPanelPlacement.Center);
 
     /// <summary>
     /// Routes a key to the focused panel's <c>OnKey</c> via
@@ -1088,7 +1095,9 @@ public static class ChatScreenPanelDock
     /// to the host's default key map) when nothing is focused, the focused id is
     /// unknown to the registry, or the panel is not in
     /// <see cref="TuiPanelState.Focused"/> — <c>Build</c> runs for every visible
-    /// state, but <c>OnKey</c> is a focus-only contract.
+    /// state, but <c>OnKey</c> is a focus-only contract. Center-placed providers
+    /// (#381, the jump palette) are excluded: they are keyed through their
+    /// modal <c>IOverlayLayer.OnKey</c>, never through the dock.
     /// </summary>
     public static bool RoutePanelKey(
         PanelRegistry registry,
@@ -1110,6 +1119,13 @@ public static class ChatScreenPanelDock
 
         var provider = registry.Get(id);
         if (provider is null)
+        {
+            return false;
+        }
+
+        // #381: Center-placed providers live on the modal overlay plane and
+        // are keyed through their IOverlayLayer.OnKey, never through the dock.
+        if (provider.DefaultPlacement == TuiPanelPlacement.Center)
         {
             return false;
         }
@@ -1156,8 +1172,9 @@ public static class ChatScreenPanelDock
 
         var view = registry.View(state);
         var active = PanelArbiter.ResolveActive(view.Providers, state);
-        if (active is null || timelineRect.Width <= 0)
+        if (active is null || active.DefaultPlacement == TuiPanelPlacement.Center || timelineRect.Width <= 0)
         {
+            // Center (#381) is the modal overlay plane, not the bottom stack.
             return 0;
         }
 
