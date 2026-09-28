@@ -201,7 +201,7 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
     }
 
     private static string GetOsShort()
-    {    {
+    {
         if (OperatingSystem.IsWindows()) return "windows";
         if (OperatingSystem.IsMacOS()) return "macos";
         if (OperatingSystem.IsLinux()) return "linux";

@@ -19,7 +19,7 @@ public sealed class DeferredSessionStore : ISessionStore
     public void Attach(ISessionStore inner) =>
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
 
-    private ISessionStore? Current => Volatile.Read(ref _inner);
+    private ISessionStore? Current => _inner;
 
     /// <inheritdoc />
     public Task<Result<Session>> CreateAsync(
