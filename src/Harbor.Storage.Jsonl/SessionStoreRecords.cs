@@ -10,13 +10,64 @@ using Harbor.Abstractions.Models;
 namespace Harbor.Storage.Jsonl;
 
 /// <summary>
-///     Parsed-message cache entry (§3.3). Records the file's last-write-time
-///     at the moment of the parse so subsequent reads can detect freshness via
-///     a single <c>File.GetLastWriteTimeUtc</c> call.
+///     Identity of a session file's on-disk state: its last-write timestamp
+///     plus its length. <b>Both halves are required (#459)</b> — the timestamp
+///     alone is not a safe freshness key, because a filesystem with coarse
+///     timestamps can serve a write whose mtime lands in the same tick as the
+///     previous one, which turned a stale cache entry into a permanent hit on
+///     outdated content. One <see cref="FileInfo" /> yields both fields from a
+///     single stat, so the key costs no extra syscall over mtime alone.
+/// </summary>
+internal readonly record struct SessionFileStat(DateTimeOffset LastWriteUtc, long Length)
+{
+    /// <summary>Read the stat of <paramref name="path" /> in one filesystem call.</summary>
+    internal static SessionFileStat Read(string path)
+    {
+        var info = new FileInfo(path);
+        return new SessionFileStat(info.LastWriteTimeUtc, info.Length);
+    }
+
+    /// <summary>True when both fields match — the file is the same one we cached.</summary>
+    internal bool Matches(SessionFileStat other) =>
+        LastWriteUtc == other.LastWriteUtc && Length == other.Length;
+}
+
+/// <summary>
+///     Parsed-message cache entry (§3.3). Records the <see cref="SessionFileStat" />
+///     the parse was taken from so subsequent reads can detect freshness with a
+///     single stat.
 /// </summary>
 internal sealed record SessionCacheEntry(
     DateTimeOffset FileLastWriteUtc,
-    IReadOnlyList<AgentMessage> Messages);
+    long FileLength,
+    IReadOnlyList<AgentMessage> Messages)
+{
+    /// <summary>True when this entry was parsed from exactly this file state.</summary>
+    internal bool IsFreshFor(SessionFileStat stat) =>
+        FileLength == stat.Length && FileLastWriteUtc == stat.LastWriteUtc;
+}
+
+/// <summary>
+///     Outcome of a full-file read: the parsed messages plus the
+///     <see cref="SessionFileStat" /> they were parsed from, and whether that
+///     pairing is <em>provable</em> (#459).
+/// </summary>
+/// <remarks>
+///     <para>
+///         <see cref="IsStable" /> is false when the file changed while it was
+///         being read — a concurrent append grew it, or an atomic rewrite
+///         swapped the path — so the messages are a consistent prefix of the
+///         log but not provably the whole of the state the stat names. Such a
+///         snapshot is still worth returning (it never contains a record cut in
+///         half), but caching it would publish incomplete data under a
+///         timestamp that claims completeness: the next read hits the cache and
+///         the missing message is invisible until the next write or restart.
+///     </para>
+/// </remarks>
+internal sealed record MessageReadSnapshot(
+    IReadOnlyList<AgentMessage> Messages,
+    SessionFileStat Stat,
+    bool IsStable);
 
 /// <summary>
 ///     Line-1 header of a session file. Optional trailing fields carry the
