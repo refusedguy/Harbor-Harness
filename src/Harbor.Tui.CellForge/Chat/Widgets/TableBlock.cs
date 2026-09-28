@@ -208,7 +208,9 @@ public sealed class TableBlock : ICollapsibleChatBlock
 
             if (overflow && row == MaxBodyLines)
             {
-                PaintRule(buffer, ctx.Rect.X, y, widths, Bl, Br, X, width, border);
+                // Collapsed frame ([UX2] #262): bottom rule from the cached
+                // layout (ENG10 one-shot render — no per-frame rebuild).
+                buffer.SetText(ctx.Rect.X, y, rules[2], border);
                 continue;
             }
 
