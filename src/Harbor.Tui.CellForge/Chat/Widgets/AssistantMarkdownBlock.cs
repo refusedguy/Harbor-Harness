@@ -8,8 +8,13 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// through the same styled-line pipeline as the streaming tail (one-shot
 /// render, width-keyed cache). Measure/Paint stay allocation-free in steady
 /// state.
+/// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291,
+/// parent #286): finalized answers start expanded so default paint stays
+/// byte-identical to the pre-collapse layout; hosts collapse via
+/// <see cref="SetExpanded"/> (feed Enter/click path via
+/// <see cref="ToggleExpanded"/>).
 /// </summary>
-public sealed class AssistantMarkdownBlock : IChatBlock
+public sealed class AssistantMarkdownBlock : ICollapsibleChatBlock
 {
     private readonly string _source;
     private readonly string? _header;
@@ -21,6 +26,8 @@ public sealed class AssistantMarkdownBlock : IChatBlock
     {
         _source = source ?? string.Empty;
         _header = string.IsNullOrWhiteSpace(header) ? null : header;
+        MaxBodyLines = ICollapsibleChatBlock.DefaultCollapsedBodyLines;
+        IsExpanded = true;
     }
 
     public string Kind => "assistant";
@@ -29,13 +36,50 @@ public sealed class AssistantMarkdownBlock : IChatBlock
 
     public int BudgetBytes => 64 + (_source.Length * 2);
 
+    /// <summary>
+    /// Collapsed-body line budget (continuation marker when exceeded).
+    /// Collapse protocol lives on <c>ICollapsibleChatBlock</c> (PRIM1a #291);
+    /// this property satisfies the mixin contract.
+    /// </summary>
+    public int MaxBodyLines { get; set; }
+
+    /// <summary>
+    /// Whether the block is expanded. Satisfies the
+    /// <c>ICollapsibleChatBlock</c> mixin contract; defaults to
+    /// <c>true</c> so collapsed paint stays opt-in and the default layout
+    /// is byte-identical to the pre-collapse block (header + full body +
+    /// trailing gap row). Collapsed paint shows the header plus the first
+    /// <see cref="MaxBodyLines"/> styled body rows with a <c>…</c> overflow
+    /// marker.
+    /// </summary>
+    public bool IsExpanded { get; private set; }
+
+    /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click path).</summary>
+    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
+    public void SetExpanded(bool expanded) => IsExpanded = expanded;
+
     public BlockMeasure Measure(int width)
     {
         EnsureRendered(width);
-        return BlockMeasure.Exact(_lines.Count + (_header is null ? 0 : 1) + 1);
+        int headerRows = _header is null ? 0 : 1;
+        int bodyRows = IsExpanded ? _lines.Count : CollapsedBodyLineCount();
+        return BlockMeasure.Exact(headerRows + bodyRows + 1);
     }
 
-    public int CheapEstimate(int width) => (_header is null ? 0 : 1) + 1 + BlockMath.EstimateLines(_source, Math.Max(1, width));
+    public int CheapEstimate(int width)
+    {
+        int body = BlockMath.EstimateLines(_source, Math.Max(1, width));
+        if (!IsExpanded)
+        {
+            // Mirror Measure: collapsed body is capped at MaxBodyLines plus
+            // one overflow-marker row ([UX5] #265: zero budget = no body row).
+            body = MaxBodyLines <= 0 ? 0 : Math.Min(body, MaxBodyLines + 1);
+        }
+
+        return (_header is null ? 0 : 1) + 1 + body;
+    }
 
     public void Paint(in BlockPaintContext ctx)
     {
@@ -44,7 +88,16 @@ public sealed class AssistantMarkdownBlock : IChatBlock
         int rows = ctx.Rect.Height;
         int skip = ctx.SkipRows;
         int headerRows = _header is null ? 0 : 1;
-        int totalRows = _lines.Count + headerRows + 1;
+        int bodyRows = IsExpanded ? _lines.Count : CollapsedBodyLineCount();
+        int totalRows = bodyRows + headerRows + 1;
+
+        // Collapsed overflow marker row (mixin geometry, styled paint stays
+        // local): when the collapse budget cuts styled body rows, the row
+        // right after the last shown one carries the dim '…' marker.
+        int budget = Math.Max(0, MaxBodyLines);
+        bool collapsedOverflow = !IsExpanded && MaxBodyLines > 0 && _lines.Count > budget;
+        int markerLineIdx = headerRows + budget;
+
         for (int i = 0; i < rows && (skip + i) < totalRows; i++)
         {
             int lineIdx = skip + i;
@@ -54,8 +107,8 @@ public sealed class AssistantMarkdownBlock : IChatBlock
                 continue;
             }
 
-            int contentIdx = lineIdx - headerRows;
-            if (contentIdx >= _lines.Count)
+            int bodyIdx = lineIdx - headerRows;
+            if (bodyIdx >= bodyRows)
             {
                 // Panel chrome: with separators enabled the trailing gap row
                 // becomes a thin dim divider between answers (off by default —
@@ -68,6 +121,13 @@ public sealed class AssistantMarkdownBlock : IChatBlock
                 continue; // trailing gap row: breathing room between bubbles
             }
 
+            if (collapsedOverflow && lineIdx == markerLineIdx)
+            {
+                buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, "…", ChatPalette.Dim);
+                continue;
+            }
+
+            int contentIdx = bodyIdx;
             if (_code is not null && _code.TryGetValue(contentIdx, out var codeSpans))
             {
                 PaintCodeSpans(buffer, ctx.Rect.X, ctx.Rect.Y + i, codeSpans);
@@ -115,6 +175,24 @@ public sealed class AssistantMarkdownBlock : IChatBlock
         MdStyle.Bullet => new CellStyle(PackedColor.Indexed(4)),
         _ => CellStyle.Plain,
     };
+
+    /// <summary>
+    /// Visible styled body rows under <see cref="MaxBodyLines"/>: capped rows
+    /// plus one continuation-marker row on overflow. Geometry mirrors
+    /// <c>ICollapsibleChatBlock.ClampedBodyLineCount</c> (PRIM1a #291) over
+    /// rendered rows — styled paint can't delegate to the plain-text
+    /// <c>PaintBodyLines</c>, so the cap lives here with identical overflow
+    /// semantics (incl. the [UX5] #265 zero-budget law: no body, no marker).
+    /// </summary>
+    private int CollapsedBodyLineCount()
+    {
+        if (MaxBodyLines <= 0 || _lines.Count == 0)
+        {
+            return 0;
+        }
+
+        return Math.Min(_lines.Count, MaxBodyLines) + (_lines.Count > MaxBodyLines ? 1 : 0);
+    }
 
     private void EnsureRendered(int width)
     {
