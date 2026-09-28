@@ -108,6 +108,65 @@ public sealed class OverlayStackTests
     }
 
     [Test]
+    public async Task FullyCoveredByOpaqueSibling_SkipsDrawing()
+    {
+        // ENG6 #277 (TGui #5360 pattern): a fully-covered opaque overlapped
+        // sibling skips drawing entirely — zero Paint calls, not one clipped call.
+        var lower = new StubLayer("lower", new Rect(0, 0, 10, 4), 'a');
+        var upper = new StubLayer("upper", new Rect(0, 0, 10, 4), 'b', opaque: true);
+        var stack = new OverlayStack();
+        stack.Push(lower);
+        stack.Push(upper);
+        var buffer = new ScreenBuffer(10, 4);
+
+        stack.PaintOver(buffer);
+
+        await Assert.That(lower.Clips.Count).IsEqualTo(0);
+        await Assert.That(upper.Clips.Count).IsEqualTo(1);
+        await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'b');
+        await Assert.That(buffer.Get(9, 3).Rune).IsEqualTo((int)'b');
+    }
+
+    [Test]
+    public async Task JointlyCoveredByTwoOpaqueSiblings_SkipsDrawing()
+    {
+        // ENG6 #277: coverage by the UNION of opaque siblings above also culls —
+        // neither half-cover alone covers the lower layer, together they do.
+        var lower = new StubLayer("lower", new Rect(0, 0, 10, 4), 'a');
+        var left = new StubLayer("left", new Rect(0, 0, 5, 4), 'l', opaque: true);
+        var right = new StubLayer("right", new Rect(5, 0, 5, 4), 'r', opaque: true);
+        var stack = new OverlayStack();
+        stack.Push(lower);
+        stack.Push(left);
+        stack.Push(right);
+        var buffer = new ScreenBuffer(10, 4);
+
+        stack.PaintOver(buffer);
+
+        await Assert.That(lower.Clips.Count).IsEqualTo(0);
+        await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'l');
+        await Assert.That(buffer.Get(9, 3).Rune).IsEqualTo((int)'r');
+    }
+
+    [Test]
+    public async Task FullyCoveredByTransparentSibling_StillPaints()
+    {
+        // ENG6 #277: a non-opaque full cover must NOT cull — the lower layer
+        // still paints its full bounds underneath the veil.
+        var lower = new StubLayer("lower", new Rect(0, 0, 10, 4), 'a');
+        var veil = new StubLayer("veil", new Rect(0, 0, 10, 4), 'b', opaque: false);
+        var stack = new OverlayStack();
+        stack.Push(lower);
+        stack.Push(veil);
+        var buffer = new ScreenBuffer(10, 4);
+
+        stack.PaintOver(buffer);
+
+        await Assert.That(lower.Clips.Count).IsEqualTo(1);
+        await Assert.That(lower.Clips[0]).IsEqualTo(new Rect(0, 0, 10, 4));
+    }
+
+    [Test]
     public async Task TransparentLayerAbove_DoesNotClipLower()
     {
         var lower = new StubLayer("lower", new Rect(0, 0, 10, 4), 'a');
