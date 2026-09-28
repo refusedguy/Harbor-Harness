@@ -34,7 +34,7 @@ The list below is the **ruthless, ship-first** ranking. Each entry has:
 | 9  | Agent pet mascot that reacts to agent state        | 4      | S      | Orca          | ❌ |
 | 10 | Markdown rich editor (TipTap) with code blocks     | 5      | L      | Orca          | ⚠️ partial (renderer, no editor) |
 | 11 | Image preview inline in chat                       | 4      | M      | Opencode, Kilo | ❌ |
-| 12 | Skill freshness pill (update available)            | 3      | S      | Orca          | ⚠️ partial (pure `SkillFreshnessModel` + `CellForgeSkillFreshnessPanel`, host seeding pending) |
+| 12 | Skill freshness pill (update available)            | 3      | S      | Orca          | ✅ (`SkillFreshnessModel` + default-on status-line aggregate `skills ●N` + `/skills update`; per-skill panel opt-in via `HARBOR_SKILL_FRESHNESS=1`) |
 | 13 | Setup-guide progress ring + checklist              | 4      | M      | Orca          | ✅ R28 (onboarding wizard with stepper) |
 | 14 | Dictation / speech-to-text input                   | 3      | L      | Orca (sherpa) | ❌ |
 | 15 | Browser/markup overlay for screenshots             | 4      | L      | Orca          | ❌ |
@@ -1076,7 +1076,7 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** S (2 hours)
 - **Priority:** P2
 - **Dependencies:** Plugin version metadata
-- **Status:** Slice 1 landed (`feat/23-small-slice`, issue #23): pure
+- **Status:** ✅ Slice 1 landed (`feat/23-small-slice`, issue #23): pure
   `SkillFreshnessModel` (`Harbor.Ui.Framework.Projection`, entry = name +
   installed/locked hashes, `✓/●/?/✗` pills) with TUnit coverage
   (`SkillFreshnessTests`); `PanelRows.SkillFreshnessRows` shared row builder;
@@ -1086,7 +1086,21 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
   (`Harbor.Application`, BCL-only — sha256 over `SKILL.md`, `skills-lock.json`
   via `Utf8JsonReader`), CLI-startup seeding of the DI-shared model,
   `/skills refresh`, opt-in panel registration (`HARBOR_SKILL_FRESHNESS=1`,
-  appends after the 9 builtins). No update dialog — pills only.
+  appends after the 9 builtins).
+  Slice 3 (issue #384, default-on pill + update): `SkillFreshnessAggregate`
+  collapses the snapshot into one status-line segment —
+  **`skills ●2 changed ✗1 missing ?1 untracked`, rendered by default in the
+  CellForge footer with no env var** (a fully `current` snapshot renders
+  *nothing*, per the footer's no-data ⇒ no-segment contract, so the row stays
+  byte-identical for clean workspaces). The footer lives outside the panel slot
+  order, so the 9-panel `Alt+1..9` pin is untouched and the detailed panel
+  stays opt-in. The pill re-derives from `SkillFreshnessModel.Revision`, so
+  `/skills refresh` / `/skills update` move it in place. `SkillUpdater`
+  (`Harbor.Application`, injectable `SkillGitRunner`) backs
+  **`/skills update [name…]`**: no args ⇒ every stale skill, named args ⇒ those
+  skills, re-resolving the git work tree that owns the skills root via
+  `git pull --ff-only`. A non-git-backed source is an explicit no-op with a
+  hint; a failed pull is a command error that never marks a skill `current`.
 
 ---
 

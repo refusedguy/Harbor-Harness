@@ -11,6 +11,7 @@ using Harbor.App.Cli.Commands;
 using Harbor.App.Cli.Hosting;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
+using Harbor.Application.Skills;
 using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.Logging;
@@ -51,6 +52,14 @@ internal sealed class SlashCommandDispatcher
     /// </summary>
     private readonly Func<IReadOnlyList<SkillFreshnessEntry>>? _skillRefresh;
 
+    /// <summary>
+    ///     Update delegate for <c>/skills update</c> (issue #384): re-resolves
+    ///     the named skills (or every stale one) from their git source and
+    ///     reseeds the shared model on success. Null on hosts without a model —
+    ///     the handler reports "not available" instead of failing.
+    /// </summary>
+    private readonly Func<IReadOnlyList<string>, Task<SkillUpdateReport>>? _skillUpdate;
+
     /// <summary>All registered slash commands (canonical + aliases → single registration).</summary>
     private sealed record SlashCommandRegistration(
         string CanonicalName,
@@ -74,7 +83,8 @@ internal sealed class SlashCommandDispatcher
         IPermissionService Permissions,
         Harbor.Hosting.PluginReloadService? PluginReload = null,
         Harbor.Hosting.Rendering.IRendererPipeline? RendererPipeline = null,
-        Func<IReadOnlyList<SkillFreshnessEntry>>? SkillRefresh = null);
+        Func<IReadOnlyList<SkillFreshnessEntry>>? SkillRefresh = null,
+        Func<IReadOnlyList<string>, Task<SkillUpdateReport>>? SkillUpdate = null);
 
     public SlashCommandDispatcher(
         ILogger<SlashCommandDispatcher> logger,
@@ -84,7 +94,8 @@ internal sealed class SlashCommandDispatcher
         IPermissionService permissions,
         Harbor.Hosting.PluginReloadService? pluginReload = null,
         Harbor.Hosting.Rendering.IRendererPipeline? rendererPipeline = null,
-        Func<IReadOnlyList<SkillFreshnessEntry>>? skillRefresh = null)
+        Func<IReadOnlyList<SkillFreshnessEntry>>? skillRefresh = null,
+        Func<IReadOnlyList<string>, Task<SkillUpdateReport>>? skillUpdate = null)
     {
         _logger = logger;
         _tools = tools;
@@ -94,6 +105,7 @@ internal sealed class SlashCommandDispatcher
         _pluginReload = pluginReload;
         _rendererPipeline = rendererPipeline;
         _skillRefresh = skillRefresh;
+        _skillUpdate = skillUpdate;
         _byName = BuildRegistry();
     }
 
@@ -145,7 +157,8 @@ internal sealed class SlashCommandDispatcher
         }
 
         var ctx = new CommandContext(writer, reader, session, agent, agentRegistry, providers,
-            configStore, authStore, _tools, _sessions, _wizard, _permissions, _pluginReload, _rendererPipeline, _skillRefresh);
+            configStore, authStore, _tools, _sessions, _wizard, _permissions, _pluginReload, _rendererPipeline,
+            _skillRefresh, _skillUpdate);
 
         return ExecuteRegisteredAsync(reg, ctx, args);
     }
@@ -393,38 +406,93 @@ internal sealed class SlashCommandDispatcher
 
     private static void RegisterSkillCommands(Dictionary<string, SlashCommandRegistration> dict)
     {
-        // KILLER_FEATURES §2.7 Feature 10 (issue #23, slice 2): reseed the
-        // shared SkillFreshnessModel from skills-lock.json. Pill-only — there
-        // is deliberately no update dialog; applying updates stays manual.
-        Register(dict, "skills", ["skill"], ["refresh"], (ctx, args) =>
+        // KILLER_FEATURES §2.7 Feature 10 (issue #23 slice 2, issue #384):
+        // `refresh` reseeds the shared SkillFreshnessModel from
+        // skills-lock.json; `update [name…]` re-resolves stale skills from
+        // their git source and then reseeds. The detailed per-skill panel
+        // stays host opt-in — the default-on signal is the status-line
+        // aggregate pill fed from the same model.
+        Register(dict, "skills", ["skill"], ["refresh", "update"], async (ctx, args) =>
         {
-            if (args.Count != 1 || !args[0].Equals("refresh", StringComparison.OrdinalIgnoreCase))
+            if (args.Count == 0)
             {
-                ctx.Writer("Usage: /skills refresh — reseed skill freshness from skills-lock.json.");
-                return Task.FromResult(Result.Success());
+                WriteSkillsUsage(ctx);
+                return Result.Success();
             }
 
-            if (ctx.SkillRefresh is null)
+            string verb = args[0];
+            if (verb.Equals("refresh", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args.Count != 1)
+                {
+                    WriteSkillsUsage(ctx);
+                    return Result.Success();
+                }
+
+                if (ctx.SkillRefresh is null)
+                {
+                    ctx.Writer("Skill freshness: not available in this build.");
+                    return Result.Success();
+                }
+
+                WriteSkillsSummary(ctx, ctx.SkillRefresh());
+                return Result.Success();
+            }
+
+            if (!verb.Equals("update", StringComparison.OrdinalIgnoreCase))
+            {
+                WriteSkillsUsage(ctx);
+                return Result.Success();
+            }
+
+            if (ctx.SkillUpdate is null)
             {
                 ctx.Writer("Skill freshness: not available in this build.");
-                return Task.FromResult(Result.Success());
+                return Result.Success();
             }
 
-            var entries = ctx.SkillRefresh();
-            int stale = 0;
-            for (int i = 0; i < entries.Count; i++)
+            // No names ⇒ every stale skill (resolved against the model).
+            var names = args.Count > 1 ? args.Skip(1).ToArray() : Array.Empty<string>();
+            var report = await ctx.SkillUpdate(names).ConfigureAwait(false);
+            ctx.Writer(report.Outcome == SkillUpdateOutcome.Failed
+                ? $"Skills: update failed — {report.Message} (freshness unchanged; run /skills refresh to re-check)"
+                : $"Skills: {report.Message}");
+
+            if (report.Outcome == SkillUpdateOutcome.Updated && ctx.SkillRefresh is { } refresh)
             {
-                if (entries[i].IsStale)
-                {
-                    stale++;
-                }
+                WriteSkillsSummary(ctx, refresh());
             }
 
-            ctx.Writer(stale == 0
-                ? $"Skills: {entries.Count} up to date."
-                : $"Skills: {entries.Count} checked, {stale} need attention.");
-            return Task.FromResult(Result.Success());
+            // A failed update is a command error, not a crash: the REPL keeps
+            // running and the pill keeps its previous (stale) state.
+            return report.Outcome == SkillUpdateOutcome.Failed
+                ? Result.Failure(report.Message)
+                : Result.Success();
         });
+    }
+
+    /// <summary><c>/skills</c> usage lines (verb forms only — args are documented in the flow).</summary>
+    private static void WriteSkillsUsage(CommandContext ctx)
+    {
+        ctx.Writer("Usage: /skills refresh — reseed skill freshness from skills-lock.json.");
+        ctx.Writer("Usage: /skills update [name…] — re-resolve stale skills from their source (all stale when no names).");
+    }
+
+    /// <summary>One-line freshness summary; identical wording for refresh and update.</summary>
+    private static void WriteSkillsSummary(CommandContext ctx, IReadOnlyList<SkillFreshnessEntry> entries)
+    {
+        int stale = 0;
+        for (int i = 0; i < entries.Count; i++)
+        {
+            if (entries[i].IsStale)
+            {
+                stale++;
+            }
+        }
+
+        ctx.Writer(stale == 0
+            ? $"Skills: {entries.Count} up to date."
+            : $"Skills: {entries.Count} checked, {stale} need attention.");
     }
 
     private static ICommandContext MakeCtx(CommandContext ctx) =>
