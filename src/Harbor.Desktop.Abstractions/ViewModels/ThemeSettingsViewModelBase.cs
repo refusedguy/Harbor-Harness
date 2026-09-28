@@ -9,7 +9,7 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 ///     (upon_layers_featureFlags): owns the active theme string
 ///     (dark / light / system) and the apply/preview commands. Extracted so the
 ///     theme-switch code path is unit-testable in isolation (construct with a
-///     fake <see cref="IThemeService" /> and assert <see cref="Apply" />
+///     fake <see cref="IThemeApplier" /> and assert <see cref="Apply" />
 ///     forwards the right theme string).
 /// </summary>
 /// <remarks>
@@ -20,7 +20,8 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// </remarks>
 public abstract partial class ThemeSettingsViewModelBase : StoreSubscriberViewModel
 {
-    private readonly IThemeService _themeService;
+    private readonly IThemeReader _themeReader;
+    private readonly IThemeApplier _themeApplier;
 
     /// <summary>
     ///     True when the resolved (applied) theme is dark. Updated by
@@ -40,16 +41,19 @@ public abstract partial class ThemeSettingsViewModelBase : StoreSubscriberViewMo
     /// <summary>Construct a <see cref="ThemeSettingsViewModelBase" />.</summary>
     /// <param name="dispatcher">UI-thread marshaller / store binder.</param>
     /// <param name="logger">Logger.</param>
-    /// <param name="themeService">The theme service that applies the theme to the running app.</param>
+    /// <param name="themeReader">Read-only view of the active theme.</param>
+    /// <param name="themeApplier">The theme applier that switches the running app.</param>
     protected ThemeSettingsViewModelBase(
         IDispatcherAdapter dispatcher,
         ILogger logger,
-        IThemeService themeService)
+        IThemeReader themeReader,
+        IThemeApplier themeApplier)
         : base(dispatcher, logger)
     {
-        _themeService = themeService;
+        _themeReader = themeReader;
+        _themeApplier = themeApplier;
 
-        Select(state => _themeService.IsDark, v => IsDarkTheme = v);
+        Select(state => _themeReader.IsDark, v => IsDarkTheme = v);
     }
 
     /// <summary>
@@ -69,8 +73,8 @@ public abstract partial class ThemeSettingsViewModelBase : StoreSubscriberViewMo
     [RelayCommand]
     private void ApplyTheme()
     {
-        _themeService.Apply(Theme);
-        IsDarkTheme = _themeService.IsDark;
+        _themeApplier.Apply(Theme);
+        IsDarkTheme = _themeReader.IsDark;
     }
 
     /// <summary>
@@ -80,7 +84,7 @@ public abstract partial class ThemeSettingsViewModelBase : StoreSubscriberViewMo
     /// <param name="theme">The theme to apply (<c>"dark"</c> / <c>"light"</c> / <c>"system"</c>).</param>
     public void Apply(string theme)
     {
-        _themeService.Apply(theme);
-        IsDarkTheme = _themeService.IsDark;
+        _themeApplier.Apply(theme);
+        IsDarkTheme = _themeReader.IsDark;
     }
 }

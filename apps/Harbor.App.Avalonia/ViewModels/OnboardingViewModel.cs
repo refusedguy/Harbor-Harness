@@ -10,7 +10,7 @@ public sealed partial class OnboardingViewModel : Harbor.Desktop.Abstractions.Vi
 {
     public OnboardingViewModel(
         ICommonConfigStore configStore,
-        IThemeService theme,
+        IThemeApplier theme,
         IToastService toasts,
         ILogger<OnboardingViewModel> logger,
         IMessenger messenger,

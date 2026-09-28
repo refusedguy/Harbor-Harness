@@ -9,6 +9,7 @@ using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Application.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Sessions;
@@ -166,6 +167,19 @@ public class AppHostDiTests
     {
         await GetHostAsync();
         await Assert.That(Services.GetService<ThemeService>()).IsNotNull();
+    }
+
+    /// <summary>#469: every theme role aliases the one ThemeService singleton.</summary>
+    [Test]
+    public async Task BuildAsync_Registers_ThemeRoles_AsTheSameSingleton()
+    {
+        await GetHostAsync();
+        var concrete = Services.GetRequiredService<ThemeService>();
+
+        await Assert.That(Services.GetRequiredService<IThemeService>()).IsEqualTo(concrete);
+        await Assert.That(Services.GetRequiredService<IThemeReader>()).IsEqualTo(concrete);
+        await Assert.That(Services.GetRequiredService<IThemeApplier>()).IsEqualTo(concrete);
+        await Assert.That(Services.GetRequiredService<IThemeWatcher>()).IsEqualTo(concrete);
     }
 
     [Test]

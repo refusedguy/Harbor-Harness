@@ -1,12 +1,26 @@
 using CSharpFunctionalExtensions;
 using Harbor.DesignSystem;
 using Harbor.Ui.Framework.Projection;
-using Harbor.Ui.Framework.Services;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
-public sealed class JsonThemeLoader : IThemeService
+/// <summary>
+///     Static parser for terminal JSON theme documents. Pure: reads a theme
+///     document and returns the merged <see cref="HarborTheme" /> — it holds no
+///     state and applies nothing.
+/// </summary>
+/// <remarks>
+///     This type deliberately does <em>not</em> implement
+///     <see cref="Harbor.Ui.Framework.Services.IThemeService" /> (or its
+///     read / apply / watch role interfaces): the terminal renderer drives
+///     <c>TerminalColorPalette</c> directly, so there is no apply / watch role
+///     for it to honour. Previously it declared the fat interface anyway and
+///     threw <see cref="NotImplementedException" /> from every apply member —
+///     which crashed the moment anything registered it (see #469).
+/// </remarks>
+public static class JsonThemeLoader
 {
+    /// <summary>Built-in Harbor terminal palette, used as the merge fallback.</summary>
     public static HarborTheme Default { get; } = new HarborTheme(
         "harbor-terminal",
         Accent: new RgbColor(0x39, 0xBA, 0xE6),
@@ -35,47 +49,7 @@ public sealed class JsonThemeLoader : IThemeService
     public static RgbColor CostMid => Default.Warning;
     public static RgbColor CostHigh => Default.Error;
 
-    public string Current => TerminalColorPalette.Current.Name;
-    public bool IsDark => TerminalBackgroundProbe.RelativeLuminance(Default.Background) < TerminalBackgroundProbe.LightLuminanceThreshold;
-
-    public void Apply(string theme) => throw new NotImplementedException();
-    public void ApplyDark() => throw new NotImplementedException();
-    public void ApplyLight() => throw new NotImplementedException();
-    public void Toggle() => throw new NotImplementedException();
-    public void ApplyHds(string theme) => throw new NotImplementedException();
-    public void SetThemeVariant(bool isDark) => throw new NotImplementedException();
-
-    public event EventHandler<string>? ThemeJsonApplied;
-
-    public Result<string> LoadJson(string path)
-    {
-        try
-        {
-            if (!File.Exists(path))
-            {
-                return Result.Failure<string>($"theme file not found: {path}");
-            }
-
-            return Result.Success(File.ReadAllText(path));
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<string>($"theme load failed: {ex.Message}");
-        }
-    }
-
-    public Result ApplyJson(string json)
-    {
-        var result = Parse(json);
-        if (result.IsSuccess)
-        {
-            TerminalColorPalette.Apply(result.Value);
-            ThemeJsonApplied?.Invoke(this, json);
-        }
-
-        return result.IsSuccess ? Result.Success() : Result.Failure(result.Error);
-    }
-
+    /// <summary>Read and parse a theme JSON file from disk.</summary>
     public static Result<HarborTheme> LoadFile(string path)
     {
         try
@@ -93,6 +67,7 @@ public sealed class JsonThemeLoader : IThemeService
         }
     }
 
+    /// <summary>Parse a theme JSON string, falling back to the active palette.</summary>
     public static Result<HarborTheme> Parse(string json)
     {
         var result = ThemeJson.Parse(json, TerminalColorPalette.Current);
@@ -101,6 +76,7 @@ public sealed class JsonThemeLoader : IThemeService
             : Result.Failure<HarborTheme>(result.Error);
     }
 
+    /// <summary>Parse a theme JSON string, merging missing keys from <paramref name="fallback" />.</summary>
     public static Result<HarborTheme> Parse(string json, HarborTheme fallback)
     {
         ArgumentNullException.ThrowIfNull(fallback);
@@ -111,25 +87,4 @@ public sealed class JsonThemeLoader : IThemeService
     }
 
     internal static bool TryParseHex(string hex, out RgbColor color) => ThemeJson.TryParseHex(hex, out color);
-
-    public IDisposable Watch(string path) => Watch(path, onError: null);
-
-    public IDisposable Watch(string path, Action<string>? onError)
-    {
-        var watcher = new ThemeFileWatcher(path, ApplyResult, OnError);
-        return watcher;
-
-        void ApplyResult(HarborTheme theme)
-        {
-            TerminalColorPalette.Apply(theme);
-            ThemeJsonApplied?.Invoke(this, string.Empty);
-        }
-
-        void OnError(string error)
-        {
-            // Non-fatal: live-reload resumes on next write. Surfaced via the
-            // Watch error channel so callers can render the error line.
-            onError?.Invoke(error);
-        }
-    }
 }

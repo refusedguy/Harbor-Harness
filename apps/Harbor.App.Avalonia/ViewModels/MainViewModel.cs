@@ -23,7 +23,7 @@ namespace Harbor.App.Avalonia.ViewModels;
 public sealed record ShellInfrastructure(
     IDispatcherAdapter Dispatcher,
     ILogger Logger,
-    IThemeService ThemeService,
+    IThemeApplier ThemeApplier,
     IToastService ToastService,
     TuiEffectHost EffectHost,
     OverlayController OverlayController,
@@ -61,7 +61,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     private readonly CommandPaletteViewModel _commandPalette;
     private readonly OverlayController _overlayController;
     private readonly CostAnimator _costAnimator;
-    private readonly IThemeService _theme;
+    private readonly IThemeApplier _themeApplier;
     private readonly IToastService _toasts;
     private readonly AvaloniaContentHost _contentHost;
     private readonly IMessenger _messenger;
@@ -237,7 +237,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         // tab strip and IsVisible bindings follow (CommandPalette_Enter test).
         _contentHost.RouteNavigated += route => Dispatcher.Post(() => ActiveView = route);
         _effects = shell.EffectHost;
-        _theme = shell.ThemeService;
+        _themeApplier = shell.ThemeApplier;
         _toasts = shell.ToastService;
         _shellStatus = shell.ShellStatus;
         _overlayController = shell.OverlayController;
@@ -336,7 +336,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     /// <summary>B6: hide the money readout entirely while nothing was spent.</summary>
     public bool HasCost => CostUsd > 0m;
     public bool ShowLiveCost => ShowAnimatedCost && _displayCost > 0m;
-    public IThemeService ThemeService => _theme;
+    public IThemeApplier ThemeApplier => _themeApplier;
 
     protected override void OnStoreChanged(UiState state)
     {
@@ -388,7 +388,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     public void ToggleSidebar() => IsSidebarVisible = !IsSidebarVisible;
 
     [RelayCommand]
-    public void ToggleTheme() => _theme.Toggle();
+    public void ToggleTheme() => _themeApplier.Toggle();
 
     [RelayCommand]
     private void OpenCommandPalette()

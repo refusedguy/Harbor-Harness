@@ -35,6 +35,14 @@ public sealed class SetupChecklistOverlayLayer : IOverlayLayer
 
     public bool HitTransparent => false;
 
+    /// <summary>
+    ///     Read-only guide — no input barrier (mirrors the other overlay
+    ///     layers, which declare it explicitly rather than leaning on the
+    ///     <c>IOverlayLayer.IsModal</c> default member: a default interface
+    ///     member is not reachable through the concrete layer type).
+    /// </summary>
+    public bool IsModal => false;
+
     /// <summary>Routes a decoded key to the checklist (Esc/q/? dismiss, Enter closes through).</summary>
     public bool OnKey(in KeyEvent key) => _overlay.HandleKey(key);
 

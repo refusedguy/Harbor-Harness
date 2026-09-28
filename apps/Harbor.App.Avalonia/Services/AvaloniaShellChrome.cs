@@ -10,13 +10,13 @@ internal sealed class AvaloniaShellChrome : IShellChrome
 {
     private readonly IContentHost _contentHost;
     private readonly OverlayController _overlayController;
-    private readonly IThemeService _theme;
+    private readonly IThemeApplier _theme;
     private readonly ILogger<AvaloniaShellChrome> _logger;
 
     public AvaloniaShellChrome(
         IContentHost contentHost,
         OverlayController overlayController,
-        IThemeService theme,
+        IThemeApplier theme,
         ILogger<AvaloniaShellChrome> logger)
     {
         _contentHost = contentHost;

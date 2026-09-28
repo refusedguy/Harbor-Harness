@@ -77,6 +77,11 @@ internal static class ServiceRegistration
         services.AddSingleton<IMessenger, WeakReferenceMessenger>();
         services.AddSingleton<ThemeService>();
         services.AddSingleton<IThemeService>(sp => sp.GetRequiredService<ThemeService>());
+        // Role aliases over the one ThemeService singleton (#469): consumers
+        // depend on the narrowest role they actually use (ISP).
+        services.AddSingleton<IThemeReader>(sp => sp.GetRequiredService<ThemeService>());
+        services.AddSingleton<IThemeApplier>(sp => sp.GetRequiredService<ThemeService>());
+        services.AddSingleton<IThemeWatcher>(sp => sp.GetRequiredService<ThemeService>());
         services.AddSingleton<DialogService>();
         services.AddSingleton<IDialogService>(sp => sp.GetRequiredService<DialogService>());
         services.AddSingleton<AvaloniaFilePicker>();
