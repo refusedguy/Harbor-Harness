@@ -231,8 +231,8 @@ public sealed class ChatScreenBridge : IDisposable
                 break;
 
             case ToolExecutionEndEvent execEnd:
-                // [UX5] #265: a live child end closes its transcript line;
-                // only the task's own end completes the card.
+                // [UX5] #265: a live child end only closes its transcript line.
+                // Only the task's own end completes the card.
                 if (_cards.TryGetRunningTask(out var finishedOwnerId)
                     && !string.Equals(execEnd.ToolCallId, finishedOwnerId, StringComparison.Ordinal)
                     && _cards.NoteTaskChildEnd(finishedOwnerId, execEnd.ToolCallId, execEnd.IsError))

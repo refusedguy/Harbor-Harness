@@ -345,16 +345,10 @@ internal sealed class ToolCardTracker
         }
         else if (ts.Running.Count == 1)
         {
-            string suffix = $"› {ts.LastChildTool}";
-            foreach (var run in ts.Running.Values)
-            {
-                suffix = string.IsNullOrEmpty(run.Summary)
-                    ? $"› {run.ToolName}"
-                    : $"› {run.ToolName} {TrimSuffix(run.Summary, 32)}";
-                break;
-            }
-
-            card.Block.LiveSuffix = suffix;
+            var run = ts.Running.Values.First();
+            card.Block.LiveSuffix = string.IsNullOrEmpty(run.Summary)
+                ? $"› {run.ToolName}"
+                : $"› {run.ToolName} {TrimSuffix(run.Summary, 32)}";
             card.Block.LiveSuffixIsError = false;
         }
         else if (ts.Running.Count > 1)
