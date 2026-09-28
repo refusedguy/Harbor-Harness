@@ -85,6 +85,17 @@ public sealed class PromptBuffer
     public ReadOnlySpan<char> AsSpan() => _buf.AsSpan(0, _length);
 
     /// <summary>
+    /// Content check that never materialises the draft: true when the buffer
+    /// holds exactly <paramref name="text"/>. This is the answer
+    /// <c>SnapshotText() != text</c> wanted, without the O(len) string
+    /// allocation it paid for it (#489) — the length check short-circuits the
+    /// common "store text is the same, shorter/empty" case before any char
+    /// comparison.
+    /// </summary>
+    public bool IsEquivalentTo(ReadOnlySpan<char> text) =>
+        _length == text.Length && _buf.AsSpan(0, _length).SequenceEqual(text);
+
+    /// <summary>
     /// Text of the last completed readline kill (Ctrl+U/W/K, Alt+D).
     /// Backspace/DeleteForward are not kills; a no-op kill never clobbers the
     /// previous entry. Single-slot kill ring backing the composer's Ctrl+Y yank.
