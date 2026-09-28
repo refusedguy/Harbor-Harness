@@ -171,7 +171,8 @@ public ref struct FrameDiffEnumerator
                 // but FRONT must mirror it silently. A hint boundary can enter
                 // the row ON the tail half; repair the lead too so a wide pair
                 // is never half-mirrored (no ghost glyphs).
-                if (_front.At(_x, _y) != n)
+                Cell f = _front.At(_x, _y);
+                if (f != n)
                 {
                     _front.At(_x, _y) = n;
                 }
