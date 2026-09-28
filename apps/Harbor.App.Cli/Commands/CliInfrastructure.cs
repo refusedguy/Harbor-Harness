@@ -60,7 +60,7 @@ internal static class CliInfrastructure
                 services.GetRequiredService<TerminalInputSource>(),
                 services.GetRequiredService<ITerminalBackend>(),
                 services.GetRequiredService<IApprovalCoordinator>());
-        };
+        }
 
         return new ReplRunner(
             services.GetRequiredService<ILogger<ReplRunner>>(),
