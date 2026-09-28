@@ -85,7 +85,7 @@ jobs:
 
   build:
     needs: changes
-    if: needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch'
+    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -163,7 +163,7 @@ jobs:
 
   test:
     needs: [changes, build]
-    if: needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch'
+    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -318,7 +318,7 @@ jobs:
   # summary so numbers are never misread as whole-repo coverage.
   coverage:
     needs: [changes, build]
-    if: needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch'
+    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -463,7 +463,9 @@ jobs:
   # SpectreTUI suites are Linux-bound; the heavy Avalonia E2E stays on ubuntu.
   test-os:
     needs: [changes, build]
-    if: needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch'
+    # Dependabot action-bump PRs cannot break OS-specific behavior — the
+    # slowest matrix is skipped, linux shards still verify correctness.
+    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
@@ -557,7 +559,7 @@ jobs:
 
   perf-gate:
     needs: [changes, build]
-    if: (needs.changes.outputs.ui == 'true' || github.event_name == 'workflow_dispatch') && needs.build.result == 'success'
+    if: (needs.changes.outputs.ui == 'true' || github.event_name == 'workflow_dispatch') && needs.build.result == 'success' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
