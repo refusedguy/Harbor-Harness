@@ -67,6 +67,15 @@ public sealed class ScreenSession
     public int CurrentCols { get; private set; }
     public int CurrentRows { get; private set; }
 
+    /// <summary>
+    /// Inline-image placements for the current frame (KILLER_FEATURES §2.7
+    /// Feature 12, issue #387). <see cref="BeginFrame" /> drops last frame's
+    /// placements and <see cref="FlushFrameAsync" /> emits this frame's after
+    /// the cell diff, so the escape payloads ride the same backend write as
+    /// the cells and never enter dirty-rect accounting.
+    /// </summary>
+    public InlineImageLayer Images { get; } = new();
+
     /// <summary>Per-frame autoresize check (ratatui policy: the render tick is
     /// the single point of truth about terminal size).</summary>
     public void CheckAutoSize()
@@ -148,6 +157,8 @@ public sealed class ScreenSession
         _back.InvalidateAll();
         _engine.Front.InvalidateAll();
         _engine.ClearHints();
+        // A different grid means the terminal may no longer hold our bitmaps.
+        Images.InvalidateEmitted();
 
         if (horizontalShrink)
         {
@@ -174,6 +185,9 @@ public sealed class ScreenSession
         _back.InvalidateAll();
         _engine.Front.InvalidateAll();
         _engine.ClearHints();
+        // A resize reflows the terminal's own cell grid, so the bitmaps we
+        // placed are no longer guaranteed to sit where we left them.
+        Images.InvalidateEmitted();
 
         if (horizontalShrink)
         {
@@ -218,6 +232,8 @@ public sealed class ScreenSession
     {
         AdoptPendingSwap();
         ChatPalette.PinFrame();
+        Images.BeginFrame();
+        Images.FrameBounds = new Rect(0, 0, CurrentCols, CurrentRows);
         _writer.BeginFrame();
         _frameInFlight = true;
         if (_eraseBeforeNextFrame)
@@ -243,6 +259,12 @@ public sealed class ScreenSession
             _back.InvalidateAll();
             _engine.Front.InvalidateAll();
             _engine.ClearHints();
+
+            // #387: an unshipped frame's inline-image escape sequences never
+            // reached the terminal, so the next frame must re-send every
+            // placement — the emit cache must not dedupe against bytes the
+            // terminal never received.
+            Images.InvalidateEmitted();
         }
 
         ChatPalette.UnpinFrame();
@@ -276,6 +298,11 @@ public sealed class ScreenSession
         {
             ArmEffects();
             _engine.Flush(_back, _writer);
+            // Inline images (issue #387) ride this same write: the escape
+            // payloads are appended to the frame buffer AFTER the cell diff, so
+            // they leave through the same single backend call and never enter
+            // dirty-rect accounting.
+            Images.Emit(_writer);
             await _writer.EndFrameAsync(cancellationToken).ConfigureAwait(false);
             shipped = true;
         }
@@ -314,6 +341,7 @@ public sealed class ScreenSession
 
             ArmEffects();
             _engine.Flush(_back, _writer);
+            Images.Emit(_writer);
             _writer.EndFrame();
             shipped = true;
         }

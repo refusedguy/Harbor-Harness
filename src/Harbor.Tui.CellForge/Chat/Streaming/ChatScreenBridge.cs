@@ -564,6 +564,13 @@ public sealed class ChatScreenBridge : IDisposable
     public bool TryRouteToolCardKey(in KeyEvent key) => _cards.TryRouteToolCardKey(key);
 
     /// <summary>
+    /// Routes a plain Enter press to the newest image block so the host can open
+    /// the fullscreen zoom viewer (KILLER_FEATURES §2.7 Feature 12, issue #387).
+    /// Returns the block to show, or null when the feed holds no image row.
+    /// </summary>
+    public ImageBlock? TryOpenImageViewer(in KeyEvent key) => _cards.TryOpenImageViewer(key);
+
+    /// <summary>
     /// Routes a left-button press/click on a collapsible block's header to
     /// expand/collapse ([UX2] #262; mirrors <see cref="TryRouteApprovalClick"/>).
     /// Returns false when the click lands outside every collapsible header —

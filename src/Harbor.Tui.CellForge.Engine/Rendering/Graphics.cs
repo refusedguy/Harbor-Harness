@@ -88,6 +88,35 @@ public static class Graphics
     }
 
     /// <summary>
+    /// Cell-sized twin of <see cref="KittyPngInline(ReadOnlySpan{byte})" />: the
+    /// same chunked transfer, plus the destination box in cells (<c>c</c>/<c>r</c>)
+    /// and <c>C=1</c> so the placement does not move the cursor out from under
+    /// the frame's pen tracking. Empty / non-PNG input yields an empty result.
+    /// </summary>
+    public static byte[] KittyPngInline(ReadOnlySpan<byte> pngBytes, int cols, int rows)
+    {
+        if (pngBytes.IsEmpty || cols <= 0 || rows <= 0 || !PngSize(pngBytes).HasValue)
+        {
+            return [];
+        }
+
+        string b64 = Convert.ToBase64String(pngBytes);
+        string box = $"c={cols},r={rows},";
+        var sb = new StringBuilder(b64.Length + ((b64.Length / KittyChunkChars) * (box.Length + 16)) + 32);
+        for (int offset = 0; offset < b64.Length; offset += KittyChunkChars)
+        {
+            int len = Math.Min(KittyChunkChars, b64.Length - offset);
+            sb.Append(EscChar).Append("_Gf=100,a=T,C=1,").Append(box);
+            sb.Append("m=");
+            sb.Append(offset + len < b64.Length ? '1' : '0');
+            sb.Append(';').Append(b64, offset, len);
+            sb.Append(EscChar).Append('\\');
+        }
+
+        return Encoding.ASCII.GetBytes(sb.ToString());
+    }
+
+    /// <summary>
     /// Encodes 24-bit RGB bytes as a complete Sixel sequence (DCS header,
     /// raster attributes, palette definitions, body, ST terminator).
     ///

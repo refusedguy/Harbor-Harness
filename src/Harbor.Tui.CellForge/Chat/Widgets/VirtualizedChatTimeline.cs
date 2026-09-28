@@ -127,6 +127,15 @@ public sealed class VirtualizedChatTimeline
     /// </summary>
     public bool ShowSeparators { get; set; }
 
+    /// <summary>
+    /// Inline-image sink handed to block painters (KILLER_FEATURES §2.7
+    /// Feature 12, issue #387). Null by default — every pre-existing timeline
+    /// test and golden keeps painting the text card. The interactive host
+    /// points it at the session's <c>ScreenSession.Images</c> so a block with
+    /// real image bytes draws them through the terminal's graphics protocol.
+    /// </summary>
+    public IInlineImageSink? InlineImages { get; set; }
+
     /// <summary>Frame tick handed to block painters.</summary>
     public long CurrentTick { get; set; }
 
@@ -638,7 +647,7 @@ public sealed class VirtualizedChatTimeline
                 }
             }
 
-            var ctx = new BlockPaintContext(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), CurrentTick, skipRows, ShowSeparators);
+            var ctx = new BlockPaintContext(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), CurrentTick, skipRows, ShowSeparators, InlineImages);
             block.Paint(ctx);
 
             // Narrow (per-widget) damage bookkeeping: entrance fades and

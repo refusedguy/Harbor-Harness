@@ -179,6 +179,22 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // the next frame takes the conservative full-scan path.
         host._broadDamageNextFrame = true;
 
+        // Image zoom viewer (issue #387) is MODAL, so it forms the outermost
+        // input barrier: it claims keys BEFORE the palette, the setup guide,
+        // the approval gate, the tool cards and the composer — a zoomed
+        // screenshot must never be typed into, and no key may reach the agent
+        // while it is up. Esc/q/Enter close; +/-/arrows zoom. An unconsumed
+        // key is still swallowed (the barrier contract: panels beneath starve).
+        if (host.Images.Visible)
+        {
+            if (host.Images.HandleKey(key))
+            {
+                host._wake.Writer.TryWrite(null);
+            }
+
+            return;
+        }
+
         // Command palette: ctrl+p toggles; a visible palette claims keys first
         // so Enter/Esc/letters never leak into the approval gate or composer.
         if (key.Key == KeyCode.Char && key.Modifiers == KeyModifiers.Ctrl
@@ -219,6 +235,21 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // composer and the guide stays up until the user closes it.
         if (host.Setup.HandleKey(key))
         {
+            host._wake.Writer.TryWrite(null);
+            return;
+        }
+
+        // Image zoom viewer OPEN gesture (issue #387): a plain Enter on an empty
+        // composer opens the viewer on the newest image row. Routed before the
+        // tool-card expand gesture so an image that is the newer of the two
+        // wins — a screenshot is the thing you asked to look at. The viewer
+        // owns no scroll/selection/UiState, so closing it hands the feed back
+        // exactly as it was: nothing to restore, nothing to leak.
+        if (host._composer.Buffer.AsSpan().IsEmpty
+            && host.Bridge.TryOpenImageViewer(key) is { } imageBlock)
+        {
+            host.Images.Show(imageBlock, host.ScreenSession.Images);
+            host._broadDamageNextFrame = true;
             host._wake.Writer.TryWrite(null);
             return;
         }

@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -6,7 +7,7 @@ namespace Harbor.Tui.CellForge.Tests;
 
 public class ImageBlockTests
 {
-    private static byte[] PngHeader(uint width, uint height)
+    internal static byte[] PngHeader(uint width, uint height)
     {
         var data = new byte[24];
         Signature(data);
@@ -91,6 +92,194 @@ public class ImageBlockTests
 
         string kindKind = new ImageBlock("f.png", "image/png", 1, PngHeader(2, 2)).Kind;
         await Assert.That(kindKind).IsEqualTo("image");
+    }
+
+    // ── #387: inline graphics through the terminal's own protocol ────────────
+
+    /// <summary>
+    /// The whole feature is one switch: a null sink, a sink reporting
+    /// <c>Enabled == false</c> and a live sink. All three are exercised
+    /// through the same block, so a regression in the fallback shows up here
+    /// rather than only in a graphics terminal.
+    /// </summary>
+    private sealed class RecordingSink : IInlineImageSink
+    {
+        private readonly InlineImageKind _kind;
+
+        public RecordingSink(InlineImageKind kind) => _kind = kind;
+
+        public bool Enabled { get; set; } = true;
+
+        public Rect FrameBounds { get; set; } = new(0, 0, 10_000, 10_000);
+
+        public List<(Rect Cells, string Payload)> Placed { get; } = [];
+
+        public int EncodeCalls { get; private set; }
+
+        public bool TryEncode(string name, string mimeType, ReadOnlySpan<byte> data, int cols, int rows, out byte[]? payload)
+        {
+            EncodeCalls++;
+            payload = InlineImageEncoder.Encode(_kind, name, data, cols, rows);
+            return payload is { Length: > 0 };
+        }
+
+        public Rect ClipToFrame(Rect cellRect) => cellRect.Intersect(FrameBounds);
+
+        public void Place(Rect cellRect, ReadOnlyMemory<byte> payload) =>
+            Placed.Add((cellRect, System.Text.Encoding.UTF8.GetString(payload.Span)));
+    }
+
+    [Test]
+    public async Task Graphics_Off_KeepsTheTwoLineTextCard()
+    {
+        var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480));
+        var sink = new RecordingSink(InlineImageKind.KittyApc) { Enabled = false };
+        var buffer = new ScreenBuffer(40, 6);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 6), 0, inlineImages: sink));
+
+        await Assert.That(sink.Placed).IsEmpty();
+        await Assert.That(sink.EncodeCalls).IsEqualTo(0);
+        await Assert.That(GridDump.Art(buffer)).Contains("◉ screenshot.png");
+        await Assert.That(GridDump.Art(buffer)).Contains("640×480");
+        // Measure keeps the pre-#387 height so the timeline layout is untouched.
+        await Assert.That(block.Measure(40).MinLines).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Graphics_On_PlacesScaledPayload_AndKeepsTheCaption()
+    {
+        var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480));
+        var sink = new RecordingSink(InlineImageKind.KittyApc);
+        const int H = 20;
+        var buffer = new ScreenBuffer(40, H);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, H), 0, inlineImages: sink));
+
+        await Assert.That(sink.Placed.Count).IsEqualTo(1);
+        var (cells, payload) = sink.Placed[0];
+
+        // 640×480 at 38 usable columns ⇒ 480/640 × 38 / 2 (cell aspect) ≈ 14
+        // rows, always inside the rect the block was handed.
+        await Assert.That(cells.Width).IsEqualTo(38);
+        await Assert.That(cells.Height).IsEqualTo(14);
+        await Assert.That(cells.Y).IsGreaterThanOrEqualTo(0);
+        await Assert.That(cells.Bottom).IsLessThanOrEqualTo(H);
+        await Assert.That(payload).StartsWith("\u001B_Gf=100,a=T,C=1,c=38,r=14,");
+
+        // Caption survives under the bitmap — that is the whole point of a card.
+        await Assert.That(GridDump.Art(buffer)).Contains("640×480");
+        // The graphic rows are blanked so no stale card text shows through.
+        string topRow = GridDump.Art(buffer).Split('\n')[0];
+        await Assert.That(topRow.Trim()).IsEmpty();
+        // ...while the caption row itself is still text.
+        await Assert.That(GridDump.Art(buffer).Split('\n')[H - 1]).Contains("640×480");
+    }
+
+    [Test]
+    public async Task Graphics_On_ReusesTheEncodedPayload_AcrossFrames()
+    {
+        var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480));
+        var sink = new RecordingSink(InlineImageKind.Osc1337);
+        var buffer = new ScreenBuffer(40, 20);
+
+        for (int tick = 0; tick < 3; tick++)
+        {
+            block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 20), tick, inlineImages: sink));
+        }
+
+        // Three frames, one encode: the payload is cached per block, not rebuilt
+        // per frame (the "no image byte array retained per frame" contract).
+        await Assert.That(sink.EncodeCalls).IsEqualTo(1);
+        await Assert.That(sink.Placed.Count).IsEqualTo(3);
+        await Assert.That(sink.Placed[0].Payload).Contains("width=38;height=14;");
+    }
+
+    [Test]
+    public async Task Graphics_On_TmuxFallback_StaysOnTheTextCard()
+    {
+        // The probe refuses inside a multiplexer; a session started under tmux
+        // therefore hands the block a disabled sink. Same block, same bytes,
+        // text card — the behaviour tmux users already have.
+        InlineImageKind kind = InlineImageProbe.Detect(name => name == "TMUX" ? "1" : null);
+        await Assert.That(kind).IsEqualTo(InlineImageKind.None);
+
+        var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480));
+        var sink = new RecordingSink(kind);
+        var buffer = new ScreenBuffer(40, 6);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 6), 0, inlineImages: sink));
+
+        await Assert.That(sink.Enabled).IsFalse();
+        await Assert.That(sink.Placed).IsEmpty();
+        await Assert.That(GridDump.Art(buffer)).Contains("◉ screenshot.png");
+    }
+
+    [Test]
+    public async Task Graphics_On_CorruptHeader_DegradesToCardWithWarningMarker()
+    {
+        // A .png whose bytes are not a PNG: mime claims an image, no header
+        // parses. Must degrade to the card, never throw.
+        var block = new ImageBlock("shots/broken.png", "image/png", 900, [0x00, 0x01, 0x02, 0x03, 0x04]);
+        await Assert.That(block.IsDamaged).IsTrue();
+        await Assert.That(block.PixelWidth).IsEqualTo(0);
+
+        var sink = new RecordingSink(InlineImageKind.KittyApc);
+        var buffer = new ScreenBuffer(40, 6);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 6), 0, inlineImages: sink));
+
+        await Assert.That(sink.Placed).IsEmpty();
+        string art = GridDump.Art(buffer);
+        await Assert.That(art).Contains("◉ broken.png");
+        await Assert.That(art).Contains("⚠");
+    }
+
+    [Test]
+    public async Task Graphics_On_KittyRefusesJpeg_KeepsTheCard()
+    {
+        // kitty speaks PNG only (f=100). A JPEG under kitty must degrade to
+        // the card rather than emit a payload the terminal will reject. The
+        // box is TALL enough for the graphic path, so the mime — not the
+        // geometry — is what forces the fallback.
+        byte[] jpeg = JpegProbeTests.Jpeg(800, 600);
+        var block = new ImageBlock("shots/photo.jpg", "image/jpeg", 4096, jpeg);
+        var sink = new RecordingSink(InlineImageKind.KittyApc);
+        var buffer = new ScreenBuffer(40, 20);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 20), 0, inlineImages: sink));
+
+        await Assert.That(block.GraphicHeight(40)).IsGreaterThan(0); // the gate passed
+        await Assert.That(sink.Placed).IsEmpty();
+        await Assert.That(GridDump.Art(buffer)).Contains("◉ photo.jpg");
+    }
+
+    [Test]
+    public async Task Graphics_On_FailedEncodeIsMemoized_NotRetriedEveryFrame()
+    {
+        byte[] jpeg = JpegProbeTests.Jpeg(800, 600);
+        var block = new ImageBlock("shots/photo.jpg", "image/jpeg", 4096, jpeg);
+        var sink = new RecordingSink(InlineImageKind.KittyApc);
+        var buffer = new ScreenBuffer(40, 20);
+
+        for (int tick = 0; tick < 4; tick++)
+        {
+            block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 20), tick, inlineImages: sink));
+        }
+
+        // A payload the protocol cannot carry must cost ONE attempt, not one
+        // per frame — the miss is memoized exactly like the hit.
+        await Assert.That(sink.EncodeCalls).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task GraphicHeight_DerivesFromProbedPixels_AndClamps()
+    {
+        var wide = new ImageBlock("a.png", "image/png", 100, PngHeader(1000, 100));
+        await Assert.That(wide.GraphicHeight(60)).IsEqualTo(3); // 58 × 0.1 / 2 ≈ 2.9
+        await Assert.That(wide.GraphicHeight(60)).IsLessThanOrEqualTo(ImageBlock.MaxGraphicRows);
+
+        var tall = new ImageBlock("b.png", "image/png", 100, PngHeader(100, 4000));
+        await Assert.That(tall.GraphicHeight(60)).IsEqualTo(ImageBlock.MaxGraphicRows);
+
+        // No probed pixels ⇒ no graphic, whatever the sink says.
+        var corrupt = new ImageBlock("c.png", "image/png", 100, [1, 2, 3]);
+        await Assert.That(corrupt.GraphicHeight(60)).IsEqualTo(0);
     }
 }
 

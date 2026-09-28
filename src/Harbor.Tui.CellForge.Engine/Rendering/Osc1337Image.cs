@@ -34,7 +34,16 @@ public static class Osc1337Image
     /// ESC, BEL and control chars are replaced so the key=value envelope
     /// cannot be broken out of).</param>
     /// <param name="data">Raw PNG/JPEG bytes — the terminal sniffs the format.</param>
-    public static byte[]? Encode(string name, ReadOnlySpan<byte> data)
+    public static byte[]? Encode(string name, ReadOnlySpan<byte> data) => Encode(name, data, 0, 0);
+
+    /// <summary>
+    /// Cell-sized twin: adds <c>width</c>/<c>height</c> in character cells
+    /// (the iTerm2 spec reads a bare <c>N</c> as cells) so the image is scaled
+    /// into the block rect. Non-positive dimensions keep the natural-size
+    /// envelope, which makes this a strict superset of
+    /// <see cref="Encode(string, ReadOnlySpan{byte})" />.
+    /// </summary>
+    public static byte[]? Encode(string name, ReadOnlySpan<byte> data, int cols, int rows)
     {
         if (data.IsEmpty || data.Length > MaxDataBytes)
         {
@@ -48,7 +57,8 @@ public static class Osc1337Image
         }
 
         string payload = Convert.ToBase64String(data);
-        string header = $"{EscChar}]1337;File=name={safeName};size={data.Length};inline=1;preserveAspectRatio=1:";
+        string box = cols > 0 && rows > 0 ? $"width={cols};height={rows};" : string.Empty;
+        string header = $"{EscChar}]1337;File=name={safeName};size={data.Length};{box}inline=1;preserveAspectRatio=1:";
         int total = Encoding.ASCII.GetByteCount(header) + Encoding.UTF8.GetMaxByteCount(payload.Length) + 1;
         var bytes = new byte[total];
         int len = Encoding.ASCII.GetBytes(header, bytes);

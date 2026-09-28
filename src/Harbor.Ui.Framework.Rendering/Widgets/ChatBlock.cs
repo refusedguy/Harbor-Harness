@@ -24,13 +24,14 @@ public readonly record struct BlockMeasure(int MinLines, int MaxLines, bool IsEx
 /// </summary>
 public readonly struct BlockPaintContext
 {
-    public BlockPaintContext(ScreenBuffer buffer, Rect rect, long tick, int skipRows = 0, bool showSeparators = false)
+    public BlockPaintContext(ScreenBuffer buffer, Rect rect, long tick, int skipRows = 0, bool showSeparators = false, IInlineImageSink? inlineImages = null)
     {
         Buffer = buffer;
         Rect = rect;
         Tick = tick;
         SkipRows = Math.Max(0, skipRows);
         ShowSeparators = showSeparators;
+        InlineImages = inlineImages;
     }
 
     public ScreenBuffer Buffer { get; }
@@ -53,6 +54,16 @@ public readonly struct BlockPaintContext
     /// <c>VirtualizedChatTimeline.ShowSeparators</c>).
     /// </summary>
     public bool ShowSeparators { get; }
+
+    /// <summary>
+    /// Inline-image sink for the current frame (KILLER_FEATURES §2.7 Feature
+    /// 12), or null when the host wires no graphics. Blocks holding image bytes
+    /// place them here instead of painting a text card; a null or
+    /// <c>Enabled == false</c> sink is the single fallback switch, so a block
+    /// never branches on the terminal protocol itself. Optional and additive —
+    /// every pre-existing call site keeps compiling and painting identically.
+    /// </summary>
+    public IInlineImageSink? InlineImages { get; }
 }
 
 /// <summary>
