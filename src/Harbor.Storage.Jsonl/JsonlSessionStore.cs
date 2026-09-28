@@ -22,9 +22,9 @@ namespace Harbor.Storage.Jsonl;
 ///         <see cref="CreateAsync" />, <see cref="DeleteAsync" />) now observe
 ///         the supplied <see cref="CancellationToken" /> via
 ///         <see cref="CancellationToken.ThrowIfCancellationRequested" /> guards
-///         before each <c>File.*</c> call. <c>File.AppendAllText</c> itself is
-///         not CT-aware — the guard at least prevents a write that has already
-///         been cancelled by the time the lock is acquired.
+///         before each <c>File.*</c> call; appends (#177) additionally pass the
+///         token to <c>File.AppendAllBytesAsync</c>, so cancellation is observed
+///         during the write itself, not just before it.
 ///     </para>
 /// </remarks>
 public sealed class JsonlSessionStore : ISessionStore
@@ -81,8 +81,8 @@ public sealed class JsonlSessionStore : ISessionStore
     ///     <b>CT note (§3.4):</b> the supplied <paramref name="ct" /> is
     ///     observed via <see cref="CancellationToken.ThrowIfCancellationRequested" />
     ///     before the directory-create and file-write.
-    ///     <c>Directory.CreateDirectory</c> and <c>File.AppendAllText</c> are
-    ///     synchronous I/O that do not accept a CT.
+    ///     <c>Directory.CreateDirectory</c> is synchronous I/O that does not accept
+    ///     a CT; the header append itself is CT-aware (<c>File.AppendAllBytesAsync</c>).
     ///     <b>ROP-B П.11:</b> the whole body rides <see cref="Result.Try" />
     ///     with <see cref="Harbor.Abstractions.Results.ResultErrors.Message" />,
     ///     so cancellation propagates as <see cref="OperationCanceledException" />
@@ -127,7 +127,10 @@ public sealed class JsonlSessionStore : ISessionStore
                     session.GitIsDirty,
                     session.Kind);
 
-                File.AppendAllText(sessionFile, JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry) + "\n");
+                // #177: source-gen straight to UTF-8 bytes + newline byte, async
+                // append — no intermediate string, no Serialize + concat.
+                byte[] line = SessionFileIO.EncodeLine(header, JsonlCodecContext.Default.SessionHeaderEntry);
+                await File.AppendAllBytesAsync(sessionFile, line, ct).ConfigureAwait(false);
             }
             finally
             {
@@ -259,7 +262,10 @@ public sealed class JsonlSessionStore : ISessionStore
                     message.CreatedAt,
                     JsonlMessageCodec.SerializeMessagePayload(message));
 
-                File.AppendAllText(sessionFile, JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry) + "\n");
+                // #177: source-gen straight to UTF-8 bytes + newline byte, async
+                // append — no intermediate string, no Serialize + concat.
+                byte[] line = SessionFileIO.EncodeLine(entry, JsonlCodecContext.Default.MessageEntry);
+                await File.AppendAllBytesAsync(sessionFile, line, ct).ConfigureAwait(false);
             }
             finally
             {
@@ -329,8 +335,10 @@ public sealed class JsonlSessionStore : ISessionStore
                     message.CreatedAt,
                     JsonlMessageCodec.SerializeMessagePayload(message));
 
-                kept.Add(JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry));
-                SessionFileIO.WriteAllLinesAtomic(sessionFile, kept);
+                // #177: pre-serialized UTF-8 entry + line-wise atomic rewrite — no
+                // List<string> join of the new entry.
+                byte[] entryBytes = JsonSerializer.SerializeToUtf8Bytes(entry, JsonlCodecContext.Default.MessageEntry);
+                SessionFileIO.WriteLinesAtomic(sessionFile, kept, entryBytes);
                 return true;
             }
             finally

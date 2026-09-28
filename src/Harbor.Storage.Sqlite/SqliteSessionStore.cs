@@ -78,7 +78,7 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@ver", "0.2.0");
                 cmd.Parameters.AddWithValue("@created", session.CreatedAt.ToString("O"));
                 cmd.Parameters.AddWithValue("@updated", session.UpdatedAt.ToString("O"));
-                cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(session.Metadata, SqliteMappers.JsonOptions));
+                cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(session.Metadata, SqliteMappers.SessionMetadataInfo));
                 cmd.ExecuteNonQuery();
 
                 return session;
@@ -177,7 +177,7 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : message is AssistantMessage a ? a.Model : DBNull.Value);
                 cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
                 cmd.Parameters.AddWithValue("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds());
-                cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), SqliteMappers.JsonOptions));
+                cmd.Parameters.AddWithValue("@payload", SqliteMappers.SerializeMessage(message));
                 cmd.ExecuteNonQuery();
 
                 // Update session.updated_at
@@ -222,7 +222,7 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@role", message.Role);
                 cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
                 cmd.Parameters.AddWithValue("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds());
-                cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), SqliteMappers.JsonOptions));
+                cmd.Parameters.AddWithValue("@payload", SqliteMappers.SerializeMessage(message));
                 return cmd.ExecuteNonQuery();
             }, ResultErrors.Message)
             .Bind(rows => rows == 0
@@ -429,7 +429,7 @@ public sealed class SqliteSessionStore : ISessionStore
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = "UPDATE sessions SET metadata = @meta WHERE id = @id";
                 cmd.Parameters.AddWithValue("@id", sessionId);
-                cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(metadata, SqliteMappers.JsonOptions));
+                cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(metadata, SqliteMappers.SessionMetadataInfo));
                 return cmd.ExecuteNonQuery();
             }, ResultErrors.Message)
             .Bind(rows => rows == 0
