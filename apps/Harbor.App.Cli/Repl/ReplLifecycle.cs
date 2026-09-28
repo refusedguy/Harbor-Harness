@@ -132,6 +132,8 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         var inputReader = host.InputSource.Events;
 
         await RenderFrameAsync(ct).ConfigureAwait(false);
+        SnapshotFrameModel();
+        host._frameTicker.MarkRendered(Environment.TickCount64);
         ArmSpinner(spinnerTimer, animationClock);
 
         // EOF (pipe closed / Ctrl+D) stops INPUT waiting but must not cut off
@@ -139,6 +141,17 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         bool inputClosed = false;
         while (!host._quitRequested && !ct.IsCancellationRequested)
         {
+            // ENG7 (issue #278): per-iteration paint-state mutation ledger —
+            // any true bumps host._frameDirtySeq before the gated frame, so a
+            // wake with an unchanged model short-circuits with zero writes.
+            bool inputChanged = false;
+            bool eventsChanged = false;
+            bool imagesChanged = false;
+            bool themeChanged = false;
+            bool notified = false;
+            bool usageChanged = false;
+            bool retryChanged = false;
+
             Task<bool> inputWait = inputClosed
                 ? Task.FromResult(false)
                 : inputReader.WaitToReadAsync(ct).AsTask();
@@ -150,6 +163,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 while (inputReader.TryRead(out var evt))
                 {
                     await host.Input.HandleInputAsync(evt, ct).ConfigureAwait(false);
+                    inputChanged = true;
                 }
             }
             else if (completed == wakeWait && wakeWait.Result)
@@ -175,6 +189,8 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 {
                     await host.Titles.MaybeAutoTitleAsync(ct).ConfigureAwait(false);
                 }
+
+                eventsChanged = true;
             }
 
             // Inline images (osc-sprint §1337): attachments drained on the
@@ -182,15 +198,18 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             while (host.Bridge.TryTakePendingImage(out var image))
             {
                 await EmitInlineImageAsync(image, ct).ConfigureAwait(false);
+                imagesChanged = true;
             }
 
             host.Bridge.Tick(Environment.TickCount64);
+            string? retryBefore = host._status.Retry;
             host.Pipeline.UpdateRetryCountdown();
             if (host._themeReloadLine is { } themeLine)
             {
                 host._themeReloadLine = null;
                 host.Bridge.AppendSystemLine(themeLine);
                 host._broadDamageNextFrame = true; // live theme swap re-projects every style
+                themeChanged = true;
             }
 
             // Long-turn notification (osc-sprint §777): staged by the timer
@@ -200,14 +219,26 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 await host.Backend.WriteAsync(Utf8(notifySeq), ct).ConfigureAwait(false);
                 host.Bridge.AppendSystemLine("⏱ ход идёт дольше 30 с — уведомление отправлено");
                 host._broadDamageNextFrame = true;
+                notified = true;
             }
 
             if (host.Pipeline.RefreshUsageIfDirty())
             {
                 host._broadDamageNextFrame = true; // status + sidebar both re-render
+                usageChanged = true;
             }
 
-            await RenderFrameAsync(ct).ConfigureAwait(false);
+            if (!string.Equals(retryBefore, host._status.Retry, StringComparison.Ordinal))
+            {
+                retryChanged = true;
+            }
+
+            if (inputChanged || eventsChanged || imagesChanged || themeChanged || notified || usageChanged || retryChanged)
+            {
+                host._frameDirtySeq++;
+            }
+
+            await RenderFrameGatedAsync(animationClock, ct).ConfigureAwait(false);
             ArmSpinner(spinnerTimer, animationClock);
 
             if (inputClosed && !host.Pipeline.IsBusy)
@@ -300,6 +331,61 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     /// </summary>
     internal static bool ShouldKeepHeartbeat(StatusBarMode mode, bool mascotAnimating) =>
         mode is StatusBarMode.Running or StatusBarMode.Compacting || mascotAnimating;
+
+    /// <summary>
+    /// ENG7 (issue #278) gated frame — render on tick, not on event. A wake
+    /// whose model version (TEA store revision + pump dirty seq + geometry)
+    /// equals the last rendered one short-circuits: no solve/paint/flush, so
+    /// idle produces zero backend writes. Forced frames (ENG5 animation clock
+    /// running, layout springs settling, geometry change) bypass the version
+    /// check — wall-clock visuals must never freeze — but still pace through
+    /// the 60 fps ticker: a dirty frame inside the interval is deferred with
+    /// <see cref="FrameTicker.MsUntilDue"/>, never dropped. Painted output is
+    /// byte-identical to the ungated loop: every mutation still renders, only
+    /// redundant frames disappear.
+    /// </summary>
+    private async Task RenderFrameGatedAsync(AnimationClock animationClock, CancellationToken ct)
+    {
+        long nowMs = Environment.TickCount64;
+        // Idempotent (ApplyResize dedups); RenderFrameAsync repeats it — the
+        // gate must see geometry changes before deciding to skip.
+        host.ScreenSession.CheckAutoSize();
+        int cols = host.ScreenSession.CurrentCols;
+        int rows = host.ScreenSession.CurrentRows;
+
+        bool versionChanged = host._replStore.State.Revision != host._lastFrameStoreRevision
+            || host._frameDirtySeq != host._lastFrameDirtySeq;
+        bool force = animationClock.IsRunning
+            || host.Screen.Tree.IsAnimating
+            || cols != host._lastFrameCols
+            || rows != host._lastFrameRows;
+
+        if (!versionChanged && !force)
+        {
+            host._frameTicker.MarkSuppressed();
+            return;
+        }
+
+        long waitMs = host._frameTicker.MsUntilDue(nowMs);
+        if (waitMs > 0)
+        {
+            host._frameTicker.MarkPaced();
+            await Task.Delay((int)Math.Min(waitMs, int.MaxValue), ct).ConfigureAwait(false);
+        }
+
+        await RenderFrameAsync(ct).ConfigureAwait(false);
+        SnapshotFrameModel();
+        host._frameTicker.MarkRendered(Environment.TickCount64);
+    }
+
+    /// <summary>Adopts the current model version as last-rendered (ENG7 gate baseline).</summary>
+    private void SnapshotFrameModel()
+    {
+        host._lastFrameStoreRevision = host._replStore.State.Revision;
+        host._lastFrameDirtySeq = host._frameDirtySeq;
+        host._lastFrameCols = host.ScreenSession.CurrentCols;
+        host._lastFrameRows = host.ScreenSession.CurrentRows;
+    }
 
     private async ValueTask RenderFrameAsync(CancellationToken ct)
     {
