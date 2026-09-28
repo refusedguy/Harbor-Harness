@@ -52,7 +52,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Base graph: abstractions + contracts + application pipeline + desktop config types (#188: no Harbor.Core facade) -->
+    <!-- Base graph: abstractions + contracts + application pipeline + desktop config types (composition root: references Harbor.Application + Harbor.Registries directly) -->
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
     <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
