@@ -20,6 +20,11 @@ public sealed class ScreenSession
     private readonly Func<(int Cols, int Rows)>? _sizeSource;
     private bool _eraseBeforeNextFrame;
 
+    /// <summary>A frame is open between <see cref="BeginFrame"/> and its
+    /// flush — gates <see cref="AbortFrame"/> so the scope stays idempotent
+    /// after a shipped frame.</summary>
+    private bool _frameInFlight;
+
     public ScreenSession(AnsiWriter writer, int cols, int rows, Func<(int Cols, int Rows)>? sizeSource = null)
     {
         _writer = writer;
@@ -169,11 +174,42 @@ public sealed class ScreenSession
     /// <summary>Starts a frame: swap adoption at the frame boundary, palette
     /// snapshot pin (theme swaps cannot tear a frame mid-paint), sync-on,
     /// optional erase-in-display first.</summary>
-    public void BeginFrame()
+    public void BeginFrame() => BeginFrameCore();
+
+    /// <summary>
+    /// Exception-safe <see cref="BeginFrame"/>. The pin (and the writer frame
+    /// it belongs to) is released when the returned scope leaves scope, on
+    /// EVERY exit path — a throw between begin and flush used to leave the
+    /// render thread pinned for the rest of the session (#458: the stale
+    /// snapshot froze the theme until restart, and the half-written frame
+    /// corrupted the next diff).
+    /// </summary>
+    public FrameScope BeginFrameScope()
+    {
+        BeginFrameCore();
+        return new FrameScope(this);
+    }
+
+    /// <summary>
+    /// Ends a frame that will never ship: unpins the palette and reopens the
+    /// diff cleanly, so the next frame is a full repaint instead of a diff
+    /// against a half-written buffer. Idempotent — a no-op once
+    /// <see cref="FlushFrame"/> has closed the frame.
+    /// </summary>
+    public void AbortFrame()
+    {
+        if (_frameInFlight)
+        {
+            CloseFrame(shipped: false);
+        }
+    }
+
+    private void BeginFrameCore()
     {
         AdoptPendingSwap();
         ChatPalette.PinFrame();
         _writer.BeginFrame();
+        _frameInFlight = true;
         if (_eraseBeforeNextFrame)
         {
             _writer.EmitEraseInDisplay(2);
@@ -181,13 +217,62 @@ public sealed class ScreenSession
         }
     }
 
+    /// <summary>
+    /// Frame teardown — reached on EVERY exit path (#458: the unpin used to
+    /// live at the tail of <c>FlushFrame*</c>, so a throw in between left the
+    /// palette pinned on the render thread until process exit). A frame that
+    /// never shipped invalidates both grids: the diff mirrors FRONT cell by
+    /// cell as it drains, so a half-written frame would otherwise corrupt the
+    /// next one.
+    /// </summary>
+    private void CloseFrame(bool shipped)
+    {
+        _frameInFlight = false;
+        if (!shipped)
+        {
+            _back.InvalidateAll();
+            _engine.Front.InvalidateAll();
+            _engine.ClearHints();
+        }
+
+        ChatPalette.UnpinFrame();
+    }
+
+    /// <summary>Frame-scope handle from <see cref="BeginFrameScope"/>: ships the
+    /// frame through <see cref="FlushAsync"/> (or <see cref="Flush"/>), and on
+    /// <see cref="Dispose"/> aborts it when no flush ran — the exception path.
+    /// Allocation-free struct: frames are the hot path.</summary>
+    public readonly struct FrameScope : IDisposable
+    {
+        private readonly ScreenSession? _session;
+
+        internal FrameScope(ScreenSession session) => _session = session;
+
+        /// <summary>Ships the frame; the scope's later dispose is then a no-op.</summary>
+        public void Flush() => _session?.FlushFrame();
+
+        /// <summary>Ships the frame; the scope's later dispose is then a no-op.</summary>
+        public ValueTask FlushAsync(CancellationToken cancellationToken = default) =>
+            _session is null ? ValueTask.CompletedTask : _session.FlushFrameAsync(cancellationToken);
+
+        public void Dispose() => _session?.AbortFrame();
+    }
+
     /// <summary>Diffs BACK against FRONT and ships the frame in one write.</summary>
     public async ValueTask FlushFrameAsync(CancellationToken cancellationToken = default)
     {
-        ArmEffects();
-        _engine.Flush(_back, _writer);
-        await _writer.EndFrameAsync(cancellationToken).ConfigureAwait(false);
-        ChatPalette.UnpinFrame();
+        bool shipped = false;
+        try
+        {
+            ArmEffects();
+            _engine.Flush(_back, _writer);
+            await _writer.EndFrameAsync(cancellationToken).ConfigureAwait(false);
+            shipped = true;
+        }
+        finally
+        {
+            CloseFrame(shipped);
+        }
     }
 
     /// <summary>
@@ -197,10 +282,18 @@ public sealed class ScreenSession
     /// </summary>
     public void FlushFrame()
     {
-        ArmEffects();
-        _engine.Flush(_back, _writer);
-        _writer.EndFrame();
-        ChatPalette.UnpinFrame();
+        bool shipped = false;
+        try
+        {
+            ArmEffects();
+            _engine.Flush(_back, _writer);
+            _writer.EndFrame();
+            shipped = true;
+        }
+        finally
+        {
+            CloseFrame(shipped);
+        }
     }
 
     /// <summary>Arms the effect pipeline only when it holds active effects —

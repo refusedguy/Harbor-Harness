@@ -91,11 +91,21 @@ public static class ChatPalette
     /// catalog but cannot tear the pinned frame; the new catalog is picked up
     /// by the next pin. Lock-free — a volatile field read plus a ThreadStatic
     /// assignment; callers on other threads are unaffected.
+    ///
+    /// Callers that own a begin/flush span should hold the pair in a
+    /// <c>try/finally</c> (or <c>ScreenSession.BeginFrameScope</c>, which
+    /// does it for them) — an unreleased pin freezes the theme on the render
+    /// thread until restart (#458).
     /// </summary>
     public static void PinFrame() => _framePinned = _catalog;
 
-    /// <summary>Ends the pinned-frame scope for the calling thread.</summary>
+    /// <summary>Ends the pinned-frame scope for the calling thread. Clearing
+    /// an unpinned thread is a no-op.</summary>
     public static void UnpinFrame() => _framePinned = null;
+
+    /// <summary>True while the calling thread holds a frame pin (diagnostics
+    /// + tests; the snapshot itself stays private).</summary>
+    public static bool IsFramePinned => _framePinned is not null;
 
     /// <summary>Active projection for the calling thread: the pinned frame
     /// snapshot when one is armed, the live catalog otherwise.</summary>

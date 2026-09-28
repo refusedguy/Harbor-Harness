@@ -556,7 +556,11 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         }
         _ = host._timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, host._timelineViewportH);
 
-        host.ScreenSession.BeginFrame();
+        // The frame scope owns the palette pin: everything between here and
+        // the flush can throw (a widget at the layout boundary), and an
+        // exception used to leave the pin armed on the render thread for
+        // good — the theme never updated again until restart (#458).
+        using var frame = host.ScreenSession.BeginFrameScope();
         // PRIM2c: dialog/toast paint through LayoutTree.Overlays (hidden layers
         // stay off the stack, so quiet frames are byte-identical to panels-only).
         host.Screen.SyncOverlays(new Rect(0, 0, cols, rows));
@@ -584,7 +588,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         ApplyFrameDamageHints(cols);
         ArmGateGlow();
 
-        await host.ScreenSession.FlushFrameAsync(ct).ConfigureAwait(false);
+        await frame.FlushAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>
