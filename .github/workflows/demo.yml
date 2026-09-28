@@ -2,14 +2,40 @@
 # command or the VHS tapes change. Local equivalent:  vhs demo/hero.tape
 # (or HARBOR_DEMO=1 dotnet test tests/Harbor.Tui.E2E.Tests — TuiDemoRecorder).
 #
-# Every fresh recording is compared against the committed baseline manifest
-# `assets/demo/baseline.json` BEFORE the auto-commit, so a bad render (size
-# blowup, truncated frame list, wrong duration) can never reach the README
-# unnoticed — issue #425.
+# DETERMINISM (issue #426). A re-record used to be a function of the runner image
+# and of when the sampler happened to fire, so the committed GIFs were not
+# reproducible and the drift gate below could not tell a real regression from a
+# font bump. Three things are now pinned, and all three are asserted, not assumed:
 #
-#   gh workflow run demo.yml                        # enforce (default)
-#   gh workflow run demo.yml -f enforce=false       # annotate drift, do not block
-#   gh workflow run demo.yml -f record_baseline=true # re-record the manifest
+#   1. TOOLCHAIN — demo/toolchain.lock pins vhs 0.11.0, ttyd 1.7.7 and
+#      JetBrains Mono 2.304, each with a sha256. demo/install-toolchain.sh
+#      verifies every download and fails if `fc-match "JetBrains Mono"` does not
+#      resolve to the pinned family. The tapes drive `harbor --demo` only — no
+#      fzf, vim or neovim is executed anywhere in the demo path, so nothing else
+#      needs pinning. ffmpeg is the runner's; its exact version is printed into
+#      the step summary and recorded in the baseline manifest, so a runner bump
+#      shows up as visible provenance rather than as silent byte drift.
+#
+#   2. DATA PATH — every tape runs demo/run-scene.sh, which unsets every *_API_KEY
+#      (so a tape cannot reach a live provider even by accident), scrubs the two
+#      nondeterministic tokens the demo prints (the throw-away HOME's GUID and the
+#      per-scene stopwatch), pins TZ/LANG/LC_ALL/PS1, hides the blinking cursor and
+#      holds each output line for a fixed number of frame intervals. Two runs of
+#      every scene produce byte-identical output, and the captured screens match.
+#
+#   3. FRAME PACING — tools/demo_repro.py re-paces each capture onto a fixed
+#      cadence (demo/toolchain.lock: GIF_STATE_FRAMES per screen, GIF_TAIL_FRAMES
+#      for the settled screen, GIF_FRAMES as the hard ceiling). The frame count and
+#      duration are therefore constants of the toolchain, not of the machine.
+#
+# The record-twice check (issue #426 AC) is `reproducibility=true`: it records
+# every tape twice in the same job and fails unless the two passes agree. The
+# default path records once and goes straight to the drift gate.
+#
+#   gh workflow run demo.yml                          # enforce (default)
+#   gh workflow run demo.yml -f enforce=false         # annotate drift, do not block
+#   gh workflow run demo.yml -f record_baseline=true  # re-record the manifest
+#   gh workflow run demo.yml -f reproducibility=true   # record twice and compare
 #
 # The dispatch that relaxes or re-records the gate is itself the audit trail:
 # every run logs its mode into the step summary.
@@ -43,6 +69,10 @@ on:
         default: "500"
       record_baseline:
         description: "Rewrite assets/demo/baseline.json from this run's GIFs (report-only; the manifest is committed back by the auto-commit step on push runs)."
+        type: boolean
+        default: false
+      reproducibility:
+        description: "Record every tape twice in this job and fail unless both passes are identical (the machine-checked form of deterministic playback)."
         type: boolean
         default: false
 
@@ -101,31 +131,58 @@ jobs:
       - name: Build CLI (tapes run the Release binary)
         run: dotnet build apps/Harbor.App.Cli -c Release
 
+      # Pinned recorder: vhs + ttyd + the one font the tapes ask for, each
+      # sha256-verified. vhs-action is not used because it always installs the
+      # *latest* ttyd, the *latest* ffmpeg and the *latest* JetBrains Mono, so a
+      # font bump would silently reflow every tape.
+      - name: Install pinned recording toolchain
+        run: |
+          set -euo pipefail
+          echo "DEMO_TOOLCHAIN_DIR=$RUNNER_TEMP/demo-toolchain" >> "$GITHUB_ENV"
+          demo/install-toolchain.sh
+          echo "$RUNNER_TEMP/demo-toolchain/bin" >> "$GITHUB_PATH"
+
+      # The tapes drive `harbor --demo` (in-process mock LLM, throw-away HOME), so
+      # no API key is needed and none is set here. run-scene.sh unsets every
+      # *_API_KEY before the CLI starts, so a tape that regressed into a live
+      # provider call would fail rather than record a model-dependent GIF.
+      - name: Prove the tapes need no credentials
+        run: |
+          set -euo pipefail
+          for tape in hero markdown approval plain; do
+            scene=$(grep -oE 'run-scene\.sh [a-z]+' "demo/$tape.tape" | head -1 | awk '{print $2}')
+            if [ -z "$scene" ]; then
+              echo "::error::demo/$tape.tape does not run demo/run-scene.sh"
+              exit 1
+            fi
+            echo "demo/$tape.tape -> scene '$scene'"
+          done
+
       # vhs-action@v2 does NOT expand globs (fs.existsSync on the literal
       # string fails; @actions/exec never shells out) — pass concrete paths.
       - name: Record hero demo GIF
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: demo/hero.tape
-          install-fonts: true
+        run: vhs demo/hero.tape
 
       - name: Record markdown demo GIF
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: demo/markdown.tape
-          install-fonts: true
+        run: vhs demo/markdown.tape
 
       - name: Record approval demo GIF
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: demo/approval.tape
-          install-fonts: true
+        run: vhs demo/approval.tape
 
       - name: Record plain demo GIF
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: demo/plain.tape
-          install-fonts: true
+        run: vhs demo/plain.tape
+
+      # Fixed frame pacing: re-emit each capture on the pinned cadence so the
+      # frame count and duration are constants of the toolchain rather than of
+      # the machine. Also verifies every GIF landed inside its frame budget.
+      - name: Normalise frame pacing
+        run: |
+          set -euo pipefail
+          for gif in hero markdown approval plain; do
+            python3 tools/demo_repro.py normalize \
+              --input "assets/demo/${gif}-compressed-raw.gif" \
+              --output "assets/demo/${gif}-compressed.gif"
+          done
 
       # Size/quality drift gate. Stdlib-only GIF walker (no decoder, no extra
       # package): reads block structure, per-frame delays and the raw LZW
@@ -491,3 +548,79 @@ jobs:
           file_pattern: |
             assets/demo/*-compressed.gif
             assets/demo/baseline.json
+
+  # Record-twice reproducibility check (issue #426). Records every tape twice in
+  # the same job — same runner, same toolchain, same build — and fails unless the
+  # two passes agree on the frame envelope, on every screen shown, and on the
+  # settled final screen. This is the machine-checkable form of "deterministic
+  # playback": without it, "deterministic" is a claim in a comment.
+  demo-reproducibility:
+    needs: [gate]
+    if: needs.gate.outputs.proceed == 'true' && inputs.reproducibility == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      - name: Build CLI (tapes run the Release binary)
+        run: dotnet build apps/Harbor.App.Cli -c Release
+
+      - name: Install pinned recording toolchain
+        run: |
+          set -euo pipefail
+          echo "DEMO_TOOLCHAIN_DIR=$RUNNER_TEMP/demo-toolchain" >> "$GITHUB_ENV"
+          demo/install-toolchain.sh
+          echo "$RUNNER_TEMP/demo-toolchain/bin" >> "$GITHUB_PATH"
+
+      - name: Record every tape twice
+        run: |
+          set -euo pipefail
+          for pass in A B; do
+            for tape in hero markdown approval plain; do
+              # Each pass writes to its own tree so the two never overwrite
+              # each other and the comparison is pass-A vs pass-B, not a file
+              # compared against itself.
+              mkdir -p "$RUNNER_TEMP/pass-$pass"
+              sed "s#^Output \"assets/demo/$tape-raw.gif\"\$#Output \"$RUNNER_TEMP/pass-$pass/$tape-raw.gif\"#" \
+                "demo/$tape.tape" > "$RUNNER_TEMP/pass-$pass/$tape.tape"
+              vhs "$RUNNER_TEMP/pass-$pass/$tape.tape"
+              python3 tools/demo_repro.py normalize \
+                --input "$RUNNER_TEMP/pass-$pass/$tape-raw.gif" \
+                --output "$RUNNER_TEMP/pass-$pass/$tape.gif"
+            done
+          done
+
+      - name: Compare the two passes
+        run: |
+          set -euo pipefail
+          failed=0
+          for tape in hero markdown approval plain; do
+            if ! python3 tools/demo_repro.py compare \
+              --a "$RUNNER_TEMP/pass-A/$tape.gif" \
+              --b "$RUNNER_TEMP/pass-B/$tape.gif" \
+              --name "$tape" --summary; then
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::demo playback is NOT reproducible — see the per-tape findings above"
+            exit 1
+          fi
+          echo "Every tape produced identical output in both passes."
+
+      - name: Upload both passes
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-reproducibility
+          path: |
+            ${{ runner.temp }}/pass-A/*.gif
+            ${{ runner.temp }}/pass-B/*.gif
+          if-no-files-found: warn
