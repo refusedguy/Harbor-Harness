@@ -20,6 +20,14 @@ public sealed class VirtualizedChatTimeline
     private readonly Dictionary<IChatBlock, long> _entranceStarts = new();
     private readonly Rect[] _fxDamage = new Rect[MaxFxDamage];
     private readonly GlowRegion[] _glowRegions = new GlowRegion[MaxFxDamage];
+
+    /// <summary>
+    /// Reusable draw-pass snapshot buffer (ENG12 #284): holds the visible
+    /// window's block refs so an event-thread Append/Evict mid-draw cannot
+    /// shift indices under the paint loop. Grown geometrically on demand —
+    /// steady-state frames allocate nothing (moat-pinned).
+    /// </summary>
+    private IChatBlock[] _paintSnapshot = [];
     private int _fxDamageCount;
     private int _glowCount;
     private bool _broadDamage;
@@ -517,12 +525,18 @@ public sealed class VirtualizedChatTimeline
         var (first, last) = _cache.VisibleRange(EffectiveScrollY, rect.Height);
         // ENG12 #284 (TGui snapshot pattern): event-thread Append/Evict
         // shifts cache indices mid-draw — snapshot the visible window's refs
-        // so BlockAt can never throw past the end. Geometry below is still
-        // read per index with a guard; a torn frame self-corrects next pass.
+        // so BlockAt can never throw past the end. The buffer is reused
+        // across frames (grown geometrically): steady-state paints allocate
+        // nothing. Geometry below is still read per index with a guard; a
+        // torn frame self-corrects next pass.
         int lo = Math.Max(first, 0);
         int hi = Math.Min(last, _cache.Count - 1);
         int window = Math.Max(0, hi - lo + 1);
-        var snapshot = new IChatBlock[window];
+        if (_paintSnapshot.Length < window)
+        {
+            _paintSnapshot = new IChatBlock[window];
+        }
+        var snapshot = _paintSnapshot;
         for (int k = 0; k < window; k++)
         {
             snapshot[k] = _cache.BlockAt(lo + k);
