@@ -519,20 +519,38 @@ public static class UnicodeWidth
         return total;
     }
 
-    // ── Per-run width cache (ENG5, issue #276) ──────────────────────────
+    // ── Per-run width cache (ENG5, issue #276; per-thread since #487) ───
     //
     // Status rows and markdown lines re-measure the same run texts every
-    // frame (StatusBarLayout.Fit even re-sums all segments per dropped
-    // victim — O(n²) rune decodes). Runs are immutable strings, so widths
-    // memoize exactly: a tiny direct-mapped table (256 slots, hash-indexed,
-    // collision = evict, never grows) keyed by reference-then-value equality.
-    // Hits allocate nothing; misses measure once and store. Bounded by
-    // construction — at most 256 retained strings, no eviction bookkeeping.
+    // frame, and runs are immutable strings, so widths memoize exactly: a tiny
+    // direct-mapped table (256 slots, hash-indexed, collision = evict, never
+    // grows) keyed by reference-then-value equality. Hits allocate nothing;
+    // misses measure once and store. Bounded by construction — at most 256
+    // retained strings per measuring thread, no eviction bookkeeping.
+    //
+    // The table is [ThreadStatic] on purpose. It used to be process-global
+    // behind a `lock`, with the O(L) rune decode INSIDE the critical section:
+    // every width measurement serialised the in-process renderer, the IPC
+    // client and any plugin renderer against each other, and
+    // StatusBarLayout.Fit — which re-summed the whole row once per dropped
+    // victim — re-took that lock O(n²) times per painted status frame. The
+    // lock was strictly wider than the work it protected, and it was on a
+    // per-frame path taken while tokens stream. A thread owns its slots
+    // outright, so a lookup is a plain array read: no monitor, no contention,
+    // no shared write. What is traded for it is one decode per distinct run
+    // per thread instead of per process — a handful at startup, and 4 KB of
+    // table per thread that ever measures text.
 
     private const int WidthCacheSize = 256;
 
-    private static readonly WidthCacheEntry[] _widthCache = new WidthCacheEntry[WidthCacheSize];
-    private static readonly object _widthCacheLock = new();
+    [ThreadStatic]
+    private static WidthCacheEntry[]? t_widthCache;
+
+    [ThreadStatic]
+    private static bool t_trackLookups;
+
+    [ThreadStatic]
+    private static long t_widthLookups;
 
     private struct WidthCacheEntry
     {
@@ -544,23 +562,63 @@ public static class UnicodeWidth
     /// Display width of a text run with per-run memoization. Same result as
     /// <c>Width(ReadOnlySpan)</c>; use for immutable run texts
     /// that are measured repeatedly (status segments, markdown spans).
+    /// Lock-free since #487: the table belongs to the calling thread.
     /// </summary>
     public static int WidthCached(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        int index = (text.GetHashCode() & int.MaxValue) & (WidthCacheSize - 1);
-        lock (_widthCacheLock)
+        if (t_trackLookups)
         {
-            var slot = _widthCache[index];
-            if (slot.Text is not null && (ReferenceEquals(slot.Text, text) || slot.Text.Equals(text, StringComparison.Ordinal)))
-            {
-                return slot.CellWidth;
-            }
-
-            int cellWidth = Width(text.AsSpan());
-            _widthCache[index] = new WidthCacheEntry { Text = text, CellWidth = cellWidth };
-            return cellWidth;
+            t_widthLookups++;
         }
+
+        WidthCacheEntry[] cache = t_widthCache ??= new WidthCacheEntry[WidthCacheSize];
+        int index = (text.GetHashCode() & int.MaxValue) & (WidthCacheSize - 1);
+        ref WidthCacheEntry slot = ref cache[index];
+        if (slot.Text is not null
+            && (ReferenceEquals(slot.Text, text) || slot.Text.Equals(text, StringComparison.Ordinal)))
+        {
+            return slot.CellWidth;
+        }
+
+        int cellWidth = Width(text.AsSpan());
+        cache[index] = new WidthCacheEntry { Text = text, CellWidth = cellWidth };
+        return cellWidth;
+    }
+
+    /// <summary>
+    /// Starts counting <see cref="WidthCached"/> calls on the CALLING thread and
+    /// returns the count seen so far, so a caller can snapshot a baseline
+    /// before the region it cares about and subtract.
+    /// </summary>
+    /// <remarks>
+    /// Counting is opt-in so the render path does not pay for it: the only cost
+    /// when tracking is off is one thread-static bool read, against a base
+    /// pointer the method has already loaded for the cache table itself.
+    /// Thread-local for a second reason — a counter shared between the TUnit
+    /// workers would make the number depend on whatever else happened to be
+    /// running, which is the same "wall clock in a parallel test host" trap as a
+    /// stopwatch. What is tracked here is a property of the algorithm (#487: one
+    /// width lookup per segment, whatever the outcome), so a test can assert it
+    /// exactly on any machine.
+    /// </remarks>
+    public static long BeginWidthLookupTracking()
+    {
+        long soFar = t_widthLookups;
+        t_widthLookups = 0;
+        t_trackLookups = true;
+        return soFar;
+    }
+
+    /// <summary>
+    /// Stops counting on the calling thread and returns the number of
+    /// <see cref="WidthCached"/> calls it made since
+    /// <see cref="BeginWidthLookupTracking"/>.
+    /// </summary>
+    public static long EndWidthLookupTracking()
+    {
+        t_trackLookups = false;
+        return t_widthLookups;
     }
 
     private static (int Lo, int Hi)[] Merge((int Lo, int Hi)[] ranges)
