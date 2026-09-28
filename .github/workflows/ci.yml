@@ -184,6 +184,7 @@ jobs:
               Harbor.Domain.Tests
               Harbor.Application.Tests
               Harbor.Core.Tests
+              Harbor.Registries.Tests
               Harbor.Hosting.Tests
               Harbor.Architecture.Tests
               Harbor.Lsp.Tests
@@ -197,6 +198,7 @@ jobs:
               Harbor.Storage.Jsonl.Tests
               Harbor.Providers.Tests
               Harbor.Transport.Remote.Tests
+              Harbor.Plugins.Abstractions.Tests
               Harbor.Plugins.Runtime.Tests
               Harbor.Ipc.Tests
           - shard: ui
@@ -209,6 +211,7 @@ jobs:
               Harbor.Ui.Framework.Tests
               Harbor.DesignSystem.Tests
               Harbor.Tui.CellForge.PtyTests
+              Harbor.Terminal.Abstractions.Tests
               Harbor.App.Avalonia.Tests
           - shard: e2e
             guard: false
@@ -364,6 +367,7 @@ jobs:
             Harbor.Domain.Tests \
             Harbor.Application.Tests \
             Harbor.Core.Tests \
+            Harbor.Registries.Tests \
             Harbor.Hosting.Tests \
             Harbor.Architecture.Tests \
             Harbor.Lsp.Tests \
@@ -373,6 +377,7 @@ jobs:
             Harbor.Storage.Jsonl.Tests \
             Harbor.Providers.Tests \
             Harbor.Transport.Remote.Tests \
+            Harbor.Plugins.Abstractions.Tests \
             Harbor.Plugins.Runtime.Tests \
             Harbor.Ipc.Tests; do
             echo "::group::coverage $p"
