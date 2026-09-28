@@ -57,9 +57,9 @@ public sealed class ChatKeyMap
         // semantics make the bare-Ctrl entry match Ctrl+Shift+Tab too: without
         // the Shift check the "next" entry would swallow "previous".
         new(ChatAction.NextTab, "next tab",
-            new Binding(UiKeyCode.Tab, KeyModifierSet.Ctrl), guard: TabStripOpenPlain),
+            new Binding(UiKeyCode.Tab, KeyModifierSet.Ctrl)) { Guard = TabStripOpenPlain },
         new(ChatAction.PreviousTab, "prev tab",
-            new Binding(UiKeyCode.Tab, KeyModifierSet.Ctrl), guard: TabStripOpenShifted),
+            new Binding(UiKeyCode.Tab, KeyModifierSet.Ctrl)) { Guard = TabStripOpenShifted },
         // Ctrl+W — close the focused tab. Unconditional: with one tab open this
         // is still a meaningful (and reversible-by-reopen) action, and it must
         // never fall through to the quit binding.
@@ -207,18 +207,17 @@ public sealed class ChatKeyMap
     /// <param name="Action">The action this entry resolves to.</param>
     /// <param name="Label">Human-readable label (help overlay, keymap footer).</param>
     /// <param name="Bindings">Key specs; the first that matches claims the press.</param>
-    /// <param name="Guard">
-    ///     Optional context predicate run after a binding hit. Needed because two
-    ///     features can legitimately share a chord: <c>Ctrl+Tab</c> cycles panels
-    ///     normally and tabs while a tab strip is open (#389). A
-    ///     <see langword="null" /> guard is unconditional.
-    /// </param>
     public sealed record Entry(
         ChatAction Action,
         string Label,
         params Binding[] Bindings)
     {
-        /// <summary>Context predicate; see <c>Guard</c> on the primary constructor.</summary>
+        /// <summary>
+        ///     Optional context predicate, run after a binding hit. Needed because
+        ///     two features can legitimately share a chord: <c>Ctrl+Tab</c> cycles
+        ///     panels normally and cycles tabs while a tab strip is open (#389).
+        ///     A <see langword="null" /> guard is unconditional.
+        /// </summary>
         public Func<UiKey, UiState?, bool>? Guard { get; init; }
     }
 }
