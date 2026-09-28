@@ -521,8 +521,10 @@ public sealed class JsonlSessionStore : ISessionStore
                 //
                 // The rewrite hands back the plan that carried the counts, so
                 // these are read off the object the decision was made on:
-                // reaching the last message reports a successful rewind of zero
-                // messages, exactly as the pre-#460 `if (removed > 0)` did.
+                // reaching the last message still reports a successful rewind of
+                // zero messages and leaves the file (and its mtime) alone, which
+                // is the pre-#460 behaviour where the rewrite was skipped when
+                // nothing was actually removed.
                 var plan = SessionFileIO.RewriteRecords(
                     sessionFile, new DeleteAfterAnchorPlan(messageId));
                 return (Found: plan.Found, Removed: plan.Removed);
