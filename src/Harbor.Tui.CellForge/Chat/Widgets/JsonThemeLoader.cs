@@ -112,7 +112,9 @@ public sealed class JsonThemeLoader : IThemeService
 
     internal static bool TryParseHex(string hex, out RgbColor color) => ThemeJson.TryParseHex(hex, out color);
 
-    public IDisposable Watch(string path)
+    public IDisposable Watch(string path) => Watch(path, onError: null);
+
+    public IDisposable Watch(string path, Action<string>? onError)
     {
         var watcher = new ThemeFileWatcher(path, ApplyResult, OnError);
         return watcher;
@@ -125,10 +127,9 @@ public sealed class JsonThemeLoader : IThemeService
 
         void OnError(string error)
         {
-            // TODO(principles)[ROP]: surface through IThemeService.Watch instead of
-            // swallowing — callers (CellForgeReplRunner) need the error line.
-            // Theme file watcher errors are non-fatal; live-reload resumes on next write.
-            // Tracked in #361.
+            // Non-fatal: live-reload resumes on next write. Surfaced via the
+            // Watch error channel so callers can render the error line.
+            onError?.Invoke(error);
         }
     }
 }

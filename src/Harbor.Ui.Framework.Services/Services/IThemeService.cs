@@ -43,4 +43,12 @@ public interface IThemeService
 
     /// <summary>Watch a theme JSON file for live reload.</summary>
     public IDisposable Watch(string path);
+
+    /// <summary>
+    ///     Watch a theme JSON file for live reload, surfacing non-fatal
+    ///     watcher errors (parse failures, IO) to <paramref name="onError" />.
+    ///     Live-reload resumes on the next write. Default routes to
+    ///     <see cref="Watch(string)" /> so existing implementers stay source-compatible.
+    /// </summary>
+    public IDisposable Watch(string path, Action<string>? onError) => Watch(path);
 }

@@ -158,10 +158,12 @@ public sealed class ThemeService : IThemeService
         return Result.Success();
     }
 
-    public IDisposable Watch(string path)
+    public IDisposable Watch(string path) => Watch(path, onError: null);
+
+    public IDisposable Watch(string path, Action<string>? onError)
     {
         // Minimal file watcher that re-applies JSON on change. Mirrors the terminal JsonThemeLoader.Watch
-        // but delegates HDS handling to ApplyJson.
+        // but delegates HDS handling to ApplyJson. Errors are non-fatal; watch resumes on next write.
         try
         {
             var dir = Path.GetDirectoryName(Path.GetFullPath(path));
@@ -176,8 +178,15 @@ public sealed class ThemeService : IThemeService
             fsw.Changed += (_, _) =>
             {
                 var res = LoadJson(path);
-                if (res.IsSuccess)
-                    ApplyJson(res.Value);
+                if (res.IsFailure)
+                {
+                    onError?.Invoke(res.Error);
+                    return;
+                }
+
+                var applied = ApplyJson(res.Value);
+                if (applied.IsFailure)
+                    onError?.Invoke(applied.Error);
             };
             return fsw;
         }
