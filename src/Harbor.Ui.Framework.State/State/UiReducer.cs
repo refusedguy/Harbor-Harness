@@ -563,6 +563,14 @@ public static class UiReducer
                 return state.Focus == FocusMode.Input && k.Pressed.Character is { } c
                     ? (state.SetInput(InputMsg.Update(state.Input, new InputMsg.Char(c))), new TuiEffect.None())
                     : (state, new TuiEffect.None());
+            case ChatAction.InsertNewline:
+                // Enter-family decision lives here (#359): Shift/Alt+Enter
+                // appends '\n' (same as typing it). Ctrl combos resolve here
+                // only via subset matching — the composer ignores Ctrl+Enter,
+                // so the store drops it too instead of inserting a newline.
+                return state.Focus == FocusMode.Input && !k.Pressed.Has(KeyModifierSet.Ctrl)
+                    ? (state.SetInput(InputMsg.Update(state.Input, new InputMsg.Char('\n'))), new TuiEffect.None())
+                    : (state, new TuiEffect.None());
 
             case ChatAction.Clear:
                 return (state.ClearTranscript(), new TuiEffect.None());

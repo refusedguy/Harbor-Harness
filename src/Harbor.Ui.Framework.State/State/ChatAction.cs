@@ -11,6 +11,8 @@ public enum ChatAction
     Quit,
     Abort,
     Submit,
+    /// <summary>Shift+Enter / Alt+Enter — insert a newline instead of submitting.</summary>
+    InsertNewline,
     ToggleFocus,
     ScrollUpLine,
     ScrollDownLine,
