@@ -132,56 +132,7 @@ public sealed class GrepTool : ITool
             }
             else if (Directory.Exists(path))
             {
-                // Parallel over files; shared results list guarded by lock.
-                // Early stop via cts when maxResults hit.
-                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                var stop = linked.Token;
-
-                var files = EnumerateFilesFast(path, includeRx);
-
-                Parallel.ForEach(
-                    files,
-                    new ParallelOptions
-                    {
-                        CancellationToken = stop,
-                        MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount)
-                    },
-                    (file, state) =>
-                    {
-                        if (stop.IsCancellationRequested || results.Count >= maxResults)
-                        {
-                            state.Stop();
-                            return;
-                        }
-
-                        var local = new List<string>(4);
-                        GrepFile(file, regex, local, maxResults, stop);
-
-                        if (local.Count == 0)
-                            return;
-
-                        lock (results)
-                        {
-                            foreach (string line in local)
-                            {
-                                if (results.Count >= maxResults)
-                                {
-                                    truncated = true;
-                                    linked.Cancel();
-                                    state.Stop();
-                                    break;
-                                }
-                                results.Add(line);
-                            }
-
-                            if (results.Count >= maxResults)
-                            {
-                                truncated = true;
-                                linked.Cancel();
-                                state.Stop();
-                            }
-                        }
-                    });
+                truncated = SearchDirectory(path, regex, includeRx, results, maxResults, ct);
             }
             else
             {
@@ -202,6 +153,84 @@ public sealed class GrepTool : ITool
 
         _logger.LogDebug("Grep complete: {Count} matches, Truncated={Truncated}", results.Count, truncated);
 
+        return FormatResults(pattern, path, results, maxResults, truncated);
+    }
+
+    /// <summary>
+    ///     Parallel search over enumerated files with early stop at
+    ///     <paramref name="maxResults" />. Returns whether output was truncated.
+    /// </summary>
+    private static bool SearchDirectory(
+        string path,
+        Regex regex,
+        Regex? includeRx,
+        List<string> results,
+        int maxResults,
+        CancellationToken ct)
+    {
+        // Parallel over files; shared results list guarded by lock.
+        // Early stop via cts when maxResults hit.
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var stop = linked.Token;
+
+        var files = EnumerateFilesFast(path, includeRx);
+        bool truncated = false;
+
+        Parallel.ForEach(
+            files,
+            new ParallelOptions
+            {
+                CancellationToken = stop,
+                MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount)
+            },
+            (file, state) =>
+            {
+                if (stop.IsCancellationRequested || results.Count >= maxResults)
+                {
+                    state.Stop();
+                    return;
+                }
+
+                var local = new List<string>(4);
+                GrepFile(file, regex, local, maxResults, stop);
+
+                if (local.Count == 0)
+                    return;
+
+                lock (results)
+                {
+                    foreach (string line in local)
+                    {
+                        if (results.Count >= maxResults)
+                        {
+                            truncated = true;
+                            linked.Cancel();
+                            state.Stop();
+                            break;
+                        }
+                        results.Add(line);
+                    }
+
+                    if (results.Count >= maxResults)
+                    {
+                        truncated = true;
+                        linked.Cancel();
+                        state.Stop();
+                    }
+                }
+            });
+
+        return truncated;
+    }
+
+    /// <summary>Formats the match list with a count header.</summary>
+    private static ToolResult FormatResults(
+        string pattern,
+        string path,
+        List<string> results,
+        int maxResults,
+        bool truncated)
+    {
         string header = truncated || results.Count >= maxResults
             ? $"Found {results.Count}+ matches (showing {results.Count}):"
             : $"Found {results.Count} matches:";

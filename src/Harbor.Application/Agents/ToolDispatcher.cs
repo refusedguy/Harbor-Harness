@@ -228,19 +228,15 @@ public sealed class ToolDispatcher(
             CancellationToken effectiveCt = timeoutCts?.Token ?? ct;
             // #43: attempt counter lives outside the try so the error paths
             // below can report it (a catch cannot see try-block locals).
-            int attempt = 0;
+            var attempts = new AttemptCount();
             try
             {
             // Argument validation — returns a tool error instead of letting the
             // tool throw (e.g. KeyNotFoundException on a missing required prop).
-            var validation = tool.ValidateArguments(toolCall.Args);
-            if (validation.IsFailure)
+            ToolResultEntry? invalid = await ValidateArgumentsAsync(tool, toolCall, activity, ct).ConfigureAwait(false);
+            if (invalid is not null)
             {
-                activity?.SetStatus(ActivityStatusCode.Error, validation.Error);
-                var invalid = ToolResult.Error(validation.Error);
-                await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                    toolCall.Id, invalid, true), ct).ConfigureAwait(false);
-                return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, invalid);
+                return invalid;
             }
 
             // Permission check.
@@ -248,164 +244,20 @@ public sealed class ToolDispatcher(
             // landing anywhere in approve→commit invalidates it. Scopes are
             // epoch-scoped (parallel calls share fate), not once-only.
             long commitScope = coordinator?.BeginApprovalScope() ?? 0;
-            // #49 PR4: the invocation is born here (toolCall.Id). Plumb it
-            // into the permission ask so the gate binds to this exact
-            // attempt; approval is viewed once per dispatch (generation 1 —
-            // retries re-enter under the same approval, never re-ask).
-            var permResponse = await permissions.CheckAsync(
-                agent.Name.Value, toolCall.ToolName, toolCall.Args, effectiveCt, toolCall.Id, generation: 1).ConfigureAwait(false);
 
-            // G3 fail-closed: a permission-SUBSYSTEM failure (agent not in the
-            // registry, invalid name) used to fall through to execution — i.e.
-            // every tool ran as "allow all". Any non-success verdict now denies.
-            if (permResponse.IsFailure || permResponse.Value.Action == PermissionAction.Deny)
+            ToolResultEntry? denied = await CheckPermissionAsync(
+                toolCall, agent, effectiveCt, ct, activity).ConfigureAwait(false);
+            if (denied is not null)
             {
-                activity?.SetStatus(ActivityStatusCode.Error, "Permission denied");
-                // Honest strings (#49 PR2): a deny produced by a cancelled wait
-                // is a cancellation, not a policy decision.
-                bool cancelled = ct.IsCancellationRequested;
-                string reason = permResponse.IsFailure
-                    ? $"Permission check failed: {permResponse.Error}"
-                    : cancelled ? "Tool execution was cancelled before start."
-                    : "Permission denied";
-                if (cancelled)
-                {
-                    activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
-                }
-
-                var denied = ToolResult.Error(reason);
-                await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                    toolCall.Id, denied, true), ct).ConfigureAwait(false);
-                return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, denied);
+                return denied;
             }
 
-            // Execution with commit barrier (#49 PR2/PR3): cancel winning
-            // after approval but before the first tool instruction must
-            // prevent the START — token observation inside the tool is
-            // best-effort only and a token-ignoring tool would otherwise run
-            // despite the abort. The commit lives INSIDE the retry loop,
-            // bound to (invocation, generation): each attempt commits its own
-            // generation, duplicates and stale replays are rejected, and the
-            // record is retired in finally so the registry holds only
-            // in-flight executions.
-            bool committed = false;
-            try
-            {
-            // Execute
-            // Guard the GetRawText() call with IsEnabled — JsonElement.GetRawText()
-            // allocates a fresh string every call, and LogDebug evaluates its args
-            // eagerly before checking whether Debug is enabled. The guard eliminates
-            // the per-tool-call string allocation when debug logging is off (the
-            // common production case).
-            if (logger.IsEnabled(LogLevel.Debug))
-            {
-                logger.LogDebug("Executing tool {ToolName} (call {CallId}) args={Args}", toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
-            }
-            var ctx = new ToolContext(
-                session.Session.Id,
-                partial.Id,
-                toolCall.Id,
-                agent.Name.Value,
-                effectiveCt,
-                session.Messages,
-                async (update, c) =>
-                {
-                    // §FP-003 (RESOLVED): previously `_ = eventBus.PublishAsync(...)`
-                    // was fire-and-forget — exceptions died as unobserved task exceptions
-                    // and tool progress updates were silently dropped on bus back-pressure.
-                    // The lambda is now async and awaits the publish with a try/catch so
-                    // failures are logged without breaking tool execution. Return type is
-                    // still `Task` per the ToolContext.ReportProgress contract.
-                    try
-                    {
-                        await eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c)
-                            .ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Tool progress publish failed for {ToolCallId}", toolCall.Id);
-                    }
-                },
-                // #201 B1: the Ask callback rides the AskUserAsync railway (checked,
-                // never .Value) — a permission-subsystem failure fails closed to
-                // Deny instead of throwing into the tool run (§ROP-002 recurrence).
-                async (req, c) =>
-                {
-                    Result<PermissionResponse> asked = await permissions.AskUserAsync(req, c).ConfigureAwait(false);
-                    if (asked.IsFailure)
-                    {
-                        logger.LogWarning("Permission ask failed for {Permission} (call {CallId}); failing closed to Deny: {Error}",
-                            req.Permission, toolCall.Id, asked.Error);
-                        return new PermissionResponse(PermissionAction.Deny, false);
-                    }
+            // Execution runs under the commit barrier with bounded retry
+            // (#49 PR2/PR3, #43) — see ExecuteWithRetryAsync.
+            var ctx = CreateToolContext(toolCall, session, partial, agent, effectiveCt);
 
-                    return asked.Value;
-                },
-                null!);
-
-            // #43: bounded retry of transport-class failures. Only the bare
-            // ExecuteAsync is retried — validation and permission already
-            // happened. Each retry re-enters under the same approval (no
-            // re-ask) but commits a NEW generation; cancellation between
-            // attempts surfaces either at the commit, at the delay, or inside
-            // the tool via the token.
-            ToolResult result;
-            while (true)
-            {
-                attempt++;
-                if (coordinator is not null
-                    && !coordinator.TryCommitApproval(commitScope, toolCall.Id, attempt))
-                {
-                    activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
-                    var cancelledBeforeStart = ToolResult.Error("Tool execution was cancelled before start.");
-                    await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                        toolCall.Id, cancelledBeforeStart, true), ct).ConfigureAwait(false);
-                    return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelledBeforeStart);
-                }
-
-                committed = true;
-                try
-                {
-                    result = await tool.ExecuteAsync(toolCall.Args, ctx, effectiveCt).ConfigureAwait(false);
-                    break;
-                }
-                catch (Exception ex) when (retryDecider is not null
-                    && !effectiveCt.IsCancellationRequested
-                    && retryDecider.ShouldRetry(toolCall.ToolName, ex, attempt))
-                {
-                    // OCE never reaches here (dedicated catches below); the
-                    // filter also refuses to retry into a cancelled token, so
-                    // the delay below can only throw on a raced cancel — which
-                    // the same dedicated catches classify honestly.
-                    TimeSpan backoff = RetryPolicy.ComputeDelay(retryDecider.Options, attempt);
-                    logger.LogWarning(ex, "Tool {ToolName} (call {CallId}) attempt {Attempt} transient, retrying in {BackoffMs:0}ms",
-                        toolCall.ToolName, toolCall.Id, attempt, backoff.TotalMilliseconds);
-                    // #76: retry-projection feed (render-only). The UI mirrors
-                    // attempt/max/backoff from these fields; the Task.Delay below
-                    // stays the only scheduling authority — the UI never triggers.
-                    await eventBus.PublishAsync(new ToolExecutionUpdateEvent(
-                        toolCall.Id,
-                        $"retry {attempt}/{retryDecider.Options.MaxAttempts} in {backoff.TotalSeconds:0.#}s",
-                        attempt,
-                        retryDecider.Options.MaxAttempts,
-                        backoff.TotalSeconds), ct).ConfigureAwait(false);
-                    await Task.Delay(backoff, effectiveCt).ConfigureAwait(false);
-                }
-            }
-
-            logger.LogDebug("Tool execution end: {ToolName} (call {CallId}) isError={IsError}", toolCall.ToolName, toolCall.Id, result.IsError);
-            await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                toolCall.Id, result, result.IsError), effectiveCt).ConfigureAwait(false);
-
-            return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, result);
-            }
-            finally
-            {
-                if (committed)
-                {
-                    coordinator?.CompleteInvocation(toolCall.Id);
-                }
-            }
+            return await ExecuteWithRetryAsync(
+                tool, toolCall, ctx, commitScope, attempts, activity, effectiveCt, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -435,14 +287,240 @@ public sealed class ToolDispatcher(
             logger.LogError(ex, "Tool {ToolName} failed", toolCall.ToolName);
             // Attempt count is reported only when retries actually happened —
             // the single-attempt message stays byte-identical (log/LLM stability).
-            string errorMessage = attempt > 1
-                ? $"Tool execution failed after {attempt} attempts: {ex.Message}"
+            string errorMessage = attempts.Value > 1
+                ? $"Tool execution failed after {attempts.Value} attempts: {ex.Message}"
                 : $"Tool execution failed: {ex.Message}";
             var errored = ToolResult.Error(errorMessage);
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, errored, true), effectiveCt).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, errored);
         }
+        }
+    }
+
+    /// <summary>Mutable attempt counter shared between the retry loop and the error formatter.</summary>
+    private sealed class AttemptCount
+    {
+        public int Value;
+    }
+
+    /// <summary>
+    ///     Validate tool arguments. Returns <see langword="null" /> when valid;
+    ///     otherwise publishes the end event and returns the error entry.
+    /// </summary>
+    private async Task<ToolResultEntry?> ValidateArgumentsAsync(
+        ITool tool,
+        ToolCallPart toolCall,
+        Activity? activity,
+        CancellationToken ct)
+    {
+        var validation = tool.ValidateArguments(toolCall.Args);
+        if (validation.IsSuccess)
+        {
+            return null;
+        }
+
+        activity?.SetStatus(ActivityStatusCode.Error, validation.Error);
+        var invalid = ToolResult.Error(validation.Error);
+        await eventBus.PublishAsync(new ToolExecutionEndEvent(
+            toolCall.Id, invalid, true), ct).ConfigureAwait(false);
+        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, invalid);
+    }
+
+    /// <summary>
+    ///     Check permission for one tool call. Returns <see langword="null" />
+    ///     when allowed; otherwise publishes the end event and returns the deny
+    ///     entry. Fail-closed: any non-success verdict denies (§G3).
+    /// </summary>
+    private async Task<ToolResultEntry?> CheckPermissionAsync(
+        ToolCallPart toolCall,
+        AgentDefinition agent,
+        CancellationToken effectiveCt,
+        CancellationToken ct,
+        Activity? activity)
+    {
+        // #49 PR4: the invocation is born here (toolCall.Id). Plumb it
+        // into the permission ask so the gate binds to this exact
+        // attempt; approval is viewed once per dispatch (generation 1 —
+        // retries re-enter under the same approval, never re-ask).
+        var permResponse = await permissions.CheckAsync(
+            agent.Name.Value, toolCall.ToolName, toolCall.Args, effectiveCt, toolCall.Id, generation: 1).ConfigureAwait(false);
+
+        // G3 fail-closed: a permission-SUBSYSTEM failure (agent not in the
+        // registry, invalid name) used to fall through to execution — i.e.
+        // every tool ran as "allow all". Any non-success verdict now denies.
+        if (permResponse.IsSuccess && permResponse.Value.Action != PermissionAction.Deny)
+        {
+            return null;
+        }
+
+        activity?.SetStatus(ActivityStatusCode.Error, "Permission denied");
+        // Honest strings (#49 PR2): a deny produced by a cancelled wait
+        // is a cancellation, not a policy decision.
+        bool cancelled = ct.IsCancellationRequested;
+        string reason = permResponse.IsFailure
+            ? $"Permission check failed: {permResponse.Error}"
+            : cancelled ? "Tool execution was cancelled before start."
+            : "Permission denied";
+        if (cancelled)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
+        }
+
+        var denied = ToolResult.Error(reason);
+        await eventBus.PublishAsync(new ToolExecutionEndEvent(
+            toolCall.Id, denied, true), ct).ConfigureAwait(false);
+        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, denied);
+    }
+
+    /// <summary>
+    ///     Build the <see cref="ToolContext" /> for one call, wiring progress
+    ///     reporting and the permission-ask callback.
+    /// </summary>
+    private ToolContext CreateToolContext(
+        ToolCallPart toolCall,
+        ISessionContext session,
+        AssistantMessage partial,
+        AgentDefinition agent,
+        CancellationToken effectiveCt)
+    {
+        // Guard the GetRawText() call with IsEnabled — JsonElement.GetRawText()
+        // allocates a fresh string every call, and LogDebug evaluates its args
+        // eagerly before checking whether Debug is enabled. The guard eliminates
+        // the per-tool-call string allocation when debug logging is off (the
+        // common production case).
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            logger.LogDebug("Executing tool {ToolName} (call {CallId}) args={Args}", toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
+        }
+
+        return new ToolContext(
+            session.Session.Id,
+            partial.Id,
+            toolCall.Id,
+            agent.Name.Value,
+            effectiveCt,
+            session.Messages,
+            async (update, c) =>
+            {
+                // §FP-003 (RESOLVED): previously `_ = eventBus.PublishAsync(...)`
+                // was fire-and-forget — exceptions died as unobserved task exceptions
+                // and tool progress updates were silently dropped on bus back-pressure.
+                // The lambda is now async and awaits the publish with a try/catch so
+                // failures are logged without breaking tool execution. Return type is
+                // still `Task` per the ToolContext.ReportProgress contract.
+                try
+                {
+                    await eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Tool progress publish failed for {ToolCallId}", toolCall.Id);
+                }
+            },
+            // #201 B1: the Ask callback rides the AskUserAsync railway (checked,
+            // never .Value) — a permission-subsystem failure fails closed to
+            // Deny instead of throwing into the tool run (§ROP-002 recurrence).
+            async (req, c) =>
+            {
+                Result<PermissionResponse> asked = await permissions.AskUserAsync(req, c).ConfigureAwait(false);
+                if (asked.IsFailure)
+                {
+                    logger.LogWarning("Permission ask failed for {Permission} (call {CallId}); failing closed to Deny: {Error}",
+                        req.Permission, toolCall.Id, asked.Error);
+                    return new PermissionResponse(PermissionAction.Deny, false);
+                }
+
+                return asked.Value;
+            },
+            null!);
+    }
+
+    /// <summary>
+    ///     Execute one tool call with the commit barrier and bounded retry.
+    ///     Cancel winning after approval but before the first tool instruction
+    ///     prevents the START (#49 PR2/PR3) — token observation inside the tool
+    ///     is best-effort only. The commit lives INSIDE the retry loop, bound to
+    ///     (invocation, generation): each attempt commits its own generation,
+    ///     duplicates and stale replays are rejected, and the record is retired
+    ///     in finally so the registry holds only in-flight executions.
+    /// </summary>
+    private async Task<ToolResultEntry> ExecuteWithRetryAsync(
+        ITool tool,
+        ToolCallPart toolCall,
+        ToolContext ctx,
+        long commitScope,
+        AttemptCount attempts,
+        Activity? activity,
+        CancellationToken effectiveCt,
+        CancellationToken ct)
+    {
+        bool committed = false;
+        try
+        {
+            // #43: bounded retry of transport-class failures. Only the bare
+            // ExecuteAsync is retried — validation and permission already
+            // happened. Each retry re-enters under the same approval (no
+            // re-ask) but commits a NEW generation; cancellation between
+            // attempts surfaces either at the commit, at the delay, or inside
+            // the tool via the token.
+            ToolResult result;
+            while (true)
+            {
+                attempts.Value++;
+                if (coordinator is not null
+                    && !coordinator.TryCommitApproval(commitScope, toolCall.Id, attempts.Value))
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
+                    var cancelledBeforeStart = ToolResult.Error("Tool execution was cancelled before start.");
+                    await eventBus.PublishAsync(new ToolExecutionEndEvent(
+                        toolCall.Id, cancelledBeforeStart, true), ct).ConfigureAwait(false);
+                    return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelledBeforeStart);
+                }
+
+                committed = true;
+                try
+                {
+                    result = await tool.ExecuteAsync(toolCall.Args, ctx, effectiveCt).ConfigureAwait(false);
+                    break;
+                }
+                catch (Exception ex) when (retryDecider is not null
+                    && !effectiveCt.IsCancellationRequested
+                    && retryDecider.ShouldRetry(toolCall.ToolName, ex, attempts.Value))
+                {
+                    // OCE never reaches here (dedicated catches below); the
+                    // filter also refuses to retry into a cancelled token, so
+                    // the delay below can only throw on a raced cancel — which
+                    // the same dedicated catches classify honestly.
+                    TimeSpan backoff = RetryPolicy.ComputeDelay(retryDecider.Options, attempts.Value);
+                    logger.LogWarning(ex, "Tool {ToolName} (call {CallId}) attempt {Attempt} transient, retrying in {BackoffMs:0}ms",
+                        toolCall.ToolName, toolCall.Id, attempts.Value, backoff.TotalMilliseconds);
+                    // #76: retry-projection feed (render-only). The UI mirrors
+                    // attempt/max/backoff from these fields; the Task.Delay below
+                    // stays the only scheduling authority — the UI never triggers.
+                    await eventBus.PublishAsync(new ToolExecutionUpdateEvent(
+                        toolCall.Id,
+                        $"retry {attempts.Value}/{retryDecider.Options.MaxAttempts} in {backoff.TotalSeconds:0.#}s",
+                        attempts.Value,
+                        retryDecider.Options.MaxAttempts,
+                        backoff.TotalSeconds), ct).ConfigureAwait(false);
+                    await Task.Delay(backoff, effectiveCt).ConfigureAwait(false);
+                }
+            }
+
+            logger.LogDebug("Tool execution end: {ToolName} (call {CallId}) isError={IsError}", toolCall.ToolName, toolCall.Id, result.IsError);
+            await eventBus.PublishAsync(new ToolExecutionEndEvent(
+                toolCall.Id, result, result.IsError), effectiveCt).ConfigureAwait(false);
+
+            return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, result);
+        }
+        finally
+        {
+            if (committed)
+            {
+                coordinator?.CompleteInvocation(toolCall.Id);
+            }
         }
     }
 }

@@ -207,64 +207,76 @@ internal sealed class SlashCommandDispatcher
     {
         var dict = new Dictionary<string, SlashCommandRegistration>(capacity: 32);
 
-        void Register(
-            string canonical,
-            IReadOnlyList<string> aliases,
-            IReadOnlyList<string>? argSuggestions,
-            Func<CommandContext, IReadOnlyList<string>, Task<Result>> execute)
-        {
-            var reg = new SlashCommandRegistration(canonical, aliases, argSuggestions, execute);
-            dict[canonical.ToLowerInvariant()] = reg;
-            foreach (var a in aliases)
-            {
-                dict[a.ToLowerInvariant()] = reg;
-            }
-        }
+        RegisterCoreCommands(dict);
+        RegisterSessionCommands(dict);
+        RegisterHostCommands(dict);
+        RegisterSkillCommands(dict);
 
-        Register("help", ["h"], null, (ctx, _) =>
+        return dict.ToFrozenDictionary();
+    }
+
+    private static void Register(
+        Dictionary<string, SlashCommandRegistration> dict,
+        string canonical,
+        IReadOnlyList<string> aliases,
+        IReadOnlyList<string>? argSuggestions,
+        Func<CommandContext, IReadOnlyList<string>, Task<Result>> execute)
+    {
+        var reg = new SlashCommandRegistration(canonical, aliases, argSuggestions, execute);
+        dict[canonical.ToLowerInvariant()] = reg;
+        foreach (var a in aliases)
+        {
+            dict[a.ToLowerInvariant()] = reg;
+        }
+    }
+
+    private static void RegisterCoreCommands(Dictionary<string, SlashCommandRegistration> dict)
+    {
+
+        Register(dict, "help", ["h"], null, (ctx, _) =>
         {
             ctx.Writer("Commands: /setup /auth /model /agent /config /permissions /providers /sessions /skills /tree /fork /plugins /tui /renderer /storage /exit");
             return Task.FromResult(Result.Success());
         });
 
-        Register("new", ["new-session"], null, (ctx, _) =>
+        Register(dict, "new", ["new-session"], null, (ctx, _) =>
         {
             ctx.Writer("Use /new in the interactive TUI to start a fresh session.");
             return Task.FromResult(Result.Success());
         });
 
-        Register("setup", [], null, async (ctx, _) =>
+        Register(dict, "setup", [], null, async (ctx, _) =>
         {
             var result = await ctx.Wizard
                 .RunAsync(ctx.Reader!, ctx.Writer).ConfigureAwait(false);
             return result;
         });
 
-        Register("auth", ["key", "api-key"], null, (ctx, _) =>
+        Register(dict, "auth", ["key", "api-key"], null, (ctx, _) =>
         {
             return new AuthCommand(ctx.AuthStore, ctx.Writer)
                 .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
         });
 
-        Register("model", ["m"], null, (ctx, _) =>
+        Register(dict, "model", ["m"], null, (ctx, _) =>
         {
             return new ModelCommand(ctx.ConfigStore, ctx.Providers, ctx.Writer, ctx.Agent, ctx.Session)
                 .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
         });
 
-        Register("agent", ["mode", "a"], null, (ctx, _) =>
+        Register(dict, "agent", ["mode", "a"], null, (ctx, _) =>
         {
             return new AgentCommand(ctx.ConfigStore, ctx.AgentRegistry, ctx.Writer)
                 .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
         });
 
-        Register("config", [], null, (ctx, _) =>
+        Register(dict, "config", [], null, (ctx, _) =>
         {
             return new ConfigCommand(ctx.ConfigStore, ctx.Writer)
                 .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
         });
 
-        Register("permissions", [], null, (ctx, _) =>
+        Register(dict, "permissions", [], null, (ctx, _) =>
         {
             return new PermissionsCommand(
                     ctx.Permissions,
@@ -272,8 +284,11 @@ internal sealed class SlashCommandDispatcher
                     ctx.ConfigStore, ctx.Writer, ctx.Agent, ctx.Session)
                 .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
         });
+    }
 
-        Register("providers", [], null, async (ctx, _) =>
+    private static void RegisterSessionCommands(Dictionary<string, SlashCommandRegistration> dict)
+    {
+        Register(dict, "providers", [], null, async (ctx, _) =>
         {
             var providers = ctx.Providers;
             ctx.Writer($"Providers ({providers.GetRegisteredProviderIds().Count}):");
@@ -286,7 +301,7 @@ internal sealed class SlashCommandDispatcher
             return Result.Success();
         });
 
-        Register("sessions", [], null, async (ctx, _) =>
+        Register(dict, "sessions", [], null, async (ctx, _) =>
         {
             var store = ctx.SessionStore;
             var result = await store.ListAsync().ConfigureAwait(false);
@@ -296,7 +311,7 @@ internal sealed class SlashCommandDispatcher
             return Result.Success();
         });
 
-        Register("tree", [], null, static async (ctx, _) =>
+        Register(dict, "tree", [], null, static async (ctx, _) =>
         {
             var store = ctx.SessionStore;
             var built = await SessionTreeRunner.BuildAsync(store, ctx.Session.Id).ConfigureAwait(false);
@@ -314,7 +329,7 @@ internal sealed class SlashCommandDispatcher
             return Result.Success();
         });
 
-        Register("fork", [], null, static async (ctx, args) =>
+        Register(dict, "fork", [], null, static async (ctx, args) =>
         {
             if (args.Count < 2)
             {
@@ -333,8 +348,11 @@ internal sealed class SlashCommandDispatcher
             ctx.Writer($"Forked → {outcome.Value.ForkId}: copied {outcome.Value.Copied} message(s).");
             return Result.Success();
         });
+    }
 
-        Register("plugins", [], null, (ctx, _) =>
+    private static void RegisterHostCommands(Dictionary<string, SlashCommandRegistration> dict)
+    {
+        Register(dict, "plugins", [], null, (ctx, _) =>
         {
             // Optional host service (absent on MINIMAL — see the field note).
             if (ctx.PluginReload is { } reload)
@@ -346,19 +364,19 @@ internal sealed class SlashCommandDispatcher
             return Task.FromResult(Result.Success());
         });
 
-        Register("tui", [], ["ansi", "plain", "spectre", "consoleex", "notifications"], (ctx, _) =>
+        Register(dict, "tui", [], ["ansi", "plain", "spectre", "consoleex", "notifications"], (ctx, _) =>
         {
             ctx.Writer("TUI: ansi (default), plain, spectre, fullscreen");
             return Task.FromResult(Result.Success());
         });
 
-        Register("storage", [], ["jsonl", "memory", "sqlite"], (ctx, _) =>
+        Register(dict, "storage", [], ["jsonl", "memory", "sqlite"], (ctx, _) =>
         {
             ctx.Writer("Storage: jsonl (default), memory, sqlite");
             return Task.FromResult(Result.Success());
         });
 
-        Register("renderer", [], null, (ctx, _) =>
+        Register(dict, "renderer", [], null, (ctx, _) =>
         {
             // Optional host service (absent on headless builds — see the field note).
             if (ctx.RendererPipeline is not { } pipeline)
@@ -371,11 +389,14 @@ internal sealed class SlashCommandDispatcher
             ctx.Writer("Usage: /renderer <backend>");
             return Task.FromResult(Result.Success());
         });
+    }
 
+    private static void RegisterSkillCommands(Dictionary<string, SlashCommandRegistration> dict)
+    {
         // KILLER_FEATURES §2.7 Feature 10 (issue #23, slice 2): reseed the
         // shared SkillFreshnessModel from skills-lock.json. Pill-only — there
         // is deliberately no update dialog; applying updates stays manual.
-        Register("skills", ["skill"], ["refresh"], (ctx, args) =>
+        Register(dict, "skills", ["skill"], ["refresh"], (ctx, args) =>
         {
             if (args.Count != 1 || !args[0].Equals("refresh", StringComparison.OrdinalIgnoreCase))
             {
@@ -404,8 +425,6 @@ internal sealed class SlashCommandDispatcher
                 : $"Skills: {entries.Count} checked, {stale} need attention.");
             return Task.FromResult(Result.Success());
         });
-
-        return dict.ToFrozenDictionary();
     }
 
     private static ICommandContext MakeCtx(CommandContext ctx) =>
