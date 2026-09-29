@@ -141,7 +141,11 @@ public class RendererVisitorRegressionTests
     [Test]
     public async Task Notifications_FullEventSweep_DoesNotThrow()
     {
-        var renderer = new NotificationTuiRenderer(NullLogger<NotificationTuiRenderer>.Instance);
+        // #665: the runner is injected, so this sweep no longer tries to pop real
+        // toasts on whatever machine runs the suite. It used to shell out to
+        // notify-send / osascript / msg for real.
+        var runner = new RecordingNotificationRunner();
+        var renderer = new NotificationTuiRenderer(NullLogger<NotificationTuiRenderer>.Instance, runner);
         try
         {
             await renderer.InitializeAsync();
@@ -156,5 +160,10 @@ public class RendererVisitorRegressionTests
         }
 
         await Assert.That(true).IsTrue();
+
+        await Assert.That(runner.Count).IsGreaterThan(0)
+            .Because("a sweep that throws nothing because it notified nothing is not a "
+                   + "regression test of the notification path — the three events this "
+                   + "renderer maps to a notification must all reach the runner");
     }
 }

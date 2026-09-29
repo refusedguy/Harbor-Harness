@@ -2,6 +2,7 @@ namespace Harbor.Tui.RendererTests;
 
 using CSharpFunctionalExtensions;
 using Harbor.Tui.Notifications;
+using Harbor.Tui.RendererTests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -32,7 +33,9 @@ public class ReadLineAbsenceContractTests
     [Test]
     public async Task CannotReadInput_ReportsAbsence_NotASuccessfulEmptyLine()
     {
-        using var renderer = new NotificationTuiRenderer(NullLogger<NotificationTuiRenderer>.Instance);
+        using var renderer = new NotificationTuiRenderer(
+            NullLogger<NotificationTuiRenderer>.Instance,
+            new RecordingNotificationRunner());
 
         Maybe<string> line = await renderer.ReadLineAsync("> ");
 
@@ -46,7 +49,9 @@ public class ReadLineAbsenceContractTests
     [Test]
     public async Task AbsentLine_IsDistinguishableFromAnEmptySubmission()
     {
-        using var renderer = new NotificationTuiRenderer(NullLogger<NotificationTuiRenderer>.Instance);
+        using var renderer = new NotificationTuiRenderer(
+            NullLogger<NotificationTuiRenderer>.Instance,
+            new RecordingNotificationRunner());
 
         Maybe<string> absent = await renderer.ReadLineAsync("> ");
         Maybe<string> emptySubmission = Maybe.From(string.Empty);
@@ -63,7 +68,9 @@ public class ReadLineAbsenceContractTests
     [Test]
     public async Task AbsentLine_StillDegradesToEmptyString_ForCallersThatRequireAValue()
     {
-        using var renderer = new NotificationTuiRenderer(NullLogger<NotificationTuiRenderer>.Instance);
+        using var renderer = new NotificationTuiRenderer(
+            NullLogger<NotificationTuiRenderer>.Instance,
+            new RecordingNotificationRunner());
 
         Maybe<string> line = await renderer.ReadLineAsync("> ");
 

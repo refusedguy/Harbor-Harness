@@ -331,8 +331,18 @@ public class FullLayerMatrixTests
         // token types come through that same reference.
         ["Harbor.Desktop.Animations"] = new(Layer.Presentation,
             ["Harbor.DesignSystem"]),
+        // #665: the renderer now binds INotificationProcessRunner out of the
+        // Abstractions facade, so the previously dead (Notifications ->
+        // Harbor.Abstractions) edge is a real one — the same shape #567 recorded
+        // for Ui.Framework.ViewModels and #663 for Ui.Framework.Sessions. The
+        // facade's implicit Harbor.Abstractions.Contracts edge comes with it
+        // (ExpandAllowed), so the contract lives in the facade and NOT in
+        // .Contracts, where it would have needed no matrix change at all: the
+        // facade is where interface contracts belong (see Harbor.Abstractions'
+        // own header), and IGitQuery — the precedent for this exact move — is
+        // there too.
         ["Harbor.Tui.Notifications"] = new(Layer.Presentation,
-            [ "Harbor.Abstractions.Contracts", "Harbor.Terminal.Abstractions"]),
+            [ "Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
         // renderer-unification Phase 4: Ansi + Plain merged into one assembly;
         // styling flows through IEscapeCodeStrategy (Ansi / Null impls).
         // Issue #77: chat writes land in the DI-shared UiStore (Presentation→

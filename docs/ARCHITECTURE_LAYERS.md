@@ -341,7 +341,7 @@ Concrete implementations of:
 
   | Rule id | Forbids | Layer that owns it |
   |---|---|---|
-  | `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | `System.Diagnostics.Process*` | Infrastructure (`BashTool` / `McpProcessClient` in `Harbor.Tools.Builtin`) |
+  | `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | `System.Diagnostics.Process*` | Infrastructure (`BashTool` / `McpProcessClient` in `Harbor.Tools.Builtin`); UI-chrome spawns go through a Domain contract and live in `Harbor.Application` (`ProcessGitQuery` #537, `ProcessNotificationRunner` #665) |
   | `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | `System.IO.File*` | Infrastructure (`Harbor.Storage.*`, config stores) |
   | `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | `System.IO.Directory*` | Infrastructure (file-tree / theme scanning) |
   | `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | `System.Net.Http*`, `Sockets`, `WebRequest`, … | Infrastructure (`Harbor.Providers.*`, `Harbor.Transport.Remote`) |
@@ -659,20 +659,25 @@ while enforcing nothing — which is the failure mode these rules exist to preve
 `FullLayerMatrixTests` + `CellForgeGraphRules` are all green. The previously cited counts
 (46 tests = 21 reflection + 25 NetArchTest, 54 executed cases) are historical.
 
-**The CAPABILITY rules added in #455 have 18 known violations, in 12 types across 5 of the
+**The CAPABILITY rules added in #455 have 15 known violations, in 9 types across 4 of the
 18 Presentation assemblies.** They are not skipped: each is a row in
 `PresentationCapabilityRules.KnownViolations` that a rule holds only while it is still
-exactly reproduced, and each carries a tracking issue. Thirteen Presentation assemblies
+exactly reproduced, and each carries a tracking issue. Fourteen Presentation assemblies
 are clean and fully enforced.
 
 A further capability is recorded in `PermanentCapabilities` — not a violation, so not
 counted above. See "Permanent capabilities" in §5.6.
 
+> These counts come from `KnownViolations`; the table below is the source of truth for
+> the per-rule split. The prose had drifted from it twice — "21 … 14 types across 7"
+> when the table held 13 across 6, then "18 … 12 types" when it held 13 across 6 again —
+> so it now says where the numbers come from rather than only what they are.
+
 | Rule | Violating types | Assemblies | Tracking issues |
 |---|---:|---:|---|
-| `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 4 | 2 | [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (3 notification backends, jump palette) |
+| `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 1 | 1 | [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (jump palette) |
 | `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 8 | 4 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (theme loader/watcher, file tree) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 6 | 4 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (file tree) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 6 | 4 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (file tree) |
 | `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | 0 | 0 | — clean, unbaselined |
 | `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | 0 | 0 | — clean, unbaselined |
 
