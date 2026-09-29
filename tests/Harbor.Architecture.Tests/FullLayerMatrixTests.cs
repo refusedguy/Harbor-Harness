@@ -251,8 +251,13 @@ public class FullLayerMatrixTests
               "Harbor.Ui.Framework.Abstractions"]),
         ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Reducers"]),
+        // #567: ToolCallViewModel.Status is a ToolCallState, so the view-models
+        // now bind the Abstractions package in IL rather than carrying an
+        // unbound reference to it. Same Presentation → Domain edge the other
+        // Ui.Framework.* rows already declare.
         ["Harbor.Ui.Framework.ViewModels"] = new(Layer.Presentation,
-            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services"]),
+            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services",
+              "Harbor.Ui.Framework.Abstractions"]),
         ["Harbor.Ui.Framework.Projection"] = new(Layer.Presentation,
             [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
              // RgbColor is defined in the standalone DesignSystem package but

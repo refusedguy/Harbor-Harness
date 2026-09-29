@@ -109,8 +109,13 @@ public sealed class EnforcerIntegrityTests
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
         new("Harbor.Ui.Framework.ViewModels", "Harbor.Abstractions",
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
-        new("Harbor.Ui.Framework.ViewModels", "Harbor.Ui.Framework.Abstractions",
-            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        // #567: the (ViewModels → Abstractions) exemption that sat here is GONE —
+        // ToolCallViewModel.Status is a ToolCallState (the single tool-call
+        // lifecycle enum, Ui.Framework.Abstractions), so the edge is now bound in
+        // IL and is a real dependency. DeclaredButUnboundProjectReferences_AreReallyUnbound
+        // fails the moment an exempt edge turns out to be live, so the exemption
+        // was removed and the edge justified in the matrix instead (the ViewModels
+        // row in FullLayerMatrixTests.Matrix).
         new("Harbor.Ui.Framework.Abstractions", "Harbor.Abstractions",
             "#450: declared but binds no type — the assembly's contracts are BCL-only, so the edge produces no IL."),
         new("Harbor.Terminal.Abstractions", "Harbor.Ui.Framework",
