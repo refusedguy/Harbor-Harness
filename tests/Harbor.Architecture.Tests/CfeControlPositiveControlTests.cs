@@ -192,10 +192,17 @@ public sealed class CfeControlPositiveControlTests
                    + "pointing somewhere else would mean the control is not exercising the code it "
                    + "claims to");
 
-        await Assert.That(output).DoesNotContain("Build succeeded")
-            .Because($"with TreatWarningsAsErrors the {BadFile} snippet must fail the build; a "
-                   + "successful build alongside a {DiagnosticId} mention would mean the diagnostic "
-                   + "came from somewhere unexpected");
+        // The snippet must COMPILE. If the known-bad file failed to build for an
+        // ordinary reason, "no CFE0001" would be trivially true and the control
+        // would be asserting nothing — which is the vacuous pass this file
+        // exists to rule out. TreatWarningsAsErrors is deliberately OFF in
+        // Harbor.CfeControl.csproj so the diagnostic surfaces as a WARNING on a
+        // successful build; a failure here means the probe itself is broken.
+        await Assert.That(output).Contains("Build succeeded")
+            .Because("the control snippet must compile, otherwise the absence of "
+                   + $"{DiagnosticId} would be an artefact of a broken probe rather than a "
+                   + "measurement. The csproj sets TreatWarningsAsErrors=false precisely so the "
+                   + "diagnostic appears as a warning on a green build.");
     }
 
     /// <summary>
