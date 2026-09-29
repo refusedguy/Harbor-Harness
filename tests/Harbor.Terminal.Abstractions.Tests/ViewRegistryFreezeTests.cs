@@ -7,6 +7,7 @@ using Harbor.Terminal.Abstractions.Views;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.ComponentModel;
 using TUnit.Assertions;
+using TUnit.Core;
 
 namespace Harbor.Terminal.Abstractions.Tests;
 
@@ -229,8 +230,12 @@ public class ViewRegistryFreezeContractTests
     [Test]
     public async Task ViewModelRegistry_Frozen_Lookups_ServeSnapshot()
     {
-        var registry = NewFrozenViewModelRegistry();
+        // Own the instances so the identity assertions are meaningful.
         var vm = new ProbeViewModel("vm0");
+        var registry = new ViewModelRegistry();
+        registry.Register(vm);
+        registry.Freeze();
+
         await Assert.That(registry.Get("vm0")).IsSameReferenceAs(vm);
         await Assert.That(registry.Get<ProbeViewModel>("vm0")).IsSameReferenceAs(vm);
         await Assert.That(registry.Get("nope")).IsNull();
@@ -375,6 +380,18 @@ public class ViewRegistryFreezeAllocationTests
     private const int ViewCount = 4;
 
     /// <summary>
+    ///     Reports a measurement to the TUnit test output. CI does not capture
+    ///     the process stdout, so this (not <c>Console.WriteLine</c>) is what
+    ///     puts the delta in the Actions log; the console line is kept for
+    ///     local runs.
+    /// </summary>
+    private static void Report(string message)
+    {
+        TestContext.Current?.Output.WriteLine(message);
+        Console.WriteLine(message);
+    }
+
+    /// <summary>
     ///     Warm up (JIT tiering) outside the measured region, then report the
     ///     best of three measured rounds.
     /// </summary>
@@ -430,6 +447,13 @@ public class ViewRegistryFreezeAllocationTests
         return registry;
     }
 
+    /// <summary>
+    ///     The frozen gate: allocation cannot be negative, so "&lt;= 0" is
+    ///     exactly zero.
+    /// </summary>
+    private static async Task AssertAllocatesNothing(long bytesPerCall)
+        => await Assert.That(bytesPerCall).IsLessThanOrEqualTo(0L);
+
     [Test]
     public async Task ViewRegistry_GetAll_Frozen_AllocatesZeroBytes()
     {
@@ -442,9 +466,9 @@ public class ViewRegistryFreezeAllocationTests
         frozen.Freeze();
         var frozenBytes = MeasureBytesPerCall(() => { _ = frozen.GetAll(); });
 
-        Console.WriteLine($"#490 ViewRegistry.GetAll (n={ViewCount}): unfrozen {unfrozen} B/call -> frozen {frozenBytes} B/call (min of 3 x {Iterations})");
+        Report($"#490 ViewRegistry.GetAll (n={ViewCount}): unfrozen {unfrozen} B/call -> frozen {frozenBytes} B/call (min of 3 x {Iterations})");
         await Assert.That(unfrozen).IsGreaterThan(0L);
-        await Assert.That(frozenBytes).IsEqualTo(0L);
+        await AssertAllocatesNothing(frozenBytes);
     }
 
     [Test]
@@ -460,10 +484,10 @@ public class ViewRegistryFreezeAllocationTests
         var frozenBytes = MeasureBytesPerCall(() => { _ = frozen.GetByPlacement(TuiViewPlacement.ChatHistory); });
         var emptyBytes = MeasureBytesPerCall(() => { _ = frozen.GetByPlacement(TuiViewPlacement.Footer); });
 
-        Console.WriteLine($"#490 ViewRegistry.GetByPlacement (n={ViewCount}): unfrozen {unfrozen} B/call -> frozen {frozenBytes} B/call; frozen empty placement {emptyBytes} B/call (min of 3 x {Iterations})");
+        Report($"#490 ViewRegistry.GetByPlacement (n={ViewCount}): unfrozen {unfrozen} B/call -> frozen {frozenBytes} B/call; frozen empty placement {emptyBytes} B/call (min of 3 x {Iterations})");
         await Assert.That(unfrozen).IsGreaterThan(0L);
-        await Assert.That(frozenBytes).IsEqualTo(0L);
-        await Assert.That(emptyBytes).IsEqualTo(0L);
+        await AssertAllocatesNothing(frozenBytes);
+        await AssertAllocatesNothing(emptyBytes);
     }
 
     [Test]
@@ -478,9 +502,9 @@ public class ViewRegistryFreezeAllocationTests
         frozen.Freeze();
         var frozenBytes = MeasureBytesPerCall(() => { _ = frozen.GetAll(); });
 
-        Console.WriteLine($"#490 ViewModelRegistry.GetAll (n={ViewCount}): unfrozen {unfrozen} B/call -> frozen {frozenBytes} B/call (min of 3 x {Iterations})");
+        Report($"#490 ViewModelRegistry.GetAll (n={ViewCount}): unfrozen {unfrozen} B/call -> frozen {frozenBytes} B/call (min of 3 x {Iterations})");
         await Assert.That(unfrozen).IsGreaterThan(0L);
-        await Assert.That(frozenBytes).IsEqualTo(0L);
+        await AssertAllocatesNothing(frozenBytes);
     }
 
     [Test]
@@ -495,8 +519,8 @@ public class ViewRegistryFreezeAllocationTests
         frozen.Freeze();
         var frozenBytes = MeasureBytesPerCall(() => { _ = frozen.Get("v0"); });
 
-        Console.WriteLine($"#490 ViewRegistry.Get: unfrozen {unfrozen} B/call -> frozen {frozenBytes} B/call (min of 3 x {Iterations})");
-        await Assert.That(frozenBytes).IsEqualTo(0L);
+        Report($"#490 ViewRegistry.Get: unfrozen {unfrozen} B/call -> frozen {frozenBytes} B/call (min of 3 x {Iterations})");
+        await AssertAllocatesNothing(frozenBytes);
     }
 
     private sealed class CountingView(string id, TuiViewPlacement placement) : ITuiView
