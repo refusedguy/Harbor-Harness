@@ -197,12 +197,13 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
         return "tool";
     }
 
-    public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
+    public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
         // SharpConsoleUI owns its own input loop in interactive mode; the
         // event-driven adapter falls back to the line-based console reader.
         Console.Write(prompt);
-        return Task.FromResult(Result.Success(Console.ReadLine() ?? string.Empty));
+        // EOF is absence, not failure: Maybe.None, not Success("") (#589).
+        return Task.FromResult(Maybe.From(Console.ReadLine()));
     }
 
     public override Task<Result> WriteAsync(string text, CancellationToken ct = default)

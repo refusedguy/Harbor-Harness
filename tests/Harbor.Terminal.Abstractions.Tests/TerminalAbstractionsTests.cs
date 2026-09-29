@@ -101,7 +101,7 @@ public class BaseTuiRendererTests
 
         public override ITuiRenderContext Context => throw new NotImplementedException();
 
-        public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
+        public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
             => throw new NotImplementedException();
 
         public override Task<Result> WriteAsync(string text, CancellationToken ct = default)

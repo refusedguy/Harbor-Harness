@@ -316,8 +316,8 @@ public class RegistrationCompositionTests
 
         public Task RenderAsync(AgentEvent @event, CancellationToken ct = default) => Task.CompletedTask;
 
-        public Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success(string.Empty));
+        public Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default) =>
+            Task.FromResult(Maybe.From(string.Empty));
 
         public Task<Result> WriteAsync(string text, CancellationToken ct = default)
         {
@@ -349,8 +349,8 @@ public class RegistrationCompositionTests
 
         public Task RenderAsync(AgentEvent @event, CancellationToken ct = default) => Task.CompletedTask;
 
-        public Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success(string.Empty));
+        public Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default) =>
+            Task.FromResult(Maybe.From(string.Empty));
 
         public Task<Result> WriteAsync(string text, CancellationToken ct = default)
         {

@@ -119,7 +119,7 @@ internal sealed class SlashCommandDispatcher
             reader: async prompt =>
             {
                 var r = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
-                return r.IsSuccess ? r.Value : string.Empty;
+                return r.GetValueOrDefault(string.Empty);
             },
             agent, agentRegistry, configStore, authStore, providers, session).ConfigureAwait(false);
     }

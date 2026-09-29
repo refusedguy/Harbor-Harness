@@ -139,10 +139,11 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
     //  Base overrides
     // ═══════════════════════════════════════════════════════════════
 
-    public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
+    public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
-        string result = AnsiConsole.Prompt(new TextPrompt<string>($"[green]{Markup.Escape(prompt)}[/]").AllowEmpty());
-        return Task.FromResult(Result.Success(result));
+        string? result = AnsiConsole.Prompt(new TextPrompt<string>($"[green]{Markup.Escape(prompt)}[/]").AllowEmpty());
+        // Prompt returns null on Ctrl-C / EOF: absence, not failure (#589).
+        return Task.FromResult(Maybe.From(result));
     }
 
     public override Task<Result> WriteAsync(string text, CancellationToken ct = default)

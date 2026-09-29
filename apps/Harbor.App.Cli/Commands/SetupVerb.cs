@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.App.Cli.Hosting;
 using Harbor.Application.Onboarding;
 using Harbor.Terminal.Abstractions;
@@ -23,7 +24,7 @@ internal static class SetupVerb
         var reader = (Func<string, Task<string>>)(async prompt =>
         {
             var r = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
-            return r.IsSuccess ? r.Value : string.Empty;
+            return r.GetValueOrDefault(string.Empty);
         });
         var result = await wizard.RunAsync(reader, writer).ConfigureAwait(false);
         logger.LogInformation("Setup wizard finished with success={Success}", result.IsSuccess);

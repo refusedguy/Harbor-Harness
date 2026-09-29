@@ -175,7 +175,7 @@ public abstract class BaseTuiRenderer : ITuiRenderer
         }
     }
 
-    public abstract Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default);
+    public abstract Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default);
     public abstract Task<Result> WriteAsync(string text, CancellationToken ct = default);
     public abstract Task<Result> WriteLineAsync(string? text = null, CancellationToken ct = default);
     public abstract Task<Result> ClearAsync(CancellationToken ct = default);

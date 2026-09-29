@@ -140,11 +140,14 @@ public class InteractiveRendererE2ETests
     }
 
     [Test]
-    public async Task SpectreTui_ReadLineAsync_ReturnsSuccess()
+    public async Task SpectreTui_ReadLineAsync_EofYieldsNone_NotASuccessfulEmptyLine()
     {
+        // Test stdin is at EOF, so Console.ReadLine() returns null. The renderer must
+        // report "no line was read" (Maybe.None) rather than fabricate a successful
+        // empty line — the fabrication is what wedged the line REPL at 100% CPU (#589).
         var renderer = new SpectreTuiRenderer(NullLogger<SpectreTuiRenderer>.Instance);
         var result = await renderer.ReadLineAsync("? ");
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.HasNoValue).IsTrue();
         renderer.Dispose();
     }
 
