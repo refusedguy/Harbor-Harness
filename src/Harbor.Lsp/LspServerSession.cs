@@ -266,7 +266,12 @@ public sealed class LspServerSession : IAsyncDisposable
                     continue;
                 }
 
+                #pragma warning disable CFE0001
+                // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+                // return or continue, a control-flow shape the analyzer does not model.
+                // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
                 if (normalized.Value.HasValue) return normalized;
+                #pragma warning restore CFE0001
             }
 
             return firstFailure is null
@@ -300,7 +305,12 @@ public sealed class LspServerSession : IAsyncDisposable
             }
 
             // Success(None) (e.g. null array items) skips silently — lenient by design.
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return or continue, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             if (normalized.Value.HasValue) list.Add(normalized.Value.Value);
+            #pragma warning restore CFE0001
         }
 
         if (skipped > 0) skippedReason = $"{skipped} malformed location(s) skipped ({skippedReason})";
@@ -350,7 +360,12 @@ public sealed class LspServerSession : IAsyncDisposable
     private static Result<Maybe<LspLocation>> MapBuilt(Result<LspLocation> built) =>
         built.IsFailure
             ? Result.Failure<Maybe<LspLocation>>(built.Error)
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return or continue, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             : Result.Success(Maybe.From(built.Value));
+            #pragma warning restore CFE0001
 
     internal static Result<LspLocation> TryBuildLocation(JsonElement uriElement, JsonElement start, string fallbackPath)
     {

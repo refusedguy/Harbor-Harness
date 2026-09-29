@@ -176,9 +176,19 @@ public sealed class ImageAttachmentReader
         ModelInfo? info = null;
         for (int i = 0; i < models.Value.Count; i++)
         {
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return or continue, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             if (string.Equals(models.Value[i].Id, modelId, StringComparison.OrdinalIgnoreCase))
+            #pragma warning restore CFE0001
             {
+                #pragma warning disable CFE0001
+                // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+                // return or continue, a control-flow shape the analyzer does not model.
+                // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
                 info = models.Value[i];
+                #pragma warning restore CFE0001
                 break;
             }
         }

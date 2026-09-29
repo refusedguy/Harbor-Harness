@@ -212,8 +212,22 @@ public sealed class HarborConfig
     ///     Effective model — the selected model or the provider default.
     ///     Falls back to the built-in default when neither resolves.
     /// </summary>
+    /// <remarks>
+    ///     CFE0001 found the previous `Identity.EffectiveModel().Value`, which
+    ///     was the ONE genuinely unguarded <c>.Value</c> in production code:
+    ///     <see cref="IdentityConfig.EffectiveModel" /> can fail (it ends in
+    ///     <c>ModelRef.TryParse</c>), and this is an expression-bodied property
+    ///     read on the startup path (<c>HarborComposeOptions</c>,
+    ///     <c>ToolsCatalog</c>, <c>ReplRunner</c>), so a failure threw
+    ///     <c>ResultFailureException</c> out of a getter during composition
+    ///     root setup. <c>GetValueOrDefault</c> applies the fallback this
+    ///     property's own summary already promises, and cannot throw.
+    /// </remarks>
     [JsonIgnore]
-    public string EffectiveModel => Identity.EffectiveModel().Value.ToString();
+    public string EffectiveModel =>
+        Identity.EffectiveModel()
+                .GetValueOrDefault(IdentityConfig.Default.Model!)
+                .ToString();
 
     /// <summary>
     ///     Returns a default <see cref="HarborConfig" /> (kilocode provider,

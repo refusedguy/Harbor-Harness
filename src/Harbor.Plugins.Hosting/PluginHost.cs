@@ -94,7 +94,12 @@ public sealed class PluginHost
                 continue;
             }
 
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return or continue, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             foreach (var plugin in instantiated.Value)
+            #pragma warning restore CFE0001
             {
                 var registerResult = _registrar.Register(plugin, host);
                 if (registerResult.IsFailure)

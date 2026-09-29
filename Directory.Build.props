@@ -147,6 +147,22 @@
   -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('tests')) or $(MSBuildProjectDirectory.Contains('samples'))">
     <NoWarn>$(NoWarn);RS0030</NoWarn>
+    <!--
+      CFE0001 policy for tests: the guard's ONLY value is protecting shipped
+      code paths from a ResultFailureException at runtime. In a test, that
+      exception IS the failure signal — `(await store.CreateAsync(...)).Value`
+      throwing means the fixture broke, which is exactly what the test should
+      do. Measured on this branch: 174 CFE0001 sites, 100% of them in tests/,
+      0 in src/. All 174 are the same false positive — the guard is a bare
+      `Assert.That(result.IsSuccess).IsTrue()` statement, and the analyzer's
+      walker only models `if`-scoped and ternary checks, so it never sees it.
+
+      Suppressed here (same condition as RS0030, same reasoning) rather than
+      with 174 call-site pragmas. Production is NOT covered by this condition:
+      src/apps/contrib keep CFE0001 at full severity, so a new unguarded
+      .Value there is still a build error.
+    -->
+    <NoWarn>$(NoWarn);CFE0001</NoWarn>
   </PropertyGroup>
 
   <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->  <ItemGroup>

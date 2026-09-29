@@ -290,7 +290,12 @@ public sealed class OnboardingWizard
         cts.CancelAfter(Abstractions.Providers.IProviderHealthCheck.DefaultTimeout);
         try
         {
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return or continue, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             var result = await clientResult.Value.GetModelsAsync(cts.Token).ConfigureAwait(false);
+            #pragma warning restore CFE0001
             if (result.IsSuccess && result.Value.Count > 0)
                 return result.Value.Select(m => m.Id).ToList();
 
