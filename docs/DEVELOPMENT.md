@@ -831,7 +831,7 @@ dotnet-gcdump collect -n harbor
 - [ ] **No runtime service location** (#63): бизнес-логика берёт зависимости через ctor. `GetRequiredService` / `GetService` вне ctor допустимы только с коротким комментарием-обоснованием:
   - factory-лямбды DI-модулей и композишн-рут (`Program.cs`, `*Module.cs`, `Use*` extensions) — idiomatic MS DI;
   - optional-зависимости с graceful fallback (`GetService` + null-handling, никогда `GetRequiredService`);
-  - framework-created инстансы, которым нельзя дать DI (панели через `PanelContext`, XAML-`ViewModelLocator`, контракт `ITuiRenderer.RunInteractiveAsync(agent, host)`).
+  - framework-created инстансы, которым нельзя дать DI: панели получают типизированный пакет `PanelServices` (ctor-параметр `PanelContext`), который композишн-рут собирает **один раз** через `PanelServices.FromContainer` (#470 — в per-frame контракте больше нет `IServiceProvider`); XAML-`ViewModelLocator`, контракт `ITuiRenderer.RunInteractiveAsync(agent, host)`.
 
 ### GoF
 

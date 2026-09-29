@@ -3,7 +3,6 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Lsp;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tools;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Builtin;
@@ -113,19 +112,16 @@ public sealed class LspTool : ITool
     {
         string action = args.GetProperty("action").GetString()!;
         string path = args.GetProperty("path").GetString()!;
+        // #470: injected by the composition root. The per-call lookup on the
+        // old service-provider field could never fire — the agent loop handed
+        // every tool a null provider — so the dependency is now honest.
         ILspService? lsp = _lsp;
-        // #63 legitimate: ctor-injected primary with a per-call context
-        // fallback (plugin hosts may provide LSP only via ToolContext).
-        if (lsp is null && context.Services is not null)
-        {
-            lsp = context.Services.GetService<ILspService>();
-        }
 
         if (lsp is null)
         {
             return ToolResult.Error(
-                "No ILspService is registered in the DI container. " +
-                "Register one with services.AddSingleton<ILspService>(new LspManager(logger)).");
+                "No ILspService was injected into the 'lsp' tool. " +
+                "The composition root builds it with services.AddSingleton<ILspService>(new LspManager(logger)).");
         }
 
         if (!lsp.SupportsFile(path))

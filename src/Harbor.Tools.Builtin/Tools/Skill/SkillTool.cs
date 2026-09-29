@@ -1,6 +1,5 @@
 using Harbor.Abstractions.Results;
 using Harbor.Abstractions.Sessions;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -30,8 +29,9 @@ public sealed class SkillTool : ITool
     private readonly string? _globalSkillsDir;
 
     /// <summary>
-    ///     Construct a <see cref="SkillTool" /> that resolves the session store
-    ///     from <see cref="ToolContext.Services" /> on each call (preferred for DI).
+    ///     Construct a <see cref="SkillTool" /> with no session store: skills
+    ///     roots fall back to the process working directory (#470 — the store is
+    ///     constructor-injected by the composition root, never looked up per call).
     /// </summary>
     /// <param name="logger">Logger for diagnostics.</param>
     public SkillTool(ILogger<SkillTool> logger)
@@ -41,7 +41,8 @@ public sealed class SkillTool : ITool
 
     /// <summary>
     ///     Construct a <see cref="SkillTool" /> with a fixed session store
-    ///     (used in tests where the DI container is not configured).
+    ///     (the shape the composition root uses — <c>ToolsCatalog</c> passes the
+    ///     store forwarder so working directories resolve from the live session).
     /// </summary>
     /// <param name="store">The session store to resolve working directories from.</param>
     /// <param name="logger">Logger for diagnostics.</param>
@@ -189,11 +190,10 @@ public sealed class SkillTool : ITool
             return (_projectSkillsDir, _globalSkillsDir);
 
         string? projectDir = null;
+        // #470: injected by the composition root. The per-call lookup on the
+        // old service-provider field could never fire — the agent loop handed
+        // every tool a null provider.
         var store = _store;
-        // #63 legitimate: ctor-injected primary with a per-call context
-        // fallback (same shape as LspTool).
-        if (store is null && context.Services is not null)
-            store = context.Services.GetService<ISessionStore>();
         if (store is not null)
         {
             var session = await store.GetAsync(context.SessionId, cancellationToken).ConfigureAwait(false);

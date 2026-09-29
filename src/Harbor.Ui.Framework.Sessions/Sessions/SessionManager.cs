@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Services;
 namespace Harbor.Ui.Framework.Sessions;
 /// <summary>
@@ -130,6 +131,9 @@ public sealed class SessionManager : ISessionManager
     /// </summary>
     public Task<bool> OpenSessionAsync(string sessionId) => _lifecycle.OpenSessionAsync(sessionId);
 
+    /// <inheritdoc />
+    public Task<bool> OpenPanelSessionAsync(string sessionId) => _lifecycle.OpenSessionAsync(sessionId);
+
     /// <summary>
     ///     Branch the active session. Forwards to <see cref="SessionLifecycleService" />.
     /// </summary>
@@ -146,4 +150,34 @@ public sealed class SessionManager : ISessionManager
     /// </summary>
     public Task<bool> RenameSessionAsync(string sessionId, string newTitle) =>
         _lifecycle.RenameSessionAsync(sessionId, newTitle);
+
+    // ── IPanelSessionGateway (#470) ──────────────────────────────────────
+    // The adapter that lets framework panels (which live in
+    // Harbor.Ui.Framework.State and therefore cannot name ISessionManager)
+    // read per-session facts without a service locator. The precedence chains
+    // below reproduce exactly what the panels used to spell out against the
+    // session-context and cached-git lookups, so no seeded row changes.
+
+    /// <inheritdoc />
+    public string? GetDirectory(string sessionId) => _router.GetContext(sessionId)?.Session.Directory;
+
+    /// <inheritdoc />
+    public string? GetStatusText(string sessionId) => _router.GetContext(sessionId)?.StatusText;
+
+    /// <inheritdoc />
+    public string? GetBranch(string sessionId)
+    {
+        var ctx = _router.GetContext(sessionId);
+        return _gitTracker.Get(sessionId).Branch ?? ctx?.Session.GitBranch ?? ctx?.GitBranch;
+    }
+
+    /// <inheritdoc />
+    public bool GetIsDirty(string sessionId)
+    {
+        var ctx = _router.GetContext(sessionId);
+        return _gitTracker.Get(sessionId).IsDirty || ctx?.GitIsDirty == true || ctx?.Session.GitIsDirty == true;
+    }
+
+    /// <inheritdoc />
+    public bool? GetIsSubagent(string sessionId) => _router.GetContext(sessionId)?.Session.IsSubagent();
 }

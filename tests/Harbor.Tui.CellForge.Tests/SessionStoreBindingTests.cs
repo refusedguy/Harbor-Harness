@@ -59,6 +59,8 @@ public class SessionStoreBindingTests
 
         public Task<bool> OpenSessionAsync(string sessionId) => Task.FromResult(true);
 
+        public Task<bool> OpenPanelSessionAsync(string sessionId) => OpenSessionAsync(sessionId);
+
         public Task<Result<Session>> BranchActiveAsync() =>
             Task.FromResult(Result.Failure<Session>("Not supported in tests."));
 
@@ -69,6 +71,20 @@ public class SessionStoreBindingTests
         public event Action<string, SessionStatus>? StatusChanged;
 
         public event Action<string, int>? MessageCountChanged;
+
+        // ── IPanelSessionGateway (#470) ─────────────────────────────────────
+        // Flat per-session projection the framework panels read. Fakes have no
+        // live router/git tracker, so everything degrades to "unknown" — exactly
+        // the null-tolerance the panels are required to handle.
+        public string? GetDirectory(string sessionId) => null;
+
+        public string? GetStatusText(string sessionId) => null;
+
+        public string? GetBranch(string sessionId) => null;
+
+        public bool GetIsDirty(string sessionId) => false;
+
+        public bool? GetIsSubagent(string sessionId) => null;
     }
 
     private static SessionContext ContextFor(string id) =>

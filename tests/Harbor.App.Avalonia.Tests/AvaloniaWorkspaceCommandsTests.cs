@@ -42,6 +42,8 @@ public class AvaloniaWorkspaceCommandsTests
 
         public Task<bool> OpenSessionAsync(string sessionId) => Task.FromResult(true);
 
+        public Task<bool> OpenPanelSessionAsync(string sessionId) => OpenSessionAsync(sessionId);
+
         public Result<Session> BranchResult { get; set; } = Result.Failure<Session>("Not configured.");
         public bool BranchCalled { get; private set; }
 
@@ -56,6 +58,20 @@ public class AvaloniaWorkspaceCommandsTests
 
         public event Action<string, SessionStatus>? StatusChanged;
         public event Action<string, int>? MessageCountChanged;
+
+        // ── IPanelSessionGateway (#470) ─────────────────────────────────────
+        // Flat per-session projection the framework panels read. Fakes have no
+        // live router/git tracker, so everything degrades to "unknown" — exactly
+        // the null-tolerance the panels are required to handle.
+        public string? GetDirectory(string sessionId) => null;
+
+        public string? GetStatusText(string sessionId) => null;
+
+        public string? GetBranch(string sessionId) => null;
+
+        public bool GetIsDirty(string sessionId) => false;
+
+        public bool? GetIsSubagent(string sessionId) => null;
     }
 
     private sealed class FakeDialogService : IDialogService

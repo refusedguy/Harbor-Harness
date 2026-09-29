@@ -76,16 +76,16 @@ public class McpToolToolTests
     }
 
     [Test]
-    public async Task ExecuteAsync_RegistryFromCtor_IsUsedInPreferenceToServices()
+    public async Task ExecuteAsync_RegistryFromCtor_IsTheOnlySource()
     {
-        // When the tool is constructed with an explicit registry, that registry wins
-        // even if context.Services also has one (or is null).
+        // #470: the registry is constructor-injected — the per-call
+        // ToolContext.Services fallback is gone, so the ctor instance is the
+        // single source and the tool works with a plain ToolContext.
         var registry = new InMemoryMcpRegistry(NullLogger<InMemoryMcpRegistry>.Instance);
         var tool = NewTool(registry);
 
         var args = JsonDocument.Parse(
             """{"server":"missing","method":"tools/list"}""").RootElement;
-        // context.Services is null! — ctor-provided registry must still resolve.
         var result = await tool.ExecuteAsync(args, CreateContext());
 
         await Assert.That(result.IsError).IsTrue();
@@ -147,6 +147,5 @@ public class McpToolToolTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }

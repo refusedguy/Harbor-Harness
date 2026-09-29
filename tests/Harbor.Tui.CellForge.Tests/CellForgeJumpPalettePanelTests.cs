@@ -31,21 +31,6 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class CellForgeJumpPalettePanelTests
 {
-    private sealed class FakeServices : IServiceProvider
-    {
-        private readonly Dictionary<Type, object> _map = new();
-
-        public FakeServices Add<T>(T instance)
-            where T : class
-        {
-            _map[typeof(T)] = instance;
-            return this;
-        }
-
-        public object? GetService(Type serviceType) =>
-            _map.TryGetValue(serviceType, out var value) ? value : null;
-    }
-
     private sealed class FakeSessionManager : ISessionManager
     {
         private readonly Dictionary<string, SessionContext> _contexts = new(StringComparer.Ordinal);
@@ -94,6 +79,8 @@ public class CellForgeJumpPalettePanelTests
             return Task.FromResult(true);
         }
 
+        public Task<bool> OpenPanelSessionAsync(string sessionId) => OpenSessionAsync(sessionId);
+
         public Task<Result<Session>> BranchActiveAsync() =>
             Task.FromResult(Result.Failure<Session>("Not supported in tests."));
 
@@ -104,6 +91,26 @@ public class CellForgeJumpPalettePanelTests
         public event Action<string, SessionStatus>? StatusChanged;
 
         public event Action<string, int>? MessageCountChanged;
+
+        // ── IPanelSessionGateway (#470) ─────────────────────────────────────
+        // Flat per-session projection the framework panels read (#470). The
+        // facade the panel used to reach for returned the same facts off
+        // SessionContext; git stays empty (GitSessionInfo.Empty), so the branch
+        // falls through to the session record exactly as before.
+        public string? GetDirectory(string sessionId) =>
+            _contexts.TryGetValue(sessionId, out var ctx) ? ctx.Session.Directory : null;
+
+        public string? GetStatusText(string sessionId) =>
+            _contexts.TryGetValue(sessionId, out var ctx) ? ctx.StatusText : null;
+
+        public string? GetBranch(string sessionId) =>
+            _contexts.TryGetValue(sessionId, out var ctx) ? ctx.Session.GitBranch ?? ctx.GitBranch : null;
+
+        public bool GetIsDirty(string sessionId) =>
+            _contexts.TryGetValue(sessionId, out var ctx) && (ctx.GitIsDirty || ctx.Session.GitIsDirty);
+
+        public bool? GetIsSubagent(string sessionId) =>
+            _contexts.TryGetValue(sessionId, out var ctx) ? ctx.Session.IsSubagent() : null;
     }
 
     private static readonly WorktreeJumpEntry[] Entries =
@@ -128,7 +135,7 @@ public class CellForgeJumpPalettePanelTests
         return panel;
     }
 
-    private static PanelContext Ctx(UiState state, IServiceProvider? services = null) =>
+    private static PanelContext Ctx(UiState state, PanelServices? services = null) =>
         new(state, 120, 40, services);
 
     private static UiState StateWithSessions(params SessionInfo[] sessions) =>
@@ -215,7 +222,7 @@ public class CellForgeJumpPalettePanelTests
         var panel = WithModel(out var model);
         var manager = new FakeSessionManager();
         var store = VisibleJumpStore();
-        var services = new FakeServices().Add<UiStore>(store).Add<ISessionManager>(manager);
+        var services = new PanelServices { Store = store, Sessions = manager };
 
         await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Enter), Ctx(new UiState(), services))).IsTrue();
 
@@ -230,7 +237,7 @@ public class CellForgeJumpPalettePanelTests
         var panel = WithModel(out var model);
         var manager = new FakeSessionManager();
         var store = VisibleJumpStore();
-        var services = new FakeServices().Add<UiStore>(store).Add<ISessionManager>(manager);
+        var services = new PanelServices { Store = store, Sessions = manager };
 
         await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Escape), Ctx(new UiState(), services))).IsTrue();
 
@@ -250,7 +257,7 @@ public class CellForgeJumpPalettePanelTests
         };
         var manager = new FakeSessionManager();
         var store = VisibleJumpStore();
-        var services = new FakeServices().Add<UiStore>(store).Add<ISessionManager>(manager);
+        var services = new PanelServices { Store = store, Sessions = manager };
 
         await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Enter), Ctx(new UiState(), services))).IsTrue();
 
@@ -326,7 +333,7 @@ public class CellForgeJumpPalettePanelTests
         // chat transcript. The store's input box stays untouched throughout.
         var panel = WithModel(out var model);
         var store = VisibleJumpStore();
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new PanelServices { Store = store };
 
         foreach (char c in "dif")
         {
@@ -353,7 +360,7 @@ public class CellForgeJumpPalettePanelTests
             WorktreePorcelainReader = () => Porcelain(),
         };
         var store = VisibleJumpStore();
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new PanelServices { Store = store };
         var ctx = Ctx(new UiState(), services);
 
         _ = panel.Build(ctx);
@@ -444,7 +451,7 @@ public class CellForgeJumpPalettePanelTests
         var store = VisibleJumpStore();
         var layer = new CellForgeJumpPaletteOverlayLayer(panel);
         var viewport = new Rect(0, 0, 120, 40);
-        layer.Sync(viewport, new PanelContext(store.State, 120, 40, null, store));
+        layer.Sync(viewport, new PanelContext(store.State, 120, 40, new PanelServices { Store = store }));
 
         await Assert.That(layer.Id).IsEqualTo(CellForgeJumpPaletteOverlayLayer.LayerId);
         await Assert.That(layer.Visible).IsTrue();
@@ -476,7 +483,7 @@ public class CellForgeJumpPalettePanelTests
         };
         var store = HiddenJumpStore();
         var layer = new CellForgeJumpPaletteOverlayLayer(panel);
-        layer.Sync(new Rect(0, 0, 120, 40), new PanelContext(store.State, 120, 40, null, store));
+        layer.Sync(new Rect(0, 0, 120, 40), new PanelContext(store.State, 120, 40, new PanelServices { Store = store }));
 
         await Assert.That(layer.Visible).IsFalse();
         var overlays = new OverlayStack();
@@ -516,7 +523,7 @@ public class CellForgeJumpPalettePanelTests
             buffer, screen.Timeline.Rect, owner.Registry, store.State, services: null);
         await Assert.That(painted).IsEqualTo(0);
         await Assert.That(ChatScreenPanelDock.RoutePanelKey(
-            owner.Registry, store.State, UiKey.ForChar('w'), null, store: store)).IsFalse();
+            owner.Registry, store.State, UiKey.ForChar('w'), new PanelServices { Store = store })).IsFalse();
     }
 
     [Test]
@@ -531,7 +538,7 @@ public class CellForgeJumpPalettePanelTests
         var manager = new FakeSessionManager();
         manager.AddContext(session);
         var state = StateWithSessions(Info("s1", "Jump Palette"));
-        var services = new FakeServices().Add<ISessionManager>(manager);
+        var services = new PanelServices { Sessions = manager };
         var panel = new CellForgeJumpPalettePanel
         {
             WorktreePorcelainReader = () => "worktree /repo/.worktrees/jump-palette\nbranch refs/heads/feat/jump-palette\n",

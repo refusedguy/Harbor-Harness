@@ -5,9 +5,7 @@ using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
-using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Tui.CellForge.Panels;
 
@@ -22,8 +20,8 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     <see cref="WorktreeJumpPaletteModel.SetQuery" /> (the fuzzy filter was
 ///     dead code until #381), <c>Backspace</c> trims the query,
 ///     <c>Enter</c> switches to the selected session via the existing
-///     <c>ISessionManager.OpenSessionAsync</c> (no new switching mechanics),
-///     <c>Esc</c> closes and clears the query, <c>r</c> re-seeds.
+///     <see cref="IPanelSessionGateway.OpenPanelSessionAsync" /> (no new switching
+///     mechanics), <c>Esc</c> closes and clears the query, <c>r</c> re-seeds.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -46,8 +44,10 @@ namespace Harbor.Tui.CellForge.Panels;
 ///         <b>Seeding:</b> merges real worktrees (<c>git worktree list
 ///         --porcelain</c>, parsed by <see cref="WorktreeJumpSeeder" />) with
 ///         the active sessions from <see cref="UiState.Chat.Sessions" /> enriched
-///         read-only via <c>ISessionManager.GetContext</c> / <c>GetGitInfo</c> —
-///         provider-local structures are never mutated. The model + seed cache
+///         read-only through the <see cref="IPanelSessionGateway" /> the host put on
+///         <see cref="PanelServices" /> (#470 — no per-frame service lookup; an
+///         absent gateway simply leaves the rows un-enriched). Provider-local
+///         structures are never mutated. The model + seed cache
 ///         are provider-local mutable state guarded by a small lock (same
 ///         compromise as <see cref="CellForgeFileTreePanel" />) so
 ///         <c>Build</c> (render thread) and <c>OnKey</c> (input thread) stay
@@ -248,12 +248,12 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
         // to) — just close the palette.
         if (selected is not null && !string.IsNullOrEmpty(selected.SessionId))
         {
-            if (ctx.Services?.GetService<ISessionManager>() is ISessionManager manager)
+            if (ctx.Deps.Sessions is { } gateway)
             {
                 // #201: fire-and-forget through the shared helper — the fault is
                 // observed (§FP-006) via OnlyOnFaulted. OpenSessionAsync logs
                 // switch failures internally and returns false.
-                TaskFireAndForget.Forget(manager.OpenSessionAsync(selected.SessionId));
+                TaskFireAndForget.Forget(gateway.OpenPanelSessionAsync(selected.SessionId));
             }
         }
 
@@ -262,7 +262,7 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
 
     private void HideViaStore(PanelContext ctx)
     {
-        if (ctx.Services?.GetService<UiStore>() is UiStore store)
+        if (ctx.Deps.Store is { } store)
         {
             _ = store.Dispatch(new AppMsg.TogglePanel(Id));
         }
@@ -271,7 +271,7 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
     /// <summary>Feed the model from sessions + worktrees. Call only under <c>_gate</c>.</summary>
     private void SeedLocked(PanelContext ctx)
     {
-        var manager = ctx.Services?.GetService<ISessionManager>();
+        var sessions = ctx.Deps.Sessions;
         IReadOnlyList<WorktreeInfo> worktrees;
         try
         {
@@ -282,7 +282,7 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
             worktrees = Array.Empty<WorktreeInfo>();
         }
 
-        _model.Show(WorktreeJumpSeeder.BuildEntries(SessionSeeds(ctx, manager), worktrees));
+        _model.Show(WorktreeJumpSeeder.BuildEntries(SessionSeeds(ctx, sessions), worktrees));
     }
 
     /// <summary>
@@ -300,7 +300,10 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
         }
     }
 
-    private static List<SessionSeed> SessionSeeds(PanelContext ctx, ISessionManager? manager)
+    // #470: the flat gateway calls below reproduce the exact precedence the
+    // panel used to spell out against the session-context and cached-git
+    // lookups, so no seeded row changes — only the source became explicit.
+    private static List<SessionSeed> SessionSeeds(PanelContext ctx, IPanelSessionGateway? gateway)
     {
         var sessions = ctx.State.Chat.Sessions;
         var seeds = new List<SessionSeed>(sessions.Length);
@@ -308,15 +311,11 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
         {
             var info = sessions[i];
             string id = info.SessionId.Value;
-            var context = manager?.GetContext(id);
-            var git = manager is not null ? manager.GetGitInfo(id) : null;
-            string directory = context?.Session.Directory ?? string.Empty;
-            string? branch = git?.Branch ?? context?.Session.GitBranch ?? context?.GitBranch;
-            string status = context?.StatusText ?? "idle";
-            bool dirty = (git?.IsDirty ?? false)
-                || (context?.GitIsDirty ?? false)
-                || (context?.Session.GitIsDirty ?? false);
-            bool isSubagent = info.IsSubagent || context?.Session.IsSubagent() == true;
+            string directory = gateway?.GetDirectory(id) ?? string.Empty;
+            string? branch = gateway?.GetBranch(id);
+            string status = gateway?.GetStatusText(id) ?? "idle";
+            bool dirty = gateway?.GetIsDirty(id) ?? false;
+            bool isSubagent = info.IsSubagent || gateway?.GetIsSubagent(id) == true;
             seeds.Add(new SessionSeed(id, info.Title, directory, branch, status, dirty, isSubagent));
         }
 

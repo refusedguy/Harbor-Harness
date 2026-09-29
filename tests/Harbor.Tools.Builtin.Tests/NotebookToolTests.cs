@@ -192,8 +192,7 @@ public class NotebookToolTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 
     private static JsonElement Args(params (string key, string value)[] pairs)
     {

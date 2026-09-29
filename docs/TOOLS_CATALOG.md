@@ -1283,9 +1283,9 @@ If your tool needs an injected dependency (like `McpToolTool` needs `IMcpRegistr
   ```csharp
   tb.AddTool(new McpToolTool(mcpRegistry, loggerFactory.CreateLogger<McpToolTool>()));
   ```
-- Or rely on `context.Services.GetService<T>()` at execution time — BUT only if your host
-  populates `ToolContext.Services` (the default `AgentLoop` doesn't, so prefer the ctor
-  injection pattern).
+- There is no third option: `ToolContext` does not expose a service provider at all
+  (#470 removed it — the agent loop used to pass `null!`, so a per-call lookup could
+  only ever return null or throw). Constructor injection is the only wiring path.
 
 ### Step 5 — Add a permission rule
 

@@ -877,7 +877,7 @@ public sealed record ChatScreen(
 /// CF-E-002 wiring (TOP-1 #27): <see cref="LayoutTree"/> leaf hosting every
 /// visible panel of one dock placement. The leaf owns no state of its own — each
 /// frame it renders its providers through
-/// <see cref="CellForgePanelAdapter.RenderToRows(IPanelProvider, UiState, int, int, IServiceProvider, UiStore)"/>
+/// <see cref="CellForgePanelAdapter.RenderToRows(IPanelProvider, UiState, int, int, PanelServices)"/>
 /// into its resolved <see cref="Panel.Rect"/> and blits the rows as plain cells.
 /// <see cref="StatusPanel"/> / <see cref="ComposerPanel"/> are untouched: dock
 /// leaves are extra splits around the timeline band, never replacements.
@@ -917,11 +917,12 @@ public sealed class CellForgeDockPanel : Panel
     /// <summary>Latest UI snapshot (refreshed by <see cref="ChatScreenPanelDock"/>).</summary>
     public UiState State { get; set; } = new UiState();
 
-    /// <summary>DI services for panels that need them (help/logs); null degrades gracefully.</summary>
-    public IServiceProvider? Services { get; set; }
-
-    /// <summary>Explicit UI store for panel state transitions (#63); null degrades gracefully.</summary>
-    public UiStore? Store { get; set; }
+    /// <summary>
+    ///     Typed panel dependencies (help/logs/subagents/jump) — #470 replaced the
+    ///     <c>IServiceProvider? Services</c> + <c>UiStore? Store</c> pair this leaf used
+    ///     to hold. Null degrades gracefully; never a live container in the paint path.
+    /// </summary>
+    public PanelServices? Services { get; set; }
 
     public override void Paint(ScreenBuffer buffer)
     {
@@ -963,7 +964,7 @@ public sealed class CellForgeDockPanel : Panel
             int left = providers.Count - i;
             int h = Math.Max(1, remaining / left);
             h = Math.Min(h, remaining);
-            var rows = CellForgePanelAdapter.RenderToRows(providers[i], State, Rect.Width, h, Services, Store);
+            var rows = CellForgePanelAdapter.RenderToRows(providers[i], State, Rect.Width, h, Services);
             Blit(buffer, Rect.X, y, Rect.Width, rows, h);
             y += h;
             remaining -= h;
@@ -985,7 +986,7 @@ public sealed class CellForgeDockPanel : Panel
         for (int i = 0; i < providers.Count && remaining > 0; i++)
         {
             int h = Math.Min(ChatScreenPanelDock.SizeOf(View, providers[i]), remaining);
-            var rows = CellForgePanelAdapter.RenderToRows(providers[i], State, Rect.Width, h, Services, Store);
+            var rows = CellForgePanelAdapter.RenderToRows(providers[i], State, Rect.Width, h, Services);
             Blit(buffer, Rect.X, y, Rect.Width, rows, h);
             y += h;
             remaining -= h;
@@ -1075,10 +1076,9 @@ public static class ChatScreenPanelDock
         ChatScreen screen,
         PanelRegistry registry,
         UiState state,
-        IServiceProvider? services,
+        PanelServices? services,
         int viewportWidth,
-        int viewportHeight,
-        UiStore? store = null)
+        int viewportHeight)
     {
         ArgumentNullException.ThrowIfNull(screen);
         ArgumentNullException.ThrowIfNull(registry);
@@ -1131,15 +1131,15 @@ public static class ChatScreenPanelDock
 
         if (active.DefaultPlacement == TuiPanelPlacement.Left)
         {
-            AttachSide(screen, view, active, TuiPanelPlacement.Left, CellForgeDockPanel.LeftId, state, services, viewportWidth, viewportHeight, store);
+            AttachSide(screen, view, active, TuiPanelPlacement.Left, CellForgeDockPanel.LeftId, state, services, viewportWidth, viewportHeight);
         }
         else if (active.DefaultPlacement == TuiPanelPlacement.Right)
         {
-            AttachSide(screen, view, active, TuiPanelPlacement.Right, CellForgeDockPanel.RightId, state, services, viewportWidth, viewportHeight, store);
+            AttachSide(screen, view, active, TuiPanelPlacement.Right, CellForgeDockPanel.RightId, state, services, viewportWidth, viewportHeight);
         }
         else
         {
-            AttachBottom(screen, view, active, state, services, viewportWidth, viewportHeight, store);
+            AttachBottom(screen, view, active, state, services, viewportWidth, viewportHeight);
         }
 
         if (viewportWidth > 0 && viewportHeight > 0)
@@ -1153,10 +1153,9 @@ public static class ChatScreenPanelDock
         PanelRegistryView view,
         IPanelProvider active,
         UiState state,
-        IServiceProvider? services,
+        PanelServices? services,
         int viewportWidth,
-        int viewportHeight,
-        UiStore? store = null)
+        int viewportHeight)
     {
         int h = SizeOf(view, active);
         var leaf = new CellForgeDockPanel(CellForgeDockPanel.BottomId, TuiPanelPlacement.Bottom, CellForgeDockPanel.BottomPriority)
@@ -1165,7 +1164,6 @@ public static class ChatScreenPanelDock
             View = view,
             State = state,
             Services = services,
-            Store = store,
         };
         int avail = Math.Max(1, screen.Timeline.Rect.Height);
         float ratio = Math.Clamp((float)(avail - Math.Min(h, avail - 1)) / avail, 0.05f, 0.95f);
@@ -1183,10 +1181,9 @@ public static class ChatScreenPanelDock
         TuiPanelPlacement placement,
         string leafId,
         UiState state,
-        IServiceProvider? services,
+        PanelServices? services,
         int viewportWidth,
-        int viewportHeight,
-        UiStore? store = null)
+        int viewportHeight)
     {
         int w = Math.Max(1, SizeOf(view, active));
 
@@ -1196,7 +1193,6 @@ public static class ChatScreenPanelDock
             View = view,
             State = state,
             Services = services,
-            Store = store,
         };
         int avail = Math.Max(1, screen.Timeline.Rect.Width);
         const int gap = 1;
@@ -1219,7 +1215,7 @@ public static class ChatScreenPanelDock
     /// track the latest snapshot; call <see cref="AttachPanels"/> when the
     /// visible set or sizes change.
     /// </summary>
-    public static void UpdatePanels(ChatScreen screen, PanelRegistry registry, UiState state, IServiceProvider? services, UiStore? store = null)
+    public static void UpdatePanels(ChatScreen screen, PanelRegistry registry, UiState state, PanelServices? services = null)
     {
         ArgumentNullException.ThrowIfNull(screen);
         ArgumentNullException.ThrowIfNull(registry);
@@ -1237,7 +1233,6 @@ public static class ChatScreenPanelDock
                 dock.View = view;
                 dock.State = state;
                 dock.Services = services;
-                dock.Store = store;
             }
         }
     }
@@ -1270,10 +1265,9 @@ public static class ChatScreenPanelDock
         PanelRegistry registry,
         UiState state,
         UiKey key,
-        IServiceProvider? services,
+        PanelServices? services,
         int width = 80,
-        int height = 24,
-        UiStore? store = null)
+        int height = 24)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(state);
@@ -1311,7 +1305,7 @@ public static class ChatScreenPanelDock
         int h = provider.DefaultPlacement is TuiPanelPlacement.Left or TuiPanelPlacement.Right
             ? Math.Max(1, height)
             : SizeOf(view, provider);
-        return CellForgePanelAdapter.RouteKey(provider, key, new PanelContext(state, w, h, services, store));
+        return CellForgePanelAdapter.RouteKey(provider, key, new PanelContext(state, w, h, services));
     }
 
     /// <summary>
@@ -1330,8 +1324,7 @@ public static class ChatScreenPanelDock
         Rect timelineRect,
         PanelRegistry registry,
         UiState state,
-        IServiceProvider? services,
-        UiStore? store = null)
+        PanelServices? services)
     {
         ArgumentNullException.ThrowIfNull(buffer);
         ArgumentNullException.ThrowIfNull(registry);
@@ -1353,7 +1346,7 @@ public static class ChatScreenPanelDock
         }
 
         buffer.Fill(new Rect(timelineRect.X, y, timelineRect.Width, h), Cell.Blank);
-        var rows = CellForgePanelAdapter.RenderToRows(active, state, timelineRect.Width, h, services, store);
+        var rows = CellForgePanelAdapter.RenderToRows(active, state, timelineRect.Width, h, services);
         int n = Math.Min(rows.Count, h);
         for (int r = 0; r < n; r++)
         {

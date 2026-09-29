@@ -742,7 +742,7 @@ dotnet run --project apps/Harbor.App.Cli -- help
 3. Register in `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` — in `CreateToolRegistry`,
    `tb.AddTool(() => new YourTool(loggerFactory.CreateLogger<YourTool>()))`.
    If the tool needs a DI dependency, construct it eagerly and pass the instance —
-   `ToolContext.Services` is not populated by the default `AgentLoop` (see
+   #470 removed `ToolContext.Services` entirely — take the dependency in the ctor (see
    `McpToolTool` registration for the pattern).
 4. Add a permission rule to `PermissionRuleset.Default` in
    `src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs`.

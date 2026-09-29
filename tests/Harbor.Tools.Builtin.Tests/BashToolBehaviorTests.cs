@@ -193,8 +193,7 @@ public class BashToolBehaviorTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 
     private static Task<ToolResult> ExecuteAsync(JsonElement args)
         => NewTool().ExecuteAsync(args, CreateContext());

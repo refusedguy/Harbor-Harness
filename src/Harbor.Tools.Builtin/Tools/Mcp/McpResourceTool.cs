@@ -1,5 +1,4 @@
 using Harbor.Tools.Mcp;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
@@ -17,8 +16,10 @@ public sealed class McpResourceTool : ITool
     private readonly IMcpRegistry? _registry;
 
     /// <summary>
-    ///     Construct a <see cref="McpResourceTool" /> that resolves the registry from
-    ///     <see cref="ToolContext.Services" /> on each call (preferred for DI).
+    ///     Construct a <see cref="McpResourceTool" /> with no registry: every call fails with
+    ///     an actionable error (#470 — the registry is constructor-injected by the
+    ///     composition root; the per-call <c>ToolContext.Services</c> lookup it used
+    ///     to fall back to always received <c>null!</c>).
     /// </summary>
     /// <param name="logger">Logger for diagnostics.</param>
     public McpResourceTool(ILogger<McpResourceTool> logger)
@@ -94,20 +95,17 @@ public sealed class McpResourceTool : ITool
         string server = args.GetProperty("server").GetString()!;
         string uri = args.GetProperty("uri").GetString()!;
 
+        // #470: constructor-injected by the composition root. The per-call
+        // lookup on the old service-provider field could never fire — the
+        // agent loop handed every tool a null provider.
         var registry = _registry;
-        // #63 legitimate: ctor-injected primary with a per-call context
-        // fallback (same shape as LspTool).
-        if (registry is null && context.Services is not null)
-        {
-            registry = context.Services.GetService<IMcpRegistry>();
-        }
 
         if (registry is null)
         {
             return ToolResult.Error(
-                "No IMcpRegistry is registered in the DI container. " +
-                "Register one with services.AddSingleton<IMcpRegistry>(...) " +
-                "and call registry.Register(name, stdioCmd) for each MCP server.");
+                "No IMcpRegistry was injected into the 'read_mcp_resource' tool. " +
+                "The composition root builds it with services.AddSingleton<IMcpRegistry>(...) " +
+                "and calls registry.Register(name, stdioCmd) for each MCP server.");
         }
 
         _logger.LogDebug("MCP resource read: server={Server} uri={Uri}", server, uri);

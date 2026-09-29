@@ -15,7 +15,7 @@ namespace Harbor.Tui.CellForge.Panels;
 /// <remarks>
 ///     <c>Build</c> reads the cursor from <c>ctx.State</c> (missing key = 0) and
 ///     clamps it for display without persisting; <c>OnKey</c> folds the move
-///     through <c>ctx.Store</c> via <c>AppMsg.SetPanelCursor</c>. The
+///     through <c>ctx.Deps.Store</c> via <c>AppMsg.SetPanelCursor</c>. The
 ///     provider-local fallback covers only the null-store degraded path
 ///     (tests); the lock keeps <c>Build</c> (render thread) and <c>OnKey</c>
 ///     (input thread) thread-safe.
@@ -72,7 +72,7 @@ public sealed class CellForgeDiagnosticsPanel : CellForgePanelBase
                     _fallbackCursor = next;
                 }
 
-                if (ctx.Store is UiStore store)
+                if (ctx.Deps.Store is { } store)
                 {
                     _ = store.Dispatch(new AppMsg.SetPanelCursor(Id, next));
                 }
@@ -90,7 +90,7 @@ public sealed class CellForgeDiagnosticsPanel : CellForgePanelBase
                     _fallbackCursor = next;
                 }
 
-                if (ctx.Store is UiStore store)
+                if (ctx.Deps.Store is { } store)
                 {
                     _ = store.Dispatch(new AppMsg.SetPanelCursor(Id, next));
                 }

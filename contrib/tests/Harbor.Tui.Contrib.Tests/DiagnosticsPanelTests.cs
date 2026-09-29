@@ -3,7 +3,6 @@ using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.Tests;
 /// <summary>
@@ -188,7 +187,8 @@ public class SpectreTuiLogsPanelTests
     public async Task Build_NoPanel_ShowsPlaceholder()
     {
         var panel = new LogsPanel();
-        var ctx = new PanelContext(new UiState(), 80, 24, null);
+        // #470: no bag at all — the panel degrades, it never dereferences null.
+        var ctx = new PanelContext(new UiState(), 80, 24);
         object? widget = panel.Build(ctx);
         await Assert.That(widget).IsNotNull();
     }
@@ -200,12 +200,9 @@ public class SpectreTuiLogsPanelTests
         diag.Log(LogLevel.Information, "Harbor.Test", "hello world");
         diag.Log(LogLevel.Error, "Harbor.Test", "boom");
 
-        var services = new ServiceCollection();
-        services.AddSingleton<IDiagnosticsPanel>(diag);
-        var sp = services.BuildServiceProvider();
-
+        // #470: the buffer arrives as a typed PanelServices field, not a container.
         var panel = new LogsPanel();
-        var ctx = new PanelContext(new UiState(), 80, 24, sp);
+        var ctx = new PanelContext(new UiState(), 80, 24, new PanelServices { Diagnostics = diag });
         object? widget = panel.Build(ctx);
         await Assert.That(widget).IsNotNull();
     }
@@ -214,12 +211,9 @@ public class SpectreTuiLogsPanelTests
     public async Task Build_EmptyPanel_ShowsNoEntriesMessage()
     {
         var diag = new InMemoryDiagnosticsPanel();
-        var services = new ServiceCollection();
-        services.AddSingleton<IDiagnosticsPanel>(diag);
-        var sp = services.BuildServiceProvider();
 
         var panel = new LogsPanel();
-        var ctx = new PanelContext(new UiState(), 80, 24, sp);
+        var ctx = new PanelContext(new UiState(), 80, 24, new PanelServices { Diagnostics = diag });
         object? widget = panel.Build(ctx);
         await Assert.That(widget).IsNotNull();
     }
@@ -227,21 +221,12 @@ public class SpectreTuiLogsPanelTests
     [Test]
     public async Task OnKey_F12_TogglesPanelViaStore()
     {
-        var diag = new InMemoryDiagnosticsPanel();
-        var services = new ServiceCollection();
-        services.AddSingleton<IDiagnosticsPanel>(diag);
-        var sp = services.BuildServiceProvider();
-
         // The store is needed for the panel to dispatch AppMsg.TogglePanel. Use
         // the real UiStore — it raises Changed on dispatch.
         var store = new UiStore();
-        var servicesWithStore = new ServiceCollection();
-        servicesWithStore.AddSingleton<IDiagnosticsPanel>(diag);
-        servicesWithStore.AddSingleton(store);
-        var sp2 = servicesWithStore.BuildServiceProvider();
 
         var panel = new LogsPanel();
-        var ctx = new PanelContext(store.State, 80, 24, sp2);
+        var ctx = new PanelContext(store.State, 80, 24, new PanelServices { Store = store });
 
         bool consumed = panel.OnKey(new UiKey(UiKeyCode.F12), ctx);
         await Assert.That(consumed).IsTrue();

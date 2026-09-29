@@ -152,7 +152,8 @@ Panels may register lazily — even after the renderer has started — and appea
 next frame. Panel plugins MUST NOT reference `Harbor.Application` or
 `Harbor.Registries`: agent state flows in via
 `PanelContext.State` (an immutable `UiState`), side effects go through `UiStore.Dispatch`
-retrieved from `PanelContext.Services`.
+read from `PanelContext.Deps.Store` — a typed, nullable field on the `PanelServices`
+bag the host attaches (#470; there is no service locator in the per-frame contract).
 
 ---
 
@@ -191,18 +192,29 @@ public sealed class PluginContext
 | `Harbor.Tui.Abstractions.Plugins` | `ITuiPlugin` |
 | `Harbor.Tui.Abstractions` | `ViewRegistry`, `ViewModelRegistry`, `ITuiView`, `ITuiViewModel`, `ITuiRenderContext` |
 
-### Via `IServiceProvider` (from `ToolContext.Services`)
+### Via constructor injection (the only supported path since #470)
 
-Tools get DI access via `context.Services.GetRequiredService<T>()`:
+`ToolContext` no longer carries an `IServiceProvider` — the agent loop always passed
+`null!` for it, so anything resolved from it was a latent `NullReferenceException`.
+Declare the dependency on your tool and let the composition root wire it:
 
 ```csharp
-public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
+public sealed class MyTool : ITool
 {
-    var providerRegistry = ctx.Services.GetRequiredService<IProviderRegistry>();
-    var sessionStore = ctx.Services.GetRequiredService<ISessionStore>();
-    // ...
+    private readonly ISessionStore _store;
+
+    public MyTool(ISessionStore store) => _store = store;
+
+    public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
+    {
+        var session = await _store.GetAsync(ctx.SessionId, ct);
+        // ...
+    }
 }
 ```
+
+A host that does not provide the dependency passes `null`; treat that as a graceful
+degradation, not an error path.
 
 ### Forbidden APIs
 

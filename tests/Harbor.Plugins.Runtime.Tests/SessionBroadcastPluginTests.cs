@@ -171,8 +171,7 @@ public sealed class SessionBroadcastPluginTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Deny, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Deny, false)));
 
     /// <summary>
     ///     Walk up from the test binaries to the repository root (the directory

@@ -134,7 +134,11 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         // panel state; the registry only holds the provider list.
         SeedPanelRegistryIntoState();
 
-        _screen = new ChatScreen(_store, _effects, _logger, Panels, host, new DefaultUiProjector());
+        // #470: one composition-time projection of the container into the typed
+        // bag the panels read. Build and OnKey now see the SAME dependencies —
+        // previously OnKey got the live container while Build got nothing.
+        _screen = new ChatScreen(
+            _store, _effects, _logger, Panels, PanelServices.FromContainer(host), new DefaultUiProjector());
 
         var settings = new ApplicationSettings
         {
@@ -223,31 +227,34 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         private readonly PanelLayoutShell _panelShell;
         private readonly SpectreTuiRenderer _parent;
         private readonly PanelRegistry _registry;
-        private readonly IServiceProvider _services;
+        // #470: typed panel dependencies, built ONCE from the host container by
+        // PanelServices.FromContainer. The per-frame PanelContext carries this
+        // value, never the IServiceProvider itself.
+        private readonly PanelServices _panelServices;
         private readonly UiStore _store;
         private readonly IUiProjector _projector;
         private ApplicationContext? _app;
 
         public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger,
-            PanelRegistry registry, IServiceProvider services, IUiProjector projector,
+            PanelRegistry registry, PanelServices panelServices, IUiProjector projector,
             SpectreTuiRenderer? parent = null)
         {
             _store = store;
             _effects = effects;
             _logger = logger;
             _registry = registry;
-            _services = services;
+            _panelServices = panelServices;
             _projector = projector;
             _layout = new ChatViewProjector();
             _viewport = new SpectreUiViewport(_layout);
-            _panels = new PanelViewProjector(_layout, registry);
+            _panels = new PanelViewProjector(_layout, registry, panelServices);
             _panelShell = new PanelLayoutShell(registry);
             _parent = parent!;
         }
 
         public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger,
-            PanelRegistry registry, IServiceProvider services)
-            : this(store, effects, logger, registry, services, new DefaultUiProjector(), null)
+            PanelRegistry registry, PanelServices panelServices)
+            : this(store, effects, logger, registry, panelServices, new DefaultUiProjector(), null)
         {
             // Backwards-compatible ctor for tests that don't pass a parent.
         }
@@ -306,7 +313,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                     return;
                 }
 
-                var ctx = new PanelContext(s, 80, 24, _services, _store);
+                var ctx = new PanelContext(s, 80, 24, _panelServices);
                 try
                 {
                     if (focusedPanel.OnKey(uiKey, ctx))

@@ -1,6 +1,5 @@
 using System.Text;
 using Harbor.Abstractions.Lsp;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -17,7 +16,22 @@ public sealed class EditTool : ITool
     private const int SnippetLen = 80;
     private readonly ILogger<EditTool> _logger;
 
-    public EditTool(ILogger<EditTool> logger) { _logger = logger; }
+    /// <summary>Language server used for the diagnostics note; null when the host wired no LSP.</summary>
+    private readonly ILspService? _lsp;
+
+    /// <summary>Construct an edit tool, optionally with a language server.</summary>
+    /// <param name="logger">Logger for diagnostics.</param>
+    /// <param name="lsp">
+    ///     Optional language server (#470). Injected by
+    ///     <c>ToolsCatalog.CreateToolRegistry</c>; the tool used to reach for the
+    ///     per-call service provider that the agent loop always handed it as
+    ///     null, so the diagnostics note was dead in production.
+    /// </param>
+    public EditTool(ILogger<EditTool> logger, ILspService? lsp = null)
+    {
+        _logger = logger;
+        _lsp = lsp;
+    }
 
     public ToolName Name => ToolName.Create("edit");
     public string DisplayName => "Edit";
@@ -217,7 +231,7 @@ public sealed class EditTool : ITool
         if (diff.Length > 0)
             msg.Append("\n\n").Append(diff);
 
-        msg.Append(await DiagnosticsNoteAsync(context, path, content, cancellationToken).ConfigureAwait(false));
+        msg.Append(await DiagnosticsNoteAsync(path, content, cancellationToken).ConfigureAwait(false));
 
         return ToolResult.Success(
             msg.ToString(),
@@ -230,14 +244,14 @@ public sealed class EditTool : ITool
     ///     edit. Returns "" when no service, unsupported file, or no diagnostics.
     /// </summary>
     private async Task<string> DiagnosticsNoteAsync(
-        ToolContext context, string path, string content, CancellationToken cancellationToken)
+        string path, string content, CancellationToken cancellationToken)
     {
         try
         {
-            // #63 legitimate: optional per-call enrichment — the default
-            // AgentLoop never populates ToolContext.Services, so a missing
-            // LSP service degrades to no diagnostics instead of a throw.
-            if (context.Services?.GetService<ILspService>() is not { } lsp)
+            // #470: injected by the composition root; an absent language server
+            // degrades to no diagnostics note instead of a per-call lookup the
+            // agent loop could only ever satisfy with a null provider.
+            if (_lsp is not { } lsp)
                 return string.Empty;
             if (!lsp.SupportsFile(path))
                 return string.Empty;

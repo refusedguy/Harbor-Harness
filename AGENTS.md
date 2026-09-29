@@ -294,8 +294,8 @@ tb.AddTool(() => new MyTool(loggerFactory.CreateLogger<MyTool>()));
 ```
 
 If the tool needs a DI dependency (e.g. `McpToolTool` needs `IMcpRegistry`), construct it
-eagerly and pass the instance — `ToolContext.Services` is not populated by the default
-`AgentLoop`:
+eagerly and pass the instance — #470 removed `ToolContext.Services` entirely, so the ctor
+is the only wiring path:
 ```csharp
 tb.AddTool(new MyTool(sp.GetRequiredService<IMyDep>(), loggerFactory.CreateLogger<MyTool>()));
 ```

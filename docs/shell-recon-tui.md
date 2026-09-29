@@ -211,7 +211,9 @@ public interface IPanelProvider
 }
 ```
 - `Build` is side-effect free, called every visible frame.
-- `OnKey` may dispatch state transitions via `UiStore.Dispatch` (via `ctx.Services`), must NOT mutate `UiState` directly.
+- `OnKey` may dispatch state transitions via `UiStore.Dispatch` (via `ctx.Deps.Store`, a
+  typed nullable field on the `PanelServices` bag — #470 removed the `IServiceProvider`
+  from `PanelContext`), must NOT mutate `UiState` directly.
 - Thread safety: `Build` called from render thread, `OnKey` from input thread concurrently.
 
 ---

@@ -257,8 +257,12 @@ public sealed class MyService
 }
 ```
 
-> **Exception:** `ToolContext.Services` deliberately exposes `IServiceProvider`
-> to plugins — they need to resolve plugin-specific services without modifying Core.
+> **Removed in #470.** `ToolContext` used to declare an `IServiceProvider` "so
+> plugins can resolve services"; both production call sites passed `null!`, so the
+> promise was false and every consumer was one missing guard from an NRE. Tool
+> dependencies are constructor-injected by the composition root
+> (`ToolsCatalog.CreateToolRegistry`) — a plugin that needs a service declares it
+> in its own constructor and the host wires it.
 
 ### 8. Open class for inheritance when not designed for it
 

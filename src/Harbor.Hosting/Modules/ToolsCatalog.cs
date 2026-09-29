@@ -102,14 +102,19 @@ internal static class ToolsCatalog
         bool full = ctx.Options.ToolSet == HarborToolSetKind.Full14;
 
         // P.2: logger-aware lambdas replaced 14 IToolFactory ceremony classes.
-        tb.AddTool(lf => new ReadTool(lf.CreateLogger<ReadTool>()));
+        // #470: every tool dependency is constructor-injected here — ToolContext
+        // no longer carries an IServiceProvider (both production call sites used
+        // to pass `null!`, so the LSP / MCP / session-store lookups that hung off
+        // it were dead). A null `lspService` / `sessionStore` now degrades the
+        // optional enrichment visibly instead of resolving against a null provider.
+        tb.AddTool(lf => new ReadTool(lf.CreateLogger<ReadTool>(), lspService));
         tb.AddTool(lf => new WriteTool(lf.CreateLogger<WriteTool>()));
-        tb.AddTool(lf => new EditTool(lf.CreateLogger<EditTool>()));
+        tb.AddTool(lf => new EditTool(lf.CreateLogger<EditTool>(), lspService));
         tb.AddTool(lf => new BashTool(lf.CreateLogger<BashTool>()));
         tb.AddTool(lf => new GlobTool(lf.CreateLogger<GlobTool>()));
         tb.AddTool(lf => new GrepTool(lf.CreateLogger<GrepTool>()));
         tb.AddTool(lf => new LsTool(lf.CreateLogger<LsTool>()));
-        tb.AddTool(lf => new SkillTool(lf.CreateLogger<SkillTool>()));
+        tb.AddTool(lf => new SkillTool(sessionStore, lf.CreateLogger<SkillTool>()));
         if (full)
         {
             tb.AddTool(lf => new TaskTool(agentRegistry, lf.CreateLogger<TaskTool>(), subAgentRunner, backgroundTasks));

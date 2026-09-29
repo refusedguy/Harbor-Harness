@@ -2,13 +2,12 @@ using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Tui.CellForge.Panels;
 
 /// <summary>
 ///     Cell-native logs panel: live <c>ILogger</c> output surfaced from
-///     <see cref="IDiagnosticsPanel"/> in <c>ctx.Services</c>. <c>F12</c> while
+///     <see cref="IDiagnosticsPanel"/> on <see cref="PanelServices"/>. <c>F12</c> while
 ///     focused dispatches <c>AppMsg.TogglePanel("logs")</c>.
 /// </summary>
 public sealed class CellForgeLogsPanel : CellForgePanelBase
@@ -29,9 +28,10 @@ public sealed class CellForgeLogsPanel : CellForgePanelBase
     public override object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        // #63 legitimate: same as above — diagnostics panel is host-registered,
-        // unreachable via ctor on a framework-created panel instance.
-        var panel = ctx.Services?.GetService<IDiagnosticsPanel>();
+        // #470: the diagnostics buffer is an explicitly typed field on
+        // PanelServices, filled by the composition root — not a per-frame lookup
+        // against a container the host may never have handed us.
+        var panel = ctx.Deps.Diagnostics;
         if (panel is null)
         {
             var rows = new List<string>(16);
@@ -55,8 +55,8 @@ public sealed class CellForgeLogsPanel : CellForgePanelBase
     {
         if (key.Code == UiKeyCode.F12)
         {
-            // #63: explicit store from the host (no Services lookup).
-            if (ctx.Store is UiStore store)
+            // #470: the store is an explicit field on PanelServices — no lookup.
+            if (ctx.Deps.Store is { } store)
             {
                 _ = store.Dispatch(new AppMsg.TogglePanel(Id));
             }

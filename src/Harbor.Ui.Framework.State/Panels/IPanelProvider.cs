@@ -53,7 +53,7 @@ public interface IPanelProvider
     ///     panel is in <see cref="TuiPanelState.Visible" />, <see cref="TuiPanelState.Focused" />,
     ///     or <see cref="TuiPanelState.Pinned" /> — never when <see cref="TuiPanelState.Hidden" />.
     /// </summary>
-    /// <param name="ctx">Per-frame context (state + geometry + services).</param>
+    /// <param name="ctx">Per-frame context (state + geometry + typed <see cref="PanelServices" />).</param>
     /// <returns>
     ///     A renderer-native widget (e.g. <c>Spectre.Tui.IWidget</c> for SpectreTUI).
     ///     Return <see langword="null" /> to render an empty placeholder.
@@ -62,8 +62,10 @@ public interface IPanelProvider
 
     /// <summary>
     ///     Handle a key press while this panel owns focus. Use
-    ///     <c>UiStore.Dispatch</c> (via <c>ctx.Services</c>) to drive transitions —
-    ///     do NOT mutate <see cref="UiState" /> in place.
+    ///     <c>UiStore.Dispatch</c> (via <c>ctx.Deps.Store</c>) to drive transitions —
+    ///     do NOT mutate <see cref="UiState" /> in place. #470: the context
+    ///     carries a typed <see cref="PanelServices" /> bag, not a container, and
+    ///     every field of it is optional — a panel must degrade, never throw.
     /// </summary>
     /// <param name="key">The pressed key (already translated to <see cref="UiKey" />).</param>
     /// <param name="ctx">Per-frame context.</param>

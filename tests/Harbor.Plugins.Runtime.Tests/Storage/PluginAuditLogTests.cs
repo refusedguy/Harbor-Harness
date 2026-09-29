@@ -161,8 +161,7 @@ public sealed class PluginAuditLogTests : IDisposable
             Abort: CancellationToken.None,
             Messages: Array.Empty<AgentMessage>(),
             ReportProgress: (_, _) => Task.CompletedTask,
-            Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-            Services: null!);
+            Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
         var result = await tool.ExecuteAsync(
             JsonDocument.Parse("""{"url":"https://www.google.com/search?q=hello"}""").RootElement.Clone(),
             ctx);

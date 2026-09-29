@@ -140,8 +140,7 @@ public class WebFetchToolTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 
     private static HttpResponseMessage NewResponse(HttpStatusCode status, string body, string contentType) =>
         new()

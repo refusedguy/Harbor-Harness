@@ -98,6 +98,11 @@ internal static class ServiceRegistration
         services.AddSingleton<ISessionQueries>(sp => sp.GetRequiredService<SessionManager>());
         services.AddSingleton<ISessionLifecycle>(sp => sp.GetRequiredService<SessionManager>());
         services.AddSingleton<ISessionStatusTracker>(sp => sp.GetRequiredService<SessionManager>());
+        // #470: PanelServices.FromContainer resolves IPanelSessionGateway (not
+        // ISessionManager) because the panel contract lives in a lower layer —
+        // publish the same instance under the narrow name so the panel bag is
+        // actually filled instead of silently degrading.
+        services.AddSingleton<Harbor.Ui.Framework.Panels.IPanelSessionGateway>(sp => sp.GetRequiredService<SessionManager>());
         services.AddSingleton<GitService>();
         services.AddSingleton<ToastService>();
         services.AddSingleton<IToastService>(sp => sp.GetRequiredService<ToastService>());

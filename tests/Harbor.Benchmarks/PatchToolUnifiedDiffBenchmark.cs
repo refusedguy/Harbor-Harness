@@ -83,8 +83,7 @@ public class PatchToolUnifiedDiffBenchmark
             Abort: CancellationToken.None,
             Messages: Array.Empty<AgentMessage>(),
             ReportProgress: (_, __) => Task.CompletedTask,
-            Ask: (_, __) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-            Services: null!);
+            Ask: (_, __) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
         var result = await _tool.ExecuteAsync(args, ctx).ConfigureAwait(false);
         return result.Output;
     }

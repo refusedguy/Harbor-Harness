@@ -47,8 +47,7 @@ public class SessionSupervisionToolTests
         CancellationToken.None,
         messages ?? Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 
     private static JsonElement Args(Dictionary<string, object?> values) =>
         JsonDocument.Parse(JsonSerializer.Serialize(values)).RootElement.Clone();

@@ -3,9 +3,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
-using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Tui.CellForge.Panels;
 
@@ -20,15 +18,18 @@ namespace Harbor.Tui.CellForge.Panels;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Rows come from an <see cref="ISessionStore" /> snapshot (resolved per
-///         frame from <c>ctx.Services</c>), refreshed on first paint, on the
+///         Rows come from an <see cref="ISessionStore" /> snapshot (carried on
+///         <see cref="PanelServices" />, built once by the composition root),
+///         refreshed on first paint, on the
 ///         explicit <c>r</c> key, and whenever <see cref="UiState.Revision" />
 ///         moves (every <c>AgentEvent</c> the host dispatches bumps it, so the
 ///         list tracks live sub-agent activity; revision-triggered refreshes
 ///         are throttled to one store listing per 1.5s). A live
-///         <see cref="ISessionManager" /> context overrides the stored status
-///         with its real-time <c>StatusText</c> when the sub-session was opened
-///         in this app run.
+///         <see cref="IPanelSessionGateway" /> overrides the stored status with its
+///         real-time status text when the sub-session was opened in this app run.
+///         Both collaborators are optional and an absent one degrades the panel
+///         instead of throwing (#470 — the old <c>ctx.Services</c> service locator
+///         was never populated on the CellForge path).
 ///     </para>
 ///     <para>
 ///         Read-only by construction: <see cref="OnKey" /> only moves the
@@ -175,7 +176,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
 
     private List<SubagentRow> ListRows(PanelContext ctx)
     {
-        var store = ctx.Services?.GetService<ISessionStore>();
+        var store = ctx.Deps.SessionStore;
         List<Session> snapshot;
         lock (_gate)
         {
@@ -188,12 +189,12 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
 
         // Live override: a session opened in this app run reports its
         // real-time status instead of the last persisted one.
-        var manager = ctx.Services?.GetService<ISessionManager>();
-        if (manager is not null)
+        var sessions = ctx.Deps.Sessions;
+        if (sessions is not null)
         {
             for (int i = 0; i < rows.Count; i++)
             {
-                string? live = manager.GetContext(rows[i].SessionId)?.StatusText;
+                string? live = sessions.GetStatusText(rows[i].SessionId);
                 if (live is not null)
                     rows[i] = rows[i] with { Status = live };
             }
@@ -231,7 +232,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
     /// <summary>Kick a store re-listing (completed-task fast path applies inline). Call only under <c>_gate</c>.</summary>
     private void KickRefreshLocked(PanelContext ctx, ISessionStore? store = null)
     {
-        store ??= ctx.Services?.GetService<ISessionStore>();
+        store ??= ctx.Deps.SessionStore;
         if (store is null)
             return;
         _refreshRequested = false;
@@ -290,7 +291,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
         _transcriptLoading = true;
         _transcriptWidth = -1;
 
-        var store = ctx.Services?.GetService<ISessionStore>();
+        var store = ctx.Deps.SessionStore;
         if (store is null)
         {
             _transcriptBody = new List<string> { "(session store unavailable)" };
@@ -438,7 +439,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
     {
         if (_transcriptSessionId is not { } sessionId)
             return;
-        var store = ctx.Services?.GetService<ISessionStore>();
+        var store = ctx.Deps.SessionStore;
         if (store is null)
             return;
         _transcriptLoading = true;
@@ -472,7 +473,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
 
     private static void HideViaStore(PanelContext ctx)
     {
-        if ((ctx.Store ?? ctx.Services?.GetService<UiStore>()) is UiStore store)
+        if (ctx.Deps.Store is { } store)
         {
             _ = store.Dispatch(new AppMsg.TogglePanel(OverlayIds.Subagents));
         }

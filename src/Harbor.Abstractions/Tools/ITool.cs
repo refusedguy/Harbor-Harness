@@ -101,7 +101,16 @@ public enum ExecutionMode
 /// <param name="Messages">A snapshot of the current conversation messages.</param>
 /// <param name="ReportProgress">Callback to report progress updates.</param>
 /// <param name="Ask">Callback to ask the user for a permission decision.</param>
-/// <param name="Services">The DI service provider for resolving tool-specific services.</param>
+/// <remarks>
+///     #470 — this record deliberately carries <b>no</b> <c>IServiceProvider</c>.
+///     It used to declare one that both production call sites
+///     (<c>ToolDispatcher</c> / <c>McpStdioServer</c>) passed as <c>null!</c>, so
+///     the signature promised a container that never existed and every consumer
+///     of it was one guard away from a <see cref="NullReferenceException" />.
+///     Tool dependencies are constructor-injected by the composition root
+///     (<c>ToolsCatalog.CreateToolRegistry</c>) — an absent dependency is now a
+///     visible <c>null</c> on the tool, not a trap in the context.
+/// </remarks>
 public sealed record ToolContext(
     string SessionId,
     string MessageId,
@@ -110,8 +119,7 @@ public sealed record ToolContext(
     CancellationToken Abort,
     IReadOnlyList<AgentMessage> Messages,
     Func<ToolProgressUpdate, CancellationToken, Task> ReportProgress,
-    Func<PermissionRequest, CancellationToken, Task<PermissionResponse>> Ask,
-    IServiceProvider Services);
+    Func<PermissionRequest, CancellationToken, Task<PermissionResponse>> Ask);
 
 /// <summary>
 ///     Progress update from a tool execution.

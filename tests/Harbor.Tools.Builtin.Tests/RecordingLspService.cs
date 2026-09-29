@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Lsp;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Tools.Builtin.Tests;
 
@@ -40,7 +39,4 @@ internal sealed class RecordingLspService : ILspService
         ValueTask.FromResult<IReadOnlyList<LspLocation>>([]);
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-
-    public static ServiceProvider ServicesWith(RecordingLspService lsp) =>
-        new ServiceCollection().AddSingleton<ILspService>(lsp).BuildServiceProvider();
 }

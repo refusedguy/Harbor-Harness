@@ -14,7 +14,8 @@ namespace Harbor.Tui.CellForge.Panels;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <see cref="PanelContext" /> (state + width + height + services) is
+///         <see cref="PanelContext" /> (state + width + height + the typed
+///         <see cref="PanelServices" /> bag) is
 ///         passed through untouched — the adapter never mutates
 ///         <see cref="UiState" /> and never interprets the widget type.
 ///     </para>
@@ -36,12 +37,11 @@ public static class CellForgePanelAdapter
         UiState state,
         int width,
         int height,
-        IServiceProvider? services = null,
-        UiStore? store = null)
+        PanelServices? services = null)
     {
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(state);
-        return RenderToRows(provider, new PanelContext(state, width, height, services, store));
+        return RenderToRows(provider, new PanelContext(state, width, height, services));
     }
 
     /// <summary>

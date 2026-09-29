@@ -14,7 +14,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class CellForgeSkillFreshnessPanelTests
 {
-    private static PanelContext Ctx(UiState state, int width = 80, int height = 24, IServiceProvider? services = null) =>
+    private static PanelContext Ctx(UiState state, int width = 80, int height = 24, PanelServices? services = null) =>
         new(state, width, height, services);
 
     private static IReadOnlyList<string> Rows(object? widget) => widget switch
