@@ -730,4 +730,3 @@ ApprovalQueue > Composer.Search > Composer.Popup > PromptBuffer > TimelineScroll
   Widgets/Layout/{Layout,LayoutSplitter}.cs; Live/LiveRenderable.cs.
 - Текущий код Harbor: src/Harbor.Terminal.Abstractions/Views/*.cs (104+82+91+85+64),
   ViewModels/TuiViewModels.cs (345) — прочитаны целиком.
-

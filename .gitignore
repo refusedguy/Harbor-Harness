@@ -144,3 +144,8 @@ assets/demo/frames/
 
 # git worktrees (local clones, e.g. .worktrees/tunit-audit)
 .worktrees/
+
+# Python bytecode from the markdown gates in tools/ (issue #509) — md-lint.py
+# and check-md-links.py import md_gate, so every run drops a __pycache__ here.
+__pycache__/
+*.pyc

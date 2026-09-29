@@ -3201,5 +3201,3 @@ All under `crates/codegen/xai-grok-pager/docs/user-guide/`:
 - **Worklog entries:** appended to `/home/z/my-project/worklog.md` (see Task ID: R for §§1–10, Task ID: G for §11)
 
 End of document.
-
-

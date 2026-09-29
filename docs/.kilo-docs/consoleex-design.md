@@ -577,5 +577,3 @@ v2 (следующие спринты): cell-diff полноэкранный р�
 MVP → full — §8.5; привязка к спринту-5 — §8.5. Ссылки на код репо
 проверены по факту 23.08.2026 (SpectreTuiRenderer, State/*.cs,
 specs/07-tui.md §8/§13/§14, Directory.Build.props).
-
-

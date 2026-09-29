@@ -74,24 +74,77 @@ Tests use [TUnit](https://github.com/thomhurst/TUnit) v1.61.0 with Microsoft Tes
 
 ## Documentation checks
 
+Two stdlib-only Python 3 gates (no pip install, no network, no dotnet) run on
+every markdown change, in CI and locally:
+
 ```bash
-./tools/check-md-links.py          # exit 0 = clean, 1 = broken link or anchor
-./tools/check-md-links.py --verbose  # plus a per-file reference count
+./tools/check-md-links.py          # do internal links + #anchors resolve?
+./tools/md-lint.py                 # do the files obey the markdown invariants?
+./tools/check-md-links.py --self-test   # prove the checker still fails on a bad link
+./tools/md-lint.py --self-test          # prove the lint still fails on bad input
 ```
 
-Stdlib-only Python 3 — no pip install, no network, no dotnet, so it runs
-anywhere the repo is checked out. It resolves every relative link and every
-`#anchor` in the tracked markdown files and reports the ones that do not
-exist, ignoring external URLs and code blocks.
+`check-md-links.py` resolves every relative link, `#anchor` and
+`path/File.cs:123` reference in the tracked markdown and reports the ones that
+do not exist; external URLs are skipped on purpose (network flakiness is worse
+than no gate). `md-lint.py` checks encoding (LF, no BOM), heading structure
+and fences; its header lists the rules it enforces **and** the markdownlint
+rules it deliberately does not, each with the measured hit count that ruled it
+out.
 
-Run it before opening a PR that adds or moves a document, or edits a
-cross-reference. Relative links break silently: a doc that renames or moves is
-still valid markdown, it just sends the reader to a 404.
+Relative links break silently: a doc that renames or moves is still valid
+markdown, it just sends the reader to a 404.
 
-> **Not in CI yet.** `ci.yml` has `paths-ignore: ['**.md', 'docs/**', …]`, so a
-> docs-only push does not trigger it and a markdown-only PR is never built.
-> Wiring this in needs a separate `docs.yml` triggered on `**.md` — tracked in
-> #39's follow-up rather than smuggled into a docs PR that `ci.yml` would skip.
+### It IS in CI now — `.github/workflows/docs.yml`
+
+`ci.yml` lists `**.md` and `docs/**` in `paths-ignore`, so a docs-only PR never
+starts a build. That is why the markdown gates live in a second workflow
+instead of `ci.yml` (issue #509): `docs.yml` triggers on `**.md` plus the gate
+scripts themselves and runs three jobs in ~30s with no .NET SDK.
+
+| Job | What it asserts |
+|---|---|
+| `checker self-test` | both gates still **fail** on fixtures that are known-broken |
+| `internal links` | `check-md-links.py --min-files 250 --min-refs 600` |
+| `markdown lint` | `md-lint.py --min-files 250 --min-lines 60000` |
+
+Three things make this a real gate rather than decoration:
+
+1. **The failure path is tested.** `--self-test` builds a throwaway git repo
+   containing a document with a missing link, a bad anchor and a lint error,
+   then asserts the exit code *and* the diagnostic. A checker edited until it
+   matches nothing goes red here instead of reporting "clean" forever.
+2. **A narrowed scan is a failure.** The `--min-*` floors are set ~20% below
+   today's numbers (310 files, 770 link refs, 74018 lines). Scanning zero
+   files, or a tenth of them, exits 1 — a script that examined nothing cannot
+   report that everything is fine. The floors are a ratchet: a PR that really
+   removes documents lowers them in the same diff, where a reviewer sees it.
+3. **No allow-list.** There is no set of files to skip and no
+   `continue-on-error`. A broken link in a docs-only PR is a red check.
+
+Verify it end to end before trusting it: add a link to a file that does not
+exist, `git push`, and watch the `internal links` job fail on the PR.
+
+> **Do not "fix" this by editing `ci.yml`.** Removing `paths-ignore` would
+> rebuild the whole solution for a typo in a paragraph, and `docs.yml` would
+> still be the only thing linting markdown. The two workflows are meant to
+> coexist.
+
+### Who owns which markdown fact
+
+Two gates touch `src/**/README.md`, and they are deliberately disjoint:
+
+| Gate | Asserts | Runs in |
+|---|---|---|
+| `ReadmeCoverageTests` ([tests/Harbor.Architecture.Tests](../tests/Harbor.Architecture.Tests)) | every `src/**/*.csproj` has a README; packable READMEs carry the six sections of [docs/standards/README-template.md](./standards/README-template.md) | the dotnet build (core shard) |
+| `tools/check-md-links.py` | every link and anchor in those READMEs resolves | `docs.yml` |
+| `tools/md-lint.py` | encoding, heading and fence structure | `docs.yml` |
+
+`ReadmeCoverageTests` never parses a link, and neither Python gate looks at the
+template sections — so a failure always names exactly one gate to fix. Keep it
+that way: adding a link check to `ReadmeCoverageTests`, or a section check to
+`md-lint.py`, would give two gates an opinion about the same fact, and two
+gates that can disagree are worse than one.
 
 ## Running the CLI
 
