@@ -120,8 +120,6 @@ public class ResultTryAdoptionTests
         (Path.Combine("src", "Harbor.Storage.Jsonl", "JsonlLineParser.cs"), 224, "try body returns Result directly"),
         (Path.Combine("src", "Harbor.Storage.Jsonl", "JsonlLineParser.cs"), 295, "try body returns Result directly"),
         (Path.Combine("src", "Harbor.Storage.Jsonl", "JsonlLineParser.cs"), 349, "try body returns Result directly"),
-        (Path.Combine("src", "Harbor.Storage.Jsonl", "SessionPorter.cs"), 224,
-            "try body returns Result<string?> directly (EOF-as-success vs read-error)"),
         (Path.Combine("src", "Harbor.Plugins.Registration", "SafePluginRegistrar.cs"), 39,
             "try body returns the callee's Result (IPluginRegistrar.Register) — needs a Bind split, not a shape fix"),
         // Outside this wave's perimeter (Harbor.Lsp), and NOT convertible as a
