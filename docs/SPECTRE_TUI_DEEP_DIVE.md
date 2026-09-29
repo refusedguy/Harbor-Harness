@@ -294,7 +294,7 @@ public static TextLine RoleHeader(ChatRole role) {
 }
 
 // Только акцент полосы. Оттенок берётся из слота (ToColor ниже), а не из
-// второй таблицы по ролям, и wildcard-руки нет: новая ChatRole = CS8509.
+// второй таблицы по ролям. Default-рука бросает, а не придумывает стиль.
 private static Style HeaderStyle(ChatRole role) {
     var color = ToColor(role);
     return role switch {
@@ -344,8 +344,14 @@ public static (string Label, bool Markdown, ChatColorSlot Slot) Describe(ChatRol
 
 Правила, из-за которых это не разъезжается (#556):
 
-- **Нет wildcard-руки.** `switch`-expression без `_` → новая `ChatRole` даёт
-  **CS8509** на компиляции, а не тихо переименовывается в `"msg"`.
+- **Default-рука бросает, а не отвечает.** C# не проверяет здесь полноту
+  `switch` по enum'у: без `_` компилятор всё равно ругается `CS8524`
+  («not exhaustive, involving an unnamed enum value»), а не считает switch
+  полным. Поэтому новая `ChatRole`, которую никто не описал, падает с
+  `ArgumentOutOfRangeException` и текстом, где написано, что именно дописать, —
+  а не тихо переименовывается в `"msg"`. `ChatRole` не персистится (его
+  рождает `SessionFactory.MessageToChatLine` в памяти), так что значение вне
+  таблицы — это всегда забытая строка, а не битые данные.
 - **Конкретный оттенок — свой у каждого бэкенда.** Общий — *слот*, а не цвет:
   Termina красит в 24-bit RGB, Terminal.Gui — в своих ANSI-именах (`Bright*`).
   Инвариант, который проверяется тестом: две роли с одним слотом получают

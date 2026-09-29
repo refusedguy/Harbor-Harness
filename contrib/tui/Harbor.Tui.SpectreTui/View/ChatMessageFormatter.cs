@@ -44,8 +44,10 @@ internal static class ChatMessageFormatter
     /// <summary>
     ///     Speaker-band emphasis. The hue is the shared slot's hue — only the
     ///     decoration is decided here, because a bold/italic band is the one
-    ///     axis the other three backends have no surface for. No wildcard arm:
-    ///     a new <see cref="ChatRole" /> is a CS8509 build break.
+    ///     axis the other three backends have no surface for. The default arm
+    ///     throws rather than inventing a style: C# will not check enum
+    ///     exhaustiveness here (a discard-free switch is rejected as CS8524, not
+    ///     accepted as a total match), so a role nobody wired up has to be loud.
     /// </summary>
     private static Style HeaderStyle(ChatRole role)
     {
