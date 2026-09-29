@@ -522,8 +522,11 @@ public class JsonlUnboundedAllocationTests
         source.Position = 0;
 
         using var reader = new ChunkedLineReader(source);
-        int headLength = ReadHeadLength(reader);
-        await Assert.That(headLength).IsEqualTo(4);
+
+        // Fill first: the block is empty until a refill, so TryGetRecord on a
+        // fresh reader has nothing to hand out.
+        await Assert.That(reader.Fill()).IsTrue();
+        await Assert.That(ReadHeadLength(reader)).IsEqualTo(4);
 
         using var sink = new MemoryStream();
         reader.CopyRemainderTo(sink);
@@ -550,40 +553,39 @@ public class JsonlUnboundedAllocationTests
         // The rewrite half of the issue: every title/status/git-branch change
         // did File.ReadAllLines(...).ToList() plus a full rewrite under the
         // per-session semaphore, to change line 1. Here the session holds a
-        // 24 MiB record, and the operation allocates single-digit MiB.
+        // 24 MiB record.
         //
         // A single big record is the right fixture HERE (and not in the read
-        // test): the header plan keeps every record after the first verbatim,
-        // so the rewrite pipes them straight through without assembling one —
-        // the fat record is not merely cheap, it never becomes a record. What
-        // IS assembled is the head, and the head is the session header: one
-        // line. So the memory is bounded by the header, not by the file.
+        // test): the header plan keeps every record after the first verbatim, so
+        // the rewrite pipes them straight through without assembling one — the
+        // fat record is not merely cheap, it never becomes a record. What IS
+        // assembled is the head, and the head is the session header: one line.
+        // So the memory is bounded by the header, not by the file.
         var (store, sessionId) = await SeedAsync(1);
         try
         {
+            // Baseline FIRST, on the same session while it is still small: the
+            // fixed cost of a rename (temp file, two FileStreams, the block) with
+            // none of the bulk involved.
+            long smallBaseline = await MeasureHeaderRewriteAsync(store, sessionId, "baseline");
+
             const int payloadBytes = 24 * 1024 * 1024;
             await AppendFatMessageAsync(store, sessionId, "fat", payloadBytes);
 
-            var session = await store.GetAsync(sessionId);
-            await Assert.That(session.IsSuccess).IsTrue();
-            var renamed = session.Value with { Title = "renamed by #460" };
+            long allocated = await MeasureHeaderRewriteAsync(store, sessionId, "renamed by #460");
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            Console.WriteLine(
+                $"jsonl-460: header rewrite = {smallBaseline / 1024} KiB on a small session, " +
+                $"{allocated / 1024} KiB on a 24 MiB one");
 
-            long before = GC.GetTotalAllocatedBytes(precise: true);
-            var updated = await store.UpdateAsync(renamed);
-            long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
-
-            Console.WriteLine($"jsonl-460: header rewrite of a 24 MiB session allocated {allocated / 1024} KiB");
-
-            await Assert.That(updated.IsSuccess).IsTrue();
-
-            // Old shape: a 24 MiB string[] plus a List over it plus a 24 MiB
-            // re-encode — tens of MiB of churn for a one-line change. New shape:
-            // the block, two FileStream buffers and the small header record.
-            await Assert.That(allocated).IsLessThan(4 * MiB);
+            // Asserted RELATIVE to the baseline, not against a magic absolute
+            // number. What #460 changed is the SCALING, and a fixed budget would
+            // mostly be measuring the platform's FileStream and ArrayPool
+            // overhead — a few MiB, and it moves between runs. The old shape put
+            // a second copy of the 24 MiB file on top of that overhead; this one
+            // puts at most a couple of MiB on top, and the gate says exactly
+            // that: growing the file 3 000x must not grow the cost with it.
+            await Assert.That(allocated - smallBaseline).IsLessThan(2 * MiB);
 
             // And every record survived the rewrite — the count first, because a
             // byte-piping bug shows up as a missing record, not as a wrong one.
@@ -597,6 +599,39 @@ public class JsonlUnboundedAllocationTests
         {
             Drop(store);
         }
+    }
+
+    /// <summary>
+    ///     What one header rename costs before any of the session's bulk is
+    ///     involved: the fixed overhead of the temp file, the two FileStreams
+    ///     and the block. The big-session measurement is compared against this,
+    ///     so the assertion is about the file's contribution and nothing else.
+    /// </summary>
+    private static async Task<long> MeasureHeaderRewriteAsync(
+        JsonlSessionStore store, string sessionId, string title)
+    {
+        var session = await store.GetAsync(sessionId);
+        if (!session.IsSuccess)
+        {
+            throw new InvalidOperationException($"session lookup failed: {session.Error}");
+        }
+
+        var renamed = session.Value with { Title = title };
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        long before = GC.GetTotalAllocatedBytes(precise: true);
+        var updated = await store.UpdateAsync(renamed);
+        long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+
+        if (!updated.IsSuccess)
+        {
+            throw new InvalidOperationException($"header rewrite failed: {updated.Error}");
+        }
+
+        return allocated;
     }
 
     [Test]
