@@ -60,6 +60,8 @@
 // emptied the set fails loudly instead of going quiet.
 
 using System.Reflection;
+using Harbor.Abstractions.Resilience;
+using Harbor.Application.Resilience;
 using Harbor.Tools.Mcp;
 
 namespace Harbor.Architecture.Tests;
@@ -165,6 +167,64 @@ public class TransportRetryOwnershipRules
         await Assert.That(Array.IndexOf(names, "McpSseTransport") >= 0).IsTrue().Because(
             "same coverage requirement for the legacy SSE transport, which carried the second copy of the same fork. "
             + $"Discovered: [{string.Join(", ", names)}]");
+    }
+
+    /// <summary>
+    ///     The shared owner must be reachable from BOTH sides that had forked.
+    ///     This is the mechanical form of the argument in the file header: the
+    ///     transports are Infrastructure and the policy is Application, so the
+    ///     owner has to sit in the Domain facade between them. Asserting it here
+    ///     is what stops "just move it next to RetryPolicy" from quietly becoming
+    ///     a forbidden Infrastructure → Application edge.
+    /// </summary>
+    [Test]
+    public async Task Assert_TheSharedOwnerIsReachableFromBothLayers()
+    {
+        Assembly owner = typeof(TransientFailurePolicy).Assembly;
+
+        await Assert.That(owner.GetName().Name).IsEqualTo("Harbor.Abstractions").Because(
+            $"the retry verdict lives in {owner.GetName().Name}. It has to be a layer both consumers can see: the MCP "
+            + "transports are Infrastructure (may not reference Harbor.Application) and the policy is Application.");
+
+        foreach (Assembly consumer in new[] { typeof(McpHttpTransport).Assembly, typeof(RetryPolicy).Assembly })
+        {
+            string[] referenced = [.. consumer.GetReferencedAssemblies().Select(a => a.Name ?? string.Empty)];
+
+            await Assert.That(Array.IndexOf(referenced, "Harbor.Abstractions") >= 0).IsTrue().Because(
+                $"{consumer.GetName().Name} must reference the Domain facade to reach the shared retry verdict, "
+                + $"referenced: [{string.Join(", ", referenced)}]");
+        }
+    }
+
+    /// <summary>
+    ///     The drift #572 is named for: an <see cref="IOException" /> and a bare
+    ///     <see cref="TimeoutException" /> are the same physical event as a
+    ///     status-less <see cref="System.Net.Http.HttpRequestException" />, which
+    ///     <see cref="RetryPolicy" /> has always retried. Before this the MCP
+    ///     transports said "retry" and the policy said "fatal" for the identical
+    ///     exception, so one app had two answers.
+    /// </summary>
+    [Test]
+    public async Task Assert_TheMcpPathAndTheLlmPathAgreeOnASocketFailure()
+    {
+        Exception[] socketFailures =
+        [
+            new IOException("connection reset by peer"),
+            new TimeoutException("the operation timed out"),
+        ];
+
+        foreach (Exception failure in socketFailures)
+        {
+            // What a remote-MCP transport asks before sleeping.
+            bool mcpVerdict = TransientFailurePolicy.ShouldRetry(failure);
+
+            // What the LLM path asks, via the canonical policy.
+            bool llmVerdict = RetryPolicy.IsTransient(failure, out _);
+
+            await Assert.That(llmVerdict).IsEqualTo(mcpVerdict).Because(
+                $"{failure.GetType().Name} gets a different retry verdict depending on which side of the app caught it "
+                + $"(MCP path: {mcpVerdict}, LLM path: {llmVerdict}). One exception, one answer.");
+        }
     }
 
     /// <summary>Every non-abstract class in the assembly that implements the transport seam.</summary>

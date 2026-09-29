@@ -1,4 +1,5 @@
 using System.Net.Http;
+using Harbor.Abstractions.Resilience;
 
 namespace Harbor.Application.Resilience;
 
@@ -8,11 +9,12 @@ namespace Harbor.Application.Resilience;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Retryable: <see cref="IOException" />, <see cref="TimeoutException" />,
-///         and <see cref="HttpRequestException" /> classified transient by the
-///         shared <see cref="RetryPolicy.IsTransient" /> (network-level, 408,
-///         429, 5xx). Everything else — validation, auth, logic errors — is
-///         fatal: retrying cannot fix it.
+///         Retryable: <see cref="IOException" />, <see cref="TimeoutException" />
+///         (both via the shared <see cref="TransientFailurePolicy.ShouldRetry" />,
+///         #572) and <see cref="HttpRequestException" /> classified transient by
+///         <see cref="RetryPolicy.IsTransient" /> (network-level, 408, 429, 5xx).
+///         Everything else — validation, auth, logic errors — is fatal: retrying
+///         cannot fix it.
 ///     </para>
 ///     <para>
 ///         Known limitation: a timeout MAY have committed side effects inside
@@ -36,10 +38,12 @@ public sealed class DefaultToolRetryDecider : IToolRetryDecider
             return false;
         }
 
+        // The socket verdict is the shared one, not a private copy: it used to
+        // be restated here AND in both MCP transports, which is how three sites
+        // came to disagree with RetryPolicy about a dropped socket (#572).
         return error switch
         {
-            IOException => true,
-            TimeoutException => true,
+            IOException or TimeoutException => TransientFailurePolicy.ShouldRetry(error),
             HttpRequestException => RetryPolicy.IsTransient(error, out _),
             _ => false,
         };
