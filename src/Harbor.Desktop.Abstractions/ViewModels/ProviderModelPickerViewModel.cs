@@ -162,7 +162,11 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
 
         foreach (var group in groups)
         {
+            #pragma warning disable CFE0001
+            // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
+            // Guard upstream is an early return.
             foreach (var m in modelsResult.Value.Where(m => m.ProviderId == group.Id))
+            #pragma warning restore CFE0001
             {
                 group.Models.Add(new PickerModelViewModel(
                     group.Id, m.Id, m.DisplayName,
@@ -240,7 +244,11 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
         try
         {
             var cfgResult = await _configStore.LoadAsync(ct).ConfigureAwait(true);
+            #pragma warning disable CFE0001
+            // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
+            // cfgResult.IsSuccess && ... cfgResult.Value ...; && short-circuit guard
             authenticated = cfgResult.IsSuccess && !string.IsNullOrWhiteSpace(cfgResult.Value.ApiKeys.GetValueOrDefault(providerId));
+            #pragma warning restore CFE0001
         }
         catch (Exception ex)
         {

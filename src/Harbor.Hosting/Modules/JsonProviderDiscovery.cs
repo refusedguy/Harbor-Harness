@@ -66,7 +66,11 @@ internal static class JsonProviderDiscovery
                         logger.LogWarning("Skipping provider config '{File}': {Error}", file, result.Error);
                         continue;
                     }
+                    #pragma warning disable CFE0001
+                    // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
+                    // Guard upstream is an loop-continue guard.
                     var config = result.Value;
+                    #pragma warning restore CFE0001
                     if (config.ApiType != "openai-compatible")
                     {
                         logger.LogDebug("Skipping provider '{Id}' (apiType={Type}, not openai-compatible)",
@@ -136,7 +140,11 @@ public static void RegisterJsonProviders(
                     continue;
                 }
 
+                #pragma warning disable CFE0001
+                // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
+                // Guard upstream is an loop-continue guard.
                 var config = loaded.Value;
+                #pragma warning restore CFE0001
                 if (config is null || string.IsNullOrEmpty(config.Id)) continue;
                 if (config.Id is "anthropic" or "openai" or "ollama") continue;
                 if (!seenIds.Add(config.Id)) continue;

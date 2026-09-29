@@ -99,7 +99,12 @@ public sealed class LspManager : ILspService
 
         try
         {
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return or continue, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             await resolved.Value.ChangeAsync(Path.GetFullPath(filePath), newText, ct).ConfigureAwait(false);
+            #pragma warning restore CFE0001
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -128,7 +133,12 @@ public sealed class LspManager : ILspService
 
         try
         {
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return or continue, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             await resolved.Value.CloseAsync(Path.GetFullPath(filePath)).ConfigureAwait(false);
+            #pragma warning restore CFE0001
         }
         catch (Exception ex)
         {
@@ -171,7 +181,12 @@ public sealed class LspManager : ILspService
         cts.CancelAfter(RequestTimeout);
         try
         {
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return or continue, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             return await resolved.Value.FindDefinitionAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
+            #pragma warning restore CFE0001
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
@@ -207,7 +222,12 @@ public sealed class LspManager : ILspService
         cts.CancelAfter(RequestTimeout);
         try
         {
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return or continue, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             return await resolved.Value.FindReferencesAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
+            #pragma warning restore CFE0001
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {

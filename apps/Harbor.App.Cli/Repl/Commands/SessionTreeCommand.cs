@@ -52,7 +52,11 @@ internal sealed class SessionTreeCommand : IReplCommand
         var seeds = new List<SessionTreeSeed>(result.Value.Count);
         for (int i = 0; i < result.Value.Count; i++)
         {
+            #pragma warning disable CFE0001
+            // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
+            // Guard upstream is an early return.
             var s = result.Value[i];
+            #pragma warning restore CFE0001
             seeds.Add(new SessionTreeSeed(
                 s.Id, s.Title, s.Directory, s.Agent, s.Model,
                 s.CreatedAt, s.UpdatedAt, s.ParentSessionId,

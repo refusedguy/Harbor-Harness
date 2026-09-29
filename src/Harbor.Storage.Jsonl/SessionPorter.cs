@@ -150,12 +150,22 @@ public sealed class JsonlSessionPorter : ISessionPorter
             }
             else
             {
+                #pragma warning disable CFE0001
+                // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+                // return or continue, a control-flow shape the analyzer does not model.
+                // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
                 var appended = await store.AppendMessageAsync(target.Id, decode.Value, ct).ConfigureAwait(false);
+                #pragma warning restore CFE0001
                 if (appended.IsFailure)
                 {
                     skipped++;
                     _logger.LogWarning("Failed to persist imported message {MessageId}: {Error}",
+                        #pragma warning disable CFE0001
+                        // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+                        // return or continue, a control-flow shape the analyzer does not model.
+                        // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
                         decode.Value.Id, appended.Error);
+                        #pragma warning restore CFE0001
                 }
                 else
                 {

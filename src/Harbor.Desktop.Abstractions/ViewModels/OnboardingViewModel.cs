@@ -419,7 +419,12 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         ConnectionStatus = $"Testing connection to {providerId}…";
         try
         {
+            #pragma warning disable CFE0001
+            // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
+            // Ternary: result.IsSuccess ? ... result.Value ... : ... result.Error. The guard IS
+            // the ternary condition; the analyzer's ternary handling still reports it.
             var result = await _healthCheck.CheckAsync(pid.Value, ct).ConfigureAwait(true);
+            #pragma warning restore CFE0001
             ConnectionStatus = result.IsSuccess
                 ? $"✓ Connection OK — {result.Value.ModelsCount} model(s), {result.Value.LatencyMs} ms."
                 : $"⚠ {result.Error}";

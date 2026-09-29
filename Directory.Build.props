@@ -147,6 +147,22 @@
   -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('tests')) or $(MSBuildProjectDirectory.Contains('samples'))">
     <NoWarn>$(NoWarn);RS0030</NoWarn>
+    <!--
+      CFE0001 policy for tests: the guard's ONLY value is protecting shipped
+      code paths from a ResultFailureException at runtime. In a test, that
+      exception IS the failure signal — `(await store.CreateAsync(...)).Value`
+      throwing means the fixture broke, which is exactly what the test should
+      do. Measured on this branch: 174 CFE0001 sites, 100% of them in tests/,
+      0 in src/. All 174 are the same false positive — the guard is a bare
+      `Assert.That(result.IsSuccess).IsTrue()` statement, and the analyzer's
+      walker only models `if`-scoped and ternary checks, so it never sees it.
+
+      Suppressed here (same condition as RS0030, same reasoning) rather than
+      with 174 call-site pragmas. Production is NOT covered by this condition:
+      src/apps/contrib keep CFE0001 at full severity, so a new unguarded
+      .Value there is still a build error.
+    -->
+    <NoWarn>$(NoWarn);CFE0001</NoWarn>
   </PropertyGroup>
 
   <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->  <ItemGroup>
@@ -189,6 +205,39 @@
          Solution-wide: every project that consumes Microsoft.Extensions.DependencyInjection
          gets checked. Severity is configured in .editorconfig (default = warning). -->
     <PackageReference Include="DependencyInjection.Lifetime.Analyzers">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!--
+      CFE0001 — "check IsSuccess or IsFailure before accessing Value from
+      result object". A mechanical guard for the §ROP-001 crash class: `.Value`
+      on a failed Result<T> throws ResultFailureException.
+
+      SCOPE — solution-wide, like every other analyzer above, and that is
+      deliberate rather than an oversight. CFE0001 fires only where the
+      analyzer can resolve a `CSharpFunctionalExtensions.Result` symbol, i.e.
+      only in projects where CSharpFunctionalExtensions is referenced. Adding
+      the reference per-project "only where CFE is referenced" would be
+      strictly WORSE: Harbor.Abstractions references CFE *transitively*, so
+      Harbor.Application, Harbor.Registries and Harbor.Tools.Builtin — the
+      projects with by far the most Result<T> traffic — would carry the crash
+      risk while being left unguarded. Solution-wide is what actually covers
+      the sites that matter.
+
+      ZERO-DEPENDENCY RULE — this does not violate Harbor.Abstractions'
+      "no new dependencies" constraint, for two reasons. (1) It is a
+      build-time-only analyzer with PrivateAssets=all: nothing flows to
+      consumers, nothing is packed into the assembly, no runtime code path
+      changes. (2) Harbor.Abstractions already carries build-time tooling of
+      exactly this shape — ZLinq.DropInGenerator, a source generator, is
+      referenced there with the same IncludeAssets/PrivateAssets pair. The
+      constraint is about RUNTIME dependencies, and this is not one.
+
+      CFE0002 is Info and disabled by default; it is deliberately left off
+      (docs/ROP-API-INVENTORY.md §5 — low value, Harbor's Result.Failure<T>
+      sites are mostly not in an inferable position).
+    -->
+    <PackageReference Include="CSharpFunctionalExtensions.Analyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

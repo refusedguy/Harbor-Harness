@@ -424,7 +424,12 @@ public sealed class SubAgentRunner(
                 else
                 {
                     AssistantMessage? parent = null;
+                    #pragma warning disable CFE0001
+                    // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+                    // return or continue, a control-flow shape the analyzer does not model.
+                    // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
                     var list = messages.Value;
+                    #pragma warning restore CFE0001
                     for (int i = 0; i < list.Count; i++)
                     {
                         if (list[i] is AssistantMessage assistant

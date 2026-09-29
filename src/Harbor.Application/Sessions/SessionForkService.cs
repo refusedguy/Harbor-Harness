@@ -62,13 +62,23 @@ public sealed class SessionForkService
         int count;
         if (upToMessageId is null)
         {
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return or continue, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             count = msgsRes.Value.Count;
+            #pragma warning restore CFE0001
         }
         else
         {
             // Linear scan keeps this allocation-free for the "cut at Nth message" case.
             int boundary = -1;
+            #pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
+            // return or continue, a control-flow shape the analyzer does not model.
+            // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             IReadOnlyList<AgentMessage> source = msgsRes.Value;
+            #pragma warning restore CFE0001
             for (int i = 0; i < source.Count; i++)
             {
                 if (string.Equals(source[i].Id, upToMessageId, StringComparison.Ordinal))

@@ -15,7 +15,7 @@
 | | |
 |---|---|
 | **Pinned version** | **`3.7.0`** |
-| Declared at | [`Directory.Packages.props:150`](../Directory.Packages.props) — `<PackageVersion Include="CSharpFunctionalExtensions" Version="3.7.0" />` |
+| Declared at | [`Directory.Packages.props:167`](../Directory.Packages.props) — `<PackageVersion Include="CSharpFunctionalExtensions" Version="3.7.0" />` |
 | Consumed by | 13 projects via `<PackageReference Include="CSharpFunctionalExtensions"/>` (central version management, no inline version) — `Harbor.Abstractions`, `Harbor.Abstractions.Contracts`, `Harbor.Desktop.Abstractions`, `Harbor.Ipc.Abstractions`, `Harbor.Ui.Framework.State`, `Harbor.Ui.Framework.Sessions`, `Harbor.Lsp`, `Harbor.Terminal.Pty`, `Harbor.Scripting.Abstractions`, `Harbor.Scripting.Bridge`, plus 3 test projects |
 | TFMs shipped | `net6.0`, `net8.0`, `netstandard2.0` (all three present in the cache; Harbor builds `net8.0`/`net10.0`) |
 | License | MIT |
@@ -588,11 +588,11 @@ Three files already say the rule out loud, and #571 records it:
 
 ---
 
-## 5. Analyzers (not adopted — owner decision)
+## 5. Analyzers (CFE0001 ADOPTED, pinned to 1.3.0 — measured)
 
 Upstream publishes a separate Roslyn analyzer package: **`CSharpFunctionalExtensions.Analyzers`**
 ([repo](https://github.com/AlmarAubel/CSharpFunctionalExtensions.Analyzers), [NuGet](https://www.nuget.org/packages/CSharpFunctionalExtensions.Analyzers)).
-It is a `netstandard2.0` `DevelopmentDependency` analyzer assembly (`analyzers/dotnet/cs`), and it is a **separate repository from the main library** — it is not part of the `3.7.0` package and adding it means a new `PackageReference`.
+It is a `netstandard2.0` `DevelopmentDependency` analyzer assembly (`analyzers/dotnet/cs`), and it is a **separate repository from the main library** — it is not part of the `3.7.0` package.
 
 It ships **two** diagnostics:
 
@@ -601,17 +601,143 @@ It ships **two** diagnostics:
 | **`CFE0001`** | *"Check IsSuccess or IsFailure before accessing Value from result object"* | Warning, enabled by default | `result.Value` where the enclosing function body never checks `IsSuccess`/`IsFailure` first | `RegisterSyntaxNodeAction(…, SimpleMemberAccessExpression)`; matches `memberAccess.Name == "Value"` on an `IPropertySymbol` whose containing type is `Result` in namespace `CSharpFunctionalExtensions`, then walks the function body for a check |
 | **`CFE0002`** | *"Prefer Implicit Type Arguments for Result Methods"* | Info, **disabled by default** | `Result.Success<T>(x)` / `Result.Failure<T>(e)` where the target type already determines `T` — i.e. `return Result.Failure<Foo>("…")` in a `Foo`-returning method | `RegisterSyntaxNodeAction(…, InvocationExpression)`; inspects the return statement's or variable declaration's target type, with a code fix that drops the explicit type argument |
 
-**What this would buy Harbor:** `CFE0001` is a *mechanical* backstop for exactly the "unguarded `.Value`" class of bug. Harbor is currently 100% clean on this **by review convention, not by tooling** — nothing enforces it, and it is one careless PR away from not being. `CFE0001` is a Warning, so under `TreatWarningsAsErrors` it would fail the build — which is either exactly what you want or immediately too noisy (the analyzer's function-body walk is a heuristic; expect false positives where the check is in a caller rather than the same body).
+**Status: `CFE0001` is adopted** (owner override of the no-new-packages rule, for this package only),
+solution-wide via `Directory.Build.props`, `PrivateAssets="all"`. **`CFE0002` stays off** — it is
+`Info`, disabled upstream, and low value here: Harbor's `Result.Failure<T>(…)` sites are mostly not in
+an inferable position.
 
-**What it would cost / why it is your call, not this document's:** the repo has a standing ban on new packages (`AGENTS.md` §Before you start; `Directory.Packages.props` §11 is a curated, argued list — every entry is a deliberate decision). Adding an analyzer is exactly the kind of change that should be a separate issue with its own measurement, not a side effect of an inventory document. **No `PackageReference` was added by this change.** `CFE0002` is `Info` and off by default — low value here regardless, since Harbor's `Result.Failure<T>(…)` sites are mostly *not* in an inferable position.
+### 5.1 The version is NOT the library's version — pin 1.3.0, not 3.7.0
 
-**Recommendation to the owner (not acted on):** open a separate issue that (a) adds `CSharpFunctionalExtensions.Analyzers` as a `PrivateAssets="all"` `DevelopmentDependency`, (b) enables `CFE0001` at Warning, and (c) measures the resulting violation count on a single project (e.g. `Harbor.Application`) before rolling out. If the false-positive rate is non-trivial, keep it `Info` as a review aid instead of a build gate.
+The analyzer is a **separate repository with its own GitVersion scheme**. There is no `3.7.0` release
+of `CSharpFunctionalExtensions.Analyzers`; pinning it "to match" the library fails restore with
+NU1102. Latest stable is **1.3.0** (see `Directory.Packages.props`).
+
+**1.4.x must not be used.** 1.4.1 crashes the compiler with
+`AD0001 … System.InvalidOperationException: Operation is not valid due to the current state of the
+object` on five production projects (`Harbor.Application` ×40, `Harbor.Tools.Builtin` ×26,
+`Harbor.Lsp` ×6, `Harbor.Ui.Framework.Sessions` ×4, `Harbor.Storage.Jsonl` ×4). Those projects then
+**fail to compile**, so they emit no CFE0001 diagnostics at all — the guard looks clean precisely
+where the risk is highest. 1.3.0 predates the `ResultValueWalker` rework (changelog: 1.4.1
+"addressed multiple issues related to pattern matching and complex conditional logic") and runs clean.
+
+### 5.2 Measured baseline (CI, `dotnet build Harbor.slnx -c Release`, analyzer 1.3.0)
+
+**210 CFE0001 sites total: 36 in shipped code (src/ + apps/), 174 under `tests/`.**
+
+| area | sites | verdict |
+|---|---|---|
+| shipped — real defect, fixed | 1 | **fixed** (see 5.3) |
+| shipped — real defect, baselined | 1 | `SettingsViewModel` ctor; needs a product decision (5.3) |
+| shipped — false positives | 34 | baselined, one documented pragma each (5.4) |
+| `tests/` | 174 | all false positives of ONE shape; suppressed centrally (5.5) |
+
+Per project: `Harbor.Lsp` 8, `Harbor.Application` 7, `Harbor.Desktop.Abstractions` 3,
+`Harbor.Hosting` 3, `Harbor.Storage.Jsonl` 2, `Harbor.App.Cli` 6, `Harbor.Plugins.Hosting` 1,
+`Harbor.Plugins.Runtime` 1, `Harbor.App.Avalonia` 3, `Harbor.Terminal.Abstractions.Tests` 1 (pre-existing break, see 5.9).
+
+**A partial build reports a LOWER BOUND, never the count.** The shipped-code sites were found across
+**six** successive runs: each run compiles further before failing, so each surfaced projects the
+previous one never reached. The first 1.3.0 run reported 18 and looked complete; the real figure was
+36. Re-measure until two consecutive runs agree — and note the first run to reach zero new sites is
+not necessarily the last to reach zero unanalysed projects.
+
+### 5.3 The one real defect: `HarborConfig.EffectiveModel`
+
+```csharp
+public string EffectiveModel => Identity.EffectiveModel().Value.ToString();
+```
+
+`IdentityConfig.EffectiveModel()` returns `Result<ModelRef>` and ends in `ModelRef.TryParse`, so it
+**can fail**. This is an expression-bodied property on the startup path
+(`HarborComposeOptions` → `ToolsCatalog` → `ReplRunner`), so a failure threw
+`ResultFailureException` **out of a property getter during composition-root setup** — the §ROP-002
+crash class, live. Now `GetValueOrDefault(IdentityConfig.Default.Model!)`, which applies the fallback
+the property's own summary always promised. This is the only unguarded `.Value` the analyzer found in
+shipped code, and the prior "35/35 clean" audit had missed it.
+
+### 5.4 The 24 production false positives, by shape
+
+The analyzer's guard detection is a heuristic function-body walk. It models `if`-scoped checks,
+ternaries and switch arms; it does **not** model these, all of which Harbor uses constantly:
+
+| shape | example | count |
+|---|---|---|
+| early `return` guard | `if (r.IsFailure) return; … r.Value` | 15 |
+| early `continue` guard | `if (r.IsFailure) { …; continue; } … r.Value` | 4 |
+| fail-fast `throw` guard | `if (psk.IsFailure) throw; … psk.Value` | 1 |
+| `&&` short-circuit | `r.IsSuccess && … r.Value` | 1 |
+| ternary mis-attribution | `built.IsFailure ? …err : …built.Value` | 1 |
+| Result-shaped wrapper pass-through | `public T Value => _result.Value;` | 1 |
+| bare assertion in a test | `Assert.That(r.IsSuccess).IsTrue(); Assert.That(r.Value)` | 174 (tests) |
+
+Each baselined site carries a line-scoped `#pragma warning disable CFE0001` with its reason, so a
+**new** `.Value` in a different member of the same file is still a build error. The table of rows
+lives in `tests/Harbor.Architecture.Tests/CfeValueBaselineTests.cs`, and is keyed by
+**file + member** (not line) because inserting a pragma shifts every line below it.
+
+### 5.5 Tests: suppressed centrally, not with 174 pragmas
+
+`tests/` is exempted in the same `Directory.Build.props` `PropertyGroup` that already exempts
+`RS0030`. In a test the thrown exception **is** the failure signal —
+`(await store.CreateAsync(…)).Value` throwing means the fixture broke, which is what the test should
+do. Production is not covered by that condition: `src`/`apps`/`contrib` keep CFE0001 at full severity.
+
+### 5.6 What this cannot see — read a green CFE0001 as evidence, not proof
+
+- **Hand-rolled `Result<T>` types are structurally invisible.** CFE0001 matches on the
+  `CSharpFunctionalExtensions.Result` *symbol*. The defective shape in #561 —
+  `IPluginCompiler.CompilationResult.Value => _assembly ?? throw …` with
+  `Error => _error ?? string.Empty` — is invisible to it, as is #588's `ModelBatch`. **CFE0001 says
+  nothing about those issues.** (Note `PluginCompilationResult` *is* flagged, but it is the
+  **correct** wrapper per #561; its `Value` is a documented pass-through guarded by its own
+  `IsSuccess` contract.)
+- It only inspects `MethodDeclarationSyntax` bodies: a `.Value` in a constructor, a local function or
+  an expression-bodied member is not modelled.
+- It ignores `?.Value`.
+- It matches by property name on a `Result`-named type, not by the `IResult` interface.
+
+### 5.7 Non-vacuity (the part that is easy to get wrong)
+
+A guard that cannot fire is worse than no guard — the same lesson as NetArchTest treating a
+non-existent assembly name as a satisfied constraint. Three mechanisms guard it:
+
+1. `CfeControlPositiveControlTests` — **behaviour**. `analyzers/CfeControl/` is a throwaway project
+   deliberately **not in `Harbor.slnx`** holding a known-bad unguarded read and a known-good guarded
+   one. The test shells out to `dotnet build` and requires CFE0001 to fire on the first and stay
+   silent on the second: sensitivity *and* specificity, because an analyzer that flagged every
+   `.Value` would pass a sensitivity-only control while being useless. It lives outside `tests/`
+   because `tests/Directory.Build.props` NoWarns CFE0001 — a control placed there would be silenced by
+   the very suppression it polices.
+2. `CfeValueBaselineTests` — **wiring**: the package is referenced and pinned; no *unconditional*
+   `NoWarn` contains CFE0001; `.editorconfig` never sets it to `none`/`silent`/`suggestion`; the
+   tests/samples condition has not widened to cover `src/`.
+3. `CfeValueBaselineTests` — **honesty**: every baselined member still exists and still carries its
+   pragma (so the baseline cannot rot into a blanket permission), and the counts are pinned.
+
+### 5.8 A pre-existing break this work had to clear
+
+Landing the analyzer surfaced, and this PR fixes, an **unrelated** break that was already red on
+`dev@ce46c8d`: `tests/Harbor.Terminal.Abstractions.Tests/ViewRegistryFreezeTests.cs` still overrode
+`ReadLineAsync` as `Task<Result<string>>` after `ITuiRenderer` changed that member to
+`Task<Maybe<string>>` (CS0508). One word. It is in its own commit so it can be dropped independently —
+but note it means **`dev` was red before this PR**, and any CI measurement taken against it is
+against a tree that did not compile.
+
+### 5.9 Cost, stated honestly
+
+A new build-time dependency, and the repo's second Roslyn-related package after
+`BannedApiAnalyzers` (Sonar, Roslynator, Meziantou, NetAnalyzers, AsyncFixer and Reflection are all
+Roslyn analyzers too, so "second" understates it). It ships one useful rule with a 4% true-positive
+rate (1 of 25), heavy false-positive shape coverage, and blind spots that include the exact
+hand-rolled-`Result` bugs issues #561 and #588 are about. **Verdict: worth it as a cheap net for the
+CFE-`Result` case, explicitly not as a §ROP-001 guarantee** — the audit and review convention remain
+the primary defence, and §5.6's blind spots are the reason.
 
 ---
 
 ## 6. How to re-derive this document
 
-The pinned version is the single source of truth. If `Directory.Packages.props:150` changes, this document is stale and must be regenerated:
+The pinned version is the single source of truth. If `Directory.Packages.props:167` changes, this document is stale and must be regenerated:
 
 ```bash
 # 1. the pinned version

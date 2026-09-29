@@ -45,7 +45,11 @@ public static class SessionSearchRunner
             if (messages.IsFailure)
                 continue;
 
+            #pragma warning disable CFE0001
+            // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
+            // Guard upstream is an continue; loop-continue guard.
             (matches, bool cappedNow) = await PrintSessionMatchesAsync(output, session, messages.Value, query, matches).ConfigureAwait(false);
+            #pragma warning restore CFE0001
             if (cappedNow)
             {
                 capped = true;

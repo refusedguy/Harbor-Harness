@@ -35,7 +35,12 @@ internal static partial class HostBuilder
         }
         else
         {
+            #pragma warning disable CFE0001
+            // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
+            // if/else where the FAILURE branch assigns a default and the success branch reads .Value.
+            // The guard is the if/else itself, not an early return.
             cliConfig = result.Value;
+            #pragma warning restore CFE0001
         }
         services.AddSingleton(cliConfig);
         return services;

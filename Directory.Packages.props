@@ -138,6 +138,23 @@
     <PackageVersion Include="AsyncFixer" Version="2.1.0" />
     <PackageVersion Include="ReflectionAnalyzers" Version="0.3.1" />
     <PackageVersion Include="Meziantou.Analyzer" Version="3.0.123" />
+    <!--
+      CSharpFunctionalExtensions.Analyzers ships CFE0001 ("check IsSuccess or
+      IsFailure before accessing Value from result object"), a mechanical guard
+      for the §ROP-001 crash class that Harbor otherwise holds by review
+      convention only (docs/ROP-API-INVENTORY.md §5).
+
+      VERSION NOTE — this is NOT versioned in lockstep with the library. The
+      analyzer lives in a separate repository
+      (github.com/AlmarAubel/CSharpFunctionalExtensions.Analyzers) with its
+      own GitVersion scheme, so `3.7.0` does not exist for it. Latest stable is
+      1.4.1; do not "match" it to the CSharpFunctionalExtensions pin. The
+      library it analyses is resolved from the consuming project's own
+      reference, not from this package, so the two versions are independent.
+
+      CFE0002 (prefer implicit type args) is Info and stays off — see §5.
+    -->
+    <PackageVersion Include="CSharpFunctionalExtensions.Analyzers" Version="1.3.0" />
     <!-- ── Performance / collections / serialization ─────────────────────── -->
     <PackageVersion Include="ZLinq" Version="1.5.6" />
     <PackageVersion Include="ZLinq.DropInGenerator" Version="1.5.6" />

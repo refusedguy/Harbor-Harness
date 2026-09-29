@@ -86,7 +86,12 @@ internal static class IpcModule
             ILoggerFactory loggerFactory = sp.GetRequiredService<ILoggerFactory>();
             var transport = new TcpServerTransport(bindText, port,
                 loggerFactory.CreateLogger<TcpServerTransport>());
+            #pragma warning disable CFE0001
+            // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
+            // psk is guarded by a fail-fast: if (psk.IsFailure) throw ... at the top of this method,
+            // so reaching line 86 implies success. A throwing guard, not an early return.
             return new HarborIpcServer(sp, transport, loggerFactory, psk.Value);
+            #pragma warning restore CFE0001
         });
 
         // Advertise address follows tailscale > lan > loopback priority so the

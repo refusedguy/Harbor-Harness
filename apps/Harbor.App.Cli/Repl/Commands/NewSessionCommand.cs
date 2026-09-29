@@ -66,10 +66,22 @@ internal sealed class NewSessionCommand : IReplCommand
         {
             sb.State = sb.State with
             {
+                #pragma warning disable CFE0001
+                // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
+                // Guard upstream is an early return.
                 SessionId = newSession.Value.Id,
+                #pragma warning restore CFE0001
+                #pragma warning disable CFE0001
+                // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
+                // Guard upstream is an early return.
                 SessionTitle = newSession.Value.Title,
+                #pragma warning restore CFE0001
                 Model = $"{provider}/{model}",
+                #pragma warning disable CFE0001
+                // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
+                // Guard upstream is an early return.
                 Agent = newSession.Value.Agent,
+                #pragma warning restore CFE0001
                 MessageCount = 0,
                 ContextWindow = await host.ResolveContextWindowAsync(provider, model, ct).ConfigureAwait(false),
                 // Fresh session starts counting from zero — otherwise the
