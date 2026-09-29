@@ -6,6 +6,10 @@ using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+// Two stores answer to this name (this namespace has its own single-session
+// fake); the TestKit one records what the core persisted, which is the half
+// under test here.
+using FakeSessionStore = Harbor.TestKit.FakeSessionStore;
 
 namespace Harbor.Application.Tests;
 

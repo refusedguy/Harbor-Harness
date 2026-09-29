@@ -150,6 +150,7 @@ public sealed class FakeProviderRegistry(ILlmClient client) : IProviderRegistry
 public sealed class FakeSessionStore(Session? session = null) : ISessionStore
 {
     private readonly List<AgentMessage> _messages = [];
+    private readonly List<SessionMetadata> _updatedStats = [];
     private readonly object _lock = new();
     private TaskCompletionSource? _gatedAppend;
     private int _appends;
@@ -229,13 +230,22 @@ public sealed class FakeSessionStore(Session? session = null) : ISessionStore
     ///     models a store with no aggregate), so a test that needs to see what the
     ///     core WROTE — the priced cost of #653, for one — reads this.
     /// </summary>
-    public List<SessionMetadata> UpdatedStats { get; } = [];
+    public IReadOnlyList<SessionMetadata> UpdatedStats
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _updatedStats];
+            }
+        }
+    }
 
     public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
     {
-        lock (UpdatedStats)
+        lock (_lock)
         {
-            UpdatedStats.Add(metadata);
+            _updatedStats.Add(metadata);
         }
 
         return Task.FromResult(Result.Success());

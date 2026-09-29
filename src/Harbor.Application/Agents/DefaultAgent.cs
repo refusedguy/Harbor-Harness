@@ -620,7 +620,7 @@ internal sealed class DefaultSessionContext : ISessionContext
         ArgumentNullException.ThrowIfNull(store);
 
         SessionMetadata seed = SessionMetadata.Empty;
-        Result stored = await store.GetStatsAsync(session.Id, ct).ConfigureAwait(false);
+        Result<SessionMetadata> stored = await store.GetStatsAsync(session.Id, ct).ConfigureAwait(false);
         if (stored.IsFailure)
         {
             // §4.6-ok: a store that cannot answer must not fail a prompt the user
