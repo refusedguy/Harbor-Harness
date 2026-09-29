@@ -69,7 +69,7 @@ slice, not here, so the gate does not encode it yet.
 
 ## Skeleton
 
-```markdown
+````markdown
 # Harbor.Example
 
 One paragraph: what this project is and which layer it sits in.
@@ -100,4 +100,4 @@ How it is activated — DI module, `HARBOR_*` env var, `HARBOR_TUI` value.
 ## See also
 
 - [`docs/…`](../../docs/…)
-```
+````

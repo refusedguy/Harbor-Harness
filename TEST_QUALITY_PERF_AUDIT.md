@@ -169,4 +169,3 @@
 4. `tests/Harbor.Tui.CellForge.PtyTests/Harbor.Tui.CellForge.PtyTests.csproj:31` — добавить один `[ParallelLimiter<MockServerLimit>]` пример.
 
 После этого — включить `--maximum-parallel-tests` в CI (по умолчанию TUnit уже ставит threadpool, но на 8-ядерном раннере `TUNIT_MAX_PARALLEL_TESTS=8` даст предсказуемость).
-

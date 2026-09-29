@@ -196,4 +196,3 @@ Keep the narrow interface, placed at the bottom of the layer stack: ICommonConfi
 - No circular reference; layering enforced by Harbor.Architecture.Tests (47/47 green).
 - Ui.Framework.Sessions resolves ICommonConfigReader optionally via GetService - hosts without config (tests, minimal) behave as before.
 - Full config surface stays on the Desktop.Abstractions type; the narrow reader must not grow beyond session-bootstrap needs.
-
