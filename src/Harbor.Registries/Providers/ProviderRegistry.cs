@@ -130,7 +130,7 @@ public sealed class ProviderRegistry : IProviderRegistry
         }
 
         int providerCount = providers.Length;
-        var tasksArray = ArrayPool<Task<ModelBatch>>.Shared.Rent(providerCount);
+        var tasksArray = ArrayPool<Task<Result<IReadOnlyList<ModelInfo>>>>.Shared.Rent(providerCount);
         List<string>? errors = null;
         try
         {
@@ -147,13 +147,13 @@ public sealed class ProviderRegistry : IProviderRegistry
                     {
                         if (_modelCache.TryGetValue(pid, out var cached))
                         {
-                            return new ModelBatch(pid, cached, null);
+                            return Result.Success<IReadOnlyList<ModelInfo>>(cached);
                         }
 
                         var client = GetClient(pid);
-                        if (client.IsFailure) // §4.6-ok: батч-перечисление — ранний выход в record ошибки провайдера.
+                        if (client.IsFailure) // §4.6-ok: батч-перечисление — ранний выход в ошибку провайдера.
                         {
-                            return new ModelBatch(pid, Array.Empty<ModelInfo>(), client.Error);
+                            return client.ConvertFailure<IReadOnlyList<ModelInfo>>();
                         }
 
                         using var perProviderCts = new CancellationTokenSource(PerProviderTimeoutMs);
@@ -161,36 +161,49 @@ public sealed class ProviderRegistry : IProviderRegistry
                         var models = await client.Value.GetModelsAsync(linkedCts.Token).ConfigureAwait(false);
                         if (models.IsFailure) // §4.6-ok: батч-перечисление — частичный результат собирается как данные.
                         {
-                            return new ModelBatch(pid, Array.Empty<ModelInfo>(), models.Error);
+                            return models;
                         }
 
+                        // The provider's own result IS the batch item: one less wrapper,
+                        // and a failure can no longer be spelled with an error that says
+                        // nothing (Result.Failure<T>("") throws instead of being built).
+                        // The cache write stays AFTER the early return rather than inside
+                        // an `if (models.IsSuccess)` block: early-return is the guard shape
+                        // CFE0001 models, and a read inside a branch is what it reports.
                         _modelCache[pid] = models.Value;
-                        return new ModelBatch(pid, models.Value, null);
+                        return models;
                     }
                     catch (OperationCanceledException ex)
                     {
                         _logger.LogWarning(ex, "Model fetch timed out for provider: {ProviderId}", pid);
-                        return new ModelBatch(pid, Array.Empty<ModelInfo>(), "timeout");
+                        return Result.Failure<IReadOnlyList<ModelInfo>>(
+                            $"timed out after {PerProviderTimeoutMs} ms: {Describe(ex)}");
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Failed to get models for provider: {ProviderId}", pid);
-                        return new ModelBatch(pid, Array.Empty<ModelInfo>(), ex.Message);
+                        return Result.Failure<IReadOnlyList<ModelInfo>>(Describe(ex));
                     }
                 }, cancellationToken);
             }
 
             // Copy the active range into a Task[] for Task.WhenAll (it requires IEnumerable<Task>).
             // We use ArrayPool + manual count to avoid the per-call array allocation of new Task[n].
-            // Wrapping the slice in an ArraySegment<Task<ModelBatch>> avoids the previous
-            // `tasksArray.AsSpan(0, providerCount).ToArray()` secondary allocation.
-            var resolved = await Task.WhenAll(new ArraySegment<Task<ModelBatch>>(tasksArray, 0, providerCount)).ConfigureAwait(false);
+            // Wrapping the slice in an ArraySegment<Task<Result<IReadOnlyList<ModelInfo>>>> avoids the
+            // previous `tasksArray.AsSpan(0, providerCount).ToArray()` secondary allocation.
+            //
+            // WhenAll returns results in the order of the tasks it was given, and task i was
+            // created from providers[i] — so resolved[i] belongs to providers[i]. That is where
+            // the provider id for an error message comes from; it is not carried in the result.
+            var resolved = await Task.WhenAll(
+                new ArraySegment<Task<Result<IReadOnlyList<ModelInfo>>>>(tasksArray, 0, providerCount))
+                .ConfigureAwait(false);
 
             // First pass: compute total capacity to avoid List resizes.
             int totalModels = 0;
             for (int i = 0; i < resolved.Length; i++)
             {
-                totalModels += resolved[i].Models.Count;
+                totalModels += CountOf(resolved[i]);
             }
 
             // Pre-size a List<ModelInfo> to the exact total and append via index-based loop.
@@ -199,25 +212,13 @@ public sealed class ProviderRegistry : IProviderRegistry
             var results = new List<ModelInfo>(totalModels);
             for (int i = 0; i < resolved.Length; i++)
             {
-                ref readonly var batch = ref resolved[i];
-                if (batch.Error is not null)
-                {
-                    errors ??= new List<string>();
-                    errors.Add($"{batch.ProviderId}: {batch.Error}");
-                }
-                else
-                {
-                    var models = batch.Models;
-                    for (int j = 0; j < models.Count; j++)
-                    {
-                        results.Add(models[j]);
-                    }
-                }
+                Collect(resolved[i], providers[i], results, ref errors);
             }
 
             if (results.Count == 0 && errors is not null && errors.Count > 0)
             {
-                return Result.Failure<IReadOnlyList<ModelInfo>>($"Failed to load any models. Errors: {string.Join("; ", errors)}");
+                return Result.Failure<IReadOnlyList<ModelInfo>>(
+                    $"Failed to load any models. Errors: {string.Join("; ", errors)}");
             }
 
             return Result.Success<IReadOnlyList<ModelInfo>>(results);
@@ -226,9 +227,59 @@ public sealed class ProviderRegistry : IProviderRegistry
         {
             // Clear the rented portion (Task references) before returning to the pool.
             Array.Clear(tasksArray, 0, providerCount);
-            ArrayPool<Task<ModelBatch>>.Shared.Return(tasksArray);
+            ArrayPool<Task<Result<IReadOnlyList<ModelInfo>>>>.Shared.Return(tasksArray);
         }
     }
+
+    /// <summary>
+    ///     How many models a provider's result carries, counting a failure as zero.
+    /// </summary>
+    private static int CountOf(Result<IReadOnlyList<ModelInfo>> batch)
+    {
+        if (batch.IsFailure)
+        {
+            return 0;
+        }
+
+        return batch.Value.Count;
+    }
+
+    /// <summary>
+    ///     Fold one provider's result into the aggregate: its models on success, its
+    ///     <c>"provider: reason"</c> line on failure. A failed provider never
+    ///     cancels the fan-out — a missing local provider is expected, and the
+    ///     tolerance is what the caller gets when at least one provider answered.
+    /// </summary>
+    private static void Collect(
+        Result<IReadOnlyList<ModelInfo>> batch,
+        ProviderId providerId,
+        List<ModelInfo> models,
+        ref List<string>? errors)
+    {
+        if (batch.IsFailure)
+        {
+            errors ??= new List<string>();
+            errors.Add($"{providerId}: {batch.Error}");
+            return;
+        }
+
+        var value = batch.Value;
+        for (int i = 0; i < value.Count; i++)
+        {
+            models.Add(value[i]);
+        }
+    }
+
+    /// <summary>
+    ///     A non-empty description of <paramref name="ex" />. Both catch blocks above
+    ///     hand this to <c>Result.Failure</c>, and that call THROWS on a null or
+    ///     empty message — an exception thrown from a catch block, turning a dead
+    ///     provider into a dead fan-out. <see cref="Exception.Message" /> is
+    ///     contractually non-null but not contractually non-empty, so the fallback
+    ///     stays.
+    /// </summary>
+    private static string Describe(Exception ex) =>
+        string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
 
     /// <inheritdoc />
     public void Register(ProviderId providerId, Func<ILlmClient> factory)
@@ -286,15 +337,6 @@ public sealed class ProviderRegistry : IProviderRegistry
         // ConcurrentDictionary slow path); both outcomes are safe.
         Interlocked.Exchange(ref _frozenClients, null);
     }
-
-    /// <summary>
-    ///     Readonly struct result holder for parallel model fetches. Avoids boxing
-    ///     ValueTuple into an object on the heap when stored in a Task.
-    /// </summary>
-    private readonly record struct ModelBatch(
-        ProviderId ProviderId,
-        IReadOnlyList<ModelInfo> Models,
-        string? Error);
 }
 
 /// <summary>
