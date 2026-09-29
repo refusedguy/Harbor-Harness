@@ -1,65 +1,97 @@
-using Harbor.Abstractions.Permissions;
-
 namespace Harbor.Ipc.Protocol;
+
 /// <summary>
 ///     Server-side dispatcher: takes a <see cref="HarborRequest" /> and
-///     produces a <see cref="HarborResponse" /> by calling the in-process
-///     <c>IAgent</c>, <c>ISessionStore</c>, <c>IProviderRegistry</c>,
-///     <c>IToolRegistry</c>, <c>IAgentRegistry</c> injected via ctor
-///     (#63: no runtime service location — every dependency is explicit).
+///     produces a <see cref="HarborResponse" /> by handing it to the
+///     <see cref="IRequestHandler{TRequest}" /> registered for that exact
+///     request type.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Stateless per request:</b> all services are ctor-injected
-///         singletons shared across calls. The
-///         <see cref="IAgent" /> is a singleton (single-flight runner), so
-///         concurrent <see cref="SendPromptRequest" />s will get the agent's
-///         "already running" failure rather than clobber each other.
+///         <b>No switch, and no service location.</b> The 14-arm
+///         <c>switch</c> this class used to hold (#485) made the protocol
+///         surface one method in one already-large class: adding a request type
+///         meant editing the switch AND adding a private method beside it, and
+///         the <c>_ =&gt;</c> arm answered anything the author forgot with
+///         <c>ErrorResponse { Message = "Unknown request type: X" }</c> — a
+///         renamed or mistyped request compiled, shipped, and failed at the
+///         client as an opaque string. Dispatch is now a dictionary lookup
+///         against <see cref="RequestHandlerRegistry" />, which is composed
+///         from explicitly-injected singletons (#63: no runtime service
+///         location — every dependency arrives through the registry's
+///         <c>CreateDefault</c>).
 ///     </para>
 ///     <para>
-///         <b>Event subscription:</b> a <see cref="SubscribeToEventsRequest" />
-///         returns an <see cref="OkResponse" /> ack immediately and registers
-///         the calling client's stream-writer with the
-///         <see cref="EventBroadcaster" />. Subsequent
-///         <see cref="HarborEvent" />s are pushed out-of-band via
-///         <see cref="EventEnvelope" /> frames.
+///         <b>Stateless per request:</b> the registry's handlers are ctor-injected
+///         singletons shared across calls. The <see cref="IAgent" /> is a
+///         singleton (single-flight runner), so concurrent
+///         <see cref="SendPromptRequest" />s will get the agent's "already
+///         running" failure rather than clobber each other.
+///     </para>
+///     <para>
+///         <b>Two boundaries, both loud:</b> an unregistered request type is
+///         rejected when the dispatcher is CONSTRUCTED (see the ctor), and a
+///         request that somehow reaches dispatch with no handler is logged,
+///         counted, and answered explicitly. Neither is silence.
 ///     </para>
 /// </remarks>
 public sealed class RequestDispatcher
 {
-    private readonly IAgent _agent;
-    private readonly IAgentRegistry _agents;
-    private readonly ISessionStore _sessions;
-    private readonly IProviderRegistry _providers;
-    private readonly IToolRegistry _tools;
-    private readonly EventBroadcaster _broadcaster;
-    private readonly IApprovalCoordinator? _coordinator;
+    private readonly RequestHandlerRegistry _handlers;
     private readonly SessionLeaseRegistry _leases;
+    private readonly ILogger _logger;
+    private long _unhandledRequests;
 
     /// <summary>
-    ///     Construct a dispatcher over explicitly-injected singletons.
+    ///     Construct a dispatcher over an explicit handler registry.
     /// </summary>
+    /// <param name="handlers">The request-type → handler table.</param>
+    /// <param name="leases">
+    ///     Session-lease registry. Kept here (rather than inside the
+    ///     <see cref="StartAgentRequest" /> handler) because the RPC server
+    ///     releases a connection's leases through this object on teardown.
+    /// </param>
+    /// <param name="logger">Logger for the unhandled-request boundary.</param>
+    /// <exception cref="InvalidOperationException">
+    ///     <b>The startup boundary.</b> At least one member of the
+    ///     <see cref="HarborRequest" /> union has neither a handler here nor an
+    ///     owner upstream in <see cref="HarborRequestTypes.HandledBeforeDispatch" />.
+    ///     A server that would answer such a request with a string must not
+    ///     start — the omission is a composition error, reported here, with the
+    ///     missing types named, instead of an opaque runtime failure.
+    /// </exception>
     public RequestDispatcher(
-        IAgent agent,
-        IAgentRegistry agents,
-        ISessionStore sessions,
-        IProviderRegistry providers,
-        IToolRegistry tools,
-        EventBroadcaster broadcaster,
-        SessionLeaseRegistry? leases = null,
-        // #49: injected, not service-located (null keeps minimal/test
-        // hosts working with direct cancel).
-        IApprovalCoordinator? coordinator = null)
+        RequestHandlerRegistry handlers,
+        SessionLeaseRegistry leases,
+        ILogger<RequestDispatcher> logger)
     {
-        _agent = agent;
-        _agents = agents;
-        _sessions = sessions;
-        _providers = providers;
-        _tools = tools;
-        _broadcaster = broadcaster;
-        _leases = leases ?? new SessionLeaseRegistry();
-        _coordinator = coordinator;
+        IReadOnlyList<Type> unhandled = handlers.UnhandledRequestTypes();
+        if (unhandled.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"The IPC request handler registry is missing "
+                + $"{unhandled.Count} of the {HarborRequestTypes.All.Count} "
+                + $"{nameof(HarborRequest)} members: "
+                + string.Join(", ", unhandled.Select(t => t.Name).OrderBy(n => n, StringComparer.Ordinal))
+                + ". Add a handler for each and one line to "
+                + "RequestHandlerRegistry.CreateDefault, or — if the type is answered before "
+                + "dispatch, the way PskAuthRequest is at the PSK gate — name it in "
+                + "HarborRequestTypes.HandledBeforeDispatch with a comment saying so.");
+        }
+
+        _handlers = handlers;
+        _leases = leases;
+        _logger = logger;
     }
+
+    /// <summary>
+    ///     Requests that reached dispatch with no registered handler, since
+    ///     construction. Zero in any healthy server: the constructor already
+    ///     refused to start one that could not answer the whole union. The
+    ///     counter exists so this boundary is observable rather than a silent
+    ///     branch, per docs/PATTERNS.md §7 rule 2.
+    /// </summary>
+    public long UnhandledRequestCount => Interlocked.Read(ref _unhandledRequests);
 
     /// <summary>
     ///     Dispatch a single request and produce a response.
@@ -90,24 +122,13 @@ public sealed class RequestDispatcher
     {
         try
         {
-            return request switch
+            if (!_handlers.TryGetEntry(request.GetType(), out RequestHandlerEntry entry))
             {
-                StartAgentRequest r => await HandleStartAgentAsync(r, clientId, ct).ConfigureAwait(false),
-                AbortAgentRequest r => HandleAbortAgent(r),
-                SendPromptRequest r => await HandleSendPromptAsync(r, ct).ConfigureAwait(false),
-                CreateSessionRequest r => await HandleCreateSessionAsync(r, ct).ConfigureAwait(false),
-                ListSessionsRequest r => await HandleListSessionsAsync(r, ct).ConfigureAwait(false),
-                GetSessionRequest r => await HandleGetSessionAsync(r, ct).ConfigureAwait(false),
-                DeleteSessionRequest r => await HandleDeleteSessionAsync(r, ct).ConfigureAwait(false),
-                GetMessagesRequest r => await HandleGetMessagesAsync(r, ct).ConfigureAwait(false),
-                ListProvidersRequest r => await HandleListProvidersAsync(r, ct).ConfigureAwait(false),
-                ListModelsRequest r => await HandleListModelsAsync(r, ct).ConfigureAwait(false),
-                ListToolsRequest r => await HandleListToolsAsync(r, ct).ConfigureAwait(false),
-                SubscribeToEventsRequest r => await HandleSubscribeToEventsAsync(r, replyStream, replyWriteLock, clientId).ConfigureAwait(false),
-                ConnectRequest r => new OkResponse { RequestId = r.RequestId },
-                DisconnectRequest r => new OkResponse { RequestId = r.RequestId },
-                _ => new ErrorResponse { RequestId = request.RequestId, Message = $"Unknown request type: {request.GetType().Name}" }
-            };
+                return Unhandled(request);
+            }
+
+            var context = new RequestContext(clientId, replyStream, replyWriteLock);
+            return await entry.Invoke(request, context, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -121,162 +142,33 @@ public sealed class RequestDispatcher
     /// <summary>The owner of a leased session (diagnostics/tests).</summary>
     public string? GetLeaseOwner(string sessionId) => _leases.GetOwner(sessionId);
 
-    // ── Agent ──────────────────────────────────────────────────────────────
-
-    private async Task<HarborResponse> HandleStartAgentAsync(StartAgentRequest r, string? clientId, CancellationToken ct)
+    /// <summary>
+    ///     The wire boundary, for the one case the constructor cannot rule
+    ///     out: a request type that is not part of the tagged union at all.
+    ///     The old code answered it with the bare string "Unknown request type:
+    ///     X" and moved on, which is indistinguishable from a request the
+    ///     server answered wrongly. This one names the type, the machine-
+    ///     parsable prefix, the reason, and where to fix it.
+    /// </summary>
+    private ErrorResponse Unhandled(HarborRequest request)
     {
-        // ROP boundary #101: shared TryCreate → GetAgent preamble (same as InProcessHarborClient).
-        var agentDefResult = _agents.ResolveAgent(r.AgentName);
-        if (agentDefResult.IsFailure)
-            return new ErrorResponse { RequestId = r.RequestId, Message = agentDefResult.Error };
+        Interlocked.Increment(ref _unhandledRequests);
 
-        var sessionResult = await _sessions.GetAsync(r.SessionId, ct).ConfigureAwait(false);
-        if (sessionResult.IsFailure)
-            return new ErrorResponse { RequestId = r.RequestId, Message = sessionResult.Error };
+        string requestType = request.GetType().Name;
+        _logger.LogError(
+            "No IPC request handler is registered for {RequestType}. It is not a member of the "
+            + "tagged {HarborRequest} union, so no handler can be registered for it; the server "
+            + "declined it rather than answering with a placeholder. This should be unreachable — "
+            + "if it fires, the wire union and HarborRequestTypes.All have drifted apart.",
+            requestType,
+            nameof(HarborRequest));
 
-        // A3: the second client may not re-initialize the agent mid-run —
-        // an owned session refuses with a structured, machine-parsable error.
-        if (!string.IsNullOrEmpty(clientId) && !_leases.TryAcquire(r.SessionId, clientId!))
+        return new ErrorResponse
         {
-            return new ErrorResponse
-            {
-                RequestId = r.RequestId,
-                Message = $"SESSION_BUSY:{r.SessionId}:owner={_leases.GetOwner(r.SessionId)}"
-            };
-        }
-
-        _agent.Initialize(sessionResult.Value, agentDefResult.Value);
-        return new OkResponse { RequestId = r.RequestId };
-    }
-
-    private HarborResponse HandleAbortAgent(AbortAgentRequest r)
-    {
-        // #49 PR1: single cancellation ingress (null = minimal host without
-        // the coordinator; direct cancel as before).
-        if (_coordinator is not null)
-        {
-            _coordinator.RequestCancel(_agent);
-        }
-        else
-        {
-            _agent.RequestAbort();
-        }
-
-        return new OkResponse { RequestId = r.RequestId };
-    }
-
-    private async Task<HarborResponse> HandleSendPromptAsync(SendPromptRequest r, CancellationToken ct)
-    {
-        var result = await _agent.PromptAsync(r.Prompt, ct).ConfigureAwait(false);
-        return result.IsSuccess
-            ? new OkResponse { RequestId = r.RequestId }
-            : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
-    }
-
-    // ── Sessions ───────────────────────────────────────────────────────────
-
-    private async Task<HarborResponse> HandleCreateSessionAsync(CreateSessionRequest r, CancellationToken ct)
-    {
-        var result = await _sessions.CreateAsync(r.Directory, r.Agent, r.Provider, r.Model, ct).ConfigureAwait(false);
-        return result.IsSuccess
-            ? new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(result.Value, ct) }
-            : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
-    }
-
-    private async Task<HarborResponse> HandleListSessionsAsync(ListSessionsRequest r, CancellationToken ct)
-    {
-        var result = await _sessions.ListAsync(null, ct).ConfigureAwait(false);
-        return result.IsSuccess
-            ? new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(result.Value, ct) }
-            : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
-    }
-
-    private async Task<HarborResponse> HandleGetSessionAsync(GetSessionRequest r, CancellationToken ct)
-    {
-        var result = await _sessions.GetAsync(r.SessionId, ct).ConfigureAwait(false);
-        return result.IsSuccess
-            ? new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(result.Value, ct) }
-            : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
-    }
-
-    private async Task<HarborResponse> HandleDeleteSessionAsync(DeleteSessionRequest r, CancellationToken ct)
-    {
-        var result = await _sessions.DeleteAsync(r.SessionId, ct).ConfigureAwait(false);
-        return result.IsSuccess
-            ? new OkResponse { RequestId = r.RequestId }
-            : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
-    }
-
-    private async Task<HarborResponse> HandleGetMessagesAsync(GetMessagesRequest r, CancellationToken ct)
-    {
-        var result = await _sessions.GetMessagesAsync(r.SessionId, ct).ConfigureAwait(false);
-        return result.IsSuccess
-            ? new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(result.Value, ct) }
-            : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
-    }
-
-    // ── Providers ──────────────────────────────────────────────────────────
-
-    private Task<HarborResponse> HandleListProvidersAsync(ListProvidersRequest r, CancellationToken ct)
-    {
-        var ids = _providers.GetRegisteredProviderIds();
-        return Task.FromResult<HarborResponse>(
-            new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(ids, ct) });
-    }
-
-    private async Task<HarborResponse> HandleListModelsAsync(ListModelsRequest r, CancellationToken ct)
-    {
-        Result<IReadOnlyList<ModelInfo>> result;
-        if (string.IsNullOrEmpty(r.ProviderId))
-        {
-            result = await _providers.GetAllModelsAsync(ct).ConfigureAwait(false);
-        }
-        else
-        {
-            // ROP boundary #101: shared TryCreate → GetClient preamble (same as InProcessHarborClient).
-            var clientResult = _providers.ResolveClient(r.ProviderId!);
-            if (clientResult.IsFailure)
-                return new ErrorResponse { RequestId = r.RequestId, Message = clientResult.Error };
-
-            result = await clientResult.Value.GetModelsAsync(ct).ConfigureAwait(false);
-        }
-
-        return result.IsSuccess
-            ? new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(result.Value, ct) }
-            : new ErrorResponse { RequestId = r.RequestId, Message = result.Error };
-    }
-
-    // ── Tools ──────────────────────────────────────────────────────────────
-
-    private Task<HarborResponse> HandleListToolsAsync(ListToolsRequest r, CancellationToken ct)
-    {
-        var list = _tools.GetAllTools();
-        return Task.FromResult<HarborResponse>(
-            new OkResponse { RequestId = r.RequestId, Payload = WireCodec.SerializeDomain(list, ct) });
-    }
-
-    // ── Streaming events ───────────────────────────────────────────────────
-
-    private async Task<HarborResponse> HandleSubscribeToEventsAsync(
-        SubscribeToEventsRequest r,
-        Stream? replyStream,
-        SemaphoreSlim? replyWriteLock,
-        string? clientId)
-    {
-        if (replyStream is null || replyWriteLock is null)
-        {
-            return new ErrorResponse { RequestId = r.RequestId, Message = "Cannot subscribe: no reply stream / write lock" };
-        }
-
-        EventBroadcaster.SubscriptionAckData ack = await _broadcaster
-            .RegisterAsync(replyStream, replyWriteLock, r.LastSequence, clientId ?? "anonymous")
-            .ConfigureAwait(false);
-
-        return new OkResponse
-        {
-            RequestId = r.RequestId,
-            Payload = WireCodec.SerializeDomain(
-                new SubscriptionAck { ServerSequence = ack.ServerSequence, ResyncRequired = ack.ResyncRequired })
+            RequestId = request.RequestId,
+            Message = $"NO_HANDLER:{requestType}: this request type is not part of the Harbor IPC "
+                      + "protocol union, so this server cannot serve it. Upgrade the server, or use a "
+                      + "request type the server implements (see HarborRequestTypes.All for the union)."
         };
     }
 }

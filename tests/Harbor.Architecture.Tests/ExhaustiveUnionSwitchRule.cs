@@ -691,15 +691,16 @@ public sealed class ExhaustiveUnionSwitchRule
 
         // #485 — `RequestDispatcher.DispatchAsync`, the 14-arm switch over the
         // IPC request union, whose `_ =>` answered a request the server does
-        // not implement with the string "Unknown request type: X". Added by
-        // the same PR that registers `HarborRequest` above, and DELETED by the
-        // refactor in that PR: `DispatchAsync` no longer contains a switch at
-        // all, so there is nothing here for the rule to grade. Kept as a
-        // separate commit precisely so the ordering is visible in history —
-        // the guard landed and went red on this row BEFORE the switch was
-        // rewritten, which is #555's "guards land before or with the rewrite".
-        [new("src/Harbor.Ipc.Server/Protocol/RequestDispatcher.cs", "HarborRequest")] =
-            "https://github.com/refusedguy/Harbor-Harness/issues/485",
+        // not implement with the string "Unknown request type: X", was a row
+        // in this guard's first commit of #485. It is not a row any more, and
+        // that is the ratchet working: dispatch is a `Dictionary<Type, …>`
+        // lookup now, so there is no switch left here for the rule to grade.
+        // Deleting the row IS the fix. What took over the half of the rule this
+        // scan provably cannot do — a MISSING arm with no default, which is
+        // invisible to a scan keyed on the default arm, and is precisely the
+        // shape #485 was — is the reflection census in
+        // `src/Harbor.Ipc.Server/Protocol/HarborRequestTypes.cs`, which
+        // RequestDispatcher's constructor refuses to start without.
     };
 
     // =====================================================================
