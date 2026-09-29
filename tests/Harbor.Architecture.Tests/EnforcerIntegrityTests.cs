@@ -764,7 +764,11 @@ public sealed class EnforcerIntegrityTests
             .Replace(LineCommentPattern.Replace(BlockCommentPattern.Replace(text, " "), " "), "\"\"");
     }
 
-    /// <summary>Path of a source file relative to its project directory.</summary>
+    /// <summary>
+    ///     Path of a source file relative to its project directory, always with
+    ///     forward slashes so the value compares equal to the exception tables
+    ///     regardless of host OS (Windows separators would never match).
+    /// </summary>
     private static string ProjectRelative(string path, string projectDir)
     {
         string? root = RepoPaths.RepoRoot;
@@ -777,6 +781,10 @@ public sealed class EnforcerIntegrityTests
         // bin folder, not the repository root, so a relative prefix never matches.
         string full = Path.GetFullPath(path);
         string prefix = Path.GetFullPath(Path.Combine(root, "src", projectDir)) + Path.DirectorySeparatorChar;
-        return full.StartsWith(prefix, StringComparison.Ordinal) ? full[prefix.Length..] : Path.GetFileName(full);
+        string relative = full.StartsWith(prefix, StringComparison.Ordinal)
+            ? full[prefix.Length..]
+            : Path.GetFileName(full);
+
+        return relative.Replace('\\', '/');
     }
 }
