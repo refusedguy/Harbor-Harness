@@ -44,25 +44,25 @@ internal static class ChatMessageFormatter
     /// <summary>
     ///     Speaker-band emphasis. The hue is the shared slot's hue — only the
     ///     decoration is decided here, because a bold/italic band is the one
-    ///     axis the other three backends have no surface for. The default arm
-    ///     throws rather than inventing a style: C# will not check enum
-    ///     exhaustiveness here (a discard-free switch is rejected as CS8524, not
-    ///     accepted as a total match), so a role nobody wired up has to be loud.
+    ///     axis the other three backends have no surface for. Every arm named,
+    ///     no wildcard (docs/PATTERNS.md §"Type unions"): an unhandled role
+    ///     falls out of the switch and hits the throw below.
     /// </summary>
     private static Style HeaderStyle(ChatRole role)
     {
         var color = ToColor(role);
-        return role switch
+        switch (role)
         {
-            ChatRole.User => new Style(color, null, Decoration.Bold),
-            ChatRole.Assistant => new Style(color, null, Decoration.Bold),
-            ChatRole.Thinking => new Style(color, null, Decoration.Italic),
-            ChatRole.Tool => new Style(color, null, Decoration.Bold),
-            ChatRole.ToolResult => new Style(color),
-            ChatRole.System => new Style(color),
-            ChatRole.Error => new Style(color, null, Decoration.Bold),
-            _ => throw ChatRolePresentation.Unhandled(role)
-        };
+            case ChatRole.User: return new Style(color, null, Decoration.Bold);
+            case ChatRole.Assistant: return new Style(color, null, Decoration.Bold);
+            case ChatRole.Thinking: return new Style(color, null, Decoration.Italic);
+            case ChatRole.Tool: return new Style(color, null, Decoration.Bold);
+            case ChatRole.ToolResult: return new Style(color);
+            case ChatRole.System: return new Style(color);
+            case ChatRole.Error: return new Style(color, null, Decoration.Bold);
+        }
+
+        throw ChatRolePresentation.Unhandled(role);
     }
 
     public static TextLine Gap()
@@ -121,13 +121,19 @@ internal static class ChatMessageFormatter
     internal static Color ToColor(ChatRole role) => ToColor(ChatRolePresentation.Slot(role));
 
     /// <summary>SpectreTui's palette table, keyed on the shared slot.</summary>
-    internal static Color ToColor(ChatColorSlot slot) => slot switch
+    internal static Color ToColor(ChatColorSlot slot)
     {
-        ChatColorSlot.User => Color.Green,
-        ChatColorSlot.Assistant => Color.White,
-        ChatColorSlot.Muted => Color.Grey,
-        ChatColorSlot.Tool => Color.Blue,
-        ChatColorSlot.Danger => Color.Red,
-        _ => throw ChatRolePresentation.UnhandledSlot(slot)
-    };
+        // Every arm named, no wildcard (docs/PATTERNS.md §"Type unions"): an
+        // unhandled slot falls out of the switch and hits the throw below.
+        switch (slot)
+        {
+            case ChatColorSlot.User: return Color.Green;
+            case ChatColorSlot.Assistant: return Color.White;
+            case ChatColorSlot.Muted: return Color.Grey;
+            case ChatColorSlot.Tool: return Color.Blue;
+            case ChatColorSlot.Danger: return Color.Red;
+        }
+
+        throw ChatRolePresentation.UnhandledSlot(slot);
+    }
 }

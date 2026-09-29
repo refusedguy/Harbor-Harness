@@ -22,19 +22,25 @@ public static class TerminalGuiColorMapper
     public static TerminalColor ToColor(ChatRole role) => ToColor(ChatRolePresentation.Slot(role));
 
     /// <summary>Terminal.Gui color for a slot — the Terminal.Gui palette table.</summary>
-    public static TerminalColor ToColor(ChatColorSlot slot) => slot switch
+    public static TerminalColor ToColor(ChatColorSlot slot)
     {
-        ChatColorSlot.User => TerminalColor.BrightGreen,
-        ChatColorSlot.Assistant => TerminalColor.White,
+        // Every arm named, no wildcard (docs/PATTERNS.md §"Type unions"): an
+        // unhandled slot falls out of the switch and hits the throw below.
+        switch (slot)
+        {
+            case ChatColorSlot.User: return TerminalColor.BrightGreen;
+            case ChatColorSlot.Assistant: return TerminalColor.White;
 
-        // One grey for the whole muted family (thinking, tool result, system).
-        // This was TerminalColor.DarkGray for thinking alone — exactly the drift
-        // the removed "same hue" comment used to promise did not exist (#556).
-        ChatColorSlot.Muted => TerminalColor.Gray,
-        ChatColorSlot.Tool => TerminalColor.BrightBlue,
-        ChatColorSlot.Danger => TerminalColor.BrightRed,
-        _ => throw ChatRolePresentation.UnhandledSlot(slot)
-    };
+            // One grey for the whole muted family (thinking, tool result, system).
+            // This was TerminalColor.DarkGray for thinking alone — exactly the drift
+            // the removed "same hue" comment used to promise did not exist (#556).
+            case ChatColorSlot.Muted: return TerminalColor.Gray;
+            case ChatColorSlot.Tool: return TerminalColor.BrightBlue;
+            case ChatColorSlot.Danger: return TerminalColor.BrightRed;
+        }
+
+        throw ChatRolePresentation.UnhandledSlot(slot);
+    }
 
     /// <summary>Header label shown in the <c>─ role ─</c> band.</summary>
     public static string ToLabel(ChatRole role) => ChatRolePresentation.Label(role);

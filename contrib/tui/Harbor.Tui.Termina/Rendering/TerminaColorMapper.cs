@@ -21,19 +21,25 @@ public static class TerminaColorMapper
     public static Color ToColor(ChatRole role) => ToColor(ChatRolePresentation.Slot(role));
 
     /// <summary>Termina color for a slot — the Termina palette table.</summary>
-    public static Color ToColor(ChatColorSlot slot) => slot switch
+    public static Color ToColor(ChatColorSlot slot)
     {
-        ChatColorSlot.User => Color.Green,
-        ChatColorSlot.Assistant => Color.White,
+        // Every arm named, no wildcard (docs/PATTERNS.md §"Type unions"): an
+        // unhandled slot falls out of the switch and hits the throw below.
+        switch (slot)
+        {
+            case ChatColorSlot.User: return Color.Green;
+            case ChatColorSlot.Assistant: return Color.White;
 
-        // One grey for the whole muted family (thinking, tool result, system).
-        // This was Color.DarkGray for thinking alone — exactly the drift the
-        // removed "same hue" comment used to promise did not exist (#556).
-        ChatColorSlot.Muted => Color.Gray,
-        ChatColorSlot.Tool => Color.Blue,
-        ChatColorSlot.Danger => Color.Red,
-        _ => throw ChatRolePresentation.UnhandledSlot(slot)
-    };
+            // One grey for the whole muted family (thinking, tool result, system).
+            // This was Color.DarkGray for thinking alone — exactly the drift the
+            // removed "same hue" comment used to promise did not exist (#556).
+            case ChatColorSlot.Muted: return Color.Gray;
+            case ChatColorSlot.Tool: return Color.Blue;
+            case ChatColorSlot.Danger: return Color.Red;
+        }
+
+        throw ChatRolePresentation.UnhandledSlot(slot);
+    }
 
     /// <summary>Header label shown in the <c>─ role ─</c> band.</summary>
     public static string ToLabel(ChatRole role) => ChatRolePresentation.Label(role);

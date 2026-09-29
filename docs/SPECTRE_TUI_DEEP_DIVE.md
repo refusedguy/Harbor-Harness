@@ -330,28 +330,45 @@ private static Style HeaderStyle(ChatRole role) {
 `TerminaColorMapper`, `TerminalGuiColorMapper` и `ChatMessageFormatter`.
 
 ```csharp
-public static (string Label, bool Markdown, ChatColorSlot Slot) Describe(ChatRole role) => role switch
+// Одна строка на ChatRole, в порядке объявления (User = 0 … Error = 6).
+private static readonly ChatRolePolicy?[] Policies =
+[
+    new("you",       true,  ChatColorSlot.User),       // ChatRole.User
+    new("assistant", true,  ChatColorSlot.Assistant), // ChatRole.Assistant
+    new("thinking",  false, ChatColorSlot.Muted),     // ChatRole.Thinking
+    new("tool",      false, ChatColorSlot.Tool),      // ChatRole.Tool
+    new("result",    false, ChatColorSlot.Muted),     // ChatRole.ToolResult
+    new("system",    true,  ChatColorSlot.Muted),     // ChatRole.System
+    new("error",     false, ChatColorSlot.Danger)     // ChatRole.Error
+];
+
+public static ChatRolePolicy Describe(ChatRole role)
 {
-    ChatRole.User       => ("you",       true,  ChatColorSlot.User),
-    ChatRole.Assistant  => ("assistant", true,  ChatColorSlot.Assistant),
-    ChatRole.Thinking   => ("thinking",  false, ChatColorSlot.Muted),
-    ChatRole.Tool       => ("tool",      false, ChatColorSlot.Tool),
-    ChatRole.ToolResult => ("result",    false, ChatColorSlot.Muted),
-    ChatRole.System     => ("system",    true,  ChatColorSlot.Muted),
-    ChatRole.Error      => ("error",     false, ChatColorSlot.Danger)
-};
+    int index = (int)role;
+    if ((uint)index >= (uint)Policies.Length || Policies[index] is not { } policy)
+        throw Unhandled(role);
+    return policy;
+}
 ```
 
 Правила, из-за которых это не разъезжается (#556):
 
-- **Default-рука бросает, а не отвечает.** C# не проверяет здесь полноту
-  `switch` по enum'у: без `_` компилятор всё равно ругается `CS8524`
-  («not exhaustive, involving an unnamed enum value»), а не считает switch
-  полным. Поэтому новая `ChatRole`, которую никто не описал, падает с
-  `ArgumentOutOfRangeException` и текстом, где написано, что именно дописать, —
-  а не тихо переименовывается в `"msg"`. `ChatRole` не персистится (его
-  рождает `SessionFactory.MessageToChatLine` в памяти), так что значение вне
-  таблицы — это всегда забытая строка, а не битые данные.
+- **Почему таблица, а не `switch`.** docs/PATTERNS.md §"Type unions" требует
+  от `switch` по union'у Harbor называть каждую руку и не иметь wildcard, и
+  `ExhaustiveUnionSwitchRule` проверяет это сканом исходников (`_ =>`,
+  `default:`). `switch`-**expression** это требование выполнить не может:
+  компилятор отвергает вариант без discard как `CS8524` («not exhaustive,
+  involving an unnamed enum value»), а не считает его полным. Значит
+  компиляторно-чистые формы — только wildcard (запрещён) или `switch`-
+  statement (молча проваливается мимо). Таблица — третий путь: строка на роль,
+  явный громкий guard перед ней и длина, которую reflection-тест сверяет с
+  `Enum.GetValues<ChatRole>()`.
+- **Guard громкий, а не тихий.** Необработанная роль — новый член `ChatRole`,
+  для которого не добавили строку, либо значение вне диапазона — бросает
+  `ArgumentOutOfRangeException` с текстом «что именно дописать», а не
+  переименовывается в `"msg"`. `ChatRole` не персистится (его рождает
+  `SessionFactory.MessageToChatLine` в памяти), так что значение вне таблицы —
+  это всегда забытая строка, а не битые данные.
 - **Конкретный оттенок — свой у каждого бэкенда.** Общий — *слот*, а не цвет:
   Termina красит в 24-bit RGB, Terminal.Gui — в своих ANSI-именах (`Bright*`).
   Инвариант, который проверяется тестом: две роли с одним слотом получают

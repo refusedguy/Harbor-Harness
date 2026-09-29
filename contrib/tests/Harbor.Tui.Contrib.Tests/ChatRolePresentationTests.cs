@@ -112,14 +112,14 @@ public class ChatRolePresentationTests
     public async Task Describe_AgreesWithTheThreeAccessors()
     {
         // One implementation: the accessors must not be able to drift from the
-        // tuple they delegate to.
+        // row they read out of the same table.
         foreach (ChatRole role in Enum.GetValues<ChatRole>())
         {
-            (string label, bool markdown, ChatColorSlot slot) = ChatRolePresentation.Describe(role);
+            ChatRolePolicy policy = ChatRolePresentation.Describe(role);
 
-            await Assert.That(label).IsEqualTo(ChatRolePresentation.Label(role));
-            await Assert.That(markdown).IsEqualTo(ChatRolePresentation.UsesMarkdown(role));
-            await Assert.That(slot).IsEqualTo(ChatRolePresentation.Slot(role));
+            await Assert.That(policy.Label).IsEqualTo(ChatRolePresentation.Label(role));
+            await Assert.That(policy.Markdown).IsEqualTo(ChatRolePresentation.UsesMarkdown(role));
+            await Assert.That(policy.Slot).IsEqualTo(ChatRolePresentation.Slot(role));
         }
     }
 

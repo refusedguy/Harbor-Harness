@@ -21,15 +21,21 @@ public static class RazorColorMapper
     public static SpectreColor ToColor(ChatRole role) => ToColor(ChatRolePresentation.Slot(role));
 
     /// <summary>Spectre color for a slot — the RazorConsole palette table.</summary>
-    public static SpectreColor ToColor(ChatColorSlot slot) => slot switch
+    public static SpectreColor ToColor(ChatColorSlot slot)
     {
-        ChatColorSlot.User => SpectreColor.Green,
-        ChatColorSlot.Assistant => SpectreColor.White,
-        ChatColorSlot.Muted => SpectreColor.Grey,
-        ChatColorSlot.Tool => SpectreColor.Blue,
-        ChatColorSlot.Danger => SpectreColor.Red,
-        _ => throw ChatRolePresentation.UnhandledSlot(slot)
-    };
+        // Every arm named, no wildcard (docs/PATTERNS.md §"Type unions"): an
+        // unhandled slot falls out of the switch and hits the throw below.
+        switch (slot)
+        {
+            case ChatColorSlot.User: return SpectreColor.Green;
+            case ChatColorSlot.Assistant: return SpectreColor.White;
+            case ChatColorSlot.Muted: return SpectreColor.Grey;
+            case ChatColorSlot.Tool: return SpectreColor.Blue;
+            case ChatColorSlot.Danger: return SpectreColor.Red;
+        }
+
+        throw ChatRolePresentation.UnhandledSlot(slot);
+    }
 
     /// <summary>Header label shown in the <c>─ role ─</c> band.</summary>
     public static string ToLabel(ChatRole role) => ChatRolePresentation.Label(role);
@@ -45,15 +51,19 @@ public static class RazorColorMapper
         return role is ChatRole.Thinking ? $"{hue} italic" : hue;
     }
 
-    private static string ToMarkup(ChatColorSlot slot) => slot switch
+    private static string ToMarkup(ChatColorSlot slot)
     {
-        ChatColorSlot.User => "green",
-        ChatColorSlot.Assistant => "white",
-        ChatColorSlot.Muted => "grey",
-        ChatColorSlot.Tool => "blue",
-        ChatColorSlot.Danger => "red",
-        _ => throw ChatRolePresentation.UnhandledSlot(slot)
-    };
+        switch (slot)
+        {
+            case ChatColorSlot.User: return "green";
+            case ChatColorSlot.Assistant: return "white";
+            case ChatColorSlot.Muted: return "grey";
+            case ChatColorSlot.Tool: return "blue";
+            case ChatColorSlot.Danger: return "red";
+        }
+
+        throw ChatRolePresentation.UnhandledSlot(slot);
+    }
 
     /// <summary>True if the role's body should be rendered with markdown spans.</summary>
     public static bool SupportsMarkdown(ChatRole role) => ChatRolePresentation.UsesMarkdown(role);
