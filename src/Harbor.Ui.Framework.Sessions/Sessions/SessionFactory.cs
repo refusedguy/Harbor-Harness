@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Configuration;
 using Harbor.Ui.Framework.State;
@@ -85,17 +86,21 @@ public sealed class SessionFactory
         if (pair is null) return (null, null);
 
         (string? provider, string? model) = pair.Value;
-        if (string.IsNullOrEmpty(provider) || string.IsNullOrEmpty(model))
-            return (null, null);
 
-        // The model may already start with the provider prefix (e.g. the user
-        // typed "kilocode/tencent/hy3:free"). Strip it so we get the bare model id.
-        string prefix = provider + "/";
-        if (model.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            model = model[prefix.Length..];
-        }
-        return (provider, model);
+        // #678: (provider, model) is ONE reference, and ModelRef is the only type
+        // in the repo written to read one — this method used to build
+        // `prefix = provider + "/"` and strip it with StartsWith, then hand the RAW
+        // provider string on, unnormalized and unvalidated, straight into the
+        // Session the app runs on. Qualify covers both shapes the config can hold:
+        // a bare model id ("tencent/hy3:free" — what OnboardingViewModel writes)
+        // and a redundant prefix for the same provider ("kilocode/tencent/hy3:free"
+        // — what HARBOR_MODEL and the settings screen write). A provider id that
+        // is not a valid id now falls back to the agent definition instead of
+        // reaching the session verbatim.
+        var resolved = ModelRef.Qualify(provider, model);
+        return resolved
+            .Map(static reference => (ProviderId: (string?)reference.ProviderId.Value, ModelId: (string?)reference.ModelId))
+            .GetValueOrDefault((null, null));
     }
 
     /// <summary>

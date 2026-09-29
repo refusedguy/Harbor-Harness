@@ -367,6 +367,84 @@ public sealed class ModelRef : ValueObject
         return Result.Success(Create(providerResult.Value, parts[1].Trim()));
     }
 
+    /// <summary>
+    ///     Resolve a model selection against a provider the caller ALREADY knows —
+    ///     the provider it picked, or the one it read out of config. The model half
+    ///     may be a bare model id or carry a redundant <c>provider/</c> prefix, and
+    ///     this is the one function allowed to tell the two apart.
+    /// </summary>
+    /// <param name="providerId">The provider the model belongs to. Normalized and validated.</param>
+    /// <param name="modelId">
+    ///     The model half: a bare id (<c>"gpt-4o"</c>), a multi-segment bare id
+    ///     (<c>"tencent/hy3:free"</c>), or a redundant prefix for this same provider
+    ///     (<c>"kilocode/tencent/hy3:free"</c> — what <c>HARBOR_MODEL</c> and the
+    ///     settings screen write). Whitespace is trimmed.
+    /// </param>
+    /// <returns>
+    ///     Success with the reference, or failure when the provider id is invalid or
+    ///     the model half is blank.
+    /// </returns>
+    /// <remarks>
+    ///     <para>
+    ///         #678: two call sites re-derived this by hand — building
+    ///         <c>prefix = provider + "/"</c> and stripping it with
+    ///         <c>StartsWith</c> (<c>SessionFactory</c> and
+    ///         <c>ToolsCatalog</c>) — and they did not agree with
+    ///         <see cref="TryParse" />: the hand-rolled version left the provider
+    ///         string RAW and unvalidated, so <c>"KiloCode"</c> reached a running
+    ///         session unnormalized while this normalizes it. Both also had to be
+    ///         taught about multi-segment model ids by hand, which is the mistake
+    ///         #599 was filed for.
+    ///     </para>
+    ///     <para>
+    ///         <b>Why the prefix is dropped only when it matches THIS provider</b>,
+    ///         and why that is not a special case to be folded into
+    ///         <see cref="TryParse" />: <c>"tencent/hy3:free"</c> is kilocode's own
+    ///         DEFAULT model id, and a model id may contain slashes. So the slash
+    ///         alone never means "already qualified" — only a prefix naming the
+    ///         provider the caller already chose is redundant. Reading the first
+    ///         segment of a bare multi-segment id as its provider is the exact bug
+    ///         that would turn the default install into a nonexistent "tencent"
+    ///         provider.
+    ///     </para>
+    ///     <para>
+    ///         The sibling rule — <b>a value that is already a reference wins over
+    ///         the provider the caller had in mind</b> — is deliberately NOT this
+    ///         method. That is the free-text rule (the <c>/model</c> command, the
+    ///         onboarding wizard): someone typing <c>otherprov/some-model</c> named a
+    ///         provider on purpose, so callers there run
+    ///         <see cref="TryParse" /> first and fall back to this method. Keeping
+    ///         the two apart here is what stops one of them from being "unified" into
+    ///         the other.
+    ///     </para>
+    /// </remarks>
+    public static Result<ModelRef> Qualify(string? providerId, string? modelId)
+        => ProviderId.TryCreate(providerId).Bind(provider => QualifyUnder(provider, modelId));
+
+    /// <summary>
+    ///     <see cref="Qualify" /> once the provider id is already typed. Private so
+    ///     the composition stays a single expression and the public surface has one
+    ///     entry point.
+    /// </summary>
+    private static Result<ModelRef> QualifyUnder(ProviderId provider, string? modelId)
+    {
+        if (string.IsNullOrWhiteSpace(modelId))
+            return Result.Failure<ModelRef>("Model reference cannot be empty");
+
+        string candidate = modelId.Trim();
+
+        // A property pattern, not `parsed.Value`: CFE0001 does not model the
+        // early-return guard shape, and this file must stay free of call-site
+        // pragmas.
+        if (TryParse(candidate) is { IsSuccess: true, Value: var reference }
+            && reference.ProviderId.Value == provider.Value)
+        {
+            return Result.Success(reference);
+        }
+
+        return Result.Success(Create(provider, candidate));
+    }
+
     /// <inheritdoc />
     public override string ToString() => $"{ProviderId}/{ModelId}";
 
