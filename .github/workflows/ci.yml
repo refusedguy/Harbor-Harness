@@ -23,6 +23,15 @@
 # executables: `dotnet run --project tests/<Name> -- <mtp-args>`.
 # MTP args forward after `--`: --minimum-expected-tests N (zero-test guard),
 # --treenode-filter (TUnit selection), --output Detailed (per-test console).
+#
+# On test measurements (issue #618): neither the console log nor `--output
+# Detailed` is where a test's `Console.WriteLine` belongs — the log prints
+# per-assembly counts and nothing per-test, and Detailed would bury the one
+# `failed <TestName>` line under a line per green test. Instead both test jobs
+# keep `--report-trx` (TUnit already files each test's stdout under that test)
+# and hand the TRX to `tools/test-measurements.py`, which renders a
+# `Class.Method -> measurement` table into the job summary. Read-only, never a
+# gate: the script exits 0 on a missing or corrupt TRX set.
 name: ci
 
 on:
@@ -74,6 +83,10 @@ jobs:
               - 'Harbor.slnx'
               - 'global.json'
               - '.github/workflows/ci.yml'
+              # Runs INSIDE the test/test-os jobs below. Without this line an
+              # edit to the script alone would set dotnet=false, skip the very
+              # job that executes it, and land unvalidated (issue #618).
+              - 'tools/test-measurements.py'
             ui:
               - 'src/Harbor.Tui.**'
               - 'src/Harbor.Ui.Framework.**'
@@ -283,6 +296,35 @@ jobs:
             echo "| $p | $status | $((end - start))s |" >> "$summary"
           done
           exit $rc
+
+      # Issue #618 — per-test measurements in the JOB SUMMARY, never in the log.
+      # The shard loop above prints per-ASSEMBLY counts only ("Test run summary:
+      # Passed! - <dll>", total/failed/succeeded/skipped/duration) and never a
+      # test name, so a value a test printed with Console.WriteLine (allocation
+      # per turn, fast-path publish fraction, ...) was reachable only by
+      # downloading the 7-day test-results-* artifact, unzipping it and grepping
+      # XML. Nobody does that mid-incident, so the measurement was invisible.
+      #
+      # The data is already there: `--report-trx` is passed above, and TUnit
+      # writes each test's stdout into THAT test's own <Output><StdOut>. This
+      # step only reads it and renders a table keyed by Class.Method, so a
+      # measurement can never float free of the test that produced it.
+      #
+      # Why the summary and not `--output Detailed` in the log: the raw log is
+      # read while debugging a failure, and every extra line competes with the
+      # compile error and with the one `failed <TestName>` line being scrolled
+      # toward. Detailed adds one line per green test — thousands, burying the
+      # failure. The summary is a separate panel and cannot compete at all.
+      #
+      # `if: always()` is load-bearing: the loop exits non-zero on a failed
+      # shard, which skips every following step without it — i.e. exactly when
+      # the measurement is most wanted. Reporting only, never a gate: the
+      # script exits 0 on a missing or corrupt TRX set.
+      - name: Report test measurements (issue #618)
+        if: always()
+        run: |
+          python3 tools/test-measurements.py "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Publish Test Results
         if: always()
@@ -510,10 +552,17 @@ jobs:
             'Harbor.Ipc.Tests'
           )
           $failed = @()
+          # --report-trx (issue #618): this job produced no TRX at all, so a
+          # measurement a test printed was unrecoverable here. TRX is written to
+          # the runner's disk and consumed by the next step — nothing is
+          # uploaded, so this adds no artifact and no retention cost.
+          $trxDir = "TestResults/${{ matrix.os }}"
+          New-Item -ItemType Directory -Force -Path $trxDir | Out-Null
           foreach ($p in $projects) {
             Write-Host "::group::dotnet exec $p"
             $dll = "tests/$p/bin/Release/net10.0/$p.dll"
-            dotnet exec $dll --minimum-expected-tests 1
+            dotnet exec $dll --minimum-expected-tests 1 --report-trx `
+              --results-directory $trxDir --report-trx-filename "$p.trx"
             if ($LASTEXITCODE -ne 0) { $failed += $p }
             Write-Host "::endgroup::"
           }
@@ -521,6 +570,18 @@ jobs:
             Write-Host "Failed on ${{ matrix.os }}: $($failed -join ', ')"
             exit 1
           }
+
+      # Same rationale as the `test` job — see the long comment there. Worth
+      # the extra plumbing here because these are the platform-sensitive
+      # measurements (bytes per agent turn, event-bus publish allocations): the
+      # question a reader otherwise has to ask by hand is precisely "does this
+      # number differ on windows/macOS?", and `test-os` is the only place that
+      # can be answered. `if: always()` so a failing OS still reports.
+      - name: Report test measurements (issue #618)
+        if: always()
+        run: |
+          python3 tools/test-measurements.py "TestResults/${{ matrix.os }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
 
   # Task: artifact publishing — self-contained single-file CLI.
   publish:
