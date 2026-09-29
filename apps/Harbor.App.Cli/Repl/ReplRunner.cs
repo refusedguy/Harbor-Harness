@@ -145,7 +145,7 @@ internal sealed class ReplRunner
             var reader = (Func<string, Task<string>>)(async prompt =>
             {
                 var r = await _renderer.ReadLineAsync(prompt).ConfigureAwait(false);
-                return r.IsSuccess ? r.Value : string.Empty;
+                return r.GetValueOrDefault(string.Empty);
             });
             var wizardResult = await _wizard.RunAsync(reader, writer).ConfigureAwait(false);
             if (wizardResult.IsFailure)
@@ -325,9 +325,23 @@ internal sealed class ReplRunner
         while (true)
         {
             var inputResult = await _renderer.ReadLineAsync("> ").ConfigureAwait(false);
-            if (inputResult.IsFailure) break;
-            string? input = inputResult.Value;
-            if (string.IsNullOrWhiteSpace(input)) continue;
+
+            // Maybe.None is end of input — EOF, Ctrl-D, exhausted/closed stdin, or a
+            // renderer that cannot read. Leaving the loop is the whole point: this used
+            // to be Result.Success(""), which is indistinguishable from a blank
+            // submission, so the blank-line `continue` below spun at 100% CPU forever
+            // on a closed stdin (#589).
+            if (inputResult.HasNoValue)
+            {
+                _logger.LogInformation("End of input — line REPL exiting");
+                break;
+            }
+
+            string input = inputResult.Value;
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                continue;
+            }
             string trimmed = input.Trim();
             if (trimmed is "exit" or "quit" or ":q")
             {

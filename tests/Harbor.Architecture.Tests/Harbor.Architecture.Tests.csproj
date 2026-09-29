@@ -24,6 +24,13 @@
   <ItemGroup>
     <PackageReference Include="NetArchTest.Rules"/>
     <PackageReference Include="TUnit.Assertions"/>
+    <!--
+      TuiReadLineContractRules asserts that ITuiRenderer.ReadLineAsync returns
+      Task<Maybe<string>> — the #589 fix. The types are reachable transitively
+      through Harbor.Terminal.Abstractions, but a guard that breaks when an
+      unrelated package reference is retargeted is not a guard.
+    -->
+    <PackageReference Include="CSharpFunctionalExtensions"/>
   </ItemGroup>
 
   <!--

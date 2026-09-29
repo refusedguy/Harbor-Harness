@@ -72,11 +72,12 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
         return 0;
     }
 
-    public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
+    public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
         _context.WriteColored(prompt, TuiColor.Green);
         string? line = Console.ReadLine();
-        return Task.FromResult(Result.Success(line ?? string.Empty));
+        // EOF is absence, not failure: Maybe.None, not Success("") (#589).
+        return Task.FromResult(Maybe.From(line));
     }
 
     public override Task<Result> WriteAsync(string text, CancellationToken ct = default)

@@ -416,8 +416,8 @@ internal sealed class TestTuiRenderer : BaseTuiRenderer
 
     public override ITuiRenderContext Context { get; }
 
-    public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
-        => Task.FromResult(Result.Success(string.Empty));
+    public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
+        => Task.FromResult(Maybe.From(string.Empty));
 
     public override Task<Result> WriteAsync(string text, CancellationToken ct = default)
         => Task.FromResult(Result.Success());

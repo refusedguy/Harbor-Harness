@@ -25,8 +25,22 @@ public interface ITuiRenderer : IDisposable
     /// <summary>Render an agent event through all bound views.</summary>
     public Task RenderAsync(AgentEvent @event, CancellationToken ct = default);
 
-    /// <summary>Read a line of input.</summary>
-    public Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default);
+    /// <summary>
+    ///     Read a line of input.
+    /// </summary>
+    /// <remarks>
+    ///     Returns <see cref="Maybe{T}.None" /> at end of input (EOF, Ctrl-D, closed or
+    ///     exhausted stdin, or a renderer that cannot read input at all). "No line was
+    ///     read" is <b>absence</b>, not failure — there is no error message to report — so
+    ///     this is a <see cref="Maybe{T}" /> and not a <see cref="Result{T}" />.
+    ///     <para>
+    ///         It was <c>Result&lt;string&gt;</c> and every implementation answered EOF with
+    ///         <c>Result.Success(line ?? string.Empty)</c> (#589), which a line-buffered
+    ///         consumer cannot distinguish from "the user submitted an empty line". Use
+    ///         <see cref="MaybeExtensions.HasValue" /> / <c>GetValueOrDefault</c> to consume.
+    ///     </para>
+    /// </remarks>
+    public Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default);
 
     /// <summary>Write text directly.</summary>
     public Task<Result> WriteAsync(string text, CancellationToken ct = default);

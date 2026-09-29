@@ -136,11 +136,12 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
     }
 
     /// <inheritdoc />
-    public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
+    public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
-        // Non-interactive renderer: cannot read input. Return empty so ask-mode
-        // can still complete (no follow-up prompts expected).
-        return Task.FromResult(Result.Success(string.Empty));
+        // Non-interactive renderer: cannot read input, so no line was read.
+        // Maybe.None, not Success("") — ask-mode completes the same way, and a
+        // line-buffered consumer now sees "no input" instead of spinning (#589).
+        return Task.FromResult(Maybe<string>.None);
     }
 
     /// <inheritdoc />

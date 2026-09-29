@@ -596,13 +596,14 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         base.Dispose();
     }
 
-    public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
+    public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
         Context.ShowCursor();
         Context.WriteColored(prompt, TuiColor.Green);
         string? line = Console.ReadLine();
         Context.HideCursor();
-        return Task.FromResult(Result.Success(line ?? string.Empty));
+        // EOF is absence, not failure: Maybe.None, not Success("") (#589).
+        return Task.FromResult(Maybe.From(line));
     }
 
     public override Task<Result> WriteAsync(string text, CancellationToken ct = default)
