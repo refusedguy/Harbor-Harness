@@ -112,15 +112,27 @@ public class ResultTryAdoptionTests
     ///     see a callee's return type, so a try body that returns a
     ///     <c>Result</c> obtained from a CALL lands here rather than being
     ///     classified structurally.
+    ///     <para>
+    ///     The third field is a CODE ANCHOR — a substring that must appear in
+    ///     the catch clause itself — and NOT a line number. Line-number entries
+    ///     were a latent time bomb: a <c>#pragma</c> added by an unrelated PR
+    ///     shifted <c>LspManager.cs</c> by 20 lines and every entry in it
+    ///     silently re-pointed at a different catch, so the ratchet reported
+    ///     "catch no longer constructs Result.Failure" for a catch that never
+    ///     did. An anchor survives any rebase; a line number does not.
+    ///     </para>
     /// </summary>
-    private static readonly (string File, int Line, string Reason)[] KnownExemptSites =
+    private static readonly (string File, string CatchAnchor, string Reason)[] KnownExemptSites =
     [
-        (Path.Combine("src", "Harbor.Storage.Jsonl", "JsonlLineParser.cs"), 84,
+        (Path.Combine("src", "Harbor.Storage.Jsonl", "JsonlLineParser.cs"), "Line parse failed:",
             "try body returns Result.Failure directly (early-return validation inside try)"),
-        (Path.Combine("src", "Harbor.Storage.Jsonl", "JsonlLineParser.cs"), 224, "try body returns Result directly"),
-        (Path.Combine("src", "Harbor.Storage.Jsonl", "JsonlLineParser.cs"), 295, "try body returns Result directly"),
-        (Path.Combine("src", "Harbor.Storage.Jsonl", "JsonlLineParser.cs"), 349, "try body returns Result directly"),
-        (Path.Combine("src", "Harbor.Plugins.Registration", "SafePluginRegistrar.cs"), 39,
+        (Path.Combine("src", "Harbor.Storage.Jsonl", "JsonlLineParser.cs"), "user message {id}:",
+            "try body returns Result directly"),
+        (Path.Combine("src", "Harbor.Storage.Jsonl", "JsonlLineParser.cs"), "assistant message {id}:",
+            "try body returns Result directly"),
+        (Path.Combine("src", "Harbor.Storage.Jsonl", "JsonlLineParser.cs"), "tool_result message {id}:",
+            "try body returns Result directly"),
+        (Path.Combine("src", "Harbor.Plugins.Registration", "SafePluginRegistrar.cs"), "catch (Exception ex)",
             "try body returns the callee's Result (IPluginRegistrar.Register) — needs a Bind split, not a shape fix"),
         // Outside this wave's perimeter (Harbor.Lsp), and NOT convertible as a
         // shape fix: the catch takes _sync and mutates _unavailable before
@@ -128,7 +140,7 @@ public class ResultTryAdoptionTests
         // variable rather than producing the returned value. Making it
         // Result.Try means restructuring the method's control flow, which is
         // its own change with its own review.
-        (Path.Combine("src", "Harbor.Lsp", "LspManager.cs"), 287,
+        (Path.Combine("src", "Harbor.Lsp", "LspManager.cs"), "server-start-failed",
             "catch mutates _unavailable under a lock; try assigns an outer local — needs a control-flow refactor"),
     ];
 
@@ -142,7 +154,7 @@ public class ResultTryAdoptionTests
             return;
         }
 
-        HashSet<string> exempt = [.. KnownExemptSites.Select(e => $"{Normalise(e.File)}:{e.Line}")];
+        Dictionary<string, string[]> exempt = ExemptAnchorsByFile();
 
         List<string> violations = [];
         foreach (string file in EnumerateSourceFiles(root))
@@ -168,7 +180,7 @@ public class ResultTryAdoptionTests
         }
 
         List<string> stale = [];
-        foreach ((string rel, int line, string reason) in KnownExemptSites)
+        foreach ((string rel, string anchor, string reason) in KnownExemptSites)
         {
             string full = Path.Combine(root, rel);
             if (!File.Exists(full))
@@ -178,22 +190,29 @@ public class ResultTryAdoptionTests
             }
 
             string[] lines = File.ReadAllLines(full);
-            if (line > lines.Length)
-            {
-                stale.Add($"{Normalise(rel)}:{line} — line past end of file (update the ratchet entry)");
-                continue;
-            }
 
-            // The ratchet records the CATCH line; walk up to the nearest catch.
-            int idx = line - 1;
-            while (idx >= 0 && !lines[idx].Contains("catch", StringComparison.Ordinal))
+            // Locate the catch by its ANCHOR, not by a recorded line number, so
+            // that inserting a line anywhere above it cannot re-point the entry
+            // at a different catch.
+            int idx = -1;
+            for (int i = 0; i < lines.Length; i++)
             {
-                idx--;
+                if (!lines[i].TrimStart().StartsWith("catch", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                int? end = FindBlockEnd(lines, i);
+                if (end is not null && CatchAnchorText(lines, i, end).Contains(anchor, StringComparison.Ordinal))
+                {
+                    idx = i;
+                    break;
+                }
             }
 
             if (idx < 0)
             {
-                stale.Add($"{Normalise(rel)}:{line} — no catch clause at/above this line ({reason})");
+                stale.Add($"{Normalise(rel)} — no catch contains the anchor \"{anchor}\" ({reason})");
                 continue;
             }
 
@@ -293,10 +312,62 @@ public class ResultTryAdoptionTests
     private static string Normalise(string relative) => relative.Replace('\\', '/');
 
     /// <summary>
+    ///     The text a ratchet anchor is matched against: the catch clause plus its
+    ///     body, newline-normalised. Anchors are matched here rather than against a
+    ///     line number or a bare clause header because several sites in one file
+    ///     share an identical <c>catch (Exception ex)</c> header and are told apart
+    ///     only by the message their body builds. Both the scan and the ratchet go
+    ///     through here, so an entry that exempts a site in one is not silently
+    ///     exempting a different one in the other.
+    /// </summary>
+    private static string CatchAnchorText(string[] lines, int catchLine, int? catchClose)
+    {
+        if (catchClose is null)
+        {
+            return string.Empty;
+        }
+
+        return string.Join('\n', lines[catchLine..catchClose.Value]);
+    }
+
+    /// <summary>
+    ///     The ratchet grouped by file: normalised repo path to the anchors that
+    ///     exempt a catch in it. A file may carry several entries because the
+    ///     same file holds several exempt catches.
+    /// </summary>
+    private static Dictionary<string, string[]> ExemptAnchorsByFile()
+    {
+        Dictionary<string, string[]> byFile = [];
+        foreach ((string file, string anchor, _) in KnownExemptSites)
+        {
+            string key = Normalise(file);
+            if (byFile.TryGetValue(key, out string[]? existing))
+            {
+                byFile[key] = [.. existing, anchor];
+            }
+            else
+            {
+                byFile[key] = [anchor];
+            }
+        }
+
+        return byFile;
+    }
+
+    /// <summary>
+    ///     True when some anchor recorded for <paramref name="rel" /> occurs in
+    ///     the catch block text. Containment, not equality: the recorded entry is
+    ///     a code anchor, not a transcription of the block.
+    /// </summary>
+    private static bool IsExempt(Dictionary<string, string[]> exempt, string rel, string catchBlockText)
+        => exempt.TryGetValue(rel, out string[]? anchors)
+           && Array.Exists(anchors, a => catchBlockText.Contains(a, StringComparison.Ordinal));
+
+    /// <summary>
     ///     Returns one message per violation in <paramref name="file" />, or an
     ///     empty sequence. See the file header for the exempt shapes.
     /// </summary>
-    private static IEnumerable<string> ScanFile(string root, string file, HashSet<string> exempt)
+    private static IEnumerable<string> ScanFile(string root, string file, Dictionary<string, string[]> exempt)
     {
         string text;
         try
@@ -371,7 +442,7 @@ public class ResultTryAdoptionTests
                 continue;
             }
 
-            if (exempt.Contains($"{rel}:{catchLine + 1}"))
+            if (IsExempt(exempt, rel, CatchAnchorText(lines, catchLine, catchClose)))
             {
                 continue;
             }

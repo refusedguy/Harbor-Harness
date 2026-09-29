@@ -61,11 +61,20 @@ public sealed class CfeControlPositiveControlTests
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    ///     Runs <c>dotnet build</c> over the control project and returns the
-    ///     combined output, or <c>null</c> when no SDK is available (the test
-    ///     then self-skips rather than reporting a false failure).
+    ///     What a probe run reports: the combined output plus the build's exit
+    ///     code. The exit code is the locale-independent signal — MSBuild's own
+    ///     "build succeeded" line is translated, so asserting on that text made
+    ///     this test fail on any non-English SDK for a reason that had nothing
+    ///     to do with the analyzer.
     /// </summary>
-    private static async Task<string?> BuildControlAsync()
+    private sealed record ProbeResult(string Output, int ExitCode);
+
+    /// <summary>
+    ///     Runs <c>dotnet build</c> over the control project and returns what it
+    ///     reported, or <c>null</c> when no SDK is available (the test then
+    ///     self-skips rather than reporting a false failure).
+    /// </summary>
+    private static async Task<ProbeResult?> BuildControlAsync()
     {
         if (RepoPaths.RepoRoot is not { } root)
         {
@@ -106,6 +115,12 @@ public sealed class CfeControlPositiveControlTests
         psi.ArgumentList.Add("-p:BaseOutputPath=" + Path.Combine(scratch, "bin") + Path.DirectorySeparatorChar);
         psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         psi.Environment["DOTNET_NOLOGO"] = "1";
+
+        // Belt and braces: the exit code is the real signal (asserted below), but
+        // MSBuild also prints a localized "build succeeded" line, and pinning the
+        // language keeps any operator reading this log from chasing a translation
+        // difference that the assertions do not depend on.
+        psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
 
         using var process = new Process { StartInfo = psi };
         var output = new System.Text.StringBuilder();
@@ -153,15 +168,13 @@ public sealed class CfeControlPositiveControlTests
                 // already exited
             }
 
-            return "TIMEOUT: the CFE0001 control build did not finish within " + BuildTimeout
-                   + Environment.NewLine + output.ToString();
+            return new ProbeResult(
+                "TIMEOUT: the CFE0001 control build did not finish within " + BuildTimeout
+                + Environment.NewLine + output.ToString(),
+                ExitCode: -1);
         }
 
-        // The control build is EXPECTED to fail: CFE0001 is a warning promoted
-        // to an error by the root props' TreatWarningsAsErrors. A successful
-        // build means the diagnostic did not fire, which the assertions below
-        // report precisely — so the exit code is not asserted here.
-        return output.ToString();
+        return new ProbeResult(output.ToString(), process.ExitCode);
     }
 
     /// <summary>
@@ -173,13 +186,15 @@ public sealed class CfeControlPositiveControlTests
     [Test]
     public async Task PositiveControl_AnalyzerFiresOnKnownBadValueAccess()
     {
-        string? output = await BuildControlAsync();
-        if (output is null)
+        ProbeResult? probe = await BuildControlAsync();
+        if (probe is null)
         {
             // No repository checkout (e.g. a published test host): there is
             // nothing to prove here. Mirrors RepoPaths' documented behaviour.
             return;
         }
+
+        string output = probe.Output;
 
         await Assert.That(output).Contains(DiagnosticId)
             .Because($"the analyzer must report {DiagnosticId} for the unguarded .Value in {BadFile}. "
@@ -198,11 +213,19 @@ public sealed class CfeControlPositiveControlTests
         // exists to rule out. TreatWarningsAsErrors is deliberately OFF in
         // Harbor.CfeControl.csproj so the diagnostic surfaces as a WARNING on a
         // successful build; a failure here means the probe itself is broken.
-        await Assert.That(output).Contains("Build succeeded")
-            .Because("the control snippet must compile, otherwise the absence of "
+        //
+        // Asserted on the EXIT CODE, not on MSBuild's success line: that line is
+        // localized ("Build succeeded" / "Сборка успешно завершена"), so a text
+        // match failed this test on a non-English SDK even when the probe was
+        // perfectly healthy. Harbor.CfeControl.csproj sets
+        // TreatWarningsAsErrors=false precisely so CFE0001 surfaces as a warning
+        // and the build still exits 0.
+        await Assert.That(probe.ExitCode).IsEqualTo(0)
+            .Because("the control snippet must COMPILE, otherwise the absence of "
                    + $"{DiagnosticId} would be an artefact of a broken probe rather than a "
-                   + "measurement. The csproj sets TreatWarningsAsErrors=false precisely so the "
-                   + "diagnostic appears as a warning on a green build.");
+                   + "measurement. A non-zero exit means the probe itself failed to build "
+                   + "and every diagnostic it did print proves nothing." + Environment.NewLine
+                   + "probe output:" + Environment.NewLine + output);
     }
 
     /// <summary>
@@ -215,15 +238,15 @@ public sealed class CfeControlPositiveControlTests
     [Test]
     public async Task NegativeControl_AnalyzerStaysSilentOnGuardedValueAccess()
     {
-        string? output = await BuildControlAsync();
-        if (output is null)
+        ProbeResult? probe = await BuildControlAsync();
+        if (probe is null)
         {
             return;
         }
 
         // A diagnostic naming the good file would mean the guard cannot tell
         // guarded code from unguarded code, i.e. every future hit is noise.
-        var offending = output
+        var offending = probe.Output
             .Split('\n')
             .Where(line => line.Contains(DiagnosticId, StringComparison.Ordinal)
                         && line.Contains(GoodFile, StringComparison.Ordinal))
