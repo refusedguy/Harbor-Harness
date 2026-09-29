@@ -4,6 +4,7 @@ using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Terminal;
 using Harbor.Abstractions.Tools;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels.Terminal;
@@ -15,6 +16,7 @@ using Harbor.Application.Sessions;
 using Harbor.Registries.Tools;
 using Harbor.Ipc.Client;
 using Harbor.Ipc.InProcess;
+using Harbor.Terminal.Pty;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
 using CommunityToolkit.Mvvm.Messaging;
@@ -115,6 +117,22 @@ internal static class ServiceRegistration
         services.AddSingleton<IOverlayStack>(sp => sp.GetRequiredService<OverlayStackService>());
         services.AddSingleton<WindowChromeService>();
         services.AddSingleton<KeyboardShortcutService>();
+        // #672: the floating terminal pane no longer forks a shell itself. The
+        // launch goes through ITerminalPaneLauncher, registered here against the
+        // one implementation that consults PermissionRuleset first and refuses
+        // unless the launch is permitted. THE COMPOSITION ROOT IS THE ONLY PLACE
+        // THAT MAY CHOOSE THE RULESET — which is the point: the policy is now one
+        // greppable line here instead of a side effect buried in a ViewModel
+        // constructor.
+        //
+        // PermissionRuleset.Default carries no `terminal` rule, and an unmatched
+        // permission evaluates to Ask, which this launcher treats as a refusal. So
+        // the pane is DENIED by default and an operator opts in explicitly with
+        // {"terminal": {"*": "allow"}}. That is deliberate and is the safe
+        // direction: this launches an interactive shell with the full inherited
+        // environment, and until #672 it launched with no gate at all.
+        services.AddSingleton<ITerminalPaneLauncher>(sp => new PermissionGatedTerminalPaneLauncher(
+            PermissionRuleset.Default));
         services.AddSingleton<IFloatingTerminals>(sp => new FloatingTerminalService(
             sp.GetRequiredService<IDispatcherAdapter>(),
             () => new FloatingTerminalViewModel(
@@ -123,6 +141,7 @@ internal static class ServiceRegistration
                 cwd => new TerminalPaneViewModel(
                     sp.GetRequiredService<IDispatcherAdapter>(),
                     sp.GetRequiredService<ILogger<TerminalPaneViewModel>>(),
+                    sp.GetRequiredService<ITerminalPaneLauncher>(),
                     cwd)),
             sp.GetRequiredService<ILogger<FloatingTerminalService>>()));
         services.AddSingleton<IShellChrome, AvaloniaShellChrome>();

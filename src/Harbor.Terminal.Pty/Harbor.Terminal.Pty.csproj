@@ -16,4 +16,16 @@
     <PackageReference Include="CSharpFunctionalExtensions"/>
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      #672: ITerminalPaneLauncher (Domain) + PermissionRuleset. The spawn stays in
+      THIS assembly — it is Infrastructure, and Application cannot reference it —
+      but the gate and the seam that Presentation talks to are Domain contracts.
+      Declared here and in FullLayerMatrixTests together; EnforcerIntegrityTests
+      cross-checks the csproj against the matrix, so editing one without the other
+      fails the architecture gate.
+    -->
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+  </ItemGroup>
+
 </Project>
