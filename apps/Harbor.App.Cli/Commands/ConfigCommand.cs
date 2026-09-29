@@ -75,8 +75,18 @@ public sealed class ConfigCommand : ISlashCommand
                 return c;
             }, ct).ConfigureAwait(false);
 
-            if (updateResult.IsSuccess)
-                _writer($"✓ {key} = {value}");
+            if (updateResult.IsFailure)
+            {
+                // #603: the success arm was the only one, so a config file that
+                // could not be written produced no output and a bare
+                // `return updateResult`. The REPL dropped that Result and
+                // `ConfigVerb` only sees the exit code — the user was told
+                // nothing about why the value did not change.
+                _writer($"✗ Failed: {updateResult.Error}");
+                return updateResult;
+            }
+
+            _writer($"✓ {key} = {value}");
             return updateResult;
         }
 

@@ -118,10 +118,17 @@ public sealed class PermissionsCommand : ISlashCommand
     private async Task<Result> ClearRules(string agentName, CancellationToken ct)
     {
         var saveResult = await _permissions.SaveAsync(ct).ConfigureAwait(false);
-        if (saveResult.IsSuccess)
+        if (saveResult.IsFailure)
         {
-            _writer($"✓ Cleared all persisted permission rules for '{agentName}'.");
+            // #603: `return saveResult` was the whole failure handling, and the
+            // slash dispatcher has no use for the Result — so `/permissions
+            // clear` against an unwritable store printed nothing and the user
+            // kept their rules with no indication. SetRule already had this arm.
+            _writer($"⚠ Failed to persist: {saveResult.Error}");
+            return saveResult;
         }
+
+        _writer($"✓ Cleared all persisted permission rules for '{agentName}'.");
         return saveResult;
     }
 }
