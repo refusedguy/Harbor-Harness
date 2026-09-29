@@ -191,17 +191,24 @@ public class StatusBarFactsParityTests
         string layout = ReadRepoFile("src", "Harbor.Tui.CellForge", "Chat", "Widgets", "ChatScreenLayout.cs");
         string projector = ReadRepoFile("src", "Harbor.Ui.Framework.Projection", "Projection", "StatusProjector.cs");
 
-        // The discarded path is deleted, not left to rot: the layout no longer
-        // projects a bar it does not read (the "ProjectStatusBar(" call form —
-        // prose mentions of it are fine), and formats no number of its own.
-        await Assert.That(layout).DoesNotContain("ProjectStatusBar(");
+        // #488 was about a projection that was computed and thrown away: the
+        // footer called ProjectStatusBar, read four of six cells back out, and
+        // rebuilt tokens and cost from raw state under a second formatting
+        // rule. The ban below is the one that mattered — no number of its own —
+        // and it is unchanged.
+        //
+        // #568 removes the rest. The footer now READS the projected bar, so the
+        // "ProjectStatusBar(" ban is inverted into its opposite: the call is
+        // required, because a footer that derives its own row is the fan-out
+        // the issue is about. Asserting its absence would have protected the
+        // duplication.
+        await Assert.That(layout).Contains("StatusProjector.ProjectStatusBar(state)");
         await Assert.That(layout).DoesNotContain("CostUsd");
         await Assert.That(layout).DoesNotContain("TokensIn");
         await Assert.That(layout).DoesNotContain("TokensOut");
 
         // …and neither does the projector: both read StatusBarFacts.
         await Assert.That(projector).DoesNotContain("ToString(");
-        await Assert.That(layout).Contains("StatusBarFacts.Of(state)");
         await Assert.That(projector).Contains("StatusBarFacts.Of(state)");
     }
 

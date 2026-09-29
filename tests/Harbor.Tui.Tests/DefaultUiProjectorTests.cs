@@ -110,8 +110,11 @@ public class DefaultUiProjectorTests
         };
         var screen = _projector.Project(state);
 
-        var providerSegment = screen.StatusBar.Segments.FirstOrDefault(s => s.Text.Contains("anthropic"));
-        await Assert.That(providerSegment).IsNotNull();
+        // #568: `UiStatusSegment` is a readonly record struct, so the row is
+        // found by "is there one", not by a null check — `FirstOrDefault` over
+        // a struct returns a value, and the default segment has no text.
+        bool found = screen.StatusBar.Segments.Any(s => s.Text.Contains("anthropic"));
+        await Assert.That(found).IsTrue();
     }
 
     [Test]
