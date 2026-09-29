@@ -369,12 +369,40 @@ public sealed class DefaultUiProjector : IUiProjector
         return new TailModels(tailRendered, tailBlocks, tailSame);
     }
 
-    /// <summary>Immutable snapshot of the last projection and its cache keys.</summary>
+    /// <summary>
+    ///     Snapshot of the last projection and its cache keys. Written once, in a single
+    ///     object initializer at the end of <see cref="Project" />, and read-only thereafter.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The six members marked <see langword="required" /> are <b>never</b> absent —
+    ///         they are either assigned by that initializer or the type does not exist yet.
+    ///         They used to be declared <c>= null!</c>, which is a lie the compiler was asked
+    ///         to accept: nothing stopped a second construction site from forgetting one, and
+    ///         a forgotten member would surface as a <see cref="NullReferenceException" /> at
+    ///         one of the three reuse sites below (<see cref="Project" /> lines 70, 112 and
+    ///         134) with nothing pointing back at the cache.
+    ///     </para>
+    ///     <para>
+    ///         <see langword="required" /> is the fix rather than
+    ///         <c>Maybe&lt;T&gt;</c>: absence is not the model here — there is no
+    ///         "widget in another state" and no working default to fall back to, so making
+    ///         the members optional would only move the null somewhere else. Requiring them
+    ///         makes the compiler state the invariant instead of a comment.
+    ///     </para>
+    ///     <para>
+    ///         Every dereference of this cache is guarded by a <c>ReferenceEquals</c> or a
+    ///         fingerprint comparison against the state being projected, so <b>publication</b>
+    ///         is the one remaining assumption: the cache is written by the render thread and
+    ///         read by it. See #605 — the field holding it is not <c>volatile</c>, and the
+    ///         desktop host registers the projector as a singleton.
+    ///     </para>
+    /// </remarks>
     private sealed class ProjectionCache
     {
-        public UiState State = null!;
-        public UiScreenModel Screen = null!;
-        public UiTranscriptModel Transcript = null!;
+        public required UiState State;
+        public required UiScreenModel Screen;
+        public required UiTranscriptModel Transcript;
 
         // History rows: keyed by the Lines backing-array reference.
         public ImmutableArray<ChatLine> Lines;
@@ -401,9 +429,9 @@ public sealed class DefaultUiProjector : IUiProjector
         public int TotalLines;
         public int ViewportLines;
         public int ScrollOffset;
-        public UiHeaderModel Header = null!;
-        public UiStatusBarModel StatusBar = null!;
-        public UiInputModel Input = null!;
+        public required UiHeaderModel Header;
+        public required UiStatusBarModel StatusBar;
+        public required UiInputModel Input;
     }
 
     private static UiStatusBarModel ProjectStatusBar(UiState state)
