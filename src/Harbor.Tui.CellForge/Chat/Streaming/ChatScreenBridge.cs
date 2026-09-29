@@ -186,6 +186,9 @@ public sealed class ChatScreenBridge : IDisposable
                         break;
                     case StepFinishEvent sf when sf.Usage is not null:
                         _streams.AddStepUsage(sf.Usage.InputTokens, sf.Usage.OutputTokens);
+                        // #623: prompt tokens of the request just sent = the
+                        // context window's real occupancy.
+                        _context.NoteRequestSize(sf.Usage.InputTokens);
                         break;
                 }
 
@@ -292,8 +295,12 @@ public sealed class ChatScreenBridge : IDisposable
                 break;
 
             case SessionStatsEvent stats:
+                // #623: the ctx segment is NOT fed from here. These totals are
+                // session-cumulative spend (SessionMetadata.AddUsage), so
+                // rendering them as occupancy pinned the bar at 100% by turn 4
+                // on a 128k window while the actual request never grew.
+                // StepFinishEvent.Usage.InputTokens is the request just sent.
                 _status.SetUsage(stats.Metadata.TokensInput, stats.Metadata.TokensOutput, stats.Metadata.Cost);
-                _context.NoteUsage(stats.Metadata.TokensInput, stats.Metadata.TokensOutput);
                 break;
 
             case SessionChangedEvent changed:

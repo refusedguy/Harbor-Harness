@@ -437,7 +437,7 @@ public class ChatScreenBridgeTests
     }
 
     [Test]
-    public async Task ContextSegment_LightsUp_FromAgentStartWindow_AndSessionStats()
+    public async Task ContextSegment_LightsUp_FromAgentStartWindow_AndStepFinish()
     {
         var bus = new FakeEventBus();
         var panel = new ChatTimelinePanel("chat", 20, 4);
@@ -450,32 +450,44 @@ public class ChatScreenBridgeTests
         var model = new ModelInfo("hy3", "kilocode", "Kilocode Hy3", 10_000, 4096, false, false, true, Pricing.Unknown, "openai");
         await bus.PublishAsync(new AgentStartEvent("s1", [], model));
 
-        // Window alone invents no usage — still dark until totals arrive.
+        // Window alone invents no usage — still dark until a request reports one.
         await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
+
+        // #623: the ctx segment is fed by the request the provider just accepted.
+        // Turn 1 → per-request prompt tokens and session-cumulative spend coincide
+        // (7400 in / 700 out), so the stats event below agrees with the step.
+        await bus.PublishAsync(new MessageUpdateEvent(
+            new StepFinishEvent(0, "stop", new Usage(7400, 700)), AssistantMessage.Empty("s1", "m")));
 
         var metadata = new SessionMetadata(0.0123m, 7400, 700, 0, 0, 0, 2, null);
         await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
 
+        // Occupancy is the request's prompt tokens — output tokens of the step just
+        // finished are not resident in the window until the next request carries them.
         await Assert.That(status.TryGetContextTokens(out var used)).IsTrue();
-        await Assert.That(used).IsEqualTo(8100); // canonical #75: accumulated in+out
+        await Assert.That(used).IsEqualTo(7400);
         await Assert.That(status.ContextWindow).IsEqualTo(10_000);
 
         // No model string set by the bridge → ctx bar is the first segment:
-        // 81% → warn band, 5 of 6 cells (same pin as StatusSegmentBarTests).
+        // 74% → warn band, 4 of 6 cells (same pin as StatusSegmentBarTests).
         var ws = new StatusSeg[8];
         int n = status.BuildSegments(ws);
         await Assert.That(n).IsEqualTo(3); // ctx bar + tokens + cost
-        await Assert.That(ws[0].Text).IsEqualTo("▰▰▰▰▰▱");
+        await Assert.That(ws[0].Text).IsEqualTo("▰▰▰▰▱▱");
         await Assert.That(ws[0].Accent).IsEqualTo(StatusAccent.Warning);
     }
 
     [Test]
-    public async Task ContextSegment_StatsBeforeWindow_LightsUp_WhenModelArrives()
+    public async Task ContextSegment_RequestBeforeWindow_LightsUp_WhenModelArrives()
     {
         var bus = new FakeEventBus();
         var panel = new ChatTimelinePanel("chat", 20, 4);
         var status = new StatusViewModel();
         using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        // A request that lands before the window is known is retained, not dropped.
+        await bus.PublishAsync(new MessageUpdateEvent(
+            new StepFinishEvent(0, "stop", new Usage(1000, 200)), AssistantMessage.Empty("s1", "m")));
 
         var metadata = new SessionMetadata(0.001m, 1000, 200, 0, 0, 0, 1, null);
         await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
@@ -484,9 +496,10 @@ public class ChatScreenBridgeTests
         var model = new ModelInfo("hy3", "kilocode", "Kilocode Hy3", 10_000, 4096, false, false, true, Pricing.Unknown, "openai");
         await bus.PublishAsync(new AgentStartEvent("s1", [], model));
 
-        // Stored totals re-apply against the late window — no new stats needed.
+        // The remembered request re-applies against the late window — no new
+        // step finish needed.
         await Assert.That(status.TryGetContextTokens(out var used)).IsTrue();
-        await Assert.That(used).IsEqualTo(1200);
+        await Assert.That(used).IsEqualTo(1000);
     }
 
     [Test]
