@@ -55,8 +55,6 @@ public sealed class EnforcerIntegrityTests
     /// </summary>
     internal static readonly UnboundReference[] DeclaredButUnboundProjectReferences =
     [
-        new("Harbor.Ui.Framework.Abstractions", "Harbor.Abstractions",
-            "#450: declared but binds no type — the assembly's own contracts are BCL-only, so the edge produces no IL."),
         new("Harbor.Terminal.Abstractions", "Harbor.Ui.Framework",
             "#450/#542: declared but binds no type — Harbor.Ui.Framework is an empty assembly (see issue #542)."),
         new("Harbor.Plugins.Hosting", "Harbor.Plugins.Storage",
@@ -273,9 +271,18 @@ public sealed class EnforcerIntegrityTests
                     continue;
                 }
 
-                // A reference to something outside the enforced src set (e.g. a
-                // third-party project) is not a layer edge.
-                if (!assemblyOf.Values.Contains(reference))
+                // A reference to something outside the enforced src set is not a
+                // layer edge. Test the PROJECT DIRECTORY: the SharpConsoleUI
+                // project lives in external/, so its assembly name is in the
+                // repo-wide inventory even though no src project produces it.
+                if (!assemblyOf.TryGetValue(reference, out string? targetAssembly))
+                {
+                    continue;
+                }
+
+                // Guard against the same-name trap in reverse: only a project that
+                // actually produces this assembly under src/ is in scope.
+                if (!FullLayerMatrixTests.AllSrcAssemblies.Contains(targetAssembly, StringComparer.Ordinal))
                 {
                     continue;
                 }

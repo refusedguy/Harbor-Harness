@@ -215,10 +215,11 @@ public class FullLayerMatrixTests
         ["Harbor.Extensions"] = new(Layer.Domain, []),
         ["Harbor.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions.Contracts"]),
         ["Harbor.Ipc.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions"]),
-        // The ProjectReference to Harbor.Abstractions is declared but binds no
-        // type (the assembly's own contracts are BCL-only), so it produces no IL
-        // edge — see EnforcerIntegrityTests.DeclaredButUnboundProjectReferences.
-        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, []),
+        // The IL *does* reference Harbor.Abstractions here even though the
+        // assembly binds no type from it by hand: the generated AssemblyInfo
+        // attributes (InternalsVisibleTo targets) force the reference. The
+        // liveness rule would otherwise call this a stale entry.
+        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions"]),
 
         // ---- Presentation -------------------------------------------------
         // #450: "Harbor.Ui.Framework" was permitted here but never used. The
@@ -416,6 +417,10 @@ public class FullLayerMatrixTests
             "Harbor.Application", "Harbor.Registries",
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
+            // #450: "Harbor.Ui.Framework.Sessions" was removed here on the theory
+            // that no file named the namespace, but the IL reference is real (the
+            // IL gate caught the regression), so it is permitted again.
+            "Harbor.Ui.Framework.Sessions",
             "Harbor.Storage.Jsonl", "Harbor.Storage.Memory", "Harbor.Storage.Sqlite",
             "Harbor.Tui.AnsiPlain",
             "Harbor.Tui.CellForge",
