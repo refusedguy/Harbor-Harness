@@ -112,9 +112,11 @@ public sealed class SessionLifecycleService : ISessionLifecycle
 
         await AbortRunningAgentAsync().ConfigureAwait(false);
 
-        var agentDef = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == "code")
-                       ?? _agents.GetAllAgents().FirstOrDefault()
-                       ?? throw new InvalidOperationException("No agents registered.");
+        // #683: this ran its own lookup of the default agent, with the name spelled
+        // next to it. It now asks the factory — the one place that question is
+        // answered — so a rebind cannot land on a different agent than the default
+        // session was created around.
+        var agentDef = _factory.ResolveDefaultAgentDefinition();
 
         (string? providerId, string? modelId) = await _factory.ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
         if (string.IsNullOrEmpty(providerId) || string.IsNullOrEmpty(modelId))
@@ -184,9 +186,14 @@ public sealed class SessionLifecycleService : ISessionLifecycle
         }
         else
         {
+            // A session recorded against an agent this host does not register (renamed,
+            // removed, or a session copied from another machine) must still open — and it
+            // must open on the SAME agent the default session would have used. Falling
+            // back to "whichever entry the registry enumerates first" is what #683 removed
+            // from the sibling path; leaving it here would reopen the same hole one method
+            // away.
             var agentDef = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
-                           ?? _agents.GetAllAgents().First()
-                           ?? throw new InvalidOperationException("No agents registered.");
+                           ?? _factory.ResolveDefaultAgentDefinition();
             _agent.Initialize(session, agentDef);
             // #89: hydrate-then-swap — same single-AppMsg atomic replay as
             // SessionSwitcher.OpenAsync (see comment there).

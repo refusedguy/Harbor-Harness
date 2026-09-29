@@ -11,7 +11,20 @@ public sealed record IdentityConfig(
 {
     public const string FallbackProvider = "kilocode";
     public const string FallbackModel = "kilocode/tencent/hy3:free";
-    public const string FallbackAgent = "code";
+
+    /// <summary>
+    ///     The agent a session gets when nobody named one.
+    /// </summary>
+    /// <remarks>
+    ///     #683: derived from <see cref="AgentName.Fallback" /> rather than spelled
+    ///     again. The UI slice (<c>Harbor.Ui.Framework.Sessions</c>) decides which agent
+    ///     is the default and cannot reference this assembly, so it reads the constant in
+    ///     <c>Harbor.Abstractions.Contracts</c> — the innermost layer, where both sides
+    ///     meet. Two layers declaring the same policy means the day one is renamed and
+    ///     the other is not, the core and the UI disagree about the default agent and
+    ///     nothing reports it.
+    /// </remarks>
+    public const string FallbackAgent = AgentName.Fallback;
 
     /// <summary>
     ///     The typed form of <see cref="FallbackModel" />, parsed from it rather than

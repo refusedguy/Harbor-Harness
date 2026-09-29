@@ -154,13 +154,12 @@ public sealed class MapErrorFailureShapeTests
             + "sub-run rail has its own payload type; the three trailer sites also wrap the text in "
             + "SubAgentFailureFormat.WithResumeTrailer, which is still a function of `e` and would "
             + "compose with MapError the moment the types line up.",
-        ["src/Harbor.Ui.Framework.Sessions/Sessions/SessionFactory.cs"] =
-            "TWO of this file's five sites are exempt — this wave converted the other three to "
-            + "MapError. What is left re-types: `GetMessagesAsync` is "
-            + "Result<IReadOnlyList<AgentMessage>> → Result<Session> (196) and `AppendMessageAsync` "
-            + "is Result → Result<Session> (212). The branch path returns a Session on success, so "
-            + "its failure has to arrive as a Result<Session> too; MapError cannot mint that from a "
-            + "Result or from a Result<IReadOnlyList<…>>.",
+        // src/Harbor.Ui.Framework.Sessions/Sessions/SessionFactory.cs is deliberately
+        // NOT here any more (#600). Its two re-type sites are now
+        // `ConvertFailure<Session>().MapError(…)` — a re-type the library CAN express,
+        // so the exemption had nothing left to exempt. See
+        // SessionsSlice_HasNoHandBuiltFailureMessage and
+        // SessionsSlice_ExemptionIsGoneOnceItsLastSiteWasConverted.
     };
 
     // ── Rule: no hand-built failure message ──────────────────────────────────
@@ -204,6 +203,82 @@ public sealed class MapErrorFailureShapeTests
                 + "Result<T> → Result<T>); add the file to HandBuiltMessageExemptions with the "
                 + "concrete type pair. Offenders:"
                 + Environment.NewLine + string.Join(Environment.NewLine, violations));
+    }
+
+    // ── Issue #600: the Sessions slice has no hand-built failure left ─────────
+
+    /// <summary>
+    ///     <b>#600.</b> The three type-preserving sites in <c>SessionFactory</c> were
+    ///     converted by the earlier wave; the remaining two are re-types
+    ///     (<c>Result&lt;IReadOnlyList&lt;AgentMessage&gt;&gt;</c> and <c>Result</c> both
+    ///     have to arrive as <c>Result&lt;Session&gt;</c>). The inventory's own verdict
+    ///     on a re-type is a <c>ConvertFailure</c> wave, not an exemption — see
+    ///     <c>docs/ROP-API-INVENTORY.md</c> §3 row 11 and §4 item 12 — and
+    ///     <c>ConvertFailure&lt;T&gt;()</c> composes with <c>MapError</c>, so the prefix
+    ///     can still be a function of <c>e</c> rather than a string that merely
+    ///     interpolates <c>x.Error</c>.
+    /// </summary>
+    [Test]
+    public async Task SessionsSlice_HasNoHandBuiltFailureMessage()
+    {
+        const string slice = "src/Harbor.Ui.Framework.Sessions/";
+
+        int scanned = 0;
+        var hits = new List<string>();
+
+        foreach ((string relative, string text) in ScanGuardedTrees())
+        {
+            if (!relative.StartsWith(slice, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            scanned++;
+            HandBuiltHit hit = FindHandBuilt(text);
+            if (hit.Found)
+            {
+                hits.Add($"{relative}:{hit.Line}: {hit.Snippet}");
+            }
+        }
+
+        await Assert.That(scanned).IsGreaterThan(3)
+            .Because(
+                "Non-vacuity: the slice holds well over three source files. Fewer means the walk stopped "
+                + "matching and the assertion below became vacuous — a guard that cannot see the file it "
+                + "was written for is worse than no guard, because it reads as a permanent green light.");
+
+        await Assert.That(hits).IsEmpty()
+            .Because(
+                "A failure message that carries a cause is a function of `e`, never a string assembled at "
+                + "the call site. `GetMessagesAsync` is Result<IReadOnlyList<AgentMessage>> and "
+                + "`AppendMessageAsync` is Result, but both must arrive as Result<Session> — so re-type "
+                + "with ConvertFailure<Session>() (inside the IsFailure branch, which is what keeps it from "
+                + "throwing on a success) and then rewrite the context with MapError. The branch path's "
+                + "copy failure additionally reports how far it got (`{copied} of {total} copied`) while "
+                + "leaving a half-written branch in the store, so that number is exactly the kind of "
+                + "context that must not be droppable. Offenders:"
+                + Environment.NewLine + string.Join(Environment.NewLine, hits));
+    }
+
+    /// <summary>
+    ///     The two-sided close: once the slice is clean, its exemption must be GONE.
+    ///     A stale entry would let the hand-built shape back in with nobody watching,
+    ///     and <see cref="AllowList_EveryEntryStillMatchesSomething" /> cannot see
+    ///     that — it only checks that an entry still matches, not that a converted
+    ///     site no longer needs one.
+    /// </summary>
+    [Test]
+    public async Task SessionsSlice_ExemptionIsGoneOnceItsLastSiteWasConverted()
+    {
+        const string converted = "src/Harbor.Ui.Framework.Sessions/Sessions/SessionFactory.cs";
+
+        await Assert.That(HandBuiltMessageExemptions.ContainsKey(converted)).IsFalse()
+            .Because(
+                converted + " is exempt for its two RE-TYPE sites, but both are now expressed as "
+                + "ConvertFailure<Session>().MapError(…) — a re-type the library member CAN perform, inside "
+                + "a failure branch. An exemption with nothing left to exempt is dead width: it silently "
+                + "re-widens the rule the next time someone writes the hand-built shape. Remove the entry "
+                + "(#600).");
     }
 
     // ── Self-check 1: the scanner must not run vacuously ─────────────────────
@@ -359,6 +434,63 @@ public sealed class MapErrorFailureShapeTests
                 + "session) and cause (WHY) must both survive.");
     }
 
+    /// <summary>
+    ///     The fourth site: the branch exists, the history read does not. This is the
+    ///     re-type the exemption was granted for, and it is the one whose message has to
+    ///     keep BOTH halves — which session, and what the store said.
+    /// </summary>
+    [Test]
+    public async Task SessionFactory_CreateBranchAsync_HistoryReadFailure_StillCarriesTheCause()
+    {
+        const string Cause = "transcript is not readable";
+        Session source = Session.Create("/home/user/project", "code", "test-provider", "test-model");
+
+        Result<Session> result = await NewFactory(new BranchStore(causeOnHistoryRead: Cause))
+            .CreateBranchAsync(source);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error)
+            .IsEqualTo($"Failed to branch session '{source.Id}': could not read message history: {Cause}")
+            .Because(
+                "ConvertFailure<Session>().MapError(e => …: {e}) must produce byte-identical text to the "
+                + "hand-built string it replaces. This test is what says 'the conversion changed the "
+                + "SHAPE, not the MESSAGE' — a rewrite that dropped the cause, or reordered the two "
+                + "halves, fails here and nowhere else.");
+    }
+
+    /// <summary>
+    ///     The fifth site, and the one the issue calls load-bearing: the branch was
+    ///     already created in the store, the transcript is truncated, and the message is
+    ///     the only record of how far the copy got.
+    /// </summary>
+    [Test]
+    public async Task SessionFactory_CreateBranchAsync_CopyFailure_StillReportsProgressAndCause()
+    {
+        const string Cause = "write-ahead log is full";
+        Session source = Session.Create("/home/user/project", "code", "test-provider", "test-model");
+        // Three messages, so the copy loop fails on the FIRST append and the reported
+        // progress is "0 of 3" — a number that could only come from a real counter.
+        var messages = new List<AgentMessage>
+        {
+            NewUserMessage("m1", "start the port"),
+            NewUserMessage("m2", "on it"),
+            NewUserMessage("m3", "now the tests")
+        };
+
+        Result<Session> result = await NewFactory(new BranchStore(causeOnAppend: Cause, history: messages))
+            .CreateBranchAsync(source);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).IsEqualTo(
+                $"Failed to branch session '{source.Id}': could not copy message history (0 of 3 copied): {Cause}")
+            .Because(
+                "The progress number is the reason this site could not be a plain MapError: the context is a "
+                + "function of `copied`, `total` AND the cause. Converting the re-type to "
+                + "ConvertFailure<Session>() and the message to MapError(e => …{e}) keeps all three as a "
+                + "function of state, and this assertion pins that a later edit cannot quietly drop the "
+                + "progress — which is the only evidence left of a half-written branch still in the store.");
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -380,6 +512,10 @@ public sealed class MapErrorFailureShapeTests
             NullLogger<SessionFactory>.Instance,
             configReader: null);
     }
+
+    /// <summary>A user message with the full positional shape <c>UserMessage</c> declares.</summary>
+    private static UserMessage NewUserMessage(string id, string content)
+        => new(id, "source-session", DateTimeOffset.UnixEpoch, content, "code", "test-model");
 
     /// <summary>One hand-built failure message, located for a human-readable report.</summary>
     private readonly record struct HandBuiltHit(bool Found, int Line, string Snippet);
@@ -497,4 +633,53 @@ internal sealed class FailingSessionStore(string cause) : ISessionStore
 
     public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
         => Task.FromResult(Result.Failure<int>(cause));
+}
+
+/// <summary>
+///     A store that SUCCEEDS at creating the branch and then fails at one named step, so
+///     the branch-copy path — the one that re-types and reports progress — is reachable.
+///     <see cref="FailingSessionStore" /> cannot get there: it fails
+///     <c>CreateAsync</c> too, and the branch path returns before it ever reads history.
+/// </summary>
+internal sealed class BranchStore(
+    string? causeOnHistoryRead = null,
+    string? causeOnAppend = null,
+    IReadOnlyList<AgentMessage>? history = null) : ISessionStore
+{
+    public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
+        => Task.FromResult(Result.Success(Session.Create(directory, agentName, providerId, modelId)));
+
+    public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
+        => Task.FromResult(causeOnHistoryRead is { } cause
+            ? Result.Failure<IReadOnlyList<AgentMessage>>(cause)
+            : Result.Success<IReadOnlyList<AgentMessage>>(history ?? []));
+
+    public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+        => Task.FromResult(causeOnAppend is { } cause
+            ? Result.Failure(cause)
+            : Result.Success());
+
+    public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
+        => Task.FromResult(Result.Failure<Session>($"Session '{sessionId}' not found."));
+
+    public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
+        => Task.FromResult(Result.Success<IReadOnlyList<Session>>([]));
+
+    public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+        => Task.FromResult(Result.Success());
+
+    public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
+        => Task.FromResult(Result.Success());
+
+    public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
+        => Task.FromResult(Result.Success());
+
+    public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
+        => Task.FromResult(Result.Success(SessionMetadata.Empty));
+
+    public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
+        => Task.FromResult(Result.Success());
+
+    public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+        => Task.FromResult(Result.Success(0));
 }
