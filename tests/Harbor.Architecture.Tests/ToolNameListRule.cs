@@ -148,29 +148,42 @@ public sealed class ToolNameListRule
     private const int TableWindowLines = 3;
 
     /// <summary>
-    ///     How many tool-SHAPED names a run must contain before it is judged a tool
-    ///     table at all — real tools or not. This is the gate that separates a table
-    ///     from a JSON schema or a CLI verb list, neither of which quotes words
-    ///     shaped like tools in bulk.
+    ///     How many tool-SHAPED names a run must contain before it is judged a table
+    ///     at all — real tools or not. This is the gate that separates a table from a
+    ///     JSON schema, which quotes no tool names in bulk.
     /// </summary>
     private const int TableMinimumNames = 3;
 
     /// <summary>
-    ///     How many of those names must be REAL tools before the run is treated as
-    ///     being about tools. Two, not three: a dead row is by definition a name that
-    ///     is not a tool, so requiring three real ones makes the rule blind to a
-    ///     table that has exactly one phantom in it — which is precisely the case it
-    ///     exists for. Two real names beside a phantom is already unmistakably a tool
-    ///     table, and a schema never reaches it because its words are not tool names.
+    ///     The fraction of a run's distinct names that must be REAL tools for the run
+    ///     to count as a tool table: <c>RealToolNumerator / RealToolDenominator</c>.
     /// </summary>
     /// <remarks>
-    ///     This threshold was three when the rule was written, and the non-vacuity
-    ///     control caught it in CI: a planted <c>"read", "write", "web_fetch"</c> held
-    ///     two real names and was therefore never seen, so the rule that exists to
-    ///     find a phantom row could not find a phantom row. A positive control that
-    ///     fails the rule it is testing is the control working.
+    ///     <para>
+    ///         Two earlier thresholds were plain counts, and CI falsified both, which
+    ///         is why this is a ratio.
+    ///     </para>
+    ///     <para>
+    ///         "Three REAL tool names" was too strict. A dead row is by definition a
+    ///         name that is not a tool, so a table carrying one phantom has one fewer
+    ///         real name than a correct one — the rule was least able to see a table
+    ///         that was slightly wrong, which is the only kind it exists for. The
+    ///         non-vacuity control caught that against a planted
+    ///         <c>"read", "write", "web_fetch"</c>.
+    ///     </para>
+    ///     <para>
+    ///         "Two REAL tool names" was too loose. It matched
+    ///         <c>SlashCommandCatalog</c>: a list of slash-command names that happens
+    ///         to contain <c>tree</c> and <c>skill</c>, two real tools among thirtysix
+    ///         names. Those are slash commands (Harbor writes them without a leading
+    ///         <c>/</c>), not tools, and the overlap is coincidence. A ratio separates
+    ///         the cases — a tool table is almost entirely tool names, while a
+    ///         coincidental mention is a small minority of one.
+    ///     </para>
     /// </remarks>
-    private const int TableMinimumRealTools = 2;
+    private const int RealToolNumerator = 2;
+
+    private const int RealToolDenominator = 3;
 
     /// <summary>A tool name spelled as a C# string literal, with the line it was on.</summary>
     private sealed record Mention(string File, int Line, string Name)
@@ -416,6 +429,41 @@ public sealed class ToolNameListRule
     }
 
     /// <summary>
+    ///     THE DENSITY CONTROL. A list that merely MENTIONS a couple of tool names
+    ///     among many non-tool names is not a tool table. CI caught exactly this:
+    ///     <c>SlashCommandCatalog</c> holds the slash commands <c>tree</c> and
+    ///     <c>skill</c>, which are spelled like two tools, among thirty-six names that
+    ///     are not tools at all. A rule that reported that list would be reporting
+    ///     coincidence, and the first person to hit it would delete the rule.
+    /// </summary>
+    [Test]
+    public async Task Non_Vacuity_A_Coincidental_Mention_Is_Not_A_Tool_Table()
+    {
+        FrozenSet<string> known = ToolNameInventory.Names;
+
+        // Shaped like SlashCommandCatalog: two real tool names, many that are not.
+        const string slashCommands = """
+            private static readonly IReadOnlyList<Command> Definitions =
+            [
+                new("help", "Show this help screen", ["h"]),
+                new("exit", "Exit Harbor", ["quit"]),
+                new("sessions", "List recent sessions", []),
+                new("tree", "Show the session fork tree", []),
+                new("model", "Switch the active LLM model", ["m"]),
+                new("skill", "Check skill freshness", ["refresh"]),
+                new("storage", "Show the session storage backend", []),
+            ];
+            """;
+
+        IReadOnlyList<IReadOnlyList<Mention>> tables = FindToolTables([("catalog.cs", slashCommands)], known);
+
+        await Assert.That(tables).IsEmpty()
+            .Because("'tree' and 'skill' are slash commands that happen to share a spelling with "
+                   + "two tools; the rest are not tools either. A run that is mostly NOT tool "
+                   + "names is not a tool table, and reporting it would be reporting coincidence");
+    }
+
+    /// <summary>
     ///     THE POINT OF ALL OF IT: a tool that exists in NO hand-written list is
     ///     still covered, because the policy set is derived from the declaration.
     ///     If this fails, a new tool could be added and simply not guarded, which
@@ -574,7 +622,12 @@ public sealed class ToolNameListRule
             string[] names = [.. run.Select(m => m.Name).Distinct(StringComparer.Ordinal)];
             int realTools = names.Count(known.Contains);
 
-            if (names.Length >= TableMinimumNames && realTools >= TableMinimumRealTools)
+            // Density, not a count: a tool table is mostly tool names, so a table
+            // holding a phantom still clears the bar while a slash-command list
+            // that happens to mention two of them does not.
+            bool mostlyTools = realTools * RealToolDenominator >= names.Length * RealToolNumerator;
+
+            if (names.Length >= TableMinimumNames && mostlyTools)
             {
                 tables.Add([.. run]);
             }
