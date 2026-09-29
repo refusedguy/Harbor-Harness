@@ -7,6 +7,8 @@
 // throwing, so a published or trimmed test host degrades to "nothing to check"
 // instead of failing the Release build with an unrelated error.
 
+using System.Xml.Linq;
+
 namespace Harbor.Architecture.Tests;
 
 /// <summary>

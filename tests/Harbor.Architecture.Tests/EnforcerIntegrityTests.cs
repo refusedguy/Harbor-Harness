@@ -119,7 +119,9 @@ public sealed class EnforcerIntegrityTests
 
                 // A project-directory name is acceptable too: the rules may name
                 // either the assembly or the project that produces it.
-                if (real.ContainsValue(name))
+                // (Values, not ContainsValue: TUnit ships an assertion extension
+                // of that name on IReadOnlyDictionary.)
+                if (real.Values.Contains(name))
                 {
                     continue;
                 }
