@@ -115,7 +115,7 @@ public sealed class TypeFilterRegistrationTests
         string root = RequireRepoRoot();
         IReadOnlyList<string> files = EnumerateProductCsFiles(root);
 
-        List<ConstructionSite> typeless = [.. files.SelectMany(f => FindTypelessConstructions(root, f))];
+        List<ConstructionSite> typeless = [.. files.SelectMany(f => ReadTypelessConstructions(root, f))];
 
         await Assert.That(typeless.Count).IsEqualTo(0)
             .Because(
@@ -250,53 +250,60 @@ public sealed class TypeFilterRegistrationTests
         int i = 0;
         while (i < text.Length)
         {
-            char c = text[i];
-
-            if (c == '/' && i + 1 < text.Length && text[i + 1] == '/')
-            {
-                int end = text.IndexOf('\n', i);
-                if (end < 0)
-                {
-                    end = text.Length;
-                }
-
-                Blank(buffer, i, end);
-                i = end;
-                continue;
-            }
-
-            if (c == '/' && i + 1 < text.Length && text[i + 1] == '*')
-            {
-                int close = text.IndexOf("*/", i + 2, StringComparison.Ordinal);
-                int end = close < 0 ? text.Length : close + 2;
-                Blank(buffer, i, end);
-                i = end;
-                continue;
-            }
-
-            if (c == '@' && i + 1 < text.Length && text[i + 1] == '"')
-            {
-                i = SkipVerbatimString(text, buffer, i + 1);
-                continue;
-            }
-
-            if (c == '"')
-            {
-                i = SkipQuoted(text, buffer, i, '"');
-                continue;
-            }
-
-            if (c == '\'')
-            {
-                i = SkipQuoted(text, buffer, i, '\'');
-                continue;
-            }
-
-            i++;
+            i = MaskOneToken(text, buffer, i);
         }
 
         return new string(buffer);
     }
+
+    /// <summary>
+    ///     Consumes the token starting at <paramref name="i" /> when it is a
+    ///     comment or a literal, and returns where the next token begins — or
+    ///     <paramref name="i" /> + 1 when the character is ordinary code.
+    /// </summary>
+    private static int MaskOneToken(string text, char[] buffer, int i)
+    {
+        if (At(text, i, "//"))
+        {
+            int end = text.IndexOf('\n', i);
+            if (end < 0)
+            {
+                end = text.Length;
+            }
+
+            Blank(buffer, i, end);
+            return end;
+        }
+
+        if (At(text, i, "/*"))
+        {
+            int close = text.IndexOf("*/", i + 2, StringComparison.Ordinal);
+            int end = close < 0 ? text.Length : close + 2;
+            Blank(buffer, i, end);
+            return end;
+        }
+
+        if (At(text, i, "@\""))
+        {
+            return SkipVerbatimString(text, buffer, i + 1);
+        }
+
+        if (At(text, i, "\""))
+        {
+            return SkipQuoted(text, buffer, i, '"');
+        }
+
+        if (At(text, i, "'"))
+        {
+            return SkipQuoted(text, buffer, i, '\'');
+        }
+
+        return i + 1;
+    }
+
+    /// <summary>Whether <paramref name="text" /> carries <paramref name="token" /> at <paramref name="i" />.</summary>
+    private static bool At(string text, int i, string token)
+        => i + token.Length <= text.Length && string.CompareOrdinal(text, i, token, 0, token.Length) == 0;
 
     /// <summary>
     ///     Blanks a range in place, keeping newlines so reported line numbers stay
@@ -520,7 +527,7 @@ public sealed class TypeFilterRegistrationTests
                || normalized.Contains("/bin/", StringComparison.Ordinal);
     }
 
-    private static List<ConstructionSite> FindTypelessConstructions(string root, string relativePath)
+    private static List<ConstructionSite> ReadTypelessConstructions(string root, string relativePath)
     {
         string text;
         try
