@@ -63,15 +63,12 @@ public static class PluginLifecycle
         if (context is null)
             throw new ArgumentNullException(nameof(context));
 
-        try
-        {
-            plugin.Initialize(context);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure($"Initialize threw: {ex.Message}");
-        }
+        // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
+        // try/catch -> Result: it catches exactly `Exception` and routes it
+        // through the handler below, so the failure text is unchanged.
+        return Result.Try(
+            () => plugin.Initialize(context),
+            ex => $"Initialize threw: {ex.Message}");
     }
 
     /// <summary>
@@ -84,14 +81,9 @@ public static class PluginLifecycle
         if (plugin is null)
             throw new ArgumentNullException(nameof(plugin));
 
-        try
-        {
-            await plugin.ShutdownAsync(ct).ConfigureAwait(false);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure($"ShutdownAsync threw: {ex.Message}");
-        }
+        return await Result.Try(
+                () => plugin.ShutdownAsync(ct),
+                ex => $"ShutdownAsync threw: {ex.Message}")
+            .ConfigureAwait(false);
     }
 }

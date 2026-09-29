@@ -361,17 +361,21 @@ internal static class SessionFileReader
     internal static async Task<Result<SessionHeaderEntry>> TryReadHeaderAsync(
         string path, string sessionId, CancellationToken ct)
     {
-        string? firstLine;
-        try
-        {
-            using var reader = new StreamReader(path);
-            firstLine = await reader.ReadLineAsync(ct).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<SessionHeaderEntry>(
-                $"Session '{sessionId}' header unreadable ({ResultErrors.Message(ex)}): {path}.");
-        }
+        // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
+        // try/catch -> Result. ResultErrors.Message rethrows OperationCanceledException
+        // inside the handler, so cancellation still propagates exactly as before.
+        var readResult = await Result.Try(
+                async () =>
+                {
+                    using var reader = new StreamReader(path);
+                    return await reader.ReadLineAsync(ct).ConfigureAwait(false);
+                },
+                ex => $"Session '{sessionId}' header unreadable ({ResultErrors.Message(ex)}): {path}.")
+            .ConfigureAwait(false);
+
+        if (readResult.IsFailure)
+            return Result.Failure<SessionHeaderEntry>(readResult.Error);
+        string? firstLine = readResult.Value;
 
         if (firstLine is null)
             return Result.Failure<SessionHeaderEntry>($"Session '{sessionId}' is empty: {path}.");

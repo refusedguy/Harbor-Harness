@@ -327,18 +327,26 @@ public sealed class DynamicModelCatalog : IModelCatalog
     private async Task<Result<IReadOnlyList<ModelInfo>>> FetchAndCacheAsync(
         ProviderConfig config, string modelsUrl, string cachePath, CancellationToken ct)
     {
-        try
-        {
-            string response = await _http.GetStringAsync(modelsUrl, ct).ConfigureAwait(false);
-            Directory.CreateDirectory(_cacheDir);
-            await File.WriteAllTextAsync(cachePath, response, ct).ConfigureAwait(false);
-            return ParseModelsResponse(response, config);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to fetch models for {Provider}, trying stale cache", config.Id);
-            return Result.Failure<IReadOnlyList<ModelInfo>>(ex.Message);
-        }
+        // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
+        // try/catch -> Result. The parse step stays OUTSIDE the Try and is
+        // chained with Bind: it has its own catch-all (see ParseModelsResponse),
+        // so folding it in would double-report and the failure texts differ
+        // ("..." for a fetch, "Failed to parse models response: ..." for a parse).
+        return await Result.Try(
+                async () =>
+                {
+                    string response = await _http.GetStringAsync(modelsUrl, ct).ConfigureAwait(false);
+                    Directory.CreateDirectory(_cacheDir);
+                    await File.WriteAllTextAsync(cachePath, response, ct).ConfigureAwait(false);
+                    return response;
+                },
+                ex =>
+                {
+                    _logger.LogWarning(ex, "Failed to fetch models for {Provider}, trying stale cache", config.Id);
+                    return ex.Message;
+                })
+            .Bind(response => ParseModelsResponse(response, config))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -358,15 +366,14 @@ public sealed class DynamicModelCatalog : IModelCatalog
                 return Result.Failure<IReadOnlyList<ModelInfo>>("cached model catalog is stale");
         }
 
-        try
-        {
-            string json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
-            return ParseModelsResponse(json, config);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<IReadOnlyList<ModelInfo>>($"Cache read failed: {ex.Message}");
-        }
+        // Result.Try + Bind, mirroring FetchAndCacheAsync: the read is the
+        // fallible I/O step, the parse keeps its own catch-all and its own
+        // failure text.
+        return await Result.Try(
+                () => File.ReadAllTextAsync(path, ct),
+                ex => $"Cache read failed: {ex.Message}")
+            .Bind(json => ParseModelsResponse(json, config))
+            .ConfigureAwait(false);
     }
 
     private Result<IReadOnlyList<ModelInfo>> ParseModelsResponse(string json, ProviderConfig config)
