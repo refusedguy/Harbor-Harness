@@ -70,10 +70,10 @@
 // * apps/Harbor.App.Cli/Commands/TaskRunRunner.cs also walks GetAllAgents() looking for an
 //   agent by name. It is NOT one of these copies and this guard does not touch it, because
 //   a single shared resolver would silently erase two real differences:
-//     - it compares ORDINAL-IGNORECASE, since the name came from a user typing
-//       `harbor run task agent=Plan`; every site in the sessions slice compares with `==`;
-//     - it has NO fallback at all — a miss is a reported error listing the sub-agents, not
-//       a quiet substitution.
+//   it compares ORDINAL-IGNORECASE, since the name came from a user typing
+//   `harbor run task agent=Plan`, while every site in the sessions slice compares with
+//   `==`; and it has NO fallback at all — a miss is a reported error listing the
+//   sub-agents, not a quiet substitution.
 //   Same shape, opposite intent. Folding them in would change case-sensitivity on a CLI
 //   surface to buy a line count. #717 hit exactly this trap on
 //   CollapseWhitespace/StripWhitespace.
@@ -377,7 +377,12 @@ public sealed class SessionAgentResolutionTests
     ///     bool would only prove the switcher did not throw.
     /// </summary>
     private static SessionSwitcher NewSwitcher(RecordingAgent agent, FixedOrderAgentRegistry registry)
-        => new(agent, new MemorySessionStore(), registry, NullLogger<SessionSwitcher>.Instance);
+    {
+        var store = new MemorySessionStore();
+        return new SessionSwitcher(
+            agent, store, new SessionFactory(registry, agent, store, NullLogger<SessionFactory>.Instance),
+            NullLogger<SessionSwitcher>.Instance);
+    }
 
     /// <summary>
     ///     A session that is not persisted anywhere. <c>MemorySessionStore</c> answers the
@@ -385,7 +390,7 @@ public sealed class SessionAgentResolutionTests
     ///     about agent resolution, not about hydration.
     /// </summary>
     private static Session SessionNamed(string agentName)
-        => Session.Create("/tmp/issue596", agentName, "test-provider", "test-model");
+        => Session.Create("/home/user/issue596", agentName, "test-provider", "test-model");
 
     private static string RequireRepoRoot()
         => RepoPaths.RepoRoot ?? throw new InvalidOperationException(

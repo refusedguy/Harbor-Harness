@@ -27,20 +27,29 @@ namespace Harbor.Ui.Framework.Sessions;
 public sealed class SessionSwitcher
 {
     private readonly IAgent _agent;
-    private readonly IAgentRegistry _agents;
     private readonly ILogger<SessionSwitcher> _logger;
+    private readonly SessionFactory _sessions;
     private readonly ISessionStore _sessionStore;
 
     /// <summary>Construct a <see cref="SessionSwitcher" />.</summary>
+    /// <param name="agent">The agent instance to bind on each open.</param>
+    /// <param name="sessionStore">Persistence each opened session replays from.</param>
+    /// <param name="sessions">
+    ///     Owns agent resolution (#596). Declared rather than a registry of our own so
+    ///     that "which agent does a session that names an unknown one open on?" is answered
+    ///     once, beside the default-agent policy it falls back to, instead of being
+    ///     re-derived from <c>IAgentRegistry</c> at every call site.
+    /// </param>
+    /// <param name="logger">Diagnostics sink for the open path.</param>
     public SessionSwitcher(
         IAgent agent,
         ISessionStore sessionStore,
-        IAgentRegistry agents,
+        SessionFactory sessions,
         ILogger<SessionSwitcher> logger)
     {
         _agent = agent;
         _sessionStore = sessionStore;
-        _agents = agents;
+        _sessions = sessions;
         _logger = logger;
     }
 
@@ -60,8 +69,18 @@ public sealed class SessionSwitcher
     {
         ArgumentNullException.ThrowIfNull(targetStore);
 
-        var agentDef = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
-                       ?? _agents.GetAllAgents().First();
+        // #596: this used to be
+        //     GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
+        //     ?? GetAllAgents().First()
+        // — the pre-#683 policy, which resolved an unknown agent name to whichever
+        // entry the registry enumerated first. AgentRegistry is a
+        // ConcurrentDictionary, so "first" is the bucket layout on that run rather
+        // than the registration order, and the sibling path in
+        // SessionLifecycleService.OpenSessionAsync (which #683 moved onto the named
+        // default) disagreed with it. Same session, two answers. Both now ask the
+        // factory, and the factory falls back to the same default the startup
+        // session is built around.
+        var agentDef = _sessions.ResolveAgentForSession(session.Agent);
 
         _agent.Initialize(session, agentDef);
 
