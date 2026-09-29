@@ -1,5 +1,5 @@
-using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Harbor.Ui.Framework.Rendering.Widgets;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
@@ -18,7 +18,11 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 ///         NOT bound by Avalonia <c>DiffView</c> — that view binds the Framework
 ///         side-by-side VM via <c>ContentHost.Diff</c> (issue #160). Distinct from
 ///         the Framework side-by-side compute VM and the TUI
-///         <c>DiffPreviewViewModel</c> — do not merge.
+///         <c>DiffPreviewViewModel</c>: the index-by-index diff that used to be
+///         duplicated in both was replaced by the shared core
+///         <see cref="LineDiff" /> (#679), but the three view contracts (unified
+///         text, aligned rows, event-driven list) are still different, so they
+///         remain separate types.
 ///     </para>
 /// </remarks>
 public sealed partial class DiffViewModel : ObservableObject
@@ -50,34 +54,21 @@ public sealed partial class DiffViewModel : ObservableObject
 
     /// <summary>
     ///     Compute a line-level diff between <see cref="Before" /> and
-    ///     <see cref="After" /> and store the unified-style result in
+    ///     <see cref="After" /> and store the result in
     ///     <see cref="DiffText" />. Lines present on both sides are prefixed
     ///     with <c>"  "</c>; removals with <c>"- "</c>; additions with
-    ///     <c>"+ "</c>.
+    ///     <c>"+ "</c> — the context-diff block the core speaks, which
+    ///     <see cref="LineDiff.TryParseContextBlock" /> reads back.
     /// </summary>
-    public void ComputeDiff()
-    {
-        var beforeLines = Before.Split('\n');
-        var afterLines = After.Split('\n');
-        var sb = new StringBuilder();
-        var max = Math.Max(beforeLines.Length, afterLines.Length);
-        for (var i = 0; i < max; i++)
-        {
-            var b = i < beforeLines.Length ? beforeLines[i] : string.Empty;
-            var a = i < afterLines.Length ? afterLines[i] : string.Empty;
-            if (b == a)
-            {
-                sb.AppendLine("  " + a);
-            }
-            else
-            {
-                if (i < beforeLines.Length) sb.AppendLine("- " + b);
-                if (i < afterLines.Length) sb.AppendLine("+ " + a);
-            }
-        }
-
-        DiffText = sb.ToString();
-    }
+    /// <remarks>
+    ///     The diff is computed by the headless core
+    ///     (<see cref="LineDiff" />), not here. This method previously walked
+    ///     <c>before[i]</c> against <c>after[i]</c>, so a line inserted
+    ///     anywhere above rewrote the whole remainder of the file in the output
+    ///     (#679). This view-model is display state: it holds the two texts and
+    ///     hands the answer to the view.
+    /// </remarks>
+    public void ComputeDiff() => DiffText = LineDiff.ToUnifiedText(LineDiff.Compute(Before, After));
 
     /// <summary>
     ///     Copy the computed diff to the clipboard. The actual clipboard write

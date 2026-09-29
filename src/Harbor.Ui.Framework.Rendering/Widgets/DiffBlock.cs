@@ -99,6 +99,56 @@ public static class UnifiedDiffParser
         return lines;
     }
 
+    /// <summary>
+    ///     The file path a unified diff is about, taken from its own
+    ///     <c>--- </c>/<c>+++ </c> file headers, or null when the text is not a
+    ///     unified diff or names no file.
+    /// </summary>
+    /// <remarks>
+    ///     The <c>a/</c> and <c>+++ b/</c> prefixes are the diff's, not the
+    ///     file's, and are stripped so the result is a path. The <c>+++ </c>
+    ///     header wins over the <c>--- </c> one because it names the result, and
+    ///     a diff with only <c>--- </c> still answers with that header rather
+    ///     than nothing. Read structurally, from parsed rows: a path is a field
+    ///     of the format, not a guess about which character is a slash.
+    /// </remarks>
+    public static string? TryReadFilePath(string? diffText)
+    {
+        if (diffText is null || !LooksLikeDiff(diffText))
+        {
+            return null;
+        }
+
+        IReadOnlyList<DiffLine> lines = Parse(diffText);
+        string? oldPath = null;
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            if (lines[i].Kind != DiffLineKind.FileHeader)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<char> header = lines[i].Text;
+            if (header.StartsWith("+++ ", StringComparison.Ordinal))
+            {
+                return StripDiffPrefix(header[4..].Trim()).ToString();
+            }
+
+            if (oldPath is null && header.StartsWith("--- ", StringComparison.Ordinal))
+            {
+                oldPath = StripDiffPrefix(header[4..].Trim()).ToString();
+            }
+        }
+
+        return oldPath;
+    }
+
+    private static ReadOnlySpan<char> StripDiffPrefix(ReadOnlySpan<char> path) =>
+        path.StartsWith("b/", StringComparison.Ordinal) || path.StartsWith("a/", StringComparison.Ordinal)
+            ? path[2..]
+            : path;
+
     private static (int OldStart, int NewStart, bool Ok) ParseHunk(ReadOnlySpan<char> header)
     {
         // Format: @@ -a[,b] +c[,d] @@ …

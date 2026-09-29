@@ -13,6 +13,11 @@
     <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.Services\Harbor.Ui.Framework.Services.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
+    <!-- #679: DiffViewModel projects the core LCS (Rendering.Widgets.LineDiff)
+         instead of walking left[i]/right[i] itself. Direct reference, not the
+         transitive one through State — the same CF-A-001 precedent the
+         Rendering project sets. Presentation to Presentation, which conforms. -->
+    <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
