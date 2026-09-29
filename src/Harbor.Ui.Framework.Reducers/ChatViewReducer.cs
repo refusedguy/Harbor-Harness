@@ -47,7 +47,7 @@ public static partial class ChatViewReducer
                 tcse.Id,
                 tcse.ToolName,
                 string.Empty,
-                "running",
+                ToolCallState.Pending,
                 string.Empty,
                 TimeSpan.Zero,
                 false,
@@ -56,12 +56,13 @@ public static partial class ChatViewReducer
 
         MessageEndEvent => AddStreamingBuffer(state),
 
-        ToolExecutionStartEvent { ToolCallId: string id } => UpdateToolCallStatus(state, id, "running"),
+        ToolExecutionStartEvent { ToolCallId: string id } =>
+            UpdateToolCallStatus(state, id, ToolCallState.Running),
 
         ToolExecutionEndEvent { ToolCallId: string id, IsError: bool isError } => UpdateToolCallStatus(
             state,
             id,
-            isError ? "error" : "success"),
+            isError ? ToolCallState.Error : ToolCallState.Success),
 
         AgentStartEvent => ResetForAgentStart(state),
 
@@ -133,7 +134,7 @@ public static partial class ChatViewReducer
         return next;
     }
 
-    private static ChatViewState UpdateToolCallStatus(ChatViewState state, string toolCallId, string status)
+    private static ChatViewState UpdateToolCallStatus(ChatViewState state, string toolCallId, ToolCallState status)
     {
         var updated = ImmutableArray.CreateBuilder<ToolCallViewModel>(state.ToolCalls.Length);
         bool changed = false;

@@ -5,6 +5,7 @@ using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework;
 using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -92,7 +93,7 @@ public class TaskCardTests
                 IsError: false));
 
             var card = (ToolCallBlock)panel.Timeline.BlockAt(panel.Timeline.Count - 1);
-            await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Ok);
+            await Assert.That(card.Status).IsEqualTo(ToolCallState.Success);
             await Assert.That(card.IsExpanded).IsFalse();
             await Assert.That(card.LiveSuffix).IsEqualTo("· 2 toolcalls");
 
@@ -194,7 +195,7 @@ public class TaskCardTests
             await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("file body"), IsError: false));
 
             var card = (ToolCallBlock)panel.Timeline.BlockAt(0);
-            await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Ok);
+            await Assert.That(card.Status).IsEqualTo(ToolCallState.Success);
             await Assert.That(card.LiveSuffix).IsNull();
             await Assert.That(card.MaxBodyLines).IsEqualTo(4);
         }

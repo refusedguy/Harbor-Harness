@@ -7,6 +7,7 @@ using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework;
 using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -44,7 +45,7 @@ public class ToolCallCardTests
             await Assert.That(panel.Timeline.Count).IsEqualTo(1);
             var card = (ToolCallBlock)panel.Timeline.BlockAt(0);
             await Assert.That(card.Kind).IsEqualTo("tool-call");
-            await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Ok);
+            await Assert.That(card.Status).IsEqualTo(ToolCallState.Success);
             await Assert.That(card.Body.Value.Output).IsEqualTo("file body");
             await Assert.That(card.Body.Value.Duration).IsEqualTo(TimeSpan.FromMilliseconds(120));
             await Assert.That(card.IsExpanded).IsFalse();
@@ -62,7 +63,7 @@ public class ToolCallCardTests
             await bus.PublishAsync(new ToolExecutionEndEvent("tc9", ToolResult.Error("exit code 1"), IsError: true));
 
             var card = (ToolCallBlock)panel.Timeline.BlockAt(panel.Timeline.Count - 1);
-            await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Error);
+            await Assert.That(card.Status).IsEqualTo(ToolCallState.Error);
             await Assert.That(card.Body.Value.Output).IsEqualTo("exit code 1");
 
             var buffer = new ScreenBuffer(40, 2);

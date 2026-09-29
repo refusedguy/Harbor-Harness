@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Streaming;
@@ -332,6 +333,21 @@ public sealed class ChatScreenBridge : IDisposable
                 }
 
                 _streams.FlushStreamNow();
+
+                // #567: a cancelled run publishes AgentEndEvent(Cancelled: true)
+                // and never a ToolExecutionEndEvent for the call it was aborting,
+                // so the in-flight card kept its running glyph and spun forever.
+                // Sweep the open calls into an explicit terminal state; before the
+                // enum collapse there was no such state and no way to say "stopped".
+                if (agentEnd.Cancelled)
+                {
+                    _cards.StopRunningCalls(ToolCallState.Cancelled, "cancelled by user");
+                    _status.Phase = AgentPhase.Errored;
+                    _status.SignalMascot(MascotReaction.ErrorBlink);
+                    _status.Mode = StatusBarMode.Idle;
+                    break;
+                }
+
                 _status.Phase = _runHadError ? AgentPhase.Errored : AgentPhase.Succeeded;
                 if (!_runHadError)
                 {

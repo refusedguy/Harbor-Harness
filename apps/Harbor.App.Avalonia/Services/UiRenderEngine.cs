@@ -2,11 +2,11 @@ using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using Harbor.Abstractions.Models;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.ViewModels;
-using ToolCallStatus = Harbor.Ui.Framework.ViewModels.ToolCallStatus;
 using ToolCallViewModel = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 using ChatLineViewModel = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 
@@ -152,7 +152,7 @@ public sealed class UiRenderEngine
             else if (line.Role == ChatRole.ToolResult && existingById.TryGetValue(line.ToolCallId!, out var entry))
             {
                 entry.Complete(
-                    line.Text.StartsWith("✗", StringComparison.Ordinal) ? ToolCallStatus.Error : ToolCallStatus.Success,
+                    line.Text.StartsWith("✗", StringComparison.Ordinal) ? ToolCallState.Error : ToolCallState.Success,
                     FormatResultPreview(line.Text),
                     TimeSpan.Zero);
                 ordered.Add(entry);

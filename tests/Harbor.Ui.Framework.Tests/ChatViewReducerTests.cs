@@ -60,7 +60,7 @@ public class ChatViewReducerTests
         var result = ChatViewReducer.Reduce(msgUpdate, state);
         await Assert.That(result.ToolCalls.Length).IsEqualTo(1);
         await Assert.That(result.ToolCalls[0].ToolName).IsEqualTo("read");
-        await Assert.That(result.ToolCalls[0].Status).IsEqualTo("running");
+        await Assert.That(result.ToolCalls[0].Status).IsEqualTo(ToolCallState.Pending);
     }
 
     [Test]
@@ -91,7 +91,7 @@ public class ChatViewReducerTests
             IsStreaming = true,
             IsThinking = true,
             StreamingBuffer = "partial",
-            ToolCalls = [new ToolCallViewModel("tc", "tool", "", "running", "", TimeSpan.Zero, false, false)],
+            ToolCalls = [new ToolCallViewModel("tc", "tool", "", ToolCallState.Running, "", TimeSpan.Zero, false, false)],
             PullProgress = 0.5,
             ShowPullIndicator = true,
             ContentScale = 1.5
@@ -131,17 +131,39 @@ public class ChatViewReducerTests
         await Assert.That(result.IsAgentRunning).IsFalse();
     }
 
+    // #567: ToolCallStartEvent announces the call but the tool has not begun
+    // executing, so the card is Pending, not Running. The state slice used to
+    // collapse both into the string "running"; the collapsed enum keeps the two
+    // phases apart because ToolCallState has room for both.
+    [Test]
+    public async Task ToolExecutionStartEvent_MovesPendingCardToRunning()
+    {
+        var state = new ChatViewState
+        {
+            ToolCalls = [new ToolCallViewModel("tc1", "read", "", ToolCallState.Pending, "", TimeSpan.Zero, false, false)]
+        };
+        await Assert.That(state.ToolCalls[0].Status.IsTerminal()).IsFalse();
+
+        var result = ChatViewReducer.Reduce(
+            new ToolExecutionStartEvent(
+                "tc1",
+                "read",
+                JsonDocument.Parse("{\"path\":\"a.cs\"}").RootElement.Clone()),
+            state);
+        await Assert.That(result.ToolCalls[0].Status).IsEqualTo(ToolCallState.Running);
+    }
+
     [Test]
     public async Task ToolExecutionEndEvent_SetsSuccessStatus()
     {
         var state = new ChatViewState
         {
-            ToolCalls = [new ToolCallViewModel("tc1", "read", "", "running", "", TimeSpan.Zero, false, false)]
+            ToolCalls = [new ToolCallViewModel("tc1", "read", "", ToolCallState.Running, "", TimeSpan.Zero, false, false)]
         };
         var result = ChatViewReducer.Reduce(
             new ToolExecutionEndEvent("tc1", ToolResult.Success("ok"), false),
             state);
-        await Assert.That(result.ToolCalls[0].Status).IsEqualTo("success");
+        await Assert.That(result.ToolCalls[0].Status).IsEqualTo(ToolCallState.Success);
     }
 
     [Test]
@@ -149,12 +171,12 @@ public class ChatViewReducerTests
     {
         var state = new ChatViewState
         {
-            ToolCalls = [new ToolCallViewModel("tc1", "read", "", "running", "", TimeSpan.Zero, false, false)]
+            ToolCalls = [new ToolCallViewModel("tc1", "read", "", ToolCallState.Running, "", TimeSpan.Zero, false, false)]
         };
         var result = ChatViewReducer.Reduce(
             new ToolExecutionEndEvent("tc1", ToolResult.Error("fail"), true),
             state);
-        await Assert.That(result.ToolCalls[0].Status).IsEqualTo("error");
+        await Assert.That(result.ToolCalls[0].Status).IsEqualTo(ToolCallState.Error);
     }
 
     [Test]

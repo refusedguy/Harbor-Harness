@@ -44,27 +44,37 @@ public static class StatusMappers
     };
 
     /// <summary>
-    ///     Map a <see cref="ViewModels.ToolCallStatus" /> to the resource
-    ///     key for the tool-call pill background brush.
+    ///     Map a <see cref="ToolCallState" /> to the resource key for the
+    ///     tool-call pill background brush. Every member named explicitly; an
+    ///     undeclared value throws instead of inheriting the former
+    ///     <c>_ =&gt; "MochaOverlay2"</c> silent default (#567).
     /// </summary>
-    public static string ToolCallStatusToBrushKey(ToolCallStatus status) => status switch
+    public static string ToolCallStateToBrushKey(ToolCallState state) => state switch
     {
-        ToolCallStatus.Running => "MochaYellow",
-        ToolCallStatus.Success => "MochaGreen",
-        ToolCallStatus.Error => "MochaRed",
-        _ => "MochaOverlay2"
+        ToolCallState.Running => "MochaYellow",
+        ToolCallState.Success => "MochaGreen",
+        ToolCallState.Error => "MochaRed",
+        ToolCallState.TimedOut => "MochaRed",
+        // Neither has started, or was stopped deliberately: neutral, not a fault.
+        ToolCallState.Pending or ToolCallState.Cancelled => "MochaOverlay2",
+        _ => throw ToolCallStateExtensions.Undeclared(state)
     };
 
     /// <summary>
-    ///     Map a <see cref="ViewModels.ToolCallStatus" /> to a short pill
-    ///     label ("running" / "ok" / "err").
+    ///     Map a <see cref="ToolCallState" /> to a short pill label
+    ///     ("pending" / "running" / "ok" / "err" / "cancelled" / "timeout").
+    ///     Every member named explicitly; an undeclared value throws instead of
+    ///     inheriting the former <c>_ =&gt; "?"</c> mystery pill (#567).
     /// </summary>
-    public static string ToolCallStatusToPill(ToolCallStatus status) => status switch
+    public static string ToolCallStateToPill(ToolCallState state) => state switch
     {
-        ToolCallStatus.Running => "running",
-        ToolCallStatus.Success => "ok",
-        ToolCallStatus.Error => "err",
-        _ => "?"
+        ToolCallState.Pending => "pending",
+        ToolCallState.Running => "running",
+        ToolCallState.Success => "ok",
+        ToolCallState.Error => "err",
+        ToolCallState.Cancelled => "cancelled",
+        ToolCallState.TimedOut => "timeout",
+        _ => throw ToolCallStateExtensions.Undeclared(state)
     };
 
     /// <summary>

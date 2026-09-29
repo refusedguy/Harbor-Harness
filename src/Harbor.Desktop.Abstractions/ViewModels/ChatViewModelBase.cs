@@ -5,7 +5,7 @@ using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.Logging;
-using ToolCallStatus = Harbor.Ui.Framework.ViewModels.ToolCallStatus;
+using ToolCallState = Harbor.Ui.Framework.ToolCallState;
 using ToolCallViewModel = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
@@ -210,7 +210,7 @@ public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
             else if (line.Role == ChatRole.ToolResult && existingById.TryGetValue(line.ToolCallId!, out var entry))
             {
                 entry.Complete(
-                    line.Text.StartsWith("✗", StringComparison.Ordinal) ? ToolCallStatus.Error : ToolCallStatus.Success,
+                    line.Text.StartsWith("✗", StringComparison.Ordinal) ? ToolCallState.Error : ToolCallState.Success,
                     FormatResultPreview(line.Text),
                     TimeSpan.Zero);
                 ordered.Add(entry);

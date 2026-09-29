@@ -237,8 +237,18 @@ public class FullLayerMatrixTests
                 // vocabulary (Rendering.Input) — the reversed edge replacing the
                 // old Rendering→State one; Presentation→Presentation conforms.
                 "Harbor.Ui.Framework.Rendering"]),
+        // #567: ChatViewReducer writes ToolCallState directly into
+        // ChatViewState.ToolCalls, so the reducer now names a type from the
+        // Abstractions package rather than only re-exporting State's. Same
+        // Presentation → Domain edge ViewModels/Services/Projection already
+        // declare; it was previously unrealised here, not forbidden.
+        // (Spelled .Contracts, not the Harbor.Abstractions facade: that facade
+        // type-forwards, so a consumer that binds contract types emits a ref to
+        // .Contracts — and Matrix_AllowedEntries_AreLive would reject the facade
+        // spelling here as a stale entry.)
         ["Harbor.Ui.Framework.Reducers"] = new(Layer.Presentation,
-            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State"]),
+            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State",
+              "Harbor.Ui.Framework.Abstractions"]),
         ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Reducers"]),
         ["Harbor.Ui.Framework.ViewModels"] = new(Layer.Presentation,
@@ -279,7 +289,7 @@ public class FullLayerMatrixTests
             "Harbor.Abstractions",
             "Harbor.Ui.Framework.ViewModels",
             "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services",
-            "Harbor.Ui.Framework.Sessions",
+            "Harbor.Ui.Framework.Sessions", "Harbor.Ui.Framework.Abstractions",
         ]),
         ["Harbor.Desktop.Shared"] = new(Layer.Presentation,
             // #462: Commands/SlashCommands projects the shared SlashCommandCatalog

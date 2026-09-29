@@ -14,6 +14,7 @@ Contracts and abstractions for the Harbor UI Framework — configuration, diagno
 | `Configuration/` | `ICommonConfigReader` — reads provider/model overrides from common config. |
 | `Diagnostics/` | `IDiagnosticsPanel`, `InMemoryDiagnosticsPanel`, `DiagnosticEntry`, `DiagnosticsPanelLoggerProvider` (ILoggerProvider that forwards logs into the panel). |
 | `Navigation/` | `IContentHost`, `IShellChrome`, `IWorkspaceCommands`, `OverlayIds` (palette, settings, diff, token usage, provider browser, model picker, sessions flyout, focus session). |
+| `ToolCallState.cs` | `ToolCallState` + `ToolCallStateExtensions.IsTerminal()` — the single tool-call lifecycle vocabulary (issue #567). |
 
 ## Public API summary
 
@@ -21,6 +22,7 @@ Contracts and abstractions for the Harbor UI Framework — configuration, diagno
 - **`ICommonConfigReader.TryReadProviderModelAsync()`**: returns `(ProviderId?, ModelId?)` from common config.
 - **`IDiagnosticsPanel`**: `Log(level, category, message)`, `GetRecent(max)`, `Clear()`.
 - **`DiagnosticsPanelLoggerProvider` / `DiagnosticsPanelLogger` : `ILoggerProvider` / `ILogger` — bridges `Microsoft.Extensions.Logging` into the diagnostics panel.
+- **`ToolCallState`**: `Pending`, `Running`, `Success`, `Error`, `Cancelled`, `TimedOut`. The union of the three enums it replaced (`ViewModels.ToolCallStatus`, `Projection.ToolCallStatus`, `CellForge.ToolCallStatus`), which had three different member sets and no terminal-state rule. `IsTerminal()` classifies once instead of per call site. Every switch over the enum names all members explicitly and throws on the unnamed domain, and a guard test walks `Enum.GetValues<ToolCallState>()` — C# cannot express named-member-only exhaustiveness for an enum (CS8524 is unconditional), so the test is the gate that makes the next member a failure rather than a spinner (#567).
 - **`IShellChrome` / `IWorkspaceCommands`**: navigation contracts for desktop shell integration.
 - **`OverlayIds`**: string constants for builtin overlay identifiers.
 

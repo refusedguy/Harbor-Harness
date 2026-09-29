@@ -4,6 +4,7 @@ using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.Converters;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
@@ -160,20 +161,20 @@ public sealed class StatusTextToBrushConverter : IValueConverter
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.ToolCallStatusToBrushKey" /> as an
+///     Wraps <see cref="StatusMappers.ToolCallStateToBrushKey" /> as an
 ///     Avalonia <see cref="IValueConverter" />. Bound to a
-///     <see cref="ToolCallStatus" /> enum value, returns the matching
+///     <see cref="ToolCallState" /> enum value, returns the matching
 ///     <see cref="IBrush" /> from app resources.
 /// </summary>
-public sealed class ToolCallStatusToBrushConverter : IValueConverter
+public sealed class ToolCallStateToBrushConverter : IValueConverter
 {
-    public static readonly ToolCallStatusToBrushConverter Instance = new();
+    public static readonly ToolCallStateToBrushConverter Instance = new();
 
     /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is not ToolCallStatus status) return null;
-        string key = StatusMappers.ToolCallStatusToBrushKey(status);
+        if (value is not ToolCallState state) return null;
+        string key = StatusMappers.ToolCallStateToBrushKey(state);
         return BrushKeyConverter.Instance.Convert(key, targetType, parameter, culture);
     }
 

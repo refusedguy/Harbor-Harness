@@ -1,5 +1,6 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework;
 using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -50,7 +51,7 @@ public class ChatBlockTests
     public async Task ToolCallBlock_Running_IsSingleHeaderLine()
     {
         var block = new ToolCallBlock(new ToolCallInfo("t1", "bash", "ls -la"));
-        await Assert.That(block.Status).IsEqualTo(ToolCallStatus.Running);
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.Running);
         var m = block.Measure(40);
         await Assert.That((m.MinLines, m.MaxLines)).IsEqualTo((1, 1));
     }
@@ -84,7 +85,7 @@ public class ChatBlockTests
         block.Complete(new ToolResultBody("boom", isError: true, TimeSpan.FromMilliseconds(5)));
         block.Complete(new ToolResultBody("second", isError: false, TimeSpan.FromMilliseconds(9)));
 
-        await Assert.That(block.Status).IsEqualTo(ToolCallStatus.Error);
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.Error);
         await Assert.That(block.Body.Value.Output).IsEqualTo("boom");
 
         var buffer = new ScreenBuffer(30, 2);

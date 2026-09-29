@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -36,7 +37,7 @@ public class WidgetStateMaybeContractTests
     {
         ToolCallBlock block = RunningBlock();
 
-        await Assert.That(block.Status).IsEqualTo(ToolCallStatus.Running);
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.Running);
         await Assert.That(block.Body.HasNoValue).IsTrue()
             .Because(
                 "A running tool call has produced no result yet. That is a state, so the " +

@@ -31,7 +31,7 @@ composition only.
 | `State/ChatAppReducer.cs` | **Harbor chat** extension: `Reduce(UiState, AgentEvent)`, `Update(UiState, AppMsg)`, plus the `ChatAppReducerPlugin` adapter for `IAppReducerPlugin`. |
 | `State/UiStore.cs` | `UiStore` — the Elm-style store that owns state, dispatches messages, and runs `TuiEffect`s via `ITuiEffectRunner`. |
 | `AppState.cs` | Legacy flat app state (`Harbor.Ui.Framework.Reducers.AppReducer` / `AppStore`) kept only for the not-yet-migrated shell-chrome consumers. **Not** on the TEA read path. |
-| `State/ChatViewState.cs` | Chat transcript state: `Lines`, `ToolCalls`, `IsStreaming`, `IsThinking`, `StreamingBuffer`, `PendingStreaming`. |
+| `State/ChatViewState.cs` | Chat transcript state: `Lines`, `ToolCalls` (each carries the shared `ToolCallState` lifecycle enum from `Harbor.Ui.Framework.Abstractions`, #567), `IsStreaming`, `IsThinking`, `StreamingBuffer`, `PendingStreaming`. |
 | `State/ChromeViewState.cs` | Chrome state: `ActiveSessionId`, `NavigationStack`, `ActiveModal`, `Toasts`, plus helper reducers. |
 | `State/SessionsViewState.cs` | Sessions list state: `Sessions`, `ActiveSessionId`, `IsLoading`. |
 | `Panels/` | `IPanelRegistry`, `PanelRegistry`, `IPanelProvider`, `TuiPanel`, `TuiPanelPlacement`, `TuiPanelState`, `PanelContext`, `ITuiPanelPlugin`. |
