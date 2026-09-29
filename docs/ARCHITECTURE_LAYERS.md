@@ -562,7 +562,7 @@ is clean on both today, so they run fully armed rather than being deferred with 
 `FullLayerMatrixTests` + `CellForgeGraphRules` are all green. The previously cited counts
 (46 tests = 21 reflection + 25 NetArchTest, 54 executed cases) are historical.
 
-**The CAPABILITY rules added in #455 have 20 known violations, in 14 types across 7 of
+**The CAPABILITY rules added in #455 have 21 known violations, in 14 types across 7 of
 the 17 Presentation assemblies.** They are not skipped: each is a row in
 `PresentationCapabilityRules.KnownViolations` that a rule holds only while it is still
 exactly reproduced, and each carries a tracking issue. Ten Presentation assemblies are
@@ -571,7 +571,7 @@ clean and fully enforced.
 | Rule | Violating types | Assemblies | Tracking issues |
 |---|---:|---:|---|
 | `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 5 | 3 | [#537](https://github.com/refusedguy/Harbor-Harness/issues/537) (GitService), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (3 notification backends, jump palette) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 8 | 6 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (theme loader/watcher, terminal stdin) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 9 | 5 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (theme loader/watcher, file tree, terminal stdin) |
 | `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 7 | 6 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536), [#537](https://github.com/refusedguy/Harbor-Harness/issues/537), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (file tree) |
 | `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | 0 | 0 | — clean, unbaselined |
 | `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | 0 | 0 | — clean, unbaselined |

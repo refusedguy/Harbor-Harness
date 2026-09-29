@@ -503,8 +503,11 @@ public sealed class PresentationCapabilityRules
                 "https://github.com/refusedguy/Harbor-Harness/issues/538",
             [NoFiles + " Harbor.Tui.CellForge.Widgets.ThemeFileWatcher"] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/538",
-            // Chat/Panels/CellForgeFileTreePanel.cs:153,:230,:232,:240 (and :242
-            // FileInfo, which the NoFiles prefix also covers).
+            // Chat/Panels/CellForgeFileTreePanel.cs:153,:230,:232,:240 for
+            // Directory, and :237,:242,:247 for FileInfo/FileAttributes — the
+            // NoFiles prefix matches those too, so this panel needs BOTH rows.
+            [NoFiles + " Harbor.Tui.CellForge.Panels.CellForgeFileTreePanel"] =
+                "https://github.com/refusedguy/Harbor-Harness/issues/538",
             [NoDirectories + " Harbor.Tui.CellForge.Panels.CellForgeFileTreePanel"] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/538",
         },
