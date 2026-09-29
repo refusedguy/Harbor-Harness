@@ -21,9 +21,10 @@
 // --------------------------------------------
 // #578 asks for a wildcard-arm rule over a Harbor-owned union, and for the
 // per-union reflection test "added as each union is touched by a refactor".
-// This file does the FIRST, for the three unions #578 names by example, and
-// anchors it with a reflection census — so the answer to "is the union
-// exhausted?" comes from the type system, not from a list a human typed.
+// This file does the FIRST, for the three unions #578 names by example plus the
+// IPC request union #485 added, and anchors it with a reflection census — so
+// the answer to "is the union exhausted?" comes from the type system, not from
+// a list a human typed.
 //
 // The scan is text-based because the question ("does this switch have a
 // `_ =>` / `default:` arm?") is not expressible against compiled metadata
@@ -81,6 +82,7 @@
 //      blanket permission.
 
 using System.Collections.Frozen;
+using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -89,6 +91,9 @@ using System.Text.RegularExpressions;
 // Read off the `namespace` line of each file, not inferred from the path.
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+// #485: the IPC request union. Same folder-vs-namespace gap as above — the type
+// is `Harbor.Ipc.Protocol.HarborRequest` in src/Harbor.Ipc.Abstractions/.
+using Harbor.Ipc.Protocol;
 
 namespace Harbor.Architecture.Tests;
 
@@ -152,17 +157,21 @@ internal static partial class UnionExhaustivenessProbe
     ///     The registered unions, built by reflection.
     /// </summary>
     /// <remarks>
-    ///     <b>Why these three.</b> #578 names <c>AgentEvent -&gt; HarborEvent</c>
+    ///     <b>Why these four.</b> #578 names <c>AgentEvent -&gt; HarborEvent</c>
     ///     (#495), the <c>ChatRole</c> label mapping (#556) and the tool-call
     ///     lifecycle (#567). AgentEvent and LlmEvent are the two record unions
     ///     the whole event pipeline is built on; ChatRole is the one enum whose
-    ///     mapping is duplicated four times.
+    ///     mapping is duplicated four times. #485 adds <c>HarborRequest</c>,
+    ///     the IPC request union — the one that crosses a PROCESS boundary, so
+    ///     a member it does not handle is a client's request answered with a
+    ///     string instead of a response.
     /// </remarks>
     public static IReadOnlyList<RegisteredUnion> Unions()
     {
         var agentEvent = ReadJsonDerivedTypes(typeof(AgentEvent));
         var llmEvent = ReadJsonDerivedTypes(typeof(LlmEvent));
         var chatRole = Enum.GetNames<ChatRole>().ToHashSet(StringComparer.Ordinal);
+        var harborRequest = ReadSubtypesOf(typeof(HarborRequest));
 
         return
         [
@@ -175,7 +184,63 @@ internal static partial class UnionExhaustivenessProbe
             new("ChatRole", chatRole, "Harbor.Abstractions.Models.ChatRole "
                 + "(src/Harbor.Abstractions.Contracts/Models/ChatLine.cs), "
                 + "Enum.GetNames read by reflection"),
+            new("HarborRequest", harborRequest, "Harbor.Ipc.Protocol.HarborRequest "
+                + "(src/Harbor.Ipc.Abstractions/Protocol/HarborRequest.cs), every "
+                + "concrete subtype in the declaring assembly read by reflection"),
         ];
+    }
+
+    /// <summary>
+    ///     Reads the closed member set off a polymorphic base record whose
+    ///     members are NOT declared with <c>[JsonDerivedType]</c>.
+    /// </summary>
+    /// <remarks>
+    ///     <b>Why not the MessagePack <c>[Union(n, typeof(T))]</c> tags.</b> They
+    ///     would be the symmetric choice to <see cref="ReadJsonDerivedTypes" />,
+    ///     but <c>MessagePack.UnionAttribute</c> exposes only <c>Key</c> as a
+    ///     public member in 3.1.x — the <c>typeof(T)</c> argument is not
+    ///     readable, so a tag census would yield tag numbers and no names, and
+    ///     the scan needs names. The type system is also the STRONGER source
+    ///     here: it names a subtype that was added without a matching
+    ///     <c>[Union]</c> tag, which the tag list would not. The one thing the
+    ///     tags add is "is every member tagged", and MessagePack's own analyzer
+    ///     plus <c>ProtocolSerializationTests</c> (which round-trips every
+    ///     subtype through the abstract base) already own that — a member with
+    ///     no tag fails to deserialize and fails there.
+    /// </remarks>
+    private static IReadOnlySet<string> ReadSubtypesOf(Type baseType)
+    {
+        var members = new HashSet<string>(StringComparer.Ordinal);
+
+        Type[] types;
+        try
+        {
+            types = baseType.Assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            // Use whatever loaded. An empty census is not a safe fallback — it
+            // would make every switch in the tree look exhaustive — so the
+            // partial set plus UnionCensus_IsLive's non-empty check is the
+            // honest degradation: a name that failed to load is simply not
+            // graded this run, and the census test reports the shortfall.
+            types = ex.Types
+                .Where(t => t is not null)
+                .Select(t => t!)
+                .ToArray();
+        }
+
+        foreach (Type type in types)
+        {
+            if (type.IsAbstract || type.IsInterface || !baseType.IsAssignableFrom(type))
+            {
+                continue;
+            }
+
+            members.Add(type.Name);
+        }
+
+        return members;
     }
 
     /// <summary>
@@ -623,6 +688,18 @@ public sealed class ExhaustiveUnionSwitchRule
         // below is the Avalonia router, which does carry one.
         [new("apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs", "AgentEvent")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/575",
+
+        // #485 — `RequestDispatcher.DispatchAsync`, the 14-arm switch over the
+        // IPC request union, whose `_ =>` answered a request the server does
+        // not implement with the string "Unknown request type: X". Added by
+        // the same PR that registers `HarborRequest` above, and DELETED by the
+        // refactor in that PR: `DispatchAsync` no longer contains a switch at
+        // all, so there is nothing here for the rule to grade. Kept as a
+        // separate commit precisely so the ordering is visible in history —
+        // the guard landed and went red on this row BEFORE the switch was
+        // rewritten, which is #555's "guards land before or with the rewrite".
+        [new("src/Harbor.Ipc.Server/Protocol/RequestDispatcher.cs", "HarborRequest")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/485",
     };
 
     // =====================================================================
@@ -689,6 +766,20 @@ public sealed class ExhaustiveUnionSwitchRule
             ],
             ["LlmEvent"] = ["TextDeltaEvent", "ThinkingDeltaEvent", "ToolCallStartEvent", "StepFinishEvent"],
             ["ChatRole"] = ["User", "Assistant", "Tool", "ToolResult", "System", "Error"],
+            // #485. The 14 the dispatch switch named, plus the one it did NOT:
+            // `PskAuthRequest` is `[Union(14, ...)]` and is consumed by the PSK
+            // gate in `MessagePackRpcServer.ApplyPskGateAsync` before dispatch,
+            // which is why it never needed an arm. Naming it here is what makes
+            // that an explained exception rather than an invisible one — a 15th
+            // member added later shows up here as "missing".
+            ["HarborRequest"] =
+            [
+                "StartAgentRequest", "AbortAgentRequest", "SendPromptRequest",
+                "CreateSessionRequest", "ListSessionsRequest", "GetSessionRequest",
+                "DeleteSessionRequest", "GetMessagesRequest", "ListProvidersRequest",
+                "ListModelsRequest", "ListToolsRequest", "SubscribeToEventsRequest",
+                "ConnectRequest", "DisconnectRequest", "PskAuthRequest",
+            ],
         };
 
         // Checked BEFORE the per-union loop: a registered union whose name is not
@@ -734,8 +825,8 @@ public sealed class ExhaustiveUnionSwitchRule
         }
 
         await Assert.That(unions.Count).IsEqualTo(expected.Count)
-            .Because("the rule is scoped to the three unions #578 names; a fourth entry that the "
-                   + "baseline does not cover would be graded against nothing");
+            .Because("the rule is scoped to the unions #578 names plus #485's HarborRequest; "
+                   + "a fifth entry that the baseline does not cover would be graded against nothing");
 
         await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
     }
