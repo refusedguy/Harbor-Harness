@@ -619,23 +619,32 @@ internal sealed class DefaultSessionContext : ISessionContext
     {
         ArgumentNullException.ThrowIfNull(store);
 
-        SessionMetadata seed = SessionMetadata.Empty;
-        Result<SessionMetadata> stored = await store.GetStatsAsync(session.Id, ct).ConfigureAwait(false);
-        if (stored.IsFailure)
+        SessionMetadata seed = await ReadSeedAsync(store, session.Id, logger, ct).ConfigureAwait(false);
+        return new DefaultSessionContext(
+            session, messages, store, steeringQueue, eventBus, seed, logger);
+    }
+
+    /// <summary>
+    ///     The run's starting totals: whatever the store already knows, or zero.
+    /// </summary>
+    private static async Task<SessionMetadata> ReadSeedAsync(
+        ISessionStore store,
+        string sessionId,
+        ILogger? logger,
+        CancellationToken ct)
+    {
+        var stats = await store.GetStatsAsync(sessionId, ct).ConfigureAwait(false);
+        if (stats.IsFailure)
         {
             // §4.6-ok: a store that cannot answer must not fail a prompt the user
             // already sent. The run starts from zero and the loss is logged.
             (logger ?? NullLogger.Instance).LogError(
                 "Failed to read session stats for {SessionId}; usage totals start at zero: {Error}",
-                session.Id, stored.Error);
-        }
-        else
-        {
-            seed = stored.Value;
+                sessionId, stats.Error);
+            return SessionMetadata.Empty;
         }
 
-        return new DefaultSessionContext(
-            session, messages, store, steeringQueue, eventBus, seed, logger);
+        return stats.Value;
     }
 
     public Session Session { get; }

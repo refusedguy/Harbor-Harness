@@ -121,7 +121,10 @@ public class CoreCostPublishingTests
         await Assert.That(store.UpdatedStats[0].Cost).IsEqualTo(12.30m);
         await Assert.That(store.UpdatedStats[0].IsCostKnown).IsTrue();
 
-        decimal constantsWouldSay = 1_000_000 / 1_000_000m * 3m + 500_000 / 1_000_000m * 15m;
+        // The same input/output, priced by the deleted constants alone: 1M in
+        // at $3/M plus 500k out at $15/M, with the 1.4M cached tokens either
+        // free or billed at the full input rate.
+        decimal constantsWouldSay = 3m + 7.5m;
         await Assert.That(constantsWouldSay).IsEqualTo(10.50m);
         await Assert.That(published.Cost).IsNotEqualTo(constantsWouldSay);
     }
