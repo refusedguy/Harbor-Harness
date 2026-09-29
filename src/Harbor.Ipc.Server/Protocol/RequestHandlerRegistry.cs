@@ -107,7 +107,8 @@ public sealed class RequestHandlerRegistry
                 + "Handled: " + string.Join(", ", _entries.Keys.Select(t => t.Name).OrderBy(n => n, StringComparer.Ordinal)) + ".");
         }
 
-        return new RequestHandlerRegistry(_entries.Where(e => e.Key != requestType));
+        return new RequestHandlerRegistry(
+            _entries.Where(e => e.Key != requestType).Select(e => e.Value));
     }
 
     /// <summary>
