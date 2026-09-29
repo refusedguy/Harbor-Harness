@@ -225,6 +225,12 @@ public class ChatAppReducerTests
     ///     the reducer must move no money for it — the old $3/M in, $15/M out
     ///     constants turned exactly this event into a fabricated $0.1878 on a
     ///     free model. The core's totals are the only source.
+    ///     <para>
+    ///         #651 sharpens the boundary rather than moving it: the step DOES
+    ///         record what the context occupies (61 600 prompt tokens is the
+    ///         request the provider just accepted), and that is a size, not a
+    ///         bill. The paid totals stay untouched until the core publishes them.
+    ///     </para>
     /// </summary>
     [Test]
     public async Task StepFinish_MovesNoCost()
@@ -238,6 +244,7 @@ public class ChatAppReducerTests
         await Assert.That(state.Chat.Cost.CostUsd).IsEqualTo(0m);
         await Assert.That(state.Chat.Cost.TokensIn).IsEqualTo(0);
         await Assert.That(state.Chat.Cost.TokensOut).IsEqualTo(0);
+        await Assert.That(state.Chat.Cost.ContextTokens).IsEqualTo(61_600);
     }
 
     /// <summary>

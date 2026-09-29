@@ -19,12 +19,21 @@ public sealed record ActiveMessage(
 }
 
 /// <summary>
-///     Running cost/token accounting for the session status line. Every value is
-///     copied from the core's <c>SessionStatsEvent</c> — the UI framework
-///     displays them and never forms one (#653).
+///     Running cost/token accounting for the session status line. The cost
+///     figures are copied from the core's <c>SessionStatsEvent</c> — the UI
+///     framework displays them and never forms one (#653); the context figure is
+///     the per-request one the core publishes on every step (#651).
 /// </summary>
-/// <param name="TokensIn">Cumulative input tokens.</param>
-/// <param name="TokensOut">Cumulative output tokens.</param>
+/// <param name="TokensIn">
+///     <b>Paid</b> — the cumulative input tokens, i.e. the sum of every
+///     request's FULL input. This is what an uncached provider bills (it re-reads
+///     the whole prompt every turn), so on turn N it is roughly N × the context,
+///     and it is not what a person means by "how full is my context". The status
+///     cell shows <paramref name="ContextTokens" /> instead; the per-turn bar
+///     chart and the token-breakdown panel report the bill and keep this one
+///     (#651).
+/// </param>
+/// <param name="TokensOut">Cumulative output tokens — never re-read, so a real total.</param>
 /// <param name="CostUsd">
 ///     Cumulative cost in USD as the core priced it, or a lower bound when
 ///     <paramref name="IsCostUnpriced" /> is <see langword="true" />.
@@ -46,11 +55,22 @@ public sealed record ActiveMessage(
 ///         did before the flag existed".
 ///     </para>
 /// </param>
+/// <param name="ContextTokens">
+///     <b>Occupied</b> — the prompt tokens of the request the provider last
+///     accepted, i.e. the context this session currently occupies. It is the
+///     figure the ctx bar has read since #630, and the one a person means by
+///     "how full is my context"; the paid sum is a bill, not a window. Stays 0
+///     until this process has seen a request: a message history records tokens,
+///     never the size of a request, so a restored session cannot reconstruct it
+///     — and <see cref="ContextUsage.DisplayedInputTokens" /> degrades to
+///     <paramref name="TokensIn" /> rather than claiming an empty context.
+/// </param>
 public readonly record struct CostSnapshot(
     long TokensIn,
     long TokensOut,
     decimal CostUsd,
-    bool IsCostUnpriced = false);
+    bool IsCostUnpriced = false,
+    long ContextTokens = 0);
 
 /// <summary>
 ///     Renderer-agnostic, immutable UI snapshot. The single source of truth that

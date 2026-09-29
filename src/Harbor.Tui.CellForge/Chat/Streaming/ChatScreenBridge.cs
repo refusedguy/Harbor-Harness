@@ -301,12 +301,19 @@ public sealed class ChatScreenBridge : IDisposable
                 // rendering them as occupancy pinned the bar at 100% by turn 4
                 // on a 128k window while the actual request never grew.
                 // StepFinishEvent.Usage.InputTokens is the request just sent.
+                // #651: the token cell takes the SAME figure for the same reason
+                // — the sum is the bill, and a cell that reported it answered
+                // "what am I paying" with a number that read as "how full am I".
+                // DisplayedInputTokens keeps the total as the fallback for a
+                // session whose totals arrive with no request behind them.
                 // #653: the cost is the core's, and null (→ "—") is the core's
                 // own answer for a model that publishes no price — this bridge
                 // used to never receive this event at all, so its footer showed
                 // no cost while the projection showed a fabricated one.
                 _status.SetUsage(
-                    stats.Metadata.TokensInput,
+                    ContextUsage.DisplayedInputTokens(
+                        _context.LastRequestTokens,
+                        stats.Metadata.TokensInput),
                     stats.Metadata.TokensOutput,
                     stats.Metadata.IsCostKnown ? stats.Metadata.Cost : null);
                 break;

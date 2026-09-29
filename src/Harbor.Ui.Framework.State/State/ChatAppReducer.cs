@@ -328,9 +328,29 @@ public static class ChatAppReducer
         TextDeltaEvent td => WithTextDelta(state, td.Delta),
         ThinkingDeltaEvent thd => WithThinkingDelta(state, thd.Delta),
         ToolCallStartEvent tcs => FlushPending(state).AddLine(ChatRole.Tool, $"→ {tcs.ToolName}", tcs.Id),
-        StepFinishEvent => FlushPending(state),
+        StepFinishEvent sf => NoteRequestSize(FlushPending(state), sf.Usage),
         _ => state
     };
+
+    /// <summary>
+    ///     Records what the context OCCUPIES, from the request the provider just
+    ///     accepted (#651). <c>Usage.InputTokens</c> is that request's full input
+    ///     — the system prompt and the whole history, re-read every turn — so
+    ///     summing it is the bill and never a window; this is the one figure that
+    ///     answers "how full is my context", and it is the same one the ctx bar
+    ///     reads (#630). Money is untouched: the paid totals arrive on
+    ///     <see cref="SessionStatsEvent" /> and are the core's (#653).
+    /// </summary>
+    private static UiState NoteRequestSize(UiState state, Usage? usage) =>
+        usage is null
+            ? state
+            : state with
+            {
+                Chat = state.Chat with
+                {
+                    Cost = state.Chat.Cost with { ContextTokens = usage.InputTokens }
+                }
+            };
 
     /// <summary>
     ///     Append a text delta to the chunked pending buffer and rebuild the
@@ -425,6 +445,15 @@ public static class ChatAppReducer
     ///         that silently drops the real number the moment the two ids
     ///         disagree.
     ///     </para>
+    ///     <para>
+    ///         #651: the occupied context carried over from the last
+    ///         <see cref="StepFinishEvent" /> is PRESERVED, not cleared. These
+    ///         totals describe the whole session; the request size describes one
+    ///         request, and only a new request may replace it. Rebuilding the
+    ///         snapshot from the totals alone would drop the context figure back
+    ///         to "unknown" at the end of every single turn — the moment the
+    ///         cell most needs it.
+    ///     </para>
     /// </remarks>
     private static UiState OnSessionStats(UiState state, SessionStatsEvent stats) => state with
     {
@@ -434,7 +463,8 @@ public static class ChatAppReducer
                 stats.Metadata.TokensInput,
                 stats.Metadata.TokensOutput,
                 stats.Metadata.Cost,
-                !stats.Metadata.IsCostKnown)
+                !stats.Metadata.IsCostKnown,
+                state.Chat.Cost.ContextTokens)
         }
     };
 

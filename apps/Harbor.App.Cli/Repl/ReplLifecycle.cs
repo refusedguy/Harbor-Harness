@@ -474,6 +474,14 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         // reducer's own state says otherwise.
         bool costUnpriced = storeChat.Cost.IsCostUnpriced;
 
+        // #651: the occupied context rides in from the store, where the reducer
+        // took it from the last step-finish. The tracker's pull feed has no
+        // request size to offer — it only ever accumulates — so the synthetic
+        // snapshot would otherwise be the one surface still printing the paid
+        // total. It is part of the memo: a snapshot that kept a stale context
+        // figure would paint a number nobody asked for.
+        long contextTokens = storeChat.Cost.ContextTokens;
+
         // Same range the projector derives from the snapshot it is handed, so
         // the memo key and the painted text can never disagree.
         int maxScroll = Math.Max(0, totalLines - Math.Max(1, viewportLines));
@@ -486,6 +494,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             && prev.Chat.AgentName == storeChat.AgentName
             && prev.Chat.Cost.TokensIn == tokensIn
             && prev.Chat.Cost.TokensOut == tokensOut
+            && prev.Chat.Cost.ContextTokens == contextTokens
             && prev.Chat.Cost.CostUsd == costUsd
             && prev.Chat.Cost.IsCostUnpriced == costUnpriced
             && prev.Ui.ScrollOffset == scrollOffset
@@ -503,7 +512,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 Model = storeChat.Model,
                 Provider = storeChat.Provider,
                 AgentName = storeChat.AgentName,
-                Cost = new CostSnapshot(tokensIn, tokensOut, costUsd, costUnpriced)
+                Cost = new CostSnapshot(tokensIn, tokensOut, costUsd, costUnpriced, contextTokens)
             },
             Ui = new TerminalUiState
             {

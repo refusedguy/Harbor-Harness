@@ -87,6 +87,43 @@ public static class ContextUsage
         RatioUsed(tokensIn + tokensOut, contextWindow);
 
     /// <summary>
+    ///     The input-token figure a status cell shows — ONE definition for every
+    ///     surface (#651), because the two numbers it chooses between answer
+    ///     different questions.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Paid</b> — <paramref name="sessionTotalInputTokens" /> — is the
+    ///         sum of every request's full input. It is the bill: an uncached
+    ///         provider reads and charges the whole prompt again on every turn, so
+    ///         on turn N this is roughly N × the context. Nothing should ever hide
+    ///         it from a price.
+    ///     </para>
+    ///     <para>
+    ///         <b>Occupied</b> — <paramref name="contextTokens" /> — is the prompt
+    ///         size of the request the provider last accepted: what the window
+    ///         holds right now, and the same figure the ctx bar reads (#630). It is
+    ///         what a person asking "how full is my context" means, and it does
+    ///         not grow with the turn count.
+    ///     </para>
+    ///     <para>
+    ///         The fallback is the degradation, not the rule: a session that
+    ///         published totals but has run no request in this process has no
+    ///         request size to report (a message history records tokens, never the
+    ///         shape of a request), so the cell shows the total it was given
+    ///         rather than claiming an empty context. Every turn after that
+    ///         publishes a request and the cell switches to the occupied figure.
+    ///     </para>
+    /// </remarks>
+    /// <param name="contextTokens">
+    ///     Prompt tokens of the most recent request; 0 when none was observed.
+    /// </param>
+    /// <param name="sessionTotalInputTokens">Paid total, as the core published it.</param>
+    /// <returns>The occupied figure when known, else the paid total.</returns>
+    public static long DisplayedInputTokens(long contextTokens, long sessionTotalInputTokens) =>
+        contextTokens > 0 ? contextTokens : sessionTotalInputTokens;
+
+    /// <summary>
     ///     Context usage ratio (0…1) from an already-summed token count.
     ///     See <see cref="PercentUsed(long,long)" /> for the "used" definition.
     /// </summary>

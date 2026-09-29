@@ -261,6 +261,29 @@ resolved `ModelInfo` to make the call, and `ModelInfo.Pricing` carries its rates
 - `SessionStatsAggregator` (the JSONL derive path) cannot price — it has no
   rates — and therefore reports `IsCostKnown: false` instead of a bare `0`.
 
+#### Paid and occupied are two numbers (#651)
+
+`Usage.InputTokens` is the size of ONE request's whole input: the provider
+re-reads the system prompt and the entire history on every turn. Summing it
+therefore yields the bill, not the window — on turn N it reads as N × the
+context, and the reported case (six messages, `61.6k↑`) was six full requests
+while the prompt never grew. The sum is *not* a bug: an uncached provider bills
+it, and hiding it means lying about money. What was wrong is one figure doing
+both jobs.
+
+- **Paid** — `SessionMetadata.TokensInput` — the cumulative sum, and the basis
+  the core prices with. The cost cell and every bill-shaped view (the per-turn
+  bar chart, the token-breakdown panel, `session_read`) keep it.
+- **Occupied** — `CostSnapshot.ContextTokens` — the prompt size of the request
+  the provider last accepted, taken from `StepFinishEvent.Usage.InputTokens`.
+  The status cell's `↑` shows it; the ctx bar beside it already read the same
+  figure (#630), so the row can no longer contradict itself.
+- `ContextUsage.DisplayedInputTokens` is the single resolution rule, shared by
+  every surface: the occupied figure when a request has been seen in this
+  process, the session total otherwise. A message history records tokens, never
+  the shape of a request, so a restored session cannot reconstruct it — the
+  fallback is the degradation, and the live path never takes it.
+
 ### 10. Generic OpenAI-compatible adapter
 
 90% of LLM providers speak OpenAI-compatible API. The `OpenAiCompatibleLlmClient` handles:
