@@ -30,7 +30,7 @@ public sealed class InstrumentedToolRegistry(IToolRegistry inner, IMetrics metri
         Result<ITool> resolved = inner.GetTool(name);
         return resolved.IsSuccess
             ? Result.Success<ITool>(new TelemetryToolDecorator(resolved.Value, metrics, tracer))
-            : Result.Failure<ITool>(resolved.Error);
+            : resolved.ConvertFailure<ITool>();
     }
 
     public Result Register(ITool tool) =>

@@ -24,7 +24,7 @@ public sealed class InstrumentedProviderRegistry(IProviderRegistry inner, IMetri
         Result<ILlmClient> resolved = inner.GetClient(providerId);
         return resolved.IsSuccess
             ? Result.Success<ILlmClient>(new InstrumentedLlmClient(providerId, resolved.Value, metrics, tracer))
-            : Result.Failure<ILlmClient>(resolved.Error);
+            : resolved.ConvertFailure<ILlmClient>();
     }
 
     public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)

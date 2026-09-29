@@ -357,7 +357,7 @@ public sealed class ModelRef : ValueObject
 
         var providerResult = ProviderId.TryCreate(parts[0]);
         if (providerResult.IsFailure)
-            return Result.Failure<ModelRef>(providerResult.Error);
+            return providerResult.ConvertFailure<ModelRef>();
 
         // A Try-method must never throw: "provider/ " survives the split
         // (whitespace is not empty) but Create rejects blank model ids.

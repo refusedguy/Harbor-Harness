@@ -159,7 +159,7 @@ public sealed class JsonlSessionStore : ISessionStore
         ct.ThrowIfCancellationRequested();
         var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
         if (resolved.IsFailure)
-            return Result.Failure<Session>(resolved.Error);
+            return resolved.ConvertFailure<Session>();
         string sessionFile = resolved.Value; // guarded: returned above on failure.
         if (!File.Exists(sessionFile))
             return Result.Failure<Session>(SessionStoreErrors.SessionNotFound(sessionId));
@@ -168,7 +168,7 @@ public sealed class JsonlSessionStore : ISessionStore
         // surface as failures (session + reason + path), never throws.
         var headerResult = await SessionFileReader.TryReadHeaderAsync(sessionFile, sessionId, ct).ConfigureAwait(false);
         if (headerResult.IsFailure)
-            return Result.Failure<Session>(headerResult.Error);
+            return headerResult.ConvertFailure<Session>();
         SessionHeaderEntry header = headerResult.Value; // guarded: returned above on failure.
 
         Result<Session> loaded = await Result.Try(async () =>
@@ -239,7 +239,7 @@ public sealed class JsonlSessionStore : ISessionStore
         ct.ThrowIfCancellationRequested();
         var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
         if (resolved.IsFailure)
-            return Result.Failure(resolved.Error);
+            return resolved.ConvertFailure();
         string sessionFile = resolved.Value;
         if (!File.Exists(sessionFile))
         {
@@ -293,7 +293,7 @@ public sealed class JsonlSessionStore : ISessionStore
         ct.ThrowIfCancellationRequested();
         var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
         if (resolved.IsFailure)
-            return Task.FromResult(Result.Failure(resolved.Error));
+            return Task.FromResult(resolved.ConvertFailure());
         string sessionFile = resolved.Value;
         if (!File.Exists(sessionFile))
         {
@@ -376,7 +376,7 @@ public sealed class JsonlSessionStore : ISessionStore
         ct.ThrowIfCancellationRequested();
         var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
         if (resolved.IsFailure)
-            return Result.Failure<IReadOnlyList<AgentMessage>>(resolved.Error);
+            return resolved.ConvertFailure<IReadOnlyList<AgentMessage>>();
         string sessionFile = resolved.Value;
         if (!File.Exists(sessionFile))
         {
@@ -402,7 +402,7 @@ public sealed class JsonlSessionStore : ISessionStore
             // crashing on an unguarded .Value.
             var parseResult = await SessionFileReader.ParseMessagesFromDiskAsync(sessionFile, sessionId, _logger, ct).ConfigureAwait(false);
             if (parseResult.IsFailure)
-                return Result.Failure<IReadOnlyList<AgentMessage>>(parseResult.Error);
+                return parseResult.ConvertFailure<IReadOnlyList<AgentMessage>>();
 
             // (parseResult.Value is guarded by the failure check above.)
             var snapshot = parseResult.Value;
@@ -446,7 +446,7 @@ public sealed class JsonlSessionStore : ISessionStore
         ct.ThrowIfCancellationRequested();
         var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
         if (resolved.IsFailure)
-            return Task.FromResult(Result.Failure(resolved.Error));
+            return Task.FromResult(resolved.ConvertFailure());
         string sessionFile = resolved.Value; // guarded: returned above on failure.
         // #199: the expected "not found" outcome is decided before the try
         // boundary so it stays a plain failure (no throw, no error log).
@@ -494,7 +494,7 @@ public sealed class JsonlSessionStore : ISessionStore
         ct.ThrowIfCancellationRequested();
         var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
         if (resolved.IsFailure)
-            return Task.FromResult(Result.Failure<int>(resolved.Error));
+            return Task.FromResult(resolved.ConvertFailure<int>());
         string sessionFile = resolved.Value; // guarded: returned above on failure.
         // #199: the expected "not found" outcome is decided before the try
         // boundary so it stays a plain failure (no throw, no error log).
@@ -553,7 +553,7 @@ public sealed class JsonlSessionStore : ISessionStore
     {
         var messagesResult = await GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
         if (messagesResult.IsFailure)
-            return Result.Failure<SessionMetadata>(messagesResult.Error);
+            return messagesResult.ConvertFailure<SessionMetadata>();
 
         // Fold lives in the shared aggregator (#184) — same derive semantics.
         return Result.Success(SessionStatsAggregator.Aggregate(messagesResult.Value));
@@ -578,7 +578,7 @@ public sealed class JsonlSessionStore : ISessionStore
         ct.ThrowIfCancellationRequested();
         var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, session.Id);
         if (resolved.IsFailure)
-            return Result.Failure(resolved.Error);
+            return resolved.ConvertFailure();
         string sessionFile = resolved.Value;
         if (!File.Exists(sessionFile))
             return Result.Failure(SessionStoreErrors.SessionNotFound(session.Id));

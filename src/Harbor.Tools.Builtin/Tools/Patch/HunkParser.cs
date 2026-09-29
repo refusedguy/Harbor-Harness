@@ -40,7 +40,7 @@ public static class HunkParser
             // Parse "@@ -oldStart,oldCount +newStart,newCount @@"
             Result<HunkHeader> headerResult = TryParseHunkHeader(lines[i]);
             if (headerResult.IsFailure)
-                return Result.Failure<List<Hunk>>(headerResult.Error);
+                return headerResult.ConvertFailure<List<Hunk>>();
             var header = headerResult.Value;
             i++;
 
@@ -120,10 +120,10 @@ public static class HunkParser
 
         Result<(int start, int count)> oldResult = TryParseRange(oldPart, line);
         if (oldResult.IsFailure)
-            return Result.Failure<HunkHeader>(oldResult.Error);
+            return oldResult.ConvertFailure<HunkHeader>();
         Result<(int start, int count)> newResult = TryParseRange(newPart, line);
         if (newResult.IsFailure)
-            return Result.Failure<HunkHeader>(newResult.Error);
+            return newResult.ConvertFailure<HunkHeader>();
 
         (int oldStart, int oldCount) = oldResult.Value;
         (int newStart, int newCount) = newResult.Value;

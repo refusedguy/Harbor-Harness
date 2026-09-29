@@ -334,7 +334,7 @@ internal static class JsonlLineParser
 
                     Result<ToolResultEntry> entry = ParseSingleResultEntry(ref reader, id);
                     if (entry.IsFailure)
-                        return Result.Failure<AgentMessage>(entry.Error);
+                        return entry.ConvertFailure<AgentMessage>();
 
                     results.Add(entry.Value);
                 }

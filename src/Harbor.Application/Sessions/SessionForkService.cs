@@ -53,11 +53,11 @@ public sealed class SessionForkService
     {
         Result<Session> parentRes = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
         if (parentRes.IsFailure)
-            return Result.Failure<SessionFork>(parentRes.Error);
+            return parentRes.ConvertFailure<SessionFork>();
 
         Result<IReadOnlyList<AgentMessage>> msgsRes = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
         if (msgsRes.IsFailure)
-            return Result.Failure<SessionFork>(msgsRes.Error);
+            return msgsRes.ConvertFailure<SessionFork>();
 
         int count;
         if (upToMessageId is null)
@@ -99,7 +99,7 @@ public sealed class SessionForkService
         Result<Session> created = await store.CreateAsync(
             parent.Directory, parent.Agent, parent.ProviderId, parent.Model, ct).ConfigureAwait(false);
         if (created.IsFailure)
-            return Result.Failure<SessionFork>(created.Error);
+            return created.ConvertFailure<SessionFork>();
 
         Session child = created.Value;
 
@@ -115,7 +115,7 @@ public sealed class SessionForkService
         if (stamped.IsFailure)
         {
             await store.DeleteAsync(child.Id, CancellationToken.None).ConfigureAwait(false);
-            return Result.Failure<SessionFork>(stamped.Error);
+            return stamped.ConvertFailure<SessionFork>();
         }
 
         for (int i = 0; i < count; i++)
@@ -123,7 +123,7 @@ public sealed class SessionForkService
             AgentMessage copy = msgsRes.Value[i] with { SessionId = child.Id };
             Result appended = await store.AppendMessageAsync(child.Id, copy, ct).ConfigureAwait(false);
             if (appended.IsFailure)
-                return Result.Failure<SessionFork>(appended.Error);
+                return appended.ConvertFailure<SessionFork>();
         }
 
         return Result.Success(new SessionFork(stampedChild, count));

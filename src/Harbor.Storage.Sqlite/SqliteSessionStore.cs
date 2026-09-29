@@ -243,7 +243,7 @@ public sealed class SqliteSessionStore : ISessionStore
         // the other stores.
         var row = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
         if (row.IsFailure)
-            return Result.Failure<IReadOnlyList<AgentMessage>>(row.Error);
+            return row.ConvertFailure<IReadOnlyList<AgentMessage>>();
         if (row.Value.HasNoValue) // guarded: .Value only read after the failure check.
             return Result.Failure<IReadOnlyList<AgentMessage>>(SessionStoreErrors.SessionNotFound(sessionId));
 

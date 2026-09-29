@@ -112,7 +112,7 @@ public sealed class ProviderRegistry : IProviderRegistry
         var client = GetClient(providerId);
         if (client.IsFailure) // §4.6-ok: одиночный passthrough после cache-miss (граница честности).
         {
-            return Result.Failure<IReadOnlyList<ModelInfo>>(client.Error);
+            return client.ConvertFailure<IReadOnlyList<ModelInfo>>();
         }
 
         var models = await client.Value.GetModelsAsync(cancellationToken).ConfigureAwait(false);

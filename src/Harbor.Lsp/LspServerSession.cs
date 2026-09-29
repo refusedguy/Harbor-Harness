@@ -359,11 +359,11 @@ public sealed class LspServerSession : IAsyncDisposable
 
     private static Result<Maybe<LspLocation>> MapBuilt(Result<LspLocation> built) =>
         built.IsFailure
-            ? Result.Failure<Maybe<LspLocation>>(built.Error)
             #pragma warning disable CFE0001
             // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
             // return or continue, a control-flow shape the analyzer does not model.
             // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
+            ? built.ConvertFailure<Maybe<LspLocation>>()
             : Result.Success(Maybe.From(built.Value));
             #pragma warning restore CFE0001
 

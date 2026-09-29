@@ -97,7 +97,7 @@ public sealed class CsPluginLoader
         var host = BuildPluginHost();
         var result = await host.LoadAllAsync(_host, ct).ConfigureAwait(false);
         if (result.IsFailure)
-            return Result.Failure<IReadOnlyList<CompiledPlugin>>(result.Error);
+            return result.ConvertFailure<IReadOnlyList<CompiledPlugin>>();
 
         var compiled = new List<CompiledPlugin>(result.Value.Count);
         foreach (var lp in result.Value)
@@ -190,7 +190,7 @@ public sealed class CsPluginLoader
 
         var result = await host.LoadAllAsync(_host, ct).ConfigureAwait(false);
         if (result.IsFailure)
-            return Result.Failure<IReadOnlyList<CompiledPlugin>>(result.Error);
+            return result.ConvertFailure<IReadOnlyList<CompiledPlugin>>();
 
         var compiled = new List<CompiledPlugin>(result.Value.Count);
         foreach (var lp in result.Value)

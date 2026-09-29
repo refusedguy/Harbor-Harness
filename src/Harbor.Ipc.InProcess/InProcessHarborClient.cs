@@ -135,11 +135,11 @@ public sealed class InProcessHarborClient : IHarborClient
         // ROP boundary #101: shared TryCreate → GetAgent preamble (same as RequestDispatcher).
         var agentDefResult = _agents.ResolveAgent(agentName);
         if (agentDefResult.IsFailure)
-            return Result.Failure(agentDefResult.Error);
+            return agentDefResult.ConvertFailure();
 
         var sessionResult = await _sessionStore.GetAsync(sessionId, ct).ConfigureAwait(false);
         if (sessionResult.IsFailure)
-            return Result.Failure(sessionResult.Error);
+            return sessionResult.ConvertFailure();
 
         _agent.Initialize(sessionResult.Value, agentDefResult.Value);
         _logger.LogInformation("Agent started: session={SessionId} agent={Agent}", sessionId, agentName);
@@ -206,7 +206,7 @@ public sealed class InProcessHarborClient : IHarborClient
         // ROP boundary #101: shared TryCreate → GetClient preamble (same as RequestDispatcher).
         var clientResult = _providers.ResolveClient(providerId);
         if (clientResult.IsFailure)
-            return Result.Failure<IReadOnlyList<ModelInfo>>(clientResult.Error);
+            return clientResult.ConvertFailure<IReadOnlyList<ModelInfo>>();
 
         return await clientResult.Value.GetModelsAsync(ct).ConfigureAwait(false);
     }

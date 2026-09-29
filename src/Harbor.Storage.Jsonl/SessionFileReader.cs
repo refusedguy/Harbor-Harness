@@ -375,7 +375,7 @@ internal static class SessionFileReader
             .ConfigureAwait(false);
 
         if (readResult.IsFailure)
-            return Result.Failure<SessionHeaderEntry>(readResult.Error);
+            return readResult.ConvertFailure<SessionHeaderEntry>();
         string? firstLine = readResult.Value;
 
         if (firstLine is null)

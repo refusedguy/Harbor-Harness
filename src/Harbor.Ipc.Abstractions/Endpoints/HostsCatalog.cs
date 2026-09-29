@@ -72,7 +72,7 @@ public static class HostsCatalog
                 }
                 else
                 {
-                    failures.Add(Result.Failure(parsed.Error));
+                    failures.Add(parsed.ConvertFailure());
                 }
             }
 

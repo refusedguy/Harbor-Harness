@@ -102,7 +102,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
             () => JsonSerializer.Deserialize(headerLine, JsonlCodecContext.Default.ExportEnvelope),
             ex => $"Invalid export header: {ex.Message}");
         if (envelopeResult.IsFailure)
-            return Result.Failure<string>(envelopeResult.Error);
+            return envelopeResult.ConvertFailure<string>();
         ExportEnvelope? envelope = envelopeResult.Value;
 
         if (envelope is null || envelope.Marker != EnvelopeMarker)

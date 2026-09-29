@@ -505,7 +505,7 @@ public sealed class CompactionService(
             Result<string> summaryOutcome =
                 await CollectSummaryAsync(summaryClient, request, ct).ConfigureAwait(false);
             if (summaryOutcome.IsFailure)
-                return Result.Failure<CompactionResult>(summaryOutcome.Error);
+                return summaryOutcome.ConvertFailure<CompactionResult>();
 
             stopwatch.Stop();
 
