@@ -136,18 +136,37 @@ internal static class SessionSupervision
         public override string Visit(AssistantMessage message) => "[assistant] " + Truncate(AssistantText(message));
 
         public override string Visit(ToolResultMessage message) => "[tool_result " + ToolResultSummary(message) + "]";
-    }
 
-    /// <summary>
-    ///     Flattens an assistant turn into one line: its text plus a
-    ///     <c>[tool:name]</c> marker per tool call, lazily built so a turn with
-    ///     nothing renderable still returns <see cref="string.Empty" />.
-    /// </summary>
-    private static string AssistantText(AssistantMessage assistant)
-    {
-        var visitor = new AssistantTextVisitor();
-        visitor.Walk(assistant.Parts);
-        return visitor.Text;
+        /// <summary>
+        ///     Flattens an assistant turn into one line: its text plus a
+        ///     <c>[tool:name]</c> marker per tool call, lazily built so a turn with
+        ///     nothing renderable still returns <see cref="string.Empty" />.
+        /// </summary>
+        private static string AssistantText(AssistantMessage assistant)
+        {
+            var visitor = new AssistantTextVisitor();
+            visitor.Walk(assistant.Parts);
+            return visitor.Text;
+        }
+
+        private static string ToolResultSummary(ToolResultMessage results)
+        {
+            int errors = 0;
+            for (int i = 0; i < results.Results.Count; i++)
+            {
+                if (results.Results[i].IsError)
+                    errors++;
+            }
+
+            return errors == 0 ? $"ok ({results.Results.Count})" : $"error {errors}/{results.Results.Count}";
+        }
+
+        private static string Truncate(string text)
+        {
+            if (text.Length <= MaxCharsPerEntry)
+                return text;
+            return text.Substring(0, MaxCharsPerEntry) + $"…[truncated {text.Length - MaxCharsPerEntry} chars]";
+        }
     }
 
     /// <summary>
@@ -186,25 +205,6 @@ internal static class SessionSupervision
 
         /// <inheritdoc cref="Visit(ThinkingPart)" />
         public override AssistantTextVisitor Visit(FilePart part) => this;
-    }
-
-    private static string ToolResultSummary(ToolResultMessage results)
-    {
-        int errors = 0;
-        for (int i = 0; i < results.Results.Count; i++)
-        {
-            if (results.Results[i].IsError)
-                errors++;
-        }
-
-        return errors == 0 ? $"ok ({results.Results.Count})" : $"error {errors}/{results.Results.Count}";
-    }
-
-    private static string Truncate(string text)
-    {
-        if (text.Length <= MaxCharsPerEntry)
-            return text;
-        return text.Substring(0, MaxCharsPerEntry) + $"…[truncated {text.Length - MaxCharsPerEntry} chars]";
     }
 
     private static void ExtractAuthors(string content, ref List<string>? authors)

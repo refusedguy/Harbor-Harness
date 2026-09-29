@@ -143,13 +143,41 @@ public static class SubagentsModel
 
         public override (string Role, string Body) Visit(ToolResultMessage message) =>
             ("tool", SummarizeToolResults(message));
-    }
 
-    private static string SummarizeAssistant(AssistantMessage assistant)
-    {
-        var visitor = new AssistantSummaryVisitor();
-        visitor.Walk(assistant.Parts);
-        return visitor.Summary;
+        private static string SummarizeAssistant(AssistantMessage assistant)
+        {
+            var visitor = new AssistantSummaryVisitor();
+            visitor.Walk(assistant.Parts);
+            return visitor.Summary;
+        }
+
+        private static string SummarizeToolResults(ToolResultMessage tool)
+        {
+            var results = tool.Results;
+            if (results.Count == 0)
+                return "(no results)";
+            if (results.Count == 1)
+                return SummarizeOneResult(results[0]);
+            int errors = 0;
+            for (int i = 0; i < results.Count; i++)
+            {
+                if (results[i].IsError)
+                    errors++;
+            }
+
+            return errors == 0
+                ? $"({results.Count} results, ok)"
+                : $"({results.Count} results, {errors} error(s))";
+        }
+
+        private static string SummarizeOneResult(ToolResultEntry result)
+        {
+            string verdict = result.IsError ? "error" : "ok";
+            string output = PanelText.SingleLine(result.Output);
+            return string.IsNullOrEmpty(output)
+                ? $"{result.ToolName}: {verdict}"
+                : $"{result.ToolName}: {verdict} {output}";
+        }
     }
 
     /// <summary>
@@ -198,31 +226,5 @@ public static class SubagentsModel
         public override AssistantSummaryVisitor Visit(FilePart part) => this;
     }
 
-    private static string SummarizeToolResults(ToolResultMessage tool)
-    {
-        var results = tool.Results;
-        if (results.Count == 0)
-            return "(no results)";
-        if (results.Count == 1)
-            return SummarizeOneResult(results[0]);
-        int errors = 0;
-        for (int i = 0; i < results.Count; i++)
-        {
-            if (results[i].IsError)
-                errors++;
-        }
 
-        return errors == 0
-            ? $"({results.Count} results, ok)"
-            : $"({results.Count} results, {errors} error(s))";
-    }
-
-    private static string SummarizeOneResult(ToolResultEntry result)
-    {
-        string verdict = result.IsError ? "error" : "ok";
-        string output = PanelText.SingleLine(result.Output);
-        return string.IsNullOrEmpty(output)
-            ? $"{result.ToolName}: {verdict}"
-            : $"{result.ToolName}: {verdict} {output}";
-    }
 }

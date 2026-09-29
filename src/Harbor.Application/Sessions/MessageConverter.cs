@@ -78,35 +78,52 @@ public sealed class MessageConverter
 
             return this;
         }
-    }
 
-    /// <summary>
-    ///     Convert a user turn, carrying any attached images (#386) as
-    ///     <see cref="LlmImageBlock" />s after the text block. Text-only turns
-    ///     keep the single-block shape <see cref="LlmUserMessage.Text" /> produces,
-    ///     so every existing provider payload is byte-identical.
-    /// </summary>
-    private static LlmUserMessage ConvertUser(UserMessage message)
-    {
-        if (message.Attachments is not { Count: > 0 } attachments)
-            return LlmUserMessage.Text(message.Content);
-
-        var blocks = new LlmContentBlock[attachments.Count + 1];
-        blocks[0] = new LlmTextBlock(message.Content);
-        for (int i = 0; i < attachments.Count; i++)
+        /// <summary>
+        ///     Convert a user turn, carrying any attached images (#386) as
+        ///     <see cref="LlmImageBlock" />s after the text block. Text-only turns
+        ///     keep the single-block shape <see cref="LlmUserMessage.Text" /> produces,
+        ///     so every existing provider payload is byte-identical.
+        /// </summary>
+        private static LlmUserMessage ConvertUser(UserMessage message)
         {
-            ImageAttachment image = attachments[i];
-            blocks[i + 1] = new LlmImageBlock(image.MimeType, image.Data);
+            if (message.Attachments is not { Count: > 0 } attachments)
+                return LlmUserMessage.Text(message.Content);
+
+            var blocks = new LlmContentBlock[attachments.Count + 1];
+            blocks[0] = new LlmTextBlock(message.Content);
+            for (int i = 0; i < attachments.Count; i++)
+            {
+                ImageAttachment image = attachments[i];
+                blocks[i + 1] = new LlmImageBlock(image.MimeType, image.Data);
+            }
+
+            return new LlmUserMessage(blocks);
         }
 
-        return new LlmUserMessage(blocks);
-    }
+        private static IReadOnlyList<LlmContentBlock> ConvertParts(IReadOnlyList<ContentPart> parts)
+        {
+            var visitor = new PartsToLlmBlocks(parts.Count);
+            visitor.Walk(parts);
+            return visitor.Blocks;
+        }
 
-    private static IReadOnlyList<LlmContentBlock> ConvertParts(IReadOnlyList<ContentPart> parts)
-    {
-        var visitor = new PartsToLlmBlocks(parts.Count);
-        visitor.Walk(parts);
-        return visitor.Blocks;
+        /// <summary>
+        ///     Lowercase the <see cref="StopReason" /> enum to the wire form expected by OpenAI-style
+        ///     providers ("stop", "length", "tool_use", …). Avoids the boxing allocation of
+        ///     <see cref="Enum.ToString" /> + the second allocation of <see cref="string.ToLowerInvariant" />
+        ///     on every converted assistant message (hot path: one conversion per LLM message).
+        /// </summary>
+        private static string StopReasonToLower(StopReason reason) => reason switch
+        {
+            StopReason.Stop => "stop",
+            StopReason.Length => "length",
+            StopReason.ToolUse => "tool_use",
+            StopReason.ContentFilter => "content_filter",
+            StopReason.Error => "error",
+            StopReason.Aborted => "aborted",
+            _ => reason.ToString().ToLowerInvariant()
+        };
     }
 
     /// <summary>
@@ -146,20 +163,4 @@ public sealed class MessageConverter
         public override PartsToLlmBlocks Visit(FilePart part) => this;
     }
 
-    /// <summary>
-    ///     Lowercase the <see cref="StopReason" /> enum to the wire form expected by OpenAI-style
-    ///     providers ("stop", "length", "tool_use", …). Avoids the boxing allocation of
-    ///     <see cref="Enum.ToString" /> + the second allocation of <see cref="string.ToLowerInvariant" />
-    ///     on every converted assistant message (hot path: one conversion per LLM message).
-    /// </summary>
-    private static string StopReasonToLower(StopReason reason) => reason switch
-    {
-        StopReason.Stop => "stop",
-        StopReason.Length => "length",
-        StopReason.ToolUse => "tool_use",
-        StopReason.ContentFilter => "content_filter",
-        StopReason.Error => "error",
-        StopReason.Aborted => "aborted",
-        _ => reason.ToString().ToLowerInvariant()
-    };
 }
