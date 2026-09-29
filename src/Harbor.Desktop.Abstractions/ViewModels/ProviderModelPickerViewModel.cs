@@ -49,6 +49,13 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
     ///     that answered fast. The two budgets used to wear the same name, so
     ///     reading one where the other belonged was indistinguishable; the name
     ///     is the fix, not a second shared literal.
+    ///     <para>
+    ///         This is also the ONE declaration of the catalogue wait in the
+    ///         project. <c>ProviderBrowserViewModel</c> and
+    ///         <c>ProviderModelPickerViewModelBase</c> bound the same registry
+    ///         fan-out through the same <see cref="AsyncFeed{T}" /> and used to
+    ///         hold private copies of the number (#685).
+    ///     </para>
     /// </remarks>
     public static readonly TimeSpan UiFeedbackBudget = TimeSpan.FromSeconds(5);
 

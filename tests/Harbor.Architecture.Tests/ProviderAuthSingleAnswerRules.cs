@@ -35,10 +35,13 @@
 //
 // SCOPE, deliberately narrow: the two view-models in
 // src/Harbor.Desktop.Abstractions/ViewModels/ that render an auth verdict.
-// ProviderBrowserViewModel and the (unreferenced)
-// ProviderModelPickerViewModelBase declare their own catalog "ModelFetchTimeout"
-// and are outside this rule — they are catalogue surfaces, not auth surfaces —
-// and widening the scan would make the gate red on files this change does not own.
+// The catalogue surfaces (ProviderBrowserViewModel and the unreferenced
+// ProviderModelPickerViewModelBase) are outside this rule — they render no auth
+// verdict — and widening the scan would make the gate red on files this change
+// does not own. Their half of the subject is not abandoned, only moved:
+// ProviderCatalogueBudgetRules (#685) governs the catalogue-wait budget across
+// every surface that touches the registry fan-out, and it deliberately does not
+// name IAuthResolver, because reachability is not authorization.
 
 using System.Text.RegularExpressions;
 

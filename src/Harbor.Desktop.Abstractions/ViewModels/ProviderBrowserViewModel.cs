@@ -17,10 +17,20 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 ///     <see cref="AsyncDataBinder" /> for the status → surface mapping it shares
 ///     with the model picker (#484).
 /// </summary>
+/// <remarks>
+///     The browser bounds the same call the picker bounds — the registry's
+///     <c>GetAllModelsAsync</c> fan-out — and answers the same question ("what
+///     models does this provider list?"), so it spends the same declared budget,
+///     <see cref="ProviderModelPickerViewModel.UiFeedbackBudget" />. It used to
+///     hold a private copy of that number under a probe-flavoured name, which is
+///     what let two views disagree about how long a catalogue may take while
+///     both looked self-consistent. It is NOT the provider-probe canon
+///     (<c>IProviderHealthCheck.DefaultTimeout</c>): that budget answers "can
+///     this provider answer?", and a user watching an empty list needs a
+///     different answer, faster (#685).
+/// </remarks>
 public sealed partial class ProviderBrowserViewModel : ObservableObject, IAsyncDataSink<ModelRowViewModel>
 {
-    public static readonly TimeSpan ModelFetchTimeout = TimeSpan.FromSeconds(5);
-
     private readonly ILogger<ProviderBrowserViewModel> _logger;
     private readonly IProviderRegistry _providers;
     private readonly AsyncFeed<IReadOnlyList<ModelRowViewModel>> _modelsFeed;
@@ -39,7 +49,9 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject, IAsyncD
     {
         _providers = providers;
         _logger = logger;
-        _modelsFeed = new AsyncFeed<IReadOnlyList<ModelRowViewModel>>(LoadModelsAsync, ModelFetchTimeout, _logger);
+        // The budget is the picker's, not this view's: same fan-out, same question (#685).
+        _modelsFeed = new AsyncFeed<IReadOnlyList<ModelRowViewModel>>(
+            LoadModelsAsync, ProviderModelPickerViewModel.UiFeedbackBudget, _logger);
         _modelsFeed.Changed += OnModelsChanged;
     }
 
