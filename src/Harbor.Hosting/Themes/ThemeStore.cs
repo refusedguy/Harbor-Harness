@@ -1,4 +1,6 @@
-namespace Harbor.DesignSystem;
+using Harbor.DesignSystem;
+
+namespace Harbor.Hosting.Themes;
 
 /// <summary>Where a marketplace theme entry came from.</summary>
 public enum ThemeSource
@@ -37,15 +39,45 @@ public sealed record ThemeEntry(
 /// error entries instead of exceptions.
 /// </summary>
 /// <remarks>
-///     The one production implementation of <see cref="IThemeStore" /> (#668).
-///     The single-implementer count is enforced by ThemeStoreSeamRules rather
-///     than left to review: a second implementer would be a second
-///     read-and-parse, which is the duplication the issue exists to remove, and
-///     it would look perfectly correct on its own. Note that the count is over
-///     implementations of the PORT, not over every read of a theme file —
-///     <see cref="ThemeDirectoryWatcher" /> still reads beside its owner, and
-///     <c>IThemeStore</c>'s own remarks say so rather than leaving the next
-///     reader to believe the port has no remaining callers to convert.
+///     <para>
+///         The one production implementation of <see cref="IThemeStore" /> (#668).
+///         The single-implementer count is enforced by ThemeStoreSeamRules rather
+///         than left to review: a second implementer would be a second
+///         read-and-parse, which is the duplication the issue exists to remove, and
+///         it would look perfectly correct on its own. Note that the count is over
+///         implementations of the PORT, not over every read of a theme file —
+///         <see cref="ThemeDirectoryWatcher" /> still reads beside its owner, and
+///         <c>IThemeStore</c>'s own remarks say so rather than leaving the next
+///         reader to believe the port has no remaining callers to convert.
+///     </para>
+///     <para>
+///         <b>#536 — why this type is not in Harbor.DesignSystem any more.</b> It
+///         was, and it was the only thing in that assembly that touched a disk:
+///         fourteen <c>File.*</c>/<c>Directory.*</c> calls and two reads of the
+///         user's home directory, held green by four rows in
+///         <c>PresentationCapabilityRules.KnownViolations</c>. Those rows were a
+///         permission, not a fix. A design-system package is the one assembly a
+///         consumer can take without pulling Harbor in — <c>IsPackable</c>,
+///         <c>PackageId: Harbor.DesignSystem</c>, an empty allowed-reference set,
+///         no PackageReference at all — so "where the user's themes live" cannot be
+///         something it knows.
+///     </para>
+///     <para>
+///         The port stayed behind on purpose, in the leaf, and this is the
+///         implementation of a contract the leaf declares. Composition root
+///         reaches Presentation, which Infrastructure in this repository may not
+///         (<c>FullLayerMatrixTests</c>: an Infrastructure row may reference Domain,
+///         Application, or a same-family Infrastructure sibling — never
+///         Presentation), so "the persistence half belongs in Infrastructure", as
+///         #536's own fix direction says, is not a destination this matrix has.
+///         Harbor.Hosting is: it is the layer above Infrastructure, it is
+///         unrestricted by rule, and the desktop app already references it, so the
+///         theme marketplace stayed reachable by both products instead of becoming
+///         a CLI internal. The tokens, <c>ThemeJson</c>,
+///         <c>TerminalColorPalette</c>, <c>ThemeParseResult</c> and the port itself
+///         are pure and stayed in the leaf; this type is the persistence half, and
+///         persistence is an outer layer's job.
+///     </para>
 /// </remarks>
 public sealed class ThemeStore : IThemeStore
 {
@@ -141,6 +173,27 @@ public sealed class ThemeStore : IThemeStore
     /// Resolves a theme by name (case-insensitive). A user theme with the same
     /// name wins over the built-in; unknown names return null.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The built-in lookup below is a loop, not
+    ///         <c>HarborTheme.BuiltIn.FirstOrDefault(...)</c>, and the reason is
+    ///         #536's move rather than taste. In <c>Harbor.DesignSystem</c> the
+    ///         assembly had no PackageReference, so no <c>Maybe</c> was reachable
+    ///         here and the null-returning LINQ was unremarkable.
+    ///         <c>Harbor.Hosting</c> IS a guarded project for
+    ///         <c>MaybeAbsenceTests.GuardedProjects_DeclareNoAbsenceViaFirstOrDefault</c>,
+    ///         which is right to fire: <c>FirstOrDefault</c> returning null to mean
+    ///         "absent" is exactly <c>Maybe&lt;T&gt;.None</c> wearing a nullable.
+    ///     </para>
+    ///     <para>
+    ///         Written as a loop it also matches the user-theme branch directly
+    ///         above, so one method now answers "did I find it" the same way twice.
+    ///         The signature is deliberately still <c>HarborTheme?</c>: promoting it
+    ///         to <c>Maybe&lt;HarborTheme&gt;</c> is a public API change to a type
+    ///         this commit only RELOCATES, and it deserves its own decision rather
+    ///         than riding along inside a move.
+    ///     </para>
+    /// </remarks>
     public HarborTheme? Resolve(string name)
     {
         foreach (var entry in ScanUserFiles())
@@ -151,7 +204,15 @@ public sealed class ThemeStore : IThemeStore
             }
         }
 
-        return HarborTheme.BuiltIn.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+        foreach (var theme in HarborTheme.BuiltIn)
+        {
+            if (string.Equals(theme.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return theme;
+            }
+        }
+
+        return null;
     }
 
     private IReadOnlyList<ThemeEntry> ScanUserFiles()

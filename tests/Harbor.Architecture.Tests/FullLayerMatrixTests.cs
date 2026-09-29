@@ -487,6 +487,17 @@ public class FullLayerMatrixTests
             "Harbor.Ui.Framework.Sessions",
             "Harbor.Storage.Jsonl", "Harbor.Storage.Memory", "Harbor.Tui.AnsiPlain",
             "Harbor.Tui.CellForge",
+            // #536: the theme marketplace's persistence half — ThemeStore and
+            // ThemeDirectoryWatcher, implementing the IThemeStore port that stayed
+            // in the DesignSystem leaf. It is an edge UPWARD on purpose: the leaf
+            // cannot hold the I/O (it is IsPackable with an EMPTY allowed set), and
+            // Infrastructure may not reference Presentation, so the composition root
+            // is the layer the move fits. Application cannot hold it either — it sits
+            // below Infrastructure, and the whole Infrastructure section already uses
+            // "outer → inner" edges. The reference is real (Harbor.Hosting.Themes
+            // names HarborTheme, ThemeJson and IThemeStore), so the IL gate would
+            // redden if this permission were dropped.
+            "Harbor.DesignSystem",
             "Harbor.Providers.Ollama", "Harbor.Providers.OpenAiCompatible", "Harbor.Tools.Builtin", "Harbor.Lsp", "Harbor.Ipc.Abstractions",
             "Harbor.Ipc.InProcess", "Harbor.Ipc.Server", "Harbor.Ipc.Client",
             // #450: "Harbor.Plugins.Runtime" and "Harbor.Ui.Framework.Sessions"

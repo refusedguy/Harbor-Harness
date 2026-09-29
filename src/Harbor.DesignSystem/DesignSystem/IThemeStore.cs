@@ -27,13 +27,17 @@ namespace Harbor.DesignSystem;
 /// </para>
 /// <para>
 ///     It is declared HERE, in the zero-reference token leaf, and not in Domain
-///     where #536 proposes, because <see cref="ThemeStore" /> lives in this
-///     assembly and the layer matrix gives this assembly an EMPTY
+///     where #536 proposed, because at the time <see cref="ThemeStore" /> lived in
+///     this assembly and the layer matrix gives this assembly an EMPTY
 ///     allowed-reference set: implementing a Domain-declared contract from here
-///     would need a forbidden edge. This placement does not block #536 —
-///     Infrastructure is an outer layer, so the persistence half #536 wants to
-///     move out may implement this contract without a new edge. The contract is
-///     the theme catalog's; where the bytes come from is Infrastructure's.
+///     would need a forbidden edge. Putting the contract in DesignSystem was
+///     therefore the placement #668 could actually reach, and #536 said out loud
+///     that it did not block the move — which is why the port did not have to move
+///     with the implementation. #536 has now landed and the two halves are apart:
+///     this contract and the tokens stayed in the leaf, and
+///     <c>ThemeStore</c> / <c>ThemeDirectoryWatcher</c> moved to
+///     <c>Harbor.Hosting.Themes</c>. The contract is the theme catalog's; where
+///     the bytes come from is an outer layer's.
 /// </para>
 /// <para>
 ///     The result type is <see cref="ThemeParseResult" />, not

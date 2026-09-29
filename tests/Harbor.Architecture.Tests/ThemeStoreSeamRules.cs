@@ -48,16 +48,32 @@
 //
 // WHY THE PORT LIVES IN DESIGNSYSTEM AND NOT IN DOMAIN
 // ----------------------------------------------------
-// #536 proposes the same contract ("IThemeStore … declared in Domain"), so the
+// #536 proposed the same contract ("IThemeStore … declared in Domain"), so the
 // two issues meet here and the placement is a decision, not an accident.
 // Harbor.DesignSystem's allowed-reference set is EMPTY (FullLayerMatrixTests:
-// new(Layer.Presentation, [])), so a ThemeStore that lives in DesignSystem
-// cannot implement a Domain-declared interface without a forbidden edge. Putting
-// the contract in DesignSystem is the placement #668 can actually reach, and it
-// does not block #536: Infrastructure is an OUTER layer, so the persistence half
-// #536 wants to move may implement a DesignSystem-declared contract without any
-// new edge. The contract is the token catalog's; where the bytes come from is
-// Infrastructure's.
+// new(Layer.Presentation, [])), so a ThemeStore that lived in DesignSystem could
+// not implement a Domain-declared interface without a forbidden edge. Putting
+// the contract in DesignSystem was the placement #668 could actually reach, and
+// it did not block #536 — the port could stay put while the persistence moved.
+//
+// It worked out that way. #536 has landed: the port is STILL declared in
+// Harbor.DesignSystem, and `ThemeStore` — its one implementation — now lives in
+// `Harbor.Hosting.Themes`. Two consequences this file has to keep true, and
+// which are easy to break by editing the wrong half:
+//
+//   * The "exactly one implementer" rule is unchanged and still counts
+//     `ProductionAssemblies()`. The implementer moved assembly, not layer, so
+//     the count is still 1 and `SoleImplementation` is still "ThemeStore".
+//   * The port's home is still asserted. `ThemeStore_Port_Is_Public_And_Lives_In_
+//     DesignSystem` was the reason the placement was legal when it looked like a
+//     problem, and it is the reason it is still legal now that the implementer is
+//     on the other side of the leaf. A port that drifted down to the
+//     implementation's own assembly would be unassertable by anyone who cannot
+//     reference it.
+//
+// The contract is the token catalog's; where the bytes come from is an outer
+// layer's — and the outer layer that can reach Presentation is the composition
+// root, not Infrastructure, which the matrix forbids.
 //
 // WHAT IS DELIBERATELY NOT RULED, AND WHY
 // ----------------------------------------
@@ -65,11 +81,13 @@
 //     syscall, and the widgets legitimately have a path to name. Same reasoning
 //     as PresentationCapabilityRules' "DELIBERATELY NOT RULED" note; do not
 //     "helpfully" add it here.
-//   * The four Harbor.DesignSystem baseline rows. #536 owns those: it wants the
-//     whole persistence half lifted out of the design-system package. That is a
-//     larger move than #668 and deleting those rows from under it would strand
-//     the issue. This file only requires that the CellForge side is clean, which
-//     is the part #668 asked for.
+//   * The four Harbor.DesignSystem baseline rows. #536 owned those and has now
+//     paid them: `ThemeStore` moved to `Harbor.Hosting.Themes` and the four
+//     `PresentationCapabilityRules` rows are deleted rather than re-baselined.
+//     What that move did NOT do is move the PORT — `IThemeStore` is still
+//     declared here, in the leaf, and that is the point: the two halves are
+//     deliberately apart, so "the assembly the port lives in" and "the assembly
+//     that touches the disk" are no longer the same answer.
 //   * Whether the two watchers share a polling base class. That is #479-A6's
 //     own proposal ("PollingWatcher base + two concretes, or one
 //     IFileSetSource"). Duplication of the *read* is what this file rules;
@@ -170,10 +188,12 @@ public sealed class ThemeStoreSeamRules
             + "for the same input. Found: " + described);
 
         await Assert.That(implementers[0].Name).IsEqualTo(SoleImplementation).Because(
-            "The port was introduced over Harbor.DesignSystem's existing store, so that "
-            + "is where the disk access already is. A new implementer in another "
-            + "assembly is a new file-reading implementation, which is the thing being "
-            + "removed. Found: " + described);
+            "The port was introduced over Harbor.DesignSystem's existing store, and that "
+            + "store is still the one implementer — #536 moved it to Harbor.Hosting.Themes "
+            + "rather than replacing it, so the name is what identifies the implementation, "
+            + "not the assembly it sits in. A SECOND implementer is a new file-reading "
+            + "implementation, which is the thing being removed, and it would look perfectly "
+            + "correct on its own. Found: " + described);
     }
 
     [Test]
@@ -239,10 +259,18 @@ public sealed class ThemeStoreSeamRules
     [Test]
     public async Task Filesystem_Scanner_Still_Sees_A_Real_Call()
     {
-        // A file that legitimately keeps its disk access until #536 moves it.
+        // #536 moved the theme store out of Harbor.DesignSystem, so this control's
+        // anchor moved with it. Re-anchoring is the whole job: deleting the control
+        // would leave `CellForge_Theme_Widgets_Read_Through_The_Port_Not_The_`
+        // Filesystem` free to pass on a broken regex, and leaving it where it was
+        // would have kept it green for the wrong reason — a MISSING file is
+        // reported as a hit by FindFilesystemCalls, so a stale path reads as
+        // "the scanner still works" while proving nothing about any file.
+        // DesignSystemLeafTakesNoIoRules is the rule that covers the leaf's own
+        // disk access; this one proves the widget scanner can still fail.
         string[] host =
         [
-            "src/Harbor.DesignSystem/DesignSystem/ThemeStore.cs",
+            "src/Harbor.Hosting/Themes/ThemeStore.cs",
         ];
 
         IReadOnlyList<string> hits = FindFilesystemCalls(host);

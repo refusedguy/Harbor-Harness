@@ -12,6 +12,19 @@
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.CodeGen\Harbor.CodeGen.csproj"/>
     <ProjectReference Include="..\..\tests\Harbor.TestKit\Harbor.TestKit.csproj"/>
+    <!--
+      #536: `ThemeFileWatcherTests` drives the widget against the REAL
+      IThemeStore implementation (4 of its 7 tests) so the file path and mtime
+      behaviour it had before the port existed is still exercised. That
+      implementation — ThemeStore — moved out of the leaf and into
+      Harbor.Hosting.Themes, so the reference follows it. Reached through
+      Harbor.Hosting rather than re-homed into this project: a Presentation
+      widget's test should not acquire a source-level dependency on a service
+      just because the service moved, and the alternative (relocating those four
+      tests to Harbor.Hosting.Tests) would have taken the widget's only
+      real-store coverage away from the widget.
+    -->
+    <ProjectReference Include="..\..\src\Harbor.Hosting\Harbor.Hosting.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

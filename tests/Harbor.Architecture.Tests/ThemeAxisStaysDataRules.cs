@@ -132,10 +132,21 @@ public sealed class ThemeAxisStaysDataRules
     // where the freeze is anchored — the exception is a carve-out from a frozen
     // set, and a carve-out with no recorded boundary is just a different freeze
     // nobody chose.
+    //
+    // #536 re-anchored two of these four paths: `ThemeStore` and
+    // `ThemeDirectoryWatcher` moved from `src/Harbor.DesignSystem/DesignSystem/`
+    // to `src/Harbor.Hosting/Themes/`, because the leaf is IsPackable with an
+    // EMPTY allowed-reference set and could not keep the disk half. The freeze
+    // did not move with the files and must not: sealing the axis is about WHAT
+    // the discovery path does, not where the file sits. A stale path here is not
+    // a harmless leftover either — `FindThemeNameTables` reports an unreadable
+    // file as a VIOLATION, so leaving one would redden
+    // `Theme_Discovery_Path_Holds_No_Registry_Of_Theme_Names` with "the guard
+    // cannot grade a file it cannot read", which is the file's design working.
     private static readonly string[] SealedThemeSourceHomes =
     [
-        "src/Harbor.DesignSystem/DesignSystem/ThemeStore.cs",
-        "src/Harbor.DesignSystem/DesignSystem/ThemeDirectoryWatcher.cs",
+        "src/Harbor.Hosting/Themes/ThemeStore.cs",
+        "src/Harbor.Hosting/Themes/ThemeDirectoryWatcher.cs",
         "src/Harbor.Tui.CellForge/Chat/Widgets/ThemeFileWatcher.cs",
         "src/Harbor.Tui.CellForge/Chat/Widgets/JsonThemeLoader.cs",
     ];
@@ -278,7 +289,12 @@ public sealed class ThemeAxisStaysDataRules
     {
         string[] control =
         [
-            "tests/Harbor.DesignSystem.Tests/ThemeDirectoryWatcherTests.cs",
+            // #536: the watcher's tests moved with it, from
+            // tests/Harbor.DesignSystem.Tests/ to tests/Harbor.Hosting.Tests/.
+            // FindDirectoryWatcherConstructions `continue`s past a file that does not
+            // exist, so a stale path here yields no hits and this control goes red —
+            // the right way round, and the reason the control exists.
+            "tests/Harbor.Hosting.Tests/ThemeDirectoryWatcherTests.cs",
         ];
 
         IReadOnlyList<string> hits = FindDirectoryWatcherConstructions(RepoPaths.RepoRoot, control);

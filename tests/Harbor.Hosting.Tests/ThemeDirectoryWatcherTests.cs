@@ -1,6 +1,8 @@
+using Harbor.DesignSystem;
+using Harbor.Hosting.Themes;
 using Harbor.Ui.Framework.Projection;
 
-namespace Harbor.DesignSystem.Tests;
+namespace Harbor.Hosting.Tests;
 
 /// <summary>
 /// Marketplace live-reload: polling picks up new/changed theme files and

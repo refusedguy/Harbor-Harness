@@ -493,6 +493,35 @@ public sealed class PresentationCapabilityRules
 
     private static readonly Dictionary<string, Dictionary<string, string>> KnownViolations = new(StringComparer.Ordinal)
     {
+        // #536 RESOLVED: the four Harbor.DesignSystem rows are GONE — not
+        // re-baselined, not narrowed, and the `["Harbor.DesignSystem"]` entry is
+        // gone with them, because an entry with no rows is a claim that the
+        // assembly is still dirty. The leaf is CLEAN and the rules above are now
+        // genuinely enforced over it.
+        //
+        // The rows were a permission, not a fix, and they were held in place by
+        // nothing: `ThemeStore` and `ThemeDirectoryWatcher` were the only two
+        // types in Harbor.DesignSystem that read a disk, and the assembly is the
+        // HDS v1 package — IsPackable, `PackageId: Harbor.DesignSystem`, an EMPTY
+        // allowed-reference set, no PackageReference. It is the one assembly a
+        // consumer can take without pulling Harbor in, so "where the user's themes
+        // live" is not something it can know. #668 had already said this about the
+        // CellForge rows it deleted; #536 is the leaf's own half.
+        //
+        // What moved is the persistence: both types now live in
+        // `Harbor.Hosting.Themes` (Harbor.Hosting, CompositionRoot — the only
+        // layer that can reach Presentation from outside, since Infrastructure may
+        // not). What stayed is the PORT — `IThemeStore` is still declared in the
+        // leaf, still implemented by `ThemeStore`, still read by the CellForge
+        // widgets — and every token. The contract belongs to the catalog; the bytes
+        // belong to an outer layer.
+        //
+        // The two `Environment.Get*` reads (#536's "also reads HARBOR_THEMES_DIR
+        // and Environment.GetFolderPath(UserProfile)") went with the types. No
+        // rule here would have caught them — they are not File.*/Directory.* — so
+        // `DesignSystemLeafTakesNoIoRules` is what keeps the leaf from regrowing a
+        // configuration surface behind a green build.
+        //
         // #537 RESOLVED: the two Harbor.Ui.Framework.Services rows are GONE — not
         // re-baselined, not widened. GitService no longer forks `git` and no longer
         // calls Directory.Exists: it maps the Domain `IGitQuery` contract onto
@@ -555,19 +584,6 @@ public sealed class PresentationCapabilityRules
             // the file-tree capability ever comes back.
             //
             // The jump palette row above is untouched — a different defect, open.
-        },
-        ["Harbor.DesignSystem"] = new(StringComparer.Ordinal)
-        {
-            // ThemeStore.cs (File :117,:122,:176; Directory :69,:71,:151,:152) and
-            // ThemeDirectoryWatcher.cs (File :64,:91; Directory :45,:46).
-            [NoFiles + " Harbor.DesignSystem.ThemeStore"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/536",
-            [NoFiles + " Harbor.DesignSystem.ThemeDirectoryWatcher"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/536",
-            [NoDirectories + " Harbor.DesignSystem.ThemeStore"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/536",
-            [NoDirectories + " Harbor.DesignSystem.ThemeDirectoryWatcher"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/536",
         },
         ["Harbor.Desktop.Abstractions"] = new(StringComparer.Ordinal)
         {
