@@ -154,7 +154,7 @@
 
       CFE0002 (prefer implicit type args) is Info and stays off — see §5.
     -->
-    <PackageVersion Include="CSharpFunctionalExtensions.Analyzers" Version="1.4.1" />
+    <PackageVersion Include="CSharpFunctionalExtensions.Analyzers" Version="1.3.0" />
     <!-- ── Performance / collections / serialization ─────────────────────── -->
     <PackageVersion Include="ZLinq" Version="1.5.6" />
     <PackageVersion Include="ZLinq.DropInGenerator" Version="1.5.6" />
