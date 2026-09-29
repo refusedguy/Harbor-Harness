@@ -47,22 +47,45 @@ public class ToolCategoryApprovalTests
     }
 
     /// <summary>
-    ///     #595: every registered builtin now declares a category. The table used
-    ///     to hold 13 of 20, so seven tools matched no category rule at all while
-    ///     the class doc promised "category rules gate whole classes".
+    ///     #595: every tool that REGISTERS declares a category. The table used to
+    ///     hold 13 of 20, so seven tools matched no category rule at all while the
+    ///     class doc promised "category rules gate whole classes".
     /// </summary>
+    /// <remarks>
+    ///     The two plugin rows — <c>session_broadcast</c> and <c>session_inbox</c> —
+    ///     are declared without a category on purpose and are the only exception.
+    ///     They never register in the builtin host, and classifying them changes a
+    ///     verdict rather than describing one: a category match makes a rule about
+    ///     the class fire against the tool, and CI caught that when
+    ///     <c>session_broadcast</c> was briefly Mcp and an earlier Ask rule then
+    ///     beat its explicit Allow. The exemption is asserted here so that adding a
+    ///     third unclassified tool is a deliberate edit to this list.
+    /// </remarks>
     [Test]
-    public async Task Every_Declared_Builtin_Tool_Has_A_Category()
+    public async Task Every_Builtin_Tool_That_Registers_Declares_A_Category()
     {
+        string[] declaredWithoutCategory = ["session_broadcast", "session_inbox"];
+
         var unclassified = BuiltinToolSafetyProfiles.All
-            .Where(d => d.Category is null)
+            .Where(d => d.Category is null && !declaredWithoutCategory.Contains(d.ToolName))
             .Select(d => d.ToolName)
+            .Order(StringComparer.Ordinal)
             .ToArray();
 
         await Assert.That(unclassified).IsEmpty()
-            .Because("a builtin with no category matches no category rule, so a user's "
-                   + "new(\"write\", \"*\", Allow) silently stops applying to it the day it "
-                   + "is added. Declare the category on the tool instead (#595).");
+            .Because("a builtin that registers with no category matches no category rule, so a "
+                   + "user's new(\"write\", \"*\", Allow) silently stops applying to it the day "
+                   + "it is added. Declare the category on the tool instead (#595). If the tool "
+                   + "genuinely belongs to no class, add it to the declared exception above "
+                   + "with the reason — an unlisted omission is the drift this guards.");
+
+        // And the exceptions are real rows, not names invented by the test.
+        await Assert.That(BuiltinToolSafetyProfiles.All
+                .Count(d => declaredWithoutCategory.Contains(d.ToolName)))
+            .IsEqualTo(declaredWithoutCategory.Length)
+            .Because("the unclassified exception names tools that must still appear in the "
+                   + "declaration table — a test asserting an exception for a row that does not "
+                   + "exist is asserting nothing");
     }
 
     [Test]

@@ -64,8 +64,19 @@ public static class BuiltinToolSafetyProfiles
         // Plugin vocabulary: declared so a plugin that loads later still finds its
         // row, never registered by the builtin host. See
         // `BuiltinToolSafetyDeclarationsTests`, which is what keeps that honest.
-        new("session_broadcast", ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
-        new("session_inbox", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
+        //
+        // Both carry NO category, and that is a decision rather than an omission.
+        // Classifying them would silently change a verdict: `PermissionRuleset`
+        // evaluates rules in order, and a category match makes a rule about the
+        // CLASS fire against these tools. `session_broadcast` was briefly classified
+        // Mcp here and CI caught the consequence — the earlier
+        // `new("mcp_prompt", "*", Ask)` rule then matched it ahead of its own
+        // explicit Allow, and `SessionBroadcastPluginTests` went red. These are
+        // session IPC tools, not the MCP bridge, so no category describes them
+        // honestly; leaving them unclassified keeps the explicit rules in charge,
+        // which is also the fail-closed reading of "belongs to no class".
+        new("session_broadcast", ToolSafetyProfile.Opaque),
+        new("session_inbox", ToolSafetyProfile.Opaque),
     ];
 
     /// <summary>
