@@ -97,7 +97,7 @@ namespace Harbor.Architecture.Tests;
 ///     the hierarchy at all; see the probe's remarks for why.
 /// </param>
 /// <param name="CallsRegisterHandler">
-///     The type (or one of its nested types) contains a call to
+///     One of the type's OWN method bodies calls
 ///     <c>BaseTuiRenderer.RegisterHandler</c>.
 /// </param>
 /// <param name="NewStoresChatAppMsgAgent">The type news up a <c>ChatAppMsg.Agent</c>.</param>
@@ -267,7 +267,19 @@ internal static class RendererSeamProbe
         return bridges;
     }
 
-    /// <summary>Records, per type, whether any of its method bodies takes a seam.</summary>
+    /// <summary>
+    ///     Records, per type, whether any of ITS OWN method bodies takes a
+    ///     seam. Nested types are recorded under their own names.
+    /// </summary>
+    /// <remarks>
+    ///     Own methods only, and each type keyed by its own full name. An earlier
+    ///     version scanned a type together with all its nested types and stored
+    ///     the combined result under the OUTER name — which works for every
+    ///     top-level renderer in the tree (they all register from their own
+    ///     constructor) and silently reports "no seam" for a nested one. That
+    ///     is precisely what the probe renderers in this file are, and the
+    ///     non-vacuity test caught it.
+    /// </remarks>
     private static void CollectSeams(
         TypeDefinition type,
         Dictionary<string, (bool Register, bool Store)> seams)
@@ -275,35 +287,31 @@ internal static class RendererSeamProbe
         bool register = false;
         bool store = false;
 
-        foreach (TypeDefinition scope in SelfAndNested(type))
+        foreach (MethodDefinition method in type.Methods)
         {
-            foreach (MethodDefinition method in scope.Methods)
+            if (!method.HasBody)
             {
-                if (!method.HasBody)
+                continue;
+            }
+
+            foreach (Instruction instruction in method.Body.Instructions)
+            {
+                if (instruction.Operand is not MethodReference callee)
                 {
                     continue;
                 }
 
-                foreach (Instruction instruction in method.Body.Instructions)
+                // A call operand's declaring type is a plain reference: its
+                // FullName is readable without resolving an assembly.
+                string? declaring = callee.DeclaringType?.FullName;
+                if (callee.Name == RegisterHandlerMethodName && declaring == BaseRendererTypeName)
                 {
-                    if (instruction.Operand is not MethodReference callee)
-                    {
-                        continue;
-                    }
+                    register = true;
+                }
 
-                    // A call operand's declaring type is a plain reference: its
-                    // FullName is readable without resolving an assembly.
-                    string? declaring = callee.DeclaringType?.FullName;
-                    if (callee.Name == RegisterHandlerMethodName
-                        && declaring == BaseRendererTypeName)
-                    {
-                        register = true;
-                    }
-
-                    if (callee.Name == ".ctor" && declaring == ChatAppMsgAgentTypeName)
-                    {
-                        store = true;
-                    }
+                if (callee.Name == ".ctor" && declaring == ChatAppMsgAgentTypeName)
+                {
+                    store = true;
                 }
             }
         }
@@ -316,18 +324,6 @@ internal static class RendererSeamProbe
         foreach (TypeDefinition nested in type.NestedTypes)
         {
             CollectSeams(nested, seams);
-        }
-    }
-
-    private static IEnumerable<TypeDefinition> SelfAndNested(TypeDefinition type)
-    {
-        yield return type;
-        foreach (TypeDefinition nested in type.NestedTypes)
-        {
-            foreach (TypeDefinition inner in SelfAndNested(nested))
-            {
-                yield return inner;
-            }
         }
     }
 
@@ -514,7 +510,8 @@ public sealed class RendererEventSeamRule
 
         var inventory = new RenderersInventory(
             facts.ToDictionary(static f => f.TypeName, StringComparer.Ordinal),
-            scanned);
+            scanned,
+            ExcludedAssemblies: []);
 
         // Select before ToHashSet: a StringComparer cannot be an
         // IEqualityComparer<RendererSeamViolation>, so the set has to be of
@@ -579,6 +576,20 @@ public sealed class RendererEventSeamRule
         await Assert.That(inventory.ConcreteRendererCount).IsGreaterThanOrEqualTo(4)
             .Because("the four src/ renderer families are unconditional ProjectReferences of this "
                    + "test project; a smaller table means the probe stopped seeing them");
+
+        // The exclusion list is the same trap one level up: an assembly quietly
+        // dropped from it stops being enforced and the rule goes green without
+        // saying so. Exactly one assembly may be excluded, and it must be the
+        // one these tests live in.
+        string self = typeof(RendererEventSeamRule).Assembly.GetName().Name ?? "<unnamed>";
+        await Assert.That(inventory.ExcludedAssemblies.Count).IsEqualTo(1)
+            .Because("only this test assembly may be excluded from the rule, and only because it "
+                   + "declares the deliberate non-conformant probes. Excluded: "
+                   + string.Join(", ", inventory.ExcludedAssemblies.Select(static e => e.Name)));
+
+        await Assert.That(inventory.ExcludedAssemblies[0].Name).IsEqualTo(self)
+            .Because("the excluded assembly must be the one these tests live in; a typo there would "
+                   + "grandf a production assembly");
     }
 
     // =====================================================================
@@ -633,9 +644,16 @@ public sealed class RendererEventSeamRule
     ///     types, both of which are looked up by name.
     /// </param>
     /// <param name="TopLevelTypesScanned">How many types the probe walked.</param>
+    /// <param name="ExcludedAssemblies">
+    ///     Assemblies deliberately left out of the rule, each with the reason.
+    ///     Asserted to be exactly this test assembly, whose two probe renderers
+    ///     are DELIBERATE violations — they exist so the rule can be shown to
+    ///     fire. Without the exclusion the rule would be red on its own controls.
+    /// </param>
     private sealed record RenderersInventory(
         Dictionary<string, RendererFacts> Renderers,
-        int TopLevelTypesScanned)
+        int TopLevelTypesScanned,
+        IReadOnlyList<(string Name, string Why)> ExcludedAssemblies)
     {
         /// <summary>Number of non-abstract renderers — the family list the rule is about.</summary>
         public int ConcreteRendererCount =>
@@ -645,14 +663,24 @@ public sealed class RendererEventSeamRule
     private static RenderersInventory Build()
     {
         var renderers = new Dictionary<string, RendererFacts>(StringComparer.Ordinal);
+        var excluded = new List<(string, string)>();
         int scanned = 0;
+        string selfName = typeof(RendererEventSeamRule).Assembly.GetName().Name ?? "<unnamed>";
 
         foreach ((string name, Assembly asm) in LoadedAssemblies.Value)
         {
+            if (string.Equals(name, selfName, StringComparison.Ordinal))
+            {
+                excluded.Add((name,
+                    "this test assembly declares the two DELIBERATE non-conformant probe "
+                    + "renderers the non-vacuity tests assert the rule catches"));
+                continue;
+            }
+
             // Cheap pre-filter: only the assemblies that actually carry a
-            // renderer are opened with Cecil. A reflection miss therefore cannot
-            // hide a renderer, because the pre-filter itself fails loudly in
-            // RendererTypeTable_IsLive.
+            // renderer are opened. A reflection miss therefore cannot hide a
+            // renderer, because the pre-filter is the same exact call the probe
+            // makes and the liveness test names four of the families.
             if (!MentionsBaseRenderer(asm))
             {
                 continue;
@@ -665,7 +693,7 @@ public sealed class RendererEventSeamRule
             }
         }
 
-        return new RenderersInventory(renderers, scanned);
+        return new RenderersInventory(renderers, scanned, excluded);
     }
 
     /// <summary>
