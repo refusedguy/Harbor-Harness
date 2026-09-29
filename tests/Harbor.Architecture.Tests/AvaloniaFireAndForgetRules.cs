@@ -49,8 +49,9 @@
 // -----------------
 // Inside a guarded project, a statement that evaluates a Task-shaped call and
 // discards the result is a build failure. There is exactly one accepted form:
-//
-//     TaskFireAndForget.Forget(task, ex => _logger.LogError(ex, "..."));
+// a `TaskFireAndForget.Forget(...)` call whose second argument is a fault sink.
+// (Spelled without an indented code block on purpose — S125 reads an indented
+// line under a `//` banner as commented-out code and warns on it.)
 //
 // There are ZERO exemptions, and that is on purpose. docs/ANTIPATTERNS.md §9
 // also blesses a hand-rolled
