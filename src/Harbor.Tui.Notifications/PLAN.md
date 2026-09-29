@@ -9,6 +9,8 @@
 - [x] Linux notify-send integration (`LinuxNotifySendBackend`)
 - [x] macOS osascript integration (`MacOsascriptBackend`)
 - [x] Windows msg.exe backend + null fallback when no notifier present (`WindowsToastBackend`, `NullNotificationBackend`)
+- [x] Process spawn moved out of Presentation behind `INotificationProcessRunner` /
+      `ProcessNotificationRunner`, backends injectable and cancellable (#665)
 
 ## TODO
 

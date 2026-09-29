@@ -23,24 +23,53 @@ window and wants to be notified when the agent needs attention.
 | Windows | `msg.exe` (modal dialog)          | Swap in `snoretoast.exe` for toasts      |
 | Other   | Null backend (silent)             | Logs a warning, never throws             |
 
+## Who starts the process
+
+This assembly starts nothing. Each backend builds an argv and hands it to
+`INotificationProcessRunner` (Domain, `Harbor.Abstractions/Notifications/`); the
+production implementation is `ProcessNotificationRunner` in
+`Harbor.Application.Notifications`, beside `ProcessGitQuery` (#665).
+
+The seam is injected through the constructor and deliberately has **no
+default**: before it, each backend owned a `Process` and a three-second
+`WaitForExit` that no caller could cancel, which is what
+`PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` was grandfathering this assembly
+for. Constructing the renderer requires naming a runner.
+
+```csharp
+using Harbor.Application.Notifications;   // Infrastructure side
+using Harbor.Tui.Notifications;           // Presentation side
+
+var runner = new ProcessNotificationRunner(loggerFactory.CreateLogger<ProcessNotificationRunner>());
+var renderer = new NotificationTuiRenderer(logger, runner);
+```
+
+`ProcessNotificationRunner` is best effort by contract: a missing notifier, a
+timeout, or a non-zero exit is logged and never thrown. A test can substitute
+`RecordingNotificationRunner` (`tests/Harbor.Tui.RendererTests/Support/`) and
+observe the exact argv without forking anything.
+
 ## Dependencies
 
-- `Harbor.Abstractions`
+- `Harbor.Abstractions` (`INotificationProcessRunner`)
 - `Harbor.Terminal.Abstractions` (`BaseTuiRenderer`, `ITuiRenderContext`)
 - `Microsoft.Extensions.Logging.Abstractions`
 
-No external NuGet packages — uses only `System.Diagnostics.Process` to shell
-out to the OS notification tool.
+No external NuGet packages. The renderer holds no `System.Diagnostics.Process`;
+the spawn lives in `Harbor.Application`.
 
 ## Files
 
-- `Harbor.Tui.Notifications.csproj` — `net10.0`, references `Harbor.Terminal.Abstractions`.
+- `Harbor.Tui.Notifications.csproj` — `net10.0`, references `Harbor.Terminal.Abstractions`;
+  `InternalsVisibleTo` for `Harbor.Tui.RendererTests` so the backends' argv can be pinned.
 - `NotificationTuiRenderer.cs` — sealed `NotificationTuiRenderer : BaseTuiRenderer`. Listens to
   `AgentEndEvent`, `AgentErrorEvent`, `CompactionCompletedEvent`, and
   `ToolExecutionEndEvent` (errors only); routes each to the detected backend.
-- `INotificationBackend` — platform abstraction with `Notify(title, body, isError)`.
+- `INotificationBackend` — platform abstraction with
+  `Notify(title, body, isError, ct)`. Abstracts the *shape* of a notification.
 - Concrete backends (all in the same file): `LinuxNotifySendBackend`, `MacOsascriptBackend`,
-  `WindowsToastBackend`, `NullNotificationBackend`.
+  `WindowsToastBackend`, `NullNotificationBackend`. Each holds an
+  `INotificationProcessRunner` and nothing else — no process, no logger, no try/catch.
 - `NotificationRenderContext : ITuiRenderContext` — absorbs render calls; this renderer is output-free.
 
 ## Event → notification mapping
@@ -78,10 +107,13 @@ public override async Task RenderAsync(AgentEvent @event, CancellationToken ct)
 }
 ```
 
-Platform detection uses `RuntimeInformation.IsOSPlatform`. On Linux it shells
-out to `notify-send`; on macOS to `osascript -e 'display notification...'`;
-on Windows to `msg.exe` (modal dialog). For proper Windows Action Center
-toasts, install `snoretoast.exe` and replace `WindowsToastBackend`.
+Platform detection uses `RuntimeInformation.IsOSPlatform`. On Linux it asks
+the runner for `notify-send`; on macOS for `osascript -e 'display
+notification...'`; on Windows for `msg.exe` (modal dialog). For proper Windows
+Action Center toasts, install `snoretoast.exe` and replace
+`WindowsToastBackend`. The `switch` in `RenderAsync` below is historical: the
+mapping moved into the registered `IAgentEventHandler`s in #185 — the snippet is
+kept to show the event mapping, not the current call path.
 
 ## Build
 
@@ -121,8 +153,11 @@ The renderer is still usable directly, which is how the tests drive it:
 
 ```csharp
 using Harbor.Tui.Notifications;
+using Harbor.Tui.RendererTests.Support;   // in tests; RecordingNotificationRunner
 
-var renderer = new NotificationTuiRenderer(NullLogger<NotificationTuiRenderer>.Instance);
+var renderer = new NotificationTuiRenderer(
+    NullLogger<NotificationTuiRenderer>.Instance,
+    new RecordingNotificationRunner());   // or ProcessNotificationRunner
 await renderer.InitializeAsync(ct);
 await renderer.RenderAsync(evt, ct);   // fires an OS notification, writes nothing
 ```
@@ -130,8 +165,10 @@ await renderer.RenderAsync(evt, ct);   // fires an OS notification, writes nothi
 ## Memory footprint
 
 Lowest of the lot: ~2 MB RSS idle. The renderer itself is stateless beyond
-the `BaseTuiRenderer` base; each notification spawns a short-lived
-`ProcessStartInfo` shell-out (a few KB and one process for ~100 ms).
+the `BaseTuiRenderer` base; each notification still costs one short-lived
+process, but the spawn now belongs to `ProcessNotificationRunner` in
+`Harbor.Application`, which also bounds it at 3 s and kills it on timeout
+instead of leaving the handle to the finalizer.
 
 ## Limitations / TODO
 
