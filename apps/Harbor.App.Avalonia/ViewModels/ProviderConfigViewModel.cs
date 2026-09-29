@@ -21,8 +21,9 @@ public sealed partial class ProviderConfigViewModel : Harbor.Desktop.Abstraction
         ICommonConfigStore commonStore,
         IProviderRegistry providers,
         IToastService toasts,
-        ILogger<ProviderConfigViewModel> logger)
-        : base(id, displayName, apiKey, requiresApiKey, isAuthenticated, commonStore, providers, toasts, logger)
+        ILogger<ProviderConfigViewModel> logger,
+        IAuthResolver auth)
+        : base(id, displayName, apiKey, requiresApiKey, isAuthenticated, commonStore, providers, toasts, logger, auth)
     {
     }
 }

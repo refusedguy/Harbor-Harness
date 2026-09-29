@@ -15,8 +15,9 @@ public sealed partial class ProviderModelPickerViewModel : Harbor.Desktop.Abstra
         ISessionManager sessions,
         IToastService toasts,
         ILogger<ProviderModelPickerViewModel> logger,
-        IMessenger messenger)
-        : base(providers, configStore, sessions, toasts, logger, messenger)
+        IMessenger messenger,
+        IAuthResolver auth)
+        : base(providers, configStore, sessions, toasts, logger, messenger, auth)
     {
     }
 }

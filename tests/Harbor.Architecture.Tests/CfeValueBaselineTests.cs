@@ -88,20 +88,30 @@ public sealed class CfeValueBaselineTests
     ///     re-measured before the drop is believed.
     /// </summary>
     /// <remarks>
-    ///     This is the SECOND measurement, and the first one under-counted —
-    ///     see <see cref="MeasuredProductionSites" />. The lesson is recorded
-    ///     rather than quietly corrected: a partial build reports only the
-    ///     projects it finished, so "N violations" from a red build is a
-    ///     LOWER BOUND, never the count.
+    ///     <para>
+    ///         This is the SECOND measurement, and the first one under-counted —
+    ///         see <see cref="MeasuredProductionSites" />. The lesson is recorded
+    ///         rather than quietly corrected: a partial build reports only the
+    ///         projects it finished, so "N violations" from a red build is a
+    ///         LOWER BOUND, never the count.
+    ///     </para>
+    ///     <para>
+    ///         #671 lowered it by one: the picker's
+    ///         <c>BuildProviderGroupAsync</c> read <c>cfgResult.Value</c> to
+    ///         decide authorization from a config dictionary, and deleting that
+    ///         read (the resolver answers the question now) deleted a
+    ///         baselined production site with it. One site out, none in — the
+    ///         delta is derived from the diff, not re-measured; CI re-measures.
+    ///     </para>
     /// </remarks>
-    private const int MeasuredTotalSites = 211;
+    private const int MeasuredTotalSites = 210;
 
     /// <summary>
-    ///     Measured CFE0001 sites in shipped code: 2 real defects (1 fixed, 1
-    ///     baselined pending a product decision) plus 34 false positives now
-    ///     carrying a documented pragma.
+    ///     Measured CFE0001 sites in shipped code: 1 real defect baselined
+    ///     pending a product decision, plus 35 false positives now carrying a
+    ///     documented pragma.
     /// </summary>
-    private const int MeasuredProductionSites = 37;
+    private const int MeasuredProductionSites = 36;
 
     /// <summary>Measured CFE0001 sites under tests/, all suppressed centrally.</summary>
     private const int MeasuredTestSites = 174;
@@ -145,8 +155,6 @@ public sealed class CfeValueBaselineTests
             "ternary whose own condition is the IsSuccess guard"),
         new("src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs", "LoadAllAsync",
             "if (IsFailure) { return Result.Failure(...); } early return"),
-        new("src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs", "BuildProviderGroupAsync",
-            "cfgResult.IsSuccess && ... .Value ...; && short-circuit guard"),
         new("src/Harbor.Hosting/Modules/IpcModule.cs", "AddNetworkedListenerIfConfigured",
             "guarded by a fail-fast throw, not an early return"),
         new("src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs", "RegisterDesktopProviders",
@@ -397,8 +405,8 @@ public sealed class CfeValueBaselineTests
             .Because("an empty baseline would mean the backstop is not demonstrably load-bearing; "
                    + "it is only meaningful because these 17 sites are real and were measured");
 
-        await Assert.That(Baseline.Length).IsEqualTo(29)
-            .Because("the shipped-code baseline is pinned at 29 members / 36 sites (CFE0001 counts "
+        await Assert.That(Baseline.Length).IsEqualTo(28)
+            .Because("the shipped-code baseline is pinned at 28 members / 35 sites (CFE0001 counts "
                    + "sites, this table counts members). It may only shrink: a new row is a new "
                    + "false positive claim that must be justified in review, and removing a row is "
                    + "always safe. If this number moved, re-measure and update "
@@ -406,7 +414,10 @@ public sealed class CfeValueBaselineTests
                    + "at 29 while adding a site: PluginCompilationResult.cs was deleted (-1 member, "
                    + "-1 site), CachingCompiler.CompileAsync was added (+1 member, +1 site), and "
                    + "PluginHost.LoadAllAsync gained a second site for `compiled.Value` (+0 member, "
-                   + "+1 site).");
+                   + "+1 site). #671 dropped it to 28: deleting the picker's config-dictionary "
+                   + "auth read took its `cfgResult.Value` site and its pragma with it (-1 member, "
+                   + "-1 site), which is the whole point — the baseline only ever shrinks because "
+                   + "the guarded code stopped needing a guard.");
     }
 
     /// <summary>
@@ -424,8 +435,8 @@ public sealed class CfeValueBaselineTests
         // re-measures and updates one side, this fails and forces the other.
         string inventory = ReadRepoFile("docs/ROP-API-INVENTORY.md");
 
-        await Assert.That(MeasuredTotalSites).IsEqualTo(211)
-            .Because("211 is the CFE0001 count (37 shipped + 174 tests) on analyzer "
+        await Assert.That(MeasuredTotalSites).IsEqualTo(210)
+            .Because("210 is the CFE0001 count (36 shipped + 174 tests) on analyzer "
                    + "1.3.0. It is recorded so that a future package bump which drops the "
                    + "diagnostic to zero shows up as a number to re-verify, not as a silent "
                    + "green build. See docs/ROP-API-INVENTORY.md §5.");
