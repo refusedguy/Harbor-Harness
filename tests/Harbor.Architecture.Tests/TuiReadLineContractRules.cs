@@ -110,7 +110,15 @@ public sealed class TuiReadLineContractRules
     [Test]
     public async Task ReadLineAsync_Interface_ReturnsMaybeOfString()
     {
-        MethodInfo method = typeof(ITuiRenderer).GetMethod(nameof(ITuiRenderer.ReadLineAsync))!;
+        // Explicit binding flags and the exact Type[] overload, so the intent survives an
+        // added overload and the reflection call stays allocation-free (REFL008/REFL029).
+        MethodInfo method = typeof(ITuiRenderer).GetMethod(
+            nameof(ITuiRenderer.ReadLineAsync),
+            BindingFlags.Public | BindingFlags.Instance,
+            [typeof(string), typeof(CancellationToken)])!;
+
+        await Assert.That(method).IsNotNull()
+            .Because("ITuiRenderer must keep a public ReadLineAsync(string, CancellationToken) to check.");
 
         await Assert.That(method.ReturnType).IsEqualTo(typeof(Task<Maybe<string>>))
             .Because(
