@@ -34,8 +34,19 @@ public sealed record WordDiffSides(
 /// <summary>
 /// Whitespace-token intraline diff between a removed and an added diff row
 /// (git --word-diff equivalent). An LCS finds matched word pairs; each row is
-/// then projected independently around those matches. Pure functions; no
-/// allocation beyond result records.
+/// then projected independently around those matches.
+///
+/// <para>
+///     Every structure here is sized from the row being diffed, and the row is
+///     untrusted: it arrives from LLM tool output — an <c>edit</c> or a
+///     <c>patch</c> over a minified bundle is one single line, and nothing in
+///     the format caps its length. Both the token arrays and the LCS table are
+///     therefore bounded (<see cref="MaxPairableLineChars" /> and
+///     <see cref="MaxLcsMatrixCells" />); past a bound the pair degrades to the
+///     plain line-level picture instead of growing with the input.
+/// </para>
+/// Pure functions; allocation is limited to the token arrays, the LCS table and
+/// the result records, all of them capped as above.
 /// </summary>
 public static class WordDiff
 {
@@ -54,12 +65,46 @@ public static class WordDiff
 
     /// <summary>
     /// Hard cap (in characters) on a single row taking part in intraline
-    /// pairing. <see cref="Segment"/> allocates an O(tokens²) LCS matrix, so a
-    /// minified line (a bundled asset, a generated lockfile row) would make
-    /// parse time quadratic in megabytes. Rows above the cap fall back to
-    /// plain line-level rendering instead of stalling the first paint.
+    /// pairing, enforced by <see cref="Segment" /> itself — so every entry
+    /// point, the public <see cref="TryPair" /> included, tokenizes at most
+    /// this much text. 4 KiB of text is at most 2 048 whitespace tokens, i.e. a
+    /// 16 KiB token array, whatever the file on disk holds. A minified line (a
+    /// bundled asset, a generated lockfile row) falls back to plain line-level
+    /// rendering instead of stalling the first paint.
     /// </summary>
     public const int MaxPairableLineChars = 4096;
+
+    /// <summary>
+    /// Hard cap on the LCS table, in cells. <see cref="Matches" /> needs the
+    /// whole <c>(oldTokens+1) × (newTokens+1)</c> table to backtrack through,
+    /// and that table is the largest structure on the diff parse path — sized
+    /// entirely by untrusted LLM tool output. At the 10 000 tokens a side the
+    /// issue was filed about it is 400 MB; this makes the worst case a
+    /// constant.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    ///     128 × 128 = 16 384 cells = 64 KiB, chosen as the largest table that
+    ///     still lands below the 85 000-byte LOH threshold: the worst case is a
+    ///     gen0/gen1 array the GC reclaims without fragmenting, rather than one
+    ///     parked on the large object heap where it is never compacted. 128
+    ///     words a side is about four wrapped lines of a 120-column terminal,
+    ///     past which per-word highlighting on a single row buys nothing
+    ///     readable.
+    /// </para>
+    /// <para>
+    ///     The cap is on the <em>product</em>, not on either side, so a
+    ///     2 048-token row against a 5-token one (2 049 × 6 cells) still gets a
+    ///     real word diff. What it rejects is the square case.
+    /// </para>
+    /// <para>
+    ///     Over the cap the pair is reported as sharing no words, which
+    ///     <see cref="Project" /> already expresses as one Deleted run and one
+    ///     Added run — and <see cref="PairRun" /> declines to emit a pair at
+    ///     all, so the row keeps painting exactly as it did before pairing.
+    /// </para>
+    /// </remarks>
+    public const int MaxLcsMatrixCells = 128 * 128;
 
     /// <summary>
     /// Half-width, in rows, of the candidate window <see cref="PairRun"/> scans
@@ -71,37 +116,85 @@ public static class WordDiff
     private const int PairSearchRadius = 4;
 
     /// <summary>Either side may be empty (pure add or pure delete line).</summary>
-    public static WordDiffSides Segment(string oldLine, string newLine)
+    public static WordDiffSides Segment(string oldLine, string newLine) =>
+        SegmentCore(oldLine, newLine).Sides;
+
+    /// <summary>
+    ///     <see cref="Segment" /> plus the budget verdict, so
+    ///     <see cref="PairRun" /> can tell "these rows share no words" (a real
+    ///     diff, still worth a pair) from "the table did not fit" (not a diff
+    ///     at all, and emitting a pair would only redraw the row one character
+    ///     short of its right edge).
+    /// </summary>
+    private static (WordDiffSides Sides, bool WithinBudget) SegmentCore(string oldLine, string newLine)
     {
-        var oldTok = Tokenize(oldLine ?? string.Empty);
-        var newTok = Tokenize(newLine ?? string.Empty);
+        oldLine ??= string.Empty;
+        newLine ??= string.Empty;
+
+        // Cap BEFORE tokenizing: the token array is sized by the row, so a
+        // megabyte line would spend 8 MB on 500k references before the LCS
+        // guard ever got a chance to look at it.
+        if (oldLine.Length > MaxPairableLineChars || newLine.Length > MaxPairableLineChars)
+            return (Unpaired(oldLine, newLine), WithinBudget: true);
+
+        var oldTok = Tokenize(oldLine);
+        var newTok = Tokenize(newLine);
 
         // Matched pair indices collected from the classic backtrack.
-        var (matchOld, matchNew) = Matches(oldTok, newTok);
-        return new WordDiffSides(
-            Project(oldTok, matchOld, WordSegKind.Deleted),
-            Project(newTok, matchNew, WordSegKind.Added));
+        var (matchOld, matchNew, withinBudget) = Matches(oldTok, newTok);
+        return (
+            new WordDiffSides(
+                Project(oldTok, matchOld, WordSegKind.Deleted),
+                Project(newTok, matchNew, WordSegKind.Added)),
+            withinBudget);
+    }
+
+    /// <summary>
+    ///     The no-anchor picture: one run per side covering the whole row, so
+    ///     the paint is the row in its accent colour — what an unpaired
+    ///     line-level row already looks like. Empty sides stay empty, matching
+    ///     the projection of a side with no tokens.
+    /// </summary>
+    private static WordDiffSides Unpaired(string oldLine, string newLine)
+    {
+        IReadOnlyList<WordSeg> removed = oldLine.Length == 0
+            ? Array.Empty<WordSeg>()
+            : new[] { new WordSeg(WordSegKind.Deleted, oldLine) };
+        IReadOnlyList<WordSeg> inserted = newLine.Length == 0
+            ? Array.Empty<WordSeg>()
+            : new[] { new WordSeg(WordSegKind.Added, newLine) };
+        return new WordDiffSides(removed, inserted);
     }
 
     private static string[] Tokenize(string text) => text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
-    private static (int[] OldMatch, int[] NewMatch) Matches(string[] a, string[] b)
+    private static (int[] OldMatch, int[] NewMatch, bool WithinBudget) Matches(string[] a, string[] b)
     {
-        int[,] lcs = new int[a.Length + 1, b.Length + 1];
-        for (int i = 1; i <= a.Length; i++)
-        {
-            for (int j = 1; j <= b.Length; j++)
-            {
-                lcs[i, j] = StringComparer.Ordinal.Equals(a[i - 1], b[j - 1])
-                    ? lcs[i - 1, j - 1] + 1
-                    : Math.Max(lcs[i - 1, j], lcs[i, j - 1]);
-            }
-        }
-
         var oldMatch = new int[a.Length];
         Array.Fill(oldMatch, -1);
         var newMatch = new int[b.Length];
         Array.Fill(newMatch, -1);
+
+        int cols = b.Length + 1;
+        if ((long)(a.Length + 1) * cols > MaxLcsMatrixCells)
+            return (oldMatch, newMatch, WithinBudget: false);
+
+        // Flat 1-D table: one allocation, and the backtrack walks it with a
+        // stride instead of a two-dimensional indexer. Fill order and the
+        // tie-break below are the ones the matrix version used, so every pair
+        // inside the budget produces byte-identical segments.
+        var lcs = new int[(a.Length + 1) * cols];
+        for (int i = 1; i <= a.Length; i++)
+        {
+            int row = i * cols;
+            int prev = row - cols;
+            for (int j = 1; j <= b.Length; j++)
+            {
+                lcs[row + j] = StringComparer.Ordinal.Equals(a[i - 1], b[j - 1])
+                    ? lcs[prev + j - 1] + 1
+                    : Math.Max(lcs[prev + j], lcs[row + j - 1]);
+            }
+        }
 
         int x = a.Length;
         int y = b.Length;
@@ -116,7 +209,7 @@ public static class WordDiff
                 continue;
             }
 
-            if (lcs[x - 1, y] >= lcs[x, y - 1])
+            if (lcs[(x - 1) * cols + y] >= lcs[x * cols + (y - 1)])
             {
                 x--;
             }
@@ -126,7 +219,7 @@ public static class WordDiff
             }
         }
 
-        return (oldMatch, newMatch);
+        return (oldMatch, newMatch, WithinBudget: true);
     }
 
     /// <summary>Projects one token array around its matches into ordered runs.</summary>
@@ -347,10 +440,21 @@ public static class WordDiff
                 continue;
             }
 
+            var segmented = SegmentCore(lines[deleteRunStart + bestDelete].Text, lines[addRunStart + bestAdd].Text);
+            if (!segmented.WithinBudget)
+            {
+                // The LCS table did not fit, so there is no anchor to draw.
+                // A pair here would paint the row from an empty context run —
+                // and one character short of its right edge, since the
+                // segmented painter budgets a separator the line painter does
+                // not. Unpaired is the identical picture at no cost.
+                continue;
+            }
+
             pairs.Add(new WordPair(
                 deleteRunStart + bestDelete,
                 addRunStart + bestAdd,
-                Segment(lines[deleteRunStart + bestDelete].Text, lines[addRunStart + bestAdd].Text)));
+                segmented.Sides));
         }
 
         return pairs;
