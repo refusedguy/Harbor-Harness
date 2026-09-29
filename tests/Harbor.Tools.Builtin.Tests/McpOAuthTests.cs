@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using CSharpFunctionalExtensions;
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging;
 using TUnit.Assertions;
@@ -184,6 +185,21 @@ public class McpOAuthTests : IDisposable
     }
 
     [Test]
+    public async Task Handler_Logout_ThenLookup_IsAbsenceAgain()
+    {
+        var cache = new McpOAuthTokenCache(_root);
+        cache.Save("srv", new McpOAuthTokens("at", null, DateTimeOffset.UtcNow.AddHours(1)));
+        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig(), cache);
+
+        handler.Logout();
+
+        Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.HasNoValue).IsTrue();
+    }
+
+    [Test]
     public async Task Handler_CacheHit_ReturnsToken_WithoutHttp()
     {
         var cache = new McpOAuthTokenCache(_root);
@@ -284,6 +300,46 @@ public class McpOAuthTests : IDisposable
     ///     lookup reports "no token" as <c>Maybe.None</c> and the caller decides
     ///     whether that is fatal for the server it is talking to (#566).
     /// </summary>
+    /// <summary>
+    ///     The three outcomes stay distinguishable at the type level, which is the
+    ///     whole point of #566: a rejected grant is the only one that reaches the
+    ///     failure channel, so a caller branching on <c>IsFailure</c> is not
+    ///     guessing from the text.
+    /// </summary>
+    [Test]
+    public async Task Handler_ThreeOutcomes_AreDistinguishableWithoutParsingText()
+    {
+        // 1. absence
+        var empty = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig(), new McpOAuthTokenCache(_root));
+        Result<Maybe<string>> absent = await empty.TryGetAccessTokenResultAsync();
+
+        // 2. a token
+        var cache = new McpOAuthTokenCache(_root);
+        cache.Save("srv", new McpOAuthTokens("at", null, DateTimeOffset.UtcNow.AddHours(1)));
+        var loggedIn = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig(), cache);
+        Result<Maybe<string>> present = await loggedIn.TryGetAccessTokenResultAsync();
+
+        // 3. a rejected grant
+        var staleCache = new McpOAuthTokenCache(_root);
+        staleCache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
+        using var http = StubClient(_ => Json(new { error = "invalid_grant" }, HttpStatusCode.BadRequest));
+        var stale = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig { TokenEndpoint = "https://x/token", ClientId = "cid" },
+            staleCache, () => http);
+        Result<Maybe<string>> rejected = await stale.TryGetAccessTokenResultAsync();
+
+        await Assert.That(absent.IsSuccess).IsTrue();
+        await Assert.That(absent.Value.HasNoValue).IsTrue();
+
+        await Assert.That(present.IsSuccess).IsTrue();
+        await Assert.That(present.Value.HasValue).IsTrue();
+        await Assert.That(present.Value.GetValueOrDefault()).IsEqualTo("at");
+
+        await Assert.That(rejected.IsFailure).IsTrue();
+    }
+
     [Test]
     public async Task Handler_LoginHint_NamesTheServerAndTheCommand()
     {
@@ -339,23 +395,7 @@ public class McpOAuthTests : IDisposable
         await Assert.That(corrupt.Error).Contains("CacheCorrupt");
     }
 
-    /// <summary>
-    ///     #566 regression pin: the failure channel no longer carries "you have
-    ///     not logged in". Absence is <c>Maybe.None</c>, so a caller branching on
-    ///     <c>IsFailure</c> can no longer mistake a routine un-logged-in state for
-    ///     a broken grant.
-    /// </summary>
-    [Test]
-    public async Task Handler_NoToken_FailureChannelCarriesNoLoginMarker()
-    {
-        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
-            new McpOAuthConfig(), new McpOAuthTokenCache(_root));
 
-        var result = await handler.TryGetAccessTokenResultAsync();
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.HasNoValue).IsTrue();
-    }
 
     [Test]
     public async Task OAuthConfig_ParseResult_MissingAuth_ReturnsNullSuccess()

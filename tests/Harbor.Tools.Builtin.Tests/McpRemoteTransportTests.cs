@@ -297,6 +297,67 @@ public class McpRemoteTransportTests
         }
     }
 
+    // ---------- #566: absence vs. a rejected grant, end to end ----------
+
+    /// <summary>
+    ///     The registry wires the handler directly, so an un-logged-in server
+    ///     reaches the caller as a token <i>failure</i> carrying the actionable
+    ///     hint rather than as a bare 401 from a request that was never going to
+    ///     succeed. Before #566 the only copy of that hint lived inside a Failure
+    ///     string produced by a code path with no production consumer, so the
+    ///     user saw the endpoint's rejection and nothing else.
+    /// </summary>
+    [Test]
+    public async Task Registry_RemoteWithAuthAndNoToken_ReportsTheLoginHint()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
+
+        await using var registry = new McpRegistry(null);
+        // The auth block is what makes "no token" fatal rather than "go anonymous".
+        McpOAuthConfig auth = new() { ClientId = "cid", TokenEndpoint = $"{server.Url}/token" };
+        var registered = registry.Register("cloud", server.Url.ToString(), McpTransportNames.Http, null, auth);
+        await Assert.That(registered.IsSuccess).IsTrue();
+
+        using var args = JsonDocument.Parse("{}");
+        Result<string> result = await registry.InvokeAsync("cloud", "tools/list", args.RootElement);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("harbor mcp login cloud");
+    }
+
+    /// <summary>
+    ///     A server with no <c>auth</c> block and no env token must still go out
+    ///     unauthenticated: <c>None</c> means "no token", not "refused". The env
+    ///     var is read for real here, so the assertion is on the request that was
+    ///     actually sent rather than on an internal branch.
+    /// </summary>
+    [Test]
+    public async Task Registry_RemoteWithoutAuthAndNoToken_StillCallsTheEndpoint()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
+
+        string? previous = Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN");
+        try
+        {
+            Environment.SetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN", null);
+
+            await using var registry = new McpRegistry(null);
+            await Assert.That(registry.Register("anon", server.Url.ToString(), McpTransportNames.Http).IsSuccess).IsTrue();
+
+            using var args = JsonDocument.Parse("{}");
+            Result<string> result = await registry.InvokeAsync("anon", "tools/list", args.RootElement);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(server.HandledRequests.Count).IsGreaterThanOrEqualTo(1);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN", previous);
+        }
+    }
+
     // ---------- #587: the diagnostic must reach the caller ----------
 
     /// <summary>
