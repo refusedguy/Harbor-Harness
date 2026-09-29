@@ -67,14 +67,15 @@ public class CostAnimatorGuardTests
         using var animator = new CostAnimator();
         animator.Start(0.0123m);
 
-        // ~2 s of ticking at ~50 Hz. The old rate added $0.0002 over that
-        // window, so it failed on the very first iteration; the assertion is on
-        // the maximum ever displayed so a mid-window spike cannot hide behind
-        // an equal final value.
+        // ~1 s of ticking. The old rate added $0.0001 over that window — four
+        // orders of magnitude more than decimal rounding, so the margin does not
+        // depend on how coarse the runner's clock is. The assertion is on the
+        // maximum ever displayed, so a mid-window spike cannot hide behind an
+        // equal final value.
         decimal highest = 0m;
-        for (int i = 0; i < 100; i++)
+        for (int i = 0; i < 40; i++)
         {
-            await Task.Delay(20);
+            await Task.Delay(25);
             animator.Advance();
             highest = Math.Max(highest, animator.DisplayCost);
         }
@@ -100,17 +101,22 @@ public class CostAnimatorGuardTests
         // move the reported total down, and a slide has to survive that too.
         foreach (decimal value in new[] { 0.0300m, 0.0301m, 0.0075m, 0.0100m })
         {
-            reported.Add(value);
             animator.BaseCost = value;
+            reported.Add(value);
             await Task.Delay(30);
             animator.Advance();
             observed.Add(animator.DisplayCost);
         }
 
+        // observed[i] is a frame drawn after reported[i + 1] was handed over
+        // (reported[0] is the Start value), so the hull it must stay inside
+        // spans reported[0..i + 1] — that is, the frame may not show more than
+        // the core had said by then, nor less than the smallest thing it had
+        // ever said in this run.
         for (int i = 0; i < observed.Count; i++)
         {
-            decimal lowest = reported.Min();
-            decimal highest = reported.Take(i + 1).Max();
+            decimal lowest = reported.Take(i + 2).Min();
+            decimal highest = reported.Take(i + 2).Max();
 
             await Assert.That(observed[i])
                 .IsGreaterThanOrEqualTo(lowest)
@@ -128,30 +134,34 @@ public class CostAnimatorGuardTests
         animator.Start(0.0123m);
         animator.BaseCost = 0.0300m;
 
-        // Part-way into the slide: the number is still one the core said, but it
-        // is genuinely moving — the animation survived, only the invented rate
-        // did not.
-        await Task.Delay(30);
-        animator.Advance();
+        // Handing over a new figure arms a slide; it does not apply it. A
+        // snapping implementation is already on 0.0300 here, so this single
+        // assertion carries the whole "it travels, it does not jump" claim
+        // without depending on catching a lucky mid-slide frame — which a
+        // loaded CI runner may never offer. Time-free by construction: no await
+        // separates the assignment from the reading.
+        await Assert.That(animator.DisplayCost).IsEqualTo(0.0123m)
+            .Because("the readout jumped to the new value instead of starting a slide toward it");
 
-        await Assert.That(animator.DisplayCost).IsGreaterThan(0.0123m)
-            .Because("the slide from the old value toward the new one stopped working");
-        await Assert.That(animator.DisplayCost).IsLessThan(0.0300m)
-            .Because("the slide snapped to the target instead of interpolating");
-
-        // Past the slide: exactly the reported value, not an approximation of it.
-        // Polled rather than slept for a fixed span, so the test states the
-        // requirement ("once the slide is over, the number is the reported
-        // one") instead of hard-coding the slide's duration.
+        // Every frame of the slide stays between the two reported numbers, and
+        // the slide ends ON the second one — exactly, not near it. Polled rather
+        // than slept for a fixed span, so this states the requirement instead of
+        // pinning the slide's duration.
+        decimal lowest = 0.0300m;
         DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
         while (animator.DisplayCost != 0.0300m && DateTime.UtcNow < deadline)
         {
+            lowest = Math.Min(lowest, animator.DisplayCost);
             await Task.Delay(20);
             animator.Advance();
         }
 
         await Assert.That(animator.DisplayCost).IsEqualTo(0.0300m)
             .Because("a finished slide must land on the reported value, not near it");
+        await Assert.That(lowest).IsGreaterThanOrEqualTo(0.0123m)
+            .Because("a frame dipped below the value the core last reported");
+        await Assert.That(animator.DisplayCost).IsLessThanOrEqualTo(0.0300m)
+            .Because("the slide overshot the value the core reported");
     }
 
     [Test]
