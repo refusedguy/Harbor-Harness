@@ -1,0 +1,29 @@
+# One person authors this repository. Every identity the tooling has ever
+# committed under is mapped here onto the account's canonical noreply form, so
+# `git log`, `git shortlog`, `git blame` and GitHub's contributor list show a
+# single author.
+#
+# This file rewrites nothing. It changes how history is *displayed*, not what is
+# stored, so it costs no force-push and invalidates no open branch. Fixing the
+# stored author field requires rewriting commits, which is tracked separately.
+#
+# Rule for tooling in this repo: do NOT pass -c user.name / user.email, do NOT
+# set GIT_AUTHOR_NAME / GIT_COMMITTER_NAME, and do NOT add Co-Authored-By
+# trailers. The repository's configured identity is the only author there is.
+
+# The two legitimate spellings of the account, and the noreply form both map to.
+refusedguy <40535288+refusedguy@users.noreply.github.com>
+refusedguy <40535288+refusedguy@users.noreply.github.com> <refusedguy@gmail.com>
+
+# Identities introduced by agents and bot commits.
+refusedguy <40535288+refusedguy@users.noreply.github.com> <agent@harbor.local>
+refusedguy <40535288+refusedguy@users.noreply.github.com> <harbor-agent@local>
+refusedguy <40535288+refusedguy@users.noreply.github.com> <harbor-agent@users.noreply.github.com>
+refusedguy <40535288+refusedguy@users.noreply.github.com> <harbor@users.noreply.github.com>
+refusedguy <40535288+refusedguy@users.noreply.github.com> <harbor-goldens@users.noreply.github.com>
+refusedguy <40535288+refusedguy@users.noreply.github.com> <opencode@local>
+refusedguy <40535288+refusedguy@users.noreply.github.com> <x@x>
+refusedguy <40535288+refusedguy@users.noreply.github.com> <noreply@anthropic.com>
+
+# dependabot[bot] is left alone on purpose: it is a real bot that opens its own
+# PRs, not a stray identity.
