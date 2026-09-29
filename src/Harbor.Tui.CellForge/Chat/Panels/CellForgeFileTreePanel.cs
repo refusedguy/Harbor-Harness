@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.IO;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
@@ -12,25 +14,55 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     the <c>read</c> tool).
 /// </summary>
 /// <remarks>
-///     Cursor + current directory live in <see cref="UiState"/> keyed by panel
-///     id (<c>PanelCursors</c> / <c>PanelDirs</c>, FP-005/TEA, #360):
-///     <c>Build</c> resolves them from <c>ctx.State</c> (missing key = cursor 0 /
-///     process working directory) and <c>OnKey</c> folds moves through
-///     <c>ctx.Deps.Store</c> via <c>AppMsg.SetPanelCursor</c> /
-///     <c>AppMsg.SetPanelDirectory</c> (descend/parent resets the cursor to 0
-///     atomically in the reducer). The filesystem listing itself stays a
-///     provider-local cache — the reducer must never do I/O — invalidated
-///     whenever the resolved directory changes. The small lock (plus the
-///     fallback fields for the null-store degraded path) keeps <c>Build</c>
-///     (render thread) and <c>OnKey</c> (input thread) thread-safe.
+///     <para>
+///         <b>This type performs no I/O, and that is the whole point of #667.</b>
+///         It used to call <c>Directory.EnumerateDirectories</c> /
+///         <c>EnumerateFiles</c> and read <c>FileAttributes</c> from
+///         <see cref="Build" /> — inside a painted frame. The reason it had to
+///         was structural, not accidental: the listing lived in a private field,
+///         and a render-thread cache can only be filled by the render thread. All
+///         three layers had to move together before the call could leave:
+///     </para>
+///     <list type="number">
+///         <item><description>
+///             the entries now live in <c>UiState.Ui.FileTrees</c>
+///             (<see cref="FileTreeSnapshot" />), written by the reducer from a
+///             message and read here;
+///         </description></item>
+///         <item><description>
+///             the walk lives behind the Domain <c>IDirectoryLister</c> port, whose
+///             only job is to be slow somewhere other than here;
+///         </description></item>
+///         <item><description>
+///             <c>FileTreeLoader</c> owns the <c>CancellationTokenSource</c> that
+///             can actually stop one, so a superseded walk cannot repaint a
+///             directory the user already left.
+///         </description></item>
+///     </list>
+///     <para>
+///         <b>What Build still does: it asks.</b> One call to
+///         <c>ctx.Deps.FileTrees.Request</c>, which starts a cancellable walk off
+///         the render thread and returns immediately, and is a no-op once the
+///         store has settled this directory. That is not the old defect wearing a
+///         new hat — the walk, the stat calls and the sorting are all off-thread
+///         now — but it IS a side effect in a function whose whole contract is
+///         "read state, return rows", and it is worth being explicit about why it
+///         is here rather than pretending it is not: see <c>FileTreeLoader</c>'s
+///         remarks on why the view asks instead of subscribing.
+///     </para>
+///     <para>
+///         <b>Cursor and directory remain in the store</b> (<c>PanelCursors</c> /
+///         <c>PanelDirs</c>, FP-005/TEA, #360); <see cref="OnKey" /> folds moves
+///         through <c>ctx.Deps.Store</c> and never mutates anything itself. The
+///         fallback fields cover only the null-store degraded path (tests), which
+///         is why they are still here and why the lock still exists.
+///     </para>
 /// </remarks>
 public sealed class CellForgeFileTreePanel : CellForgePanelBase
 {
     private readonly object _gate = new();
     private int _fallbackCursor;
     private string _fallbackDir = string.Empty;
-    private string _entriesDir = string.Empty;
-    private List<Entry> _entries = new();
 
     /// <inheritdoc />
     public override string Id => "file-tree";
@@ -48,21 +80,23 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
     public override object? Build(PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        string dir = ResolveDir(ctx);
-        EnsureEntries(dir);
-        List<Entry> snapshot;
-        int cursor;
-        lock (_gate)
-        {
-            snapshot = new List<Entry>(_entries);
-            cursor = ResolveCursor(ctx);
-        }
+        string dir = ctx.State.Ui.ResolvePanelDirectory(Id);
 
-        cursor = snapshot.Count == 0 ? 0 : Math.Clamp(cursor, 0, snapshot.Count - 1);
+        // The demand signal. Non-blocking, idempotent, and the only call in this
+        // method that is not a pure read of ctx.State.
+        ctx.Deps.FileTrees?.Request(Id, dir, ctx.Deps.Store);
+
+        // Covers(dir) is what makes a late result harmless: a snapshot for some
+        // other directory answers as "nothing loaded" instead of painting.
+        FileTreeSnapshot snapshot = ctx.State.Ui.FileTreeFor(Id, dir);
+        ImmutableArray<FileTreeEntry> entries = snapshot.Entries;
+        int cursor = ResolveCursor(ctx, entries.Length);
+        cursor = entries.Length == 0 ? 0 : Math.Clamp(cursor, 0, entries.Length - 1);
 
         var rows = PanelRows.FileTreeRows(
             dir,
-            snapshot.Select(e => new PanelRows.FileTreeRow(e.Name, e.IsDirectory, e.IsHidden)).ToList(),
+            snapshot,
+            ToRows(entries),
             cursor,
             ctx.Width,
             ctx.Height);
@@ -75,12 +109,13 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
         if (key.Code == UiKeyCode.Enter
             || (key.Code == UiKeyCode.Char && (key.Character == '\r' || key.Character == '\n')))
         {
-            Entry? current;
-            lock (_gate)
-            {
-                int cursor = ResolveCursor(ctx);
-                current = cursor >= 0 && cursor < _entries.Count ? _entries[cursor] : null;
-            }
+            string dir = ctx.State.Ui.ResolvePanelDirectory(Id);
+            FileTreeSnapshot snapshot = ctx.State.Ui.FileTreeFor(Id, dir);
+            ImmutableArray<FileTreeEntry> entries = snapshot.Entries;
+            int cursor = ResolveCursor(ctx, entries.Length);
+
+            FileTreeEntry? current =
+                cursor >= 0 && cursor < entries.Length ? entries[cursor] : null;
 
             if (current is not null)
             {
@@ -107,12 +142,14 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
             case 'j':
             case 'J':
             {
+                string dir = ctx.State.Ui.ResolvePanelDirectory(Id);
+                int count = ctx.State.Ui.FileTreeFor(Id, dir).Entries.Length;
                 int next;
                 lock (_gate)
                 {
-                    int current = ResolveCursor(ctx);
-                    next = _entries.Count > 0
-                        ? Math.Min(_entries.Count - 1, current + 1)
+                    int current = ResolveCursor(ctx, count);
+                    next = count > 0
+                        ? Math.Min(count - 1, current + 1)
                         : current;
                     _fallbackCursor = next;
                 }
@@ -128,11 +165,13 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
             case 'k':
             case 'K':
             {
+                string dir = ctx.State.Ui.ResolvePanelDirectory(Id);
+                int count = ctx.State.Ui.FileTreeFor(Id, dir).Entries.Length;
                 int next;
                 lock (_gate)
                 {
-                    int current = ResolveCursor(ctx);
-                    next = _entries.Count > 0
+                    int current = ResolveCursor(ctx, count);
+                    next = count > 0
                         ? Math.Max(0, current - 1)
                         : current;
                     _fallbackCursor = next;
@@ -149,10 +188,17 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
             case 'h':
             case 'H':
             {
-                string currentDir = ResolveDir(ctx);
-                if (Directory.GetParent(currentDir) is { } parent)
+                // Path.GetDirectoryName, not Directory.GetParent: the latter
+                // allocates a DirectoryInfo, and every System.IO.Directory* call
+                // in this file is exactly what
+                // PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES
+                // forbids. This is pure string handling and the rule table says
+                // so explicitly. Null at the filesystem root is the answer, not
+                // an error.
+                string currentDir = ctx.State.Ui.ResolvePanelDirectory(Id);
+                if (Path.GetDirectoryName(currentDir) is { Length: > 0 } parent)
                 {
-                    MoveToDirectory(ctx, parent.FullName);
+                    MoveToDirectory(ctx, parent);
                 }
 
                 return true;
@@ -160,10 +206,18 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
 
             case 'r':
             case 'R':
+                // Invalidate rather than "clear my cache": the listing is state
+                // now, so a refresh is an ordinary observable reload — the panel
+                // really does go back to "(loading…)" instead of pretending the
+                // old rows are current.
+                if (ctx.Deps.Store is { } store)
+                {
+                    _ = store.Dispatch(new AppMsg.InvalidateFileTree(Id));
+                }
+
                 lock (_gate)
                 {
-                    _entries = new List<Entry>();
-                    _entriesDir = string.Empty;
+                    _fallbackCursor = 0;
                 }
 
                 return true;
@@ -178,8 +232,6 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
         {
             _fallbackDir = dir;
             _fallbackCursor = 0;
-            _entries = new List<Entry>();
-            _entriesDir = string.Empty;
         }
 
         if (ctx.Deps.Store is { } store)
@@ -188,7 +240,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
         }
     }
 
-    private int ResolveCursor(PanelContext ctx)
+    private int ResolveCursor(PanelContext ctx, int entryCount)
     {
         if (ctx.State.Ui.PanelCursors.TryGetValue(Id, out int stored))
         {
@@ -197,83 +249,24 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
 
         lock (_gate)
         {
-            return _fallbackCursor;
+            return Math.Clamp(_fallbackCursor, 0, Math.Max(0, entryCount - 1));
         }
     }
 
-    private string ResolveDir(PanelContext ctx)
+    /// <summary>
+    ///     Project the state entries into the projection's row vocabulary. The
+    ///     allocation is per frame and per entry, which is why the file tree caps
+    ///     what it loads: a bounded list of small strings is a fine thing to build
+    ///     every frame, an unbounded directory walk is not.
+    /// </summary>
+    private static List<PanelRows.FileTreeRow> ToRows(ImmutableArray<FileTreeEntry> entries)
     {
-        if (ctx.State.Ui.PanelDirs.TryGetValue(Id, out string? stored))
+        var rows = new List<PanelRows.FileTreeRow>(entries.Length);
+        for (int i = 0; i < entries.Length; i++)
         {
-            return string.IsNullOrEmpty(stored) ? Environment.CurrentDirectory : stored;
+            rows.Add(new PanelRows.FileTreeRow(entries[i].Name, entries[i].IsDirectory, entries[i].IsHidden));
         }
 
-        lock (_gate)
-        {
-            return string.IsNullOrEmpty(_fallbackDir) ? Environment.CurrentDirectory : _fallbackDir;
-        }
+        return rows;
     }
-
-    private void EnsureEntries(string dir)
-    {
-        lock (_gate)
-        {
-            if (_entries.Count > 0 && _entriesDir == dir)
-            {
-                return;
-            }
-        }
-
-        var fresh = new List<Entry>(32);
-        try
-        {
-            foreach (string d in Directory.EnumerateDirectories(dir))
-            {
-                var info = new DirectoryInfo(d);
-                fresh.Add(new Entry(
-                    info.Name + Path.DirectorySeparatorChar,
-                    info.FullName,
-                    true,
-                    (info.Attributes & FileAttributes.Hidden) != 0));
-            }
-
-            foreach (string f in Directory.EnumerateFiles(dir))
-            {
-                var info = new FileInfo(f);
-                fresh.Add(new Entry(
-                    info.Name,
-                    info.FullName,
-                    false,
-                    (info.Attributes & FileAttributes.Hidden) != 0));
-            }
-        }
-        catch (IOException)
-        {
-            // Directory not readable — publish an empty listing below.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // No permissions — publish an empty listing below.
-        }
-
-        fresh.Sort(static (a, b) =>
-        {
-            int cmp = b.IsDirectory.CompareTo(a.IsDirectory); // dirs first
-            return cmp != 0 ? cmp : StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name);
-        });
-        lock (_gate)
-        {
-            if (_entries.Count == 0 || _entriesDir != dir)
-            {
-                _entries = fresh;
-                _entriesDir = dir;
-                if (_fallbackCursor >= _entries.Count)
-                {
-                    _fallbackCursor = 0;
-                }
-            }
-        }
-    }
-
-    private sealed record Entry(string Name, string FullPath, bool IsDirectory, bool IsHidden);
 }

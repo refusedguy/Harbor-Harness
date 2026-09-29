@@ -250,11 +250,88 @@ public static class PanelRows
     /// <summary>One file-tree entry for row building (navigation state stays in the panel).</summary>
     public sealed record FileTreeRow(string Name, bool IsDirectory, bool IsHidden);
 
-    /// <summary>File-tree rows: cursor window with over/underflow markers.</summary>
-    public static List<string> FileTreeRows(string displayDir, IReadOnlyList<FileTreeRow> entries, int cursor, int width, int height)
+    /// <summary>
+    ///     File-tree rows for a loaded listing: cursor window with over/underflow
+    ///     markers.
+    /// </summary>
+    /// <param name="displayDir">The directory whose contents are shown.</param>
+    /// <param name="entries">The entries, in display order.</param>
+    /// <param name="cursor">Zero-based cursor, clamped by the caller.</param>
+    /// <param name="width">Available columns.</param>
+    /// <param name="height">Available rows.</param>
+    public static List<string> FileTreeRows(
+        string displayDir,
+        IReadOnlyList<FileTreeRow> entries,
+        int cursor,
+        int width,
+        int height)
     {
         ArgumentNullException.ThrowIfNull(entries);
-        var rows = new List<string>(entries.Count + 6);
+        return FileTreeBody(entries, cursor, width, height, displayDir, FileTreeFooter.Empty);
+    }
+
+    /// <summary>
+    ///     File-tree rows for a snapshot that is not necessarily loaded (#667).
+    ///     Renders the same loaded view as the entry-point overload, and adds the
+    ///     two states a lazy listing makes possible: a load in flight, and a load
+    ///     that failed.
+    /// </summary>
+    /// <remarks>
+    ///     The status is passed rather than read from a provider field on purpose:
+    ///     the whole point of #667 is that the view can no longer tell "empty
+    ///     because the directory is empty" from "empty because nothing has loaded
+    ///     yet" by looking at its own state, and the one thing that CAN tell them
+    ///     apart is the status that arrived with the entries.
+    /// </remarks>
+    /// <param name="displayDir">The directory whose contents are shown.</param>
+    /// <param name="snapshot">The listing and its load status.</param>
+    /// <param name="rows">The projected entry rows, in display order.</param>
+    /// <param name="cursor">Zero-based cursor, clamped by the caller.</param>
+    /// <param name="width">Available columns.</param>
+    /// <param name="height">Available rows.</param>
+    public static List<string> FileTreeRows(
+        string displayDir,
+        FileTreeSnapshot snapshot,
+        IReadOnlyList<FileTreeRow> rows,
+        int cursor,
+        int width,
+        int height)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(rows);
+
+        if (snapshot.Status == AsyncStatus.Error)
+        {
+            return FileTreePlaceholder(
+                displayDir,
+                width,
+                "(cannot read)",
+                snapshot.Error,
+                isError: true);
+        }
+
+        if (rows.Count == 0 && snapshot.IsPending)
+        {
+            return FileTreePlaceholder(displayDir, width, "(loading…)", reason: null, isError: false);
+        }
+
+        var footer = snapshot.Truncated
+            ? FileTreeFooter.Truncated(snapshot.TotalCount)
+            : FileTreeFooter.Empty;
+
+        return FileTreeBody(rows, cursor, width, height, displayDir, footer);
+    }
+
+    /// <summary>Shared body: header, path, separator, the cursor window, the footer.</summary>
+    private static List<string> FileTreeBody(
+        IReadOnlyList<FileTreeRow> entries,
+        int cursor,
+        int width,
+        int height,
+        string displayDir,
+        string footerNote)
+    {
+        var rows = new List<string>(entries.Count + 7);
         rows.Add("File Tree");
         rows.Add(PanelText.ShortenTail(displayDir, Math.Max(0, width - 2)));
         rows.Add(PanelText.Separator);
@@ -288,7 +365,62 @@ public static class PanelRows
 
         rows.Add(PanelText.Separator);
         rows.Add("j/k move · Enter open · h parent · r refresh");
+        if (!string.IsNullOrEmpty(footerNote))
+        {
+            rows.Add(footerNote);
+        }
+
         return rows;
+    }
+
+    /// <summary>
+    ///     The two states that are not a listing: a walk in flight, and a walk
+    ///     that failed. Both keep the header and the path, so the panel does not
+    ///     blink out of existence while the filesystem is being asked.
+    /// </summary>
+    private static List<string> FileTreePlaceholder(
+        string displayDir,
+        int width,
+        string label,
+        string? reason,
+        bool isError)
+    {
+        var rows = new List<string>(5)
+        {
+            "File Tree",
+            PanelText.ShortenTail(displayDir, Math.Max(0, width - 2)),
+            PanelText.Separator,
+            label,
+        };
+
+        if (!string.IsNullOrEmpty(reason))
+        {
+            // The reason is whatever the loader phrased — a filesystem message,
+            // or an exception's. It is user-visible text of unknown length, so it
+            // is clipped like any other row rather than trusted to fit.
+            rows.Add(PanelText.Truncate(reason, Math.Max(1, width - 2)));
+        }
+
+        if (isError)
+        {
+            rows.Add("r retry");
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    ///     The one line that can follow the key hints. A truncated listing says
+    ///     so, because a silently shortened tree is indistinguishable from a
+    ///     complete one and that is a lie the user cannot detect.
+    /// </summary>
+    private static class FileTreeFooter
+    {
+        public static string Empty { get; } = string.Empty;
+
+        public static string Truncated(int totalCount) => totalCount > 0
+            ? $"… showing the first entries of at least {totalCount} · r reloads nothing more"
+            : "… listing truncated · this directory has more entries than the cap";
     }
 
     /// <summary>Skill-freshness rows: header, one pill row per skill, stale summary.</summary>
