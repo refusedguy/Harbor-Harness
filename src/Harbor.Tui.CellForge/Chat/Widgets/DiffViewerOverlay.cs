@@ -357,7 +357,7 @@ public sealed class DiffViewerOverlay
             return;
         }
 
-        DrawBox(buffer, box);
+        PanelChrome.PaintBorderBox(buffer, box);
 
         int innerW = box.Width - 2;
         int bodyH = Math.Max(0, box.Height - ChromeRows);
@@ -659,33 +659,5 @@ public sealed class DiffViewerOverlay
         }
 
         return text.PadRight(width);
-    }
-
-    private static void DrawBox(ScreenBuffer buffer, Rect rect)
-    {
-        var fillStyle = new CellStyle(ChatPalette.Panel);
-        var borderStyle = new CellStyle(ChatPalette.Border);
-        buffer.Fill(rect, Cell.From(new Rune(' '), fillStyle));
-        if (rect.Width < 2 || rect.Height < 2)
-        {
-            return;
-        }
-
-        int x1 = rect.X, y1 = rect.Y, x2 = rect.Right - 1, y2 = rect.Bottom - 1;
-        buffer.At(x1, y1) = Cell.From(new Rune('╭'), borderStyle);
-        buffer.At(x2, y1) = Cell.From(new Rune('╮'), borderStyle);
-        buffer.At(x1, y2) = Cell.From(new Rune('╰'), borderStyle);
-        buffer.At(x2, y2) = Cell.From(new Rune('╯'), borderStyle);
-        for (int x = x1 + 1; x < x2; x++)
-        {
-            buffer.At(x, y1) = Cell.From(new Rune('─'), borderStyle);
-            buffer.At(x, y2) = Cell.From(new Rune('─'), borderStyle);
-        }
-
-        for (int y = y1 + 1; y < y2; y++)
-        {
-            buffer.At(x1, y) = Cell.From(new Rune('│'), borderStyle);
-            buffer.At(x2, y) = Cell.From(new Rune('│'), borderStyle);
-        }
     }
 }

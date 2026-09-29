@@ -1,4 +1,3 @@
-using System.Text;
 using Harbor.Ui.Framework.Projection;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -165,7 +164,7 @@ public sealed class SetupChecklistOverlay
             return;
         }
 
-        DrawBox(buffer, box);
+        PanelChrome.PaintBorderBox(buffer, box);
 
         SetupChecklistModel model = Model;
         int innerW = box.Width - Chrome;
@@ -202,35 +201,6 @@ public sealed class SetupChecklistOverlay
 
     /// <summary>Total content rows: title, gauge, one blank, tasks, footer.</summary>
     private static int RowCount(SetupChecklistModel model) => 3 + model.Tasks.Count + 1;
-
-    /// <summary>Rounded modal box in the shared dialog language (panel fill, border).</summary>
-    private static void DrawBox(ScreenBuffer buffer, Rect rect)
-    {
-        var fillStyle = new CellStyle(ChatPalette.Panel);
-        var borderStyle = new CellStyle(ChatPalette.Border);
-        buffer.Fill(rect, Cell.From(new Rune(' '), fillStyle));
-        if (rect.Width < 2 || rect.Height < 2)
-        {
-            return;
-        }
-
-        int x1 = rect.X, y1 = rect.Y, x2 = rect.Right - 1, y2 = rect.Bottom - 1;
-        buffer.At(x1, y1) = Cell.From(new Rune('╭'), borderStyle);
-        buffer.At(x2, y1) = Cell.From(new Rune('╮'), borderStyle);
-        buffer.At(x1, y2) = Cell.From(new Rune('╰'), borderStyle);
-        buffer.At(x2, y2) = Cell.From(new Rune('╯'), borderStyle);
-        for (int x = x1 + 1; x < x2; x++)
-        {
-            buffer.At(x, y1) = Cell.From(new Rune('─'), borderStyle);
-            buffer.At(x, y2) = Cell.From(new Rune('─'), borderStyle);
-        }
-
-        for (int y = y1 + 1; y < y2; y++)
-        {
-            buffer.At(x1, y) = Cell.From(new Rune('│'), borderStyle);
-            buffer.At(x2, y) = Cell.From(new Rune('│'), borderStyle);
-        }
-    }
 
     private static string Truncate(string text, int width) =>
         width <= 0 ? string.Empty : text.Length <= width ? text : text[..width];
