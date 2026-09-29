@@ -3,11 +3,19 @@ using CommunityToolkit.Mvvm.Input;
 using System.Globalization;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-using Harbor.Desktop.Abstractions.Models;
 using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 using Microsoft.Extensions.Logging;
+
+// Aliased, not namespace-imported: this file already has
+// `Harbor.Ui.Framework.Services` in scope, and both that namespace and
+// `Harbor.Desktop.Abstractions.Models` declare a `ToastKind`, so importing
+// the latter would make every `_toasts.Show(..., ToastKind.X)` below
+// ambiguous (CS0104). Aliases bind the two dot types by name and leave
+// `ToastKind` resolving as it did before #663.
+using SessionDotState = Harbor.Desktop.Abstractions.Models.SessionDotState;
+using SessionDotStates = Harbor.Desktop.Abstractions.Models.SessionDotStates;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
