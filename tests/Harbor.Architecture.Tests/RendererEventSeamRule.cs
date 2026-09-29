@@ -473,7 +473,12 @@ public sealed class RendererEventSeamRule
             facts.ToDictionary(static f => f.TypeName, StringComparer.Ordinal),
             scanned);
 
-        var reported = Evaluate(inventory).ToHashSet(StringComparer.Ordinal);
+        // Select before ToHashSet: a StringComparer cannot be an
+        // IEqualityComparer<RendererSeamViolation>, so the set has to be of
+        // the type NAMES.
+        var reported = Evaluate(inventory)
+            .Select(static v => v.TypeName)
+            .ToHashSet(StringComparer.Ordinal);
 
         string seamless = "Harbor.Architecture.Tests.RendererEventSeamRule+SeamlessRenderer";
         string registered = "Harbor.Architecture.Tests.RendererEventSeamRule+HandlerRegisteredRenderer";
