@@ -113,16 +113,29 @@ public sealed class ProviderModelAbsenceRules
     [Test]
     public async Task ResolveProviderModelFromConfigAsync_ReturnsMaybeOfModelRef()
     {
-        // Explicit binding flags and types, not `GetMethod(name)`: the build is a
-        // zero-warnings gate, and REFL008/REFL029 flag the loose overload.
-        MethodInfo method = typeof(SessionFactory).GetMethod(
+        // Explicit binding flags and an explicit (empty) parameter-type list, not
+        // `GetMethod(name)`: the build is a zero-warnings gate and REFL008/REFL029
+        // flag the loose overload. The `types` argument is the method's PARAMETER
+        // types — this one takes none, so it is Type.EmptyTypes, not the declaring
+        // type. Passing the declaring type there matches nothing and returns null.
+        MethodInfo? method = typeof(SessionFactory).GetMethod(
             nameof(SessionFactory.ResolveProviderModelFromConfigAsync),
             BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly,
             binder: null,
-            [typeof(SessionFactory)],
-            modifiers: null)!;
+            Type.EmptyTypes,
+            modifiers: null);
 
-        await Assert.That(method.ReturnType).IsEqualTo(typeof(Task<Maybe<ModelRef>>))
+        // Non-vacuity. Without this the `!` below turns a moved-or-renamed method
+        // into a NullReferenceException, which fails for the wrong reason and tells
+        // the next reader nothing about which check broke.
+        await Assert.That(method).IsNotNull()
+            .Because(
+                "ResolveProviderModelFromConfigAsync must be a public, parameterless method declared "
+                + "on SessionFactory. If it moved, gained a parameter, or was renamed, point this guard "
+                + "at its new home rather than deleting the check — a lookup that silently finds "
+                + "nothing is how a guard starts reporting green forever.");
+
+        await Assert.That(method!.ReturnType).IsEqualTo(typeof(Task<Maybe<ModelRef>>))
             .Because(
                 "the config names one provider/model or nothing; it never names half. "
                 + "Task<(string?, string?)> makes three states spellable and lets two of them "
