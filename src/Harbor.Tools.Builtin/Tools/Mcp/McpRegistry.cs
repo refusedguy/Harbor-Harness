@@ -560,10 +560,17 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 // #566: the provider speaks the same Result<Maybe<string>> as the
                 // handler, so absence ("no token yet") and a rejected grant stay two
                 // distinct states all the way to the transport instead of being
-                // flattened to a null by a compat overload. The env-var fallback keeps
-                // null-means-absent, wrapped as Maybe.None.
+                // flattened to a null by a compat overload.
+                //
+                // The two branches differ in what absence MEANS, and that knowledge
+                // lives here, not in the handler or the transport:
+                //   - an `auth` block means the server is OAuth-protected, so an
+                //     absent token is fatal and the user needs the hint;
+                //   - the legacy env-var fallback is opportunistic, so an unset
+                //     var just means "send it unauthenticated" — an
+                //     anonymous-capable endpoint must still be reachable.
                 Func<CancellationToken, Task<Result<Maybe<string>>>> oauthTokenProvider = remote.OAuth is not null
-                    ? (ct => OAuthFor(remote, logger).TryGetAccessTokenResultAsync(ct))
+                    ? ct => RequireOAuthTokenAsync(OAuthFor(remote, logger), ct)
                     : (_ => Task.FromResult(Result.Success(
                         Maybe<string>.From(Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN")))));
 
@@ -578,6 +585,29 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 _transport = created.Value;
                 return created;
             }
+        }
+
+        /// <summary>
+        ///     The registry's half of the #566 boundary. The handler reports "no
+        ///     token" as <c>Maybe.None</c> because it cannot know whether a missing
+        ///     token is fatal for the server; the registry registered the
+        ///     <c>auth</c> block, so it does know, and it converts absence into the
+        ///     actionable failure the user needs. A rejected grant is already a
+        ///     failure and passes through untouched.
+        /// </summary>
+        private static async Task<Result<Maybe<string>>> RequireOAuthTokenAsync(
+            McpOAuthHandler oauth,
+            CancellationToken cancellationToken)
+        {
+            Result<Maybe<string>> token = await oauth.TryGetAccessTokenResultAsync(cancellationToken).ConfigureAwait(false);
+            if (token.IsFailure)
+            {
+                return token;
+            }
+
+            return token.Value.HasValue
+                ? token
+                : Result.Failure<Maybe<string>>(oauth.LoginHint);
         }
 
         private McpOAuthHandler OAuthFor(McpRemoteEndpoint remote, ILogger? logger)

@@ -307,6 +307,13 @@ public class McpRemoteTransportTests
     ///     succeed. Before #566 the only copy of that hint lived inside a Failure
     ///     string produced by a code path with no production consumer, so the
     ///     user saw the endpoint's rejection and nothing else.
+    ///     <para>
+    ///     HARBOR_HOME is redirected to a scratch directory: the registry builds
+    ///     its <see cref="McpOAuthHandler" /> with the default cache, which
+    ///     resolves under the real harbor home. Without this the test asserts
+    ///     against whatever token the developer happens to have cached, and on CI
+    ///     it silently found one and the call succeeded.
+    ///     </para>
     /// </summary>
     [Test]
     public async Task Registry_RemoteWithAuthAndNoToken_ReportsTheLoginHint()
@@ -314,17 +321,31 @@ public class McpRemoteTransportTests
         using FakeServer server = FakeServer.Start();
         server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
 
-        await using var registry = new McpRegistry(null);
-        // The auth block is what makes "no token" fatal rather than "go anonymous".
-        McpOAuthConfig auth = new() { ClientId = "cid", TokenEndpoint = $"{server.Url}/token" };
-        var registered = registry.Register("cloud", server.Url.ToString(), McpTransportNames.Http, null, auth);
-        await Assert.That(registered.IsSuccess).IsTrue();
+        string scratch = Directory.CreateTempSubdirectory("harbor-mcp-oauth-hint").FullName;
+        string? previousHome = Environment.GetEnvironmentVariable("HARBOR_HOME");
+        try
+        {
+            Environment.SetEnvironmentVariable("HARBOR_HOME", scratch);
 
-        using var args = JsonDocument.Parse("{}");
-        Result<string> result = await registry.InvokeAsync("cloud", "tools/list", args.RootElement);
+            await using var registry = new McpRegistry(null);
+            // The auth block is what makes "no token" fatal rather than "go anonymous".
+            McpOAuthConfig auth = new() { ClientId = "cid", TokenEndpoint = $"{server.Url}/token" };
+            var registered = registry.Register("cloud", server.Url.ToString(), McpTransportNames.Http, null, auth);
+            await Assert.That(registered.IsSuccess).IsTrue();
 
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("harbor mcp login cloud");
+            using var args = JsonDocument.Parse("{}");
+            Result<string> result = await registry.InvokeAsync("cloud", "tools/list", args.RootElement);
+
+            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result.Error).Contains("harbor mcp login cloud");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HARBOR_HOME", previousHome);
+            try { Directory.Delete(scratch, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
     /// <summary>
