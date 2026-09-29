@@ -130,12 +130,12 @@ public class HdsThemeCatalogParityTests
         {
             foreach (string name in HdsThemeCatalog.PaletteNames)
             {
-                HdsThemePreview? preview = HdsThemeCatalog.Find(name);
+                HdsThemePreview preview = HdsThemeCatalog.Find(name);
                 await Assert.That(preview).IsNotNull();
 
                 string path = Path.Combine(HdsThemesDir, name + ".axaml");
 
-                await Assert.That(ColorOf(preview!.Surface))
+                await Assert.That(ColorOf(preview.Surface))
                     .IsEqualTo(DeclaredColor(path, "AppBackgroundBrush"));
                 await Assert.That(ColorOf(preview.Accent))
                     .IsEqualTo(DeclaredColor(path, "AccentBrush"));
@@ -161,7 +161,7 @@ public class HdsThemeCatalogParityTests
         await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
         await session.Dispatch(async () =>
         {
-            await Assert.That(HdsThemeCatalog.Previews.Count).IsEqualTo(HdsThemeCatalog.PaletteNames.Count);
+            await Assert.That(HdsThemeCatalog.ReadAll().Count).IsEqualTo(HdsThemeCatalog.PaletteNames.Count);
             await Assert.That(HdsThemeCatalog.Find("Vapor")).IsNotNull();
             await Assert.That(HdsThemeCatalog.Find("NoSuchPalette")).IsNull();
         }, CancellationToken.None);
@@ -175,9 +175,9 @@ public class HdsThemeCatalogParityTests
     [Test]
     public async Task DisplayName_Is_Derived_From_The_Palette_Id()
     {
-        await Assert.That(HdsThemeCatalog.Find("CatppuccinMocha")!.DisplayName).IsEqualTo("Catppuccin Mocha");
-        await Assert.That(HdsThemeCatalog.Find("Vapor")!.DisplayName).IsEqualTo("Vapor");
-        await Assert.That(HdsThemeCatalog.Find("Lumen")!.DisplayName).IsEqualTo("Lumen");
+        await Assert.That(HdsThemeCatalog.Find("CatppuccinMocha")?.DisplayName).IsEqualTo("Catppuccin Mocha");
+        await Assert.That(HdsThemeCatalog.Find("Vapor")?.DisplayName).IsEqualTo("Vapor");
+        await Assert.That(HdsThemeCatalog.Find("Lumen")?.DisplayName).IsEqualTo("Lumen");
         await Assert.That(HdsThemeCatalog.Find("NoSuchPalette")).IsNull();
     }
 

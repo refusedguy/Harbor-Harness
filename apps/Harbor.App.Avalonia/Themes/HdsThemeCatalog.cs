@@ -85,14 +85,17 @@ public static class HdsThemeCatalog
     ];
 
     /// <summary>
-    ///     One preview per palette, read from the palette dictionaries.
+    ///     Read one preview per palette out of the palette dictionaries. A
+    ///     method rather than a property on purpose: it materialises a fresh
+    ///     collection per call, and a property that copies a collection is
+    ///     indistinguishable from a cached one at the call site (S2365).
     /// </summary>
     /// <remarks>
     ///     <para>
     ///         Deliberately not cached. Six compiled dictionaries load in
     ///         well under a millisecond, and the only caller
     ///         (<c>ThemeSettingsViewModel</c>, built when the Settings dialog
-    ///         opens) snapshots the list into its collection once. Caching would
+    ///         opens) snapshots the list into its collection once. A cache would
     ///         add a process-wide mutable that a *failed* load could poison
     ///         forever — and a failed load is exactly what happens when the
     ///         view-model is constructed before the Avalonia resource system is
@@ -106,7 +109,7 @@ public static class HdsThemeCatalog
     ///         path cannot become the normal one.
     ///     </para>
     /// </remarks>
-    public static IReadOnlyList<HdsThemePreview> Previews =>
+    public static IReadOnlyList<HdsThemePreview> ReadAll() =>
         PaletteNames.Select(TryLoad).OfType<HdsThemePreview>().ToArray();
 
     /// <summary>The <c>avares://</c> URI of one palette dictionary.</summary>
@@ -212,6 +215,12 @@ public static class HdsThemeCatalog
         return false;
     }
 
+    /// <summary>
+    ///     One resource out of a palette dictionary, on the variant the palette
+    ///     itself declares. <c>ThemeVariant.Default</c> rather than a concrete
+    ///     Dark/Light so a themed resource would still resolve for a viewer whose
+    ///     variant differs from the one the palette was authored for.
+    /// </summary>
     private static bool TryGet(ResourceInclude palette, string key, out object? value) =>
         palette.TryGetResource(key, ThemeVariant.Default, out value);
 

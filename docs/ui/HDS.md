@@ -63,7 +63,8 @@ via `ResourceInclude`, not a second declaration of their values.
 
 `apps/Harbor.App.Avalonia/Themes/HdsThemeCatalog.cs` lists the palette names and
 resolves each one's preview (`AppBackgroundBrush` / `AccentBrush` / `TextBrush` plus
-its variant) out of the dictionary itself. Settings binds the result through
+its variant) out of the dictionary itself — `HdsThemeCatalog.ReadAll()` for the list,
+`HdsThemeCatalog.Find(name)` for one. Settings binds the result through
 `ThemeSettingsViewModel.AvailableThemes`; it holds no colour of its own.
 
 Each palette declares which `ThemeVariant` it is designed for:

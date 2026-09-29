@@ -69,7 +69,7 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
         // Snapshotted once per dialog opening: the catalog reads the palette
         // dictionaries, so the collection is a snapshot of "what the themes
         // declare right now", not a live view of them.
-        AvailableThemes = new ObservableCollection<HdsThemePreview>(HdsThemeCatalog.Previews);
+        AvailableThemes = new ObservableCollection<HdsThemePreview>(HdsThemeCatalog.ReadAll());
     }
 
     /// <summary>
