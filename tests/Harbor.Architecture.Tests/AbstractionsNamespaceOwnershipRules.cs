@@ -22,10 +22,10 @@
 // supposed to do.
 //
 // This was already half-migrated when #452 was written. Nine files live in
-// src/Harbor.Registries; FIVE had already moved to the owning root
-// (`Harbor.Registries.Events` — SamplingMiddleware, TypeFilterMiddleware;
-// `Harbor.Registries.Tools` — CompositeToolRegistry, FrozenToolView,
-// InMemoryMcpRegistry) and FOUR had not. The audit recorded six; the nightly
+// src/Harbor.Registries; FIVE had already moved to the owning root — the event
+// middlewares to Harbor.Registries.Events, and CompositeToolRegistry /
+// FrozenToolView / InMemoryMcpRegistry to Harbor.Registries.Tools — and FOUR
+// had not. The audit recorded six; the nightly
 // assembly moves resolved two of them before this guard landed. This rule
 // finishes the wave the repo had already started rather than inventing a
 // convention.
@@ -54,7 +54,7 @@
 //   Harbor.Ipc.Server          -> Harbor.Ipc.Transport     namespace shared by
 //   Harbor.Ipc.Abstractions    -> Harbor.Ipc               the IPC family)
 //   Harbor.Ui.Framework.Projection -> Harbor.Ui.Framework.Rendering
-//   Harbor.Ui.Framework.Reducers   -> Harbor.Ui.Framework.State
+//   Harbor.Ui.Framework.Services     -> Harbor.Ui.Framework.Overlays
 //   Harbor.Tui.CellForge.Engine    -> Harbor.Tui.CellForge.Rendering
 //   Harbor.Diagnostics.Abstractions -> Harbor.Diagnostics
 //   … and so on.
@@ -316,7 +316,7 @@ public class AbstractionsNamespaceOwnershipRules
             ("Harbor.Ipc.Server", "Harbor.Ipc.Transport"),
             ("Harbor.Ipc.Abstractions", "Harbor.Ipc"),
             ("Harbor.Ui.Framework.Projection", "Harbor.Ui.Framework.Rendering"),
-            ("Harbor.Ui.Framework.Reducers", "Harbor.Ui.Framework.State"),
+            ("Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Overlays"),
             ("Harbor.Tui.CellForge.Engine", "Harbor.Tui.CellForge.Rendering"),
             ("Harbor.Diagnostics.Abstractions", "Harbor.Diagnostics"),
             ("Harbor.Telemetry.Core", "Harbor.Telemetry"),
