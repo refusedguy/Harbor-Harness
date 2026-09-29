@@ -673,6 +673,13 @@ public sealed record ChatScreen(
     private SetupChecklistOverlayLayer? _setupLayer;
     private ImageViewerOverlayLayer? _imageLayer;
 
+    /// <summary>Ratio the tab-strip split was last driven to, so a frame that
+    /// re-derives the SAME row count claims no damage it did not cause — the
+    /// narrow-diff win of #465/#511 must survive the fix that keeps a real row
+    /// change honest. Seeded with the ratio <see cref="Build"/> installs: the
+    /// transcript keeps the whole band, the strip nothing.</summary>
+    private float _tabStripRatio = 1f;
+
     /// <summary>
     /// PRIM2c seating: reconciles the dialog/toast overlay layers with
     /// <paramref name="viewport"/> (typically the full screen). PRIM12 seats
@@ -869,7 +876,27 @@ public sealed record ChatScreen(
         // arithmetic is one subtraction; the alternative (a strip-side ratio)
         // cannot express "give me almost everything", because the solver clamps
         // the other side to its minimum first.
-        Tree.SetRatio(TabsId, band > 0 ? (band - rows) / (float)band : 1f);
+        float target = band > 0 ? (band - rows) / (float)band : 1f;
+
+        // Same ratio as last frame ⇒ the strip keeps the rows it already has
+        // and nothing re-homed, so this frame may stay on the narrow damage
+        // path. Re-deriving the identical value must not cost a full scan.
+        if (Math.Abs(_tabStripRatio - target) <= 0f)
+        {
+            return;
+        }
+
+        _tabStripRatio = target;
+        Tree.SetRatio(TabsId, target);
+
+        // The strip claiming — or releasing — rows re-homes EVERY panel under
+        // it: the transcript's last rows, the composer, its INPUT title row and
+        // the status row all change row in the same frame. The narrow damage
+        // path rescans only the status row and the transcript's own dirty rect,
+        // so without this the moved rows are never written and the terminal
+        // keeps the previous frame's glyphs over raw background. No block grew
+        // — the LAYOUT moved — so this is the honest description.
+        Timeline.Timeline.MarkViewportWide();
     }
 }
 

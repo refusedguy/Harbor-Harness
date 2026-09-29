@@ -268,8 +268,21 @@ public sealed class VirtualizedChatTimeline
     public void MarkLastDirty()
     {
         _cache.MarkHeightsDirty(Math.Max(0, _cache.Count - 1));
-        _broadDamage = true;
+        MarkViewportWide();
     }
+
+    /// <summary>Viewport-wide damage with no block to name: the frame's
+    /// <b>layout</b> moved (a split changed its row count), so every visible
+    /// row can differ from the previous frame — the transcript's tail, the
+    /// composer and the status row all re-home in the same frame.
+    ///
+    /// The narrow dirty-rect path can only cover one block's suffix, so a
+    /// caller that reshapes the layout must route through here. Without it the
+    /// host rescans only the status row and the transcript's own rect, the
+    /// moved rows are never written, and the terminal keeps the previous
+    /// frame's glyphs over its raw background — bands of unpainted cells in
+    /// the middle of a correct screen.</summary>
+    public void MarkViewportWide() => _broadDamage = true;
 
     /// <summary>Dirty-rect invalidation for one resident block (#465): its
     /// cached height is stale, so the next frame damages the single rect from
