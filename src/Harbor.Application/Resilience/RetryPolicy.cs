@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Threading;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Resilience;
 using Harbor.Application.Agents;
 
 namespace Harbor.Application.Resilience;
@@ -20,6 +21,11 @@ namespace Harbor.Application.Resilience;
 ///         code (network-level failure), HTTP 408, HTTP 429 and any 5xx.
 ///         A <see cref="TaskCanceledException" /> raised while the caller's
 ///         token is NOT cancelled represents a provider timeout and is retried.
+///         <see cref="IOException" /> and <see cref="TimeoutException" /> are
+///         transient too (#572) — the same physical failure as a status-less
+///         <see cref="HttpRequestException" />, judged by
+///         <see cref="TransientFailurePolicy.ShouldRetry" /> so the remote-MCP
+///         transports and this policy cannot disagree about it again.
 ///     </para>
 ///     <para>
 ///         <b>Fatal:</b> HTTP 401/403/400/404/409/422-style client errors
@@ -377,11 +383,33 @@ public sealed class RetryPolicy : IRetryPolicy
         }
     }
 
+    /// <summary>
+    ///     The socket verdict (#572) — <see cref="IOException" /> and
+    ///     <see cref="TimeoutException" /> — and the shared retry budget the
+    ///     remote-MCP transports consume. This classifier is total and defers
+    ///     entirely to <see cref="TransientFailurePolicy.ShouldRetry" />: it must
+    ///     not restate the type set, or it becomes the fourth copy of the answer
+    ///     this issue removed.
+    /// </summary>
+    private sealed class SocketClassifier : IExceptionClassifier
+    {
+        public bool TryClassify(Exception ex, out bool transient, out TimeSpan? retryAfter)
+        {
+            retryAfter = null;
+            transient = TransientFailurePolicy.ShouldRetry(ex);
+            return transient;
+        }
+    }
+
     private static readonly IExceptionClassifier[] Classifiers =
     [
         new CancellationClassifier(),
         new HttpClassifier(),
         new StreamErrorClassifier(),
+        // #572: last on purpose. The three above own the more specific verdict
+        // for their families; this one only answers for the exceptions they
+        // decline, so a stream error or an HTTP failure is never re-judged here.
+        new SocketClassifier(),
     ];
 
     /// <summary>

@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using Harbor.Abstractions.Resilience;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Mcp;
@@ -57,9 +58,6 @@ public interface IMcpRemoteTransport : IAsyncDisposable
 /// </summary>
 public sealed class McpHttpTransport : IMcpRemoteTransport
 {
-    private const int MaxAttempts = 3;
-    private static readonly TimeSpan FirstRetryDelay = TimeSpan.FromMilliseconds(200);
-
     private readonly Uri _endpoint;
     private readonly IReadOnlyDictionary<string, string>? _headers;
     private readonly Func<CancellationToken, Task<Result<Maybe<string>>>>? _oauthTokenProvider;
@@ -128,10 +126,10 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
                 if ((int)httpResponse.StatusCode >= 500 || httpResponse.StatusCode == HttpStatusCode.RequestTimeout)
                 {
                     string cause = $"server returned {(int)httpResponse.StatusCode}";
-                    if (attempt >= MaxAttempts)
+                    if (attempt >= TransientFailurePolicy.DefaultMaxAttempts)
                         return Fail<Maybe<JsonDocument>>(sw, attempt, cause);
                     _logger?.LogWarning("MCP HTTP request to {Endpoint} failed (attempt {Attempt}/{Max}): {Cause}; retrying",
-                        _endpoint, attempt, MaxAttempts, cause);
+                        _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts, cause);
                     await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                     attempt++;
                     continue;
@@ -152,20 +150,21 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             {
                 // Client-side per-attempt timeout — retryable, unlike user cancellation.
                 string cause = $"server did not respond within {_requestTimeout.TotalSeconds:F0}s";
-                if (attempt >= MaxAttempts)
+                if (attempt >= TransientFailurePolicy.DefaultMaxAttempts)
                     return Fail<Maybe<JsonDocument>>(sw, attempt, cause);
 
                 await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                 attempt++;
             }
-            catch (Exception ex) when (IsTransient(ex) && attempt < MaxAttempts)
+            catch (Exception ex) when (TransientFailurePolicy.ShouldRetry(ex)
+                                       && attempt < TransientFailurePolicy.DefaultMaxAttempts)
             {
                 _logger?.LogWarning(ex, "MCP HTTP request to {Endpoint} failed (attempt {Attempt}/{Max}); retrying",
-                    _endpoint, attempt, MaxAttempts);
+                    _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts);
                 await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                 attempt++;
             }
-            catch (Exception ex) when (IsTransient(ex))
+            catch (Exception ex) when (TransientFailurePolicy.ShouldRetry(ex))
             {
                 return Fail<Maybe<JsonDocument>>(sw, attempt, ex.Message);
             }
@@ -192,11 +191,8 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         return ValueTask.CompletedTask;
     }
 
-    private static bool IsTransient(Exception ex)
-        => ex is HttpRequestException or IOException or TimeoutException;
-
-    private async Task BackoffAsync(int attempt, CancellationToken cancellationToken)
-        => await Task.Delay(FirstRetryDelay * (1 << (attempt - 1)), cancellationToken).ConfigureAwait(false);
+    private static Task BackoffAsync(int attempt, CancellationToken cancellationToken)
+        => Task.Delay(TransientFailurePolicy.BackoffDelay(attempt), cancellationToken);
 
     private HttpRequestMessage BuildRequest(string body, Maybe<string> oauthToken)
     {
