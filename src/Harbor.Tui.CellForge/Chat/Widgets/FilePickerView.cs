@@ -1,6 +1,8 @@
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 
+using CSharpFunctionalExtensions;
+
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
@@ -55,9 +57,15 @@ public sealed class FilePickerView
     /// <summary>Index into <see cref="Results" />.</summary>
     public int SelectedIndex => _selected;
 
-    /// <summary>Currently selected entry (null when the result set is empty).</summary>
-    public FilePickerItem? SelectedItem =>
-        _results.Count == 0 ? null : _results[Math.Min(_selected, _results.Count - 1)];
+    /// <summary>
+    ///     Currently selected entry, or <see cref="Maybe{T}.None" /> when the result set is
+    ///     empty. An empty set is not a missing value, it is a state the picker is in
+    ///     (#592).
+    /// </summary>
+    public Maybe<FilePickerItem> SelectedItem =>
+        _results.Count == 0
+            ? Maybe<FilePickerItem>.None
+            : Maybe.From(_results[Math.Min(_selected, _results.Count - 1)]);
 
     /// <summary>Preview lines for the selected entry (provider fallback, clipped to <see cref="MaxPreviewLines" />).</summary>
     public IReadOnlyList<string> SelectedPreview => ResolvePreview(SelectedItem);
@@ -299,7 +307,7 @@ public sealed class FilePickerView
         }
 
         var selected = SelectedItem;
-        string header = selected is null ? "(no preview)" : TruncateMiddle(selected.Path, width);
+        string header = selected.HasNoValue ? "(no preview)" : TruncateMiddle(selected.Value.Path, width);
         buffer.SetText(x, top, header.AsSpan(0, Math.Min(header.Length, width)), ChatPalette.Dim);
 
         if (rows < 3)
@@ -334,12 +342,14 @@ public sealed class FilePickerView
         }
     }
 
-    private IReadOnlyList<string> ResolvePreview(FilePickerItem? item)
+    private IReadOnlyList<string> ResolvePreview(Maybe<FilePickerItem> selected)
     {
-        if (item is null)
+        if (selected.HasNoValue)
         {
             return [];
         }
+
+        FilePickerItem item = selected.Value;
 
         IReadOnlyList<string>? lines = item.PreviewLines ?? PreviewProvider?.Invoke(item);
         if (lines is null || lines.Count == 0)

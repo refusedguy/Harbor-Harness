@@ -331,7 +331,7 @@ public class InlineImageRenderTests
         // open/close pair — and it is consumed, never leaked to the agent.
         await Assert.That(viewer.HandleKey(KeyEvent.Simple(KeyCode.Enter))).IsTrue();
         await Assert.That(viewer.Visible).IsFalse();
-        await Assert.That(viewer.Source).IsNull();
+        await Assert.That(viewer.Source.HasNoValue).IsTrue();
 
         // Zoom resets on reopen: a fresh look, not the last magnification.
         viewer.Show(block, layer);

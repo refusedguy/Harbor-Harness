@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
+using CSharpFunctionalExtensions;
 using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -249,7 +250,7 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
         bool anyRunning = false;
         for (int i = 0; i < _members.Count; i++)
         {
-            if (_members[i].Body is null)
+            if (_members[i].Body.HasNoValue)
             {
                 anyRunning = true;
                 break;
@@ -291,11 +292,12 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
             return;
         }
 
-        var body = member.Body;
-        char glyph = body is null ? RunningGlyph : (body.IsError ? ErrorGlyph : OkGlyph);
-        var glyphStyle = body is null
+        Maybe<ToolResultBody> body = member.Body;
+        bool done = body.HasValue;
+        char glyph = !done ? RunningGlyph : (body.Value.IsError ? ErrorGlyph : OkGlyph);
+        var glyphStyle = !done
             ? ChatPalette.ToolRunning
-            : (body.IsError ? ChatPalette.ToolError : ChatPalette.ToolOk);
+            : (body.Value.IsError ? ChatPalette.ToolError : ChatPalette.ToolOk);
 
         buffer.SetText(x, y, [glyph], glyphStyle);
         int cursor = x + 1;
@@ -315,14 +317,14 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
         // OutcomeText — no per-frame StringBuilder. Identical cells to the
         // former ' ' + args + " → " + ("ok "/"error ") + FormatDuration run.
         int end = x + width;
-        var detailStyle = body?.IsError == true ? ChatPalette.ToolError : ChatPalette.ToolArgs;
+        var detailStyle = done && body.Value.IsError ? ChatPalette.ToolError : ChatPalette.ToolArgs;
         if (!string.IsNullOrEmpty(member.Info.ArgsSummary))
         {
             PaintRun(buffer, ref cursor, end, y, " ", detailStyle);
             PaintRun(buffer, ref cursor, end, y, member.Info.ArgsSummary.AsSpan(), detailStyle);
         }
 
-        if (body is not null && member.OutcomeText is { Length: > 0 } outcome)
+        if (done && member.OutcomeText is { Length: > 0 } outcome)
         {
             PaintRun(buffer, ref cursor, end, y, " → ", detailStyle);
             PaintRun(buffer, ref cursor, end, y, outcome.AsSpan(), detailStyle);

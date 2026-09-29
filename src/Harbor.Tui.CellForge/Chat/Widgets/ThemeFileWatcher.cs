@@ -1,5 +1,7 @@
 using Harbor.DesignSystem;
 
+using CSharpFunctionalExtensions;
+
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
@@ -20,8 +22,11 @@ public sealed class ThemeFileWatcher : IDisposable
     /// <summary>Poll interval (default 500 ms — imperceptible for theme edits).</summary>
     public static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(500);
 
-    /// <summary>Theme applied by the most recent successful reload (null until the first change).</summary>
-    public HarborTheme? LastApplied { get; private set; }
+    /// <summary>
+    ///     Theme applied by the most recent successful reload, or
+    ///     <see cref="Maybe{T}.None" /> until the first change (#592).
+    /// </summary>
+    public Maybe<HarborTheme> LastApplied { get; private set; } = Maybe<HarborTheme>.None;
 
     public ThemeFileWatcher(string path, Action<HarborTheme>? onApplied = null, Action<string>? onError = null)
     {
@@ -54,7 +59,7 @@ public sealed class ThemeFileWatcher : IDisposable
             var result = JsonThemeLoader.LoadFile(_path);
             if (result.IsSuccess)
             {
-                LastApplied = result.Value;
+                LastApplied = Maybe.From(result.Value);
                 if (_onApplied is null)
                 {
                     TerminalColorPalette.Apply(result.Value);

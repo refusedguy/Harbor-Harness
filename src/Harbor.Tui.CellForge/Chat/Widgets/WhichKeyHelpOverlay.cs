@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Ui.Framework.Panels;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -30,28 +31,75 @@ public sealed class WhichKeyHelpOverlay
     private const int Padding = 1;
     private const int Chrome = 2 + (Padding * 2);
 
-    private WhichKeyContext? _context;
+    // ONE source of truth for "no context was supplied". Was a bare `WhichKeyContext?`
+    // that three members each re-derived from, so `Show(null)` produced a shown
+    // overlay whose Context was null while HasContext asked a different question
+    // (#592). Maybe makes the absence explicit at every read, and `Context` below is
+    // the only projection of it — HasContext and BuildLines both read through that.
+    private Maybe<WhichKeyContext> _context;
 
-    public bool Visible { get; private set; }
+    private bool _shown;
 
-    public WhichKeyContext? Context => _context;
+    /// <summary>
+    ///     The single authority on "did the host show this overlay?". The layer's
+    ///     <see cref="WhichKeyHelpOverlayLayer.Visible" /> used to be a second,
+    ///     independent answer (shown AND big enough to fit), so a shown overlay
+    ///     reported <c>Visible == false</c> on a small terminal and the host could not
+    ///     tell a geometry problem from a state problem. That is now
+    ///     <see cref="WhichKeyHelpOverlayLayer.HasRoom" />, named for what it answers.
+    /// </summary>
+    public bool IsShown => _shown;
 
-    public bool HasContext =>
-        !string.IsNullOrEmpty(_context?.FocusedPanelId) ||
-        !string.IsNullOrEmpty(_context?.ActiveOverlayId);
+    /// <summary>Alias of <see cref="IsShown" />, kept for the existing caller surface.</summary>
+    public bool Visible => _shown;
+
+    /// <summary>
+    ///     Host-supplied context. <see cref="Maybe{T}.None" /> when the host showed the
+    ///     overlay with no context — a real, expected state, not a missing value.
+    /// </summary>
+    public Maybe<WhichKeyContext> Context => _context;
+
+    /// <summary>
+    ///     True when the context section has something to print: a context was supplied
+    ///     AND it names a focused panel or an active overlay. Derived from
+    ///     <see cref="Context" /> rather than re-deriving the lookup.
+    /// </summary>
+    public bool HasContext
+    {
+        get
+        {
+            Maybe<WhichKeyContext> context = Context;
+            if (context.HasNoValue)
+            {
+                return false;
+            }
+
+            WhichKeyContext value = context.Value;
+            return !string.IsNullOrEmpty(value.FocusedPanelId) ||
+                   !string.IsNullOrEmpty(value.ActiveOverlayId);
+        }
+    }
 
     public void Show(WhichKeyContext? context = null)
     {
-        _context = context;
-        Visible = true;
+        _context = Maybe.From(context);
+        _shown = true;
     }
 
+    /// <summary>
+    ///     Dismiss. The context is deliberately NOT cleared: a host primes it with
+    ///     <see cref="SetContext" /> while hidden and then hands it to
+    ///     <see cref="Show(WhichKeyContext?)" />. The shown flag is the state; the context
+    ///     is content. Note that <see cref="Show(WhichKeyContext?)" /> assigns its argument
+    ///     unconditionally, so calling it with no argument clears the primed context — that
+    ///     is pre-existing behaviour, not something this wave changed.
+    /// </summary>
     public void Hide()
     {
-        Visible = false;
+        _shown = false;
     }
 
-    public void SetContext(WhichKeyContext? context) => _context = context;
+    public void SetContext(WhichKeyContext? context) => _context = Maybe.From(context);
 
     /// <summary>
     /// Overlay-local dismissal (Esc / '?'), mirroring
@@ -60,7 +108,7 @@ public sealed class WhichKeyHelpOverlay
     /// </summary>
     public bool HandleKey(ConsoleKeyInfo key)
     {
-        if (!Visible)
+        if (!IsShown)
         {
             return false;
         }
@@ -120,7 +168,7 @@ public sealed class WhichKeyHelpOverlay
     public void Paint(ScreenBuffer buffer, Rect viewport)
     {
         ArgumentNullException.ThrowIfNull(buffer);
-        if (!Visible)
+        if (!IsShown)
         {
             return;
         }
@@ -158,18 +206,28 @@ public sealed class WhichKeyHelpOverlay
             lines.Add($"  {hotkey.Key,-12} {hotkey.Description}");
         }
 
-        if (HasContext)
+        // Read through Context, not the backing field: the render path and the public
+        // surface now look at one value, so a future state change cannot leave them
+        // disagreeing about whether a context exists.
+        Maybe<WhichKeyContext> context = Context;
+        if (context.HasValue)
         {
-            lines.Add(string.Empty);
-            lines.Add("Context");
-            if (!string.IsNullOrEmpty(_context?.FocusedPanelId))
+            WhichKeyContext value = context.Value;
+            bool hasFocus = !string.IsNullOrEmpty(value.FocusedPanelId);
+            bool hasOverlay = !string.IsNullOrEmpty(value.ActiveOverlayId);
+            if (hasFocus || hasOverlay)
             {
-                lines.Add($"  focus   {_context.FocusedPanelId}");
-            }
+                lines.Add(string.Empty);
+                lines.Add("Context");
+                if (hasFocus)
+                {
+                    lines.Add($"  focus   {value.FocusedPanelId}");
+                }
 
-            if (!string.IsNullOrEmpty(_context?.ActiveOverlayId))
-            {
-                lines.Add($"  overlay {_context.ActiveOverlayId}");
+                if (hasOverlay)
+                {
+                    lines.Add($"  overlay {value.ActiveOverlayId}");
+                }
             }
         }
 

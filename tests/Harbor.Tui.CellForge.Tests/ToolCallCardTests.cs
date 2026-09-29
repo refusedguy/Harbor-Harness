@@ -45,8 +45,8 @@ public class ToolCallCardTests
             var card = (ToolCallBlock)panel.Timeline.BlockAt(0);
             await Assert.That(card.Kind).IsEqualTo("tool-call");
             await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Ok);
-            await Assert.That(card.Body!.Output).IsEqualTo("file body");
-            await Assert.That(card.Body.Duration).IsEqualTo(TimeSpan.FromMilliseconds(120));
+            await Assert.That(card.Body.Value.Output).IsEqualTo("file body");
+            await Assert.That(card.Body.Value.Duration).IsEqualTo(TimeSpan.FromMilliseconds(120));
             await Assert.That(card.IsExpanded).IsFalse();
         }
     }
@@ -63,7 +63,7 @@ public class ToolCallCardTests
 
             var card = (ToolCallBlock)panel.Timeline.BlockAt(panel.Timeline.Count - 1);
             await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Error);
-            await Assert.That(card.Body!.Output).IsEqualTo("exit code 1");
+            await Assert.That(card.Body.Value.Output).IsEqualTo("exit code 1");
 
             var buffer = new ScreenBuffer(40, 2);
             card.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 2), 0));

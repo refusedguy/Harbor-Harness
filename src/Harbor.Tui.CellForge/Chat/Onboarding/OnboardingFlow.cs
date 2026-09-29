@@ -1,6 +1,8 @@
 using System.Text;
 using Harbor.Tui.CellForge.Widgets;
 
+using CSharpFunctionalExtensions;
+
 namespace Harbor.Tui.CellForge.Onboarding;
 
 /// <summary>
@@ -147,11 +149,14 @@ public sealed class OnboardingFlow
     /// <summary>True once the flow reached a terminal outcome (completed or cancelled).</summary>
     public bool IsComplete => Step == OnboardingStep.Finished;
 
-    /// <summary>Terminal outcome; null until <see cref="IsComplete"/>.</summary>
-    public OnboardingResult? Result { get; private set; }
+    /// <summary>
+    ///     Terminal outcome, or <see cref="Maybe{T}.None" /> until <see cref="IsComplete"/>.
+    ///     "Not finished yet" is the absence of an outcome, not a null outcome (#592).
+    /// </summary>
+    public Maybe<OnboardingResult> Result { get; private set; } = Maybe<OnboardingResult>.None;
 
-    /// <summary>Provider selected on the picker step; null until selected.</summary>
-    public OnboardingProvider? SelectedProvider => _selected;
+    /// <summary>Provider selected on the picker step; <see cref="Maybe{T}.None" /> until selected.</summary>
+    public Maybe<OnboardingProvider> SelectedProvider => Maybe.From(_selected);
 
     /// <summary>Start the flow (shows the welcome alert). Ignored unless idle.</summary>
     public void Start()
@@ -454,19 +459,19 @@ public sealed class OnboardingFlow
 
     private void FinishCompleted()
     {
-        Result = new OnboardingResult(
+        Result = Maybe.From(new OnboardingResult(
             true,
             _selected?.Id ?? string.Empty,
             _model,
             _apiKey,
-            _keyAlreadyConfigured);
+            _keyAlreadyConfigured));
         Step = OnboardingStep.Finished;
         Dialog.Dismiss();
     }
 
     private void Cancel()
     {
-        Result = new OnboardingResult(false, string.Empty, string.Empty, null, false);
+        Result = Maybe.From(new OnboardingResult(false, string.Empty, string.Empty, null, false));
         Step = OnboardingStep.Finished;
         Dialog.Dismiss();
     }

@@ -85,7 +85,7 @@ public class ChatBlockTests
         block.Complete(new ToolResultBody("second", isError: false, TimeSpan.FromMilliseconds(9)));
 
         await Assert.That(block.Status).IsEqualTo(ToolCallStatus.Error);
-        await Assert.That(block.Body!.Output).IsEqualTo("boom");
+        await Assert.That(block.Body.Value.Output).IsEqualTo("boom");
 
         var buffer = new ScreenBuffer(30, 2);
         block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 30, 2), 0));

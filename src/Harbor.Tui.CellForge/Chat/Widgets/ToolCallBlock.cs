@@ -1,4 +1,5 @@
 using System.Text;
+using CSharpFunctionalExtensions;
 using Harbor.Tui.CellForge.Rendering;
 using FrameworkStatusMappers = Harbor.Ui.Framework.Converters.StatusMappers;
 using VmToolCallStatus = Harbor.Ui.Framework.ViewModels.ToolCallStatus;
@@ -78,7 +79,11 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     private const char ErrorGlyph = '✖';
 
     private ToolCallStatus _status;
-    private ToolResultBody? _body;
+    // The block has no body until Complete() — a state, not a missing value. It was
+    // a bare `ToolResultBody?` with four `!` suppressions in the paint/measure path
+    // (each one a place where the `is null` guard lived in a DIFFERENT method than the
+    // deref, so the compiler could not see it) (#592).
+    private Maybe<ToolResultBody> _body;
 
     // ENG10 #282: one-shot paints — transition-computed strings, never
     // per-frame heap objects. Assigned once at construction or first
@@ -100,7 +105,12 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
 
     public ToolCallStatus Status => _status;
 
-    public ToolResultBody? Body => _body;
+    /// <summary>
+    ///     The tool result, or <see cref="Maybe{T}.None" /> while the call is still
+    ///     running. A <see cref="Maybe{T}" /> forces every consumer to handle the
+    ///     running case, which a nullable only documented.
+    /// </summary>
+    public Maybe<ToolResultBody> Body => _body;
 
     /// <summary>
     /// Framework-level <see cref="VmToolCall"/> snapshot for this block.
@@ -120,8 +130,8 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             ToolCallStatus.Error => VmToolCallStatus.Error,
             _ => VmToolCallStatus.Running,
         },
-        ResultPreview = _body is null ? string.Empty : _body.Output,
-        Duration = _body?.Duration ?? TimeSpan.Zero,
+        ResultPreview = _body.HasValue ? _body.Value.Output : string.Empty,
+        Duration = _body.HasValue ? _body.Value.Duration : TimeSpan.Zero,
         IsDiffTool = Info.DiffFull is not null,
         DiffFilePath = Info.FilePath,
         DiffPreview = Info.DiffPreview,
@@ -214,17 +224,17 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     public int BudgetBytes => 96 + (Info.ToolName.Length * 2) + (Info.ArgsSummary.Length * 2)
         + ((Info.ArgsFull?.Length ?? 0) * 2)
         + ((LiveSuffix?.Length ?? 0) * 2)
-        + (_body is null ? 0 : 64 + (_body.Output.Length * 2));
+        + (_body.HasValue ? 64 + (_body.Value.Output.Length * 2) : 0);
 
     /// <summary>Completes the card; idempotent — first result wins.</summary>
     public void Complete(ToolResultBody body)
     {
-        if (_body is not null)
+        if (_body.HasValue)
         {
             return;
         }
 
-        _body = body;
+        _body = Maybe.From(body);
         _status = body.IsError ? ToolCallStatus.Error : ToolCallStatus.Ok;
 
         // ENG10 #282: transition-computed paint fragments — Paint slices
@@ -243,10 +253,10 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             lines += 1; // full-args row
         }
 
-        if (_body is not null)
+        if (_body.HasValue)
         {
             // Mirror Paint: a present DiffText replaces the output body.
-            if (_body.DiffText is not null)
+            if (_body.Value.DiffText is not null)
             {
                 lines += DiffLineCount();
             }
@@ -267,9 +277,9 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             lines += 1;
         }
 
-        if (_body is not null)
+        if (_body.HasValue)
         {
-            if (_body.DiffText is not null)
+            if (_body.Value.DiffText is not null)
             {
                 lines += DiffLineCount();
             }
@@ -309,7 +319,7 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
         PaintHeader(buffer, ctx.Rect.X, y, ctx.Rect.Width);
 
         bool showArgs = IsExpanded && !string.IsNullOrEmpty(ArgsFullText);
-        if (_body is null)
+        if (_body.HasNoValue)
         {
             if (showArgs && ctx.Rect.Bottom - (y + 1) > 0)
             {
@@ -332,9 +342,9 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
         }
 
         int rows = ctx.Rect.Bottom - y;
-        if (_body.DiffText is not null)
+        if (_body.Value.DiffText is { } diffText)
         {
-            DiffRenderer.RenderPlain(_body.DiffText, buffer, ctx.Rect.X, y, rows);
+            DiffRenderer.RenderPlain(diffText, buffer, ctx.Rect.X, y, rows);
             return;
         }
 
@@ -376,7 +386,7 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
         buffer.SetText(cursor, y, Info.ToolName, ChatPalette.ToolName);
         cursor += Info.ToolName.Length;
 
-        if (_body is not null)
+        if (_body.HasValue)
         {
             // CF-E-012: duration straight from StatusMappers.DurationToText.
             // It returns string.Empty for sub-millisecond (instantaneous) calls,
@@ -457,8 +467,19 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     /// </summary>
     private void PaintOutputBody(ScreenBuffer buffer, int x, int y, int rows, int maxLines)
     {
-        var style = _body!.IsError ? ChatPalette.ToolError : ChatPalette.ToolBody;
-        ICollapsibleChatBlock.PaintBodyLines(buffer, x, y, rows, _body.Output, maxLines, style, ChatPalette.Dim);
+        // Narrow explicitly instead of `_body!`. Every current caller has already
+        // returned early on absence, so this branch is unreachable today — which is
+        // exactly why the suppression was safe and also why a fourth entry point
+        // would have been an NRE nobody could see (#592). An absent body paints no
+        // rows, which is what the header-only card already looks like.
+        if (!_body.HasValue)
+        {
+            return;
+        }
+
+        ToolResultBody body = _body.Value;
+        var style = body.IsError ? ChatPalette.ToolError : ChatPalette.ToolBody;
+        ICollapsibleChatBlock.PaintBodyLines(buffer, x, y, rows, body.Output, maxLines, style, ChatPalette.Dim);
     }
 
     /// <summary>
@@ -469,32 +490,54 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     /// </summary>
     private int BodyLineCount()
     {
-        var output = _body!.Output.AsSpan().TrimEnd('\n');
+        if (!_body.HasValue)
+        {
+            return 0;
+        }
+
+        var output = _body.Value.Output.AsSpan().TrimEnd('\n');
         return ICollapsibleChatBlock.ClampedBodyLineCount(output, MaxBodyLines);
     }
 
     private int ExpandedBodyLineCount()
     {
-        var output = _body!.Output.AsSpan().TrimEnd('\n');
+        if (!_body.HasValue)
+        {
+            return 0;
+        }
+
+        var output = _body.Value.Output.AsSpan().TrimEnd('\n');
         return ICollapsibleChatBlock.ClampedBodyLineCount(output, ExpandedBodyLines);
     }
 
-    private int DiffLineCount() => DiffRenderer.CountLines(_body!.DiffText!);
+    private int DiffLineCount()
+    {
+        // Two suppressions used to sit here: `_body!` and `DiffText!`. The callers guard
+        // both, so the early return is unreachable today and a no-op rather than a crash
+        // if that ever stops being true.
+        if (!_body.HasValue || _body.Value.DiffText is not string diff)
+        {
+            return 0;
+        }
+
+        return DiffRenderer.CountLines(diff);
+    }
 
     public string RawText()
     {
         var sb = new StringBuilder();
         sb.Append(RunningGlyph).Append(' ').Append(Info.ToolName);
-        if (_body is not null)
+        if (_body.HasValue)
         {
-            sb.Append(" → ").Append(_body.IsError ? "error" : "ok")
-              .Append(' ').Append(ToolResultBody.FormatDuration(_body.Duration));
+            ToolResultBody body = _body.Value;
+            sb.Append(" → ").Append(body.IsError ? "error" : "ok")
+              .Append(' ').Append(ToolResultBody.FormatDuration(body.Duration));
         }
 
         return sb.ToString();
     }
 
-    public bool HasDiffText => _body?.DiffText is not null;
+    public bool HasDiffText => _body.HasValue && _body.Value.DiffText is not null;
 }
 
 /// <summary>

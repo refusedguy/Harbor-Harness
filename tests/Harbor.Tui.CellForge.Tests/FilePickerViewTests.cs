@@ -42,7 +42,7 @@ public class FilePickerViewTests
         await Assert.That(picker.Visible).IsTrue();
         await Assert.That(picker.Results).Count().IsEqualTo(Files.Length);
         await Assert.That(picker.SelectedIndex).IsEqualTo(0);
-        await Assert.That(picker.SelectedItem).IsNotNull();
+        await Assert.That(picker.SelectedItem.HasValue).IsTrue();
     }
 
     [Test]
@@ -146,18 +146,18 @@ public class FilePickerViewTests
 
         _ = picker.HandleKey(Key(KeyCode.Down));
         _ = picker.HandleKey(Key(KeyCode.Down));
-        await Assert.That(picker.SelectedItem!.Path).IsEqualTo("README.md");
+        await Assert.That(picker.SelectedItem.Value.Path).IsEqualTo("README.md");
         await Assert.That(picker.SelectedPreview[0]).IsEqualTo("# Harbor");
 
         // docs/ROADMAP.md has no inline preview → provider fallback.
         picker.PreviewProvider = static item => item.Path.EndsWith("ROADMAP.md") ? ["# Roadmap"] : null;
         _ = picker.HandleKey(Key(KeyCode.Down));
-        await Assert.That(picker.SelectedItem!.Path).IsEqualTo("docs/ROADMAP.md");
+        await Assert.That(picker.SelectedItem.Value.Path).IsEqualTo("docs/ROADMAP.md");
         await Assert.That(picker.SelectedPreview[0]).IsEqualTo("# Roadmap");
 
         // Directory without preview lines reports itself.
         _ = picker.HandleKey(Key(KeyCode.Down));
-        await Assert.That(picker.SelectedItem!.IsDirectory).IsTrue();
+        await Assert.That(picker.SelectedItem.Value.IsDirectory).IsTrue();
         await Assert.That(picker.SelectedPreview[0]).IsEqualTo("(directory)");
     }
 
