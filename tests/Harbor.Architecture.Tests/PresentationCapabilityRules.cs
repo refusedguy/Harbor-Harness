@@ -588,9 +588,17 @@ public sealed class PresentationCapabilityRules
         ["Harbor.Tui.CellForge"] = new(StringComparer.Ordinal)
         {
             // Chat/Panels/CellForgeJumpPalettePanel.cs:330,:343 — ProcessStartInfo
-            // / Process.Start to run the jump-to-definition search.
+            // / Process.Start. The spawn is `git worktree list --porcelain` in
+            // ReadWorktreePorcelain, redirected, with a 3s timeout.
             [NoSubprocess + " Harbor.Tui.CellForge.Panels.CellForgeJumpPalettePanel"] = new(
-                Reason: null,
+                Reason:
+                    "Read-only UI chrome over a directory the user already opened: `git worktree "
+                    + "list --porcelain`, stdout/stderr redirected and capped at 3s, with no model "
+                    + "input anywhere in the path — so it never reaches PermissionRuleset and is not "
+                    + "a capability the agent can be talked into using. The AGENT's git access is the "
+                    + "opposite case and IS gated, through the `bash` tool. Same judgement as the "
+                    + "GitService rows #537 deleted; the open question is the PLACEMENT, tracked in "
+                    + "#538, which is why this is a tracked violation and not a permanent capability.",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/538"),
             // #668 RESOLVED: the JsonThemeLoader / ThemeFileWatcher rows are GONE
             // — not re-baselined. Those two were a second implementation of theme
@@ -622,26 +630,52 @@ public sealed class PresentationCapabilityRules
             // edge (#188) and docs/ARCHITECTURE_LAYERS.md §1's
             // ICommonConfigReader cycle note.
             [NoFiles + " Harbor.Desktop.Abstractions.Configuration.JsonAppConfigStore`1"] = new(
-                Reason: null,
+                Reason:
+                    "One of the two rows that decide which layer this project is in: together they "
+                    + "are the ONLY reason Harbor.Desktop.Abstractions sits in Presentation rather "
+                    + "than Domain — see the layer-matrix exception on its Harbor.Application edge "
+                    + "(#188) and §1's ICommonConfigReader cycle note, which exists because this "
+                    + "store is here. The debt is real and #534 tracks the move; the row stays "
+                    + "because deleting it would not move the file, it would only stop counting it.",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
             [NoFiles + " Harbor.Desktop.Abstractions.Configuration.JsonCommonConfigStore"] = new(
-                Reason: null,
+                Reason:
+                    "The same argument as the row above, for the common config: these two stores "
+                    + "are the load-bearing reason for this project's layer placement, and the "
+                    + "ICommonConfigReader seam was introduced to make that placement survivable. "
+                    + "#534 tracks moving the file-backed part behind the port.",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
             [NoDirectories + " Harbor.Desktop.Abstractions.Configuration.JsonAppConfigStore`1"] = new(
-                Reason: null,
+                Reason:
+                    "Same site as the NoFiles row, second reason: the store creates the directory it "
+                    + "writes config into, so one type needs BOTH rows. The placement argument is the "
+                    + "one above — these two types are why this project is Presentation, and #534 is "
+                    + "the issue that moves them.",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
             [NoDirectories + " Harbor.Desktop.Abstractions.Configuration.JsonCommonConfigStore"] = new(
-                Reason: null,
+                Reason:
+                    "The Directory half of the same two types. The config directory is created before "
+                    + "the first write so a fresh install needs no manual setup — a small, deliberate "
+                    + "side effect, in the two types whose LAYER is the tracked debt (#534).",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
         },
         ["Harbor.Desktop.Shared"] = new(StringComparer.Ordinal)
         {
             // Services/RecentItemsService.cs:89,:90,:117 (File) and :110 (Directory).
             [NoFiles + " Harbor.Desktop.Shared.Services.RecentItemsService"] = new(
-                Reason: null,
+                Reason:
+                    "The MRU list behind the command palette and the file recent-items menu, "
+                    + "persisted to a single file at ~/.harbor/recent.json. It is shell chrome with "
+                    + "no domain model behind it and nothing an agent can act on, so there is no "
+                    + "seam worth introducing for it yet; the path is injectable and tests pass a "
+                    + "temp one. The open part is that a Presentation service owns persistence, which "
+                    + "#535 tracks.",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/535"),
             [NoDirectories + " Harbor.Desktop.Shared.Services.RecentItemsService"] = new(
-                Reason: null,
+                Reason:
+                    "The Directory half of the same type: Save creates the parent directory before "
+                    + "the first write, so a fresh install with no ~/.harbor yet still persists. Same "
+                    + "reason as the row above, and the same tracked move (#535).",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/535"),
         },
     };
