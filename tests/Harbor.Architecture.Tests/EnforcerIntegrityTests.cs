@@ -55,6 +55,8 @@ public sealed class EnforcerIntegrityTests
     /// </summary>
     internal static readonly UnboundReference[] DeclaredButUnboundProjectReferences =
     [
+        new("Harbor.Ui.Framework.Abstractions", "Harbor.Abstractions",
+            "#450: declared but binds no type — the assembly's contracts are BCL-only, so the edge produces no IL."),
         new("Harbor.Terminal.Abstractions", "Harbor.Ui.Framework",
             "#450/#542: declared but binds no type — Harbor.Ui.Framework is an empty assembly (see issue #542)."),
         new("Harbor.Plugins.Hosting", "Harbor.Plugins.Storage",

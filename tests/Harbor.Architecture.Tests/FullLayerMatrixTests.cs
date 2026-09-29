@@ -215,11 +215,13 @@ public class FullLayerMatrixTests
         ["Harbor.Extensions"] = new(Layer.Domain, []),
         ["Harbor.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions.Contracts"]),
         ["Harbor.Ipc.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions"]),
-        // The IL *does* reference Harbor.Abstractions here even though the
-        // assembly binds no type from it by hand: the generated AssemblyInfo
-        // attributes (InternalsVisibleTo targets) force the reference. The
-        // liveness rule would otherwise call this a stale entry.
-        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions"]),
+        // #450: the ProjectReference to Harbor.Abstractions is declared but the
+        // assembly binds no type from it (the IL gate confirms no AssemblyRef), so
+        // the row is narrowed to empty and the reference is listed as
+        // declared-but-unbound. An earlier attempt to keep the entry, on the
+        // theory that the SDK-generated AssemblyInfo forces the reference, was
+        // wrong — the compiled reference list is the authority.
+        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, []),
 
         // ---- Presentation -------------------------------------------------
         // #450: "Harbor.Ui.Framework" was permitted here but never used. The
