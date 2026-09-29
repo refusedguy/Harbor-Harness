@@ -9,3 +9,6 @@ global using CSharpFunctionalExtensions;
 global using Harbor.Abstractions.Models;
 global using Harbor.Abstractions.Models.Identifiers;
 global using Harbor.Abstractions.Tools;
+
+// #557: ITool.SafetyProfile — the required per-tool permission declaration.
+global using Harbor.Abstractions.Permissions;

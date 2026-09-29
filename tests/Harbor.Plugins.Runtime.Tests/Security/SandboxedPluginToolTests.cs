@@ -212,6 +212,10 @@ public sealed class SandboxedPluginToolTests
         }
 
         public ToolName Name => ToolName.Create("google_search");
+
+        /// <inheritdoc />
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
         public string DisplayName => "Google Search";
         public string Description => "Fake plugin tool for sandbox tests";
         public ExecutionMode ExecutionMode => ExecutionMode.Sequential;

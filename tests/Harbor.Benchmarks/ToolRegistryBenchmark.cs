@@ -228,6 +228,10 @@ internal sealed class StubTool : ITool
     }
 
     public ToolName Name { get; }
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
     public string DisplayName { get; }
     public string Description { get; }
     public JsonDocument ParameterSchema => Schema;

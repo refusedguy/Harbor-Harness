@@ -36,6 +36,8 @@ public class SteeringDeliveryTests
     {
         public ToolName Name => ToolName.Create("steerer");
 
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
         public string DisplayName => "Steerer";
 
         public string Description => "Enqueues steering messages during execution.";
@@ -74,6 +76,8 @@ public class SteeringDeliveryTests
     private sealed class CancellingTool(CancellationTokenSource cts) : ITool
     {
         public ToolName Name => ToolName.Create("canceller");
+
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
 
         public string DisplayName => "Canceller";
 

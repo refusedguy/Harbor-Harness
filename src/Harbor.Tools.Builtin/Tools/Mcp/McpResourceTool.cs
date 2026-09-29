@@ -42,6 +42,9 @@ public sealed class McpResourceTool : ITool
     public ToolName Name => ToolName.Create("read_mcp_resource");
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
+    /// <inheritdoc />
     public string DisplayName => "MCP Resource";
 
     /// <inheritdoc />

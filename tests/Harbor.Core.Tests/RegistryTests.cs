@@ -4,6 +4,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 namespace Harbor.Core.Tests;
 public class RegistryTests
@@ -81,6 +82,10 @@ internal sealed class TestTool : ITool
         Description = description;
     }
     public ToolName Name { get; }
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
     public string DisplayName { get; }
     public string Description { get; }
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("{}");

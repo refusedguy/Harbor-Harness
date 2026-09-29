@@ -39,6 +39,9 @@ public sealed class McpToolTool : ITool
     public ToolName Name => ToolName.Create("mcp");
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
+    /// <inheritdoc />
     public string DisplayName => "MCP";
 
     /// <inheritdoc />

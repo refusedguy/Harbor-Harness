@@ -97,6 +97,7 @@ public class PluginReloadServiceTests
                                                              using CSharpFunctionalExtensions;
                                                              using Harbor.Abstractions.Models;
                                                              using Harbor.Abstractions.Models.Identifiers;
+                                                             using Harbor.Abstractions.Permissions;
                                                              using Harbor.Abstractions.Plugins;
                                                              using Harbor.Abstractions.Tools;
                                                              using Microsoft.Extensions.Logging;
@@ -119,6 +120,8 @@ public class PluginReloadServiceTests
                                                                  public string Description => "Returns a greeting";
                                                                  public JsonDocument ParameterSchema => JsonDocument.Parse("{\"type\":\"object\"}");
                                                                  public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+                                                                 public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
                                                                  public string? PromptSnippet => null;
                                                                  public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
                                                                  public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)

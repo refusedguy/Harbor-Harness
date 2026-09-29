@@ -471,16 +471,20 @@ public sealed class PresentationCapabilityRules
 
     private static readonly Dictionary<string, Dictionary<string, string>> KnownViolations = new(StringComparer.Ordinal)
     {
-        ["Harbor.Ui.Framework.Services"] = new(StringComparer.Ordinal)
-        {
-            // Services/GitService.cs — ProcessStartInfo/Process.Start at :52,:64
-            // (git rev-parse, git status) and Directory.Exists at :21. GitService
-            // is NOT an ITool and never reaches the permission seam.
-            [NoSubprocess + " Harbor.Ui.Framework.Services.GitService"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/537",
-            [NoDirectories + " Harbor.Ui.Framework.Services.GitService"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/537",
-        },
+        // #537 RESOLVED: the two Harbor.Ui.Framework.Services rows are GONE — not
+        // re-baselined, not widened. GitService no longer forks `git` and no longer
+        // calls Directory.Exists: it maps the Domain `IGitQuery` contract onto
+        // GitSessionInfo, and `ProcessGitQuery` (Harbor.Application) does the spawn
+        // beside BashTool / WorkspaceInspector.
+        // NonVacuity_GrandfatheredViolations_AreStillReal is what FORCES the
+        // deletion: had the rows stayed while the code was fixed, that test would
+        // now fail with "baseline row is stale" — the liveness check working.
+        //
+        // What remains is a decision, not an oversight: the UI-chrome git read is
+        // deliberately NOT routed through PermissionRuleset (no model input,
+        // read-only, a directory the user opened), while the AGENT's git access IS
+        // gated, through the `bash` tool. See IGitQuery's remarks and
+        // GitServicePermissionGatingTests.
         ["Harbor.Tui.Notifications"] = new(StringComparer.Ordinal)
         {
             // NotificationTuiRenderer.cs — three OS notification backends, each

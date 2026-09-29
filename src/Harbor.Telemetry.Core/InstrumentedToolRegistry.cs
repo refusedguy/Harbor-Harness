@@ -18,6 +18,10 @@ public sealed class InstrumentedToolRegistry(IToolRegistry inner, IMetrics metri
 {
     public IReadOnlyList<ToolDescriptor> GetAllTools() => inner.GetAllTools();
 
+    // #557: the guard set is derived from the tools themselves, so the decorator
+    // forwards the inner registry's view rather than keeping a second copy.
+    public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies => inner.SafetyPolicies;
+
     public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
         => inner.ResolveTools(agentName, sessionPermission);
 
@@ -48,6 +52,8 @@ public sealed class TelemetryToolDecorator(ITool inner, IMetrics metrics, ITrace
     public string Description => inner.Description;
 
     public ExecutionMode ExecutionMode => inner.ExecutionMode;
+
+    public ToolSafetyProfile SafetyProfile => inner.SafetyProfile;
 
     public string? PromptSnippet => inner.PromptSnippet;
 

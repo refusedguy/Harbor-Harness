@@ -15,6 +15,10 @@ public sealed class WriteTool : ITool
     public WriteTool(ILogger<WriteTool> logger) { _logger = logger; }
 
     public ToolName Name => ToolName.Create("write");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
     public string DisplayName => "Write";
     public string Description =>
         "Write content to a file (create or overwrite). Creates parent directories by default.";

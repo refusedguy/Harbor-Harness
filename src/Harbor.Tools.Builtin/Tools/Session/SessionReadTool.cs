@@ -26,6 +26,10 @@ public sealed class SessionReadTool : ITool
     }
 
     public ToolName Name => ToolName.Create("session_read");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
     public string DisplayName => "Session Read";
 
     public string Description =>

@@ -18,6 +18,10 @@ public sealed class McpToolAdapter : ITool
     }
 
     public ToolName Name => ToolName.Create($"mcp_{_server}_{_toolName}");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
     public string DisplayName => $"{_server}:{_toolName}";
     public string Description => $"MCP tool {_toolName} on server {_server}";
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;

@@ -5,6 +5,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugin.TodoWrite;
@@ -31,6 +32,10 @@ public sealed class TodoWritePlugin : IToolPlugin
 public sealed class TodoWriteTool : ITool
 {
     public ToolName Name => ToolName.Create("todo");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
     public string DisplayName => "Todo";
     public string Description => "Manage a todo list for the current task. Supports add, update, list, complete, and clear operations. Todos persist across tool calls within the same session.";
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;

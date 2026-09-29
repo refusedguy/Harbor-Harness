@@ -25,6 +25,10 @@ public sealed class LsTool : ITool
     public LsTool(ILogger<LsTool> logger) { _logger = logger; }
 
     public ToolName Name => ToolName.Create("ls");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
     public string DisplayName => "List";
     public string Description =>
         "List directory contents. Entries: [dir]/[file] with size and modified time for files. " +

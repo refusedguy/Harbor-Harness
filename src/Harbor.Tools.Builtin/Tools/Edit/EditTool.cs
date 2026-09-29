@@ -34,6 +34,10 @@ public sealed class EditTool : ITool
     }
 
     public ToolName Name => ToolName.Create("edit");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
     public string DisplayName => "Edit";
     public string Description =>
         "Replace text in a file. Single: oldString→newString. Multi: edits[]. " +

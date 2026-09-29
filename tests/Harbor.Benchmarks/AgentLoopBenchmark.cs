@@ -276,6 +276,10 @@ internal sealed class BenchToolRegistry : IToolRegistry
     public Result<ITool> GetTool(ToolName name)
         => name == _tool.Name ? Result.Success(_tool) : Result.Failure<ITool>($"Unknown tool '{name.Value}'");
 
+    // #557: derived from the tool itself, exactly like the production registry.
+    public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies =>
+        ToolSafetyPolicies.Build([new ToolSafetyDeclaration(_tool.Name.Value, _tool.SafetyProfile)]);
+
     public Result Register(ITool tool) => Result.Success();
 
     public Result Unregister(ToolName name) => Result.Success();
@@ -287,6 +291,10 @@ internal sealed class BenchToolRegistry : IToolRegistry
 internal sealed class BenchTool : ITool
 {
     public ToolName Name => ToolName.Create("bench_tool");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
     public string DisplayName => "Bench Tool";
     public string Description => "A trivial tool used to exercise the dispatch path.";
     public JsonDocument ParameterSchema => JsonDocument.Parse("{}");

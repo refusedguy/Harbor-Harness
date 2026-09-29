@@ -31,6 +31,10 @@ public class ToolTimeoutTests
     private sealed class HangingTool : ITool
     {
         public ToolName Name => ToolName.Create("hang");
+
+        /// <inheritdoc />
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
         public string DisplayName => "Hang";
         public string Description => "Never returns.";
         public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");

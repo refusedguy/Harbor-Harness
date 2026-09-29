@@ -38,6 +38,10 @@ public sealed class GrepTool : ITool
     public GrepTool(ILogger<GrepTool> logger) { _logger = logger; }
 
     public ToolName Name => ToolName.Create("grep");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
     public string DisplayName => "Grep";
     public string Description =>
         "Search file contents with regex. Returns matching lines as file:line:content. " +

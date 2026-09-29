@@ -126,6 +126,10 @@ public class ToolRegistryAllocationTests
         public CachedSchemaStubTool(string name) => Name = ToolName.Create(name);
 
         public ToolName Name { get; }
+
+        /// <inheritdoc />
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
         public string DisplayName => Name.Value;
         public string Description => "Allocation-budget stub (schema parsed once).";
         public ExecutionMode ExecutionMode => ExecutionMode.Parallel;

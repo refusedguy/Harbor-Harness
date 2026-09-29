@@ -291,6 +291,10 @@ public class DecoratorTelemetryTests : IDisposable
 
         public Result<ITool> GetTool(ToolName name) => Result.Success(tool);
 
+        // #557: derived from the tool itself, exactly like the production registry.
+        public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies =>
+            ToolSafetyPolicies.Build([new ToolSafetyDeclaration(tool.Name.Value, tool.SafetyProfile)]);
+
         public Result Register(ITool tool) => Result.Success();
 
         public Result Unregister(ToolName name) => Result.Success();
@@ -327,6 +331,8 @@ public class DecoratorTelemetryTests : IDisposable
         public string Description => "stub";
 
         public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
+
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
 
         public string? PromptSnippet => null;
 

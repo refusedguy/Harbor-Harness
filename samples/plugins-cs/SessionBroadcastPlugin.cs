@@ -24,6 +24,7 @@ using System.Threading.Tasks;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
@@ -244,6 +245,9 @@ public sealed class SessionBroadcastTool : ITool
     public ToolName Name => ToolName.Create("session_broadcast");
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
+    /// <inheritdoc />
     public string DisplayName => "Session Broadcast";
 
     /// <inheritdoc />
@@ -376,6 +380,9 @@ public sealed class SessionInboxTool : ITool
 
     /// <inheritdoc />
     public ToolName Name => ToolName.Create("session_inbox");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
 
     /// <inheritdoc />
     public string DisplayName => "Session Inbox";

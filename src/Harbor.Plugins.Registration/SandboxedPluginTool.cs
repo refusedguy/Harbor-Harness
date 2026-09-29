@@ -90,6 +90,9 @@ public sealed class SandboxedPluginTool : ITool
     public ToolName Name => _inner.Name;
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => _inner.SafetyProfile;
+
+    /// <inheritdoc />
     public string DisplayName => _inner.DisplayName;
 
     /// <inheritdoc />

@@ -47,6 +47,9 @@ public sealed class NotebookTool : ITool
     public ToolName Name => ToolName.Create("notebook");
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
+    /// <inheritdoc />
     public string DisplayName => "Notebook";
 
     /// <inheritdoc />

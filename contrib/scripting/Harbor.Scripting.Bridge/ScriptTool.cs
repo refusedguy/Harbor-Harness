@@ -64,6 +64,9 @@ public sealed class ScriptTool : ITool
     public ToolName Name { get; }
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
+    /// <inheritdoc />
     public string DisplayName { get; }
 
     /// <inheritdoc />

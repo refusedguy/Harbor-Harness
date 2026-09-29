@@ -62,6 +62,8 @@ public class ToolDispatcherRetryTests
         public int Executions => Volatile.Read(ref _executions);
 
         public ToolName Name => ToolName.Create("flaky");
+
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
         public string DisplayName => "Flaky";
         public string Description => "Fails per script, then succeeds.";
         public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
