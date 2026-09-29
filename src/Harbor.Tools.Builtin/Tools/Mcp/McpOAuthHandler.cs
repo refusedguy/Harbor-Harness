@@ -185,10 +185,14 @@ public sealed class McpOAuthHandler
             }
             else
             {
+                // Re-type through the library member, not a hand-rolled
+                // Result.Failure<string>(launched.Error) — see the
+                // ConvertFailure guard. The `IsFailure` check in front is what
+                // keeps the call from throwing on a success.
                 Result launched = OpenBrowser(url);
                 if (launched.IsFailure)
                 {
-                    return launched.ConvertFailure();
+                    return launched.ConvertFailure<string>();
                 }
             }
 
