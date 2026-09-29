@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.App.Cli.Logging;
 using System.Threading.Tasks;
 namespace Harbor.App.Cli.Commands;
@@ -159,13 +160,13 @@ public sealed class LogsCommand : ICommand
             _error.WriteLine($"No log directory yet: {LogDir}");
             return 0;
         }
-        FileInfo? latest;
+        Maybe<FileInfo> latest;
         try
         {
             latest = Directory.GetFiles(LogDir, "harbor-*.log")
                 .Select(f => new FileInfo(f))
                 .OrderByDescending(f => f.CreationTimeUtc)
-                .FirstOrDefault();
+                .TryFirst();
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -178,16 +179,16 @@ public sealed class LogsCommand : ICommand
             return 2;
         }
 
-        if (latest is null)
+        if (latest.HasNoValue)
         {
             _error.WriteLine($"No log files in {LogDir}.");
             return 2;
         }
 
-        _output.WriteLine($"=== {latest.FullName} ===");
+        _output.WriteLine($"=== {latest.Value.FullName} ===");
         try
         {
-            using var fs = new FileStream(latest.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var fs = new FileStream(latest.Value.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using var reader = new StreamReader(fs);
             string? line;
             while ((line = reader.ReadLine()) is not null)
@@ -228,7 +229,7 @@ public sealed class LogsCommand : ICommand
         }
         catch (IOException ex)
         {
-            _error.WriteLine($"Cannot read {latest.FullName}: {ex.Message}");
+            _error.WriteLine($"Cannot read {latest.Value.FullName}: {ex.Message}");
             return 2;
         }
     }

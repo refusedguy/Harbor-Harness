@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using CSharpFunctionalExtensions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Hosting;
@@ -89,14 +90,15 @@ public static class HarborModeRegistry
 
     /// <summary>
     ///     Resolve a raw <c>HARBOR_MODE</c> value to its strategy
-    ///     (trim + case-insensitive). Returns <c>false</c> for unknown
-    ///     modes — the caller throws the documented ArgumentException.
+    ///     (trim + case-insensitive). Unknown modes come back as
+    ///     <see cref="Maybe{T}.None" /> — the caller throws the documented
+    ///     ArgumentException. Absence is a value, so it travels in the
+    ///     signature instead of in a nullable out-parameter.
     /// </summary>
-    public static bool TryResolve(
+    public static Maybe<IHarborModeStrategy> Resolve(
         FrozenDictionary<string, IHarborModeStrategy> registry,
-        string rawMode,
-        out IHarborModeStrategy? strategy)
+        string rawMode)
     {
-        return registry.TryGetValue(rawMode.Trim(), out strategy);
+        return registry.TryFind(rawMode.Trim());
     }
 }

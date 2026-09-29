@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,15 +39,16 @@ internal static class StorageModule
         // (IPluginLoadHost.RegisterSessionStore), so those are named too.
         FrozenDictionary<string, ISessionStoreFactory> registry =
             SessionStoreRegistry.Build(ctx.Registries.SessionStores);
-        if (!SessionStoreRegistry.TryResolve(registry, requested, out ISessionStoreFactory? factory) || factory is null)
+        Maybe<ISessionStoreFactory> factory = SessionStoreRegistry.Resolve(registry, requested);
+        if (factory.HasNoValue)
         {
             throw new ArgumentException(
                 $"Unknown HARBOR_STORAGE: '{requested}'. Expected one of: {string.Join(", ", registry.Keys.Order(StringComparer.Ordinal))}.");
         }
 
-        ctx.Logger.LogInformation("Storage backend: {Storage}", factory.BackendId);
+        ctx.Logger.LogInformation("Storage backend: {Storage}", factory.Value.BackendId);
 
-        services.AddSingleton<ISessionStore>(sp => factory.Create(sp, sessionsDir, sqlitePath));
+        services.AddSingleton<ISessionStore>(sp => factory.Value.Create(sp, sessionsDir, sqlitePath));
         // Session import/export works over ANY registered backend: the porter reads via
         // ISessionStore and encodes through the shared JSONL message codec (V4-slice).
         services.AddSingleton<ISessionPorter, JsonlSessionPorter>();

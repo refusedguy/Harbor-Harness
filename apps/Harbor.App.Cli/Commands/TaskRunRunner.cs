@@ -62,9 +62,9 @@ public static class TaskRunRunner
             return 1;
         }
 
-        AgentDefinition? definition = agents.GetAllAgents()
-            .FirstOrDefault(a => a.Name.Value.Equals(agentName, StringComparison.OrdinalIgnoreCase));
-        if (definition is null)
+        Maybe<AgentDefinition> definition = agents.GetAllAgents()
+            .TryFirst(a => a.Name.Value.Equals(agentName, StringComparison.OrdinalIgnoreCase));
+        if (definition.HasNoValue)
         {
             var available = agents.GetAllAgents().Where(a => a.IsSubAgent).Select(a => a.Name.Value);
             await stderr.WriteLineAsync(
@@ -72,7 +72,7 @@ public static class TaskRunRunner
             return 1;
         }
 
-        if (!definition.IsSubAgent)
+        if (!definition.Value.IsSubAgent)
         {
             await stderr.WriteLineAsync(
                 $"Agent '{agentName}' is not a sub-agent. Only agents with IsSubAgent=true can be run via task.").ConfigureAwait(false);
@@ -97,7 +97,7 @@ public static class TaskRunRunner
             $"limits={contract.Limits.TimeoutSeconds}s/{contract.Limits.MaxSteps}steps").ConfigureAwait(false);
 
         var result = await runner.RunAsync(
-            definition,
+            definition.Value,
             new SubAgentRunRequest(prompt, ParentSessionId: null),
             CancellationToken.None).ConfigureAwait(false);
 
