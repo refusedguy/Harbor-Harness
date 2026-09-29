@@ -5,15 +5,10 @@
 // THE WAVE
 // --------
 // When a step on a Result railway fails and the caller adds its own context to the
-// reason, the reason must travel through the library's error-mapping member:
-//
-//     if (created.IsFailure)
-//         return created.MapError(e => $"Failed to create session: {e}");
-//
-// not through a hand-assembled failure:
-//
-//     if (created.IsFailure)
-//         return Result.Failure<Session>($"Failed to create session: {created.Error}");
+// reason, the reason must travel through the library's error-mapping member, spelled
+// `created.MapError(e => $"Failed to create session: {e}")`, and not through a
+// hand-assembled failure spelled `Result.Failure<Session>(...)` around a string that
+// interpolates `created.Error`.
 //
 // The second form is where the original cause dies: the string is built once, at the
 // call site, from a value the caller had to remember to interpolate, and a future
@@ -58,12 +53,13 @@
 // -----------
 // A source scan that matches nothing is indistinguishable from a source scan that is
 // broken, and a broken guard is worse than none because it is believed. Two tests
-// close that. `Scanner_...` requires a repository root and a non-trivial file count,
-// and runs the SAME matcher against a synthetic positive control (the old spelling,
-// which must be flagged) and two synthetic negative controls (the converted spelling
-// and its legitimate neighbours, which must not be). `AllowList_...` then fails when
-// an exemption stops matching anything, so a stale exemption cannot sit there
-// silently letting the pattern back in.
+// close that. `Scanner_FlagsTheOldSpellingAndAcceptsTheNewOne` requires a repository
+// root and a non-trivial file count, and runs the SAME matcher against a synthetic
+// positive control (the old spelling, which must be flagged) and two synthetic
+// negative controls (the converted spelling and its legitimate neighbours, which
+// must not be). `AllowList_EveryEntryStillMatchesSomething` then fails when an
+// exemption stops matching anything, so a stale exemption cannot sit there silently
+// letting the pattern back in.
 
 using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
@@ -349,7 +345,7 @@ public sealed class MapErrorFailureShapeTests
     public async Task SessionFactory_CreateBranchAsync_Error_StillCarriesTheCauseAndTheSessionId()
     {
         const string Cause = "session index is corrupt";
-        Session source = Session.Create("/tmp/harbor-maperror-guard", "code", "test-provider", "test-model");
+        Session source = Session.Create("/home/user/project", "code", "test-provider", "test-model");
 
         Result<Session> result = await NewFactory(new FailingSessionStore(Cause))
             .CreateBranchAsync(source);
