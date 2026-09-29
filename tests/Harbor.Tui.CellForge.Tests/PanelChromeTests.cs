@@ -272,7 +272,15 @@ public class PanelChromeTests
         await Assert.That(rows[5]).IsEqualTo("########");
     }
 
-    /// <summary>Rectilinear corners are a parameter of the one painter, not a seventh copy.</summary>
+    /// <summary>
+    /// Rectilinear corners are a parameter of the one painter, not a seventh
+    /// copy — and the square dialect is also the one that does NOT blank the
+    /// interior, because the image viewer is fullscreen and opaque and wipes its
+    /// own surface first (a second fill would only repaint blanks with blanks).
+    /// The sentinel therefore SURVIVES inside the frame here, where the rounded
+    /// sibling above shows blanks: that difference between the two dialects is
+    /// exactly what the art below pins.
+    /// </summary>
     [Test]
     public async Task PaintBorderBox_SquareStyle_UsesRectilinearCorners()
     {
@@ -282,8 +290,8 @@ public class PanelChromeTests
         string[] rows = GridDump.Art(buffer).Split('\n');
         await Assert.That(rows[0]).IsEqualTo("########");
         await Assert.That(rows[1]).IsEqualTo("#┌────┐#");
-        await Assert.That(rows[2]).IsEqualTo("#│    │#");
-        await Assert.That(rows[3]).IsEqualTo("#│    │#");
+        await Assert.That(rows[2]).IsEqualTo("#│####│#");
+        await Assert.That(rows[3]).IsEqualTo("#│####│#");
         await Assert.That(rows[4]).IsEqualTo("#└────┘#");
         await Assert.That(rows[5]).IsEqualTo("########");
     }
@@ -312,6 +320,13 @@ public class PanelChromeTests
     /// wants a frame calls <c>PanelChrome.PaintBorderBox</c> instead of
     /// copying the nearest private painter — which is how two of the seven
     /// lost the degenerate-rect guard in the first place.
+    ///
+    /// The scan covers BOTH dialects. The first version of this guard only
+    /// looked for the rounded <c>╭╮╰╯</c>, which meant a new overlay copying
+    /// the image viewer's rectilinear <c>┌┐└┘</c> — the other half of
+    /// <see cref="BoxStyle"/> — walked straight past it. TableBlock is the one
+    /// legitimate <c>┌</c> in this layer and is a table GRID, not a panel
+    /// frame: it also draws <c>┼├┤</c>, which no outer border can contain.
     /// </summary>
     [Test]
     public async Task BoxCorners_AreSpelledInExactlyOneFile()
@@ -328,7 +343,16 @@ public class PanelChromeTests
             }
 
             string text = File.ReadAllText(file);
-            if (!text.Contains('╭') && !text.Contains('╮') && !text.Contains('╰') && !text.Contains('╯'))
+            bool rounded = text.Contains('╭') || text.Contains('╮') || text.Contains('╰') || text.Contains('╯');
+            bool rectilinear = text.Contains('┌') || text.Contains('┐') || text.Contains('└') || text.Contains('┘');
+            if (!rounded && !rectilinear)
+            {
+                continue;
+            }
+
+            // A grid renderer draws junctions inside the frame; a copied panel
+            // box cannot. See the summary on the exception above.
+            if (rectilinear && (text.Contains('┼') || text.Contains('├') || text.Contains('┤')))
             {
                 continue;
             }
