@@ -58,12 +58,21 @@ internal static class SessionsVerb
         using var host = HostBuilder.Build();
         var store = host.Services.GetRequiredService<ISessionStore>();
         var result = await store.ListAsync().ConfigureAwait(false);
-        if (result.IsSuccess)
+        if (result.IsFailure)
         {
-            logger.LogInformation("Found {Count} sessions", result.Value.Count);
-            foreach (var s in result.Value)
-                Console.WriteLine($"  {s.Id} — {s.Title} [{s.ProviderId}/{s.Model}]");
+            // #603: the same swallow as the `/sessions` slash command, and worse
+            // — it returned 0, so `harbor sessions list` exited SUCCESS on an
+            // unreadable store after printing nothing. A script wrapping it
+            // would read that as "no sessions", which is a different and much
+            // more expensive conclusion than "the store is broken".
+            logger.LogError("Cannot list sessions: {Error}", result.Error);
+            Console.Error.WriteLine($"Cannot list sessions: {result.Error}");
+            return 1;
         }
+
+        logger.LogInformation("Found {Count} sessions", result.Value.Count);
+        foreach (var s in result.Value)
+            Console.WriteLine($"  {s.Id} — {s.Title} [{s.ProviderId}/{s.Model}]");
         return 0;
     }
 

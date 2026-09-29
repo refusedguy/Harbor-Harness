@@ -62,14 +62,22 @@ public sealed class AuthCommand : ISlashCommand
 
             case "list":
                 var listResult = await _authStore.ListApiKeysAsync(ct).ConfigureAwait(false);
-                if (listResult.IsSuccess)
+                if (listResult.IsFailure)
                 {
-                    _writer("Configured API keys:");
-                    foreach (var kv in listResult.Value)
-                    {
-                        string status = kv.Value ? "✓ set" : "✗ empty";
-                        _writer($"  {kv.Key,-15} {status}");
-                    }
+                    // #603: no failure arm here meant an unreadable key store
+                    // printed nothing and reported success, so `/auth list` (and
+                    // `harbor auth list`, which maps the Result to an exit code)
+                    // both claimed there were no keys. Matches the `set`/`reset`
+                    // arms above.
+                    _writer($"✗ Failed: {listResult.Error}");
+                    return listResult;
+                }
+
+                _writer("Configured API keys:");
+                foreach (var kv in listResult.Value)
+                {
+                    string status = kv.Value ? "✓ set" : "✗ empty";
+                    _writer($"  {kv.Key,-15} {status}");
                 }
                 return Result.Success();
 

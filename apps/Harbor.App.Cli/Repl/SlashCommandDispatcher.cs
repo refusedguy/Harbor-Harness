@@ -189,8 +189,29 @@ internal sealed class SlashCommandDispatcher
         try
         {
             _logger.LogInformation("Slash command: /{Command} args={ArgCount}", reg.Definition.Name, args.Count);
+
+            // #603: the handler's Result used to be assigned here and never read.
+            // `SlashCommandOutcome` carries only ShouldQuit/ExitCode and all three
+            // production entry points read only those, so the channel was
+            // decorative: `/sessions` could swallow a failed ListAsync, return
+            // Success(), and nothing downstream would ever know. The user-facing
+            // report is the handler's own `ctx.Writer` call (see the contract on
+            // Register); reading the value here is what makes the failure
+            // diagnosable when a handler forgets, and it is the guard
+            // tests/Harbor.Architecture.Tests/SlashResultChannelTests.cs enforces.
             var result = await reg.Execute(ctx, args).ConfigureAwait(false);
-            _logger.LogDebug("Command /{Command} completed", reg.Definition.Name);
+            if (result.IsFailure)
+            {
+                // A command error is not a crash: the REPL keeps running. Log it
+                // at Warning so `harbor logs` still shows what the user saw (or,
+                // for a handler that forgot to write, did not see).
+                _logger.LogWarning("Command /{Command} failed: {Error}", reg.Definition.Name, result.Error);
+            }
+            else
+            {
+                _logger.LogDebug("Command /{Command} completed", reg.Definition.Name);
+            }
+
             return SlashCommandOutcome.Continue;
         }
         catch (Exception ex)
@@ -243,6 +264,29 @@ internal sealed class SlashCommandDispatcher
         }
     }
 
+    /// <remarks>
+    ///     <para>
+    ///         #603 — the handler contract. Returning <see cref="Result" /> does
+    ///         <b>not</b> stop the REPL: a failed command is a command error, not
+    ///         a crash, and <see cref="SlashCommandOutcome" /> has no error member
+    ///         because no caller has ever had a use for one.
+    ///     </para>
+    ///     <para>
+    ///         So the <see cref="Result" /> is a <b>declaration</b> that the
+    ///         handler has handled the failure, not a transport that will deliver
+    ///         it. The obligation it carries is: <i>if you return
+    ///         <c>Result.Failure</c>, the reason has already been written through
+    ///         <c>ctx.Writer</c></i>. <see cref="ExecuteRegisteredAsync" /> reads
+    ///         the value only to log it, and
+    ///         <c>tests/Harbor.Architecture.Tests/SlashResultChannelTests.cs</c>
+    ///         fails the build when a handler branches on <c>IsSuccess</c> with no
+    ///         failure arm, or drops an awaited <c>Result</c> entirely.
+    ///     </para>
+    ///     <para>
+    ///         <c>/tree</c> and <c>/fork</c> are the reference shape: check
+    ///         <c>IsFailure</c>, write the reason, return <c>Success()</c>.
+    ///     </para>
+    /// </remarks>
     private static void Register(
         Dictionary<string, SlashCommandRegistration> dict,
         string canonical,
@@ -290,6 +334,16 @@ internal sealed class SlashCommandDispatcher
         {
             var result = await ctx.Wizard
                 .RunAsync(ctx.Reader!, ctx.Writer).ConfigureAwait(false);
+            if (result.IsFailure)
+            {
+                // #603: the wizard writes prompts but nothing on the way out, and
+                // its Result went straight back to this dispatcher, which dropped
+                // it — so "/setup" then Ctrl-D or three blank lines ended with no
+                // explanation at all. ReplRunner.cs:150 reports the same failure
+                // on the boot-time path; this is the slash path's equivalent.
+                ctx.Writer($"Setup failed: {result.Error}");
+            }
+
             return result;
         });
 
@@ -346,9 +400,18 @@ internal sealed class SlashCommandDispatcher
         {
             var store = ctx.SessionStore;
             var result = await store.ListAsync().ConfigureAwait(false);
-            if (result.IsSuccess)
-                foreach (var s in result.Value)
-                    ctx.Writer($"  {s.Id} — {s.Title} [{s.ProviderId}/{s.Model}]");
+            if (result.IsFailure)
+            {
+                // #603: this had no failure arm and returned Success() anyway,
+                // so an unreadable store printed nothing at all — which reads as
+                // "you have no sessions". Same wording as /tree, which reports
+                // the same store failing.
+                ctx.Writer($"Cannot list sessions: {result.Error}");
+                return Result.Success();
+            }
+
+            foreach (var s in result.Value)
+                ctx.Writer($"  {s.Id} — {s.Title} [{s.ProviderId}/{s.Model}]");
             return Result.Success();
         });
 
@@ -492,7 +555,9 @@ internal sealed class SlashCommandDispatcher
             }
 
             // A failed update is a command error, not a crash: the REPL keeps
-            // running and the pill keeps its previous (stale) state.
+            // running and the pill keeps its previous (stale) state. The reason
+            // reaches the user through the `ctx.Writer` line above — not through
+            // this Result, which the dispatcher only logs (#603).
             return report.Outcome == SkillUpdateOutcome.Failed
                 ? Result.Failure(report.Message)
                 : Result.Success();
