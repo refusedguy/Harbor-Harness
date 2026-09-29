@@ -224,13 +224,18 @@ public sealed class ModelCommand : ISlashCommand
             modelId = model;
         }
 
-        var currentDef = _agent.State?.Agent;
-        if (currentDef is null)
+        // #559: absence is Maybe, so "the agent is not initialized" is a shape the
+        // compiler keeps us honest about instead of a `?.` that silently yields a
+        // null we then have to re-test. HasNoValue, not an empty property pattern:
+        // a struct is never "null", so `{ }` would match the Maybe itself.
+        Maybe<AgentState> bound = _agent.State;
+        if (bound.HasNoValue)
         {
             _writer("⚠ Agent is not initialized — cannot rebind, restart the REPL.");
             return Result.Success();
         }
 
+        AgentDefinition currentDef = bound.Value.Agent;
         var reboundSession = _session with { ProviderId = providerId, Model = modelId };
         _agent.Initialize(reboundSession, currentDef.WithModel(modelId, providerId));
         _writer($"✓ Active session rebound to {providerId}/{modelId} (no restart needed).");

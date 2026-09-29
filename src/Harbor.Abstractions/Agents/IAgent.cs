@@ -123,10 +123,35 @@ public interface IAgentRunner
 public interface IAgent : IAgentRunner, IDisposable
 {
     /// <summary>
-    ///     Current agent state snapshot. <see cref="AgentState.IsRunning" /> reflects whether
-    ///     a <see cref="PromptAsync" /> call is in flight.
+    ///     Current agent state snapshot — <see cref="Maybe.None" /> until <see cref="Initialize" />
+    ///     binds a session. <see cref="AgentState.IsRunning" /> reflects whether a
+    ///     <see cref="PromptAsync" /> call is in flight.
     /// </summary>
-    public AgentState State { get; }
+    /// <remarks>
+    ///     <para>
+    ///         <b>Why absence and not a fabricated default (#559):</b> this property used to be
+    ///         declared non-nullable while every implementation started at <c>null!</c> and first
+    ///         assigned it inside <see cref="Initialize" />. The annotation was a lie the compiler
+    ///         could not check, and it discouraged the check the implementation needed — the class
+    ///         null-tested its OWN property in four places and dereferenced it unguarded a few lines
+    ///         later. Roughly twenty call sites trusted the annotation instead, three of them in
+    ///         constructors where the caller cannot sequence around them.
+    ///     </para>
+    ///     <para>
+    ///         An <c>AgentState.Uninitialized</c> sentinel is NOT the answer: the record
+    ///         carries a <c>SessionId</c> and an <see cref="AgentDefinition" />, so "unbound" would
+    ///         have to invent both — and the invented session id flows straight into
+    ///         <c>ISessionStore.AppendMessageAsync</c> while the invented definition surfaces as
+    ///         <c>Model == ""</c>. That trades one lie for a worse one.
+    ///     </para>
+    ///     <para>
+    ///     Consumers that only need "is a turn in flight?" should call
+    ///         <see cref="AgentStateProbe.IsRunning(IAgent)" />, which decides the unbound
+    ///         case once (an unbound agent is definitionally idle) instead of re-guessing it
+    ///         at each site.
+    ///     </para>
+    /// </remarks>
+    public Maybe<AgentState> State { get; }
 
     /// <summary>
     ///     Subscribe to all <see cref="AgentEvent" />s emitted by this agent. The returned
@@ -188,6 +213,43 @@ public sealed record AgentState(
         0,
         null,
         null);
+}
+
+/// <summary>
+///     Absence-tolerant reads over <see cref="IAgent.State" />.
+/// </summary>
+/// <remarks>
+///     <para>
+///         <b>Why this exists (#559):</b> after <c>State</c> became <c>Maybe&lt;AgentState&gt;</c>
+///         there were roughly ten consumers asking the same question — "is a turn in flight?" —
+///         from the frame loop, the abort gesture and four slash commands. Each one would have
+///         had to re-derive the unbound case, and the derivations would have drifted.
+///     </para>
+///     <para>
+///         The unbound case is not a degradation, it is the truth: an agent with no session has
+///         no run, so <see langword="false" /> is the correct answer rather than a fallback that
+///         hides a mistake. Callers that genuinely cannot proceed without a bound agent should
+///         pattern-match on <c>State</c> themselves and say so.
+///     </para>
+/// </remarks>
+public static class AgentStateProbe
+{
+    /// <summary>
+    ///     Whether a prompt run is in flight. An agent that has not been
+    ///     <see cref="IAgent.Initialize" />d yet answers <see langword="false" />.
+    /// </summary>
+    /// <param name="agent">The agent to probe.</param>
+    /// <returns><see langword="true" /> only while a bound agent is running.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="agent" /> is <see langword="null" />.</exception>
+    public static bool IsRunning(this IAgent agent)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+
+        // One read of the property: two reads could observe a rebind in between
+        // and answer from a snapshot that no longer exists.
+        Maybe<AgentState> state = agent.State;
+        return state.HasValue && state.Value.IsRunning;
+    }
 }
 
 /// <summary>

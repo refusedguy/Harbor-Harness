@@ -176,7 +176,8 @@ public class ModelCommandRebindTests
     {
         public List<(Session Session, AgentDefinition Definition)> InitializeCalls { get; } = [];
 
-        public AgentState State { get; private set; } = AgentState.Idle("sess-1", initialDef);
+        // #559: Maybe-shaped, like the interface.
+        public Maybe<AgentState> State { get; private set; } = Maybe.From(AgentState.Idle("sess-1", initialDef));
 
         public CancellationToken AbortToken => _abortSource.Token;
         public void RequestAbort() => _abortSource.Cancel();
@@ -185,7 +186,7 @@ public class ModelCommandRebindTests
         public void Initialize(Session session, AgentDefinition agent)
         {
             InitializeCalls.Add((session, agent));
-            State = AgentState.Idle(session.Id, agent);
+            State = Maybe.From(AgentState.Idle(session.Id, agent));
         }
 
         public Task<Result> PromptAsync(string text, CancellationToken ct = default) =>

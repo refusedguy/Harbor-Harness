@@ -52,7 +52,15 @@ public sealed class PermissionsCommand : ISlashCommand
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
-        string agentName = _agent?.State?.Agent.Name.Value ?? context.Session.Session.Agent;
+        // #559: `State` is Maybe<AgentState>. An agent the host never initialized has
+        // no definition to read, and that is the truth rather than a degradation:
+        // fall back to the session's own agent name, which is the field this
+        // meant to mirror. Not `?.` — a Maybe is a struct, so `?.` does not even
+        // bind to it (CS0023).
+        Maybe<AgentState> state = _agent is { } bound ? bound.State : Maybe<AgentState>.None;
+        string agentName = state.HasValue
+            ? state.Value.Agent.Name.Value
+            : context.Session.Session.Agent;
 
         if (args.Count == 0)
         {

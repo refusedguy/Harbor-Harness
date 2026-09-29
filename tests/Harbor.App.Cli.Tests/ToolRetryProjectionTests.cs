@@ -83,7 +83,9 @@ public class ToolRetryProjectionTests
         public CancellationToken AbortToken => _abortSource.Token;
         public void RequestAbort() => _abortSource.Cancel();
         private readonly CancellationTokenSource _abortSource = new();
-        public AgentState State { get; }
+
+        // #559: Maybe-shaped, like the interface.
+        public Maybe<AgentState> State { get; }
         public void Initialize(Session session, AgentDefinition agent) { }
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new Nop();
         public Task<Result> PromptAsync(string text, CancellationToken ct = default) => Task.FromResult(Result.Success());

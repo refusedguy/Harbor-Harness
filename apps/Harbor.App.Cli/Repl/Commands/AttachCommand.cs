@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Agents;
 using Harbor.Application.Attachments;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -33,7 +34,7 @@ internal sealed class AttachCommand : IReplCommand
             return Task.CompletedTask;
         }
 
-        if (host.Agent.State.IsRunning)
+        if (host.Agent.IsRunning())
         {
             host.Bridge.AppendSystemLine("⚠ Agent is busy — wait for completion or press Esc / Ctrl+C to abort.");
             host.WakeUp();

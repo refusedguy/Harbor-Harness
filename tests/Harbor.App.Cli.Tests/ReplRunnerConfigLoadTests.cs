@@ -459,7 +459,10 @@ public class ReplRunnerConfigLoadTests
 
         public void RequestAbort() => _abortSource.Cancel();
 
-        public AgentState State => throw new NotSupportedException("Not used in these tests.");
+        // #559: Maybe-shaped, like the interface. This double is never initialized
+        // (the tests assert on Initialize calls, not on state), so it throws if
+        // anything ever reads it — which is the honest signal.
+        public Maybe<AgentState> State => throw new NotSupportedException("Not used in these tests.");
 
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NopDisposable();
 

@@ -1,4 +1,5 @@
 using System.Linq;
+using Harbor.Abstractions.Agents;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
@@ -367,7 +368,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
     /// While the agent runs, Ctrl+C aborts the current turn instead.</summary>
     private void HandleAbortGesture()
     {
-        if (host.Agent.State.IsRunning)
+        if (host.Agent.IsRunning())
         {
             // #49 PR1: single cancellation ingress — the coordinator orders this
             // against any in-flight approval decision and unblocks its waiter.

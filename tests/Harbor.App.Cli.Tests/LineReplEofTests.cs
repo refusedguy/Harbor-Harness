@@ -242,7 +242,7 @@ public class LineReplEofTests
 
         public void RequestAbort() => _abortSource.Cancel();
 
-        public AgentState State => throw new NotSupportedException("Not used in these tests.");
+        public Maybe<AgentState> State => throw new NotSupportedException("Not used in these tests.");
 
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NopDisposable();
 

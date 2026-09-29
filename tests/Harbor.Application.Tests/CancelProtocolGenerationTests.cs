@@ -51,12 +51,14 @@ public class CancelProtocolGenerationTests
     private static async Task WaitUntilRunningAsync(DefaultAgent agent)
     {
         var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
-        while (agent.State?.IsRunning != true && DateTimeOffset.UtcNow < deadline)
+        // #559: AgentStateProbe decides the unbound case once — an agent
+        // that has not been bound yet is definitionally not running.
+        while (!agent.IsRunning() && DateTimeOffset.UtcNow < deadline)
         {
             await Task.Delay(10);
         }
 
-        await Assert.That(agent.State?.IsRunning ?? false).IsTrue();
+        await Assert.That(agent.IsRunning()).IsTrue();
     }
 
     [Test]

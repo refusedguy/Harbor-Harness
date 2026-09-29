@@ -19,7 +19,12 @@ internal sealed class StubAgent : IAgent
     public CancellationToken AbortToken => _abortSource.Token;
     public void RequestAbort() => _abortSource.Cancel();
     private CancellationTokenSource _abortSource = new();
-    public AgentState State { get; private set; } = null!;
+    // #559: Maybe, so the stub models "not initialized" the way the contract now
+    // does instead of starting from a null the non-nullable annotation hid.
+    public Maybe<AgentState> State => _state is { } bound ? Maybe.From(bound) : Maybe<AgentState>.None;
+
+    private AgentState? _state;
+
     public string? LastPrompt { get; private set; }
     public string? LastSessionId { get; private set; }
     public string? LastAgentName { get; private set; }
@@ -27,15 +32,15 @@ internal sealed class StubAgent : IAgent
     public Task<Result> PromptAsync(string text, CancellationToken ct = default)
     {
         LastPrompt = text;
-        if (State is null)
+        if (_state is not { } state)
             return Task.FromResult(Result.Failure("Agent not initialized."));
 
-        State = State with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
+        _state = state with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
         // Emit a minimal AgentStartEvent so event-subscription tests can observe it.
         // Use Task.Run + ContinueWith to await PublishAsync without making PromptAsync async.
-        _ = PublishAsync(new AgentStartEvent(State.SessionId, Array.Empty<AgentMessage>(), null), ct)
+        _ = PublishAsync(new AgentStartEvent(state.SessionId, Array.Empty<AgentMessage>(), null), ct)
             .AsTask();
-        State = State with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
+        _state = state with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
         return Task.FromResult(Result.Success());
     }
 
@@ -67,7 +72,7 @@ internal sealed class StubAgent : IAgent
     {
         LastSessionId = session.Id;
         LastAgentName = agent.Name.Value;
-        State = AgentState.Idle(session.Id, agent);
+        _state = AgentState.Idle(session.Id, agent);
     }
 
     public void Steer(AgentMessage message) { /* no-op */ }

@@ -109,14 +109,59 @@ public sealed class DefaultAgent : IAgent
         // outside the lock exactly as before, failures logged per listener.
         _eventBusSubscription = _eventBus.Subscribe(async (evt, ct) =>
         {
-            await _listeners.DispatchAsync(evt, ct, _logger, State?.SessionId).ConfigureAwait(false);
+            // #559: absence is Maybe, so the "which session is this event for"
+            // question travels as Maybe<string> instead of a null the listener
+            // registry has to interpret. An unbound agent dispatches with
+            // Maybe.None, which the registry logs as "unbound".
+            await _listeners.DispatchAsync(evt, ct, _logger, State.Map(static s => s.SessionId)).ConfigureAwait(false);
         });
     }
 
     /// <summary>
-    ///     Current agent state snapshot. <see langword="null" /> until <see cref="Initialize" /> is called.
+    ///     Backing field for <see cref="State" />. <see langword="null" /> until
+    ///     <see cref="Initialize" /> binds a session.
     /// </summary>
-    public AgentState State { get; private set; } = null!;
+    /// <remarks>
+    ///     Deliberately a plain nullable reference rather than a
+    ///     <c>Maybe&lt;AgentState&gt;</c> field: a reference read/write is a
+    ///     single atomic word, which is exactly the guarantee the auto-property
+    ///     this replaced gave the event-bus subscription lambda on the frame
+    ///     thread. A struct-typed field would be read as several instructions.
+    /// </remarks>
+    private AgentState? _state;
+
+    /// <summary>
+    ///     Current agent state snapshot; <c>Maybe.None</c> until
+    ///     <see cref="Initialize" /> is called.
+    /// </summary>
+    /// <remarks>
+    ///     This property used to be declared non-nullable and initialised with
+    ///     <c>null!</c> (#559), which put the compiler in the position of
+    ///     accepting a value nobody had produced yet — while twenty external
+    ///     call sites, three of them in constructors, dereferenced the
+    ///     annotation. See <see cref="IAgent.State" /> for why absence is the
+    ///     fix and a fabricated sentinel is not.
+    /// </remarks>
+    public Maybe<AgentState> State => _state is { } bound ? Maybe.From(bound) : Maybe<AgentState>.None;
+
+    /// <summary>
+    ///     <see cref="State" /> as a plain record, for the paths that have
+    ///     already established the agent is bound. Unlike the old
+    ///     <c>State = null!</c> auto-property this throws a NAMED error rather
+    ///     than handing back a null the compiler promised was a value, so
+    ///     "read before Initialize" surfaces at the call site instead of as an
+    ///     NRE a few frames deeper.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    ///     <see cref="Initialize" /> has not been called yet.
+    /// </exception>
+    private AgentState BoundState
+    {
+        get => _state ?? throw new InvalidOperationException(
+            $"{nameof(DefaultAgent)}.{nameof(State)} was read before {nameof(Initialize)}. "
+            + "Bind a session with Initialize(session, agent) first.");
+        set => _state = value;
+    }
 
     /// <summary>
     ///     Token observing the current run's abort state. The live source
@@ -206,19 +251,22 @@ public sealed class DefaultAgent : IAgent
     /// <returns>Success on completion (or after steering an active run), or failure with an error message.</returns>
     public async Task<Result> PromptAsync(string text, CancellationToken ct = default)
     {
-        if (State is null)
+        // #559: the guard the old `State is null` check wanted, spelled against
+        // the field instead of the projection. One read, so a concurrent rebind
+        // cannot split the snapshot the message is stamped from.
+        if (_state is not { } state)
             return Result.Failure("Agent is not initialized. Call InitializeAsync first.");
 
         var userMessage = new UserMessage(
             Guid.NewGuid().ToString("N"),
-            State.SessionId,
+            state.SessionId,
             DateTimeOffset.UtcNow,
             text,
-            State.Agent.Name.Value,
-            State.Agent.Model);
+            state.Agent.Name.Value,
+            state.Agent.Model);
 
         // Ф2/B1: prompt during an active run → steer it instead of failing.
-        if (State.IsRunning)
+        if (state.IsRunning)
         {
             Steer(userMessage);
             return Result.Success();
@@ -245,7 +293,7 @@ public sealed class DefaultAgent : IAgent
     /// <returns>Success on completion (or after steering an active run), or failure with an error message.</returns>
     public async Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default)
     {
-        if (State is null)
+        if (_state is not { } state)
             return Result.Failure("Agent is not initialized.");
 
         bool acquired;
@@ -266,11 +314,14 @@ public sealed class DefaultAgent : IAgent
             // still held but the run already flipped its state to idle — in
             // that case steering would strand the message until an unknown
             // future run, so we keep the explicit failure instead.
-            if (State.IsRunning)
+            // #559: deliberately a FRESH read through BoundState, not the
+            // snapshot taken at the top of the method — seeing a run that
+            // started after that snapshot is the whole point of this re-check.
+            if (BoundState.IsRunning)
             {
                 _logger.LogInformation(
                     "Agent {Agent} is running; prompt routed to steering queue",
-                    State.Agent.Name.Value);
+                    state.Agent.Name.Value);
                 Steer(message);
                 return Result.Success();
             }
@@ -301,13 +352,13 @@ public sealed class DefaultAgent : IAgent
             // the reloaded context lacked the user's message (model answered
             // stale history), and memory/disk/model diverged silently. Fail
             // the run BEFORE any completion-source/state swap instead.
-            Result persisted = await _sessionStore.AppendMessageAsync(State.SessionId, message, ct)
+            Result persisted = await _sessionStore.AppendMessageAsync(state.SessionId, message, ct)
                 .ConfigureAwait(false);
             if (persisted.IsFailure) // §4.6-ok: F14-политика — специфичный лог + текст провала, одиночный шаг.
             {
                 _logger.LogError(
                     "Failed to persist user message {MessageId} for session {SessionId}: {Error}",
-                    message.Id, State.SessionId, persisted.Error);
+                    message.Id, state.SessionId, persisted.Error);
                 return persisted.MapError(static e => $"Failed to persist prompt: {e}");
             }
 
@@ -317,18 +368,18 @@ public sealed class DefaultAgent : IAgent
             // that raced between State.IsRunning flipping true and the swap.
             var completion = StartRunCompletion();
 
-            State = State with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
+            BoundState = BoundState with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
 
             var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(AbortToken, ct);
 
             try
             {
-                var loaded = await LoadSessionContextAsync(State.SessionId, linkedCts.Token).ConfigureAwait(false);
+                var loaded = await LoadSessionContextAsync(state.SessionId, linkedCts.Token).ConfigureAwait(false);
                 if (loaded.IsFailure) // §4.6-ok: единственный мост Result→исключение на границе рана (catch ниже всё равно нужен ради RunAsync).
                     throw new InvalidOperationException(loaded.Error);
-                var result = await _agentLoop.RunAsync(loaded.Value, State.Agent, linkedCts.Token).ConfigureAwait(false);
+                var result = await _agentLoop.RunAsync(loaded.Value, state.Agent, linkedCts.Token).ConfigureAwait(false);
 
-                State = State with
+                BoundState = BoundState with
                 {
                     IsRunning = false,
                     LastActivityAt = DateTimeOffset.UtcNow
@@ -339,15 +390,15 @@ public sealed class DefaultAgent : IAgent
             }
             catch (OperationCanceledException) when (linkedCts.Token.IsCancellationRequested)
             {
-                State = State with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
+                BoundState = BoundState with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
                 var cancelled = Result.Failure("Agent was cancelled.");
                 completion.TrySetResult(cancelled);
                 return cancelled;
             }
             catch (Exception ex)
             {
-                State = State with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
-                _logger.LogError(ex, "Agent run failed: session={SessionId}", State.SessionId);
+                BoundState = BoundState with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
+                _logger.LogError(ex, "Agent run failed: session={SessionId}", state.SessionId);
                 var failed = Result.Failure(ex.Message);
                 completion.TrySetException(ex);
                 return failed;
@@ -390,7 +441,10 @@ public sealed class DefaultAgent : IAgent
     /// </remarks>
     public Task WaitForIdleAsync(CancellationToken ct = default)
     {
-        if (State?.IsRunning != true)
+        // #559: `State?.IsRunning != true` used to be the null-tolerant spelling of
+        // "not bound, or bound and idle" — both answer the same question here, so the
+        // single pattern covers the absent case explicitly instead of leaning on `?.`.
+        if (_state is not { IsRunning: true })
         {
             return Task.CompletedTask;
         }
@@ -414,7 +468,7 @@ public sealed class DefaultAgent : IAgent
         // survives rebinds. Stale messages authored for a PREVIOUS session
         // would otherwise be drained into the new session's history on its
         // first run. Same-session rebind keeps queued steering intact.
-        if (State is not null && !string.Equals(State.SessionId, session.Id, StringComparison.Ordinal))
+        if (_state is { } current && !string.Equals(current.SessionId, session.Id, StringComparison.Ordinal))
         {
             // [G4]: the steering inbox outlives rebinds; stale messages authored
             // for the previous session are dropped, never drained into the new one.
@@ -424,11 +478,11 @@ public sealed class DefaultAgent : IAgent
             {
                 _logger.LogWarning(
                     "Dropped {Count} stale steering message(s) while rebinding agent from session {OldSession} to {NewSession}",
-                    dropped, State.SessionId, session.Id);
+                    dropped, current.SessionId, session.Id);
             }
         }
 
-        State = AgentState.Idle(session.Id, agent);
+        _state = AgentState.Idle(session.Id, agent);
     }
 
     /// <summary>

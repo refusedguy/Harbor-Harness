@@ -28,7 +28,18 @@ public sealed class TerminaTeaBridge : IDisposable
         Store = store ?? new UiStore();
         Effects = new TuiEffectHost(agent, Store, slash, appCt);
         Keys = new KeyHandler(Store, logger);
-        Store.Dispatch(new ChatAppMsg.ConfigureRuntime(agent.State.Agent.Model, agent.State.Agent.ProviderId, agent.State.Agent.Name.Value));
+// #559: an agent built before Initialize has no state, and a CONSTRUCTOR is the
+        // worst place to find that out — the caller cannot sequence around it. The
+        // runtime banner is therefore only published once the agent is bound; the
+        // TEA store keeps its own defaults until then instead of being handed a
+        // fabricated Model/Provider/AgentName triple.
+        // `State` is a Maybe struct, so the absent case needs HasValue — an empty
+        // property pattern would match the WRAPPER (a struct is never null) and
+        // bind `bound` to the Maybe instead of the state.
+        if (agent.State is { HasValue: true, Value: var bound })
+        {
+            Store.Dispatch(new ChatAppMsg.ConfigureRuntime(bound.Agent.Model, bound.Agent.ProviderId, bound.Agent.Name.Value));
+        }
     }
 
     /// <summary>The single source of truth for the UI.</summary>

@@ -353,7 +353,12 @@ public class DecoratorTelemetryTests : IDisposable
 
     private sealed class StubAgent(Func<string, Result> outcome, Action<CorrelationContext> onPrompt) : IAgent
     {
-        public AgentState State { get; private set; } = null!;
+        // #559: Maybe, matching the interface contract the proxy forwards. The stub stays
+        // unbound until Initialize so the proxy's "unknown agent name" path is
+        // exercised by the tests that never call it.
+        public Maybe<AgentState> State => _state is { } bound ? Maybe.From(bound) : Maybe<AgentState>.None;
+
+        private AgentState? _state;
 
         public CancellationToken AbortToken => _abortSource.Token;
         public void RequestAbort() => _abortSource.Cancel();
@@ -365,7 +370,7 @@ public class DecoratorTelemetryTests : IDisposable
 
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new Noop();
 
-        public void Initialize(Session session, AgentDefinition agent) => State = AgentState.Idle(session.Id, agent);
+        public void Initialize(Session session, AgentDefinition agent) => _state = AgentState.Idle(session.Id, agent);
 
         public void Steer(AgentMessage message)
         {

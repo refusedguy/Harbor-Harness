@@ -105,10 +105,20 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         // keeps tests / non-composed hosts working.
         _store = host.GetService(typeof(UiStore)) as UiStore ?? new UiStore();
         _effects = new TuiEffectHost(agent, _store, _slashHandler, ct);
-        _store.Dispatch(new ChatAppMsg.ConfigureRuntime(
-            agent.State.Agent.Model,
-            agent.State.Agent.ProviderId,
-            agent.State.Agent.Name.Value));
+        // #559: an agent built before Initialize has no state, and this dispatch happens
+        // before the run loop can sequence around it. The runtime banner is only
+        // published once the agent is bound; the TEA store keeps its own defaults
+        // until then instead of being handed a fabricated triple.
+        // `State` is a Maybe struct, so the absent case needs HasValue — an empty
+        // property pattern would match the WRAPPER (a struct is never null) and
+        // bind `bound` to the Maybe instead of the state.
+        if (agent.State is { HasValue: true, Value: var bound })
+        {
+            _store.Dispatch(new ChatAppMsg.ConfigureRuntime(
+                bound.Agent.Model,
+                bound.Agent.ProviderId,
+                bound.Agent.Name.Value));
+        }
 
         // Register builtin panels if the user hasn't suppressed them
         // (env var HARBOR_TUI_NO_BUILTIN_PANELS=1 → opt-out for tests).

@@ -38,7 +38,15 @@ internal static class SourceNullabilityScan
     ///     cannot match; the trailing group rejects a following word character
     ///     so documentation like <c>null!x</c> cannot either.
     /// </summary>
-    private static readonly Regex NullForgivingOnNull = new(@"(?<!\w)null!(?!\w)", RegexOptions.Compiled);
+    /// <remarks>
+    ///     <c>internal</c> rather than <c>private</c> since #559: a third gate
+    ///     (<c>AgentStateContractRules</c>) matches a NARROWER rule — "a
+    ///     null-forgiving initialiser on an <c>AgentState</c> declaration" — over
+    ///     a slice this helper's <see cref="EnumerateSources" /> does not cover
+    ///     (<c>src/</c> + <c>apps/</c>). It needs the SAME matcher; a second copy
+    ///     of the regex is exactly the drift this file exists to prevent.
+    /// </remarks>
+    internal static readonly Regex NullForgivingOnNull = new(@"(?<!\w)null!(?!\w)", RegexOptions.Compiled);
 
     /// <summary>Matches one or more consecutive single-line comments.</summary>
     private static readonly Regex LineComment = new(@"//[^\n]*", RegexOptions.Compiled);
@@ -137,6 +145,12 @@ internal static class SourceNullabilityScan
     ///     Strips comments so documentation about the rule cannot trip it.
     ///     <see cref="LineComment" /> runs last because it cannot span a line.
     /// </summary>
-    private static string StripComments(string source) =>
+    /// <remarks>
+    ///     <c>internal</c> for the same reason as <see cref="NullForgivingOnNull" />:
+    ///     <c>AgentStateContractRules</c> (#559) blanks comments with the SAME
+    ///     stripper before matching, because a contributor documenting why a field
+    ///     is no longer null-forgiving must not fail a gate.
+    /// </remarks>
+    internal static string StripComments(string source) =>
         LineComment.Replace(BlockComment.Replace(source, BlankOutComment), " ");
 }

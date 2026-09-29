@@ -33,11 +33,16 @@ internal sealed class ListenerRegistry
     ///     Dispatch one event to every subscribed listener. A failing listener
     ///     is logged and skipped — it never breaks delivery to the rest.
     /// </summary>
+    /// <remarks>
+    ///     <paramref name="sessionId" /> is <c>Maybe.None</c> before the agent has been
+    ///     initialized (#559). Absence travels as <c>Maybe&lt;string&gt;</c> rather than a null
+    ///     sentinel so "unbound" is visible in the signature instead of being a convention.
+    /// </remarks>
     internal async Task DispatchAsync(
         AgentEvent evt,
         CancellationToken ct,
         ILogger logger,
-        string? sessionId)
+        Maybe<string> sessionId)
     {
         // Snapshot listeners under the lock, then iterate the snapshot outside the lock.
         // Previously this allocated a fresh List<T> via ToList() on every published event,
@@ -62,7 +67,7 @@ internal sealed class ListenerRegistry
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Listener failed: session={SessionId}", sessionId ?? "unbound");
+                logger.LogError(ex, "Listener failed: session={SessionId}", sessionId.GetValueOrDefault("unbound"));
             }
         }
     }

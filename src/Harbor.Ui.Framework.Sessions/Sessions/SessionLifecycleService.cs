@@ -328,14 +328,21 @@ public sealed class SessionLifecycleService : ISessionLifecycle
     /// </summary>
     private async Task AbortRunningAgentAsync()
     {
-        if (_agent.State?.IsRunning != true)
+        // #559: the old `State?.IsRunning != true` guard was null-tolerant but the deref
+        // seven lines below it was not — one snapshot covers both and the absent
+        // case is spelled rather than papered over with `?.`.
+        // `State` is Maybe<AgentState>, so the absence is a HasNoValue test: an
+        // empty property pattern would match the Maybe ITSELF (a struct is never
+        // "null") and the guard would never fire.
+        Maybe<AgentState> bound = _agent.State;
+        if (bound.HasNoValue || !bound.Value.IsRunning)
         {
             _agent.ResetAbortSource();
             return;
         }
 
         _logger.LogInformation("Aborting in-flight agent before rebind (session={OldSession})",
-            _agent.State.SessionId);
+            bound.Value.SessionId);
 
         // #49 PR1: single cancellation ingress (null-safe: hosts/tests without
         // the coordinator registered keep the direct cancel).
