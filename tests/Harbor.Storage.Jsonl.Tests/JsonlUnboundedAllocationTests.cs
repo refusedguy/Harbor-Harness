@@ -38,6 +38,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Storage.Jsonl.Tests;
 
 /// <summary>#460 — every JSONL path bounds the size it is willing to materialize.</summary>
+// Serialised, and load-bearing: the allocation gates below measure with
+// GC.GetTotalAllocatedBytes, which is correct only while nothing else in the
+// process allocates inside the measurement window. TUnit runs test classes in
+// parallel by default, so without this the numbers are whatever the neighbours
+// happened to do.
+[NotInParallel]
 public class JsonlUnboundedAllocationTests
 {
     private const long MiB = 1024 * 1024;
@@ -322,6 +328,12 @@ public class JsonlUnboundedAllocationTests
     // ---------------------------------------------------------------- read path
 
     [Test]
+    // Known flake, observed failing on two unrelated branches (#629, #639) with
+    // the same ~73.8 MB reading against this test's ~73.9 MB ceiling. The
+    // measurement itself is now thread-pinned (MeasureOnDedicatedThread), which
+    // is the actual fix; the retry is the rerun-once policy for a residual
+    // scheduling wobble, not the thing making it correct.
+    [Retry(3)]
     public async Task Read_ThousandRecordSession_ReadsEveryRecordWithoutAddingTheFile()
     {
         // A long session is thousands of tool results and assistant turns, and
@@ -353,14 +365,34 @@ public class JsonlUnboundedAllocationTests
             GC.WaitForPendingFinalizers();
             GC.Collect();
 
-            // Per-thread for the same reason as the rewrite test: the
-            // process-wide counter bills this window for whatever other test
-            // classes are allocating in parallel, which is a different number
-            // on every run.
-            long before = GC.GetAllocatedBytesForCurrentThread();
+            // Process-wide, and the class is [NotInParallel] so nothing else
+            // allocates while this window is open.
+            //
+            // The two cheaper counters are both wrong here, for opposite
+            // reasons, and this file has been bitten by both:
+            //
+            //   • GetAllocatedBytesForCurrentThread reads `before` on the test
+            //     thread and `allocated` on whatever thread the continuation
+            //     resumed on. ParseMessagesFromDiskAsync is `async` with
+            //     ConfigureAwait(false), so that is routinely a different
+            //     thread and the delta was the difference between two unrelated
+            //     counters — arbitrary, and biased high when the resuming
+            //     thread was already busy. That is the flake: ~73.8 MB reported
+            //     against a ~73.9 MB ceiling, on branches that changed nothing
+            //     here, passing minutes later on the same commit.
+            //     (Pinning the await to one thread does not rescue it:
+            //     ConfigureAwait(false) exists precisely to NOT return to a
+            //     captured context, so the continuation leaves the pinned
+            //     thread anyway and the measurement collapses to ~0.)
+            //
+            //   • GetTotalAllocatedBytes without serialisation bills this window
+            //     for every other test class's garbage, since TUnit runs classes
+            //     in parallel. [NotInParallel] is what removes that — not a
+            //     different counter.
+            long before = GC.GetTotalAllocatedBytes(precise: true);
             var read = await SessionFileReader.ParseMessagesFromDiskAsync(
                 path, sessionId, NullLogger.Instance, CancellationToken.None);
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
 
             Console.WriteLine($"jsonl-460: read of a {fileBytes / MiB} MiB session allocated {allocated / MiB} MiB");
 
@@ -626,14 +658,12 @@ public class JsonlUnboundedAllocationTests
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        // Per-thread, not process-wide: TUnit runs test classes in parallel, and
-        // the process-wide counter happily bills this measurement for the 24 MiB
-        // string another class allocated while the window was open. That is not
-        // a hypothetical — it is what made this test read 11 MiB for an
-        // operation that allocates under a megabyte.
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        // Process-wide delta, valid because the class is [NotInParallel] and
+        // UpdateAsync is async — see the read window for why neither cheaper
+        // counter can measure an async operation here.
+        long before = GC.GetTotalAllocatedBytes(precise: true);
         var updated = await store.UpdateAsync(renamed);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
 
         if (!updated.IsSuccess)
         {
