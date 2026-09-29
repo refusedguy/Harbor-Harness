@@ -20,5 +20,6 @@
     "streaming": "true",
     "toolUse": "true"
   },
+  "icon": "✖️",
   "priority": 80
 }

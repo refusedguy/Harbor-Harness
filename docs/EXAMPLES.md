@@ -202,6 +202,7 @@ public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
   "modelMapping": { "id": "id", "displayName": "name", "contextWindow": "context_length" },
   "defaultModel": "llama-4-70b",
   "setupHint": "Get a key at https://myllm.com/keys",
+  "icon": "🎯",
   "priority": 200
 }
 ```
@@ -229,10 +230,14 @@ Fields the picker reads on top of the client config:
 | `authType` | `"none"` ⇒ no API key is asked for | no (defaults to `bearer`) |
 | `authEnvVar` | where the key is read from — this is how `kilocode` uses `KILO_API_KEY` | for key-bearing providers |
 | `setupHint` | "get a key at …" line under the prompt | no |
+| `icon` | glyph next to the picker row | no (defaults to a generic 🔧) |
 | `priority` | position in the onboarding picker (lower = earlier; unset = last) | no |
 
 `priority` exists so the bundled recommendation order (free models first, local
-providers last) stays a property of the *data* rather than of a C# array.
+providers last) stays a property of the *data* rather than of a C# array. `icon`
+is here for the same reason (#560): it used to be a 13-arm `switch` over provider
+ids inside the desktop wizard, so adding a provider meant editing existing C#, and
+forgetting the arm failed *silently* — the row just rendered the generic wrench.
 
 > Precedence: `~/.harbor/providers/<name>.json` overrides the bundled file with the
 > same `id`, so you can retune a shipped provider without touching the repo.
@@ -268,6 +273,41 @@ Register in `ProviderFactories.CreateProviderRegistry`
 ```csharp
 pb.AddProvider("myllm", () => new MyLlmClient(httpFactory.CreateClient("myllm")));
 ```
+
+**Provider-specific request quirks are not a switch.** A provider that needs a
+field the standard payload does not carry implements `IProviderCompatFlag` and is
+registered in `ProviderCompatFlags`:
+
+```csharp
+// src/Harbor.Providers.OpenAiCompatible/Compat/MyLlmCompatFlag.cs
+public sealed class MyLlmCompatFlag : IProviderCompatFlag
+{
+    public ProviderId ProviderId { get; } = ProviderId.Create("myllm");
+
+    public bool IsPropertyOmitted(string propertyName, LlmRequest request) => false;
+
+    public void Write(Utf8JsonWriter writer, LlmRequest request)
+        => writer.WriteNumber("top_k", 40);
+}
+```
+
+The client iterates `ProviderConfig.Quirks` and never learns what any individual
+quirk does. Provider-keyed behaviour belongs in a registered strategy, never in a
+`switch (ProviderId.Value)` — `ProviderIdDispatchRule` (tests/Harbor.Architecture.Tests)
+fails the build if one reappears in a switch arm, and
+`ProviderCompatFlagTests` fails it if a flag is written but not registered.
+
+#### Which path do I take? (three tiers)
+
+| the provider speaks… | path | files you touch |
+|---|---|---|
+| the OpenAI wire format | **§9** — drop `providers/<id>.json` | **1** (the JSON) |
+| a special API, out-of-tree | implement `IProviderPlugin` | **0** in this repo |
+| a special API, in-tree | **§10** above | new `src/` project + registration |
+
+The middle tier is the one that is easiest to forget: a provider with a non-OpenAI
+API can ship as a plugin and skip the layer matrix entirely. Reach for it unless the
+provider is genuinely part of Harbor's built-in set.
 
 ### 11. Use Anthropic cache_control for prompt caching
 

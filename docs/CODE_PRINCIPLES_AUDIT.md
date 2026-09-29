@@ -159,6 +159,17 @@ private static readonly AsyncLocal<Dictionary<int, string>?> _currentStream = ne
 ### §OOP-002 — ApplyCompatFlags: OCP violation (string-based dispatch)
 
 > **Status:** ✅ RESOLVED (Sprint 1) — provider quirks extracted to `IProviderCompatFlag` (Strategy pattern) in `Harbor.Providers.OpenAiCompatible/Compat/IProviderCompatFlag.cs`. `ProviderConfig.Quirks` carries the per-provider list (populated by `ProviderCompatFlags.For(providerId)` in registration code); `ApplyCompatFlags` simply iterates the list. New providers with quirks no longer require editing the client.
+>
+> **Follow-up (#560): the violation had moved, not disappeared.** The request-payload
+> path was clean, but a 13-arm `switch (id)` had reappeared one layer out as
+> `OnboardingViewModel.IconFor` — the picker glyph. Same shape, and *silent*: a new
+> provider rendered the generic 🔧 and no test failed. The glyph is now an `icon`
+> field on the provider's own `providers/<id>.json`, projected by
+> `ProviderPresetCatalog` alongside `displayName`/`priority`, so adding a provider
+> touches no existing C#. `ProviderIdDispatchRule`
+> (tests/Harbor.Architecture.Tests/ProviderIdDispatchRule.cs) now fails the build on
+> any provider-keyed switch arm anywhere in `src/`+`apps/`, and reads the ids it
+> hunts from `providers/*.json` so the guard re-points itself as the catalogue grows.
 
 **Файл:** `src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs`  
 **Severity:** medium  

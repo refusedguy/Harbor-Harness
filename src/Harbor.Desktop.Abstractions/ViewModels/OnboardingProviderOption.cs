@@ -14,7 +14,17 @@ public sealed partial class OnboardingProviderOption : ObservableObject
     private bool _isSelected;
 
     /// <summary>Construct a provider option.</summary>
-    public OnboardingProviderOption(string id, string displayName, string? authEnvVar, bool requiresKey, string defaultModel, string icon = "🔧")
+    /// <param name="icon">
+    ///     Glyph read from the provider's own <c>providers/&lt;id&gt;.json</c> by
+    ///     <c>ProviderPresetCatalog</c> (#560) — it used to come from an id→glyph
+    ///     switch in the wizard, so adding a provider meant editing this layer.
+    ///     The fallback glyph for a config that declares none is applied upstream by
+    ///     the catalog, so this layer stays free of a Harbor.Application reference
+    ///     (the #188 Presentation→Application exception is scoped to two files by
+    ///     <c>FullLayerMatrixTests.DocumentedExceptions</c>, and widening it here
+    ///     would spread that debt).
+    /// </param>
+    public OnboardingProviderOption(string id, string displayName, string? authEnvVar, bool requiresKey, string defaultModel, string icon = "")
     {
         Id = id;
         DisplayName = displayName;
