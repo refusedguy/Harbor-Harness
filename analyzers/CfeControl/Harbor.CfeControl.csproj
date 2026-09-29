@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CFE0001 POSITIVE CONTROL — see KnownBadValueAccess.cs.
+
+    This project is deliberately NOT in Harbor.slnx and is never built by the
+    normal solution build. It exists so that a test can compile it on demand and
+    assert that CFE0001 actually fires. A guard that cannot fire is worse than
+    no guard (the NetArchTest "non-existent assembly name satisfies the
+    constraint" lesson in PresentationCapabilityRules.cs), and the only honest
+    way to rule that out is to compile something known-bad and see the
+    diagnostic appear.
+
+    It lives OUTSIDE tests/ on purpose: tests/Directory.Build.props adds CFE0001
+    to NoWarn, so a control placed under tests/ would be suppressed by the very
+    suppression it is meant to police, and would "pass" while proving nothing.
+
+    TreatWarningsAsErrors is off so the compile SUCCEEDS and the control can
+    assert on the warning text. An error would also prove the point, but a
+    successful build with a captured diagnostic is a cleaner assertion and does
+    not depend on the exit code.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Never suppress the diagnostic under test, whatever an outer props file says. -->
+    <NoWarn>$(NoWarn.Replace(';CFE0001', ''))</NoWarn>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="KnownBadValueAccess.cs"/>
+    <Compile Include="KnownGoodValueAccess.cs"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+  </ItemGroup>
+
+</Project>

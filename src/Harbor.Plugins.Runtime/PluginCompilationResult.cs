@@ -23,7 +23,12 @@ public readonly record struct PluginCompilationResult
     public bool IsFailure => _result.IsFailure;
 
     /// <summary>The compiled plugin (only valid when <see cref="IsSuccess" />).</summary>
+    #pragma warning disable CFE0001
+    // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
+    // Result-shaped wrapper: this type IS a Result facade, and its Value is the
+    // documented pass-through ("only valid when IsSuccess"). Callers check IsSuccess.
     public CompiledPlugin Value => _result.Value;
+    #pragma warning restore CFE0001
 
     /// <summary>The error message (only valid when <see cref="IsFailure" />).</summary>
     public string Error => _result.Error;

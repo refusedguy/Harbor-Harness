@@ -87,7 +87,23 @@ public sealed class CfeValueBaselineTests
     ///     stopped firing (regression or a broken pin) and §5 must be
     ///     re-measured before the drop is believed.
     /// </summary>
-    private const int MeasuredTotalSites = 192;
+    /// <remarks>
+    ///     This is the SECOND measurement, and the first one under-counted —
+    ///     see <see cref="MeasuredProductionSites" />. The lesson is recorded
+    ///     rather than quietly corrected: a partial build reports only the
+    ///     projects it finished, so "N violations" from a red build is a
+    ///     LOWER BOUND, never the count.
+    /// </remarks>
+    private const int MeasuredTotalSites = 199;
+
+    /// <summary>
+    ///     Measured CFE0001 sites in shipped code (src/): 1 real defect, now
+    ///     fixed, plus 21 false positives now carrying a documented pragma.
+    /// </summary>
+    private const int MeasuredProductionSites = 22;
+
+    /// <summary>Measured CFE0001 sites under tests/, all suppressed centrally.</summary>
+    private const int MeasuredTestSites = 177;
 
     /// <summary>
     ///     Every accepted production exemption. Adding a row is a claim that the
@@ -122,6 +138,14 @@ public sealed class CfeValueBaselineTests
             "if (IsFailure) { return/continue; } else-branch access"),
         new("src/Harbor.Storage.Jsonl/SessionPorter.cs", "ImportAsync",
             "if (IsFailure) { skipped++; } else-branch access"),
+        new("src/Harbor.Plugins.Runtime/PluginCompilationResult.cs", "Value",
+            "Result-shaped wrapper whose Value is the documented pass-through"),
+        new("src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs", "TestConnectionAsync",
+            "ternary whose own condition is the IsSuccess guard"),
+        new("src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs", "LoadAllAsync",
+            "if (IsFailure) { return Result.Failure(...); } early return"),
+        new("src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs", "BuildProviderGroupAsync",
+            "cfgResult.IsSuccess && ... .Value ...; && short-circuit guard"),
     ];
 
     private static string? Root => RepoPaths.RepoRoot;
@@ -348,8 +372,8 @@ public sealed class CfeValueBaselineTests
             .Because("an empty baseline would mean the backstop is not demonstrably load-bearing; "
                    + "it is only meaningful because these 17 sites are real and were measured");
 
-        await Assert.That(Baseline.Length).IsEqualTo(13)
-            .Because("the production baseline is pinned at 13 members / 17 sites (CFE0001 counts "
+        await Assert.That(Baseline.Length).IsEqualTo(17)
+            .Because("the production baseline is pinned at 17 members / 21 sites (CFE0001 counts "
                    + "sites, this table counts members). It may only shrink: a new row is a new "
                    + "false positive claim that must be justified in review, and removing a row is "
                    + "always safe. If this number moved, re-measure and update "
@@ -364,11 +388,17 @@ public sealed class CfeValueBaselineTests
     [Test]
     public async Task NonVacuity_MeasuredTotalIsRecorded()
     {
-        await Assert.That(MeasuredTotalSites).IsEqualTo(192)
-            .Because("192 is the CI-measured CFE0001 count (18 production + 174 tests) on analyzer "
+        await Assert.That(MeasuredTotalSites).IsEqualTo(199)
+            .Because("199 is the CI-measured CFE0001 count (22 production + 177 tests) on analyzer "
                    + "1.3.0. It is recorded so that a future package bump which drops the "
                    + "diagnostic to zero shows up as a number to re-verify, not as a silent "
                    + "green build. See docs/ROP-API-INVENTORY.md §5.");
+
+        // The two halves must reconcile, or one of the three numbers above is a
+        // copy-paste that nobody re-measured.
+        await Assert.That(MeasuredProductionSites + MeasuredTestSites).IsEqualTo(MeasuredTotalSites)
+            .Because("the recorded total is the sum of the recorded halves; if these drift apart, "
+                   + "someone edited one without re-running the measurement");
     }
 
     /// <summary>
