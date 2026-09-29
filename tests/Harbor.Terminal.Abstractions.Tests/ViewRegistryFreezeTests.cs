@@ -346,7 +346,7 @@ public class ViewRegistryFreezeContractTests
 
         public override ITuiRenderContext Context => throw new NotSupportedException();
 
-        public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default) => throw new NotSupportedException();
+        public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default) => throw new NotSupportedException();
 
         public override Task<Result> WriteAsync(string text, CancellationToken ct = default) => throw new NotSupportedException();
 
