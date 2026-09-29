@@ -307,7 +307,7 @@ public sealed class FilePickerView
         }
 
         var selected = SelectedItem;
-        string header = selected is null ? "(no preview)" : TruncateMiddle(selected.Path, width);
+        string header = selected.HasNoValue ? "(no preview)" : TruncateMiddle(selected.Value.Path, width);
         buffer.SetText(x, top, header.AsSpan(0, Math.Min(header.Length, width)), ChatPalette.Dim);
 
         if (rows < 3)

@@ -67,8 +67,7 @@ public sealed class CellForgeWidgetStateRules
     /// <remarks>
     ///     <para><b>Host-supplied hooks</b> — a working default exists and no consumer branches:</para>
     ///     <list type="bullet">
-    ///         <item><description>Host-wired DI container; #470 owns the locator removal.</description></item>
-    ///         <item><description>Host-injected; the renderer substitutes its own when absent.</description></item>
+    ///         <item><description>Host-wired typed panel dependencies (#63 replaced the old IServiceProvider/Store pair).</description></item>
     ///         <item><description>Host-wired read-only panel snapshot.</description></item>
     ///         <item><description>Host callback — nothing to branch on, only to invoke.</description></item>
     ///         <item><description>Host-injected clock driving transitions.</description></item>
@@ -96,8 +95,7 @@ public sealed class CellForgeWidgetStateRules
     /// </remarks>
     private static readonly Dictionary<string, string> AllowedNullableProperties = new(StringComparer.Ordinal)
     {
-        ["CellForgeDockPanel.Services"] = "host-wired DI container; #470 owns the locator removal",
-        ["CellForgeDockPanel.Store"] = "host-injected; the renderer substitutes its own when absent",
+        ["CellForgeDockPanel.Services"] = "host-wired typed panel dependencies; #63 replaced the IServiceProvider/Store pair",
         ["CellForgeDockPanel.View"] = "host-wired read-only panel snapshot",
         ["CommandPaletteView.OnCommit"] = "host callback — nothing to branch on, only to invoke",
         ["ComposerPanel.Placeholder"] = "placeholder text; null draws the default prompt",
