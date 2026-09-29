@@ -44,6 +44,11 @@
 // matching, so the prose in this very file (and the XML docs that quote the
 // mnemonics) cannot be mistaken for a second table.
 //
+// The stripping itself lives in SourceCommentStripper, shared with
+// SessionStatusTableRule (#663): two rules that each carried their own copy of
+// that lexer would be two lexers to keep in agreement, which is the same
+// drift this rule exists to catch.
+//
 // PERIMETER
 // ---------
 // `ScanRoots` is `src` + `apps` ONLY. The three `contrib/tui/*/DiagnosticsView`
@@ -67,7 +72,6 @@
 //      green while enforcing nothing.
 
 using System.Collections.Frozen;
-using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
@@ -186,7 +190,7 @@ internal static partial class LogLevelMnemonicProbe
         List<LevelTableSite> tables,
         List<string> sentinels)
     {
-        string[] clean = lines.Select(StripComments).ToArray();
+        string[] clean = SourceCommentStripper.StripAll(lines);
 
         for (int i = 0; i < clean.Length; i++)
         {
@@ -374,157 +378,6 @@ internal static partial class LogLevelMnemonicProbe
 
     private static string MakeRelative(string repoRoot, string path) =>
         Path.GetRelativePath(repoRoot, path).Replace(Path.DirectorySeparatorChar, '/');
-
-    /// <summary>Lexical states for <see cref="StripComments" />.</summary>
-    private enum StripState
-    {
-        /// <summary>Ordinary code.</summary>
-        Code,
-
-        /// <summary>Inside a <c>"…"</c> string, where <c>\</c> escapes.</summary>
-        String,
-
-        /// <summary>Inside a <c>@"…"</c> verbatim string, where <c>""</c> escapes.</summary>
-        VerbatimString,
-
-        /// <summary>Inside a <c>'…'</c> char.</summary>
-        Char,
-
-        /// <summary>Inside a <c>// …</c> comment, ending at the newline.</summary>
-        LineComment,
-
-        /// <summary>Inside a <c>/* … */</c> comment.</summary>
-        BlockComment,
-    }
-
-    /// <summary>
-    ///     Blanks out COMMENTS ONLY, keeping string literals — this scan needs
-    ///     the literals, and what it must not match is the prose. Without this
-    ///     step the doc comments that quote the mnemonics (including the ones in
-    ///     this file) would read as a second table.
-    /// </summary>
-    private static string StripComments(string line)
-    {
-        var output = new StringBuilder(line.Length);
-        StripState state = StripState.Code;
-
-        for (int i = 0; i < line.Length; i++)
-        {
-            char c = line[i];
-            char next = i + 1 < line.Length ? line[i + 1] : '\0';
-
-            switch (state)
-            {
-                case StripState.Code:
-                    if (c == '/' && next == '/')
-                    {
-                        state = StripState.LineComment;
-                        i++;
-                        continue;
-                    }
-
-                    if (c == '/' && next == '*')
-                    {
-                        state = StripState.BlockComment;
-                        i++;
-                        continue;
-                    }
-
-                    if (c == '@' && next == '"')
-                    {
-                        state = StripState.VerbatimString;
-                        output.Append(c);
-                        i++;
-                        continue;
-                    }
-
-                    if (c == '"')
-                    {
-                        state = StripState.String;
-                        output.Append(c);
-                        continue;
-                    }
-
-                    if (c == '\'')
-                    {
-                        state = StripState.Char;
-                        output.Append(c);
-                        continue;
-                    }
-
-                    output.Append(c);
-                    continue;
-
-                case StripState.String:
-                    output.Append(c);
-                    if (c == '\\' && next != '\0')
-                    {
-                        output.Append(next);
-                        i++;
-                    }
-                    else if (c == '"')
-                    {
-                        state = StripState.Code;
-                    }
-
-                    continue;
-
-                case StripState.VerbatimString:
-                    output.Append(c);
-                    if (c == '"')
-                    {
-                        if (next == '"')
-                        {
-                            output.Append(next);
-                            i++;
-                        }
-                        else
-                        {
-                            state = StripState.Code;
-                        }
-                    }
-
-                    continue;
-
-                case StripState.Char:
-                    output.Append(c);
-                    if (c == '\\' && next != '\0')
-                    {
-                        output.Append(next);
-                        i++;
-                    }
-                    else if (c == '\'')
-                    {
-                        state = StripState.Code;
-                    }
-
-                    continue;
-
-                case StripState.LineComment:
-                    if (c == '\n')
-                    {
-                        state = StripState.Code;
-                        output.Append(c);
-                    }
-
-                    continue;
-
-                case StripState.BlockComment:
-                    if (c == '*' && next == '/')
-                    {
-                        state = StripState.Code;
-                        i++;
-                    }
-
-                    continue;
-
-                default:
-                    throw new InvalidOperationException($"[log-level-probe] unknown strip state {state}.");
-            }
-        }
-
-        return output.ToString();
-    }
 }
 
 /// <summary>

@@ -8,6 +8,15 @@ using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 using Microsoft.Extensions.Logging;
 
+// Aliased, not namespace-imported: this file already has
+// `Harbor.Ui.Framework.Services` in scope, and both that namespace and
+// `Harbor.Desktop.Abstractions.Models` declare a `ToastKind`, so importing
+// the latter would make every `_toasts.Show(..., ToastKind.X)` below
+// ambiguous (CS0104). Aliases bind the two dot types by name and leave
+// `ToastKind` resolving as it did before #663.
+using SessionDotState = Harbor.Desktop.Abstractions.Models.SessionDotState;
+using SessionDotStates = Harbor.Desktop.Abstractions.Models.SessionDotStates;
+
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 public partial class SessionCardViewModel : ObservableObject
@@ -60,14 +69,13 @@ public partial class SessionCardViewModel : ObservableObject
     public string StatusText => StatusMappers.SessionStatusToText(Status);
     public string StatusBrushKey => StatusMappers.SessionStatusToBrushKey(Status);
 
-    public Harbor.Desktop.Abstractions.Models.SessionDotState DotState => Status switch
-    {
-        SessionStatus.Working => Harbor.Desktop.Abstractions.Models.SessionDotState.Running,
-        SessionStatus.Done => Harbor.Desktop.Abstractions.Models.SessionDotState.Done,
-        SessionStatus.Error => Harbor.Desktop.Abstractions.Models.SessionDotState.Error,
-        SessionStatus.Aborted => Harbor.Desktop.Abstractions.Models.SessionDotState.Error,
-        _ => Harbor.Desktop.Abstractions.Models.SessionDotState.Idle
-    };
+    /// <summary>
+    ///     The card's dot state, derived by the one owner of that translation
+    ///     rather than by a switch on this view model (#663) — see
+    ///     <see cref="SessionDotStates.FromStatus" /> for why it lives beside
+    ///     the enum and what it deliberately does not claim.
+    /// </summary>
+    public SessionDotState DotState => SessionDotStates.FromStatus(Status);
 
 
     private string ComputeDuration()

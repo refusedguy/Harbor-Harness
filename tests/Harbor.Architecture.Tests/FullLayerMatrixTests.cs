@@ -282,8 +282,17 @@ public class FullLayerMatrixTests
         // namespace) plus the cell-style primitives and ChatPalette, so
         // Projection/Rendering/CellForge/apps all resolve them from here.
         ["Harbor.DesignSystem"] = new(Layer.Presentation, []),
+        // #663: "Harbor.Ui.Framework.ViewModels" joined this row. It was a
+        // #450 dead edge (declared, permitted, bound in no IL) until
+        // SessionContext.StatusText started calling
+        // StatusMappers.SessionStatusToText instead of keeping its own
+        // SessionStatus→label switch. Both projects are Presentation-layer
+        // siblings, which the matrix permits; the reference is now live, so
+        // EnforcerIntegrityTests demanded the exemption be deleted and the edge
+        // be justified here. That is the same shape #567 recorded for
+        // ViewModels → Abstractions below.
         ["Harbor.Ui.Framework.Sessions"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions"]),
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions", "Harbor.Ui.Framework.ViewModels"]),
         // #450: "Harbor.Terminal.Abstractions" and "Harbor.Ui.Framework" were both
         // permitted but never referenced. Terminal.Abstractions is dead permission
         // (no file names the ITuiRenderer/ITuiView vocabulary); Ui.Framework is an
