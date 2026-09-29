@@ -294,7 +294,11 @@ public sealed class DiagnosticsAggregator : IDisposable
     ///     silently read as «not an error», which is the failure this whole issue
     ///     is about — a path that looks connected and reports nothing.
     /// </summary>
-    internal static DiagnosticIssueSeverity SeverityOf(LspSeverity severity) => severity switch
+    /// <remarks>
+    ///     Public because it IS the contract between the protocol's numbering and
+    ///     this type's, and every host that composes rows by hand needs it.
+    /// </remarks>
+    public static DiagnosticIssueSeverity SeverityOf(LspSeverity severity) => severity switch
     {
         LspSeverity.Error => DiagnosticIssueSeverity.Error,
         LspSeverity.Warning => DiagnosticIssueSeverity.Warning,
