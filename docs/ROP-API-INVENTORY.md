@@ -622,21 +622,24 @@ where the risk is highest. 1.3.0 predates the `ResultValueWalker` rework (change
 
 ### 5.2 Measured baseline (CI, `dotnet build Harbor.slnx -c Release`, analyzer 1.3.0)
 
-**199 CFE0001 sites total: 25 in shipped code, 174 under `tests/`.**
+**210 CFE0001 sites total: 36 in shipped code (src/ + apps/), 174 under `tests/`.**
 
 | area | sites | verdict |
 |---|---|---|
-| `src/` — real defect | 1 | **fixed** (see 5.3) |
-| `src/` — false positives | 24 | baselined, one documented pragma each (5.4) |
+| shipped — real defect, fixed | 1 | **fixed** (see 5.3) |
+| shipped — real defect, baselined | 1 | `SettingsViewModel` ctor; needs a product decision (5.3) |
+| shipped — false positives | 34 | baselined, one documented pragma each (5.4) |
 | `tests/` | 174 | all false positives of ONE shape; suppressed centrally (5.5) |
 
-Per project (`src/` only): `Harbor.Lsp` 8, `Harbor.Application` 7, `Harbor.Desktop.Abstractions` 3,
-`Harbor.Hosting` 3, `Harbor.Storage.Jsonl` 2, `Harbor.Plugins.Hosting` 1, `Harbor.Plugins.Runtime` 1.
+Per project: `Harbor.Lsp` 8, `Harbor.Application` 7, `Harbor.Desktop.Abstractions` 3,
+`Harbor.Hosting` 3, `Harbor.Storage.Jsonl` 2, `Harbor.App.Cli` 6, `Harbor.Plugins.Hosting` 1,
+`Harbor.Plugins.Runtime` 1, `Harbor.App.Avalonia` 3, `Harbor.Terminal.Abstractions.Tests` 1 (pre-existing break, see 5.9).
 
-**A partial build reports a LOWER BOUND, never the count.** The 25 production sites were found across
-four successive runs: each run compiles further before failing, so each surfaced projects the previous
-one never reached. The first run alone reported 18 and looked complete. Re-measure until two
-consecutive runs agree.
+**A partial build reports a LOWER BOUND, never the count.** The shipped-code sites were found across
+**six** successive runs: each run compiles further before failing, so each surfaced projects the
+previous one never reached. The first 1.3.0 run reported 18 and looked complete; the real figure was
+36. Re-measure until two consecutive runs agree — and note the first run to reach zero new sites is
+not necessarily the last to reach zero unanalysed projects.
 
 ### 5.3 The one real defect: `HarborConfig.EffectiveModel`
 
@@ -711,7 +714,16 @@ non-existent assembly name as a satisfied constraint. Three mechanisms guard it:
 3. `CfeValueBaselineTests` — **honesty**: every baselined member still exists and still carries its
    pragma (so the baseline cannot rot into a blanket permission), and the counts are pinned.
 
-### 5.8 Cost, stated honestly
+### 5.8 A pre-existing break this work had to clear
+
+Landing the analyzer surfaced, and this PR fixes, an **unrelated** break that was already red on
+`dev@ce46c8d`: `tests/Harbor.Terminal.Abstractions.Tests/ViewRegistryFreezeTests.cs` still overrode
+`ReadLineAsync` as `Task<Result<string>>` after `ITuiRenderer` changed that member to
+`Task<Maybe<string>>` (CS0508). One word. It is in its own commit so it can be dropped independently —
+but note it means **`dev` was red before this PR**, and any CI measurement taken against it is
+against a tree that did not compile.
+
+### 5.9 Cost, stated honestly
 
 A new build-time dependency, and the repo's second Roslyn-related package after
 `BannedApiAnalyzers` (Sonar, Roslynator, Meziantou, NetAnalyzers, AsyncFixer and Reflection are all

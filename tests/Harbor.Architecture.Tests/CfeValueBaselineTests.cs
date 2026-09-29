@@ -413,13 +413,24 @@ public sealed class CfeValueBaselineTests
     [Test]
     public async Task NonVacuity_MeasuredTotalIsRecorded()
     {
+        // Asserted against the DOCUMENT rather than against a literal: a
+        // literal would make the assertion unfalsifiable (TUnit's
+        // TUnitAssertions0005 says so), and the number's whole purpose is to be
+        // cross-checked against the record of how it was obtained. If someone
+        // re-measures and updates one side, this fails and forces the other.
+        string inventory = ReadRepoFile("docs/ROP-API-INVENTORY.md");
+
         await Assert.That(MeasuredTotalSites).IsEqualTo(210)
             .Because("210 is the CI-measured CFE0001 count (36 shipped + 174 tests) on analyzer "
                    + "1.3.0. It is recorded so that a future package bump which drops the "
                    + "diagnostic to zero shows up as a number to re-verify, not as a silent "
                    + "green build. See docs/ROP-API-INVENTORY.md §5.");
 
-        // The two halves must reconcile, or one of the three numbers above is a
+        await Assert.That(inventory.Contains(MeasuredTotalSites.ToString(), StringComparison.Ordinal)).IsTrue()
+            .Because("docs/ROP-API-INVENTORY.md §5 must carry the same measured total as this test; "
+                   + "if the two drift apart, one of them is a copy nobody re-measured");
+
+        // The two halves must reconcile, or one of the numbers above is a
         // copy-paste that nobody re-measured.
         await Assert.That(MeasuredProductionSites + MeasuredTestSites).IsEqualTo(MeasuredTotalSites)
             .Because("the recorded total is the sum of the recorded halves; if these drift apart, "
