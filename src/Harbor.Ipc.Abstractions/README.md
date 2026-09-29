@@ -11,12 +11,24 @@ Shared contract for Harbor's IPC layer. Referenced by **both** the in-process cl
 | `IPipeTransport.cs`           | Transport abstraction (Named Pipe on Windows, Unix Domain Socket on Linux/Mac).                       |
 | `HarborEvent.cs`              | 11-case discriminated union of streaming events (simplified, wire-stable projection of `AgentEvent`). |
 | `HarborEventMapping.cs`       | Bidirectional mapping `HarborEvent ↔ HarborEventData` (wire DTO).                                     |
+| `AgentEventProjector.cs`      | **The one** `AgentEvent → HarborEvent` projection, shared by every host (was duplicated in two, #495). |
+| `EventProjection.cs`          | `EventProjectionOutcome` + `EventProjection` — the typed result: emitted / no-wire-case / unmapped.     |
+| `ProjectionState.cs`          | Per-host state the projection needs: active session + per-session turn index.                          |
 | `Protocol/HarborRequest.cs`   | MessagePack `[Union]` of all request types (StartAgent, SendPrompt, CreateSession, ListTools, ...).   |
 | `Protocol/HarborResponse.cs`  | MessagePack `[Union]` of three response shapes: `OkResponse`, `ErrorResponse`, `EventEnvelope`.       |
 | `Protocol/HarborEventData.cs` | MessagePack `[Union]` of event wire DTOs (mirror of `HarborEvent`).                                   |
 | `Protocol/WireCodec.cs`       | Length-prefixed MessagePack framing + `SerializeDomain<T>` / `DeserializeDomain<T>` helpers.          |
 
 ## Wire format
+
+Every `AgentEvent` subtype is classified exactly once in `AgentEventProjector`:
+either a handler that emits a `HarborEvent`, or an entry in `NoWireCaseReasons`
+with the reason it has no wire case. There is no `_ =>` fallback — a type in
+neither table comes back as `Unmapped`, which hosts log and count instead of
+dropping silently. `tests/Harbor.Ipc.Tests/AgentEventProjectionCoverageTests`
+reflects over the `AgentEvent` and `LlmEvent` unions and fails when a subtype is
+unclassified, so adding an event type without deciding its projection is a test
+failure, not a silent behaviour change on one host.
 
 Each frame:
 

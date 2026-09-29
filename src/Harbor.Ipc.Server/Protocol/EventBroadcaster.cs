@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 namespace Harbor.Ipc.Protocol;
 /// <summary>
 ///     Broadcasts <see cref="HarborEvent" />s to all connected client streams.
@@ -7,9 +6,11 @@ namespace Harbor.Ipc.Protocol;
 ///     <para>
 ///         The broadcaster subscribes to the host's <see cref="IEventBus" />
 ///         once and projects each <see cref="AgentEvent" /> down to a
-///         <see cref="HarborEvent" /> (using a projection identical to
-///         <c>InProcessHarborClient.ProjectEvent</c>). Each projected event
-///         is serialized once into an <see cref="EventEnvelope" />, stamped
+///         <see cref="HarborEvent" /> with the shared
+///         <see cref="AgentEventProjector" /> — the same table the in-process
+///         client uses, so both hosts observe an identical stream (#495). Each
+///         projected event is serialized once into an
+///         <see cref="EventEnvelope" />, stamped
 ///         with a monotonic <see cref="EventEnvelope.Sequence"/>, appended to
 ///         the replay ring, and fanned out into each registered client's
 ///         outbound queue.
@@ -55,12 +56,11 @@ public sealed class EventBroadcaster : IAsyncDisposable
     private readonly ILogger<EventBroadcaster> _logger;
     private readonly SessionLeaseRegistry? _leases;
 
-    // Session whose run is currently streaming (A3): events without their
-    // own SessionId resolve against ITS lease owner dynamically — so a lease
-    // release immediately falls back to broadcast. The singleton agent is
-    // single-flight, so between an AgentStarted and the next one all streamed
-    // events belong to that session.
-    private string? _activeSessionId;
+    // Session whose run is currently streaming (A3) plus the session-scoped
+    // turn indices, both owned by the SHARED projector (#495). Routing only
+    // READS this state; an event type the projector does not know is counted
+    // and logged, never dropped quietly.
+    private readonly ProjectionState _projection = new();
 
     // Replay ring: fixed-capacity, overwrite-in-place (same shape as the
     // event bus scrollback). Envelopes are immutable; readers copy under lock.
@@ -75,14 +75,19 @@ public sealed class EventBroadcaster : IAsyncDisposable
     private ulong _sequence;
     private int _disposed;
 
-    // Turn tracking is SESSION-SCOPED (multi-agent sprint): two parallel agent
-    // runs each advance their own turn index, so a shared mutable counter would
-    // leak run A's turn into run B's emitted TurnEnd events. The key is the
-    // session id carried on AgentStart/TurnStart/TurnEnd events; legacy emitters
-    // that send no session id resolve against the active run's session.
-    private readonly ConcurrentDictionary<string, int> _turnsBySession = new();
+    // #495: how many events the projector could not map. Must stay 0 — a
+    // non-zero value means a new AgentEvent subtype shipped without a case.
+    private long _unmappedEventCount;
     private IDisposable? _eventBusSubscription;
     private TaskCompletionSource<bool>? _subscriptionReady;
+
+    /// <summary>
+    ///     Number of bus events the shared projector reported as
+    ///     <see cref="EventProjectionOutcome.Unmapped" />. Always 0 in a healthy
+    ///     build — the coverage test fails if a new <c>AgentEvent</c> subtype has no
+    ///     case — and exposed so a host can be asserted on it in production too.
+    /// </summary>
+    public long UnmappedEventCount => Interlocked.Read(ref _unmappedEventCount);
 
     /// <summary>
     ///     Construct a broadcaster. Call <see cref="Start" /> to begin
@@ -239,10 +244,16 @@ public sealed class EventBroadcaster : IAsyncDisposable
 
     private async ValueTask OnEventAsync(AgentEvent evt, CancellationToken ct)
     {
-        var projected = ProjectEvent(evt);
-        if (projected is null) return;
+        var projection = AgentEventProjector.Project(evt, _projection);
+        if (projection.Outcome == EventProjectionOutcome.Unmapped)
+        {
+            ReportUnmappedEvent(evt);
+            return;
+        }
 
-        string target = ResolveTargetUnsafe(evt);
+        if (projection.Event is not { } projected) return;
+
+        string target = ResolveTarget(evt);
 
         var data = HarborEventMapping.ToData(projected);
         byte[] eventBytes = MessagePackSerializer.Serialize(data, cancellationToken: ct);
@@ -299,14 +310,19 @@ public sealed class EventBroadcaster : IAsyncDisposable
     ///     session's lease owner; everything else inherits the active run's
     ///     owner; unleased periods broadcast to everyone.
     /// </summary>
-    private string ResolveTargetUnsafe(AgentEvent evt)
+    /// <remarks>
+    ///     A PURE read of the projection state (#495) — it used to mutate
+    ///     <c>_activeSessionId</c> from inside the routing switch, which is why the
+    ///     two copies of the projection had drifted apart. The active session is
+    ///     now set by <see cref="AgentEventProjector" /> when the run starts.
+    /// </remarks>
+    private string ResolveTarget(AgentEvent evt)
     {
         if (_leases is null) return string.Empty;
 
         switch (evt)
         {
             case AgentStartEvent started:
-                _activeSessionId = started.SessionId;
                 return _leases.GetOwner(started.SessionId) ?? string.Empty;
             case CompactionStartedEvent compaction:
                 return _leases.GetOwner(compaction.SessionId) ?? ActiveOwner();
@@ -320,8 +336,21 @@ public sealed class EventBroadcaster : IAsyncDisposable
     /// <summary>Live lookup of the active run's owner — empty when unleased.</summary>
     private string ActiveOwner()
     {
-        if (_activeSessionId is null || _leases is null) return string.Empty;
-        return _leases.GetOwner(_activeSessionId) ?? string.Empty;
+        if (_projection.ActiveSessionId is not { } active || _leases is null) return string.Empty;
+        return _leases.GetOwner(active) ?? string.Empty;
+    }
+
+    /// <summary>
+    ///     #495: an event type the shared projector does not know. Logged at Error
+    ///     and counted, so a new <c>AgentEvent</c> subtype can never vanish from the
+    ///     stream without a trace.
+    /// </summary>
+    private void ReportUnmappedEvent(AgentEvent evt)
+    {
+        Interlocked.Increment(ref _unmappedEventCount);
+        _logger.LogError(
+            "No AgentEvent -> HarborEvent mapping for {EventType}; event NOT delivered. Add a case to AgentEventProjector (Harbor.Ipc.Abstractions).",
+            evt.GetType().FullName);
     }
 
     private async Task EvictAsync(ClientRegistration dead)
@@ -387,81 +416,11 @@ public sealed class EventBroadcaster : IAsyncDisposable
 
     // ── Internal: AgentEvent → HarborEvent projection ──────────────────────
     //
-    // This projection is intentionally identical to the one in
-    // InProcessHarborClient.ProjectEvent. Keeping them in lockstep means
-    // in-process and IPC clients observe identical event streams for the
-    // same agent run.
-
-    private HarborEvent? ProjectEvent(AgentEvent evt)
-    {
-        return evt switch
-        {
-            AgentStartEvent e =>
-                ResetTurnAndProject(e.SessionId),
-            MessageStartEvent => null,
-            MessageUpdateEvent e =>
-                new HarborEvent.MessageUpdate(e.Partial, ExtractDelta(e.LlmEvent)),
-            MessageEndEvent e =>
-                new HarborEvent.MessageEnd(e.Message),
-            ToolExecutionStartEvent e =>
-                new HarborEvent.ToolStart(e.ToolCallId, e.ToolName),
-            ToolExecutionEndEvent e =>
-                new HarborEvent.ToolEnd(e.ToolCallId, e.Result),
-            TurnStartEvent e =>
-                TrackTurnAndProject(e),
-            TurnEndEvent e =>
-                new HarborEvent.TurnEnd(ResolveCurrentTurn(e.SessionId)),
-            AgentEndEvent => null,
-            AgentErrorEvent e =>
-                new HarborEvent.AgentError(e.Message),
-            CompactionStartedEvent e =>
-                new HarborEvent.CompactionStarted(e.SessionId),
-            CompactionCompletedEvent e =>
-                new HarborEvent.CompactionCompleted(e.SessionId, e.PrunedMessageCount, e.TokensSaved),
-            SessionStatsEvent => null,
-            _ => null
-        };
-    }
-
-    private HarborEvent ResetTurnAndProject(string sessionId)
-    {
-        _turnsBySession[sessionId] = 0;
-        return new HarborEvent.AgentStarted(sessionId);
-    }
-
-    /// <summary>
-    ///     Record the turn index the event itself carries — the broadcaster never
-    ///     derives or overwrites it. The index is filed under the event's session
-    ///     (legacy emitters without a session fall back to the active run).
-    /// </summary>
-    private HarborEvent TrackTurnAndProject(TurnStartEvent e)
-    {
-        string? session = e.SessionId ?? _activeSessionId;
-        if (session is not null)
-        {
-            _turnsBySession[session] = e.TurnIndex;
-        }
-
-        return new HarborEvent.TurnStart(e.TurnIndex);
-    }
-
-    /// <summary>Session-scoped current turn, 0 when unknown.</summary>
-    private int ResolveCurrentTurn(string? sessionId)
-    {
-        string? session = sessionId ?? _activeSessionId;
-        return session is not null && _turnsBySession.TryGetValue(session, out int turn) ? turn : 0;
-    }
-
-    private static string ExtractDelta(LlmEvent llmEvent)
-    {
-        return llmEvent switch
-        {
-            TextDeltaEvent e => e.Delta,
-            ThinkingDeltaEvent e => e.Delta,
-            ToolCallDeltaEvent e => e.ArgsDelta,
-            _ => string.Empty
-        };
-    }
+    // #495: there is NO local projection left. The table lives in
+    // AgentEventProjector (Harbor.Ipc.Abstractions) and is shared with the
+    // in-process client, so a new event case cannot be added here and forgotten
+    // there. What stays host-local is `_projection` (the state the table reads)
+    // and `ReportUnmappedEvent` (the loud failure path).
 
     /// <summary>
     ///     Data returned to a subscribing client: the server's current

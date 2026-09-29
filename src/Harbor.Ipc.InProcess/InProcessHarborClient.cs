@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
@@ -29,7 +28,9 @@ namespace Harbor.Ipc.InProcess;
 ///         <b>Event bridging:</b> <see cref="SubscribeToEventsAsync" />
 ///         subscribes to <see cref="IEventBus" /> and projects the rich
 ///         <see cref="AgentEvent" /> hierarchy down to the wire-stable
-///         <see cref="HarborEvent" /> union via an internal channel.
+///         <see cref="HarborEvent" /> union via an internal channel, using the
+///         shared <see cref="AgentEventProjector" /> — the same table the IPC
+///         broadcaster uses, so both modes deliver an identical stream (#495).
 ///     </para>
 ///     <para>
 ///         <b>Thread safety:</b> the underlying <see cref="IAgent" /> is
@@ -51,14 +52,13 @@ public sealed class InProcessHarborClient : IHarborClient
     private readonly IProviderRegistry _providers;
     private readonly ISessionStore _sessionStore;
     private readonly IToolRegistry _tools;
-    // Session-scoped turn tracking (multi-agent sprint, lockstep with the IPC
-    // EventBroadcaster): parallel agent runs each keep their own turn index, so
-    // emitted TurnEnd events can never carry another run's turn.
-    private readonly ConcurrentDictionary<string, int> _turnsBySession = new();
 
-    // Fallback owner for legacy events that carry no SessionId (parity with the
-    // IPC EventBroadcaster's active-run resolution).
-    private volatile string? _activeSessionId;
+    // #495: active session + session-scoped turn tracking, owned by the ONE
+    // shared AgentEvent → HarborEvent projector (Harbor.Ipc.Abstractions).
+    // Parallel agent runs each keep their own turn index, so an emitted TurnEnd
+    // can never carry another run's turn.
+    private readonly ProjectionState _projection = new();
+    private long _unmappedEventCount;
     private int _disposed;
     private TaskCompletionSource<bool>? _subscriptionReady;
 
@@ -255,79 +255,45 @@ public sealed class InProcessHarborClient : IHarborClient
     }
 
     // ── Internal: AgentEvent → HarborEvent projection ──────────────────────
+    //
+    // #495: there is NO local projection left. The table lives in
+    // AgentEventProjector (Harbor.Ipc.Abstractions) and is shared with the IPC
+    // EventBroadcaster, so a new event case cannot be added here and forgotten
+    // there. What stays host-local is `_projection` (the state the table reads)
+    // and the loud failure path below.
 
     private async ValueTask OnEventBusEventAsync(AgentEvent evt, CancellationToken ct)
     {
-        var projected = ProjectEvent(evt);
-        if (projected is null) return;
+        var projection = AgentEventProjector.Project(evt, _projection);
+        if (projection.Outcome == EventProjectionOutcome.Unmapped)
+        {
+            ReportUnmappedEvent(evt);
+            return;
+        }
+
+        if (projection.Event is not { } projected) return;
+
         await _eventChannel.Writer.WriteAsync(projected, ct).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Map a domain <see cref="AgentEvent" /> to a wire-stable
-    ///     <see cref="HarborEvent" />. Returns <see langword="null" /> for
-    ///     event kinds that have no projection (e.g. <c>SessionStatsEvent</c>
-    ///     — not yet in the wire union).
+    ///     Number of bus events the shared projector reported as
+    ///     <see cref="EventProjectionOutcome.Unmapped" />. Always 0 in a healthy
+    ///     build — the coverage test fails if a new <c>AgentEvent</c> subtype has no
+    ///     case — and exposed so a host can be asserted on it in production too.
     /// </summary>
-    internal HarborEvent? ProjectEvent(AgentEvent evt)
-    {
-        return evt switch
-        {
-            AgentStartEvent e => ResetTurnAndProject(e.SessionId),
-            MessageStartEvent => null, // start implied by first MessageUpdate
-            MessageUpdateEvent e => new HarborEvent.MessageUpdate(e.Partial, ExtractDelta(e.LlmEvent)),
-            MessageEndEvent e => new HarborEvent.MessageEnd(e.Message),
-            ToolExecutionStartEvent e => new HarborEvent.ToolStart(e.ToolCallId, e.ToolName),
-            ToolExecutionEndEvent e => new HarborEvent.ToolEnd(e.ToolCallId, e.Result),
-            TurnStartEvent e => TrackTurnAndProject(e),
-            TurnEndEvent e => new HarborEvent.TurnEnd(ResolveCurrentTurn(e.SessionId)),
-            AgentEndEvent => null, // AgentEnded emitted separately by the agent runner hook
-            AgentErrorEvent e => new HarborEvent.AgentError(e.Message),
-            CompactionStartedEvent e => new HarborEvent.CompactionStarted(e.SessionId),
-            CompactionCompletedEvent e => new HarborEvent.CompactionCompleted(
-                e.SessionId, e.PrunedMessageCount, e.TokensSaved),
-            SessionStatsEvent => null,
-            _ => null
-        };
-    }
-
-    private HarborEvent ResetTurnAndProject(string sessionId)
-    {
-        _activeSessionId = sessionId;
-        _turnsBySession[sessionId] = 0;
-        return new HarborEvent.AgentStarted(sessionId);
-    }
+    public long UnmappedEventCount => Interlocked.Read(ref _unmappedEventCount);
 
     /// <summary>
-    ///     Store the turn index carried by the event (never re-derived) under its
-    ///     session; legacy emitters without a session id keep the previous
-    ///     single-run behavior by tracking against the last known session.
+    ///     #495: an event type the shared projector does not know. Logged at Error
+    ///     and counted, so a new <c>AgentEvent</c> subtype can never vanish from the
+    ///     stream without a trace.
     /// </summary>
-    private HarborEvent TrackTurnAndProject(TurnStartEvent e)
+    private void ReportUnmappedEvent(AgentEvent evt)
     {
-        string? session = e.SessionId ?? _activeSessionId;
-        if (session is not null)
-        {
-            _turnsBySession[session] = e.TurnIndex;
-        }
-
-        return new HarborEvent.TurnStart(e.TurnIndex);
-    }
-
-    private int ResolveCurrentTurn(string? sessionId)
-    {
-        string? session = sessionId ?? _activeSessionId;
-        return session is not null && _turnsBySession.TryGetValue(session, out int turn) ? turn : 0;
-    }
-
-    private static string ExtractDelta(LlmEvent llmEvent)
-    {
-        return llmEvent switch
-        {
-            TextDeltaEvent e => e.Delta,
-            ThinkingDeltaEvent e => e.Delta,
-            ToolCallDeltaEvent e => e.ArgsDelta,
-            _ => string.Empty
-        };
+        Interlocked.Increment(ref _unmappedEventCount);
+        _logger.LogError(
+            "No AgentEvent -> HarborEvent mapping for {EventType}; event NOT delivered. Add a case to AgentEventProjector (Harbor.Ipc.Abstractions).",
+            evt.GetType().FullName);
     }
 }
