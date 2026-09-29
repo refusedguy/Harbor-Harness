@@ -16,8 +16,6 @@
 > #33 (`Ui.Framework` into reusable layers — the reducer/TEA refactor §2
 > describes), #44 (dispatcher topology), #47 (mandatory/optional sinks).
 
-<!-- check-doc-cites: allow-unwired EventBusAppStoreDispatcher — named on purpose, as a warning not to follow it; §2 says explicitly that no composition root constructs it, and #664 tracks its deletion. The rule is what found it, so it stays in the document rather than being silenced by deleting the sentence. -->
-
 ## 1. Actual topology
 
 There is **no `Channel<AgentEvent>` in the core bus and no single
@@ -57,11 +55,12 @@ subscribers (all in-process, each owns its IDisposable — see §6)
 ```
 
 Every entry in that subscriber list is a live `IEventBus.Subscribe` on a shipped
-code path, and the list is exhaustive for `src/` + `apps/`. One subscriber is
-**not** on it: `EventBusAppStoreDispatcher`
-(`src/Harbor.Ui.Framework.Services/EventBusAppStoreDispatcher.cs:28`) is
-present in the tree but constructed by no composition root — see §2. It was
-listed here until #664; a type nothing builds is not topology.
+code path, and the list is exhaustive for `src/` + `apps/`. It is exhaustive
+without exception: until #664 it was not — `EventBusAppStoreDispatcher` was
+listed here while no composition root constructed it, and a type nothing builds
+is not topology. #594 then deleted that branch (with the `AppStore` /
+`Harbor.Ui.Framework.Reducers` it fed), so the list is now complete because
+there is nothing left off it.
 
 `Channel<T>` exists **only at the edges**, never in the core bus:
 
@@ -89,15 +88,18 @@ is the subscriber's business, and the live branches are:
   (`ReplLifecycle.cs:205-209`).
 - **Avalonia desktop** — `UiEventRouter` resolves the session-scoped store and
   dispatches there (`apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61-80`).
-- **Dead branch, do not follow it.** `EventBusAppStoreDispatcher`
-  (`src/Harbor.Ui.Framework.Services/EventBusAppStoreDispatcher.cs:28-33`) posts
-  into `AppStore` (`src/Harbor.Ui.Framework.Reducers/AppStore.cs:23-31`), which
-  reduces the flat `AppState` through the legacy `Harbor.Ui.Framework.Reducers.AppReducer`.
-  **No composition root constructs either type**: `AppStore` is referenced by no
-  file under `src/` or `apps/` other than that dispatcher, and `AppState.cs:8-13`
-  says so itself ("NOT on the TUI read path"). This document used to describe
-  it as *the* UI-state projection, which sent readers into a dead end. It is
-  tracked for deletion in #664, not used.
+<!-- check-doc-cites: allow-unwired AppState — named once here as the shape the deleted branch used to fold AgentEvent into. #594 removed that branch, so AppState now has readers (two benchmarks) but no writer under src/ or apps/. It is deliberately left in place rather than deleted with the branch: it lives in the live Harbor.Ui.Framework.State project, and docs/ROADMAP.md records the decision as an open item. Deleting the sentence would hide a true and useful fact — that the legacy shape is producer-less. -->
+- **The flat-`AppState` branch no longer exists.** This document used to carry a
+  "dead branch, do not follow it" entry here describing
+  `EventBusAppStoreDispatcher` → `AppStore` → `Harbor.Ui.Framework.Reducers.AppReducer`
+  as the second UI-state projection, with a note that no composition root
+  constructed any of it. That note is gone because the code is: #594 deleted
+  all three, and with them the whole `src/Harbor.Ui.Framework.Reducers`
+  project. The caveat is not lost, it is enforced —
+  `tests/Harbor.Architecture.Tests/LegacyFlatTeaBranchRule.cs` fails the build
+  if any of it returns, and fails it in the same assertion block that requires
+  `State/ChatAppReducer.cs` + `State/UiStore.cs` to still be present, so the
+  rule cannot be satisfied by deleting the *live* fold instead.
 - **Session persistence** is a separate claim: `ISessionStore` implementations
   (Jsonl/Memory/Sqlite) are written on the agent path, **not** via bus
   subscription — there is no atomicity between "event published" and "message

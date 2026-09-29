@@ -93,7 +93,6 @@ public class FullLayerMatrixTests
         "Harbor.Terminal.Abstractions",
         "Harbor.Ui.Framework",
         "Harbor.Ui.Framework.State",
-        "Harbor.Ui.Framework.Reducers",
         "Harbor.Ui.Framework.Services",
         "Harbor.Ui.Framework.ViewModels",
         "Harbor.Ui.Framework.Projection",
@@ -237,18 +236,12 @@ public class FullLayerMatrixTests
                 // vocabulary (Rendering.Input) — the reversed edge replacing the
                 // old Rendering→State one; Presentation→Presentation conforms.
                 "Harbor.Ui.Framework.Rendering"]),
-        // #567: ChatViewReducer writes ToolCallState directly into
-        // ChatViewState.ToolCalls, so the reducer now names a type from the
-        // Abstractions package rather than only re-exporting State's. Same
-        // Presentation → Domain edge ViewModels/Services/Projection already
-        // declare; it was previously unrealised here, not forbidden.
-        // (Spelled .Contracts, not the Harbor.Abstractions facade: that facade
-        // type-forwards, so a consumer that binds contract types emits a ref to
-        // .Contracts — and Matrix_AllowedEntries_AreLive would reject the facade
-        // spelling here as a stale entry.)
-        ["Harbor.Ui.Framework.Reducers"] = new(Layer.Presentation,
-            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State",
-              "Harbor.Ui.Framework.Abstractions"]),
+        // #594 removed the `Harbor.Ui.Framework.Reducers` row outright. It was
+        // the second home for the AgentEvent → UI-state fold, and nothing ever
+        // built a renderer on it: no composition root constructed its AppStore,
+        // so the edge it declared here was permission for a branch with no
+        // caller. Its one live-looking consumer, EventBusAppStoreDispatcher, went
+        // with it. The rows that remain below are the real dependencies.
         // #667: `FileTreeLoader` implements `IFileTreeLoader`, which lives beside
         // `PanelServices` in the State assembly — so this row already permitted
         // the edge and the reference is genuine, not a new permission. The
@@ -257,7 +250,7 @@ public class FullLayerMatrixTests
         // Naming the concrete loader in `PanelServices` would have needed the
         // reverse edge and a project cycle.
         ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Reducers"]),
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.State"]),
         // #567: ToolCallViewModel.Status is a ToolCallState, so the view-models
         // now bind the Abstractions package in IL rather than carrying an
         // unbound reference to it. Same Presentation → Domain edge the other

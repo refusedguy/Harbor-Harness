@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
@@ -8,7 +7,6 @@ using Harbor.Tui.CellForge.Panels;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
-using Harbor.Ui.Framework.Reducers;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
@@ -23,8 +21,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///     <see cref="SubagentsModel" /> row selection (parent→children tree +
 ///     sub-agent kind), status/age formatting, read-only transcript view
 ///     (Enter opens, Esc returns, no composer/input anywhere), and the
-///     <see cref="SessionsReducer" /> sub-agent flag propagation that hides
-///     these sessions from the jump palette.
+///     jump-palette hiding of sub-agent sessions.
 /// </summary>
 public class CellForgeSubagentsPanelTests
 {
@@ -430,20 +427,5 @@ public class CellForgeSubagentsPanelTests
         await Assert.That(uiStore.State.Ui.PanelStates[OverlayIds.Subagents]).IsEqualTo(TuiPanelState.Hidden);
         await Assert.That(store.Appends).IsEqualTo(0);
         await Assert.That(store.Updates).IsEqualTo(0);
-    }
-
-    [Test]
-    public async Task Reducer_AgentStartEvent_PropagatesSubagentFlag()
-    {
-        var flagged = SessionsReducer.Reduce(
-            new AgentStartEvent("s1", Array.Empty<AgentMessage>(), null, SessionKind.Subagent),
-            new SessionsViewState());
-        var plain = SessionsReducer.Reduce(
-            new AgentStartEvent("s2", Array.Empty<AgentMessage>()),
-            new SessionsViewState());
-
-        await Assert.That(flagged.Sessions.Count).IsEqualTo(1);
-        await Assert.That(flagged.Sessions[0].IsSubagent).IsTrue();
-        await Assert.That(plain.Sessions[0].IsSubagent).IsFalse();
     }
 }

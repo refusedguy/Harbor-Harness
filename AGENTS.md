@@ -67,7 +67,7 @@ src/Harbor.Tui.AnsiPlain/             — unified ANSI-streaming + plain-text re
 src/Harbor.Tui.CellForge(+.Engine)/   — canonical fullscreen cell-diff renderer (HARBOR_TUI=cellforge; `consoleex` is a legacy alias)
 src/Harbor.Tui.NickConsoleEx/         — SharpConsoleUI-based renderer (HARBOR_TUI=nickconsoleex; complements CellForge)
 src/Harbor.Tui.Notifications/         — desktop OS notifications renderer
-src/Harbor.Ui.Framework{,.Abstractions,.State,.Reducers,.ViewModels,.Rendering,.Projection,.Services,.Sessions}/ — TEA-style UI state/reducers/projection/services shared by apps (shell csproj is a meta-package)
+src/Harbor.Ui.Framework{,.Abstractions,.State,.ViewModels,.Rendering,.Projection,.Services,.Sessions}/ — TEA-style UI state/reducers/projection/services shared by apps (shell csproj is a meta-package)
 src/Harbor.Desktop.{Abstractions,Shared,Animations} — desktop app support
 src/Harbor.Storage.{Jsonl,Memory,Sqlite}/ — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
 src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible}/ — LLM clients; Harbor.Providers.Shared/ is linked-source (no .csproj, compiled into each provider)

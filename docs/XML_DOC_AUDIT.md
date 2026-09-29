@@ -2689,29 +2689,16 @@
 | Harbor.Ui.Framework.Projection/Rendering/ChatStreamingPresenter.cs | 9 | class ChatStreamingPresenter | YES | MED |
 | Harbor.Ui.Framework.Projection/Rendering/ChatStreamingPresenter.cs | 27 | public SessionStatus DeriveStatus(UiState state) | YES | MED |
 
-## Project: Harbor.Ui.Framework.Reducers
-
-| File | Line | Member | Has XML doc? | Priority |
-|------|------|--------|--------------|----------|
-| Harbor.Ui.Framework.Reducers/AppReducer.cs | 25 | class AppReducer | YES | MED |
-| Harbor.Ui.Framework.Reducers/AppReducer.cs | 30 | public static AppState Reduce(AgentEvent @event, AppState state) => @event switch | YES | HIGH |
-| Harbor.Ui.Framework.Reducers/AppStore.cs | 10 | class AppStore | YES | HIGH |
-| Harbor.Ui.Framework.Reducers/AppStore.cs | 18 | event EventHandler<AppState>? StateChanged | YES | MED |
-| Harbor.Ui.Framework.Reducers/AppStore.cs | 23 | public void Dispatch(AgentEvent @event) | YES | HIGH |
-| Harbor.Ui.Framework.Reducers/ChatViewReducer.cs | 21 | class ChatViewReducer | YES | MED |
-| Harbor.Ui.Framework.Reducers/ChatViewReducer.cs | 27 | public static ChatViewState Reduce(AgentEvent @event, ChatViewState state) => @event switch | YES | HIGH |
-| Harbor.Ui.Framework.Reducers/ChromeReducer.cs | 22 | class ChromeReducer | YES | MED |
-| Harbor.Ui.Framework.Reducers/ChromeReducer.cs | 27 | public static ChromeViewState Reduce(AgentEvent @event, ChromeViewState state) => @event switch | YES | HIGH |
-| Harbor.Ui.Framework.Reducers/SessionsReducer.cs | 23 | class SessionsReducer | YES | MED |
-| Harbor.Ui.Framework.Reducers/SessionsReducer.cs | 29 | public static SessionsViewState Reduce(AgentEvent @event, SessionsViewState state) => @event switch | YES | HIGH |
+<!-- #594: the Harbor.Ui.Framework.Reducers section was removed here along with
+     the project. This is a point-in-time audit snapshot, so its Summary counts
+     above are a pre-deletion figure and are not recomputed; the per-project
+     tables are what a reader follows, and a table for a project that no longer
+     exists is the same class of lie EVENT_TOPOLOGY.md carried until #664. -->
 
 ## Project: Harbor.Ui.Framework.Services
 
 | File | Line | Member | Has XML doc? | Priority |
 |------|------|--------|--------------|----------|
-| Harbor.Ui.Framework.Services/EventBusAppStoreDispatcher.cs | 10 | class EventBusAppStoreDispatcher | YES | HIGH |
-| Harbor.Ui.Framework.Services/EventBusAppStoreDispatcher.cs | 25 | public void Start() | YES | HIGH |
-| Harbor.Ui.Framework.Services/EventBusAppStoreDispatcher.cs | 37 | public ValueTask DisposeAsync() | YES | HIGH |
 | Harbor.Ui.Framework.Services/IRenderEngine.cs | 5 | interface IRenderEngine | **NO** | HIGH |
 | Harbor.Ui.Framework.Services/Overlays/OverlayController.cs | 13 | class OverlayController | YES | MED |
 | Harbor.Ui.Framework.Services/Overlays/OverlayController.cs | 27 | bool HasOverlay | **NO** | LOW |

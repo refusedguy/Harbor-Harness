@@ -39,8 +39,8 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 ┌─────────────────────────────────────────────────────────────────┐
 │  UI FRAMEWORK (TEA + reusable VMs + components)                 │
 │  - Harbor.Ui.Framework (+ split projects Abstractions/, State/, │
-│    Reducers/, ViewModels/, Rendering/, Projection/, Services/,  │
-│    Sessions/; shell csproj is a meta-package)                   │
+│    ViewModels/, Rendering/, Projection/, Services/, Sessions/;  │
+│    shell csproj is a meta-package)                             │
 │    State/      (UiStore, UiState{Ui,Chat}, AppMsg/ChatAppMsg,   │
 │                AppReducer/ChatAppReducer — TEA)                  │
 │    ViewModels/ (ChatLineVM, ToolCallVM, TokenUsageVM, ...)      │

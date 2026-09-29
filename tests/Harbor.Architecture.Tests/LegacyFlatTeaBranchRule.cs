@@ -81,6 +81,7 @@
 //      `AppReducer` that shares its name with the dead one, and a
 //      commented-out reference.
 
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -301,9 +302,13 @@ internal static partial class LegacyFlatTeaBranchProbe
         for (int i = 0; i < lines.Length; i++)
         {
             string line = lines[i];
-            var sb = new System.Text.StringBuilder(line.Length);
+            var sb = new StringBuilder(line.Length);
             int cursor = 0;
 
+            // Two `break`s out of this loop, both on a terminal condition, so
+            // `cursor` is never read after being parked at `line.Length` — hence
+            // the S1854 fix below rather than an assignment to satisfy the
+            // analyzer.
             while (cursor < line.Length)
             {
                 if (inComment)
@@ -311,7 +316,6 @@ internal static partial class LegacyFlatTeaBranchProbe
                     int close = line.IndexOf("-->", cursor, StringComparison.Ordinal);
                     if (close < 0)
                     {
-                        cursor = line.Length;
                         break;
                     }
 
@@ -324,7 +328,6 @@ internal static partial class LegacyFlatTeaBranchProbe
                 if (open < 0)
                 {
                     sb.Append(line, cursor, line.Length - cursor);
-                    cursor = line.Length;
                     break;
                 }
 

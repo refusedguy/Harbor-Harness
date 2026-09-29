@@ -39,7 +39,6 @@
     <Project Path="src/Harbor.Tui.TerminalGui/Harbor.Tui.TerminalGui.csproj" />
     <Project Path="src/Harbor.Ui.Framework.Abstractions/Harbor.Ui.Framework.Abstractions.csproj" />
     <Project Path="src/Harbor.Ui.Framework.Projection/Harbor.Ui.Framework.Projection.csproj" />
-    <Project Path="src/Harbor.Ui.Framework.Reducers/Harbor.Ui.Framework.Reducers.csproj" />
     <Project Path="src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj" />
     <Project Path="src/Harbor.Ui.Framework.Sessions/Harbor.Ui.Framework.Sessions.csproj" />
     <Project Path="src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj" />
