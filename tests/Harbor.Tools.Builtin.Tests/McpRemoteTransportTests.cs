@@ -43,7 +43,7 @@ public class McpRemoteTransportTests
 
         await using var transport = new McpHttpTransport(server.Url);
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
-        Result<JsonDocument?> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
+        Result<Maybe<JsonDocument>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("500");
@@ -77,7 +77,7 @@ public class McpRemoteTransportTests
 
         await using var transport = new McpHttpTransport(server.Url);
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{}}""");
-        Result<JsonDocument?> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
+        Result<Maybe<JsonDocument>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("no matching JSON-RPC frame");

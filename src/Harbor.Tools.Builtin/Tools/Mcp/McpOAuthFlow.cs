@@ -146,18 +146,18 @@ public static class McpOAuthFlow
         IReadOnlyList<string> scopes,
         CancellationToken cancellationToken = default)
     {
-        Result<string?> registered = await RegisterClientResultAsync(
+        Result<Maybe<string>> registered = await RegisterClientResultAsync(
             http, registrationEndpoint, redirectUri, scopes, cancellationToken).ConfigureAwait(false);
-        return registered.Match(static id => id, _ => null);
+        return registered.Match(static id => id.HasValue ? id.Value : null, _ => null);
     }
 
     /// <summary>
     ///     Result railway for dynamic client registration (#201 A6): a server
-    ///     rejection stays <c>Success(null)</c> (callers fall back to the default
+    ///     rejection stays <c>Success(Maybe.None)</c> (callers fall back to the default
     ///     client id — same as before); unreachable/timeout/malformed responses
     ///     are typed <c>Failure</c>s (<c>Unreachable/Timeout/MalformedRegistrationResponse/…</c>).
     /// </summary>
-    public static async Task<Result<string?>> RegisterClientResultAsync(
+    public static async Task<Result<Maybe<string>>> RegisterClientResultAsync(
         HttpClient http,
         string registrationEndpoint,
         string redirectUri,
@@ -176,11 +176,12 @@ public static class McpOAuthFlow
             request.Headers.UserAgent.ParseAdd(UserAgent);
             using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
-                return Result.Success<string?>(null);
+                return Result.Success(Maybe<string>.None);
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-            return Result.Success(doc.RootElement.TryGetProperty("client_id", out var id) && id.ValueKind == JsonValueKind.String
+            string? clientId = doc.RootElement.TryGetProperty("client_id", out var id) && id.ValueKind == JsonValueKind.String
                 ? id.GetString()
-                : null);
+                : null;
+            return Result.Success(Maybe<string>.From(clientId));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -189,27 +190,27 @@ public static class McpOAuthFlow
         catch (HttpRequestException ex)
         {
             // Unreachable server — no client to register.
-            return Result.Failure<string?>($"Unreachable: client registration failed: {ex.Message}");
+            return Result.Failure<Maybe<string>>($"Unreachable: client registration failed: {ex.Message}");
         }
         catch (TaskCanceledException ex)
         {
             // Registration timed out.
-            return Result.Failure<string?>($"Timeout: client registration timed out: {ex.Message}");
+            return Result.Failure<Maybe<string>>($"Timeout: client registration timed out: {ex.Message}");
         }
         catch (JsonException ex)
         {
             // Malformed registration response.
-            return Result.Failure<string?>($"MalformedRegistrationResponse: {ex.Message}");
+            return Result.Failure<Maybe<string>>($"MalformedRegistrationResponse: {ex.Message}");
         }
         catch (InvalidOperationException ex)
         {
             // Unusable registration URL.
-            return Result.Failure<string?>($"InvalidRegistrationEndpoint: {ex.Message}");
+            return Result.Failure<Maybe<string>>($"InvalidRegistrationEndpoint: {ex.Message}");
         }
         catch (IOException ex)
         {
             // Transport failure.
-            return Result.Failure<string?>($"Transport: client registration failed: {ex.Message}");
+            return Result.Failure<Maybe<string>>($"Transport: client registration failed: {ex.Message}");
         }
     }
 

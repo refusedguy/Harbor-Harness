@@ -51,22 +51,24 @@ public sealed record McpOAuthConfig
 
     /// <summary>Parse the <c>auth</c> block of an mcp.json remote entry. Unknown fields ignored.</summary>
     public static McpOAuthConfig? Parse(JsonElement element) =>
-        ParseResult(element).Match(static cfg => cfg, _ => null);
+        ParseResult(element).Match(static cfg => cfg.HasValue ? cfg.Value : null, _ => null);
 
     /// <summary>
     ///     Result railway for the <c>auth</c> block (#201 A6): a missing
-    ///     <c>auth</c> block is <c>Success(null)</c> (valid no-auth server — same
-    ///     as before); a non-object entry or <c>auth</c> block is a typed
-    ///     <c>Failure</c> instead of an indistinguishable null.
+    ///     <c>auth</c> block is <c>Success(Maybe.None)</c> (valid no-auth server —
+    ///     same as before); a non-object entry or <c>auth</c> block is a typed
+    ///     <c>Failure</c> instead of an indistinguishable null. "No auth block"
+    ///     and "unparseable entry" are different states, so the value is a
+    ///     <see cref="Maybe{T}" /> rather than a null that stands for both.
     /// </summary>
-    public static Result<McpOAuthConfig?> ParseResult(JsonElement element)
+    public static Result<Maybe<McpOAuthConfig>> ParseResult(JsonElement element)
     {
         if (element.ValueKind != JsonValueKind.Object)
-            return Result.Failure<McpOAuthConfig?>("InvalidServerEntry: expected an object for the MCP server entry.");
+            return Result.Failure<Maybe<McpOAuthConfig>>("InvalidServerEntry: expected an object for the MCP server entry.");
         if (!element.TryGetProperty("auth", out var auth))
-            return Result.Success<McpOAuthConfig?>(null);
+            return Result.Success(Maybe<McpOAuthConfig>.None);
         if (auth.ValueKind != JsonValueKind.Object)
-            return Result.Failure<McpOAuthConfig?>("InvalidAuthBlock: 'auth' must be an object.");
+            return Result.Failure<Maybe<McpOAuthConfig>>("InvalidAuthBlock: 'auth' must be an object.");
 
         static string? Str(JsonElement o, string name) =>
             o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
@@ -86,7 +88,7 @@ public sealed record McpOAuthConfig
             && portEl.TryGetInt32(out int p) && p is > 0 and < 65536)
             port = p;
 
-        return Result.Success<McpOAuthConfig?>(new McpOAuthConfig
+        return Result.Success(Maybe<McpOAuthConfig>.From(new McpOAuthConfig
         {
             ClientId = Str(auth, "clientId"),
             ClientSecret = Str(auth, "clientSecret"),
@@ -95,6 +97,6 @@ public sealed record McpOAuthConfig
             TokenEndpoint = Str(auth, "tokenEndpoint"),
             RegistrationEndpoint = Str(auth, "registrationEndpoint"),
             RedirectPort = port,
-        });
+        }));
     }
 }

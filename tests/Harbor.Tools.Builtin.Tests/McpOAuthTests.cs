@@ -244,7 +244,7 @@ public class McpOAuthTests : IDisposable
             http, "https://x/register", "http://127.0.0.1:9/callback", ["a"]);
 
         await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsNull();
+        await Assert.That(result.Value.HasNoValue).IsTrue();
     }
 
     [Test]
@@ -289,7 +289,7 @@ public class McpOAuthTests : IDisposable
         var result = McpOAuthConfig.ParseResult(doc.RootElement);
 
         await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsNull();
+        await Assert.That(result.Value.HasNoValue).IsTrue();
     }
 
     [Test]

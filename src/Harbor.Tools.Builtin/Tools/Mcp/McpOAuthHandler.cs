@@ -317,21 +317,21 @@ public sealed class McpLoopbackListener : IAsyncDisposable
     }
 
     public static string? ParseQuery(string requestLine, string key, string expectedState) =>
-        ParseQueryResult(requestLine, key, expectedState).Match(static code => code, _ => null);
+        ParseQueryResult(requestLine, key, expectedState).Match(static code => code.HasValue ? code.Value : null, _ => null);
 
     /// <summary>
     ///     Result railway for the loopback redirect (#201 A7): a well-formed
-    ///     request with a mismatched state is <c>Success(null)</c> (retryable user
+    ///     request with a mismatched state is <c>Success(Maybe.None)</c> (retryable user
     ///     error — same as before); an unparseable request line is
     ///     <c>Failure("MalformedCallback: ...")</c> instead of a silent null.
     /// </summary>
-    public static Result<string?> ParseQueryResult(string requestLine, string key, string expectedState)
+    public static Result<Maybe<string>> ParseQueryResult(string requestLine, string key, string expectedState)
     {
         // Request line: GET /callback?code=..&state=.. HTTP/1.1
         int q = requestLine.IndexOf('?');
         int sp = requestLine.IndexOf(' ', q < 0 ? 0 : q);
         if (q < 0 || sp < 0)
-            return Result.Failure<string?>("MalformedCallback: cannot parse the OAuth redirect request line.");
+            return Result.Failure<Maybe<string>>("MalformedCallback: cannot parse the OAuth redirect request line.");
         string? code = null;
         string? state = null;
         foreach (string pair in requestLine.Substring(q + 1, sp - q - 1).Split('&', StringSplitOptions.RemoveEmptyEntries))
@@ -345,7 +345,7 @@ public sealed class McpLoopbackListener : IAsyncDisposable
             else if (k == "state") state = v;
         }
 
-        return Result.Success<string?>(state == expectedState ? code : null);
+        return Result.Success(Maybe<string>.From(state == expectedState ? code : null));
     }
 
     public ValueTask DisposeAsync()
