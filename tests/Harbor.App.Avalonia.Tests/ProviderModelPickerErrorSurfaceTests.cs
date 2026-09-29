@@ -104,7 +104,8 @@ public class ProviderModelPickerErrorSurfaceTests
             new StubSessionManager(),
             new StubToastService(),
             NullLogger<ProviderModelPickerViewModel>.Instance,
-            WeakReferenceMessenger.Default);
+            WeakReferenceMessenger.Default,
+            new NoKeysAnywhereAuthResolver());
 
     private static FakeRegistry FailingRegistry() =>
         new() { Models = Result.Failure<IReadOnlyList<ModelInfo>>("connection refused") };

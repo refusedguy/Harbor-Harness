@@ -627,7 +627,7 @@ where the risk is highest. 1.3.0 predates the `ResultValueWalker` rework (change
 
 ### 5.2 Measured baseline (CI, `dotnet build Harbor.slnx -c Release`, analyzer 1.3.0)
 
-**211 CFE0001 sites total: 37 in shipped code (src/ + apps/), 174 under `tests/`.** (#561 moved one site out of production when it deleted `PluginCompilationResult`, and added two when the compiler contract became a real `Result<T>` — the `compiled.Value` read in `PluginHost.LoadAllAsync` and the `inner.Value.AssemblyBytes` read in `CachingCompiler.CompileAsync`, both false positives of the early-return guard shape, both carrying a documented pragma.)
+**210 CFE0001 sites total: 36 in shipped code (src/ + apps/), 174 under `tests/`.** (#561 moved one site out of production when it deleted `PluginCompilationResult`, and added two when the compiler contract became a real `Result<T>` — the `compiled.Value` read in `PluginHost.LoadAllAsync` and the `inner.Value.AssemblyBytes` read in `CachingCompiler.CompileAsync`, both false positives of the early-return guard shape, both carrying a documented pragma. #671 took one out of production: `ProviderModelPickerViewModel.BuildProviderGroupAsync` read `cfgResult.Value` to decide a provider's authorization from a config dictionary, and deleting that read — `IAuthResolver` answers that question now — deleted the site and its pragma with it.)
 
 | area | sites | verdict |
 |---|---|---|
@@ -636,7 +636,7 @@ where the risk is highest. 1.3.0 predates the `ResultValueWalker` rework (change
 | shipped — false positives | 34 | baselined, one documented pragma each (5.4) |
 | `tests/` | 174 | all false positives of ONE shape; suppressed centrally (5.5) |
 
-Per project: `Harbor.Lsp` 8, `Harbor.Application` 7, `Harbor.Desktop.Abstractions` 3,
+Per project: `Harbor.Lsp` 8, `Harbor.Application` 7, `Harbor.Desktop.Abstractions` 2,
 `Harbor.Hosting` 3, `Harbor.Storage.Jsonl` 2, `Harbor.App.Cli` 6, `Harbor.Plugins.Hosting` 1,
 `Harbor.Plugins.Runtime` 1, `Harbor.App.Avalonia` 3, `Harbor.Terminal.Abstractions.Tests` 1 (pre-existing break, see 5.9).
 

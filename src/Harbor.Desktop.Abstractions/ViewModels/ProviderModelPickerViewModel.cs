@@ -37,9 +37,23 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// </remarks>
 public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncDataSink<ProviderGroupViewModel>
 {
-    public static readonly TimeSpan ModelFetchTimeout = TimeSpan.FromSeconds(5);
+    /// <summary>
+    ///     How long the user waits for a catalogue refresh before the picker
+    ///     settles into an empty-or-partial state (#671).
+    /// </summary>
+    /// <remarks>
+    ///     This is a UI feedback budget, NOT a provider-probe budget, and it is
+    ///     deliberately not <see cref="IProviderHealthCheck.DefaultTimeout" />.
+    ///     The picker does not ask "can this provider answer?" — it asks "what
+    ///     models does it list?", and a user staring at an empty picker needs
+    ///     that answered fast. The two budgets used to wear the same name, so
+    ///     reading one where the other belonged was indistinguishable; the name
+    ///     is the fix, not a second shared literal.
+    /// </remarks>
+    public static readonly TimeSpan UiFeedbackBudget = TimeSpan.FromSeconds(5);
 
     private readonly AsyncFeed<IReadOnlyList<ProviderGroupViewModel>> _modelsFeed;
+    private readonly IAuthResolver _auth;
     private readonly ICommonConfigStore _configStore;
     private readonly ILogger<ProviderModelPickerViewModel> _logger;
     private readonly IMessenger _messenger;
@@ -67,7 +81,8 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
         ISessionManager sessions,
         IToastService toasts,
         ILogger<ProviderModelPickerViewModel> logger,
-        IMessenger messenger)
+        IMessenger messenger,
+        IAuthResolver auth)
     {
         _providers = providers ?? throw new ArgumentNullException(nameof(providers));
         _configStore = configStore ?? throw new ArgumentNullException(nameof(configStore));
@@ -75,9 +90,10 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
         _toasts = toasts ?? throw new ArgumentNullException(nameof(toasts));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _messenger = messenger;
+        _auth = auth ?? throw new ArgumentNullException(nameof(auth));
 
         _modelsFeed = new AsyncFeed<IReadOnlyList<ProviderGroupViewModel>>(
-            LoadAllAsync, ModelFetchTimeout, _logger);
+            LoadAllAsync, UiFeedbackBudget, _logger);
 
         _modelsFeed.Changed += OnModelsChanged;
     }
@@ -240,22 +256,9 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
         var preset = ProviderPresets.Find(providerId);
         string displayName = preset?.DisplayName ?? providerId;
 
-        bool authenticated = false;
-        try
-        {
-            var cfgResult = await _configStore.LoadAsync(ct).ConfigureAwait(true);
-            #pragma warning disable CFE0001
-            // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
-            // cfgResult.IsSuccess && ... cfgResult.Value ...; && short-circuit guard
-            authenticated = cfgResult.IsSuccess && !string.IsNullOrWhiteSpace(cfgResult.Value.ApiKeys.GetValueOrDefault(providerId));
-            #pragma warning restore CFE0001
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Config load threw for {Provider}", providerId);
-        }
-
         bool requiresKey = preset?.RequiresApiKey ?? true;
+        bool authenticated = !requiresKey || await IsAuthorizedAsync(providerId, ct).ConfigureAwait(true);
+
         string icon;
         string text;
         string brushKey;
@@ -282,6 +285,44 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
         {
             SetupHint = preset?.SetupHint
         };
+    }
+
+    /// <summary>
+    ///     Ask <see cref="IAuthResolver" /> whether <paramref name="providerId" />
+    ///     is authorized (#671).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The picker used to read <c>CommonConfig.ApiKeys</c> itself, which
+    ///         is one of the four stores the resolver reads and not the whole of
+    ///         it: a key in the environment, a keychain or a CLI override was
+    ///         invisible here, so the same provider showed "✗ No API key" in the
+    ///         picker and "Authenticated" in Settings. Asking the one declared
+    ///         abstraction is what makes the two screens answer alike.
+    ///     </para>
+    ///     <para>
+    ///         <see cref="Result{T}.IsSuccess" /> is the whole verdict, exactly as
+    ///         the other call sites read it — a resolver that answers Success
+    ///         answered "a usable key resolved". Re-deciding what a key "looks
+    ///         like" here would be a second opinion.
+    ///     </para>
+    ///     <para>
+    ///         A throwing resolver means "not authorized", not a crash: the row
+    ///         renders the ✗ glyph and the user can still pick another provider.
+    ///     </para>
+    /// </remarks>
+    private async Task<bool> IsAuthorizedAsync(string providerId, CancellationToken ct)
+    {
+        try
+        {
+            var resolved = await _auth.ResolveApiKeyAsync(providerId, ct).ConfigureAwait(true);
+            return resolved.IsSuccess;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Auth resolution threw for {Provider}", providerId);
+            return false;
+        }
     }
 
     private void ApplyFilter()

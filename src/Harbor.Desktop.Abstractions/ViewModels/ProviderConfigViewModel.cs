@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Providers;
 using Harbor.Ui.Framework.Services;
 using Harbor.Desktop.Abstractions.Configuration;
@@ -30,6 +31,7 @@ public partial class ProviderConfigViewModel : ObservableObject
 {
     private readonly ICommonConfigStore _commonStore;
     private readonly ILogger<ProviderConfigViewModel> _logger;
+    private readonly IAuthResolver _auth;
     private readonly IProviderRegistry _providers;
     private readonly IToastService _toasts;
 
@@ -62,6 +64,7 @@ public partial class ProviderConfigViewModel : ObservableObject
     /// <param name="providers">The provider registry (for Test connection).</param>
     /// <param name="toasts">Toast service (for user feedback).</param>
     /// <param name="logger">Logger.</param>
+    /// <param name="auth">The single auth abstraction — the only source of an auth verdict (#671).</param>
     public ProviderConfigViewModel(
         string id,
         string displayName,
@@ -71,7 +74,8 @@ public partial class ProviderConfigViewModel : ObservableObject
         ICommonConfigStore commonStore,
         IProviderRegistry providers,
         IToastService toasts,
-        ILogger<ProviderConfigViewModel> logger)
+        ILogger<ProviderConfigViewModel> logger,
+        IAuthResolver auth)
     {
         Id = id;
         DisplayName = displayName;
@@ -79,6 +83,7 @@ public partial class ProviderConfigViewModel : ObservableObject
         RequiresApiKey = requiresApiKey;
         _isAuthenticated = isAuthenticated;
         _commonStore = commonStore;
+        _auth = auth ?? throw new ArgumentNullException(nameof(auth));
         _providers = providers;
         _toasts = toasts;
         _logger = logger;
@@ -130,7 +135,13 @@ public partial class ProviderConfigViewModel : ObservableObject
 
         if (result.IsSuccess)
         {
-            row.IsAuthenticated = !string.IsNullOrWhiteSpace(row.ApiKey);
+            // Re-read the verdict from the resolver rather than assuming the
+            // save granted it (#671). Non-whitespace ApiKey was a third answer
+            // to "is this provider authorized?" — and the wrong one, since a
+            // blank field says nothing about the env key the agent will
+            // actually use. The resolver reloads config per call, so the value
+            // just persisted is already visible to it.
+            row.IsAuthenticated = await IsAuthorizedAsync().ConfigureAwait(true);
             row.TestResult = row.IsAuthenticated ? "✓ Key saved" : "Key saved (will check on next request)";
             _toasts.Show($"API key saved for {row.DisplayName}.", ToastKind.Success);
         }
@@ -142,11 +153,31 @@ public partial class ProviderConfigViewModel : ObservableObject
     }
 
     /// <summary>
-    ///     Test this provider's connection by fetching its model list
-    ///     with a 5-second timeout. Persists the row's current API key first
-    ///     (so the test sees the value the user just typed, not the on-disk
-    ///     one). Used by the "Test" button on each provider row.
+    ///     Test this provider's connection by fetching its model list. Persists
+    ///     the row's current API key first (so the test sees the value the user
+    ///     just typed, not the on-disk one). Used by the "Test" button on each
+    ///     provider row.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Fetching /models IS a provider probe, so this spends
+    ///         <see cref="IProviderHealthCheck.DefaultTimeout" /> — the budget
+    ///         the onboarding wizard already spends for the same question. It
+    ///         used to carry a bare five-second literal and then tell the user
+    ///         it had "Timed out after 5s": a second number under one concept,
+    ///         and not the number the rest of the app means by it.
+    ///     </para>
+    ///     <para>
+    ///         What this reports is REACHABILITY — how many models the endpoint
+    ///         listed — and reachability is not authorization. It used to assign
+    ///         <see cref="IsAuthenticated" /> from the model count and to clear
+    ///         it when /models failed, so an authorized provider behind an empty
+    ///         catalogue, or one behind a flaky network, read as "No key". The
+    ///         auth verdict belongs to <see cref="IAuthResolver" />;
+    ///         <see cref="SaveKeyAsync" /> asks it on the way in, and a probe
+    ///         that fails changes only the probe's own line of text.
+    ///     </para>
+    /// </remarks>
     [RelayCommand(CanExecute = nameof(CanTestConnection))]
     private async Task TestConnectionAsync()
     {
@@ -159,27 +190,28 @@ public partial class ProviderConfigViewModel : ObservableObject
             // from CommonConfig on every call) sees the latest value.
             await SaveKeyAsync().ConfigureAwait(true);
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var cts = new CancellationTokenSource(IProviderHealthCheck.DefaultTimeout);
             var modelsResult = await _providers.GetAllModelsAsync(cts.Token).ConfigureAwait(true);
             if (modelsResult.IsSuccess)
             {
-                int count = modelsResult.Value.Count(m => m.ProviderId == row.Id);
-                row.IsAuthenticated = count > 0 || !row.RequiresApiKey;
-                row.TestResult = count > 0
-                    ? $"✓ {count} model(s) available"
+                int listed = modelsResult.Value.Count(m => m.ProviderId == row.Id);
+                row.TestResult = listed > 0
+                    ? $"✓ {listed} model(s) available"
                     : row.RequiresApiKey
                         ? "✓ Reachable but no models returned"
                         : "✓ Reachable (no key needed)";
             }
             else
             {
-                row.IsAuthenticated = false;
                 row.TestResult = $"✗ {modelsResult.Error}";
             }
         }
         catch (OperationCanceledException)
         {
-            row.TestResult = "✗ Timed out after 5s — is the provider running?";
+            // The number comes from the budget that actually elapsed, so the
+            // message cannot drift away from the behaviour.
+            int seconds = (int)IProviderHealthCheck.DefaultTimeout.TotalSeconds;
+            row.TestResult = $"✗ Timed out after {seconds}s — is the provider running?";
         }
         catch (Exception ex)
         {
@@ -188,6 +220,31 @@ public partial class ProviderConfigViewModel : ObservableObject
         finally
         {
             row.IsTesting = false;
+        }
+    }
+
+    /// <summary>
+    ///     Ask <see cref="IAuthResolver" /> whether this row's provider is
+    ///     authorized (#671) — the same question, asked of the same abstraction,
+    ///     so this row and the picker cannot disagree about one provider.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="Result{T}.IsSuccess" /> is the whole verdict, read exactly
+    ///     as the other call sites read it. A resolver that answers Success
+    ///     answered "a usable key resolved"; re-deciding what a key looks like
+    ///     here would be a second opinion, which is the bug.
+    /// </remarks>
+    private async Task<bool> IsAuthorizedAsync()
+    {
+        try
+        {
+            var resolved = await _auth.ResolveApiKeyAsync(Id).ConfigureAwait(true);
+            return resolved.IsSuccess;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Auth resolution threw for {Provider}", Id);
+            return false;
         }
     }
 
