@@ -41,7 +41,6 @@ namespace Harbor.Storage.Jsonl;
 [JsonSerializable(typeof(ToolCallPartPayload))]
 [JsonSerializable(typeof(FilePartPayload))]
 [JsonSerializable(typeof(ImageAttachmentPayload))]
-[JsonSerializable(typeof(UnknownPartPayload))]
 [JsonSerializable(typeof(UserPayload))]
 [JsonSerializable(typeof(AssistantPayload))]
 [JsonSerializable(typeof(ToolResultPayload))]
@@ -125,5 +124,10 @@ internal sealed record ImageAttachmentPayload(
     [property: System.Text.Json.Serialization.JsonPropertyName("height")] int Height,
     [property: System.Text.Json.Serialization.JsonPropertyName("data")] byte[] Data);
 
-internal sealed record UnknownPartPayload(
-    [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type);
+// #550: there is deliberately NO placeholder payload for a part kind the codec does
+// not know. `UnknownPartPayload("unknown")` used to stand in for one, and it was the
+// reason the store could persist a record its own readers refuse: the read path
+// dropped the unknown tag, so what came back was a shorter message than what was
+// written, with nothing logged. A kind with no shape is now a refusal on both sides
+// (JsonlMessageCodec.SerializePart / DeserializePart), matching
+// ContentPartVisitor<TResult>.VisitUnknown and the SQLite writer from #461.

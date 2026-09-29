@@ -177,6 +177,25 @@ internal static class SqliteMappers
     {
         internal static readonly ContentPartJsonConverter Instance = new();
 
+        /// <summary>
+        ///     #550 — a tag → type factory, not a walk over the part union, so there is
+        ///     no visitor to route it through and nothing downstream can notice a tag it
+        ///     does not know. It used to answer <see langword="null" /> and let the
+        ///     enclosing array converter skip the null, which is how a row written by a
+        ///     newer Harbor reloaded as a shorter assistant turn with nothing logged.
+        /// </summary>
+        /// <remarks>
+        ///     Now it refuses, by name, exactly like
+        ///     <see cref="ContentPartVisitor{TResult}.Accept" /> refuses a kind the write
+        ///     side has no arm for: an unknown tag is version skew, and a known tag
+        ///     missing a field is a corrupt row. Neither is a part this reader may
+        ///     invent. The store collects a refused row into its <c>skipped</c> list and
+        ///     <c>LogWarning</c>s the reason, so the cost of refusing is one warning that
+        ///     names the tag; the cost of the old behaviour was a part nobody could
+        ///     account for. The <see cref="JsonException" /> is what
+        ///     <see cref="TryDeserializeMessage" />'s <c>Result.Try</c> turns into that
+        ///     failure, so this is the same rail the rest of the row decode rides.
+        /// </remarks>
         public override ContentPart? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             using var doc = JsonDocument.ParseValue(ref reader);
@@ -184,25 +203,64 @@ internal static class SqliteMappers
             string? type = el.TryGetProperty("type", out var tp) ? tp.GetString() : el.TryGetProperty("Type", out var tp2) ? tp2.GetString() : null;
             return type switch
             {
-                "text" => new TextPart(el.TryGetProperty("text", out var t) ? t.GetString()! : el.GetProperty("Text").GetString()!),
-                "thinking" => new ThinkingPart(el.TryGetProperty("text", out var t) ? t.GetString()! : el.GetProperty("Text").GetString()!),
+                "text" => new TextPart(RequiredString(el, "text")),
+                "thinking" => new ThinkingPart(RequiredString(el, "text")),
                 "tool_call" => new ToolCallPart(
-                    el.TryGetProperty("id", out var id) ? id.GetString()! : el.GetProperty("Id").GetString()!,
-                    el.TryGetProperty("toolName", out var tn) ? tn.GetString()! : el.GetProperty("ToolName").GetString()!,
+                    RequiredString(el, "id"),
+                    RequiredString(el, "toolName"),
+                    // A row with no args at all is tolerated, as it always was: an
+                    // undefined element is a faithful reading of "this row carries no
+                    // arguments", and refusing it would truncate a row this build
+                    // used to load.
                     el.TryGetProperty("args", out var a) ? a.Clone() : el.TryGetProperty("Args", out var a2) ? a2.Clone() : default),
                 "file" => new FilePart(
-                    el.TryGetProperty("path", out var p) ? p.GetString()! : el.GetProperty("Path").GetString()!,
-                    el.TryGetProperty("mimeType", out var mt) ? mt.GetString()! : el.GetProperty("MimeType").GetString()!,
-                    el.TryGetProperty("sizeBytes", out var sb) ? sb.GetInt64() : el.GetProperty("SizeBytes").GetInt64()),
-                // Read is a TAG -> TYPE factory, not a walk over the part union, so
-                // there is no visitor to route it through: an unrecognised tag is
-                // reported as null and the enclosing array converter skips it
-                // (ContentPartListJsonConverter). Deliberately unchanged in #461 —
-                // making both read paths (here and Harbor.Storage.Jsonl) fail loud
-                // on a foreign tag is a separate change.
-                _ => null
+                    RequiredString(el, "path"),
+                    RequiredString(el, "mimeType"),
+                    RequiredInt64(el, "sizeBytes")),
+                null => throw new JsonException(
+                    "content part has no 'type' discriminator, so it cannot be rebuilt."),
+                _ => throw new JsonException(
+                    $"content part type '{type}' is not known to this build; the row was refused rather than read with the part missing."),
             };
         }
+
+        /// <summary>
+        ///     A mandatory string member, tolerating the pre-camelCase casing rows
+        ///     written before the naming policy carry. A member that is absent under
+        ///     both spellings is a named <see cref="JsonException" /> rather than the
+        ///     <see cref="KeyNotFoundException" /> <c>GetProperty</c> used to throw —
+        ///     the whole point of refusing is that the refusal says which part of which
+        ///     row is broken.
+        /// </summary>
+        private static string RequiredString(JsonElement el, string camel)
+        {
+            if (el.TryGetProperty(camel, out var value) && value.ValueKind == JsonValueKind.String)
+                return value.GetString()!;
+
+            string legacy = char.ToUpperInvariant(camel[0]) + camel[1..];
+            if (el.TryGetProperty(legacy, out var legacyValue) && legacyValue.ValueKind == JsonValueKind.String)
+                return legacyValue.GetString()!;
+
+            throw new JsonException($"content part of type '{TagOf(el)}' is missing '{camel}'.");
+        }
+
+        private static long RequiredInt64(JsonElement el, string camel)
+        {
+            if (el.TryGetProperty(camel, out var value) && value.ValueKind == JsonValueKind.Number)
+                return value.GetInt64();
+
+            string legacy = char.ToUpperInvariant(camel[0]) + camel[1..];
+            if (el.TryGetProperty(legacy, out var legacyValue) && legacyValue.ValueKind == JsonValueKind.Number)
+                return legacyValue.GetInt64();
+
+            throw new JsonException($"content part of type '{TagOf(el)}' is missing '{camel}'.");
+        }
+
+        /// <summary>The part's own tag, for a diagnostic that has to name the part.</summary>
+        private static string TagOf(JsonElement el) =>
+            (el.TryGetProperty("type", out var tp) ? tp.GetString()
+                : el.TryGetProperty("Type", out var tp2) ? tp2.GetString()
+                : null) ?? "<missing>";
 
         /// <summary>
         ///     #461: the write side is a per-kind walk, so it goes through
