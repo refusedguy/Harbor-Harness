@@ -72,8 +72,17 @@ public interface IOnboardingPersister
 {
     /// <summary>
     ///     Merge the wizard result into the shared config (API-key merge,
-    ///     defaults, storage backend) and mark onboarding completed.
+    ///     default provider / model) and mark onboarding completed.
     /// </summary>
+    /// <remarks>
+    ///     The wizard has no storage-backend step, so it must not write that
+    ///     field. <c>CommonConfig.StorageBackend</c> is <c>""</c> for "not
+    ///     chosen" and the composition preset resolves it (ADR-008 — CLI
+    ///     <c>jsonl</c>, desktop <c>memory</c>). This persister used to write
+    ///     <c>"jsonl"</c> whenever the field was empty, which pinned every
+    ///     desktop install to the CLI backend and left the user unable to unset
+    ///     the field (#677).
+    /// </remarks>
     Task<Result> PersistAsync(string provider, string model, string? newKey, bool overwriteDefaults, CancellationToken ct);
 }
 
@@ -96,7 +105,6 @@ public sealed class ConfigStoreOnboardingPersister(ICommonConfigStore configStor
                 ApiKeys = mergedKeys.ToImmutable(),
                 DefaultProvider = overwriteDefaults || string.IsNullOrEmpty(cfg.DefaultProvider) ? provider : cfg.DefaultProvider,
                 DefaultModel = overwriteDefaults || string.IsNullOrEmpty(cfg.DefaultModel) ? model : cfg.DefaultModel,
-                StorageBackend = string.IsNullOrEmpty(cfg.StorageBackend) ? "jsonl" : cfg.StorageBackend
             };
         }, ct);
 }

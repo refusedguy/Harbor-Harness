@@ -95,11 +95,17 @@
                         <!-- Storage backend -->
                         <StackPanel Spacing="4">
                             <TextBlock Text="Storage backend" Classes="Label" />
+                            <!-- #677: an empty selection is a real state, not a bug — it
+                                 means "not chosen", and the composition preset decides
+                                 (CLI jsonl, desktop memory). The old view-model filled this
+                                 box with "jsonl" so the preset was unreachable. -->
                             <ComboBox SelectedItem="{Binding StorageBackend, Mode=TwoWay}" MinWidth="180">
                                 <ComboBoxItem Content="memory" />
                                 <ComboBoxItem Content="jsonl" />
                                 <ComboBoxItem Content="sqlite" />
                             </ComboBox>
+                            <TextBlock Text="Leave empty to use the app's default backend."
+                                       FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
                         </StackPanel>
 
                         <!-- Log level -->
@@ -114,10 +120,16 @@
                             </ComboBox>
                         </StackPanel>
 
-                        <!-- Ollama host -->
+                        <!-- Ollama host. Read-only on purpose (#677): ProviderFactories
+                             snapshots OLLAMA_HOST into an HttpClient while AddHarbor
+                             composes, so this screen could never change a running
+                             app — it used to appear to, by writing the process
+                             environment and showing a "Settings saved" toast. -->
                         <StackPanel Spacing="4">
                             <TextBlock Text="Ollama host" Classes="Label" />
-                            <TextBox Text="{Binding OllamaHost, Mode=TwoWay}" PlaceholderText="http://localhost:11434" />
+                            <TextBox Text="{Binding OllamaHost, Mode=OneWay}" IsReadOnly="True"
+                                     PlaceholderText="http://localhost:11434"
+                                     ToolTip.Tip="Read from OLLAMA_HOST when Harbor starts. Set the environment variable before launching to change it." />
                         </StackPanel>
 
                         <Separator Margin="0,2" />
