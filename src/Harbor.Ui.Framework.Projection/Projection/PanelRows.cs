@@ -2,7 +2,6 @@ using System.Globalization;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.Logging;
 
 namespace Harbor.Ui.Framework.Projection;
 
@@ -216,19 +215,14 @@ public static class PanelRows
         for (int i = 0; i < entries.Count; i++)
         {
             var entry = entries[i];
-            string levelTag = entry.Level switch
-            {
-                LogLevel.Trace => "TRAC",
-                LogLevel.Debug => "DBUG",
-                LogLevel.Information => "INFO",
-                LogLevel.Warning => "WARN",
-                LogLevel.Error => "ERRO",
-                LogLevel.Critical => "CRIT",
-                _ => "????",
-            };
-            string time = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
+            // #563: the mnemonic comes from the one table that spells it. This
+            // used to be a local switch ending in a 4-question-mark sentinel,
+            // while the two FileLogger copies answered the same question with
+            // `level.ToString().ToUpperInvariant()` — so one event rendered as
+            // that sentinel here and as "VERBOSE" in the log file.
+            string levelTag = LogLevelTag.For(entry.Level);
             string category = ShortenCategory(entry.Category);
-            int budget = width - time.Length - levelTag.Length - category.Length - 7;
+            int budget = width - LogRowFormat.TimestampWidth - LogLevelTag.Width - category.Length - 7;
             string body = PanelText.SingleLine(entry.Message);
             if (budget <= 0)
             {
@@ -239,7 +233,11 @@ public static class PanelRows
                 body = budget == 1 ? "…" : body[..(budget - 1)] + "…";
             }
 
-            rows.Add($"{time} {levelTag} {category} {body}".TrimEnd());
+            // #563: the row layout belongs to LogRowFormat, not to this loop.
+            // It used to be an interpolation here, and a consumer elsewhere
+            // re-read the level out of the finished string at a hard-coded
+            // [13..17] — an offset that only ever described THIS producer.
+            rows.Add(new LogRow(entry.Timestamp, entry.Level, category, body).Format());
         }
 
         rows.Add(PanelText.Separator);
