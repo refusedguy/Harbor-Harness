@@ -66,7 +66,12 @@ public sealed class KeyPressEventArgs : EventArgs
 /// <remarks>
 ///     <para>
 ///         Slash commands are user-typed shortcuts prefixed with <c>/</c> (e.g. <c>/help</c>,
-///         <c>/models</c>). They are dispatched by <see cref="ISlashCommandRouter" />.
+///         <c>/models</c>). What a command IS is the contract below; how one is ROUTED is the
+///         host's concern and not this assembly's — <c>Harbor.App.Cli</c>'s
+///         <c>SlashCommandDispatcher</c> owns that and hands back a <c>SlashCommandOutcome</c>
+///         (#603). There is deliberately no router interface here: an unimplemented one is a
+///         shape the next author copies, and a copy is a second slash-command router diverging
+///         from the wired one (#565).
 ///     </para>
 /// </remarks>
 public interface ISlashCommand
@@ -145,44 +150,4 @@ public interface ICommandContext
     ///     Callback to prompt the user for input and await the response.
     /// </summary>
     public Func<string, Task<string>> Prompt { get; }
-}
-
-/// <summary>
-///     Router for slash-commands.
-/// </summary>
-/// <remarks>
-///     Implementations live in the renderer/composition-root assemblies
-///     (<c>Harbor.Tui.*</c>, <c>Harbor.Hosting</c>).
-/// </remarks>
-public interface ISlashCommandRouter
-{
-    /// <summary>
-    ///     Register a slash command.
-    /// </summary>
-    /// <param name="command">The command to register.</param>
-    /// <returns>Success, or failure if a command with the same name is already registered.</returns>
-    public Result Register(ISlashCommand command);
-
-    /// <summary>
-    ///     Unregister a slash command by name.
-    /// </summary>
-    /// <param name="name">The command name.</param>
-    /// <returns>Success, or failure if the command is not registered.</returns>
-    public Result Unregister(string name);
-
-    /// <summary>
-    ///     Try to handle a user input line. If the input starts with <c>/</c>, dispatches the
-    ///     matching command and returns <see langword="true" />; otherwise returns <see langword="false" />.
-    /// </summary>
-    /// <param name="input">The raw user input.</param>
-    /// <param name="context">The command context.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Success with <see langword="true" /> if handled, <see langword="false" /> if not a command; failure on error.</returns>
-    public Task<Result<bool>> TryHandleAsync(string input, ICommandContext context, CancellationToken ct = default);
-
-    /// <summary>
-    ///     Get all registered commands.
-    /// </summary>
-    /// <returns>A read-only list of registered commands.</returns>
-    public IReadOnlyList<ISlashCommand> GetRegisteredCommands();
 }
