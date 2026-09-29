@@ -44,13 +44,10 @@
 //
 // WHAT #620 ACTUALLY FOUND
 // ------------------------
-// Two of the seven axes are HALF-OPEN — a door with no marker:
-//
-//   src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs
-//     public Result RegisterSessionStore(string backendId, Func<ISessionStore> factory);
-//     public Result RegisterTuiBackend(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory);
-//
-// Both were opened deliberately (#581, #584) and everything AROUND them is
+// Two of the seven axes are HALF-OPEN — a door with no marker.
+// `IPluginLoadHost` declares `RegisterSessionStore` and `RegisterTuiBackend`
+// (src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs). Both were opened
+// deliberately (#581, #584) and everything AROUND them is
 // built and wired: `PluginSessionStoreFactory` wraps a plugin store, the
 // storage registry folds plugin ids in and `StorageModule` reads them;
 // `PluginTuiBackend` does the same for renderers and `TuiModule` folds those
@@ -272,10 +269,11 @@ internal static partial class ExtensionAxisProbe
             {
                 types.AddRange(ex.Types.Where(t => t is not null).Select(t => t!));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // An assembly that will not enumerate is covered by its own
                 // layering tests; skipping it here must not crash this rule.
+                _ = ex;
             }
         }
 
@@ -845,11 +843,6 @@ internal sealed class SyntheticAxisFixture
     /// </summary>
     public interface IAppReducerShaped
     {
-        ReduceResultLike? Reduce(object state, object message);
-    }
-
-    /// <summary>Placeholder return so the near-miss interface needs no real domain types.</summary>
-    public sealed class ReduceResultLike
-    {
+        object? Reduce(object state, object message);
     }
 }

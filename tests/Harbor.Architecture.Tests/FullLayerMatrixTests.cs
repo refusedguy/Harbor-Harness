@@ -175,12 +175,19 @@ public class FullLayerMatrixTests
         ],
         // ITuiPlugin / TUI vocabulary lives in Terminal.Abstractions by design;
         // plugin-surface assemblies legitimately reach Presentation for it.
+        //
+        // #620: IPluginBackendAxes.cs is listed for the same reason and the same
+        // reason it is a NAMED site and not a project-granular excuse — the
+        // ITuiBackendPlugin axis is defined by its door, and that door's payload
+        // is a Func<ITuiRenderer>. It is the renderer equivalent of ITuiPlugin,
+        // not a widening: #620's ExtensionAxisFreezeRule is what found the axis
+        // half-open, and this file is the plugin-author half of it.
         ["Harbor.Plugins.Abstractions"] =
         [
             new DocumentedException(
                 "Harbor.Terminal.Abstractions",
-                "ITuiPlugin is TUI vocabulary; the plugin contract surface must name it.",
-                ["IPluginLoadHost.cs"]),
+                "ITuiPlugin and ITuiRenderer are TUI vocabulary; the plugin contract surface must name them.",
+                ["IPluginLoadHost.cs", "IPluginBackendAxes.cs"]),
             new DocumentedException(
                 "Harbor.Ui.Framework.State",
                 "Plugin manifests describe TUI state projections (panel payloads).",
