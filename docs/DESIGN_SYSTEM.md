@@ -127,6 +127,41 @@ The CellForge interactive shell ships the same contract for a single file:
 `HARBOR_THEME_FILE`, else `~/.harbor/theme.json` when present
 (`JsonThemeLoader` + `ThemeFileWatcher`, which delegate to `ThemeJson`).
 
+## The theme axis is exempt from the feature freeze (#622)
+
+The owner freeze [#555](https://github.com/refusedguy/Harbor-Harness/issues/555)
+froze "a new theme source" with every other extension axis. This axis is carved
+back out, and the reason is structural rather than preferential:
+
+- **A tool is code.** `ReadTool` is a class, and the product must be *told* it
+  exists — `ToolsCatalog` constructs it, `ITool.SafetyProfile` declares what it
+  may touch, `PermissionRuleset.Default` carries a row naming it. Those are the
+  hand-kept name lists [#557](https://github.com/refusedguy/Harbor-Harness/issues/557)
+  counted. A tool is reachable only because C# mentions it by name.
+- **A theme is data.** `ThemeJson.Parse` merges whatever slots a document
+  declares over a fallback, and `ThemeStore` resolves the themes directory by
+  enumerating it. No C# names a theme — **a file that exists is the
+  registration**.
+
+So #555's premise — *every new axis is one more hand-maintained list to keep in
+sync* — is true of tools and false of themes. Adding a theme costs zero files
+edited; adding a tool costs a dozen. The freeze is right for the code axis and
+wrong for the data axis.
+
+What stays frozen is the **mechanism**: a new *source* of themes (another
+directory, a network catalogue, a plugin-provided palette, a second file format)
+is a new axis and is not opened by this exception. Only adding a theme *to* the
+existing directory is.
+
+Enforced by `ThemeAxisStaysDataRules` in `tests/Harbor.Architecture.Tests/`,
+which fails if a table of theme names appears in the discovery path (that would
+turn the data axis back into a code axis), if no product constructs the themes
+directory watcher (an axis nobody can reach is not an extension axis), or if a
+new theme *source* is introduced. `HarborTheme.BuiltIn` and the Avalonia
+`HdsThemeCatalog.PaletteNames` are deliberately outside the rule: a built-in
+palette is a curated product decision, and a compiled Avalonia app genuinely
+cannot enumerate `avares://`.
+
 ## Per-component overrides
 
 Component scopes patch the active theme without cloning it. A

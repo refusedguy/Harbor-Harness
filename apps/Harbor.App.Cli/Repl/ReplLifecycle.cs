@@ -124,6 +124,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             host.Screen.Status.AnimationClock = null;
             host.DisposePipeline();
             host._themeWatcher?.Dispose();
+            host._themeDirectoryWatcher?.Dispose();
             // #674: stop pushing core diagnostics into a store the REPL is
             // leaving. The aggregator outlives the REPL (it is a process
             // singleton), so the handler has to come off explicitly.
@@ -803,11 +804,84 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                       ?? Path.Combine(
                           Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                           ".harbor", "theme.json");
-        if (!File.Exists(path))
+        if (File.Exists(path))
+        {
+            ArmThemeFile(path);
+            return;
+        }
+
+        // #622: no explicit theme file, so the themes DIRECTORY is the axis. This
+        // is the half of the theme extension point that was unreachable from any
+        // product: `ThemeStore` and `ThemeDirectoryWatcher` existed, were
+        // documented in docs/DESIGN_SYSTEM.md as a live marketplace, and nothing
+        // outside their own test file ever constructed them. A user who followed
+        // the documentation — drop a .json into ~/.harbor/themes/ — got no theme,
+        // which is what makes an additive axis read as a frozen one.
+        ArmThemeDirectory();
+    }
+
+    /// <summary>
+    ///     #622 — arm the themes directory (<c>~/.harbor/themes</c>, override with
+    ///     <c>HARBOR_THEMES_DIR</c>) so a theme is added by dropping a file into
+    ///     it. This is the whole point of the carve-out from the #555 freeze: the
+    ///     theme axis is DATA, so adding one must edit no code.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <c>Poll()</c> is called once synchronously rather than waiting for
+    ///         the watcher's first 500 ms tick. The OSC 11 auto-detect is in flight
+    ///         at this point and stands down only via <c>_themeFileApplied</c>, so
+    ///         the applied theme has to be installed before the response can land —
+    ///         the same ordering the single-file arm above relies on. The initial
+    ///         poll records the directory's stamps, so the timer's first tick finds
+    ///         nothing changed and does not re-apply.
+    ///     </para>
+    ///     <para>
+    ///         <b>Which theme wins.</b> <c>Poll</c> applies every parseable
+    ///         <c>*.json</c> in name order, so with several files present the last
+    ///         one alphabetically is the effective theme. That ordering is
+    ///         <see cref="ThemeDirectoryWatcher" />'s own existing contract, not a
+    ///         choice made here: the alternative was to re-derive a selection rule
+    ///         in the REPL and hold two answers to one question. A user who wants
+    ///         a specific theme names it — one file, or <c>HARBOR_THEME_FILE</c>,
+    ///         which takes the branch above.
+    ///     </para>
+    /// </remarks>
+    private void ArmThemeDirectory()
+    {
+        var store = new ThemeStore();
+        if (!Directory.Exists(store.ThemesDirectory))
         {
             return;
         }
 
+        host._themeDirectoryWatcher = new ThemeDirectoryWatcher(
+            store.ThemesDirectory,
+            onApplied: theme =>
+            {
+                host._themeReloadLine = $"theme: live-reload → {theme.Name}";
+                host._wake.Writer.TryWrite(null);
+            },
+            onError: error =>
+            {
+                host._themeReloadLine = "! theme: " + error;
+                host._wake.Writer.TryWrite(null);
+            });
+
+        host._themeDirectoryWatcher.Poll();
+
+        // Stands the OSC 11 auto-detect down exactly as the single-file arm does:
+        // a theme the user placed wins over a theme the terminal guessed.
+        if (host._themeDirectoryWatcher.LastApplied is { } applied)
+        {
+            host._themeFileApplied = true;
+            host.Bridge.AppendSystemLine(
+                $"theme: {applied.Name} ({store.ThemesDirectory})");
+        }
+    }
+
+    private void ArmThemeFile(string path)
+    {
         host._themeFileApplied = true;
 
         IThemeStore store = new ThemeStore();
