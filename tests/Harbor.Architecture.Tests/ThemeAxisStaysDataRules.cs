@@ -86,6 +86,27 @@
 //   * The desktop `ThemeService.Apply` 3-arm switch, which can only reach 2 of the
 //     6 shipped palettes. That is #583, a real and separate defect. It is named
 //     here so the next reader does not mistake it for a gap in this guard.
+//
+// TWO DEFECTS THIS GUARD HAD ON ITS FIRST CI RUN
+// ----------------------------------------------
+// Both were caught by the non-vacuity controls, which is the only reason they are
+// worth their lines. Recorded because a guard that shipped either would have been
+// worse than no guard: one was a green light wired to nothing.
+//
+//   1. The product-side probe scanned the WHOLE repository, tests included. It
+//      found the four `new ThemeDirectoryWatcher(` in ThemeDirectoryWatcherTests
+//      and reported that a product constructs the watcher — on a product that
+//      constructs NOTHING. The rule was green and meant nothing. Exercising a type
+//      in a test is not shipping it; the probe now reads only `src/` and `apps/`.
+//   2. The registry regex matched on the variable NAME, so it could not see
+//      `HarborTheme.BuiltIn` — a real `IReadOnlyList<HarborTheme>` whose name
+//      contains no "Theme" at all. The non-vacuity control failed loudly, which
+//      is what it exists for. A registry is a COLLECTION; the collection type is
+//      the signal and the name never was.
+//
+// The lesson generalises past this file: a rule that cannot fail is not a guard,
+// and a rule whose failure modes are indistinguishable from "the rule is broken"
+// teaches the next reader to delete it.
 
 using System.Text.RegularExpressions;
 
@@ -121,19 +142,35 @@ public sealed class ThemeAxisStaysDataRules
 
     /// <summary>
     ///     Discovery must be structural — enumerate a directory, parse a document —
-    ///     never a lookup in a table of names someone typed.
+    ///     never a lookup in a table someone typed.
     /// </summary>
     /// <remarks>
-    ///     Deliberately narrow: it looks for a collection of theme names, not for
-    ///     the word "theme". A single `string themeName` parameter is the opposite
-    ///     of a registry — it is the caller's name passed through — and flagging
-    ///     every identifier would make the rule noise nobody keeps. The
-    ///     non-vacuity test below is what keeps the narrower shape honest.
+    ///     <para>
+    ///         A registry is a COLLECTION, so the collection type is the signal and
+    ///         the variable name is not: <c>HarborTheme.BuiltIn</c> is
+    ///         <c>IReadOnlyList&lt;HarborTheme&gt;</c> named <c>BuiltIn</c> — no
+    ///         "Theme" in the identifier at all — and an earlier revision of this
+    ///         regex matched on the name, so the non-vacuity control below caught
+    ///         the scanner being unable to see the one real table in the repo. The
+    ///         name-based shape was the bug, and the control is what surfaced it.
+    ///     </para>
+    ///     <para>
+    ///         Both element types count: a collection of theme OBJECTS
+    ///         (<c>HarborTheme</c>) is the built-in catalog, and a collection of
+    ///         theme NAME strings is the hand-typed variant. Either is a place a
+    ///         new theme has to be added, which is what the freeze's premise is
+    ///         about. A single <c>string themeName</c> parameter is deliberately not
+    ///         matched — that is a caller's name passed through, the opposite of a
+    ///         registry.
+    ///     </para>
     /// </remarks>
     private static readonly Regex ThemeNameTable = new(
-        @"(?:static\s+readonly|private\s+static\s+readonly|const)\s+" +
-        @"(?:IReadOnlyList<string>|IEnumerable<string>|string\[\]|List<string>|HashSet<string>|FrozenSet<string>)\s+" +
-        @"\w*(?:Theme|Palette)s?\w*\s*=",
+        @"(?:static\s+readonly|const)\s+" +
+        @"(?:IReadOnlyList|IReadOnlyCollection|IEnumerable|List|HashSet|FrozenSet|ImmutableArray)" +
+        @"<(?:\s*HarborTheme|\s*string)\s*>\s+\w+\s*=" +
+        @"|" +
+        @"(?:static\s+readonly|const)\s+" +
+        @"(?:HarborTheme|string)\[\]\s+\w+\s*=",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>A construction of the directory watcher, with or without a target type.</summary>
@@ -227,6 +264,15 @@ public sealed class ThemeAxisStaysDataRules
     ///     Non-vacuity for the construction scanner in
     ///     <see cref="A_Shipped_Product_Constructs_The_Themes_Directory_Watcher" />.
     /// </summary>
+    /// <remarks>
+    ///     The control deliberately reads a TEST file, which the product-scope
+    ///     filter excludes from the rule above. That is the point: it separates the
+    ///     two things the first version of this guard had merged. The scanner must
+    ///     find a construction where one genuinely exists, and the rule must be
+    ///     able to report that the same construction does NOT exist in
+    ///     production — otherwise a green rule means "the scanner is broken" and a
+    ///     red one means "the product is broken", and those are not the same claim.
+    /// </remarks>
     [Test]
     public async Task Directory_Watcher_Scanner_Still_Sees_A_Real_Construction()
     {
@@ -240,8 +286,8 @@ public sealed class ThemeAxisStaysDataRules
         await Assert.That(hits.Count).IsGreaterThan(0).Because(
             "The scanner behind A_Shipped_Product_Constructs_The_Themes_Directory_Watcher "
             + "must be able to find a construction. If it cannot find the four in "
-            + "ThemeDirectoryWatcherTests, it is not reading the files and the product-side "
-            + "pass is vacuous.");
+            + "ThemeDirectoryWatcherTests, it is not reading the files, and every "
+            + "product-side result it produces is vacuous.");
     }
 
     /// <summary>
@@ -300,12 +346,27 @@ public sealed class ThemeAxisStaysDataRules
     }
 
     /// <summary>
-    ///     Every <c>new ThemeDirectoryWatcher(</c> under the repository, as
-    ///     <c>path:line</c>, excluding build output. Test files are included by
-    ///     default — a construction in a test is what the non-vacuity rule needs to
-    ///     see, and the product-side rule is about ABSENCE in apps/, which the
-    ///     <paramref name="alsoSearch" /> list lets a caller exclude.
+    ///     Every <c>new ThemeDirectoryWatcher(</c> in PRODUCTION code — <c>src/</c>
+    ///     and <c>apps/</c>, with <c>tests/</c> and <c>contrib/</c> excluded — as
+    ///     <c>path:line</c>.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The exclusion of <c>tests/</c> is the whole point, and it was the
+    ///         first version's worst bug. Scanning the whole repository found the
+    ///         four constructions in <c>ThemeDirectoryWatcherTests</c> and the
+    ///         product-side rule went GREEN on a product that wires nothing — a
+    ///         pass that meant nothing, which is the exact failure the non-vacuity
+    ///         rules elsewhere in this repo exist to prevent. A test constructing
+    ///         the watcher is the watcher being exercised, not the axis being
+    ///         reachable; only a <c>src/</c> or <c>apps/</c> construction can make a
+    ///         user drop a file in a directory and see a theme.
+    ///     </para>
+    ///     <para>
+    ///         <c>contrib/</c> is excluded for the usual reason — it is unmaintained
+    ///         and no CI job compiles it, so a construction there is not a product.
+    ///     </para>
+    /// </remarks>
     private static IReadOnlyList<string> FindDirectoryWatcherConstructions(
         string? root,
         IReadOnlyList<string>? only = null)
@@ -317,10 +378,10 @@ public sealed class ThemeAxisStaysDataRules
 
         string[] files = only is { Count: > 0 }
             ? [.. only.Select(rel => Path.Combine(root, rel))]
-            : [.. Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
-                .Where(static f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                                   && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-                                   && !f.Contains($"{Path.DirectorySeparatorChar}contrib{Path.DirectorySeparatorChar}"))];
+            : [.. new[] { "src", "apps" }
+                .Where(dir => Directory.Exists(Path.Combine(root, dir)))
+                .SelectMany(dir => Directory.EnumerateFiles(Path.Combine(root, dir), "*.cs", SearchOption.AllDirectories))
+                .Where(static f => !IsExcludedFromProductScope(f))];
 
         var hits = new List<string>();
         foreach (string file in files)
@@ -342,5 +403,24 @@ public sealed class ThemeAxisStaysDataRules
 
         hits.Sort(StringComparer.Ordinal);
         return hits;
+    }
+
+    /// <summary>
+    ///     Build output and the trees that are not a shipped product: <c>tests/</c>
+    ///     (exercising a type is not shipping it) and <c>contrib/</c> (unmaintained,
+    ///     compiled by no CI job).
+    /// </summary>
+    private static bool IsExcludedFromProductScope(string file)
+    {
+        string normalized = file.Replace('\\', '/');
+        foreach (string segment in new[] { "/tests/", "/contrib/", "/obj/", "/bin/" })
+        {
+            if (normalized.Contains(segment, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
