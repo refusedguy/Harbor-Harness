@@ -3,6 +3,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -10,7 +11,17 @@ namespace Harbor.Tui.CellForge.Tests;
 /// Event reactions (mascot-brand T3): error blink, success bounce, approval
 /// wiggle — short overlay sequences that override the mood frames, tinted by
 /// event accent, played exactly once per signal. Deterministic ticks only.
+/// <para>
+/// Serialized under the same <c>"pty"</c> key as the theme tests. The reaction
+/// assertions read exact <c>ChatPalette</c> styles off a painted buffer, and
+/// <c>ChatPalette</c> is a process-wide static catalog that
+/// <c>TerminalColorPalette.Apply</c> re-publishes — so running beside a theme
+/// swap lets a concurrently-swapped palette decide
+/// <c>buffer.Get(x, y).Style == ChatPalette.ToolError</c>. That is a test-order
+/// dependency, not a rendering bug: nothing here reads the clock.
+/// </para>
 /// </summary>
+[NotInParallel("pty")]
 public class MascotReactionTests
 {
     private static (ChatScreen Screen, ScreenBuffer Buffer) BuildFooterScreen(int cols = 120, int rows = 8)

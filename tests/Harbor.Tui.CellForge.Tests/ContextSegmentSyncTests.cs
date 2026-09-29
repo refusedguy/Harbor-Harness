@@ -22,6 +22,13 @@ namespace Harbor.Tui.CellForge.Tests;
 /// Occupancy is the prompt-token count of the request the provider just accepted,
 /// carried by <c>StepFinishEvent.Usage.InputTokens</c>.
 /// </para>
+/// <para>
+/// #651 extends the same split to the token cell: it reports occupancy for the
+/// same reason the bar does, while the cumulative sum stays the basis of the
+/// money. The bar half of this file is unchanged by #651 — the second
+/// regression here, <c>SessionStatsAlone_LeavesOccupancyDark</c>, still asserts
+/// the paid total on a session that has published totals but sent no request.
+/// </para>
 /// </summary>
 public class ContextSegmentSyncTests
 {
@@ -73,8 +80,16 @@ public class ContextSegmentSyncTests
         await Assert.That(CtxAccent(status)).IsEqualTo(StatusAccent.Success);
         await Assert.That(CtxText(status)).IsEqualTo("▰▱▱▱▱▱");
 
-        // The token/cost segments still track cumulative spend — only ctx moved.
-        await Assert.That(status.Tokens).IsEqualTo("150k↑ 500↓");
+        // #651: the token cell follows OCCUPANCY too — the same 30k the ctx bar
+        // reads. "150k↑" answered "what am I paying" with a number that read as
+        // "how full am I", and it grew with the turn count while the payload
+        // stood still.
+        await Assert.That(status.Tokens).IsEqualTo("30k↑ 500↓");
+
+        // …and the cumulative sum is still the BASIS OF THE MONEY: moving the
+        // cell onto the occupied figure must not understate what the provider
+        // charged. $0.01/turn × 5 turns is priced over all 150k input tokens.
+        await Assert.That(status.Cost).IsEqualTo("$0.05");
     }
 
     /// <summary>
