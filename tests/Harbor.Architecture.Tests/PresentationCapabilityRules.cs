@@ -745,6 +745,62 @@ public sealed class PresentationCapabilityRules
     }
 
     /// <summary>
+    ///     #669 — a baseline row is a PROMISE TO FIX. Every row carries a tracking
+    ///     issue that plans the refactor, and #538's checkbox counts rows deleted.
+    ///     Reading the console is not that: fd 0 is the renderer's input medium,
+    ///     so <c>TerminalInputStream</c> owns the capability permanently and no
+    ///     refactor removes it short of deleting the renderer.
+    ///     <para>
+    ///     Filed under <c>PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES</c> it
+    ///     read as the opposite of the truth — "renderers may touch the filesystem"
+    ///     — which is precisely the precedent a future, illegitimate
+    ///     <c>FileStream</c> needs. It also made #538 ("seven baseline rows
+    ///     deleted") unreachable: the row could be neither deleted (the capability
+    ///     is real) nor kept without leaving the exception under the wrong rule.
+    ///     </para>
+    /// </summary>
+    [Test]
+    public async Task Baseline_MustNot_FilePermanentCapabilities_AsViolations()
+    {
+        // Capabilities a Presentation assembly owns by construction, and the
+        // architectural reason each one is not a fixable violation. Listed so the
+        // next site of this shape (#538 was split into five) lands in the right
+        // table from the start instead of being filed as debt and re-litigated.
+        var permanent = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [NoFiles + " Harbor.Tui.CellForge.Input.TerminalInputStream"] =
+                "fd 0 is the renderer's input medium, not storage — reading the console is "
+                + "renderer work.",
+        };
+
+        var failures = new List<string>();
+
+        foreach (var (assemblyName, byKey) in KnownViolations)
+        {
+            foreach (var (key, trackedBy) in byKey)
+            {
+                foreach (var (permanentKey, reason) in permanent)
+                {
+                    if (!string.Equals(key, permanentKey, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    failures.Add(
+                        $"{assemblyName} / {key}: this is a PERMANENT capability, not a fixable "
+                        + $"violation — {reason} Listed under a capability rule and tracked by "
+                        + $"{trackedBy}, it misfiles a permission as debt, teaches the next "
+                        + "FileStream that renderers may touch the filesystem, and blocks that "
+                        + "issue's 'delete the baseline row' checkbox. Record it as a permanent "
+                        + "capability with the reason attached instead.");
+                }
+            }
+        }
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
     ///     Rule-table and baseline integrity: rule ids unique and non-blank, every
     ///     rule states what it forbids and why, every rule and every baseline row
     ///     names a rule that exists, every baseline row points at a tracking
