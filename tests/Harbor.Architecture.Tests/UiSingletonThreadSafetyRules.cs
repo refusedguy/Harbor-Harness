@@ -2,20 +2,15 @@
 //
 // DefaultUiProjector documented itself as NOT thread-safe ("call Project from
 // a single render loop — every built-in renderer already constructs its own
-// instance") while the one shipped DI host registered it — and its only
-// consumer — as singletons:
-//
-//     apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs
-//         services.AddSingleton<DefaultUiProjector>();
-//         services.AddSingleton<UiRenderEngine>();
+// instance") while the only shipped DI host registered it — and its only
+// consumer — as singletons. apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs
+// registers both DefaultUiProjector and UiRenderEngine that way.
 //
 // Both halves of that comment were false, and the consequence is a crash
-// rather than a stale frame: the projector's only mutable state is
-//
-//     private ProjectionCache? _cache;      // DefaultUiProjector.cs:61
-//
-// published unsynchronised at the end of Project and read at the top. Without
-// a release/acquire pair a second thread can observe the ProjectionCache
+// rather than a stale frame: the projector's only mutable state is the field
+// `private ProjectionCache? _cache;` (DefaultUiProjector.cs:61), published
+// unsynchronised at the end of Project and read at the top. Without a
+// release/acquire pair a second thread can observe the ProjectionCache
 // *reference* while its fields are still at their defaults — which is how the
 // #562 `null!` class would turn a publication race into a
 // NullReferenceException at the reuse sites (Project lines 70, 112, 134).
