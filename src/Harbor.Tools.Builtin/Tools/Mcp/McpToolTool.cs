@@ -38,8 +38,30 @@ public sealed class McpToolTool : ITool
     /// <inheritdoc />
     public ToolName Name => ToolName.Create("mcp");
 
-    /// <inheritdoc />
-    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+    /// <summary>
+    ///     Path, not Opaque — even though this tool's own schema carries no
+    ///     <c>path</c> property.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <c>PathArgExtractionPolicy</c> still lists <c>mcp</c> among the tools
+    ///         whose <c>path</c> argument is normalized against the workspace root
+    ///         before rule matching, and it did so from before the argument was folded
+    ///         into the free-form <c>args</c> object. The permission system therefore
+    ///         really does treat a <c>path</c> reaching this tool as a workspace path,
+    ///         and the traversal guard must keep applying to it — declaring
+    ///         <see cref="ToolArgKind.Opaque" /> here would silently drop the guard
+    ///         from a tool that is still path-treated.
+    ///     </para>
+    ///     <para>
+    ///         This is a known disagreement with the schema, not an accident.
+    ///         Reconciling <c>PathArgExtractionPolicy</c>'s hand-maintained list with
+    ///         these declarations is tracked in #595; until then the declaration states
+    ///         what the permission core actually DOES, which is the property the guard
+    ///         depends on.
+    ///     </para>
+    /// </remarks>
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
 
     /// <inheritdoc />
     public string DisplayName => "MCP";
