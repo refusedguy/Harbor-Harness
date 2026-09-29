@@ -21,15 +21,14 @@
 //     root in `ProviderFactories.CreateProviderRegistry`, which registers exactly
 //     those three ids natively; the JSON path must not double-register them.
 //
-// What was left, and genuinely wrong, was one thing:
-//
-//     private static string IconFor(string id) => id switch
-//     {
-//         "anthropic" => "🤖",
-//         "openai" => "🌐",
-//         ... 13 arms ...
-//         _ => "🔧"
-//     };
+// What was left, and genuinely wrong, was one thing: `OnboardingViewModel` mapped
+// a provider id to its picker glyph through a 13-arm switch expression ending in a
+// generic-wrench default — one arm per bundled provider, each arm a string literal,
+// the whole thing reachable only by editing that file. It was the §OOP-002 shape
+// again, and SILENT: a 14th provider rendered the wrench, no test named a single
+// arm, and nothing failed. `Icon` is now a field on the provider's own
+// `providers/<id>.json`, projected through `ProviderPresetCatalog` exactly like
+// `displayName` and `priority` — so adding a provider touches no existing C#.
 //
 // The same Open/Closed violation §OOP-002 removed from the request-payload path,
 // reappearing one layer out. It was SILENT: a 14th provider renders the generic
@@ -235,8 +234,12 @@ public sealed class ProviderIdDispatchRule
     {
         IReadOnlySet<string> ids = BundledProviderIds(RequireRepoRoot());
         // Deterministic pick: the guard must not depend on set iteration order for
-        // which id it plants, so take the ordinal-first one explicitly.
-        string id = ids.Min(StringComparer.Ordinal);
+        // which id it plants, so take the ordinal-first one explicitly. The set is
+        // non-empty by construction (BundledProviderCatalogue_IsDiscoverable_
+        // AndNonTrivial asserts the directory walk works), and Min on a non-empty
+        // sequence cannot return null.
+        string id = ids.Min(StringComparer.Ordinal)
+            ?? throw new InvalidOperationException("no bundled provider ids were discovered");
 
         string[] planted =
         [
