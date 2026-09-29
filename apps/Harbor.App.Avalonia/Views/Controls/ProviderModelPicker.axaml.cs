@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Abstractions.Tools;
+using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.Views.Controls;
 /// <summary>
 ///     Reusable provider + model picker. Hosts a search box, a scrollable
@@ -26,6 +28,12 @@ namespace Harbor.App.Avalonia.Views.Controls;
 /// </remarks>
 public partial class ProviderModelPicker : UserControl
 {
+    // #569: Avalonia instantiates this control, so it cannot take a constructor
+    // dependency — the logger is a lazily-created static, matching
+    // CodeEditorView's code-behind.
+    private static readonly ILogger<ProviderModelPicker> Logger =
+        LoggerFactory.Create(b => b.AddDebug()).CreateLogger<ProviderModelPicker>();
+
     private bool _loadedOnce;
 
     /// <summary>Construct the picker.</summary>
@@ -47,7 +55,13 @@ public partial class ProviderModelPicker : UserControl
         if (!_loadedOnce && this.DataContext is ProviderModelPickerViewModel vm)
         {
             _loadedOnce = true;
-            _ = vm.LoadCommand.ExecuteAsync(null);
+
+            // #569: OnAttachedToVisualTree is synchronous by contract. The VM's
+            // Load surfaces failures through ErrorMessage, but the command Task
+            // was discarded bare, so a fault outside that catch was lost.
+            TaskFireAndForget.Forget(
+                vm.LoadCommand.ExecuteAsync(null),
+                ex => Logger.LogError(ex, "Model picker auto-load on attach failed"));
         }
     }
 
@@ -61,7 +75,11 @@ public partial class ProviderModelPicker : UserControl
             && this.DataContext is ProviderModelPickerViewModel vm)
         {
             _loadedOnce = true;
-            _ = vm.LoadCommand.ExecuteAsync(null);
+
+            // #569: same synchronous-callback reasoning as the attach hook.
+            TaskFireAndForget.Forget(
+                vm.LoadCommand.ExecuteAsync(null),
+                ex => Logger.LogError(ex, "Model picker auto-load on visibility failed"));
         }
     }
 }

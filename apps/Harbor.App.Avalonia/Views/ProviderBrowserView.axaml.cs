@@ -4,8 +4,10 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.Navigation;
+using Harbor.Abstractions.Tools;
 using Harbor.Desktop.Abstractions.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Provider browser code-behind. Loads providers on first visibility —
@@ -15,6 +17,12 @@ namespace Harbor.App.Avalonia.Views;
 /// </summary>
 public partial class ProviderBrowserView : UserControl
 {
+    // #569: Avalonia instantiates this control, so the code-behind cannot take
+    // a constructor dependency. The logger is a lazily-created static,
+    // matching CodeEditorView and DiagnosticsSquiggleRenderer in this project.
+    private static readonly ILogger<ProviderBrowserView> Logger =
+        LoggerFactory.Create(b => b.AddDebug()).CreateLogger<ProviderBrowserView>();
+
     private bool _loadedOnce;
 
     /// <summary>Construct the provider browser.</summary>
@@ -43,7 +51,14 @@ public partial class ProviderBrowserView : UserControl
             && this.DataContext is ProviderBrowserViewModel vm)
         {
             _loadedOnce = true;
-            _ = vm.LoadProvidersCommand.ExecuteAsync(null);
+
+            // #569: OnPropertyChanged is an Avalonia lifecycle override and
+            // cannot await. The VM's LoadProvidersAsync has its own catch that
+            // surfaces the message via ErrorMessage, but the command Task was
+            // discarded bare — anything raised outside that catch vanished.
+            TaskFireAndForget.Forget(
+                vm.LoadProvidersCommand.ExecuteAsync(null),
+                ex => Logger.LogError(ex, "Provider-browser initial load failed"));
         }
     }
 
@@ -73,7 +88,10 @@ public partial class ProviderBrowserView : UserControl
     {
         if (this.DataContext is ProviderBrowserViewModel vm && vm.SelectedProvider is not null)
         {
-            _ = vm.LoadModelsCommand.ExecuteAsync(vm.SelectedProvider);
+            // #569: same synchronous-callback reasoning as the initial load.
+            TaskFireAndForget.Forget(
+                vm.LoadModelsCommand.ExecuteAsync(vm.SelectedProvider),
+                ex => Logger.LogError(ex, "Provider-browser model load failed for {Provider}", vm.SelectedProvider.Id));
         }
     }
 }

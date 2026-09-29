@@ -1,5 +1,7 @@
 using Avalonia.Input;
+using Harbor.Abstractions.Tools;
 using Harbor.Ui.Framework.Navigation;
+using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.Services;
 /// <summary>
 ///     Centralised keyboard-shortcut dispatcher for the main window. Every
@@ -14,17 +16,36 @@ namespace Harbor.App.Avalonia.Services;
 ///     <see cref="HandleKeyDown" /> with a synthetic <see cref="KeyEventArgs" />
 ///     instead of driving a real Avalonia input pump.
 /// </remarks>
+/// <remarks>
+///     <para>
+///         <b>Why the shortcuts cannot await (§569).</b> <see cref="HandleKeyDown" />
+///         returns <see cref="bool" />: Avalonia's <c>OnKeyDown</c> override has to
+///         know synchronously whether the key was handled so it can set
+///         <c>e.Handled</c> before the base call. Making it <c>async</c> would defer
+///         that decision past the base call and change input behaviour, so the
+///         contract stays synchronous.
+///     </para>
+///     <para>
+///         That is why the two file commands route through
+///         <see cref="TaskFireAndForget" /> rather than <c>await</c>: the sync
+///         contract is not the defect, losing the fault is. Ctrl+S in particular
+///         drives a <c>SaveAsync</c> whose result used to be dropped bare, so a
+///         save that threw was invisible — no log, no toast. It now reports.
+///     </para>
+/// </remarks>
 public sealed class KeyboardShortcutService
 {
     private readonly IShellChrome _shellChrome;
     private readonly IWorkspaceCommands _workspaceCommands;
     private readonly IFloatingTerminals? _floatingTerminals;
+    private readonly ILogger<KeyboardShortcutService> _logger;
 
     public KeyboardShortcutService(IShellChrome shellChrome, IWorkspaceCommands workspaceCommands,
-        IFloatingTerminals? floatingTerminals = null)
+        ILogger<KeyboardShortcutService> logger, IFloatingTerminals? floatingTerminals = null)
     {
         _shellChrome = shellChrome;
         _workspaceCommands = workspaceCommands;
+        _logger = logger;
         _floatingTerminals = floatingTerminals;
     }
 
@@ -63,14 +84,18 @@ public sealed class KeyboardShortcutService
         // Ctrl+O → open file.
         if (ctrl && e.Key == Key.O)
         {
-            _ = _workspaceCommands.OpenFileAsync();
+            TaskFireAndForget.Forget(
+                _workspaceCommands.OpenFileAsync(),
+                ex => _logger.LogError(ex, "Ctrl+O open-file failed"));
             return true;
         }
 
         // Ctrl+S → save file.
         if (ctrl && e.Key == Key.S)
         {
-            _ = _workspaceCommands.SaveFileAsync();
+            TaskFireAndForget.Forget(
+                _workspaceCommands.SaveFileAsync(),
+                ex => _logger.LogError(ex, "Ctrl+S save-file failed"));
             return true;
         }
 

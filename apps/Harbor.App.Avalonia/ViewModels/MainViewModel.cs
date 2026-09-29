@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Harbor.App.Avalonia.Navigation;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels.Board;
+using Harbor.Abstractions.Tools;
 using Harbor.Desktop.Abstractions.Messages;
 using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Animation;
@@ -285,7 +286,15 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         _toasts.Show("Harbor ready — press Ctrl+P for the command palette.", ToastKind.Info);
 
         ProjectRootPath = Environment.CurrentDirectory;
-        _ = RefreshFileTreeAsync();
+
+        // #569: the constructor cannot await. The scan itself is already
+        // catch-guarded inside RefreshFileTreeAsync (it logs and leaves the
+        // tree untouched), but the Task was being discarded bare, so a fault
+        // raised outside that try was lost. Started, not abandoned — and the
+        // file tree simply stays empty until the scan lands, exactly as before.
+        TaskFireAndForget.Forget(
+            RefreshFileTreeAsync(),
+            ex => _logger.LogError(ex, "Initial file-tree scan failed"));
     }
 
     public ChatViewModel Chat => _contentHost.Chat;
@@ -443,7 +452,11 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         // sees a stale/empty board after chatting in another tab.
         if (view == "board")
         {
-            _ = _contentHost.Board.RefreshCommand.ExecuteAsync(null);
+            // #569: SwitchView is [RelayCommand] on a void method, so the board
+            // refresh cannot be awaited. It was discarded bare.
+            TaskFireAndForget.Forget(
+                _contentHost.Board.RefreshCommand.ExecuteAsync(null),
+                ex => _logger.LogError(ex, "Sessions-board refresh on tab switch failed"));
         }
     }
 
@@ -465,11 +478,21 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         Dispatcher.Post(() =>
         {
             Toasts.Add(toast);
-            _ = Task.Delay(TimeSpan.FromSeconds(4)).ContinueWith(_ =>
-            {
-                Dispatcher.Post(() => Toasts.Remove(toast));
-            }, TaskScheduler.Default);
+
+            // #569: the 4s auto-dismiss timer used to be a bare
+            // `Task.Delay(...).ContinueWith(...)`. Task.Delay itself does not
+            // fault, but the continuation body runs outside any handler — a
+            // throw there faulted the ContinueWith task with nobody watching.
+            TaskFireAndForget.Forget(
+                RemoveToastAfterDelayAsync(toast),
+                ex => _logger.LogError(ex, "Auto-dismiss timer faulted for toast {Message}", toast.Message));
         });
+    }
+
+    private async Task RemoveToastAfterDelayAsync(ToastNotification toast)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(4)).ConfigureAwait(false);
+        Dispatcher.Post(() => Toasts.Remove(toast));
     }
 
     public bool CloseTopOverlay()

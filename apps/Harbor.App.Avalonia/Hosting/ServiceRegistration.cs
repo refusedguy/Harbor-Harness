@@ -127,6 +127,10 @@ internal static class ServiceRegistration
             sp.GetRequiredService<ILogger<FloatingTerminalService>>()));
         services.AddSingleton<IShellChrome, AvaloniaShellChrome>();
         services.AddSingleton<IWorkspaceCommands, AvaloniaWorkspaceCommands>();
+        // #569: AvaloniaWorkspaceCommands takes an ILogger<AvaloniaWorkspaceCommands>
+        // so its sync IWorkspaceCommands members can report a fault instead of
+        // dropping the Task (a void member whose body is ExecuteAsync has no
+        // '_ =' marker and so was invisible to the original audit).
         services.AddSingleton<DefaultUiProjector>();
         services.AddSingleton<AvaloniaUiViewport>();
         services.AddSingleton<ChatStreamingPresenter>();

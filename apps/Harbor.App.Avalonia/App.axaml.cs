@@ -9,6 +9,7 @@ using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
 using Harbor.App.Avalonia.Views.Dev;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -231,22 +232,29 @@ public partial class App : global::Avalonia.Application
         // For first run (onboarding), session is created AFTER wizard completes
         // (in ShowOnboardingThenMain) so it uses the wizard's provider/model.
         // For subsequent runs, session is created here with config from disk.
-        _ = Task.Run(async () =>
-        {
-            try
+        //
+        // #569: the inner try/catch reports through ILogger<App>, but the
+        // Task.Run handle was discarded bare — so a fault raised outside that
+        // try died at finalization. TaskFireAndForget observes it. The task
+        // itself is unchanged: startup is still not blocked.
+        TaskFireAndForget.Forget(
+            Task.Run(async () =>
             {
-                var sessionManager = Services.GetRequiredService<SessionManager>();
-                await sessionManager.EnsureDefaultSessionAsync().ConfigureAwait(false);
+                try
+                {
+                    var sessionManager = Services.GetRequiredService<SessionManager>();
+                    await sessionManager.EnsureDefaultSessionAsync().ConfigureAwait(false);
 
-                // Load existing sessions into the sidebar.
-                var sessionsVm = mainViewModel.Sessions;
-                sessionsVm.RefreshCommand.Execute(null);
-            }
-            catch (Exception ex)
-            {
-                Services.GetService<ILogger<App>>()?.LogError(ex, "Session initialization failed");
-            }
-        });
+                    // Load existing sessions into the sidebar.
+                    var sessionsVm = mainViewModel.Sessions;
+                    sessionsVm.RefreshCommand.Execute(null);
+                }
+                catch (Exception ex)
+                {
+                    Services.GetService<ILogger<App>>()?.LogError(ex, "Session initialization failed");
+                }
+            }),
+            ex => Services.GetService<ILogger<App>>()?.LogError(ex, "Startup session task faulted"));
     }
 
     private void ShowGalleryView(IClassicDesktopStyleApplicationLifetime desktop)
