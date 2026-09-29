@@ -1,35 +1,46 @@
 namespace Harbor.Abstractions.Models;
 
 /// <summary>
-///     Canonical context-usage math (issue #75) — the single definition of
+///     Canonical context-occupancy math (issue #75) — the single definition of
 ///     "ctx%" shared by every surface: the legacy status-bar view model,
 ///     the CellForge sidebar, and the CellForge status bar.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Definition:</b> <c>used = accumulated input + accumulated output
-///         tokens</c> over the model's <c>ContextWindow</c>, clamped to
-///         0…100%. This is a spend-vs-window proxy, <b>not</b> a live
-///         window-fill gauge: the only per-step accurate fill figure (last
-///         step's <c>Usage.InputTokens</c>, i.e. the prompt just sent) is
-///         available solely on the event-driven path, while every pull-feed
-///         surface (<c>ITokenTracker.GetStats()</c>,
-///         <c>SessionStatsEvent.Metadata</c>, <c>CostSnapshot</c>) carries
-///         only cumulative totals. Accumulated in+out is therefore the only
-///         formula derivable from existing tracker state at <i>all</i> call
-///         sites — and it matches the cumulative totals printed next to the
-///         percentage on the status line (previously the percent was
-///         last-step-only while its neighbors accumulated — the #75 bug).
+///         <b>What the caller must pass.</b> This class is pure arithmetic: it
+///         takes an already-measured "used" token count and a window and returns
+///         a clamped percentage. It does not and cannot know how the caller
+///         measured. Occupancy — how much of the window the request just sent
+///         filled — is <c>StepFinishEvent.Usage.InputTokens</c>. Session-cumulative
+///         spend (<c>SessionMetadata.AddUsage</c> accumulates across the whole
+///         session, as do <c>ITokenTracker.GetStats()</c>,
+///         <c>SessionStatsEvent.Metadata</c> and <c>CostSnapshot</c>) is a
+///         different quantity: it grows without bound, so fed in here it pins the
+///         reading at 100% by turn 4 on a 128k window while the payload never
+///         grew. That is bug #623, not a rounding nuance.
 ///     </para>
 ///     <para>
-///         <b>Saturation caveat:</b> cumulative spend grows unboundedly, so
-///         long sessions pin at 100%. That is intended: the number answers
-///         "how much window-equivalent have we spent", consistent with the
-///         adjacent <c>↑/↓</c> totals. A true next-input projection ("will
-///         the <i>next</i> request fit?") needs per-message estimates plus
-///         the pending input text — neither is reachable from the
-///         Presentation layer (<c>HeuristicTokenEstimator</c> lives in
-///         Application) — so projection is explicitly out of scope.
+///         <b>Callers:</b> the CellForge ctx bar (#630) and the legacy
+///         <c>StatusBarViewModel</c> ctx cell (#641) both pass the last
+///         request's prompt tokens. The CellForge sidebar still passes
+///         cumulative <c>TokensIn/TokensOut</c> — a known divergence, tracked
+///         separately; the arithmetic here is right for whatever it is handed,
+///         so the fix belongs at the call site, not in this class.
+///     </para>
+///     <para>
+///         <b>Unknown ≠ zero.</b> A window of 0 (the model published no context
+///         length) and a "used" of 0 both return 0, which is also the correct
+///         answer for "no request has been sent yet" — a surface that must stay
+///         dark in that case should track the presence of a reading itself
+///         (<c>StatusViewModel.TryGetContextTokens</c>), not encode absence in
+///         the number.
+///     </para>
+///     <para>
+///         A true next-input projection ("will the <i>next</i> request fit?")
+///         needs per-message estimates plus the pending input text — neither is
+///         reachable from the Presentation layer
+///         (<c>HeuristicTokenEstimator</c> lives in Application) — so projection
+///         is explicitly out of scope.
 ///     </para>
 ///     <para>
 ///         Pure BCL, allocation-free, AOT-safe. Thresholds double as the
@@ -46,17 +57,20 @@ public static class ContextUsage
     public const double DangerThreshold = 0.85;
 
     /// <summary>
-    ///     Context usage percent from accumulated token counters.
+    ///     Context occupancy percent from a pair of token counters, summed.
     ///     Returns 0 when <paramref name="contextWindow" /> is unknown
-    ///     (≤ 0); saturates at 100.
+    ///     (≤ 0); saturates at 100. What the two counters <em>mean</em> — one
+    ///     request's prompt tokens, or the session's running totals — is the
+    ///     caller's decision; see the class remarks on #623.
     /// </summary>
     public static int PercentUsed(long tokensIn, long tokensOut, long contextWindow) =>
         PercentUsed(tokensIn + tokensOut, contextWindow);
 
     /// <summary>
-    ///     Context usage percent from an already-summed token count.
-    ///     Callers must pass accumulated input+output (the #75 canonical
-    ///     "used" definition) — not a single step's count.
+    ///     Context occupancy percent from an already-summed token count.
+    ///     Callers on a ctx segment pass the prompt tokens of the request the
+    ///     provider just accepted (<c>StepFinishEvent.Usage.InputTokens</c>);
+    ///     passing session-cumulative spend instead is bug #623.
     /// </summary>
     public static int PercentUsed(long usedTokens, long contextWindow)
     {
@@ -79,9 +93,10 @@ public static class ContextUsage
     }
 
     /// <summary>
-    ///     Context usage ratio (0…1) from accumulated token counters.
+    ///     Context occupancy ratio (0…1) from a pair of token counters, summed.
     ///     Returns 0 when <paramref name="contextWindow" /> is unknown
-    ///     (≤ 0); saturates at 1.
+    ///     (≤ 0); saturates at 1. See <see cref="PercentUsed(long,long,long)" />
+    ///     for what the counters may mean.
     /// </summary>
     public static double RatioUsed(long tokensIn, long tokensOut, long contextWindow) =>
         RatioUsed(tokensIn + tokensOut, contextWindow);
@@ -124,7 +139,7 @@ public static class ContextUsage
         contextTokens > 0 ? contextTokens : sessionTotalInputTokens;
 
     /// <summary>
-    ///     Context usage ratio (0…1) from an already-summed token count.
+    ///     Context occupancy ratio (0…1) from an already-summed token count.
     ///     See <see cref="PercentUsed(long,long)" /> for the "used" definition.
     /// </summary>
     public static double RatioUsed(long usedTokens, long contextWindow)

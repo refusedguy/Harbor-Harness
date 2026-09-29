@@ -17,12 +17,15 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     private string _agent = "code";
 
     /// <summary>
-    ///     Current context size in tokens (last step's input/prompt token count).
-    ///     Informational only — <see cref="ContextPct" /> is computed from the
-    ///     accumulated <c>TokensIn + TokensOut</c> totals (see #75), not from this.
+    ///     Prompt-token count of the request the provider just accepted
+    ///     (<c>StepFinishEvent.Usage.InputTokens</c>) — i.e. how much of the
+    ///     context window the last request occupied. This is the source of the
+    ///     ctx cell; the session's running token totals (<see cref="_tokensIn" />
+    ///     / <see cref="_tokensOut" />) are spend, not occupancy, and are never
+    ///     a window reading (#623).
     /// </summary>
     [ObservableProperty]
-    private int _contextTokens;
+    private int _requestTokens;
 
     /// <summary>
     ///     Model context window (max input tokens). 0 when unknown.
@@ -71,12 +74,17 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     private Pricing? _pricing;
 
     /// <summary>
-    ///     Context usage as a percentage of <see cref="_contextWindow" />. 0 when unknown.
-    ///     Canonical #75 definition: accumulated input+output over the window
-    ///     (see <see cref="ContextUsage" />) — consistent with the accumulated
-    ///     <c>TokensIn/Out</c> totals shown beside it.
+    ///     Context-window occupancy as a percentage of <see cref="_contextWindow" />.
+    ///     0 when the window is unknown or no request has been sent yet.
+    ///     The numerator is the last request's prompt tokens
+    ///     (<see cref="_requestTokens" />) — NOT the accumulated
+    ///     <c>TokensIn + TokensOut</c> totals. Those are session-cumulative spend
+    ///     (<see cref="SessionMetadata.AddUsage" /> accumulates across the whole
+    ///     session), so reading them as occupancy made the bar grow without
+    ///     bound and pin at 100% by turn 4 on a 128k window while the payload
+    ///     never grew. #623; the CellForge ctx bar got the same fix in #630.
     /// </summary>
-    public int ContextPct => ContextUsage.PercentUsed(TokensIn, TokensOut, ContextWindow);
+    public int ContextPct => ContextUsage.PercentUsed(RequestTokens, ContextWindow);
 
     /// <summary>
     ///     Codex-style collapsed status line: model, context-%, cost, queue.
@@ -95,7 +103,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
         {
             string head = $"{Provider}/{Model} | agent: {Agent}";
             string ctx = ContextWindow > 0
-                ? $" | ctx: {((long)TokensIn + TokensOut) / 1000}k/{ContextPct}%"
+                ? $" | ctx: {RequestTokens / 1000}k/{ContextPct}%"
                 : string.Empty;
             string queue = QueuedCount > 0 ? $" | queue: {QueuedCount}" : string.Empty;
             return $"{head}{ctx} | {CostText} | {TokensIn}↑ {TokensOut}↓{queue} | {Status}";
@@ -129,7 +137,10 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
             case MessageUpdateEvent mu when mu.LlmEvent is StepFinishEvent sf && sf.Usage is not null:
                 TokensIn += sf.Usage.InputTokens;
                 TokensOut += sf.Usage.OutputTokens;
-                ContextTokens = sf.Usage.InputTokens;
+                // The one event that carries the size of the request just sent —
+                // the ctx cell's occupancy reading (#623). SessionStatsEvent is
+                // deliberately not a source: its totals are session-cumulative.
+                RequestTokens = sf.Usage.InputTokens;
                 if (_pricing is not null)
                     Cost += _pricing.CalculateCost(sf.Usage);
                 break;
@@ -142,6 +153,8 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
                 break;
             case SessionStatsEvent ss:
                 // #653: the core owns the number — assign it, never re-derive it.
+                // These totals are session-cumulative spend; they feed the
+                // cost/token cells, not the ctx cell (#623).
                 Cost = ss.Metadata.Cost;
                 IsCostKnown = ss.Metadata.IsCostKnown;
                 TokensIn = ss.Metadata.TokensInput;
@@ -180,7 +193,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
         Cost = 0;
         TokensIn = 0;
         TokensOut = 0;
-        ContextTokens = 0;
+        RequestTokens = 0;
         QueuedCount = 0;
         Status = "idle";
     }
