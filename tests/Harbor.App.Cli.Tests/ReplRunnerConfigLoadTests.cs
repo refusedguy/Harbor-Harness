@@ -405,7 +405,13 @@ public class ReplRunnerConfigLoadTests
         private readonly Queue<Result<HarborConfig>> _loads;
 
         public ScriptedConfigStore(Result<HarborConfig> first, Result<HarborConfig> then)
-            => _loads = new Queue<Result<HarborConfig>> { first, then };
+        {
+            // Enqueue, not a collection initializer: Queue<T> has no public Add,
+            // so `{ first, then }` does not compile.
+            _loads = new Queue<Result<HarborConfig>>();
+            _loads.Enqueue(first);
+            _loads.Enqueue(then);
+        }
 
         public List<HarborConfig> Saved { get; } = [];
 
