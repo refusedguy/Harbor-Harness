@@ -192,6 +192,39 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!--
+      CFE0001 — "check IsSuccess or IsFailure before accessing Value from
+      result object". A mechanical guard for the §ROP-001 crash class: `.Value`
+      on a failed Result<T> throws ResultFailureException.
+
+      SCOPE — solution-wide, like every other analyzer above, and that is
+      deliberate rather than an oversight. CFE0001 fires only where the
+      analyzer can resolve a `CSharpFunctionalExtensions.Result` symbol, i.e.
+      only in projects where CSharpFunctionalExtensions is referenced. Adding
+      the reference per-project "only where CFE is referenced" would be
+      strictly WORSE: Harbor.Abstractions references CFE *transitively*, so
+      Harbor.Application, Harbor.Registries and Harbor.Tools.Builtin — the
+      projects with by far the most Result<T> traffic — would carry the crash
+      risk while being left unguarded. Solution-wide is what actually covers
+      the sites that matter.
+
+      ZERO-DEPENDENCY RULE — this does not violate Harbor.Abstractions'
+      "no new dependencies" constraint, for two reasons. (1) It is a
+      build-time-only analyzer with PrivateAssets=all: nothing flows to
+      consumers, nothing is packed into the assembly, no runtime code path
+      changes. (2) Harbor.Abstractions already carries build-time tooling of
+      exactly this shape — ZLinq.DropInGenerator, a source generator, is
+      referenced there with the same IncludeAssets/PrivateAssets pair. The
+      constraint is about RUNTIME dependencies, and this is not one.
+
+      CFE0002 is Info and disabled by default; it is deliberately left off
+      (docs/ROP-API-INVENTORY.md §5 — low value, Harbor's Result.Failure<T>
+      sites are mostly not in an inferable position).
+    -->
+    <PackageReference Include="CSharpFunctionalExtensions.Analyzers">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
   <!--
