@@ -176,11 +176,26 @@ public static class StatusProjectorPanel
     };
 
     /// <summary>
-    /// Fills <paramref name="workspace"/> left-to-right from
-    /// <see cref="StatusBarFacts"/>; returns segment count.
-    /// Order keeps the documented truncation contract (tokens/cost rightmost,
-    /// die first): chrome, status, agent, retry, skills, scroll, elapsed,
-    /// tokens, cost.
+    /// Fills <paramref name="workspace"/> left-to-right from the shared cell
+    /// declaration; returns segment count.
+    /// <para>
+    ///     The cells that come from <see cref="UiState" /> are read from
+    ///     <see cref="StatusProjector.ProjectStatusBar" /> — the one place a
+    ///     status cell is named, with its order and its truncation priority
+    ///     (#568). This method used to spell that row out cell by cell instead,
+    ///     which is why adding a segment meant editing this file as well as the
+    ///     projection, and why the two could disagree: the projection ranked
+    ///     scroll last among right-aligned cells while this row put it before
+    ///     tokens and cost, so the same session truncated differently depending
+    ///     on which backend painted it.
+    /// </para>
+    /// <para>
+    ///     Retry, the freshness pill and run duration stay here: they are driven
+    ///     by the host and by the clock, not by the snapshot, so they are not
+    ///     cells the projection knows about. They interleave with the projected
+    ///     cells at the same two points as before — warnings right after the
+    ///     agent cell, elapsed just before the token/cost tail.
+    /// </para>
     /// </summary>
     /// <param name="state">Projected UI snapshot (source of truth).</param>
     /// <param name="workspace">Target span (at least <see cref="MaxSegments"/> cells).</param>
@@ -198,11 +213,19 @@ public static class StatusProjectorPanel
         TimeSpan? elapsed = null,
         SkillFreshnessSummary? skills = null)
     {
-        // #488: read the cells, don't rebuild them. Going through
-        // StatusProjector.ProjectStatusBar here allocated an ImmutableArray and
-        // two interpolated strings per frame only to drop the token/cost pair
-        // on the floor and re-derive them under a second formatting rule.
-        var facts = StatusBarFacts.Of(state);
+        // #488: read the cells, don't rebuild them. The footer used to call
+        // StatusProjector.ProjectStatusBar, drop the token/cost pair on the
+        // floor, and re-derive them from raw state under a second formatting
+        // rule — so it read the cells only to disagree with them.
+        //
+        // #568: it reads them for real now. The row takes the projected
+        // segments and maps each one — style to accent, FixedPriority through —
+        // so a cell added in StatusProjector arrives here with no edit to this
+        // file. The ImmutableArray the #488 note complained about is one per
+        // snapshot, not one per cell: BuildSegments is reached only from
+        // StatusPanel.ProjectProjected, which caches the row against the
+        // snapshot and rebuilds when the snapshot actually changes.
+        var segments = StatusProjector.ProjectStatusBar(state).Segments;
 
         string? elapsedText = elapsed.HasValue
             ? FrameworkStatusMappers.DurationToText(elapsed.Value)
@@ -213,55 +236,146 @@ public static class StatusProjectorPanel
         }
 
         int n = 0;
-        if (facts.Chrome is not null && n < workspace.Length)
+
+        // One ordering for the whole row, and one accent per cell.
+        //
+        // Host-driven slots are declared here because the host owns them: the
+        // snapshot does not know about a pending retry, a stale skill or how
+        // long the run has been going. They are given the same coordinates as
+        // every projected cell and placed by the SAME ordering function, so
+        // where they land is a number rather than a position in a hand-written
+        // sequence. The projected cells around them come from the projection —
+        // not from a second reading of the facts.
+        //
+        // Importance, right-aligned group, painted left to right:
+        //   agent 6 › retry 5 › skills 5 › scroll 4 › elapsed 4 › tokens 3 › cost 2
+        // The sort is stable, so equal numbers keep declaration order — which
+        // is how retry precedes skills, and scroll precedes elapsed, without
+        // either pair needing a rank of its own.
+        var row = new List<Cell>(segments.Count + 3);
+
+        for (int i = 0; i < segments.Count; i++)
         {
-            workspace[n++] = new StatusSeg(facts.Chrome, StatusAccent.Accent, FixedPriority: true);
+            UiStatusSegment seg = segments[i];
+            row.Add(new Cell(seg, MapAccent(seg.Style)));
         }
 
-        if (n < workspace.Length)
+        if (!string.IsNullOrEmpty(retryLine))
         {
-            workspace[n++] = new StatusSeg(facts.Status, MapAccent(facts.StatusStyle), FixedPriority: true);
+            // Warning is a CellForge accent with no word in the shared style
+            // enum: `UiSpanStyle` is closed and every backend maps it, so
+            // widening it to express one host's slot would be the wrong trade.
+            // The accent belongs to the host that owns the slot; its ORDER and
+            // its truncation priority are declared the same way as everyone
+            // else's.
+            row.Add(new Cell(
+                new UiStatusSegment(
+                    Text: retryLine!,
+                    Align: Alignment.Right,
+                    Importance: 5,
+                    Style: UiSpanStyle.Default,
+                    // #384: a warning-class signal, so fixed priority —
+                    // truncation drops the counters before it (same rule as
+                    // the freshness pill).
+                    FixedPriority: true),
+                StatusAccent.Warning));
         }
 
-        if (facts.Agent is not null && n < workspace.Length)
+        if (skills is not null)
         {
-            workspace[n++] = new StatusSeg(facts.Agent, StatusAccent.Neutral, FixedPriority: false);
+            row.Add(new Cell(
+                new UiStatusSegment(
+                    Text: skills.Text,
+                    Align: Alignment.Right,
+                    Importance: 5,
+                    Style: skills.Style,
+                    FixedPriority: true),
+                MapAccent(skills.Style)));
         }
 
-        if (!string.IsNullOrEmpty(retryLine) && n < workspace.Length)
+        if (elapsedText is not null)
         {
-            workspace[n++] = new StatusSeg(retryLine!, StatusAccent.Warning, FixedPriority: true);
+            row.Add(new Cell(
+                new UiStatusSegment(
+                    Text: elapsedText,
+                    Align: Alignment.Right,
+                    Importance: 4,
+                    Style: UiSpanStyle.Dim),
+                StatusAccent.Dim));
         }
 
-        // #384: the freshness pill is a warning-class signal — fixed priority so
-        // truncation drops scroll/tokens/cost before it (same rule as retry).
-        if (skills is not null && n < workspace.Length)
-        {
-            workspace[n++] = new StatusSeg(skills.Text, MapAccent(skills.Style), FixedPriority: true);
-        }
+        // Sort the row with the ONE rule, then paint it. `StatusSegmentOrdering`
+        // sorts `UiStatusSegment`; this is the same three-group comparison over
+        // the same coordinates, applied to entries that also carry an accent —
+        // a stable insertion sort rather than a second LINQ pipeline, so the
+        // row costs no extra allocation and the comparison stays next to the
+        // declaration it implements.
+        SortRow(row);
 
-        if (n < workspace.Length)
+        for (int i = 0; i < row.Count && n < workspace.Length; i++)
         {
-            workspace[n++] = new StatusSeg(facts.Scroll, StatusAccent.Dim, FixedPriority: false);
-        }
+            Cell cell = row[i];
+            UiStatusSegment seg = cell.Segment;
 
-        if (elapsedText is not null && n < workspace.Length)
-        {
-            workspace[n++] = new StatusSeg(elapsedText, StatusAccent.Dim, FixedPriority: false);
-        }
-
-        if (facts.Tokens is not null && n < workspace.Length)
-        {
-            workspace[n++] = new StatusSeg(facts.Tokens, StatusAccent.Dim, FixedPriority: false);
-        }
-
-        if (facts.Cost is not null && n < workspace.Length)
-        {
-            workspace[n++] = new StatusSeg(facts.Cost, StatusAccent.Dim, FixedPriority: false);
+            // The only per-cell decision left is the renderer's own vocabulary:
+            // a style becomes an accent. FixedPriority is read through, not
+            // re-derived.
+            workspace[n++] = new StatusSeg(seg.Text, cell.Accent, seg.FixedPriority);
         }
 
         return n;
     }
+
+    /// <summary>
+    ///     Left → center → right, ascending by importance except the right
+    ///     group, which descends. Identical to
+    ///     <see cref="StatusSegmentOrdering.Ordered" />, over entries that
+    ///     carry an accent as well as a segment.
+    /// </summary>
+    /// <remarks>
+    ///     Stable, so equal importances keep declaration order — that is what
+    ///     puts retry before skills and scroll before elapsed without either
+    ///     pair needing a rank of its own. A status row is a handful of cells,
+    ///     so insertion sort is the right algorithm and the in-place pass
+    ///     allocates nothing.
+    /// </remarks>
+    private static void SortRow(List<Cell> row)
+    {
+        for (int i = 1; i < row.Count; i++)
+        {
+            Cell cell = row[i];
+            int j = i - 1;
+            while (j >= 0 && Compare(row[j], cell) > 0)
+            {
+                row[j + 1] = row[j];
+                j--;
+            }
+
+            row[j + 1] = cell;
+        }
+    }
+
+    /// <summary>Negative when <paramref name="a" /> paints before <paramref name="b" />.</summary>
+    private static int Compare(in Cell a, in Cell b)
+    {
+        if (a.Segment.Align != b.Segment.Align)
+        {
+            return ((int)a.Segment.Align).CompareTo((int)b.Segment.Align);
+        }
+
+        // Left and center ascend; right descends, so the rightmost cell — the
+        // one Fit drops first — is the least important.
+        return a.Segment.Align == Alignment.Right
+            ? b.Segment.Importance.CompareTo(a.Segment.Importance)
+            : a.Segment.Importance.CompareTo(b.Segment.Importance);
+    }
+
+    /// <summary>
+    ///     A row entry: the shared cell plus the accent this backend paints it
+    ///     in. The accent is a rendering fact, not a declaration fact, so it
+    ///     rides alongside the segment instead of inside the shared enum.
+    /// </summary>
+    private readonly record struct Cell(UiStatusSegment Segment, StatusAccent Accent);
 }
 
 /// <summary>

@@ -102,7 +102,13 @@ public class StatusProjectionTests
         var tokens = model.Segments.First(s => s.Text == "1.2K↑ 5.7K↓");
         await Assert.That(tokens.Align).IsEqualTo(Alignment.Right);
         await Assert.That(tokens.Style).IsEqualTo(UiSpanStyle.Dim);
-        await Assert.That(tokens.Importance).IsEqualTo(2);
+        // #568: the right-hand group is ranked so that the order the row paints
+        // is agent, scroll, tokens, cost — the truncation order read right to
+        // left, because Fit drops the rightmost flexible cell first. This
+        // assertion pins the RANK, not a historical constant: what matters is
+        // that tokens sort left of cost, and StatusSegmentOrderTests pins the
+        // sequence both surfaces actually paint.
+        await Assert.That(tokens.Importance).IsEqualTo(3);
     }
 
     [Test]
@@ -134,7 +140,7 @@ public class StatusProjectionTests
         var cost = model.Segments.First(s => s.Text == "$0.0123");
         await Assert.That(cost.Align).IsEqualTo(Alignment.Right);
         await Assert.That(cost.Style).IsEqualTo(UiSpanStyle.Dim);
-        await Assert.That(cost.Importance).IsEqualTo(1);
+        await Assert.That(cost.Importance).IsEqualTo(2);
     }
 
     [Test]

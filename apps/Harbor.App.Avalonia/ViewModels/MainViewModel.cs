@@ -13,7 +13,6 @@ using Harbor.Ui.Framework.Animation;
 using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
-using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
@@ -354,8 +353,14 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         // C2: apply the projections registered once in the constructor.
         ApplySelectors(state);
 
-        var statusBar = StatusProjector.ProjectStatusBar(state);
-
+        // #568: this used to compute `StatusProjector.ProjectStatusBar(state)`
+        // into a local that was never read — an ImmutableArray and six
+        // segments allocated on every state change, to produce nothing. The
+        // status bar this window draws is bound to the Select()-projected
+        // properties below (StatusText, AgentLabel, ModelLabel, …), which is
+        // also why no .axaml binds ShellStatus.*: that record is written below
+        // and read by nothing. Removing the dead call is step 9 of the issue's
+        // fourteen, and the first of them that is a pure deletion.
         TokenHistory.Add(TokensIn + TokensOut);
         while (TokenHistory.Count > 60)
             TokenHistory.RemoveAt(0);
