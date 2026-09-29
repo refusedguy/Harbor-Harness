@@ -78,6 +78,15 @@
     <ProjectReference Include="..\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Engine\Harbor.Tui.CellForge.Engine.csproj"/>
     <ProjectReference Include="..\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
+    <!--
+      #667: FileTreeLoader — the loader behind the file-tree panel's
+      IDirectoryLister demand signal. It already reaches Harbor.Application and
+      Harbor.Ui.Framework.State transitively; this is the first DIRECT edge from
+      the composition root to Harbor.Ui.Framework.Services, and it is needed here
+      because the registration belongs in TuiModule (the one place that knows the
+      TUI is being composed) rather than in each app.
+    -->
+    <ProjectReference Include="..\Harbor.Ui.Framework.Services\Harbor.Ui.Framework.Services.csproj"/>
 
     <!-- Baseline providers -->
     <ProjectReference Include="..\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>

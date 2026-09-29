@@ -1,7 +1,10 @@
 using System.Collections.Frozen;
 using Harbor.Hosting.Rendering;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Filesystem;
 using Harbor.Abstractions.Models;
+using Harbor.Application.Filesystem;
+using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -64,6 +67,17 @@ internal static class TuiModule
         // Renderers keep their own private stores; the pipeline reads this
         // shared snapshot, never writes it.
         services.AddSingleton<UiStore>();
+
+        // #667: the file-tree seam. `SystemDirectoryLister` is the only place in
+        // the harness that walks a directory for a UI view, and it lives in
+        // Application; `FileTreeLoader` owns the CancellationTokenSource and
+        // publishes into the store above. Registered HERE, in the TUI module,
+        // rather than in an app, because the panel that needs it is a TUI panel:
+        // `PanelServices.FromContainer` picks it up and every host that composes
+        // a renderer gets it, with no per-app wiring to forget. A host that
+        // resolves neither simply gets a null loader and a panel that says so.
+        services.AddSingleton<IDirectoryLister, SystemDirectoryLister>();
+        services.AddSingleton<IFileTreeLoader, FileTreeLoader>();
 
         // Phase 6.3: hot-swappable renderer runtime. The pipeline owns the
         // published renderer (CAS-gated swaps), restores the UiState snapshot
