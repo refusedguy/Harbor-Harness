@@ -220,17 +220,17 @@ public sealed class HandRolledResultShapeTests
     ///     a decision with a reason, checked by
     ///     <see cref="Rule3Exemptions_AreStillNeeded" />.
     /// </summary>
-    private static readonly Dictionary<string, string> Rule3Exemptions = new(StringComparer.Ordinal)
-    {
-        ["src/Harbor.Tools.Builtin/Tools/Edit/EditTool.cs::EditResult"] =
-            "A FOURTH instance of the #588 shape, found by Rule 3 while #588 was being fixed — "
-            + "and deliberately NOT fixed there. `private readonly record struct EditResult(bool Ok, "
-            + "string Text, int Count, string? Error)` is a `Result<T>` spelled by hand: a boolean "
-            + "flag next to a nullable error, with the same null-means-failure channel. It lives in "
-            + "a builtin tool, not the providers perimeter that #588 covers, so fixing it is its own "
-            + "change. Deferred, not forgotten: #721. When it is fixed, delete this entry — "
-            + "Rule3Exemptions_AreStillNeeded fails if the entry outlives the type."
-    };
+    /// <remarks>
+    ///     EMPTY, and that is the point rather than an oversight. Rule 3's one entry was
+    ///     <c>EditTool.EditResult</c> — a fourth instance of #588's shape, deferred from #588
+    ///     to #721 because it is a builtin tool and not the providers perimeter #588 covers.
+    ///     #721 returned a real <c>Result&lt;(string Text, int Count)&gt;</c> from the private
+    ///     <c>EditTool.ApplyEdit</c> helper and deleted the type, and the entry went with it.
+    ///     The table and its staleness check stay, so the next exemption has a place to go and
+    ///     cannot rot: adding an entry without a reason, or leaving one behind after fixing
+    ///     its type, is exactly what <see cref="Rule3Exemptions_AreStillNeeded" /> makes fail.
+    /// </remarks>
+    private static readonly Dictionary<string, string> Rule3Exemptions = new(StringComparer.Ordinal);
 
     [Test]
     public async Task Rule1_NoTypeReimplementsTheResultSurface()
