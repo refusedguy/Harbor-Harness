@@ -1,4 +1,18 @@
-# Harbor benchmark gate — BenchmarkDotNet subset on every PR.
+# Harbor benchmark gate — BenchmarkDotNet subset, push-triggered with a cooldown.
+#
+# WHY NOT EVERY PR: a BDN run is ~30 minutes, and an agent working a PR waits
+# on it. Agents were blocking for the better part of an hour on a signal they
+# do not act on — a benchmark number does not make a PR reviewable, and the
+# number that matters is the one on the branch, not on the transient merge ref.
+# So this runs on pushes to the long-lived branches only, where a measurement
+# can actually be compared against the previous one on the SAME branch.
+#
+# WHY A COOLDOWN: dev takes many pushes an hour, and 30 minutes per push is
+# both slow and pointless — the hot paths barely move between two commits an
+# hour apart. The gate job below skips the run when the previous measurement on
+# this branch is younger than BENCHMARK_COOLDOWN_HOURS. `workflow_dispatch`
+# always runs: asking for a measurement explicitly must never be silently
+# swallowed by the rate limit.
 #
 # Runs a curated hot-path subset (PermissionRuleset evaluation, provider +
 # tool registry lookups, EventBus publish paths — the numbers quoted in
@@ -13,7 +27,8 @@
 name: benchmark
 
 on:
-  pull_request:
+  push:
+    branches: [dev, master, main]
     paths:
       - "src/**"
       - "tests/Harbor.Benchmarks/**"
@@ -24,7 +39,7 @@ permissions: {}
 
 concurrency:
   group: benchmark-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 env:
   DOTNET_NOLOGO: true
@@ -35,10 +50,87 @@ env:
   MSBuildEnableWorkloadResolver: false
 
 jobs:
+  # Decides whether the measurement is worth 30 minutes right now. Separate job
+  # because deciding needs the API and `if:` on the bench job needs a value —
+  # a step cannot gate its own job.
+  gate:
+    name: Cooldown check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      should_run: ${{ steps.decide.outputs.should_run }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          CURRENT_RUN: ${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+          COOLDOWN_HOURS: ${{ vars.BENCHMARK_COOLDOWN_HOURS || '3' }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "reason=workflow_dispatch — explicit request, never rate-limited" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Fail OPEN on an API error. A broken gate must not silently retire
+          # the benchmark: the cost is one extra 30-minute run, the alternative
+          # is measurements that stop without anyone noticing.
+          if ! runs=$(gh api -H "Accept: application/vnd.github+json" \
+              "/repos/$REPO/actions/workflows/benchmark.yml/runs?branch=$BRANCH&per_page=20" 2>/dev/null); then
+            echo "could not read run history; running anyway" >&2
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "reason=API unavailable — failed open" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Most recent FINISHED run on this branch, excluding the one that is
+          # asking the question. In-flight runs do not count: a run that is
+          # still going will finish and make the next push wait, and the
+          # concurrency group already collapses same-branch runs.
+          last=$(printf '%s' "$runs" | jq -r \
+            --argjson self "$CURRENT_RUN" \
+            '.workflow_runs[]
+             | select(.id != $self)
+             | select(.status == "completed")
+             | .created_at' | head -n 1)
+
+          if [ -z "$last" ] || [ "$last" = "null" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "reason=no previous completed run on $BRANCH" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          age_hours=$(python3 -c '
+          import datetime as dt, sys
+          started = dt.datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00"))
+          print(round((dt.datetime.now(dt.timezone.utc) - started).total_seconds() / 3600, 2))
+          ' "$last")
+
+          if python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) < float(sys.argv[2]) else 1)' \
+               "$age_hours" "$COOLDOWN_HOURS"; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "reason=last measurement on $BRANCH was ${age_hours}h ago, cooldown ${COOLDOWN_HOURS}h — dispatch this workflow to force one" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "reason=last measurement on $BRANCH was ${age_hours}h ago, past the ${COOLDOWN_HOURS}h cooldown" >> "$GITHUB_OUTPUT"
+          fi
+
   bench:
-    # Dependabot action-bump PRs cannot move hot-path numbers — skip the
-    # 15-minute BDN run and keep only the fast correctness gates.
-    if: github.actor != 'dependabot[bot]'
+    needs: gate
+    # Two conditions, ONE `if:`. Two consecutive `if:` keys is a silent trap:
+    # YAML keeps the last one, so a gate that decides everything can be
+    # shadowed by a stale condition underneath it and never fire. This repo
+    # already has gates that looked armed and were not — see the arch-gate work
+    # in #540. Combine them or nest them as `if: a && b`.
+    #
+    # dependabot action bumps cannot move hot-path numbers.
+    if: needs.gate.outputs.should_run == 'true' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
