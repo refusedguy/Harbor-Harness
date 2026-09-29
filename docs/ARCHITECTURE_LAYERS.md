@@ -665,10 +665,14 @@ while enforcing nothing — which is the failure mode these rules exist to preve
 exactly reproduced, and each carries a tracking issue. Fourteen Presentation assemblies
 are clean and fully enforced.
 
-Two rows left that count in #668: the terminal `JsonThemeLoader` and `ThemeFileWatcher`
-were not a filesystem permission but a second implementation of theme loading beside
-`Harbor.DesignSystem`'s `ThemeStore`. They read through `IThemeStore` now, and
-`ThemeStoreSeamRules` fails if a second implementation of that port appears.
+Four rows left that no longer count, in two issues. #668: the terminal
+`JsonThemeLoader` and `ThemeFileWatcher` were not a filesystem permission but a second
+implementation of theme loading beside `Harbor.DesignSystem`'s `ThemeStore`. They read
+through `IThemeStore` now, and `ThemeStoreSeamRules` fails if a second implementation of
+that port appears. #667: the two `CellForgeFileTreePanel` rows — the file tree, described
+below. Both deletions are forced rather than asserted: the liveness test fails the build
+on a row that outlived its violation, and the resolved-list test fails it if the
+capability returns.
 
 A further capability is recorded in `PermanentCapabilities` — not a violation, so not
 counted above. See "Permanent capabilities" in §5.6.
@@ -681,8 +685,8 @@ counted above. See "Permanent capabilities" in §5.6.
 | Rule | Violating types | Assemblies | Tracking issues |
 |---|---:|---:|---|
 | `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 1 | 1 | [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (jump palette) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 6 | 4 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (file tree) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 6 | 4 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (file tree) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 5 | 4 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 5 | 3 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher) |
 | `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | 0 | 0 | — clean, unbaselined |
 | `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | 0 | 0 | — clean, unbaselined |
 
@@ -697,6 +701,34 @@ The reference-layer template below applies to the capability rules too, keyed by
 red** — that is the one move that turns an enforced rule back into a comment. Either fix
 the I/O (move it behind a Domain contract + an Infrastructure implementation) or, if it
 genuinely must stay, add a row with a real issue URL.
+
+### ARCH-5 completed — the file tree (#667)
+
+`CellForgeFileTreePanel` was the clearest example of why a rule needs a *design* and not
+just a moved call. It listed the working directory with `Directory.EnumerateDirectories`
+/ `EnumerateFiles` and read `FileAttributes`, from inside `Build` — inside a painted
+frame. Deleting those three calls was not possible on its own, because the listing lived
+in a private field and **a render-thread cache can only be filled by the render thread**.
+Three layers had to land together:
+
+| Layer | Before | After |
+|---|---|---|
+| State | `_entries` + `_entriesDir` fields, lock-guarded | `UiState.Ui.FileTrees` → `FileTreeSnapshot`, reducer-written |
+| Seam | none — the call was inline | Domain `IDirectoryLister`, implemented by `SystemDirectoryLister` (Application) |
+| Cancellation | none | `FileTreeLoader` owns a per-panel `CancellationTokenSource` |
+
+The third layer is what makes the second one safe rather than merely relocated: a walk
+is bounded (entry cap), cancellable, and superseded — navigating away cancels the walk
+in flight, and a result that arrives for a directory the panel has left is dropped by
+the reducer rather than painted. The panel now performs **no** `System.IO` at all;
+`Path.GetDirectoryName` replaces `Directory.GetParent` for the `h` key, which is pure
+string handling and explicitly not forbidden.
+
+Two baseline rows are gone, and both deletions are enforced in both directions:
+`NonVacuity_GrandfatheredViolations_AreStillReal` fails the build on a row that outlived
+its violation, and `ResolvedViolations_HaveNoHits` fails it if the capability returns.
+The second is the one worth copying for the remaining #538 sites — a removed violation
+with nothing guarding its removal is indistinguishable from one that was never paid for.
 
 ### Previously suspected (not a violation)
 
