@@ -2,9 +2,11 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Instantiation;
+using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Plugins;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;
@@ -111,8 +113,86 @@ public sealed class PluginRegistrar : IPluginRegistrar
                         _logger.LogWarning(ex, "ITuiPanelPlugin.RegisterPanels threw for {Name}", panelPlugin.Name);
                     }
                 }
+
+                // #620: these two doors have been on IPluginLoadHost since #581/#584
+                // with the registries, the composition plumbing and the module wiring
+                // already built around them — but nothing dispatched them and a plugin
+                // is never handed the host, so they were unreachable. ExtensionAxisFreezeRule
+                // found both axes half-open; these branches are the other half of the fix.
+                if (plugin.Instance is ISessionStorePlugin storePlugin)
+                {
+                    try
+                    {
+                        storePlugin.RegisterSessionStores(new SessionStoreRegistrarAdapter(host, _logger));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "ISessionStorePlugin.RegisterSessionStores threw for {Name}", plugin.Name);
+                    }
+                }
+                if (plugin.Instance is ITuiBackendPlugin backendPlugin)
+                {
+                    try
+                    {
+                        backendPlugin.RegisterTuiBackends(new TuiBackendRegistrarAdapter(host, _logger));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "ITuiBackendPlugin.RegisterTuiBackends threw for {Name}", plugin.Name);
+                    }
+                }
             },
             ex => $"Register threw: {ex.Message}");
+    }
+
+    // ── Backend registrar adapters ───────────────────────────────────────────────
+    // #620: one-method sinks so a plugin reaches its OWN door and no other. Handing a
+    // plugin the whole IPluginLoadHost would work and would quietly reopen the tool,
+    // provider, agent and panel axes to a plugin that only wanted a session store.
+
+    /// <summary>Forwards one axis' door into the host, logging rather than throwing on a rejected registration.</summary>
+    private static void ReportDoorFailure(ILogger logger, string kind, string id, Result result)
+    {
+        if (result.IsFailure)
+            logger.LogWarning("Plugin {Kind} registration failed for '{Id}': {Error}", kind, id, result.Error);
+    }
+
+    private sealed class SessionStoreRegistrarAdapter : ISessionStoreRegistrar
+    {
+        private readonly IPluginLoadHost _host;
+        private readonly ILogger _logger;
+
+        internal SessionStoreRegistrarAdapter(IPluginLoadHost host, ILogger logger)
+        {
+            _host = host;
+            _logger = logger;
+        }
+
+        public Result RegisterSessionStore(string backendId, Func<ISessionStore> factory)
+        {
+            Result result = _host.RegisterSessionStore(backendId, factory);
+            ReportDoorFailure(_logger, "session store", backendId, result);
+            return result;
+        }
+    }
+
+    private sealed class TuiBackendRegistrarAdapter : ITuiBackendRegistrar
+    {
+        private readonly IPluginLoadHost _host;
+        private readonly ILogger _logger;
+
+        internal TuiBackendRegistrarAdapter(IPluginLoadHost host, ILogger logger)
+        {
+            _host = host;
+            _logger = logger;
+        }
+
+        public Result RegisterTuiBackend(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory)
+        {
+            Result result = _host.RegisterTuiBackend(backendId, aliases, factory);
+            ReportDoorFailure(_logger, "TUI backend", backendId, result);
+            return result;
+        }
     }
 
     // ── Registry builder adapters ────────────────────────────────────────────────
