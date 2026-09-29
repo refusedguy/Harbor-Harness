@@ -128,13 +128,30 @@ public class StatusMappersTests
     public async Task ToolCallStateToBrushKey_Cancelled_Is_Neutral_TimedOut_Is_Red()
     {
         await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Cancelled))
-            .IsEqualTo("MochaOverlay2");
+            .IsEqualTo("MochaOverlay1");
         await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.TimedOut))
             .IsEqualTo("MochaRed");
 
         // Cancelled is deliberate, not a fault — it must not wear the error brush.
         await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Cancelled))
             .IsNotEqualTo(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Error));
+    }
+
+    /// <summary>
+    /// The brush half of the #567 guard. "Neutral, not a fault" is a claim about
+    /// fault-ness, not about lifecycle: folding Cancelled onto Pending's key made
+    /// a deliberately stopped card paint identically to one that never started,
+    /// and the two were distinguishable only by pill text.
+    /// </summary>
+    [Test]
+    public async Task ToolCallStateToBrushKey_Cancelled_Does_Not_Borrow_Pending()
+    {
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Cancelled))
+            .IsNotEqualTo(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Pending))
+            .Because("a stopped call must not look like one that has not started");
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Cancelled))
+            .IsNotEqualTo(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Running))
+            .Because("a stopped call must not look like a live one");
     }
 
     /// <summary>

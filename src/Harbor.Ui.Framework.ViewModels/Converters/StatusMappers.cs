@@ -49,14 +49,33 @@ public static class StatusMappers
     ///     undeclared value throws instead of inheriting the former
     ///     <c>_ =&gt; "MochaOverlay2"</c> silent default (#567).
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>No two states share a key, terminal or not.</b> Cancelled and
+    ///         Pending both being "neutral, not a fault" is a statement about
+    ///         fault-ness, not about lifecycle — and collapsing them onto one
+    ///         key reproduced the exact #567 hazard this collapse exists to
+    ///         remove: a card that was deliberately stopped painted identically
+    ///         to one that never started, so the two were told apart by the
+    ///         pill <em>text</em> alone. They are dimmed differently instead —
+    ///         <c>MochaOverlay1</c> for the stopped call, <c>MochaOverlay2</c>
+    ///         for the one still waiting — which is the resource-key mirror of
+    ///         the cell-side split (<c>ChatPalette.Dim</c> vs
+    ///         <c>ChatPalette.ToolRunning</c>, see
+    ///         <c>ToolCallBlock.StatusGlyphStyle</c>). The guard that pins this
+    ///         is <c>ToolCallStateGuardTests.Terminal_States_Never_Borrow_The_Live_Presentation</c>.
+    ///     </para>
+    /// </remarks>
     public static string ToolCallStateToBrushKey(ToolCallState state) => state switch
     {
         ToolCallState.Running => "MochaYellow",
         ToolCallState.Success => "MochaGreen",
-        ToolCallState.Error => "MochaRed",
-        ToolCallState.TimedOut => "MochaRed",
-        // Neither has started, or was stopped deliberately: neutral, not a fault.
-        ToolCallState.Pending or ToolCallState.Cancelled => "MochaOverlay2",
+        // TimedOut is a failure to complete, so it wears the fault colour.
+        ToolCallState.Error or ToolCallState.TimedOut => "MochaRed",
+        // Cancelled is deliberate, not a fault — but it is stopped, so it dims
+        // one step further than a Pending call that has not started yet.
+        ToolCallState.Cancelled => "MochaOverlay1",
+        ToolCallState.Pending => "MochaOverlay2",
         _ => throw ToolCallStateExtensions.Undeclared(state)
     };
 
