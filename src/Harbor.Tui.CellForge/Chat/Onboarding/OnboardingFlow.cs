@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Tui.CellForge.Widgets;
 
 using CSharpFunctionalExtensions;
@@ -434,12 +435,40 @@ public sealed class OnboardingFlow
             FinishModel($"{providerId}/{live[idx - 1]}");
             return;
         }
-        if (!input.Contains('/'))
+        FinishModel(QualifyToSelectedProvider(input));
+    }
+
+    /// <summary>
+    /// The "add the picked provider unless the text already carries one" rule
+    /// (#678), resolved by the contract instead of a slash probe.
+    /// </summary>
+    /// <remarks>
+    /// This used to be <c>if (!input.Contains('/'))</c> — "is this text already a
+    /// provider/model reference?" answered by counting separators, which is the
+    /// read, not a validation, and which cannot tell a multi-segment model id
+    /// (<c>tencent/hy3:free</c>) from a qualified reference. The two answers
+    /// below are <see cref="ModelRef" />'s own, and they are deliberately
+    /// different: a text that already parses as a reference NAMES ITS PROVIDER, so
+    /// it is taken as written (that is the rule the console
+    /// <c>OnboardingWizard</c> applies by hand); anything else is a model id for
+    /// the provider the user picked. Both are the free-text rule — a machine-written
+    /// pair of provider and model is <see cref="ModelRef.Qualify" />'s, and
+    /// collapsing the two is what would break kilocode's own default.
+    /// <para>
+    /// A text that only LOOKS like a reference (<c>/x</c>, <c>bad provider/x</c>)
+    /// no longer reaches the config verbatim: it is qualified against the picked
+    /// provider, which is where the old probe sent it anyway to be rejected later.
+    /// </para>
+    /// </remarks>
+    private string QualifyToSelectedProvider(string modelId)
+    {
+        if (ModelRef.TryParse(modelId) is { IsSuccess: true, Value: var typed })
         {
-            FinishModel($"{providerId}/{input}");
-            return;
+            return typed.ToString();
         }
-        FinishModel(input);
+
+        var qualified = ModelRef.Qualify(_selected?.Id, modelId);
+        return qualified.Map(static reference => reference.ToString()).GetValueOrDefault(modelId);
     }
 
     private void FinishModel(string model)
