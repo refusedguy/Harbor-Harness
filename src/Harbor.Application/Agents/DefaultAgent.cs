@@ -308,7 +308,7 @@ public sealed class DefaultAgent : IAgent
                 _logger.LogError(
                     "Failed to persist user message {MessageId} for session {SessionId}: {Error}",
                     message.Id, State.SessionId, persisted.Error);
-                return Result.Failure($"Failed to persist prompt: {persisted.Error}");
+                return persisted.MapError(static e => $"Failed to persist prompt: {e}");
             }
 
             // Swap in a fresh per-run completion source so WaitForIdleAsync callers
