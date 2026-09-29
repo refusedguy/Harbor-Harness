@@ -24,7 +24,7 @@ LLM turns, tool invocations, compaction events, and permission checks.
 | `Resilience/RetryPolicyExtensions.cs` | Central retry policy helpers for transient provider errors — `ExecuteSafeAsync` adapts exception-based retries onto the `Result<T>` railway. |
 | `Telemetry/`                       | Usage telemetry plumbing consumed by the app hosts.                                                                      |
 | `Onboarding/OnboardingWizard.cs`   | First-run interactive wizard: pick provider → enter API key → pick live model → pick agent → save config.                |
-| `Configuration/HarborConfig.cs`    | Application config model + `JsonConfigStore`, `AuthStore`, `ProviderPresets` (single preset catalog backing `/model`).    |
+| `Configuration/HarborConfig.cs`    | Application config model + `JsonConfigStore`, `AuthStore`, `ProviderPresets` (the provider picker catalogue, projected from `providers/*.json` by `Configuration/ProviderPresetCatalog.cs` — one declaration per provider, #580).    |
 
 ## Why this project exists
 

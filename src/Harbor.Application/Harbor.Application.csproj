@@ -9,6 +9,17 @@
   </PropertyGroup>
 
   <!--
+    #580: embed providers/*.json (Directory.Build.targets globs the whole folder —
+    no explicit <EmbeddedResource> list) so ProviderPresetCatalog, which drives the
+    onboarding picker, /providers and /auth set, still sees the bundled configs in a
+    published single-file binary where no providers/ directory sits next to the
+    executable. Dropping a new providers/<name>.json needs no csproj edit.
+  -->
+  <PropertyGroup>
+    <EmbedProviders>true</EmbedProviders>
+  </PropertyGroup>
+
+  <!--
     Application layer depends on Harbor.Abstractions only — never on
     Infrastructure (Providers.*, Storage.*, Tools.Builtin), never on
     Presentation (Tui.*), never on sibling Application projects

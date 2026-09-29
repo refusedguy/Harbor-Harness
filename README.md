@@ -40,7 +40,7 @@ CI regenerates the GIFs on TUI changes (`.github/workflows/demo.yml`).
 
 - **LLM providers** — 4 native clients + 13 JSON-config providers:
   - Native: `Anthropic` (cache_control, extended thinking), `OpenAI` (Chat Completions + Responses API), `Ollama` (local NDJSON), `OpenAiCompatible` (generic adapter)
-  - JSON configs: `anthropic`, `kilocode` (with **FREE** models), `deepseek`, `groq`, `mistral`, `xai`, `together`, `fireworks`, `cerebras`, `openrouter`, `vllm`, `ollama` presets in [`providers/*.json`](./providers/)
+  - JSON configs: `anthropic`, `kilocode` (with **FREE** models), `deepseek`, `groq`, `mistral`, `xai`, `together`, `fireworks`, `cerebras`, `openrouter`, `vllm`, `ollama` presets in [`providers/*.json`](./providers/) — the very same files the onboarding picker, `/providers` and `/auth set` read, so adding one is the whole change
 - **Storage backends**: `Jsonl` (default, zero native deps), `Memory` (tests), `Sqlite` — switched via `HARBOR_STORAGE`
 - **Terminal UIs**:
   - `Harbor.Tui.CellForge` — the canonical fullscreen render path: own raw-mode input pipeline (kitty keyboard protocol, SGR mouse 1000/1002/1006, bracketed paste), cell-grid diff renderer (`DiffEngine`), zero-allocation steady-state budgets, virtualized chat timeline with streaming markdown and unified-diff blocks. Opt-in, see below.

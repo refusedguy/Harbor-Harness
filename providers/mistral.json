@@ -2,6 +2,8 @@
   "id": "mistral",
   "displayName": "Mistral AI",
   "description": "Mistral models — Large, Medium, Small, Codestral, Pixtral.",
+  "defaultModel": "mistral-large-latest",
+  "setupHint": "Get a key at https://console.mistral.ai",
   "baseUrl": "https://api.mistral.ai/v1",
   "apiType": "openai-compatible",
   "authType": "bearer",
@@ -18,5 +20,6 @@
   "capabilities": {
     "streaming": "true",
     "toolUse": "true"
-  }
+  },
+  "priority": 70
 }

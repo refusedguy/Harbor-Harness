@@ -2,6 +2,8 @@
   "id": "groq",
   "displayName": "Groq",
   "description": "Groq's ultra-fast LPU inference. Llama, Mixtral, Gemma models.",
+  "defaultModel": "llama-3.3-70b-versatile",
+  "setupHint": "Get a key at https://console.groq.com",
   "baseUrl": "https://api.groq.com/openai/v1",
   "apiType": "openai-compatible",
   "authType": "bearer",
@@ -18,5 +20,6 @@
   "capabilities": {
     "streaming": "true",
     "toolUse": "true"
-  }
+  },
+  "priority": 60
 }

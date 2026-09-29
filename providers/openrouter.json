@@ -3,6 +3,8 @@
   "id": "openrouter",
   "displayName": "OpenRouter",
   "description": "Multi-provider router with 200+ models from Anthropic, OpenAI, Google, Meta, Mistral, and others.",
+  "defaultModel": "anthropic/claude-3.5-sonnet",
+  "setupHint": "Get a key at https://openrouter.ai",
   "baseUrl": "https://openrouter.ai/api/v1",
   "apiType": "openai-compatible",
   "authType": "bearer",
@@ -29,5 +31,6 @@
     "reasoning": "auto"
   },
   "timeout": 120,
-  "retries": 3
+  "retries": 3,
+  "priority": 40
 }

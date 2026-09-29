@@ -2,6 +2,8 @@
   "id": "together",
   "displayName": "Together AI",
   "description": "Together AI's hosted open-source models.",
+  "defaultModel": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+  "setupHint": "Get a key at https://api.together.xyz",
   "baseUrl": "https://api.together.xyz/v1",
   "apiType": "openai-compatible",
   "authType": "bearer",
@@ -18,5 +20,6 @@
   "capabilities": {
     "streaming": "true",
     "toolUse": "true"
-  }
+  },
+  "priority": 90
 }
