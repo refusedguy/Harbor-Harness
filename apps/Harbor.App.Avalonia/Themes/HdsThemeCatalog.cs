@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Avalonia.Controls;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
 using Avalonia.Styling;
@@ -157,7 +156,7 @@ public static class HdsThemeCatalog
     }
 
     private static bool TryGetVariant(
-        IResourceNode palette,
+        ResourceInclude palette,
         string name,
         [NotNullWhen(true)] out ThemeVariant? variant)
     {
@@ -195,7 +194,7 @@ public static class HdsThemeCatalog
     }
 
     private static bool TryGetBrush(
-        IResourceNode palette,
+        ResourceInclude palette,
         string name,
         string key,
         [NotNullWhen(true)] out IBrush? brush)
@@ -213,7 +212,7 @@ public static class HdsThemeCatalog
         return false;
     }
 
-    private static bool TryGet(IResourceNode palette, string key, out object? value) =>
+    private static bool TryGet(ResourceInclude palette, string key, out object? value) =>
         palette.TryGetResource(key, ThemeVariant.Default, out value);
 
     /// <summary>
