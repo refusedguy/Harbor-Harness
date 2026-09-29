@@ -63,18 +63,37 @@ public sealed record MessageEndEvent(AssistantMessage Message) : AgentEvent;
 /// <summary>
 ///     Emitted just before a tool call is executed.
 /// </summary>
+/// <remarks>
+///     <b>#680:</b> <paramref name="Glyph" /> is the calling tool's own
+///     <c>ITool.Glyph</c>, published here so every renderer can draw the tool's
+///     icon by READING the event instead of keeping a tool-name-keyed table of its
+///     own. It used to be one such table per rendering path — three of them, two
+///     disagreeing, and all three carrying a dead <c>"web_fetch"</c> arm for a tool
+///     named <c>webfetch</c>. Null on legacy emitters and from hosts that predate
+///     it; consumers fall back to a generic marker, never to a name lookup.
+/// </remarks>
+/// <param name="ToolCallId">Correlation id shared with the matching end event.</param>
+/// <param name="ToolName">The tool's stable name.</param>
+/// <param name="Args">The raw arguments the call was made with.</param>
+/// <param name="Glyph">The tool's declared glyph, or <c>null</c>.</param>
 public sealed record ToolExecutionStartEvent(
     string ToolCallId,
     string ToolName,
-    JsonElement Args) : AgentEvent
+    JsonElement Args,
+    string? Glyph = null) : AgentEvent
 {
     /// <summary>
     ///     Create an event from possibly short-lived <see cref="JsonElement" />
     ///     args. The args are cloned so the event owns them beyond the source
     ///     <see cref="JsonDocument" /> lifetime (#87).
     /// </summary>
-    public static ToolExecutionStartEvent Create(string toolCallId, string toolName, JsonElement args) =>
-        new(toolCallId, toolName, args.ValueKind == JsonValueKind.Undefined ? args : args.Clone());
+    public static ToolExecutionStartEvent Create(
+        string toolCallId, string toolName, JsonElement args, string? glyph = null) =>
+        new(
+            toolCallId,
+            toolName,
+            args.ValueKind == JsonValueKind.Undefined ? args : args.Clone(),
+            glyph);
 }
 
 /// <summary>

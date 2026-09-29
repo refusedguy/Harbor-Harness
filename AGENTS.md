@@ -272,6 +272,7 @@ public sealed class MyTool : ITool
 {
     public ToolName Name => ToolName.Create("my_tool");
     public string DisplayName => "My Tool";
+    public string Glyph => "🔧";                        // optional; the icon every UI draws (#680)
     public string Description => "Does something useful";
     public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
     public string? PromptSnippet => "my_tool: Does something";

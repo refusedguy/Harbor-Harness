@@ -993,10 +993,21 @@ public sealed class AvaloniaUiTests
         var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
         var partial = Harbor.Abstractions.Models.AssistantMessage.Empty(
             "e2e-tool-session", "qwen2.5-coder:7b");
+
+        // The card is projected from the EXECUTION event, not the LLM-level one
+        // (#680). ChatViewModelBase used to parse the rendered transcript line
+        // "→ read" back into a structured call; it no longer does, and the reducer
+        // fills Chat.ToolCalls from ToolExecutionStartEvent — the same event
+        // ToolDispatcher publishes, carrying the args and the tool's own glyph.
+        // The LLM-level start is still published because production publishes
+        // both: it is what writes the transcript line the card sits under.
         await eventBus.PublishAsync(new MessageUpdateEvent(
             new ToolCallStartEvent("tc-e2e-1", "read"), partial)).ConfigureAwait(false);
-        await eventBus.PublishAsync(new MessageUpdateEvent(
-            new ToolCallDeltaEvent("tc-e2e-1", "{\"path\":\"/test.txt\"}"), partial)).ConfigureAwait(false);
+        await eventBus.PublishAsync(ToolExecutionStartEvent.Create(
+            "tc-e2e-1",
+            "read",
+            JsonDocument.Parse("""{"path":"/test.txt"}""").RootElement.Clone(),
+            "▸")).ConfigureAwait(false);
 
         // Poll for the tool call card text instead of a fixed delay.
         bool sawTool = await Driver.WaitForRenderedTextAsync("read", TimeSpan.FromSeconds(3))
@@ -1005,9 +1016,12 @@ public sealed class AvaloniaUiTests
 
         await Driver.ScreenshotAsync("24-tool-call-card").ConfigureAwait(false);
 
-        // Close the call through the matching production event.
-        await eventBus.PublishAsync(new MessageUpdateEvent(
-            new ToolCallEndEvent("tc-e2e-1", "read", System.Text.Json.JsonDocument.Parse("{}").RootElement), partial)).ConfigureAwait(false);
+        // Close the call through the matching production event — the execution
+        // end, not the LLM-level one, which the reducer does not act on.
+        await eventBus.PublishAsync(new ToolExecutionEndEvent(
+            "tc-e2e-1",
+            Harbor.Abstractions.Models.ToolResult.Success("ok"),
+            false)).ConfigureAwait(false);
     }
 
     /// <summary>

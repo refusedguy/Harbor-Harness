@@ -149,6 +149,23 @@ public sealed record UiState
     public UiState AddLine(ChatRole role, string text, string? toolCallId = null) =>
         this with { Chat = Chat.AddLine(role, text, toolCallId) };
 
+    /// <summary>
+    ///     Record a tool invocation in the structured slice the UI reads (#680),
+    ///     beside the display line the transcript draws.
+    /// </summary>
+    public UiState PutToolCall(ToolCallSnapshot call) => this with { Chat = Chat.PutToolCall(call) };
+
+    /// <summary>
+    ///     Close an in-flight call with its result (#680). Returns <c>this</c> when
+    ///     the id is unknown, matching <see cref="SetLine" />: the store skips
+    ///     re-stamping a returned input, so a no-op must not look like a change.
+    /// </summary>
+    public UiState CompleteToolCall(string toolCallId, ToolCallState status, string resultPreview)
+    {
+        var chat = Chat.CompleteToolCall(toolCallId, status, resultPreview);
+        return ReferenceEquals(chat, Chat) ? this : this with { Chat = chat };
+    }
+
     /// <summary>Replace a line at the given index (used only for in-place edits if needed).</summary>
     public UiState SetLine(int index, ChatRole role, string text)
     {

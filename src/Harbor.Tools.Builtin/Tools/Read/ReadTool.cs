@@ -42,6 +42,10 @@ public sealed class ReadTool : ITool
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
 
     public string DisplayName => "Read";
+
+    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
+    public string Glyph => "▸";
+
     public string Description =>
         "Read a file. Text: returns numbered lines (use offset/limit for large files). " +
         "Images: returns path/mime/size (vision payload depends on host wiring).";

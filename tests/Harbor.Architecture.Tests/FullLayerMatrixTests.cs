@@ -307,7 +307,15 @@ public class FullLayerMatrixTests
             "Harbor.Abstractions",
             "Harbor.Ui.Framework.ViewModels",
             "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services",
-            "Harbor.Ui.Framework.Sessions", "Harbor.Ui.Framework.Abstractions",
+            "Harbor.Ui.Framework.Sessions",
+            // #680: "Harbor.Ui.Framework.Abstractions" was permitted here because
+            // ChatViewModelBase aliased ToolCallState (which lives there) for the
+            // one line of its hand-rolled tool-line parser that recovered a status
+            // by sniffing a "✗" prefix. With the parser gone the alias went with
+            // it, and Matrix_AllowedEntries_AreLive reported the row as stale —
+            // which is the guard working: a permitted edge nobody takes is a lie
+            // about the assembly's dependencies.
+            //
             // #679: the desktop DiffViewModel/DiffViewModelBase read the core
             // diff algorithm and the diff-format parsers
             // (Rendering.Widgets) rather than each re-deriving a diff by index

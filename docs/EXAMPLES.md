@@ -71,6 +71,12 @@ tb.AddTool(lf => new TimeTool(lf.CreateLogger<TimeTool>()));
 registry.Freeze();
 ```
 
+`Glyph` (optional, defaults to a generic 🔧) is the icon every UI surface draws
+next to your tool's name. It rides the tool-call event into the UI state, so
+declaring it here is the only step — no renderer keeps a table of tool names, and
+adding this tool changed none of them (#680). `SafetyProfile` has no default and
+must be declared; see [TOOLS_CATALOG.md](./TOOLS_CATALOG.md).
+
 ### 2. Validate args with `Result`
 
 Всегда проверяй аргументы до `ExecuteAsync`. Если валидация упала — LLM увидит ошибку и попробует снова.

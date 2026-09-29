@@ -139,14 +139,10 @@ public static class PanelRows
             for (int i = 0; i < changes.Count; i++)
             {
                 var change = changes[i];
-                string icon = change.ToolName switch
-                {
-                    "edit" => "✎",
-                    "write" => "✚",
-                    "read" => "▸",
-                    "patch" => "⌥",
-                    _ => "·",
-                };
+                // The tool's own glyph, carried on the record (#680). This used to be a
+                // four-arm table keyed by tool name — the fourth such table in the
+                // UI layer, and the three chat-card ones already disagreed.
+                string icon = change.Glyph.Length > 0 ? change.Glyph : "·";
                 string ok = change.IsError ? "✗" : "✓";
                 string path = ShortenPath(change.FilePath, Math.Max(4, width - 12));
                 rows.Add($"{icon} {ok} {path}");

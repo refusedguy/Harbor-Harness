@@ -1196,6 +1196,7 @@ public sealed class WebFetchTool : ITool
     // ── 4. ITool members ─────────────────────────────────────────────
     public ToolName Name => ToolName.Create("webfetch");
     public string DisplayName => "WebFetch";
+    public string Glyph => "🌍";
     public string Description => "Fetch a URL and return markdown-converted content ...";
     public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
     public string? PromptSnippet => "webfetch: Fetch a URL and return markdown";
@@ -1251,9 +1252,13 @@ public sealed class WebFetchTool : ITool
 ### Step 3 — Quality rules (must follow)
 
 1. **`sealed` class** — prevents inheritance; tools are leaf strategies.
-2. **`ITool` implementation** — all 7 members: `Name`, `DisplayName`, `Description`,
-   `ParameterSchema`, `ExecutionMode`, `PromptSnippet`, `PromptGuidelines`, plus
-   `ValidateArguments` + `ExecuteAsync`.
+2. **`ITool` implementation** — all members: `Name`, `DisplayName`, `Glyph`,
+   `Description`, `ParameterSchema`, `ExecutionMode`, `SafetyProfile`,
+   `PromptSnippet`, `PromptGuidelines`, plus `ValidateArguments` + `ExecuteAsync`.
+   `SafetyProfile` (#557) has no default and the compiler will refuse you without
+   it. `Glyph` (#680) does default to a generic 🔧 — declare one if your tool has
+   a natural icon, because the glyph travels with the call into every UI surface
+   and no renderer keeps a table of tool names any more.
 3. **`ConfigureAwait(false)`** everywhere — required for library code, avoids
    SynchronizationContext capture.
 4. **`CancellationToken` threaded through** — never ignore; respect `context.Abort`.

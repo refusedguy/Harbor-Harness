@@ -32,6 +32,10 @@ public sealed class PatchTool : ITool
     /// <inheritdoc />
     public string DisplayName => "Patch";
 
+    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
+    public string Glyph => "⌥";
+
+
     /// <inheritdoc />
     public string Description =>
         "Apply a unified-diff patch to a file. Context lines must match exactly. " +

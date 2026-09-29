@@ -399,6 +399,17 @@ public sealed class DefaultInterfaceMemberRule
             ""),
         new(
             "Harbor.Abstractions.Tools.ITool",
+            "Glyph",
+            DimDirection.Conservative,
+            "Returns ToolGlyphs.Default — a generic wrench. Nothing is accepted, nothing is "
+            + "swallowed, and the omission is visible on screen: a tool with no glyph of its own "
+            + "looks unspecific rather than looking like some other tool (#680). This is the "
+            + "direction #579's convention requires, and it is why the glyph can be a default "
+            + "at all — a required member would have meant editing every tool, plugin and test "
+            + "double for a cosmetic field.",
+            ""),
+        new(
+            "Harbor.Abstractions.Tools.ITool",
             "ValidateArguments",
             DimDirection.Permissive,
             "Returns Result, so the only sane default is Success — i.e. accept any argument shape. "

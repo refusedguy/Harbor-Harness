@@ -20,6 +20,10 @@ public sealed class WriteTool : ITool
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
 
     public string DisplayName => "Write";
+
+    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
+    public string Glyph => "✚";
+
     public string Description =>
         "Write content to a file (create or overwrite). Creates parent directories by default.";
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;

@@ -156,11 +156,42 @@ public static class PanelExtractors
         return result;
     }
 
-    /// <summary>Overload reading from <see cref="UiState.Chat.Lines" />.</summary>
+    /// <summary>
+    ///     Overload reading the transcript AND the structured tool calls
+    ///     (#680). This is the one that can fill <see cref="PanelFileChange.Glyph" />:
+    ///     the published snapshot carries the calling tool's own glyph, so the
+    ///     diff panel draws what the tool declared instead of consulting a table of
+    ///     its own.
+    /// </summary>
     public static IReadOnlyList<PanelFileChange> ExtractRecentChanges(UiState state, int maxCount = 8)
     {
         ArgumentNullException.ThrowIfNull(state);
-        return ExtractRecentChanges(state.Chat.Lines, maxCount);
+
+        IReadOnlyList<PanelFileChange> changes = ExtractRecentChanges(state.Chat.Lines, maxCount);
+        if (changes.Count == 0 || state.Chat.ToolCalls.IsEmpty)
+        {
+            return changes;
+        }
+
+        // Keyed by file path: the panel shows the FILE, and two calls may touch
+        // the same one.
+        var glyphByPath = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (ToolCallSnapshot call in state.Chat.ToolCalls)
+        {
+            if (call.IsDiffTool
+                && call.DiffFilePath is { Length: > 0 } path
+                && !glyphByPath.ContainsKey(path))
+            {
+                glyphByPath[path] = call.Glyph;
+            }
+        }
+
+        return
+        [
+            .. changes.Select(change => glyphByPath.TryGetValue(change.FilePath, out string? glyph)
+                ? change with { Glyph = glyph }
+                : change)
+        ];
     }
 
     /// <summary>
@@ -350,7 +381,18 @@ public sealed record TodoItem(string Marker, string Content);
 /// <param name="FilePath">File path from the tool args, or <c>&lt;unknown&gt;</c>.</param>
 /// <param name="DiffBody">Tool result body without the <c>✓</c>/<c>✗</c> prefix.</param>
 /// <param name="IsError">True when the result line carries the <c>✗</c> prefix.</param>
-public sealed record PanelFileChange(string ToolName, string FilePath, string DiffBody, bool IsError);
+/// <param name="Glyph">
+///     The tool's own glyph, carried rather than looked up (#680). A row renderer
+///     that wants an icon reads this field; the alternative was a fourth
+///     tool-name-keyed glyph table, and the three that already existed disagreed
+///     with each other.
+/// </param>
+public sealed record PanelFileChange(
+    string ToolName,
+    string FilePath,
+    string DiffBody,
+    bool IsError,
+    string Glyph = "");
 
 /// <summary>Severity of a collected diagnostic.</summary>
 public enum PanelDiagnosticSeverity
