@@ -28,12 +28,14 @@ public class TuiDemoRecorderTests
             Skip.Test(TuiDriver.NoPtySkipReason);
         }
 
-        // The 4 README GIFs — mirrors demo/*.tape (plain = renderer-switch variant).
+        // The 4 README GIFs — mirrors demo/*.tape. Three are recorded on the
+        // canonical CellForge cell-diff backend; plain is the renderer-switch
+        // variant and stays on the line renderer.
         var recordings = new (string Scene, string Tui, string Output)[]
         {
-            ("hero", "ansi", "assets/demo/hero-compressed.gif"),
-            ("markdown", "ansi", "assets/demo/markdown-compressed.gif"),
-            ("approval", "ansi", "assets/demo/approval-compressed.gif"),
+            ("hero", "cellforge", "assets/demo/hero-compressed.gif"),
+            ("markdown", "cellforge", "assets/demo/markdown-compressed.gif"),
+            ("approval", "cellforge", "assets/demo/approval-compressed.gif"),
             ("hero", "plain", "assets/demo/plain-compressed.gif"),
         };
 

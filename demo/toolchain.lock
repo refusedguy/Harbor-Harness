@@ -35,6 +35,10 @@
 #                        fire — that was the ±30 % size swing.
 #   DEMO_TAIL_SECONDS    settled-screen hold after the demo finished, so the
 #                        last frames are always the finished scene.
+#   DEMO_CELLFORGE_STEP_MS  frame-locked pacing for the cell-diff backend: the
+#                        renderer holds each painted frame for this long, since
+#                        the cell-diff frame pipeline cannot be paced from a
+#                        shell pipe (see below).
 #
 # shell-sourceable and python-parseable: KEY=VALUE, '#' comments.
 
@@ -97,4 +101,34 @@ DEMO_PROMPT="harbor-demo\$ "
 # run or the recording is cut off mid-scene. DEMO_TAPE_TAIL_SECONDS is that
 # value; a 2 s tail left only the first 3 lines in the GIF.
 DEMO_LINE_HOLD=0.25
-DEMO_TAPE_TAIL_SECONDS=20
+
+# CellForge (canonical cell-diff backend) playback — issue #440.
+#
+# `harbor demo --tui cellforge` paints whole frames into the alternate screen
+# instead of writing lines, so it cannot be paced by demo/run-scene.sh: a pipe
+# would replace the measured window with the renderer's 80x24 fallback grid and
+# `scrub`/`pace` would write into the middle of a painted frame. The pacing
+# therefore lives where the frames are produced — the playback holds each painted
+# frame for HARBOR_DEMO_STEP_MS, which run-scene.sh exports from the value below.
+#
+# The same frame-locked rule as DEMO_LINE_HOLD: one step must be a whole number
+# of 1/GIF_FPS sampling intervals, or a screen slips between two captures and
+# the two passes of the record-twice check end up comparing different screen
+# sequences. 250 ms = 3 x 1/12 s, the same multiple DEMO_LINE_HOLD uses.
+DEMO_CELLFORGE_STEP_MS=250
+
+# The cell-diff path holds after the CLI exits, before the script returns.
+# Optional override: when set, run-scene.sh sleeps this many seconds instead of
+# the derived default (DEMO_TAPE_TAIL_SECONDS + 30). The shell prompt the
+# recorder's terminal prints afterwards repaints the restored console, and
+# whether a sampling tick lands before or after it is a race - one pass would
+# show the prompt, the next would not. Holding past the tape's trailing Sleep
+# means the prompt can only ever arrive after the recorder has stopped, so it
+# costs nothing.
+
+# Trailing Sleep every tape records. The cell-diff scenes are longer than the
+# line ones (boot plus a fixed number of held frames, not one held line each),
+# so this covers the whole run: a tail that is too short does not merely look
+# worse, the recorder stops mid-scene and the GIF is silently missing most of
+# the output.
+DEMO_TAPE_TAIL_SECONDS=34

@@ -205,7 +205,8 @@ public sealed class TuiDriver : IE2eDriver
     /// <param name="tuiName">
     ///     Value of the <c>HARBOR_TUI</c> env var. One of:
     ///     <c>spectre-tui</c>, <c>termina</c>, <c>terminal-gui</c>, <c>razor</c>,
-    ///     <c>plain</c>, <c>ansi</c>, <c>spectre</c>, <c>fullscreen</c>.
+    ///     <c>plain</c>, <c>ansi</c>, <c>spectre</c>, <c>fullscreen</c>,
+    ///     <c>cellforge</c>.
     /// </param>
     /// <param name="screenshotDir">
     ///     Optional directory for screenshot capture. If provided, screenshots will

@@ -36,7 +36,7 @@ internal static class HelpVerbs
                           Harbor — modular AI coding agent.
                           Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|demo|setup|auth|config|providers|models|sessions|mcp|serve|tui|events|storage|logs|help|version] [--script <path>]
 
-                          demo [--scene hero|markdown|approval|all] [--tui ansi|plain]
+                          demo [--scene hero|markdown|approval|all] [--tui ansi|plain|cellforge]
                                             Scripted demo with an in-process mock LLM — no API keys.
                                             The GIF recorder (tests/Harbor.E2E.Framework/TuiDemoRecorder)
                                             and the VHS tapes (demo/*.tape) drive this command.

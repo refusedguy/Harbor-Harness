@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Abstractions.Permissions;
+using Harbor.App.Cli.Hosting;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -16,15 +17,47 @@ namespace Harbor.App.Cli.Demo;
 /// </summary>
 internal static class DemoRuntime
 {
-    /// <summary>Register the demo permission service with the auto-approving gate asker.</summary>
-    internal static IServiceCollection AddDemoRuntime(this IServiceCollection services) =>
-        services
+    /// <summary>
+    ///     Env var <c>HARBOR_DEMO_TUI</c> — the renderer <c>harbor demo</c> was asked
+    ///     for. Set by <c>DemoCommand</c> alongside <c>HARBOR_DEMO</c>.
+    /// </summary>
+    internal const string TuiEnvVar = "HARBOR_DEMO_TUI";
+
+    /// <summary>
+    ///     Register the demo permission service. The scripted asker auto-approves
+    ///     every request; how it *shows* that depends on the renderer.
+    /// </summary>
+    internal static IServiceCollection AddDemoRuntime(this IServiceCollection services)
+    {
+        if (IsCellForgePlayback())
+        {
+            // The cell-diff frame owns every byte on screen. A card written
+            // through ITuiRenderer would land in the middle of a painted frame,
+            // so the asker only resolves the request: the gate the README shows
+            // is replayed onto the timeline by DemoCellForgeScreen, which is the
+            // only writer while the alternate screen is up.
+            return services.AddSingleton<IPermissionService>(sp => new PermissionService(
+                sp.GetRequiredService<IAgentRegistry>(),
+                sp.GetRequiredService<ILogger<PermissionService>>(),
+                (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, PersistDecision: false)),
+                workspaceRoot: Directory.GetCurrentDirectory()));
+        }
+
+        return services
             .AddSingleton<DemoApprovalGate>()
             .AddSingleton<IPermissionService>(sp => new PermissionService(
                 sp.GetRequiredService<IAgentRegistry>(),
                 sp.GetRequiredService<ILogger<PermissionService>>(),
                 (request, ct) => sp.GetRequiredService<DemoApprovalGate>().AskAsync(request, ct),
                 workspaceRoot: Directory.GetCurrentDirectory()));
+    }
+
+    /// <summary>True when the demo is playing the fullscreen cell-diff backend.</summary>
+    private static bool IsCellForgePlayback() =>
+        string.Equals(
+            Environment.GetEnvironmentVariable(TuiEnvVar),
+            TuiMode.CellForgeId,
+            StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>

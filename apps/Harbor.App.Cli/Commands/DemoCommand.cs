@@ -4,6 +4,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Demo;
+using Harbor.App.Cli.Hosting;
 using Harbor.Application.Configuration;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,12 +28,19 @@ namespace Harbor.App.Cli.Commands;
 ///     </para>
 ///     <para>
 ///         Supported flags: <c>--scene hero|markdown|approval|all</c>,
-///         <c>--tui ansi|plain</c>, <c>--chunk-delay &lt;ms&gt;</c>.
+///         <c>--tui ansi|plain|cellforge</c>, <c>--chunk-delay &lt;ms&gt;</c>.
+///     </para>
+///     <para>
+///         <c>cellforge</c> is the canonical backend the README GIFs are recorded
+///         on (issue #440). It paints whole frames into the alternate screen
+///         instead of writing lines, so it is driven by
+///         <see cref="DemoCellForgeScreen" /> rather than through
+///         <see cref="ITuiRenderer" />.
 ///     </para>
 /// </remarks>
 public sealed class DemoCommand : ICommand
 {
-    private static readonly HashSet<string> SupportedTuis = new(StringComparer.OrdinalIgnoreCase) { "ansi", "plain" };
+    private static readonly HashSet<string> SupportedTuis = new(StringComparer.OrdinalIgnoreCase) { "ansi", "plain", "cellforge" };
 
     private readonly TextWriter _output;
     private readonly TextWriter _error;
@@ -59,8 +67,12 @@ public sealed class DemoCommand : ICommand
         DemoLlmServer server = new(options.ChunkDelayMs);
         await server.StartAsync(ct).ConfigureAwait(false);
         string demoHome = CreateDemoHome(server.BaseUri);
+        // The cell-diff backend is not line-oriented, so nothing scrubs the
+        // throw-away HOME for it (a pipe would break the frame pipeline too) —
+        // the GUID must therefore never reach the recording in the first place.
+        string shownHome = IsCellForge(options.Tui) ? "<demo-home>" : demoHome;
         await _output.WriteLineAsync("harbor demo — scripted showcase, mock LLM, no API keys").ConfigureAwait(false);
-        await _output.WriteLineAsync($"  scene: {options.Scene}  tui: {options.Tui}  home: {demoHome}").ConfigureAwait(false);
+        await _output.WriteLineAsync($"  scene: {options.Scene}  tui: {options.Tui}  home: {shownHome}").ConfigureAwait(false);
 
         try
         {
@@ -91,7 +103,14 @@ public sealed class DemoCommand : ICommand
         Environment.SetEnvironmentVariable("DEMO_API_KEY", "demo-key");
         Environment.SetEnvironmentVariable("HARBOR_SKIP_ONBOARDING", "1");
         Environment.SetEnvironmentVariable("HARBOR_DEMO", "1");
+        // The demo runtime reads this before the host is built, to know whether
+        // the scripted approval gate may paint a card through ITuiRenderer
+        // (line renderers) or must stay silent (the cell-diff frame owns stdout).
+        Environment.SetEnvironmentVariable(DemoRuntime.TuiEnvVar, options.Tui);
     }
+
+    /// <summary>True for the canonical fullscreen cell-diff backend (and its legacy alias).</summary>
+    private static bool IsCellForge(string tui) => TuiMode.IsCellForgeId(tui);
 
     /// <summary>Create a temp HOME containing the mock provider config + onboarding-complete marker.</summary>
     private static string CreateDemoHome(Uri mockBaseUri)
@@ -140,23 +159,22 @@ public sealed class DemoCommand : ICommand
 
     /// <summary>
     ///     Play the selected scenes through the real agent pipeline — one
-    ///     session, one prompt per scene, streamed through the renderer exactly
-    ///     like <c>harbor ask</c>.
+    ///     session, one prompt per scene. The two renderer families take
+    ///     different routes through the same turn: the streaming/plain backends
+    ///     write lines through <see cref="ITuiRenderer" />, while the canonical
+    ///     cell-diff backend owns the alternate screen and is driven by
+    ///     <see cref="DemoCellForgeScreen" /> (#440).
     /// </summary>
     private async Task<int> RunScenesAsync(DemoOptions options, CancellationToken ct)
     {
         using IHost host = Hosting.HostBuilder.Build();
         IServiceProvider sp = host.Services;
 
-        var renderer = sp.GetRequiredService<ITuiRenderer>();
         var eventBus = sp.GetRequiredService<IEventBus>();
         var agent = sp.GetRequiredService<IAgent>();
         var sessionStore = sp.GetRequiredService<ISessionStore>();
         var agentRegistry = sp.GetRequiredService<IAgentRegistry>();
         var configStore = sp.GetRequiredService<IConfigStore>();
-
-        await renderer.InitializeAsync().ConfigureAwait(false);
-        eventBus.Subscribe(async (evt, c) => await renderer.RenderAsync(evt, c).ConfigureAwait(false));
 
         HarborConfig config = (await configStore.LoadAsync().ConfigureAwait(false)).Value;
         var defaultAgent = agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
@@ -173,7 +191,22 @@ public sealed class DemoCommand : ICommand
 
         agent.Initialize(sessionResult.Value, defaultAgent);
 
-        foreach (DemoScene scene in DemoScenes.Select(options.Scene))
+        DemoScene[] scenes = [.. DemoScenes.Select(options.Scene)];
+
+        if (IsCellForge(options.Tui))
+        {
+            // The closing line is written by the playback itself, in the same
+            // terminal write as the leave-alt-screen sequence — see
+            // DemoCellForgeScreen for why the two must not be split.
+            return await new DemoCellForgeScreen(sp, eventBus, agent, SceneTuples(scenes))
+                .RunAsync(ct).ConfigureAwait(false);
+        }
+
+        var renderer = sp.GetRequiredService<ITuiRenderer>();
+        await renderer.InitializeAsync().ConfigureAwait(false);
+        eventBus.Subscribe(async (evt, c) => await renderer.RenderAsync(evt, c).ConfigureAwait(false));
+
+        foreach (DemoScene scene in scenes)
         {
             await renderer.WriteLineAsync($"\n━━━ harbor demo · scene: {scene.Id} ━━━ provider: demo (mock) · tui: {options.Tui}").ConfigureAwait(false);
             await renderer.WriteLineAsync("> " + scene.Prompt).ConfigureAwait(false);
@@ -194,10 +227,22 @@ public sealed class DemoCommand : ICommand
         return 0;
     }
 
+    /// <summary>Flatten the scene scripts into the shape the cell-diff playback takes.</summary>
+    private static (string Id, string Prompt)[] SceneTuples(DemoScene[] scenes)
+    {
+        var tuples = new (string Id, string Prompt)[scenes.Length];
+        for (int i = 0; i < scenes.Length; i++)
+        {
+            tuples[i] = (scenes[i].Id, scenes[i].Prompt);
+        }
+
+        return tuples;
+    }
+
     private void PrintUsage()
     {
         _error.WriteLine("""
-                         Usage: harbor demo [--scene hero|markdown|approval|all] [--tui ansi|plain] [--chunk-delay <ms>]
+                         Usage: harbor demo [--scene hero|markdown|approval|all] [--tui ansi|plain|cellforge] [--chunk-delay <ms>]
 
                            Plays a scripted demo (mock LLM, no API keys) through the real
                            agent pipeline. Output is meant to be recorded into GIFs:
@@ -261,7 +306,7 @@ public sealed class DemoCommand : ICommand
 
             if (!SupportedTuis.Contains(tui))
             {
-                error.WriteLine("harbor demo: --tui must be 'ansi' or 'plain' (interactive shells are not scriptable)");
+                error.WriteLine("harbor demo: --tui must be 'ansi', 'plain' or 'cellforge' (other shells are not scriptable)");
                 return null;
             }
 
@@ -308,11 +353,17 @@ public sealed class DemoCommand : ICommand
 
         private static readonly DemoReply[] HeroReplies =
         [
+            // Line-broken on purpose: the cell-diff stream coalescer reveals
+            // *completed source lines* into the timeline block, so a single
+            // unbroken paragraph would land on screen in one jump and the
+            // recorded hero scene would show no streaming at all.
             DemoReply.FromText(
-                "Harbor is a modular .NET 10 AI coding agent harness. Every concern — providers, storage, TUI " +
-                "rendering, tool execution, permissions — lives behind an interface and swaps through DI. It ships " +
-                "4 native LLM clients plus 13 JSON-config providers, 18 builtin tools, JSONL-first session storage, " +
-                "and a plugin host that compiles C# sources at startup — all performance-first and NativeAOT-ready."),
+                "Harbor is a modular .NET 10 AI coding agent harness — every concern lives behind an\n" +
+                "interface and swaps through DI.\n\n" +
+                "It ships 4 native LLM clients plus 13 JSON-config providers, 18 builtin tools,\n" +
+                "JSONL-first session storage, and a plugin host that compiles C# sources at startup.\n\n" +
+                "Performance-first, NativeAOT-ready, and it renders through CellForge — a fullscreen\n" +
+                "cell-diff terminal renderer with its own input pipeline and virtualized timeline."),
         ];
 
         private static readonly DemoReply[] MarkdownReplies =

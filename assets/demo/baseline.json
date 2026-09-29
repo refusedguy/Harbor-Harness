@@ -1,52 +1,52 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-28T21:50:00Z",
+  "generatedAt": "36539846878",
   "generator": ".github/workflows/demo.yml (drift gate, stdlib GIF walker)",
   "notes": "Per GIF: byte size, frame count, total duration, and a content-hash summary. `framesSha256` is the sha256 over every per-frame LZW payload digest, in frame order (that rollup is the per-frame content hash summary); `uniqueFrames` counts the distinct per-frame digests. The gate fails on a missing GIF, size above baseline + threshold, lost frames, or a duration change outside tolerance, and warns on anything smaller. Re-record with: gh workflow run demo.yml -f record_baseline=true",
   "gifs": {
     "hero": {
       "path": "assets/demo/hero-compressed.gif",
-      "bytes": 170659,
+      "bytes": 285948,
       "width": 1200,
       "height": 620,
-      "frames": 171,
-      "durationMs": 6840,
-      "uniqueFrames": 44,
-      "fileSha256": "7ab584c0af05b595d890782776606fed0edd0318e0f98167f3b39d30a3dd1e72",
-      "framesSha256": "5d8b69820be58c479f77566da6a5c25d34834c43f27d21d66e67a08f4184daf9"
+      "frames": 216,
+      "durationMs": 18000,
+      "uniqueFrames": 17,
+      "fileSha256": "0581164d62067fba24365d599b28eb65660ba4f89b83dc413ea75e0b438067f3",
+      "framesSha256": "e4bc2c387547727af1a3e893b7e006ac8580f00d56b00b133f434c7483ddb1b8"
     },
     "markdown": {
       "path": "assets/demo/markdown-compressed.gif",
-      "bytes": 413624,
+      "bytes": 239744,
       "width": 1200,
       "height": 620,
-      "frames": 171,
-      "durationMs": 6840,
-      "uniqueFrames": 35,
-      "fileSha256": "06c5f8bce755e10052a472763bd466b6264b606988b8327cbd2b58f8c6732253",
-      "framesSha256": "7847033f20daee5df035bdf526d9fd67ee05f8f2ef6bbaafbc6383f8f5d11b0a"
+      "frames": 204,
+      "durationMs": 17000,
+      "uniqueFrames": 16,
+      "fileSha256": "e35f35a2218e74b528bbe48172962193957fb79652057c8d6a8605bcbdfb474c",
+      "framesSha256": "78be83de196e830466c0f029cbc4bdb14ea974e56a1d9f50331e27a10837281a"
     },
     "approval": {
       "path": "assets/demo/approval-compressed.gif",
-      "bytes": 168941,
+      "bytes": 266127,
       "width": 1200,
       "height": 620,
-      "frames": 196,
-      "durationMs": 7840,
-      "uniqueFrames": 16,
-      "fileSha256": "63f34f7ab73b3abd6960de95733bf216ad889f6b9be1660b7f8c5d501c8d7ae6",
-      "framesSha256": "636549b2bfe6f67682b7ecd356bc0f766473fc93d591e6fd0466c806bae9c57b"
+      "frames": 312,
+      "durationMs": 26000,
+      "uniqueFrames": 25,
+      "fileSha256": "33c7b7b84b9c74c836d05930841056968bb0b2d846f47f0accb4fedac7804387",
+      "framesSha256": "fc0136d79ab788d8394d192eb8c858a8aeef0eded8627cadd49cb1ce7df260b3"
     },
     "plain": {
       "path": "assets/demo/plain-compressed.gif",
-      "bytes": 188024,
+      "bytes": 169574,
       "width": 1200,
       "height": 620,
-      "frames": 171,
-      "durationMs": 6840,
-      "uniqueFrames": 44,
-      "fileSha256": "83f6cdda8f4f3067e2acc8f044bef2ac1b9cd92a19ce0a303ff47ddb75be9cf2",
-      "framesSha256": "85f41ceb4033b8c7be27babb15b5d2e1aacf568c9d5cfd028474cb5d93a927b7"
+      "frames": 132,
+      "durationMs": 11000,
+      "uniqueFrames": 10,
+      "fileSha256": "5938e2edbf2c17f63960d7e4e98054a789b763fc5c990418d68bdedff9b0c7fc",
+      "framesSha256": "0fe12979e95194c7ae983b20d177e57373b72df90d3c739334d80715a134ea02"
     }
   }
 }
