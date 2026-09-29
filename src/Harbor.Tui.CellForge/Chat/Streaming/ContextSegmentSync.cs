@@ -6,8 +6,10 @@ namespace Harbor.Tui.CellForge.Streaming;
 /// Context-window feed extracted from <see cref="ChatScreenBridge"/> (#172,
 /// #75 follow-up): AgentStartEvent carries the resolved ModelInfo (resolved
 /// up front by the agent loop, so no provider/session lookup from the TUI
-/// layer), SessionStatsEvent carries cumulative totals; together they feed
-/// StatusViewModel.SetContext so the ctx bar segment lights up.
+/// layer) and StepFinishEvent carries the prompt tokens of the request the
+/// provider just accepted; together they feed StatusViewModel.SetContext so
+/// the ctx bar segment lights up. SessionStatsEvent is deliberately NOT a
+/// source here — its totals are session-cumulative spend (#623).
 /// </summary>
 internal sealed class ContextSegmentSync
 {
@@ -39,9 +41,15 @@ internal sealed class ContextSegmentSync
         RefreshContextSegment();
     }
 
-    public void NoteUsage(long tokensInput, long tokensOutput)
+    /// <summary>
+    ///     <paramref name="requestTokens" /> is the size of the request just sent
+    ///     (one provider call's prompt tokens), never session-cumulative spend —
+    ///     feeding the running total pinned the bar at 100% by turn 4 on a 128k
+    ///     window while the payload never grew. Fixes #623.
+    /// </summary>
+    public void NoteRequestSize(long requestTokens)
     {
-        _usedTokens = tokensInput + tokensOutput;
+        _usedTokens = requestTokens;
         _hasUsage = true;
         RefreshContextSegment();
     }
