@@ -39,7 +39,7 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 5. Read [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for high-level design + principles summary.
 6. Read [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for development workflow + **principles checklist** for PRs.
 7. Read [docs/ROADMAP.md](./docs/ROADMAP.md) for current state + planned next steps.
-8. If touching the interactive shell (`contrib/tui/Harbor.Tui.SpectreTui`, compiled into the default CLI build) or any renderer — read [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) for render-loop anatomy + recipes for opencode/kilocode/pi-agent features.
+8. If touching the interactive shell or any renderer — read [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) for render-loop anatomy + recipes for opencode/kilocode/pi-agent features. The canonical renderer is `src/Harbor.Tui.CellForge`; the interactive Spectre shell is `src/Harbor.Tui.Spectre` (the similarly-named `contrib/` copies are unmaintained, see the project map).
 9. Run `dotnet build` to make sure the project compiles.
 10. Run the affected test projects individually (`dotnet run --project tests/<Project> -c Release --no-build`) — **including `tests/Harbor.Architecture.Tests/`** after every project-reference change. `dotnet test` discovers zero tests in this repo (broken MTP bridge) — never use it.
 
@@ -84,8 +84,15 @@ src/Harbor.Extensions/, Harbor.Diagnostics.Abstractions/
 apps/Harbor.App.Cli/                  — CLI entry point, slash commands, REPL, HostBuilder DI root
 apps/Harbor.App.Avalonia/             — cross-platform desktop GUI
 
-contrib/tui/                          — extra interactive shells compiled into the default CLI build:
-                                        Harbor.Tui.SpectreTui (interactive shell), Harbor.Tui.Spectre.Fullscreen,
+contrib/                              — UNMAINTAINED, NOT COMPILED BY CI. Not in Harbor.slnx, no
+                                        ProjectReference from apps/ or src/ (the contrib/tui block in
+                                        Harbor.App.Cli.csproj is commented out; HarborWithSpectreTui is
+                                        defined nowhere, so six renderer factories in TuiBackendRegistry
+                                        sit behind an #if that never opens). Do NOT send work here and do
+                                        not expect CI to catch breakage in it. The supported renderers
+                                        are in src/ (CellForge, AnsiPlain, NickConsoleEx) and apps/.
+                                        What is here, kept for reference only:
+                                        Harbor.Tui.SpectreTui, Harbor.Tui.Spectre.Fullscreen,
                                         Harbor.Tui.{Spectre,TerminalGui,Termina,RazorConsole}
 contrib/apps/, contrib/scripting/, contrib/tests/ — WPF/Maui/Blazor apps, scripting stack, their tests
 
@@ -431,7 +438,7 @@ CS plugins are compiled in-memory via Roslyn at startup. Cached by source SHA-25
 
 ### Add a SpectreTUI feature (diff-view, slash-popup, file-tree, etc.)
 
-Если фича — в `contrib/tui/Harbor.Tui.SpectreTui/` (компилируется в дефолтную CLI-сборку; исходники физически в contrib после миграции sprint-2), **обязательно** прочтите [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) целиком. Краткий workflow:
+Если фича — в интерактивной оболочке, **обязательно** прочтите [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) целиком. Краткий workflow:
 
 1. **State** для фичи → добавить в `UiState` (immutable record), обновлять через `with`.
 2. **Transitions** → в `ChatAppReducer.Update` (pattern match на `AppMsg`). Не мутить state в renderer'е.
