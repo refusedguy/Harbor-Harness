@@ -158,8 +158,9 @@ public sealed class UnguardedResultReadRules
         var violations = new List<string>();
         foreach (string file in files)
         {
-            violations.AddRange(Matches(file, File.ReadAllText(file), ValueOffAwait));
-            violations.AddRange(Matches(file, File.ReadAllText(file), ValueOffGetResult));
+            string source = File.ReadAllText(file);
+            violations.AddRange(Matches(file, source, ValueOffAwait));
+            violations.AddRange(Matches(file, source, ValueOffGetResult));
         }
 
         violations.RemoveAll(v => IsAllowlisted(v));
@@ -259,6 +260,69 @@ public sealed class UnguardedResultReadRules
     }
 
     // ── Non-vacuity of the matchers: the fixed spellings must pass ───────────
+
+    [Test]
+    public async Task Matcher_IgnoresTheBadSpellingWhenItOnlyAppearsInCommentary()
+    {
+        // This is not hypothetical: writing the fix's "this used to be …" comment
+        // tripped the rule on its own fix, because the prose quotes the crash.
+        // A guard that flags the explanation of a bug is a guard whose allow-list
+        // starts growing on day one, and then it is decoration.
+        const string Commented = """
+            // #602: this was `(await store.LoadAsync()).Value`, which THROWS.
+            // The empty-registry fallback was `GetAllAgents()[0]`, and it threw too.
+            /* block form: (await store.LoadAsync().ConfigureAwait(false)).Value */
+            /// doc form: GetAllAgents()[0]
+            var loaded = await store.LoadAsync().ConfigureAwait(false);
+            if (loaded.IsFailure)
+            {
+                return 1;
+            }
+
+            HarborConfig config = loaded.IsSuccess ? loaded.Value : HarborConfig.Default;
+            """;
+
+        string[] code = StripComments(Commented).Split('\n');
+
+        await Assert.That(ValueOffAwait.IsMatch(string.Join('\n', code))).IsFalse()
+            .Because("rule 1 is about code; the comment above is the fix's own changelog");
+        await Assert.That(RegistryZeroIndex.IsMatch(string.Join('\n', code))).IsFalse()
+            .Because("rule 3 likewise — a doc comment naming the old expression is not a call to it");
+    }
+
+    [Test]
+    public async Task Matcher_StillFlagsRealCodeThatCarriesATrailingComment()
+    {
+        // The mirror of the test above, and the one that stops the stripper from
+        // being a loophole: blanking to end-of-line must not blank the CODE that
+        // precedes the comment.
+        const string Trailing = """
+            var config = (await _configStore.LoadAsync().ConfigureAwait(false)).Value; // the #602 crash
+            """;
+
+        string[] code = StripComments(Trailing).Split('\n');
+
+        await Assert.That(ValueOffAwait.IsMatch(string.Join('\n', code))).IsTrue()
+            .Because("a trailing note must not launder a real violation");
+    }
+
+    [Test]
+    public async Task Matcher_SurvivesAUrlInAStringLiteral()
+    {
+        // `//` inside a string is not a comment, and the two appear on the same
+        // line here precisely because that is the only arrangement that
+        // discriminates. Blank to the first `//` and this violation disappears —
+        // a guard that goes blind next to a log message is one somebody will
+        // switch off.
+        const string WithUrl = """
+            _logger.LogError("corrupt at https://example.invalid/config.json"); var n = (await s.LoadAsync()).Value;
+            """;
+
+        string[] code = StripComments(WithUrl).Split('\n');
+
+        await Assert.That(ValueOffAwait.IsMatch(string.Join('\n', code))).IsTrue()
+            .Because("the string literal must be tracked, not mistaken for the start of a comment");
+    }
 
     [Test]
     public async Task Matcher_AwaitValue_AcceptsTheFixedSpelling()
@@ -429,14 +493,146 @@ public sealed class UnguardedResultReadRules
         }
 
         string relative = Path.GetRelativePath(root, absolutePath).Replace('\\', '/');
-        string[] lines = source.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
+        string[] raw = source.Split('\n');
+        // Match against the COMMENT-STRIPPED projection, report the original text.
+        // A guard that flags the prose explaining the bug is a guard that gets
+        // deleted: this file's own header quotes the crash, and so does the fix's
+        // "this used to be …" comment. A rule which cannot tell code from
+        // commentary trains reviewers to reach for the allow-list.
+        string[] code = StripComments(source).Split('\n');
+
+        for (int i = 0; i < code.Length && i < raw.Length; i++)
         {
-            if (pattern.IsMatch(lines[i]))
+            if (pattern.IsMatch(code[i]))
             {
-                yield return $"{relative}:{i + 1}: {lines[i].Trim()}";
+                yield return $"{relative}:{i + 1}: {raw[i].Trim()}";
             }
         }
+    }
+
+    /// <summary>
+    ///     Blanks comment content while preserving every character offset and every
+    ///     newline, so line numbers in failure messages stay true.
+    /// </summary>
+    /// <remarks>
+    ///     A deliberately small scanner, not a C# parser: it tracks
+    ///     <c>//</c>, <c>/* */</c>, regular string literals and char literals, which
+    ///     is what it needs to survive the two things that actually appear next to a
+    ///     forbidden read — a trailing note about it, and a URL in a log message.
+    ///     Known limits, stated rather than hidden: a verbatim or interpolated
+    ///     string with an unbalanced quote inside an interpolation hole would
+    ///     desynchronise the rest of that line. Every limit here can only cause a
+    ///     MISS, never a false accusation, and the three positive controls below
+    ///     are what keep the scanner honest.
+    /// </remarks>
+    private static string StripComments(string source)
+    {
+        var blanked = new System.Text.StringBuilder(source.Length);
+        bool inBlockComment = false;
+        bool inString = false;
+        bool inChar = false;
+        bool escaped = false;
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            char c = source[i];
+            char next = i + 1 < source.Length ? source[i + 1] : '\0';
+
+            if (inBlockComment)
+            {
+                // Content is blanked, not preserved: a block comment that quotes
+                // the forbidden read is still a block comment.
+                blanked.Append(c == '\n' ? '\n' : ' ');
+                if (c == '*' && next == '/')
+                {
+                    blanked.Append(' ');
+                    i++;
+                    inBlockComment = false;
+                }
+
+                continue;
+            }
+
+            if (inString)
+            {
+                blanked.Append(c);
+                if (c == '\n')
+                {
+                    inString = false; // unterminated — recover rather than swallow the file
+                }
+                else if (escaped)
+                {
+                    escaped = false;
+                }
+                else if (c == '\\')
+                {
+                    escaped = true;
+                }
+                else if (c == '"')
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            if (inChar)
+            {
+                blanked.Append(c);
+                if (c == '\n')
+                {
+                    inChar = false;
+                }
+                else if (escaped)
+                {
+                    escaped = false;
+                }
+                else if (c == '\\')
+                {
+                    escaped = true;
+                }
+                else if (c == '\'')
+                {
+                    inChar = false;
+                }
+
+                continue;
+            }
+
+            if (c == '/' && next == '/')
+            {
+                // Blank to end of line, keeping the newline itself.
+                while (i < source.Length && source[i] != '\n')
+                {
+                    blanked.Append(' ');
+                    i++;
+                }
+
+                i--; // the loop's own ++ re-reads the newline
+                continue;
+            }
+
+            if (c == '/' && next == '*')
+            {
+                blanked.Append("  ");
+                i++;
+                inBlockComment = true;
+                continue;
+            }
+
+            blanked.Append(c);
+
+            if (c == '"')
+            {
+                inString = true;
+            }
+            else if (c == '\'')
+            {
+                inChar = true;
+            }
+        }
+
+        return blanked.ToString();
     }
 
     /// <summary>Whether a violation line names an allow-listed file.</summary>

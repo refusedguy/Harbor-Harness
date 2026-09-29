@@ -688,6 +688,24 @@ do. Production is not covered by that condition: `src`/`apps`/`contrib` keep CFE
 
 ### 5.6 What this cannot see — read a green CFE0001 as evidence, not proof
 
+- **A `.Value` read across an `await` is invisible — and that is the shape async code always uses.**
+  CFE0001 registers on `SimpleMemberAccessExpression` and resolves the **receiver** to an
+  `IPropertySymbol` on `CSharpFunctionalExtensions.Result`. For
+
+  ```csharp
+  var config = (await _configStore.LoadAsync().ConfigureAwait(false)).Value;
+  ```
+
+  the receiver is a parenthesized `AwaitExpression`, which has no symbol to resolve, so the node is
+  skipped. The synchronous spelling of the same hole is
+  `store.LoadAsync().GetAwaiter().GetResult().Value`, where the receiver is an invocation. Both
+  spellings were live defects (#602): a hand-edited `~/.harbor/config.json` with a trailing comma
+  makes `JsonConfigStore` return `Failure("config.json is corrupt: …")`, and the unguarded read
+  turned that into a `ResultFailureException` out of `harbor ask` and out of the interactive path.
+  `tests/Harbor.Architecture.Tests/UnguardedResultReadRules.cs` is the companion backstop for exactly
+  those two spellings, plus `GetAllAgents()[0]` — not a `Result` site at all, so no analyzer can
+  ever see it. The §5.2 counts are unaffected by #602: the sites it fixed were never counted,
+  because the analyzer never saw them.
 - **Hand-rolled `Result<T>` types are structurally invisible.** CFE0001 matches on the
   `CSharpFunctionalExtensions.Result` *symbol*. The defective shape in #561 —
   `IPluginCompiler.CompilationResult.Value => _assembly ?? throw …` with

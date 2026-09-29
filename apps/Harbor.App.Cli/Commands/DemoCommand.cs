@@ -176,14 +176,38 @@ public sealed class DemoCommand : ICommand
         var agentRegistry = sp.GetRequiredService<IAgentRegistry>();
         var configStore = sp.GetRequiredService<IConfigStore>();
 
-        HarborConfig config = (await configStore.LoadAsync().ConfigureAwait(false)).Value;
-        // Absent ⇒ the registry's first agent. Same shape as the `?? [0]` it
-        // replaces: a null element falls into the fallback arm exactly as it
-        // did when FirstOrDefault returned null, and `[0]` is only evaluated on
-        // the None branch (Match runs its fallback lazily).
-        var defaultAgent = agentRegistry.GetAllAgents()
+        // #602: this was `(await configStore.LoadAsync()).Value`, which THROWS
+        // ResultFailureException on a failed load — and a failed load is the
+        // ordinary state of a corrupt config.json. `harbor demo` points at a
+        // throw-away temp HOME, but the read is the same one, so the read is
+        // guarded the same way.
+        var configResult = await configStore.LoadAsync().ConfigureAwait(false);
+        if (configResult.IsFailure)
+        {
+            await _error.WriteLineAsync("harbor demo: config load failed: " + configResult.Error).ConfigureAwait(false);
+            return 1;
+        }
+
+        // IsSuccess ternary, not a bare `.Value` — the default arm is unreachable
+        // (the failure above already returned) and exists only to keep the read
+        // inside a shape CFE0001 models. NOT a silent fallback to the default
+        // provider.
+        HarborConfig config = configResult.IsSuccess ? configResult.Value : HarborConfig.Default;
+
+        // Absent ⇒ the registry's first agent; an empty registry is a reported
+        // failure rather than `GetAllAgents()[0]`, which threw on it (#602). The
+        // registry is read once.
+        IReadOnlyList<AgentDefinition> agents = agentRegistry.GetAllAgents();
+        Maybe<AgentDefinition> runAgent = agents
             .TryFirst(a => a.Name.Value == config.Agent)
-            .Match<AgentDefinition, AgentDefinition>(matched => matched, () => agentRegistry.GetAllAgents()[0]);
+            .Or(() => agents.TryFirst());
+        if (runAgent.HasNoValue)
+        {
+            await _error.WriteLineAsync("harbor demo: no agents are registered.").ConfigureAwait(false);
+            return 1;
+        }
+
+        AgentDefinition defaultAgent = runAgent.Value;
         string[] modelParts = config.EffectiveModel.Split('/', 2);
         var sessionResult = await sessionStore.CreateAsync(
             Environment.CurrentDirectory, defaultAgent.Name.Value, modelParts[0],

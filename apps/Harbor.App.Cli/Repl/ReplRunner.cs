@@ -106,21 +106,49 @@ internal sealed class ReplRunner
         // При отказе raw-режима — прозрачный откат на legacy-путь ниже.
         // (Plugin hot-reload watcher is resolved — thereby started — by the
         // composition root in Program.cs; disposal rides on host teardown.)
-        var earlyConfigResult = await _configStore.LoadAsync().ConfigureAwait(false);
-        var earlyConfig = earlyConfigResult.IsSuccess ? earlyConfigResult.Value : HarborConfig.Default;
+        //
+        // ONE read, ONE decision (#602). `IConfigStore.LoadAsync` really does
+        // fail: `JsonConfigStore.LoadCore` returns
+        // `Failure("config.json is corrupt: …")` on a JsonException, and a
+        // hand-edited config.json with a trailing comma is the ordinary trigger.
+        // This method used to spell that rule three different ways — two sites
+        // read `(await LoadAsync()).Value`, which THROWS ResultFailureException,
+        // and the third read `IsSuccess ? Value : Default`, which throws nothing
+        // and is worse: it quietly starts a session on the default provider and
+        // model, which is not the one the user configured. So the load error is
+        // reported once, with the parser's own composed message, and the run
+        // stops. The renderer is initialized first because that is the only
+        // channel available before the REPL starts.
+        var configResult = await _configStore.LoadAsync().ConfigureAwait(false);
+        if (configResult.IsFailure)
+        {
+            _logger.LogError("Config load failed: {Error}", configResult.Error);
+            await _renderer.InitializeAsync().ConfigureAwait(false);
+            await _renderer.WriteLineAsync($"Failed: {configResult.Error}").ConfigureAwait(false);
+            return 1;
+        }
+
+        // Read through the IsSuccess ternary rather than a bare `.Value`. CFE0001
+        // models this shape and does NOT model the early-return guard above —
+        // docs/ROP-API-INVENTORY.md §5.4 lists that shape among the false
+        // positives that need a pragma — and a guard this file would then depend
+        // on is not a guard. The default arm is unreachable in practice: the
+        // failure already returned above. It exists to satisfy the analyzer, NOT
+        // to paper over a failed load.
+        HarborConfig config = configResult.IsSuccess ? configResult.Value : HarborConfig.Default;
         if (TuiMode.IsCellForgeSelected())
         {
-            if (!earlyConfig.Ui.CellForge.Enabled)
+            if (!config.Ui.CellForge.Enabled)
             {
                 _logger.LogWarning("CellForge выбран (tui/env), но ui.consoleEx.enabled=false — используется legacy-рендер");
             }
-            else if (!earlyConfig.Onboarded)
+            else if (!config.Onboarded)
             {
                 _logger.LogInformation("CellForge отложен: onboarding не завершён — мастер требует legacy-рендер");
             }
             else
             {
-                var consoleResult = await RunCellForgeAsync(ct).ConfigureAwait(false);
+                var consoleResult = await RunCellForgeAsync(config, ct).ConfigureAwait(false);
                 if (consoleResult.IsSuccess)
                 {
                     return consoleResult.Value;
@@ -133,8 +161,6 @@ internal sealed class ReplRunner
         _logger.LogInformation("Interactive REPL starting — renderer={RendererType}", _renderer.GetType().Name);
         await _renderer.InitializeAsync().ConfigureAwait(false);
 
-        var configResult = await _configStore.LoadAsync().ConfigureAwait(false);
-        var config = configResult.IsSuccess ? configResult.Value : HarborConfig.Default;
         _logger.LogInformation("Config loaded: provider={Provider}, model={Model}, agent={Agent}, onboarded={Onboarded}",
             config.EffectiveProvider, config.EffectiveModel, config.Agent, config.Onboarded);
 
@@ -154,7 +180,22 @@ internal sealed class ReplRunner
                 await _renderer.WriteLineAsync($"Setup failed: {wizardResult.Error}").ConfigureAwait(false);
                 return 1;
             }
-            config = (await _configStore.LoadAsync().ConfigureAwait(false)).Value;
+            // The wizard claims to have written the file; re-read it so the
+            // session runs on what was actually persisted. Guarded, unlike the
+            // bare `.Value` this replaces — that threw ResultFailureException
+            // out of the REPL when the post-wizard write did not land (#602).
+            // A reload that fails is NOT survivable: continuing would start the
+            // session on `HarborConfig.Default` and throw away the answer the
+            // user just gave the wizard.
+            var reloadResult = await _configStore.LoadAsync().ConfigureAwait(false);
+            if (reloadResult.IsFailure)
+            {
+                _logger.LogError("Config reload after onboarding failed: {Error}", reloadResult.Error);
+                await _renderer.WriteLineAsync($"Setup failed: {reloadResult.Error}").ConfigureAwait(false);
+                return 1;
+            }
+
+            config = reloadResult.IsSuccess ? reloadResult.Value : HarborConfig.Default;
             _logger.LogInformation("Onboarding completed, config reloaded");
         }
 
@@ -167,13 +208,20 @@ internal sealed class ReplRunner
             await _renderer.WriteLineAsync(string.Empty).ConfigureAwait(false);
         }
 
-        // Absent ⇒ the registry's first agent. Same shape as the `?? [0]` it
-        // replaces: a null element falls into the fallback arm exactly as it
-        // did when FirstOrDefault returned null, and `[0]` is only evaluated on
-        // the None branch (Match/Or run their fallback lazily).
-        var defaultAgent = _agentRegistry.GetAllAgents()
-            .TryFirst(a => a.Name.Value == config.Agent)
-            .Match<AgentDefinition, AgentDefinition>(matched => matched, () => _agentRegistry.GetAllAgents()[0]);
+        // Absent ⇒ the registry's first agent; an EMPTY registry is a reported
+        // failure, not an index that throws (#602). `GetAllAgents()[0]` — which
+        // this replaces — threw ArgumentOutOfRangeException on an empty list,
+        // and an empty registry is exactly the state of a fresh install or of a
+        // failed plugin-load pass. It also enumerated the registry twice.
+        Maybe<AgentDefinition> resolvedAgent = FindRunAgent(config);
+        if (resolvedAgent.HasNoValue)
+        {
+            _logger.LogError("No agents are registered — nothing to run.");
+            await _renderer.WriteLineAsync("No agents are registered — nothing to run.").ConfigureAwait(false);
+            return 1;
+        }
+
+        AgentDefinition defaultAgent = resolvedAgent.Value;
         string[] parts = config.EffectiveModel.Split('/', 2);
         _logger.LogInformation("Creating session: agent={Agent}, provider={Provider}, model={Model}",
             defaultAgent.Name.Value, parts[0], parts.Length > 1 ? parts[1] : config.EffectiveModel);
@@ -232,14 +280,12 @@ internal sealed class ReplRunner
     ///     успешного входа в raw-режим, чтобы откат на legacy не оставлял
     ///     осиротевших сессий.
     /// </summary>
-    private async Task<Result<int>> RunCellForgeAsync(CancellationToken ct)
+    private async Task<Result<int>> RunCellForgeAsync(HarborConfig config, CancellationToken ct)
     {
         var modeController = CreateModeController();
         // Deferred: screens/stdin resolve only on the CellForge path so the
         // legacy path never pays for (or disturbs) stdin ownership.
         var screens = _cellForgeScreens();
-        var configResult = await _configStore.LoadAsync().ConfigureAwait(false);
-        var config = configResult.IsSuccess ? configResult.Value : HarborConfig.Default;
 
         try
         {
@@ -251,13 +297,16 @@ internal sealed class ReplRunner
             return Result.Failure<int>($"raw mode unavailable: {ex.Message}");
         }
 
-        // Absent ⇒ the registry's first agent. Same shape as the `?? [0]` it
-        // replaces: a null element falls into the fallback arm exactly as it
-        // did when FirstOrDefault returned null, and `[0]` is only evaluated on
-        // the None branch (Match/Or run their fallback lazily).
-        var defaultAgent = _agentRegistry.GetAllAgents()
-            .TryFirst(a => a.Name.Value == config.Agent)
-            .Match<AgentDefinition, AgentDefinition>(matched => matched, () => _agentRegistry.GetAllAgents()[0]);
+        // Absent ⇒ the registry's first agent; an empty registry is a reported
+        // failure, not `GetAllAgents()[0]` (#602).
+        Maybe<AgentDefinition> resolvedAgent = FindRunAgent(config);
+        if (resolvedAgent.HasNoValue)
+        {
+            _logger.LogError("No agents are registered — CellForge session not created.");
+            return Result.Failure<int>("no agents are registered");
+        }
+
+        AgentDefinition defaultAgent = resolvedAgent.Value;
         string[] parts = config.EffectiveModel.Split('/', 2);
         _logger.LogInformation("CellForge: creating session agent={Agent}, provider={Provider}, model={Model}",
             defaultAgent.Name.Value, parts[0], parts.Length > 1 ? parts[1] : config.EffectiveModel);
@@ -308,6 +357,26 @@ internal sealed class ReplRunner
             ? new WindowsVtModeController()
             : new UnixTermiosModeController();
 
+    /// <summary>
+    ///     The agent this run should use: the one <paramref name="config" /> names,
+    ///     else the registry's first. Absence is <see cref="Maybe{T}.None" />, not an
+    ///     index.
+    /// </summary>
+    /// <remarks>
+    ///     The registry is read ONCE. Every caller previously wrote
+    ///     <c>GetAllAgents()[0]</c> as the fallback arm, which throws
+    ///     <see cref="ArgumentOutOfRangeException" /> when the registry is empty —
+    ///     the state of a fresh install, and of a failed plugin-load pass — and
+    ///     enumerated the registry a second time to do it (#602).
+    /// </remarks>
+    private Maybe<AgentDefinition> FindRunAgent(HarborConfig config)
+    {
+        IReadOnlyList<AgentDefinition> agents = _agentRegistry.GetAllAgents();
+        return agents
+            .TryFirst(a => a.Name.Value == config.Agent)
+            .Or(() => agents.TryFirst());
+    }
+
     public async Task<int> RunAskAsync(string prompt)
     {
         _logger.LogInformation("Ask mode: prompt={Prompt}", prompt.Length > 80 ? prompt[..80] + "..." : prompt);
@@ -315,14 +384,36 @@ internal sealed class ReplRunner
         await _renderer.InitializeAsync().ConfigureAwait(false);
         _eventBus.Subscribe(async (evt, c) => await _renderer.RenderAsync(evt, c).ConfigureAwait(false));
 
-        var config = (await _configStore.LoadAsync().ConfigureAwait(false)).Value;
-        // Absent ⇒ the registry's first agent. Same shape as the `?? [0]` it
-        // replaces: a null element falls into the fallback arm exactly as it
-        // did when FirstOrDefault returned null, and `[0]` is only evaluated on
-        // the None branch (Match/Or run their fallback lazily).
-        var defaultAgent = _agentRegistry.GetAllAgents()
-            .TryFirst(a => a.Name.Value == config.Agent)
-            .Match<AgentDefinition, AgentDefinition>(matched => matched, () => _agentRegistry.GetAllAgents()[0]);
+        // `harbor ask` has no wizard and no interactive recovery, so a config it
+        // cannot read is a hard stop with the parser's message on stderr. This
+        // is the #602 crash site: the previous `(await LoadAsync()).Value` threw
+        // ResultFailureException out of the single most-run command in the
+        // harness, and the diagnostic JsonConfigStore had already composed
+        // ("config.json is corrupt: …") was thrown away with it.
+        var configResult = await _configStore.LoadAsync().ConfigureAwait(false);
+        if (configResult.IsFailure)
+        {
+            _logger.LogError("Config load failed: {Error}", configResult.Error);
+            Console.Error.WriteLine($"Failed: {configResult.Error}");
+            return 1;
+        }
+
+        // IsSuccess ternary, not a bare `.Value` — see the note in
+        // RunInteractiveAsync. The default arm is unreachable: the failure above
+        // already returned. It is NOT a silent fallback to the default provider.
+        HarborConfig config = configResult.IsSuccess ? configResult.Value : HarborConfig.Default;
+
+        // Absent ⇒ the registry's first agent; an empty registry is a reported
+        // failure rather than `GetAllAgents()[0]`, which threw on it (#602).
+        Maybe<AgentDefinition> resolvedAgent = FindRunAgent(config);
+        if (resolvedAgent.HasNoValue)
+        {
+            _logger.LogError("No agents are registered — nothing to run.");
+            Console.Error.WriteLine("No agents are registered — nothing to run.");
+            return 1;
+        }
+
+        AgentDefinition defaultAgent = resolvedAgent.Value;
         string[] parts = config.EffectiveModel.Split('/', 2);
         var sessionResult = await _sessionStore.CreateAsync(
             Environment.CurrentDirectory, defaultAgent.Name.Value, parts[0],
