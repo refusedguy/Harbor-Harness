@@ -3,12 +3,44 @@ using Serilog.Core;
 using Serilog.Events;
 namespace Harbor.Logging;
 /// <summary>
-///     Centralized Serilog configuration — shared by CLI, Avalonia, and all desktop apps.
+///     Serilog configuration for the desktop apps — used by Avalonia
+///     (<c>Harbor.App.Avalonia.Hosting.LoggingConfiguration</c>).
 ///     Writes to:
 ///     - File: ~/.harbor/logs/harbor-{appPrefix}-{timestamp}.log (rolling, keep 50)
 ///     - Console: colored, filtered by app mode (verbose in Debug, info in Release)
 ///     - Optional diagnostics panel: via ILogger → IDiagnosticsPanel bridge
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>This is NOT shared with the CLI, and the doc comment above used
+///         to claim it was</b> ("shared by CLI, Avalonia, and all desktop
+///         apps"). The CLI logs through its own hand-rolled
+///         <c>ILoggerProvider</c> in <c>Harbor.App.Cli.Logging</c>, not through
+///         Serilog.
+///     </para>
+///     <para>
+///         <b>They are not two copies of one behaviour, so do not "fix" the
+///         duplication by folding one into the other</b> (issue #558 found and
+///         deleted a third, genuinely dead copy of the CLI's sink; see
+///         <c>FileLogSinkOwnershipRule</c>). The two are app-disjoint — no
+///         process loads both, so no log line can be written twice — and they
+///         differ in ways a merge would change for every user: level model
+///         (<c>LogEventLevel</c> Verbose..Fatal here vs <c>LogLevel</c>
+///         Trace..None there), line format, exception rendering (this writes
+///         the full <c>{Exception}</c> chain; the hand-rolled provider writes
+///         one <c>Exception:</c> line plus a single <c>Inner:</c> line, so a
+///         third-level inner exception is dropped), and retention owner.
+///         Collapsing them is a rewrite of two working log formats, not a
+///         deduplication.
+///     </para>
+///     <para>
+///         One consequence that IS real and still open: both sinks sweep the
+///         same <c>harbor-*.log</c> glob over <c>~/.harbor/logs</c>
+///         (<see cref="CleanupOldLogs" /> here, <c>RollingLogCleaner</c> in the
+///         CLI), so either can delete the other's files. Unchanged by #558 and
+///         recorded in docs/ROADMAP.md rather than fixed silently.
+///     </para>
+/// </remarks>
 public static class LoggerSetup
 {
     /// <summary>
