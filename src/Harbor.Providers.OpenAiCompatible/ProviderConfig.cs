@@ -328,10 +328,10 @@ public sealed class DynamicModelCatalog : IModelCatalog
         ProviderConfig config, string modelsUrl, string cachePath, CancellationToken ct)
     {
         // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
-        // try/catch -> Result. The parse step stays OUTSIDE the Try and is
-        // chained with Bind: it has its own catch-all (see ParseModelsResponse),
-        // so folding it in would double-report and the failure texts differ
-        // ("..." for a fetch, "Failed to parse models response: ..." for a parse).
+        // wrapping a throwing call in a Result. The parse step stays OUTSIDE
+        // the Try and is chained with Bind: it has its own catch-all (see
+        // ParseModelsResponse), so folding it in would double-report, and the
+        // two failure texts differ (fetch vs parse).
         return await Result.Try(
                 async () =>
                 {

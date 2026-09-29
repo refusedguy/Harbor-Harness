@@ -190,7 +190,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
     private static Result<AgentMessage> DecodeMessageLine(string sessionId, string line)
     {
         // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
-        // try/catch -> Result: same `catch (Exception)` scope, same failure text.
+        // wrapping a throwing call in a Result: same catch scope, same text.
         return Result.Try(
                 () => JsonDocument.Parse(line),
                 ex => $"malformed JSON line: {ex.Message}")

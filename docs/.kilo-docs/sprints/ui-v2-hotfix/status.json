@@ -1,19 +1,19 @@
 {
   "name": "UI-V2-HOTFIX",
-  "state": "queued",
-  "head": "",
+  "state": "failed",
+  "head": "0204326a9c1c9c63e206ae71a65ea7dfa8d1c1b9",
   "base": "ea7c87e",
-  "commits": 0,
-  "started_at": null,
-  "finished_at": null,
+  "commits": 6,
+  "started_at": "2026-09-04T03:34:58+0500",
+  "finished_at": "2026-09-04T05:40:00+0500",
   "kilo_pid": null,
   "kilo_session": null,
-  "findings": ".kilo-docs/sprints/ui-v2-hotfix/findings.json",
+  "findings": ".kilo-docs/sprints/ui-v2/findings.json",
   "report": ".kilo-docs/sprints/ui-v2-hotfix/report.html",
-  "failures": 0,
+  "failures": 1,
   "retries": 0,
-  "last_activity": null,
+  "last_activity": "2026-09-04T06:00:12+0500",
   "progress": {
-    "last_heartbeat": "2026-08-28T09:33:02Z"
+    "last_heartbeat": "2026-09-04T05:40:00Z"
   }
 }

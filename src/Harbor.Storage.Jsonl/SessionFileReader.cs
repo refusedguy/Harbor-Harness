@@ -362,8 +362,9 @@ internal static class SessionFileReader
         string path, string sessionId, CancellationToken ct)
     {
         // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
-        // try/catch -> Result. ResultErrors.Message rethrows OperationCanceledException
-        // inside the handler, so cancellation still propagates exactly as before.
+        // wrapping a throwing call in a Result. ResultErrors.Message rethrows
+        // OperationCanceledException inside the handler, so cancellation still
+        // propagates exactly as before.
         var readResult = await Result.Try(
                 async () =>
                 {

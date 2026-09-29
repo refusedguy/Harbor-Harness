@@ -64,8 +64,8 @@ public static class PluginLifecycle
             throw new ArgumentNullException(nameof(context));
 
         // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
-        // try/catch -> Result: it catches exactly `Exception` and routes it
-        // through the handler below, so the failure text is unchanged.
+        // wrapping a throwing call in a Result: it catches exactly `Exception`
+        // and routes it through the handler, so the failure text is unchanged.
         return Result.Try(
             () => plugin.Initialize(context),
             ex => $"Initialize threw: {ex.Message}");

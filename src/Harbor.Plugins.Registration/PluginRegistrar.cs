@@ -66,9 +66,9 @@ public sealed class PluginRegistrar : IPluginRegistrar
             return initResult;
 
         // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
-        // try/catch -> Result: same `catch (Exception)` scope, same failure text.
-        // The nested panel-plugin try/catch below is deliberately kept — it
-        // logs and CONTINUES rather than failing the whole registration.
+        // wrapping a throwing call in a Result: same catch scope, same text.
+        // The nested panel-plugin catch below is deliberately kept — it logs
+        // and CONTINUES rather than failing the whole registration.
         return Result.Try(
             () =>
             {
