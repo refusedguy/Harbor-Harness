@@ -134,7 +134,7 @@ internal static class SourceScan
         var blank = new char[match.Length];
         for (int i = 0; i < match.Length; i++)
         {
-            blank[i] = match[i] == '\n' ? '\n' : ' ';
+            blank[i] = match.Value[i] == '\n' ? '\n' : ' ';
         }
 
         return new string(blank);

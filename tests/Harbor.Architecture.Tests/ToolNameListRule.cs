@@ -176,10 +176,10 @@ public sealed class ToolNameListRule
     public async Task No_Product_File_Hand_Maintains_A_Set_Of_Tool_Names()
     {
         FrozenSet<string> known = ToolNameInventory.Names;
-        IReadOnlyList<IGrouping<string, Mention>> tables = FindToolTables(ReadProductSources(), known);
+        IReadOnlyList<IReadOnlyList<Mention>> tables = FindToolTables(ReadProductSources(), known);
 
         var offenders = new List<string>();
-        foreach (IGrouping<string, Mention> table in tables)
+        foreach (IReadOnlyList<Mention> table in tables)
         {
             string relative = table.First().RelativePath;
             if (PolicyExemptions.ContainsKey(relative))
@@ -188,7 +188,7 @@ public sealed class ToolNameListRule
             }
 
             offenders.Add(
-                $"{relative}: {string.Join(", ", table.Select(m => $"\"{m.Name}\"").Distinct().Order())}");
+                $"{relative}: {string.Join(", ", Sorted(table.Select(m => m.Name)))}");
         }
 
         await Assert.That(offenders).IsEmpty()
@@ -216,10 +216,10 @@ public sealed class ToolNameListRule
     public async Task No_Tool_Table_Is_Keyed_On_A_Name_That_Is_Not_A_Tool()
     {
         FrozenSet<string> known = ToolNameInventory.Names;
-        IReadOnlyList<IGrouping<string, Mention>> tables = FindToolTables(ReadProductSources(), known);
+        IReadOnlyList<IReadOnlyList<Mention>> tables = FindToolTables(ReadProductSources(), known);
 
         var offenders = new List<string>();
-        foreach (IGrouping<string, Mention> table in tables)
+        foreach (IReadOnlyList<Mention> table in tables)
         {
             foreach (Mention mention in table)
             {
@@ -319,13 +319,13 @@ public sealed class ToolNameListRule
 
         FrozenSet<string> known = ToolNameInventory.Names;
 
-        IReadOnlyList<IGrouping<string, Mention>> planted =
+        IReadOnlyList<IReadOnlyList<Mention>> planted =
             FindToolTables([("planted.cs", plantedTable)], known);
-        IReadOnlyList<IGrouping<string, Mention>> commented =
+        IReadOnlyList<IReadOnlyList<Mention>> commented =
             FindToolTables([("commented.cs", commentAboutTools)], known);
-        IReadOnlyList<IGrouping<string, Mention>> single =
+        IReadOnlyList<IReadOnlyList<Mention>> single =
             FindToolTables([("lookup.cs", singleLookup)], known);
-        IReadOnlyList<IGrouping<string, Mention>> schema =
+        IReadOnlyList<IReadOnlyList<Mention>> schema =
             FindToolTables([("schema.cs", nonToolWords)], known);
 
         await Assert.That(planted.Count).IsEqualTo(1)
@@ -333,7 +333,7 @@ public sealed class ToolNameListRule
                    + "saw fewer the rule is vacuous, and if it saw more it is noise that will get "
                    + "worked around rather than obeyed");
 
-        await Assert.That(planted[0].Select(m => m.Name).Distinct().Order())
+        await Assert.That(Sorted(planted[0].Select(m => m.Name)))
             .IsEquivalentTo(new[] { "edit", "read", "write" })
             .Because("the finder must recover the planted table's names in full, or the rule "
                    + "cannot name the offender it reports");
@@ -464,13 +464,19 @@ public sealed class ToolNameListRule
     ///     rows the rule reports.
     /// </summary>
     private static string[] DeadRows(
-        IReadOnlyList<IGrouping<string, Mention>> tables,
+        IReadOnlyList<IReadOnlyList<Mention>> tables,
         FrozenSet<string> known) =>
-        [.. tables.SelectMany(t => t)
+        [.. Sorted(tables.SelectMany(t => t)
             .Where(m => !known.Contains(m.Name))
-            .Select(m => m.Name)
-            .Distinct()
-            .Order()];
+            .Select(m => m.Name))];
+
+    /// <summary>
+    ///     The distinct values, ordinal-sorted. A failure message whose order
+    ///     depends on dictionary iteration is a message that differs between runs
+    ///     and cannot be diffed against the previous one.
+    /// </summary>
+    private static string[] Sorted(IEnumerable<string> values) =>
+        [.. values.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
 
     /// <summary>
     ///     Every run of quoted words in the supplied sources that qualifies as a
@@ -484,11 +490,11 @@ public sealed class ToolNameListRule
     ///     CLI verb list in the repository — noise a rule gets disabled rather than
     ///     obeyed. A schema names no tools, so it can never reach the threshold.
     /// </remarks>
-    private static IReadOnlyList<IGrouping<string, Mention>> FindToolTables(
+    private static IReadOnlyList<IReadOnlyList<Mention>> FindToolTables(
         IReadOnlyList<(string Path, string Source)> sources,
         FrozenSet<string> known)
     {
-        var tables = new List<IGrouping<string, Mention>>();
+        var tables = new List<IReadOnlyList<Mention>>();
 
         foreach ((string path, string source) in sources)
         {
@@ -515,7 +521,7 @@ public sealed class ToolNameListRule
     private static void CollectTables(
         List<Mention> mentions,
         FrozenSet<string> known,
-        List<IGrouping<string, Mention>> tables)
+        List<IReadOnlyList<Mention>> tables)
     {
         Mention[] ordered = [.. mentions.OrderBy(m => m.Line)];
 
@@ -533,16 +539,26 @@ public sealed class ToolNameListRule
         CloseRun(run, known, tables);
     }
 
+    /// <summary>
+    ///     Closes a candidate run: keeps it as a table when it holds at least
+    ///     <see cref="TableMinimumToolNames" /> real tool names, then clears the
+    ///     buffer for the next run.
+    /// </summary>
+    /// <remarks>
+    ///     A run is built per file (see <see cref="CollectTables" />), so every
+    ///     mention in it already shares a path and the buffer can be handed over
+    ///     directly. Copying it, because the buffer is reused for the next run.
+    /// </remarks>
     private static void CloseRun(
         List<Mention> run,
         FrozenSet<string> known,
-        List<IGrouping<string, Mention>> tables)
+        List<IReadOnlyList<Mention>> tables)
     {
         if (run.Count > 0
             && run.Select(m => m.Name).Where(known.Contains).Distinct(StringComparer.Ordinal).Count()
                >= TableMinimumToolNames)
         {
-            tables.Add(run.GroupBy(m => m.File).SelectMany(g => g));
+            tables.Add([.. run]);
         }
 
         run.Clear();
