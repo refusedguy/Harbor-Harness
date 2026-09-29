@@ -2,6 +2,7 @@ using System.Text;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.DesignSystem;
+using Harbor.Hosting.Themes;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.Projection;

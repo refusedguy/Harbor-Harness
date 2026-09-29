@@ -1,4 +1,6 @@
-namespace Harbor.DesignSystem;
+using Harbor.DesignSystem;
+
+namespace Harbor.Hosting.Themes;
 
 /// <summary>
 /// Live-reload for the theme marketplace: polls a themes directory on a fixed
@@ -8,6 +10,23 @@ namespace Harbor.DesignSystem;
 /// Invalid files report through the onError callback and keep the last
 /// applied theme. Expose <see cref="Poll" /> for deterministic tests.
 /// </summary>
+/// <remarks>
+/// <para>
+///     #536 moved this type into <c>Harbor.Hosting.Themes</c>; it used to live in
+///     <c>Harbor.DesignSystem</c>. The reason is the same as
+///     <see cref="ThemeStore" />'s and is recorded there in full: a token leaf with
+///     an empty allowed-reference set has no business enumerating a directory and
+///     stat-ing files on a timer.
+/// </para>
+/// <para>
+///     #536 also calls the directory walk "unbounded", and that half is still here.
+///     It is a poll every 500 ms over a top-directory-only <c>*.json</c>
+///     enumeration — bounded in depth, unbounded in entry count — on a timer thread,
+///     not the render loop. So it is not the UI-thread hazard the issue described,
+///     but a directory with a great many files in it costs one stat per file per
+///     tick. Recorded here so the next reader does not re-derive it from the issue.
+/// </para>
+/// </remarks>
 public sealed class ThemeDirectoryWatcher : IDisposable
 {
     /// <summary>Poll interval (default 500 ms — imperceptible for theme edits).</summary>

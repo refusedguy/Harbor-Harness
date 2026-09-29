@@ -88,6 +88,17 @@ string roundTrip = ThemeJson.Write(HarborTheme.HarborWarm);
 
 ## The theme marketplace directory
 
+> **Where these two types live.** `ThemeStore` and `ThemeDirectoryWatcher` were
+> in this package until [#536](https://github.com/refusedguy/Harbor-Harness/issues/536)
+> moved them to `Harbor.Hosting.Themes`. They were the only thing here that ever
+> read a disk, and this package is `IsPackable` with an **empty** allowed-reference
+> set — a token catalog that enumerates `~/.harbor/themes` is a catalog with a
+> storage feature. The **port stayed**: `IThemeStore` and every token are still
+> declared in `Harbor.DesignSystem`, so a consumer of this package can still read a
+> theme document through the contract the package owns. The two halves are
+> deliberately in different assemblies now; the full reason is in `ThemeStore`'s
+> own doc comment.
+
 `ThemeStore` manages `~/.harbor/themes/` (override with `HARBOR_THEMES_DIR`):
 
 - **Scan** lists built-ins first (`HarborTheme.BuiltIn`: dark, light, warm,
@@ -100,6 +111,9 @@ string roundTrip = ThemeJson.Write(HarborTheme.HarborWarm);
   theme everywhere the store resolves.
 
 ```csharp
+using Harbor.DesignSystem;        // tokens, ThemeJson, IThemeStore
+using Harbor.Hosting.Themes;      // ThemeStore — the persistence half
+
 var store = new ThemeStore();                 // ~/.harbor/themes
 store.SeedBuiltIns();                          // editable starting points
 foreach (var entry in store.Scan())
@@ -111,11 +125,12 @@ if (store.Resolve("harbor-warm") is { } warm)
 
 ## Live reload
 
-`ThemeDirectoryWatcher` polls the themes directory (500 ms default) and applies
-changed files through `TerminalColorPalette.Apply`; parse failures report via
-the error callback and keep the last applied theme. Polling (not
-`FileSystemWatcher`) keeps behaviour deterministic across terminals, network
-mounts and CI; `Poll()` is public for deterministic tests.
+`ThemeDirectoryWatcher` (also in `Harbor.Hosting.Themes`, see the note above)
+polls the themes directory (500 ms default) and applies changed files through
+`TerminalColorPalette.Apply`; parse failures report via the error callback and
+keep the last applied theme. Polling (not `FileSystemWatcher`) keeps behaviour
+deterministic across terminals, network mounts and CI; `Poll()` is public for
+deterministic tests.
 
 ```csharp
 using var watcher = new ThemeDirectoryWatcher(
@@ -124,8 +139,9 @@ using var watcher = new ThemeDirectoryWatcher(
 ```
 
 The CellForge interactive shell ships the same contract for a single file:
-`HARBOR_THEME_FILE`, else `~/.harbor/theme.json` when present
-(`JsonThemeLoader` + `ThemeFileWatcher`, which delegate to `ThemeJson`).
+`HARBOR_THEME_FILE`, else `~/.harbor/theme.json` when present (`JsonThemeLoader`
++ `ThemeFileWatcher`, which read through the `IThemeStore` port this package
+declares — see [#668](https://github.com/refusedguy/Harbor-Harness/issues/668)).
 
 ## The theme axis is exempt from the feature freeze (#622)
 

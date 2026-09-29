@@ -17,6 +17,7 @@ using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Harbor.DesignSystem;
 using Harbor.Hosting.Rendering;
+using Harbor.Hosting.Themes;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.Projection;

@@ -88,6 +88,25 @@
     -->
     <ProjectReference Include="..\Harbor.Ui.Framework.Services\Harbor.Ui.Framework.Services.csproj"/>
 
+    <!--
+      #536: Harbor.Hosting.Themes — the theme marketplace's persistence half
+      (ThemeStore, ThemeDirectoryWatcher). It used to live in Harbor.DesignSystem,
+      which cannot hold it: that assembly is the HDS v1 token leaf, IsPackable with
+      an EMPTY allowed-reference set, and the two types were the only thing in it
+      that read a disk or the user's home directory — held green by four rows in
+      PresentationCapabilityRules.KnownViolations, which is a permission, not a fix.
+
+      The PORT (IThemeStore) and every token stayed in the leaf; only the I/O moved.
+      Hosting is the destination because Infrastructure in this matrix may not
+      reference Presentation (FullLayerMatrixTests: Domain, Application, or a
+      same-family Infrastructure sibling — never Presentation), so "the persistence
+      half belongs in Infrastructure" has no Infrastructure to go to. Composition
+      root is unrestricted, and apps/Harbor.App.Avalonia already references Hosting,
+      so the marketplace stayed reachable by both products rather than becoming a
+      CLI internal.
+    -->
+    <ProjectReference Include="..\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
+
     <!-- Baseline providers -->
     <ProjectReference Include="..\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
     <ProjectReference Include="..\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
