@@ -14,6 +14,10 @@ using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.TestKit;
+using Harbor.Registries.Agents;
+using Harbor.Registries.Providers;
+using Harbor.Registries.Tools;
+using Harbor.Registries.Events;
 namespace Harbor.Core.Tests;
 /// <summary>
 ///     Tests for <see cref="AgentLoop" /> using a mock <see cref="ILlmClient" /> that yields

@@ -7,6 +7,9 @@ using Harbor.Registries.Tools;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.Registries.Agents;
+using Harbor.Registries.Providers;
+using Harbor.Registries.Events;
 
 namespace Harbor.Ipc.Tests;
 

@@ -6,6 +6,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Ui.Framework.State;
+using Harbor.Registries.Agents;
 
 namespace Harbor.App.Cli.Repl;
 

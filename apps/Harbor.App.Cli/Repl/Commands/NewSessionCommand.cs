@@ -2,6 +2,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
+using Harbor.Registries.Agents;
 
 namespace Harbor.App.Cli.Repl.Commands;
 

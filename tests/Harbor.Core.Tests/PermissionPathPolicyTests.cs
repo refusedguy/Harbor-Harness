@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Application.Permissions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Agents;
 
 namespace Harbor.Core.Tests;
 

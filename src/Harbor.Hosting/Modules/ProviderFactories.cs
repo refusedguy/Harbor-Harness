@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 #if HARBOR_WITH_ALL_PROVIDERS
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
+using Harbor.Registries.Providers;
 #endif
 
 namespace Harbor.Hosting;

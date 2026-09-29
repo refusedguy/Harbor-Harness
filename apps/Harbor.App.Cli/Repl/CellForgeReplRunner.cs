@@ -28,6 +28,8 @@ using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Tui.CellForge.Widgets;
 using Microsoft.Extensions.Logging;
+using Harbor.Registries.Agents;
+using Harbor.Registries.Providers;
 
 namespace Harbor.App.Cli.Repl;
 

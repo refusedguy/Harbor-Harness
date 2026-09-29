@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Registries.Events;
 
 namespace Harbor.Core.Tests;
 

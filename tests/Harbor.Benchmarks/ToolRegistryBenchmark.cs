@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.Registries.Tools;
 namespace Harbor.Benchmarks;
 /// <summary>
 ///     Benchmarks <see cref="ToolRegistry" /> hot paths:

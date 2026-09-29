@@ -7,11 +7,10 @@
 // FullLayerMatrixTests.cs:404) was declared in a namespace that READS like a
 // contract:
 //
-//   src/Harbor.Registries/Agents/AgentRegistry.cs     namespace Harbor.Abstractions.Agents;
-//   src/Harbor.Registries/Events/InMemoryEventBus.cs namespace Harbor.Abstractions.Events;
-//   src/Harbor.Registries/Providers/ProviderRegistry.cs
-//                                                     namespace Harbor.Abstractions.Providers;
-//   src/Harbor.Registries/Tools/ToolRegistry.cs       namespace Harbor.Abstractions.Tools;
+//   src/Harbor.Registries/Agents/AgentRegistry.cs     ->  Harbor.Abstractions.Agents
+//   src/Harbor.Registries/Events/InMemoryEventBus.cs  ->  Harbor.Abstractions.Events
+//   src/Harbor.Registries/Providers/ProviderRegistry.cs -> Harbor.Abstractions.Providers
+//   src/Harbor.Registries/Tools/ToolRegistry.cs        ->  Harbor.Abstractions.Tools
 //
 // So `Harbor.Abstractions.Providers` was declared by TWO assemblies at once:
 // `IAgentRegistry`/`IProviderRegistry`/`ITool`/`IEventBus` in src/Harbor.Abstractions
@@ -358,7 +357,7 @@ public class AbstractionsNamespaceOwnershipRules
             .Select(m => m.Groups["ns"].Value)
             .ToArray();
 
-        await Assert.That(matches).IsEqualTo(new[] { "Harbor.Registries.Tools" })
+        await Assert.That(matches).IsEquivalentTo(new[] { "Harbor.Registries.Tools" })
             .Because(
                 "Only the real declaration may survive comment stripping. A rule that fires on prose "
                 + "documenting a foreign namespace gets deleted within a week, and a deleted rule protects "

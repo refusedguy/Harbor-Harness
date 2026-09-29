@@ -14,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Events;
 namespace Harbor.Plugins.Runtime.Tests;
 /// <summary>
 ///     Tests for <see cref="CsPluginLoader" /> — Roslyn-based CS-source plugin loading,

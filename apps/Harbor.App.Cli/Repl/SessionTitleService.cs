@@ -7,6 +7,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Repl.Commands;
 using Microsoft.Extensions.Logging;
+using Harbor.Registries.Providers;
 
 namespace Harbor.App.Cli.Repl;
 

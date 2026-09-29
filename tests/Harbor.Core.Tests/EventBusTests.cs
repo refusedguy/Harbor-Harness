@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Events;
 namespace Harbor.Core.Tests;
 public class EventBusTests
 {

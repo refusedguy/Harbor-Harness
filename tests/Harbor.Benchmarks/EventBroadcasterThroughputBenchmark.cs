@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Ipc.Protocol;
 using Harbor.Ipc.Server;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Events;
 namespace Harbor.Benchmarks;
 
 /// <summary>

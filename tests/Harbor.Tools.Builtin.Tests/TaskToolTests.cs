@@ -6,6 +6,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Agents;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
 ///     Tests for <see cref="TaskTool" /> — argument validation, unknown-agent errors,

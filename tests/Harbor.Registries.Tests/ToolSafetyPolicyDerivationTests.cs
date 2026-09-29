@@ -5,6 +5,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using System.Text.Json;
 using TUnit.Assertions;
+using Harbor.Registries.Tools;
 
 namespace Harbor.Registries.Tests;
 

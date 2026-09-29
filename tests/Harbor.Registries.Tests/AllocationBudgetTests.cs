@@ -8,6 +8,7 @@ using Harbor.Registries.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using TUnit.Assertions;
+using Harbor.Registries.Events;
 
 namespace Harbor.Registries.Tests;
 

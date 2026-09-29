@@ -14,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Events;
 namespace Harbor.Plugins.Runtime.Tests.TestSupport;
 /// <summary>
 ///     In-memory <see cref="IPluginLoadHost" /> for tests. Captures all Register* calls

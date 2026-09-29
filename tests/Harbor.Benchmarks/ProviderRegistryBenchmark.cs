@@ -3,6 +3,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Registries.Providers;
 namespace Harbor.Benchmarks;
 /// <summary>
 ///     Benchmarks <see cref="ProviderRegistry" /> hot paths:

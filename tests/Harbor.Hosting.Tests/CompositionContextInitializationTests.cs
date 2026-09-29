@@ -39,6 +39,9 @@ using Harbor.Abstractions.Tools;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Agents;
+using Harbor.Registries.Providers;
+using Harbor.Registries.Tools;
 
 namespace Harbor.Hosting.Tests;
 

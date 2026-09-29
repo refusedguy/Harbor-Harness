@@ -1,5 +1,5 @@
 using NonBlocking;
-namespace Harbor.Abstractions.Agents;
+namespace Harbor.Registries.Agents;
 /// <summary>
 ///     Thread-safe agent registry.
 ///     Implements Registry pattern (GOF).

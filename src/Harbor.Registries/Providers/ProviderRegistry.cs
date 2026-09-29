@@ -1,8 +1,9 @@
 using System.Collections.Frozen;
+using Harbor.Registries.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NonBlocking;
-namespace Harbor.Abstractions.Providers;
+namespace Harbor.Registries.Providers;
 /// <summary>
 ///     Thread-safe provider registry with lazy instantiation and frozen lookup table.
 ///     Implements Registry pattern (GOF).
