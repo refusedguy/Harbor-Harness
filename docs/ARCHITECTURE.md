@@ -236,6 +236,31 @@ Two loading paths:
 {"type":"message","id":"m2","role":"assistant","createdAt":"...","payload":{"parts":[{"type":"text","text":"Hi!"}],...}}
 ```
 
+#### Session cost is priced by the core, displayed by the UI (#653)
+
+A message history records tokens, never the rates the provider billed them at.
+So the price of a session can only be formed where the model is known — the core
+resolved `ModelInfo` to make the call, and `ModelInfo.Pricing` carries its rates
+(including the separate, much cheaper cache-read/cache-write rates).
+
+- `Pricing.CalculateCost(Usage)` (`Harbor.Abstractions.Contracts`) is the single
+  implementation of the formula.
+- `SessionMetadata.AddUsage(Usage, Pricing)` is the single fold that turns one
+  turn's usage into money; `ISessionContext.UpdateStatsAsync` takes the pricing
+  because the caller is the only party that knows the model.
+- The running total leaves as `SessionStatsEvent` (once per turn) and is
+  mirrored into the store's metadata record. The reducers ASSIGN it; no
+  presentation assembly prices anything, and
+  `tests/Harbor.Architecture.Tests/CostPricedInCoreRules.cs` fails the build if
+  one starts.
+- `SessionMetadata.IsCostKnown` carries the core's answer to "does this model
+  publish a price at all". A model that does not (Ollama, or a paid provider
+  whose catalogue entry carries no rates) publishes a cost *floor* flagged
+  false, and the status bar renders an em dash: a `$0.0000` there is a claim
+  ("this was free") that nothing downstream can tell from a truth.
+- `SessionStatsAggregator` (the JSONL derive path) cannot price — it has no
+  rates — and therefore reports `IsCostKnown: false` instead of a bare `0`.
+
 ### 10. Generic OpenAI-compatible adapter
 
 90% of LLM providers speak OpenAI-compatible API. The `OpenAiCompatibleLlmClient` handles:

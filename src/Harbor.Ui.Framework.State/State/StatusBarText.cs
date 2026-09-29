@@ -69,5 +69,33 @@ public static class StatusBarText
     ///     grok None-semantics (#457): a zero/negative cost hides the cell rather
     ///     than painting a meaningless "$0.0000" next to a live transcript.
     /// </summary>
-    public static string? CostCell(decimal costUsd) => costUsd > 0 ? CostToUsd(costUsd) : null;
+    /// <param name="costUsd">Cumulative cost, as the core priced it.</param>
+    /// <param name="isCostUnpriced">
+    ///     <see langword="true" /> when the core could not price the session
+    ///     (<c>Pricing.Unknown</c> — a local Ollama, or a paid provider whose
+    ///     catalogue entry carries no rates). Then the cell reads "—": "we track
+    ///     cost, this model's price is unknown" is a fact, and a "$0.0000" or a
+    ///     missing cell would both be read as "free" (#653).
+    ///     <para>
+    ///         The polarity is "unpriced", not "priced", so that the default
+    ///         argument and <c>default(CostSnapshot)</c> agree — see
+    ///         <see cref="CostSnapshot" />.
+    ///     </para>
+    /// </param>
+    public static string? CostCell(decimal costUsd, bool isCostUnpriced = false)
+    {
+        if (isCostUnpriced)
+        {
+            return UnknownCostCell;
+        }
+
+        return costUsd > 0 ? CostToUsd(costUsd) : null;
+    }
+
+    /// <summary>
+    ///     The cell shown when the model publishes no price. An em dash, not a
+    ///     zero and not silence: it is the one glyph that cannot be misread as an
+    ///     amount.
+    /// </summary>
+    public const string UnknownCostCell = "—";
 }

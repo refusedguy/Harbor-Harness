@@ -150,6 +150,7 @@ public sealed class FakeProviderRegistry(ILlmClient client) : IProviderRegistry
 public sealed class FakeSessionStore(Session? session = null) : ISessionStore
 {
     private readonly List<AgentMessage> _messages = [];
+    private readonly List<SessionMetadata> _updatedStats = [];
     private readonly object _lock = new();
     private TaskCompletionSource? _gatedAppend;
     private int _appends;
@@ -223,8 +224,32 @@ public sealed class FakeSessionStore(Session? session = null) : ISessionStore
     public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
         => Task.FromResult(Result.Success(SessionMetadata.Empty));
 
+    /// <summary>
+    ///     Every stats record the core persisted, in order. <c>GetStatsAsync</c>
+    ///     deliberately reports <see cref="SessionMetadata.Empty" /> (this fake
+    ///     models a store with no aggregate), so a test that needs to see what the
+    ///     core WROTE — the priced cost of #653, for one — reads this.
+    /// </summary>
+    public IReadOnlyList<SessionMetadata> UpdatedStats
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _updatedStats];
+            }
+        }
+    }
+
     public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
-        => Task.FromResult(Result.Success());
+    {
+        lock (_lock)
+        {
+            _updatedStats.Add(metadata);
+        }
+
+        return Task.FromResult(Result.Success());
+    }
 
     public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
         => Task.FromResult(Result.Success(0));

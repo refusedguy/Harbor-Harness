@@ -189,13 +189,22 @@ public class AgentLoopTests
 
         var (loop, _, _, _, bus) = CreateLoop(client);
         var statsUpdates = new List<Usage>();
-        var session = new CapturingStatsSession(CreateSession().Session, Array.Empty<AgentMessage>(), statsUpdates);
+        var pricings = new List<Pricing>();
+        var session = new CapturingStatsSession(
+            CreateSession().Session, Array.Empty<AgentMessage>(), statsUpdates, pricings);
 
         await loop.RunAsync(session, AgentDefinition.CodeDefault("test-model", "test"));
 
         await Assert.That(statsUpdates.Count).IsEqualTo(1);
         await Assert.That(statsUpdates[0].InputTokens).IsEqualTo(100);
         await Assert.That(statsUpdates[0].OutputTokens).IsEqualTo(50);
+
+        // #653: the rates handed over are the RESOLVED MODEL's — TestModel
+        // publishes none, so "unknown" travels all the way down instead of a
+        // constant rate standing in for it.
+        await Assert.That(pricings.Count).IsEqualTo(1);
+        await Assert.That(pricings[0]).IsEqualTo(TestModel.Pricing);
+        await Assert.That(pricings[0].IsUnknown).IsTrue();
     }
 
     [Test]

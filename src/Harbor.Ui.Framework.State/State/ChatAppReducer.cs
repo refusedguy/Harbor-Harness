@@ -19,6 +19,13 @@ namespace Harbor.Ui.Framework.State;
 ///         box on submit) go through <see cref="UiState.Ui" /> explicitly.
 ///     </para>
 ///     <para>
+///         <b>#653 — costs are folded, never computed.</b> The totals come from
+///         the core, in <see cref="SessionStatsEvent" />; nothing in this reducer
+///         turns tokens into money. The hand-rolled "$3/M in, $15/M out" formula
+///         it used to carry charged a free model for 61.6k tokens — see
+///         <c>tests/Harbor.Architecture.Tests/CostPricedInCoreRules.cs</c>.
+///     </para>
+///     <para>
 ///         Must never call into <c>IAgent</c> or perform I/O — side-effects are the
 ///         responsibility of <see cref="ITuiEffectRunner" /> (see
 ///         <see cref="ClassifySubmit" />).
@@ -26,10 +33,6 @@ namespace Harbor.Ui.Framework.State;
 /// </remarks>
 public static class ChatAppReducer
 {
-    /// <summary>Default per-million-token pricing (USD). Override via model table if available.</summary>
-    private const decimal InputPricePerMillion = 3m;
-    private const decimal OutputPricePerMillion = 15m;
-
     // ── extension surface (IAppReducerPlugin hook lives in ChatAppReducerPlugin) ──
 
     /// <summary>
@@ -142,6 +145,7 @@ public static class ChatAppReducer
         MessageEndEvent => OnMessageEnd(state),
         ToolExecutionStartEvent tes => state.AddLine(ChatRole.Tool, FormatToolStart(tes), tes.ToolCallId),
         ToolExecutionEndEvent tee => state.AddLine(ChatRole.ToolResult, FormatToolEnd(tee), tee.ToolCallId),
+        SessionStatsEvent ss => OnSessionStats(state, ss),
         CompactionStartedEvent => state with { Chat = state.Chat with { Status = "compacting" } },
         CompactionCompletedEvent cc => OnCompactionCompleted(state, cc),
         AgentErrorEvent err => state
@@ -300,7 +304,7 @@ public static class ChatAppReducer
         TextDeltaEvent td => WithTextDelta(state, td.Delta),
         ThinkingDeltaEvent thd => WithThinkingDelta(state, thd.Delta),
         ToolCallStartEvent tcs => FlushPending(state).AddLine(ChatRole.Tool, $"→ {tcs.ToolName}", tcs.Id),
-        StepFinishEvent sf when sf.Usage is not null => OnStepFinish(FlushPending(state), sf.Usage),
+        StepFinishEvent => FlushPending(state),
         _ => state
     };
 
@@ -375,21 +379,40 @@ public static class ChatAppReducer
         };
     }
 
-    private static UiState OnStepFinish(UiState state, Usage usage)
+    /// <summary>
+    ///     Adopt the session totals the core published — tokens AND cost — in one
+    ///     assignment.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #653: these are absolute session-cumulative totals, not a delta, so
+    ///         they are ASSIGNED. Folding a per-step delta here is what used to
+    ///         make the status bar's money a second opinion about a bill the core
+    ///         already knew; the cost also arrives with the core's own answer to
+    ///         "is this model's price published at all", so an unpriced model
+    ///         renders "—" instead of a fabricated "$0.0000".
+    ///     </para>
+    ///     <para>
+    ///         No session check here on purpose. A session's events reach its own
+    ///         store (see <c>UiEventRouter</c> / <c>SessionManager</c>), and a
+    ///         sub-agent run publishes no totals of its own — it propagates its
+    ///         cost into the parent record instead. A reducer-level "is this my
+    ///         session?" filter would duplicate that isolation with a heuristic
+    ///         that silently drops the real number the moment the two ids
+    ///         disagree.
+    ///     </para>
+    /// </remarks>
+    private static UiState OnSessionStats(UiState state, SessionStatsEvent stats) => state with
     {
-        long nextIn = state.Chat.Cost.TokensIn + usage.InputTokens;
-        long nextOut = state.Chat.Cost.TokensOut + usage.OutputTokens;
-        return state with
+        Chat = state.Chat with
         {
-            Chat = state.Chat with
-            {
-                Cost = new CostSnapshot(
-                    nextIn,
-                    nextOut,
-                    state.Chat.Cost.CostUsd + EstimateCost(usage.InputTokens, usage.OutputTokens))
-            }
-        };
-    }
+            Cost = new CostSnapshot(
+                stats.Metadata.TokensInput,
+                stats.Metadata.TokensOutput,
+                stats.Metadata.Cost,
+                !stats.Metadata.IsCostKnown)
+        }
+    };
 
     private static UiState OnMessageEnd(UiState state)
     {
@@ -433,9 +456,6 @@ public static class ChatAppReducer
         string preview = output.Length > 600 ? output[..600] + "..." : output;
         return $"{label} {preview.Trim()}";
     }
-
-    private static decimal EstimateCost(int inputTokens, int outputTokens) =>
-        inputTokens / 1_000_000m * InputPricePerMillion + outputTokens / 1_000_000m * OutputPricePerMillion;
 
     private static UiState WithStatus(this UiState state, string status) =>
         state with { Chat = state.Chat with { Status = status } };

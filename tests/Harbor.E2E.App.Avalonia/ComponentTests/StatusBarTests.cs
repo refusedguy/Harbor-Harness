@@ -108,15 +108,15 @@ public sealed class StatusBarTests : ComponentTestBase
 
         // Drive token counts through the REAL event path: direct VM property
         // sets are stomped by the selector pipeline on the next store
-        // transition now that the app fully boots. StepFinishEvent carries
-        // usage into state.Cost (AppReducer.OnStepFinish).
+        // transition now that the app fully boots. The totals the status bar
+        // shows are the ones the core publishes (SessionStatsEvent — #653: the
+        // reducer no longer prices, so a StepFinishEvent no longer moves them).
         var eventBus = Driver.Host.Services
             .GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
-        var partial = Harbor.Abstractions.Models.AssistantMessage.Empty(
-            "e2e-tok-session", "qwen2.5-coder:7b");
-        await eventBus.PublishAsync(new MessageUpdateEvent(
-            new StepFinishEvent(0, "stop", new Harbor.Abstractions.Models.Usage(1234, 5678)),
-            partial)).ConfigureAwait(false);
+        await eventBus.PublishAsync(new SessionStatsEvent(
+            "e2e-tok-session",
+            new Harbor.Abstractions.Models.SessionMetadata(
+                0.0234m, 1234, 5678, 0, 0, 0, 1, null))).ConfigureAwait(false);
 
         // N0 grouping is culture-dependent ("1,234" vs "1 234") — build the
         // expected strings with the process culture instead of hardcoding.

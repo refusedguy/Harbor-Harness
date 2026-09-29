@@ -11,25 +11,34 @@ namespace Harbor.App.Cli.Tests;
 ///     #457: the CellForge status footer paints a snapshot built once per frame
 ///     by <see cref="ReplLifecycle.BuildStatusSnapshot" />. Both cost and scroll
 ///     used to be hardcoded there (<c>0m</c> / <c>0</c>), so the value the
-///     reducer accumulates per finished step never reached the projection and
-///     the scroll segment stayed pinned. These tests drive the real store
-///     (dispatch → <see cref="ChatAppReducer" /> → snapshot → <see cref="StatusProjector" />)
+///     reducer carried never reached the projection and the scroll segment stayed
+///     pinned. These tests drive the real store (dispatch →
+///     <see cref="ChatAppReducer" /> → snapshot → <see cref="StatusProjector" />)
 ///     so a regression in any of those four hops fails here.
 /// </summary>
+/// <remarks>
+///     #653: the totals are dispatched as a <see cref="SessionStatsEvent" /> —
+///     the core's own event, carrying the cost it priced from the model's rate
+///     table. The reducer no longer turns tokens into money, so a step-finish
+///     event is no longer the way to move this cell.
+/// </remarks>
 public class StatusSnapshotTests
 {
     private const int Rows = 24;
     private const int Total = 40;
 
-    /// <summary>1000 in @ $3/M + 500 out @ $15/M — the reducer's own pricing.</summary>
+    /// <summary>What the core published for the first turn.</summary>
     private const decimal OneStepCost = 0.0105m;
 
+    /// <summary>What the core published after a second, identical turn.</summary>
+    private const decimal TwoStepCost = 0.0210m;
+
     [Test]
-    public async Task AccumulatedCost_ReachesFooterProjection()
+    public async Task CoreCost_ReachesFooterProjection()
     {
         var store = new UiStore();
         _ = store.Dispatch(new ChatAppMsg.ConfigureRuntime("kilo-auto/free", "kilocode", "code"));
-        StepFinished(store, 1_000, 500);
+        StatsPublished(store, OneStepCost, 1_000, 500);
 
         var snapshot = ReplLifecycle.BuildStatusSnapshot(null, store.State, 1_000, 500, Rows, Total);
 
@@ -44,11 +53,11 @@ public class StatusSnapshotTests
         var before = ReplLifecycle.BuildStatusSnapshot(null, store.State, 1_000, 500, Rows, Total);
         await Assert.That(before.Chat.Cost.CostUsd).IsEqualTo(0m);
 
-        // Same chrome, same token counts, same geometry — the accumulated cost
-        // is the only input that moved. This is exactly what the old memo
-        // dropped: it compared the snapshot's 0 against a hardcoded 0, never
-        // rebuilt, and the footer kept painting the stale $0.0000 segment.
-        StepFinished(store, 1_000, 500);
+        // Same chrome, same token counts, same geometry — the cost total is the
+        // only input that moved. This is exactly what the old memo dropped: it
+        // compared the snapshot's 0 against a hardcoded 0, never rebuilt, and the
+        // footer kept painting the stale $0.0000 segment.
+        StatsPublished(store, OneStepCost, 1_000, 500);
         var after = ReplLifecycle.BuildStatusSnapshot(before, store.State, 1_000, 500, Rows, Total);
 
         await Assert.That(ReferenceEquals(before, after)).IsFalse();
@@ -57,33 +66,78 @@ public class StatusSnapshotTests
     }
 
     [Test]
-    public async Task SecondStep_CostAccumulatesAcrossSteps()
+    public async Task SecondTurn_CostIsTheCoreTotal_NotTwiceTheFirst()
     {
         var store = new UiStore();
-        StepFinished(store, 1_000, 500);
+        StatsPublished(store, OneStepCost, 1_000, 500);
         var afterOne = ReplLifecycle.BuildStatusSnapshot(null, store.State, 1_000, 500, Rows, Total);
         await Assert.That(afterOne.Chat.Cost.CostUsd).IsEqualTo(OneStepCost);
 
-        StepFinished(store, 1_000, 500);
+        // The core publishes ABSOLUTE session totals, so the footer follows it to
+        // $0.0210. A reducer that folded the incoming value as a delta would
+        // print $0.0315 here — the number would be its own invention again.
+        StatsPublished(store, TwoStepCost, 2_000, 1_000);
         var storeState = store.State;
         var second = ReplLifecycle.BuildStatusSnapshot(
             afterOne, storeState, storeState.Chat.Cost.TokensIn, storeState.Chat.Cost.TokensOut, Rows, Total);
 
         await Assert.That(ReferenceEquals(afterOne, second)).IsFalse();
-        await Assert.That(second.Chat.Cost.CostUsd).IsEqualTo(OneStepCost * 2);
+        await Assert.That(second.Chat.Cost.CostUsd).IsEqualTo(TwoStepCost);
         await Assert.That(Footer(second)).Contains("0.0210");
+    }
+
+    /// <summary>
+    ///     #653: a model with no published price shows a dash, not "$0.0000" —
+    ///     zero there is a claim ("this was free") that a paid provider with an
+    ///     unpriced catalogue entry would be lying about.
+    /// </summary>
+    [Test]
+    public async Task UnknownPrice_RendersADash_NotZeroDollars()
+    {
+        var store = new UiStore();
+        _ = store.Dispatch(new ChatAppMsg.Agent(new SessionStatsEvent(
+            "s1",
+            new SessionMetadata(0m, 61_600, 196, 0, 0, 0, 1, null, IsCostKnown: false))));
+
+        var snapshot = ReplLifecycle.BuildStatusSnapshot(null, store.State, 61_600, 196, Rows, Total);
+
+        await Assert.That(snapshot.Chat.Cost.IsCostUnpriced).IsTrue();
+        await Assert.That(StatusBarText.CostCell(snapshot.Chat.Cost.CostUsd, snapshot.Chat.Cost.IsCostUnpriced))
+            .IsEqualTo("—");
+        await Assert.That(Footer(snapshot)).DoesNotContain("$0.0000");
+        await Assert.That(Footer(snapshot)).Contains("—");
     }
 
     [Test]
     public async Task QuietFrame_ReusesSnapshotInstance()
     {
         var store = new UiStore();
-        StepFinished(store, 1_000, 500);
+        StatsPublished(store, OneStepCost, 1_000, 500);
 
         var first = ReplLifecycle.BuildStatusSnapshot(null, store.State, 1_000, 500, Rows, Total);
         var second = ReplLifecycle.BuildStatusSnapshot(first, store.State, 1_000, 500, Rows, Total);
 
         await Assert.That(ReferenceEquals(first, second)).IsTrue();
+    }
+
+    /// <summary>
+    ///     #653, end to end through the real store: the LLM's own step-finish
+    ///     event moves no money. 61.6k in + 196 out is the exact pair that used
+    ///     to print $0.1878 on a free model. (The REPL's token CELL comes from
+    ///     the tracker's pull feed, which BuildStatusSnapshot takes as an
+    ///     argument — the claim under test is the reducer's own state.)
+    /// </summary>
+    [Test]
+    public async Task StepFinishAlone_MovesNoCost()
+    {
+        var store = new UiStore();
+        StepFinished(store, 61_600, 196);
+
+        var snapshot = ReplLifecycle.BuildStatusSnapshot(null, store.State, 61_600, 196, Rows, Total);
+
+        await Assert.That(store.State.Chat.Cost.CostUsd).IsEqualTo(0m);
+        await Assert.That(snapshot.Chat.Cost.CostUsd).IsEqualTo(0m);
+        await Assert.That(Footer(snapshot)).DoesNotContain("$0.1878");
     }
 
     [Test]
@@ -143,6 +197,12 @@ public class StatusSnapshotTests
         Apply(store, new ChatAppMsg.Agent(new MessageUpdateEvent(
             new StepFinishEvent(0, "stop", new Usage(inputTokens, outputTokens)),
             AssistantMessage.Empty("s", "m"))));
+
+    /// <summary>What the core publishes after a turn: the session totals it folded.</summary>
+    private static void StatsPublished(UiStore store, decimal cost, int tokensIn, int tokensOut) =>
+        Apply(store, new ChatAppMsg.Agent(new SessionStatsEvent(
+            "s",
+            new SessionMetadata(cost, tokensIn, tokensOut, 0, 0, 0, 1, null))));
 
     private static void Apply(UiStore store, params AppMsg[] msgs)
     {

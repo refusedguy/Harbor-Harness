@@ -46,5 +46,8 @@ internal sealed class DummySessionContext : ISessionContext
     // message — writers and the AgentLoop reader held different channels.
     public Channel<AgentMessage> SteeringQueue { get; } = Channel.CreateUnbounded<AgentMessage>();
     public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default) => Task.CompletedTask;
-    public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default) => Task.CompletedTask;
+
+    // #653: the pricing rides along because the model is only known to the
+    // caller; this stand-in records nothing, so it has nothing to price with.
+    public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default) => Task.CompletedTask;
 }

@@ -157,7 +157,7 @@ public sealed class LoadSessionContext : ISessionContext
         }
     }
 
-    public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default) => Task.CompletedTask;
+    public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default) => Task.CompletedTask;
 
     public void EnqueueSteering(params AgentMessage[] messages)
     {

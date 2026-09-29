@@ -375,6 +375,9 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         svm.TokensIn = (int)Math.Min(state.Chat.Cost.TokensIn, int.MaxValue);
         svm.TokensOut = (int)Math.Min(state.Chat.Cost.TokensOut, int.MaxValue);
         svm.Cost = state.Chat.Cost.CostUsd;
+        // #653: pass the core's "could this be priced?" through unchanged, so the
+        // status line says "—" for an unpriced model instead of "$0.0000".
+        svm.IsCostKnown = !state.Chat.Cost.IsCostUnpriced;
 
         _lastStatusSlice = StatusSlice.Capture(state);
     }

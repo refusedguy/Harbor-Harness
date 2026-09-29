@@ -103,7 +103,11 @@ public sealed partial record Session(
 /// <summary>
 ///     Aggregated metadata about a session.
 /// </summary>
-/// <param name="Cost">Total estimated cost in USD.</param>
+/// <param name="Cost">
+///     Total cost in USD, or the best floor known when
+///     <see cref="IsCostKnown" /> is <see langword="false" /> — a floor is a
+///     lower bound, never a measured zero.
+/// </param>
 /// <param name="TokensInput">Total input tokens consumed.</param>
 /// <param name="TokensOutput">Total output tokens generated.</param>
 /// <param name="TokensReasoning">Total reasoning tokens consumed (when supported).</param>
@@ -111,6 +115,18 @@ public sealed partial record Session(
 /// <param name="TokensCacheWrite">Total cache-write tokens (when supported).</param>
 /// <param name="MessageCount">Total number of messages appended to the session.</param>
 /// <param name="TimeCompacting">Total time spent compacting the session.</param>
+/// <remarks>
+///     <para>
+///         <b>#653 — the cost is a CORE number.</b> It is computed on the headless
+///         side, from the model that actually made the call, by
+///         <see cref="AddUsage" /> delegating to
+///         <see cref="Pricing.CalculateCost" />. Nothing in the presentation
+///         layer may re-derive it: a renderer that recomputes the price applies
+///         some model's rates to every session and disagrees with the bill — and
+///         with the core. See
+///         <c>tests/Harbor.Architecture.Tests/CostPricedInCoreRules.cs</c>.
+///     </para>
+/// </remarks>
 [MemoryPackable]
 public sealed partial record SessionMetadata(
     decimal Cost,
@@ -120,7 +136,8 @@ public sealed partial record SessionMetadata(
     int TokensCacheRead,
     int TokensCacheWrite,
     int MessageCount,
-    TimeSpan? TimeCompacting)
+    TimeSpan? TimeCompacting,
+    bool IsCostKnown = true)
 {
     /// <summary>
     ///     A zeroed <see cref="SessionMetadata" /> for fresh sessions.
@@ -128,14 +145,30 @@ public sealed partial record SessionMetadata(
     public static SessionMetadata Empty => new(0m, 0, 0, 0, 0, 0, 0, null);
 
     /// <summary>
-    ///     Returns a copy of this metadata with the usage from one LLM call added in.
+    ///     Returns a copy of this metadata with the usage from one LLM call added
+    ///     in, priced with that call's model rates.
     /// </summary>
+    /// <remarks>
+    ///     The ONLY place a usage delta becomes money. Delegating to
+    ///     <see cref="Pricing.CalculateCost" /> is what makes cache-read and
+    ///     cache-write tokens bill at their own (much cheaper) rates instead of
+    ///     at the full input rate — one of the two defects #653 was opened for.
+    /// </remarks>
     /// <param name="usage">The usage to add.</param>
+    /// <param name="pricing">
+    ///     The rates of the model that produced <paramref name="usage" />.
+    ///     <see cref="Pricing.Unknown" /> for a model whose price is not
+    ///     published: the delta contributes nothing and
+    ///     <see cref="IsCostKnown" /> goes <see langword="false" />, so the UI
+    ///     reports "price unknown" instead of a "$0.0000" that reads as "free".
+    /// </param>
     /// <returns>A new <see cref="SessionMetadata" /> with incremented counters.</returns>
-    public SessionMetadata AddUsage(Usage usage)
+    public SessionMetadata AddUsage(Usage usage, Pricing pricing)
     {
         return this with
         {
+            Cost = Cost + pricing.CalculateCost(usage),
+            IsCostKnown = !pricing.IsUnknown,
             TokensInput = TokensInput + usage.InputTokens,
             TokensOutput = TokensOutput + usage.OutputTokens,
             TokensReasoning = TokensReasoning + (usage.ReasoningTokens ?? 0),
@@ -180,6 +213,26 @@ public sealed partial record Pricing(
     ///     Sentinel pricing for models with unknown pricing. <see cref="CalculateCost" /> returns 0.
     /// </summary>
     public static Pricing Unknown => new(0m, 0m);
+
+    /// <summary>
+    ///     Whether these rates are a real price table or the
+    ///     <see cref="Unknown" /> sentinel — i.e. whether the model publishes a
+    ///     price at all.
+    /// </summary>
+    /// <remarks>
+    ///     True for Ollama and for every genuinely free model, and also for a
+    ///     paid provider whose catalogue entry carries no rates. The two are
+    ///     indistinguishable from the numbers alone, which is exactly why the
+    ///     core publishes the answer as its own bit
+    ///     (<see cref="SessionMetadata.IsCostKnown" />) instead of leaving a
+    ///     renderer to guess: a "$0.0000" is a claim, and for the second case
+    ///     it is a false one.
+    /// </remarks>
+    public bool IsUnknown =>
+        InputPerMillion == 0m
+        && OutputPerMillion == 0m
+        && (CacheReadPerMillion ?? 0m) == 0m
+        && (CacheWritePerMillion ?? 0m) == 0m;
 
     /// <summary>
     ///     Calculate the cost in USD for the given <see cref="Usage" />.

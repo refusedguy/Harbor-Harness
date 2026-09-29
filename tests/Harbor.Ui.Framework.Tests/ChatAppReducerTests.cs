@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -203,19 +204,95 @@ public class ChatAppReducerTests
         await Assert.That(result.State.Chat.Status).IsEqualTo("compacting");
     }
 
+    /// <summary>
+    ///     #653: the reducer's whole remaining job for money — copy the total the
+    ///     core published, cache-aware and model-correct, and nothing else.
+    /// </summary>
     [Test]
-    public async Task StepFinish_AccumulatesCost()
+    public async Task SessionStats_AdoptsTheCostTheCorePriced()
+    {
+        var state = Stats("s1", new SessionMetadata(
+            0.1878m, 1_234, 567, 0, 900, 100, 3, null));
+
+        await Assert.That(state.Chat.Cost.CostUsd).IsEqualTo(0.1878m);
+        await Assert.That(state.Chat.Cost.TokensIn).IsEqualTo(1_234);
+        await Assert.That(state.Chat.Cost.TokensOut).IsEqualTo(567);
+        await Assert.That(state.Chat.Cost.IsCostUnpriced).IsFalse();
+    }
+
+    /// <summary>
+    ///     #653: the UI computes nothing. A finished LLM step carries usage, and
+    ///     the reducer must move no money for it — the old $3/M in, $15/M out
+    ///     constants turned exactly this event into a fabricated $0.1878 on a
+    ///     free model. The core's totals are the only source.
+    /// </summary>
+    [Test]
+    public async Task StepFinish_MovesNoCost()
     {
         var partial = AssistantMessage.Empty("s", "m");
         var state = ChatAppReducer.Update(new UiState(),
             new ChatAppMsg.Agent(new MessageStartEvent(partial))).State;
         state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new MessageUpdateEvent(
-            new StepFinishEvent(0, "stop", new Usage(1_000, 2_000)), partial))).State;
+            new StepFinishEvent(0, "stop", new Usage(61_600, 196)), partial))).State;
 
-        await Assert.That(state.Chat.Cost.TokensIn).IsEqualTo(1_000);
-        await Assert.That(state.Chat.Cost.TokensOut).IsEqualTo(2_000);
-        await Assert.That(state.Chat.Cost.CostUsd).IsGreaterThan(0m);
+        await Assert.That(state.Chat.Cost.CostUsd).IsEqualTo(0m);
+        await Assert.That(state.Chat.Cost.TokensIn).IsEqualTo(0);
+        await Assert.That(state.Chat.Cost.TokensOut).IsEqualTo(0);
     }
+
+    /// <summary>
+    ///     #653: the cost total is ABSOLUTE, not a delta — a second stats event
+    ///     replaces the number instead of adding to it, or the status bar would
+    ///     report twice what the core said.
+    /// </summary>
+    [Test]
+    public async Task SessionStats_ReplacesTheTotal_ItDoesNotAccumulateIt()
+    {
+        var state = Stats("s1", new SessionMetadata(0.0105m, 1_000, 500, 0, 0, 0, 1, null));
+        state = Stats(state, "s1", new SessionMetadata(0.0210m, 2_000, 1_000, 0, 0, 0, 2, null));
+
+        await Assert.That(state.Chat.Cost.CostUsd).IsEqualTo(0.0210m);
+        await Assert.That(state.Chat.Cost.TokensIn).IsEqualTo(2_000);
+    }
+
+    /// <summary>
+    ///     #653: an unpriced model is reported as unpriced. The status bar reads
+    ///     "—" here, which is the whole point of the core publishing a bit
+    ///     instead of a zero that would read as "free".
+    /// </summary>
+    [Test]
+    public async Task SessionStats_UnknownPrice_MarksTheCostAsUnknown()
+    {
+        var state = Stats("s1", new SessionMetadata(
+            0m, 10_000, 2_000, 0, 0, 0, 1, null, IsCostKnown: false));
+
+        await Assert.That(state.Chat.Cost.IsCostUnpriced).IsTrue();
+        await Assert.That(StatusBarText.CostCell(state.Chat.Cost.CostUsd, state.Chat.Cost.IsCostUnpriced))
+            .IsEqualTo("—");
+    }
+
+    /// <summary>
+    ///     #653: a state that never mentioned a cost renders exactly as it did
+    ///     before the flag existed. <c>CostSnapshot</c> is a struct, so
+    ///     <c>default</c> is what <c>ChatDomainState.Empty</c>, a fresh
+    ///     <c>UiState</c> and half the test suite carry; had the flag been
+    ///     "priced", every one of those screens would have read "price unknown".
+    /// </summary>
+    [Test]
+    public async Task AnUnsetCostSnapshot_ReadsAsPriced()
+    {
+        var state = new UiState();
+
+        await Assert.That(state.Chat.Cost.IsCostUnpriced).IsFalse();
+        await Assert.That(StatusBarText.CostCell(state.Chat.Cost.CostUsd, state.Chat.Cost.IsCostUnpriced))
+            .IsNull();
+    }
+
+    private static UiState Stats(string sessionId, SessionMetadata metadata) =>
+        Stats(new UiState(), sessionId, metadata);
+
+    private static UiState Stats(UiState state, string sessionId, SessionMetadata metadata) =>
+        ChatAppReducer.Update(state, new ChatAppMsg.Agent(new SessionStatsEvent(sessionId, metadata))).State;
 
     [Test]
     public async Task AgentEnd_AfterError_KeepsErrorStatus()

@@ -64,7 +64,7 @@ public sealed class TestSessionContext(Session session, IReadOnlyList<AgentMessa
         return Task.CompletedTask;
     }
 
-    public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default) => Task.CompletedTask;
+    public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default) => Task.CompletedTask;
 
     public void EnqueueSteering(params AgentMessage[] messages)
     {

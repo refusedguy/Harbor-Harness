@@ -72,11 +72,29 @@ public sealed class StatusViewModel
 
     public void ClearContext() => ContextTokensUsed = null;
 
-    /// <summary>Formats usage numbers once per change, not per frame.</summary>
+    /// <summary>
+    ///     Formats usage numbers once per change, not per frame. #653: both
+    ///     numbers are the core's, copied from <c>SessionStatsEvent</c> — this
+    ///     widget computes no cost.
+    /// </summary>
+    /// <param name="inputTokens">Cumulative input tokens.</param>
+    /// <param name="outputTokens">Cumulative output tokens.</param>
+    /// <param name="costUsd">
+    ///     Cumulative cost as the core priced it, or <see langword="null" /> when
+    ///     the core could not price this session (a model with no published
+    ///     rates). The cell then reads "—": a "$0.0000" there claims the session
+    ///     was free, which is false for a paid provider and true for Ollama, and
+    ///     nothing downstream can tell those apart. Same glyph as
+    ///     <c>StatusBarText.UnknownCostCell</c> — spelled out rather than shared
+    ///     because this assembly is a BCL-only leaf that must not reference
+    ///     Harbor.Ui.Framework.State (that edge would be circular).
+    /// </param>
     public void SetUsage(long inputTokens, long outputTokens, decimal? costUsd)
     {
         Tokens = FormatCount(inputTokens) + "↑ " + FormatCount(outputTokens) + "↓";
-        Cost = costUsd is null ? null : "$" + costUsd.Value.ToString("0.####", CultureInfo.InvariantCulture);
+        Cost = costUsd is null
+            ? "—"
+            : "$" + costUsd.Value.ToString("0.####", CultureInfo.InvariantCulture);
     }
 
     /// <summary>Token-only pull feed (host polling <c>ITokenTracker.GetStats()</c>):

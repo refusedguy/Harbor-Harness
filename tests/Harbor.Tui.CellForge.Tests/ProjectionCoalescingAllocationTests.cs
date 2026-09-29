@@ -382,6 +382,11 @@ public class ProjectionCoalescingAllocationTests
                 new MessageUpdateEvent(new TextDeltaEvent("t1", "c"), partial),
                 new MessageUpdateEvent(new ThinkingDeltaEvent("h1", "hmm"), partial),
                 new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(1000, 500)), partial),
+                // #653: the token/cost totals the sidebar caches arrive from the
+                // CORE, not from the step-finish event — that event is usage for
+                // the prompt bar only, and pricing it here is what the two
+                // deleted $3/$15 constants used to do.
+                new SessionStatsEvent("s1", new SessionMetadata(0.0105m, 1000, 500, 0, 0, 0, 1, null)),
                 new MessageUpdateEvent(new TextDeltaEvent("t1", "d"), partial),
                 new MessageUpdateEvent(new TextDeltaEvent("t1", "e"), partial),
             ];
@@ -562,8 +567,8 @@ public class SideBarProjectionCacheTests
     {
         // The audit suggested keying the cache on (Sessions, ActiveSessionId).
         // That key is WRONG: the sidebar also carries the token/cost line,
-        // which moves on StepFinishEvent while both session inputs stand
-        // still. Pinned here so the narrower key can never come back.
+        // which moves on the core's SessionStatsEvent while both session inputs
+        // stand still. Pinned here so the narrower key can never come back.
         var cache = new SideBarProjectionCache();
         var sessions = Many(200);
         var active = SessionId.Create("s7");

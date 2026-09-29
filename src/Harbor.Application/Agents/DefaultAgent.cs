@@ -517,30 +517,65 @@ public sealed class DefaultAgent : IAgent
     // only for PromptAsync's catch to re-wrap them into a Failure — one Bind
     // railway replaces both throw bridges; the single bridge left lives at the
     // run boundary below where the catch is needed for RunAsync anyway.
-    // No awaits here — the chain is returned to the caller, so there is no
-    // SynchronizationContext capture point inside this method.
+    // The chain itself is returned to the caller; the one await is inside the
+    // explicit lambda below and continues on the thread pool (ConfigureAwait).
     private Task<Result<ISessionContext>> LoadSessionContextAsync(string sessionId, CancellationToken ct)
         => _sessionStore.GetAsync(sessionId, ct)
             .Bind(session => _sessionStore.GetMessagesAsync(sessionId, ct)
-                .Map(messages => (ISessionContext)new DefaultSessionContext(
-                    session, messages, _sessionStore, _steering.Channel)));
+                // The context seeds its running usage/cost total from the store,
+                // which is an async read — hence Bind over an explicitly typed
+                // async lambda instead of the old sync Map.
+                .Bind(async (IReadOnlyList<AgentMessage> messages) =>
+                    Result.Success<ISessionContext>(await DefaultSessionContext.CreateAsync(
+                        session, messages, _sessionStore, _steering.Channel, _eventBus, ct)
+                        .ConfigureAwait(false))));
 
 }
 
 /// <summary>
 ///     Default session context implementation.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>#653 — the running cost lives here, on the core side.</b> The core
+///         knows which model it just called and therefore what that call's
+///         <see cref="Usage" /> cost, so the fold happens here and the total
+///         leaves as a <see cref="SessionStatsEvent" />. A renderer displays that
+///         number and never forms one of its own — see
+///         <c>tests/Harbor.Architecture.Tests/CostPricedInCoreRules.cs</c>.
+///     </para>
+///     <para>
+///         <b>Why the total is seeded once, here, instead of re-read per turn.</b>
+///         <see cref="ISessionStore.GetStatsAsync" /> diverges by implementation
+///         and <c>JsonlSessionStore</c> derives its fold from the message
+///         history — which already contains the assistant message this turn just
+///         appended. Re-reading per turn and adding the delta on top counts that
+///         turn twice. The seed is taken before the first turn, so the running
+///         total kept here is exact.
+///     </para>
+/// </remarks>
 internal sealed class DefaultSessionContext : ISessionContext
 {
     private readonly List<AgentMessage> _messages;
     private readonly ISessionStore _store;
+    private readonly IEventBus? _eventBus;
     private readonly ILogger _logger;
 
-    public DefaultSessionContext(
+    /// <summary>
+    ///     Session-cumulative usage and cost, seeded from the store before the
+    ///     first turn (see the type remarks) and folded once per turn. This is
+    ///     the value the core publishes; the store's own record is a separate,
+    ///     best-effort mirror.
+    /// </summary>
+    private SessionMetadata _stats;
+
+    private DefaultSessionContext(
         Session session,
         IReadOnlyList<AgentMessage> messages,
         ISessionStore store,
         Channel<AgentMessage> steeringQueue,
+        IEventBus? eventBus,
+        SessionMetadata seed,
         ILogger? logger = null)
     {
         Session = session;
@@ -552,8 +587,64 @@ internal sealed class DefaultSessionContext : ISessionContext
             _messages.Add(messages[i]);
         }
         _store = store;
+        _eventBus = eventBus;
         _logger = logger ?? NullLogger.Instance;
+        _stats = seed;
         SteeringQueue = steeringQueue;
+    }
+
+    /// <summary>
+    ///     Build a context for one run, seeding its running total from the store.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The seed read is best-effort: a store that cannot answer (closed,
+    ///         IO failure) starts the run from <see cref="SessionMetadata.Empty" />
+    ///         and logs, rather than failing a prompt the user already sent.
+    ///     </para>
+    ///     <para>
+    ///         <paramref name="eventBus" /> is <see langword="null" /> for a
+    ///         session nobody is watching (a sub-agent run): its usage is still
+    ///         folded and persisted, it just has no live audience to publish to.
+    ///     </para>
+    /// </remarks>
+    internal static async Task<DefaultSessionContext> CreateAsync(
+        Session session,
+        IReadOnlyList<AgentMessage> messages,
+        ISessionStore store,
+        Channel<AgentMessage> steeringQueue,
+        IEventBus? eventBus,
+        CancellationToken ct = default,
+        ILogger? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+
+        SessionMetadata seed = await ReadSeedAsync(store, session.Id, logger, ct).ConfigureAwait(false);
+        return new DefaultSessionContext(
+            session, messages, store, steeringQueue, eventBus, seed, logger);
+    }
+
+    /// <summary>
+    ///     The run's starting totals: whatever the store already knows, or zero.
+    /// </summary>
+    private static async Task<SessionMetadata> ReadSeedAsync(
+        ISessionStore store,
+        string sessionId,
+        ILogger? logger,
+        CancellationToken ct)
+    {
+        var stats = await store.GetStatsAsync(sessionId, ct).ConfigureAwait(false);
+        if (stats.IsFailure)
+        {
+            // §4.6-ok: a store that cannot answer must not fail a prompt the user
+            // already sent. The run starts from zero and the loss is logged.
+            (logger ?? NullLogger.Instance).LogError(
+                "Failed to read session stats for {SessionId}; usage totals start at zero: {Error}",
+                sessionId, stats.Error);
+            return SessionMetadata.Empty;
+        }
+
+        return stats.Value;
     }
 
     public Session Session { get; }
@@ -580,8 +671,23 @@ internal sealed class DefaultSessionContext : ISessionContext
         }
     }
 
-    public async Task UpdateStatsAsync(Usage usage, CancellationToken ct = default)
+    public async Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default)
     {
+        // 1. Fold the delta into the running total and publish it. The core is
+        //    the only place this number is formed: `pricing` is the resolved
+        //    ModelInfo's own rate table, so cached tokens bill at their cache
+        //    rates and a model with no published price publishes
+        //    IsCostKnown=false instead of a $0.0000 that reads as "free".
+        _stats = _stats.AddUsage(usage, pricing);
+        if (_eventBus is not null)
+        {
+            await _eventBus.PublishAsync(new SessionStatsEvent(Session.Id, _stats), ct).ConfigureAwait(false);
+        }
+
+        // 2. Mirror the delta into the store's own record, best-effort. This is a
+        //    read-modify-write against the store's snapshot rather than a write of
+        //    `_stats`, so a concurrent sub-agent cost propagation
+        //    (SubAgentRunner) landing between two turns is not rolled back.
         var stats = await _store.GetStatsAsync(Session.Id, ct).ConfigureAwait(false);
         if (stats.IsFailure)
         {
@@ -592,7 +698,7 @@ internal sealed class DefaultSessionContext : ISessionContext
             return;
         }
 
-        var updated = stats.Value.AddUsage(usage);
+        var updated = stats.Value.AddUsage(usage, pricing);
         await _store.UpdateStatsAsync(Session.Id, updated, ct).ConfigureAwait(false);
     }
 }

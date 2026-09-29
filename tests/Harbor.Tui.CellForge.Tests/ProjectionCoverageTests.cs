@@ -100,17 +100,43 @@ public class ProjectionCoverageTests
         await Assert.That(harness.Status.Agent).IsEqualTo("code");
     }
 
+    /// <summary>
+    ///     #653: the renderer shows the totals the CORE published — cost included,
+    ///     already priced with the model's own (cache-aware) rates. A
+    ///     <c>StepFinishEvent</c> on its own moves nothing: the old reducer
+    ///     charged this exact event with two hardcoded constants.
+    /// </summary>
     [Test]
-    public async Task Tokens_And_Cost_FromStepFinish()
+    public async Task Tokens_And_Cost_ComeFromTheCore()
     {
         using var harness = await CreateAsync();
         var partial = Partial();
         await harness.Renderer.RenderAsync(new MessageStartEvent(partial));
         await harness.Renderer.RenderAsync(new MessageUpdateEvent(
             new StepFinishEvent(0, "stop", new Usage(1000, 500)), partial));
+        await harness.Renderer.RenderAsync(new SessionStatsEvent(
+            "s1", new SessionMetadata(0.0105m, 1000, 500, 0, 400, 100, 1, null)));
+
         await Assert.That(harness.Status.TokensIn).IsEqualTo(1000);
         await Assert.That(harness.Status.TokensOut).IsEqualTo(500);
         await Assert.That(harness.Status.Cost).IsEqualTo(0.0105m);
+    }
+
+    /// <summary>
+    ///     #653: a model with no published price reaches the renderer flagged as
+    ///     unpriced, so the status line can say "—" instead of "$0.0000".
+    /// </summary>
+    [Test]
+    public async Task UnknownPrice_ReachesTheRendererAsUnpriced()
+    {
+        using var harness = await CreateAsync();
+        await harness.Renderer.RenderAsync(new SessionStatsEvent(
+            "s1",
+            new SessionMetadata(0m, 61_600, 196, 0, 0, 0, 1, null, IsCostKnown: false)));
+
+        await Assert.That(harness.Status.IsCostKnown).IsFalse();
+        await Assert.That(harness.Status.Formatted).Contains("—");
+        await Assert.That(harness.Status.Formatted).DoesNotContain("$0.0000");
     }
 
     [Test]
@@ -165,6 +191,7 @@ public class ProjectionCoverageTests
             new MessageUpdateEvent(new TextDeltaEvent("t1", "mirror-me"), partial),
             new MessageUpdateEvent(new ThinkingDeltaEvent("h1", "deep-thought"), partial),
             new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(2000, 1000)), partial),
+            new SessionStatsEvent("s1", new SessionMetadata(0.0210m, 2000, 1000, 0, 0, 0, 1, null)),
         ];
         foreach (var evt in stream)
         {

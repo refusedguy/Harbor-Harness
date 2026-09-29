@@ -21,4 +21,4 @@ model: kilocode/tencent/hy3:free | ввод — текст, /help — коман
                                                                                 
                                                                                 
                                                                                 
-mock/mock-model ○ idle agent code live                                          
+mock/mock-model ○ idle agent code live $0.0001                                  
