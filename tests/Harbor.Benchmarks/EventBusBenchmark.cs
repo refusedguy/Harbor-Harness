@@ -313,6 +313,12 @@ public class EventBusBenchmark
     /// </summary>
     private static void PrimeRing(InMemoryEventBus bus)
     {
+        // #518: arm retention first. Since the first read is what arms the ring,
+        // an unarmed bus would take the zero-subscriber fast path for every
+        // prime below and write no slots — leaving the `*_ScrollbackOn` rows
+        // measuring a fast path under a slow-path label.
+        _ = bus.GetScrollback(ScrollbackCapacity);
+
         for (int i = 0; i < ScrollbackCapacity; i++)
         {
             bus.PublishAsync(new TurnStartEvent(i)).GetAwaiter().GetResult();
@@ -399,6 +405,10 @@ public class EventBusBenchmarkFanout
 
         _drainOnlyBus = new InMemoryEventBus(maxScrollback: 0);
         _enqueueAndDrainBus = new InMemoryEventBus(maxScrollback: ScrollbackCapacity);
+
+        // #518: arm retention — the ring is only maintained once a reader has
+        // asked for history, so the pre-fill below needs it to write slots.
+        _ = _enqueueAndDrainBus.GetScrollback(ScrollbackCapacity);
 
         for (int i = 0; i < ScrollbackCapacity; i++)
         {
@@ -539,6 +549,12 @@ public class EventBusDeliveryBenchmark
         {
             _steadyBus.Subscribe(NoOpHandler);
         }
+
+        // #518: arm retention on both buses before any publish — `EnqueueOnly`
+        // has zero subscribers, so unarmed it would take the fast path and
+        // measure nothing but a field read.
+        _ = _enqueueBus.GetScrollback(MaxScrollback);
+        _ = _steadyBus.GetScrollback(MaxScrollback);
 
         for (int i = 0; i < MaxScrollback; i++)
         {

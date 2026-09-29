@@ -125,6 +125,29 @@ concerns:
   `lastSequence` cursor against the 1000-envelope server ring
   (`EventBroadcaster.cs:32-35,49-50,141-189`); a gap older than the ring
   requires full resync (no in-bus cursor/dedup primitive).
+- **The scrollback ring is armed by its first reader (#518).** The topology
+  answer to "is retention part of the bus contract?" is *yes* — the pull above is
+  a declared in-process guarantee, and `IEventBus` is public in the
+  zero-dependency `Harbor.Abstractions` assembly that every plugin references
+  (`IPluginLoadHost.EventBus` hands a live bus to out-of-tree plugin code, and
+  the desktop app declares `[Exposes(typeof(IEventBus))]` as a validated DI
+  capability). "No production callers" is therefore **not a provable claim**
+  here, and the ring was not deleted. What *was* wrong is the cost: arming
+  retention by capacity made a ring nobody read cost a slot write under a lock
+  on every publish **and** silently disqualified the fast path for every shipped
+  preset (0/200 qualifying publishes on CLI and desktop, 200/200 only headless).
+  Retention is now armed by the first `GetScrollback` call, so:
+  - an unread ring costs nothing, and the fast path is reachable for the
+    shipped presets;
+  - history is complete **from the first read onward**. Events published
+    strictly before the first read were not retained, and a publish racing the
+    arming may be missed — an accepted gap for a diagnostic pull;
+  - arming is one-way and permanent, and a disabled ring (`maxScrollback <= 0`)
+    can never be armed.
+  Tested: `EventBusRetentionArmingGuardTests` (both halves — the ring stays free
+  while unread and is genuinely maintained once read, so the fast path can never
+  be won by silently dropping history), and the shipped-preset regression row
+  `EventBusSinkCompositionTests.DesktopPreset_ZeroSubscribers_Qualifies`.
 
 ## 5. Subscriber-error and backpressure policy
 

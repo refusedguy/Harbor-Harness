@@ -65,13 +65,20 @@ public class EventBusSinkVerdictTests
     }
 
     /// <summary>
-    ///     Scrollback is a retention sink: with slots to write, the bus is not
-    ///     eligible even without a single mandatory sink.
+    ///     An ARMED scrollback ring is a retention sink: with slots to write, the
+    ///     bus is not eligible even without a single mandatory sink. #518 moved
+    ///     the arming from capacity to the first reader, so the bus is asked for
+    ///     history first — that call is what turns a potential into an
+    ///     obligation, and from there the ring behaves exactly as before.
     /// </summary>
     [Test]
-    public async Task ScrollbackCapacity_DisablesTheFastPath()
+    public async Task ArmedScrollback_DisablesTheFastPath()
     {
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 8);
+
+        // Arm retention (#518). A bus with slots but no reader is eligible —
+        // see EventBusRetentionArmingGuardTests.
+        _ = bus.GetScrollback(8);
 
         await Assert.That(bus.HasMandatorySink).IsFalse();
         await Assert.That(bus.FastPathEligible).IsFalse();

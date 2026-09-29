@@ -551,8 +551,33 @@ its **allocation** (0 B) is the load-bearing claim, and it is also asserted — 
 
 Which production compositions actually qualify is measured per preset in
 `tests/Harbor.Hosting.Tests/EventBusSinkCompositionTests.cs` and tabulated in
-[`docs/EVENT_BUS_SINKS.md`](./EVENT_BUS_SINKS.md) §5 (today: 0 % for every shipped preset — the
-mandatory/optional verdict, not the guard, is what keeps them out).
+[`docs/EVENT_BUS_SINKS.md`](./EVENT_BUS_SINKS.md) §5.
+
+> **Corrected by #518 — the "0 % for every shipped preset" attribution above was wrong, and so
+> was the sentence explaining it.** Until #518 the fast-path guard read
+> `maxScrollback == 0 && no mandatory sink`, so the shipped 1000-slot scrollback capacity
+> disqualified the fast path by itself. The claim that "the mandatory/optional verdict, not the
+> guard, is what keeps them out" held only for the **CLI** preset, whose `TypeFilterMiddleware` is
+> genuinely mandatory; the **desktop** preset has no sinks at all and was being kept out by the
+> scrollback term alone — a ring that was written on every publish and read by no one.
+>
+> Retention is now armed by the first `GetScrollback` call, so the guard reads "no mandatory sink
+> and an unarmed ring". Composition-level result, asserted by
+> `EventBusSinkCompositionTests` (qualifying publishes out of 200, zero subscribers):
+>
+> | Preset | Before #518 | After #518 | Reason |
+> |---|---:|---:|---|
+> | Desktop (`DesktopDefault`, no sinks) | 0/200 | **200/200** | ring was never read → never maintained → publish is unobservable |
+> | CLI (`CliOptions` + `TypeFilterMiddleware`) | 0/200 | 0/200 | the type filter is mandatory and still keeps the full path |
+> | Headless (`EventBusScrollback = 0`) | 200/200 | 200/200 | unchanged — no ring to maintain |
+>
+> **The latency figures in §5.4 and §5.5 above are not re-measured for #518** and still describe
+> the pre-#518 code path; the tables are left as the record of what was measured, not updated with
+> numbers nobody has taken. The *qualification* rows are exact — they are asserted in CI by
+> `EventBusFastPathTests` / `EventBusSinkCompositionTests`, not eyeballed. Re-run
+> `dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*EventBus*'` to refresh the
+> timings; the `*_ScrollbackOn` rows in `EventBusBenchmark` now arm retention in `Setup`, without
+> which they would have measured the fast path under a slow-path label.
 
 ### 5.6 Status-bar packing (`StatusBarLayoutFitBenchmark`, #487) ⏳ not yet measured
 

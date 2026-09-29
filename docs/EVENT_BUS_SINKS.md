@@ -47,9 +47,9 @@ publish path re-derives it, and no sink type is special-cased by name.
 | # | Site | Sink | Verdict | Reason (what breaks if the event is silently dropped) |
 |---|---|---|---|---|
 | 1 | *removed in #478* — was `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` | ~~`TypeFilterMiddleware` (CLI preset)~~ | **n/a — deleted** | it was registered with NO allowed types, so it admitted every event while still declaring **mandatory**: the CLI paid the mandatory-sink cost (fast path off, queue-age envelope built) for a filter that dropped nothing. Deleting it is delivery-neutral — the filter passed everything — and it was the one term in this table that was not true |
-| 2 | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs:123` | `EventBusScrollback = 1000` (retention) | **mandatory retention** (for `GetScrollback`) | a reader asking for history would get an empty answer; the guard honours retention regardless of who reads it (§5) |
-| 3 | `src/Harbor.Hosting/HarborComposeOptions.cs:124-128` | `CliDefault()` — scrollback 1000, no sinks | **mandatory retention** | same as #2; the bus is therefore not fast-path eligible |
-| 4 | `src/Harbor.Hosting/HarborComposeOptions.cs:131-134` | `DesktopDefault()` — no sink, default capacity | **mandatory retention** | same as #2; no sink does not mean eligible |
+| 2 | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs:123` | `EventBusScrollback = 1000` (retention) | **retention, armed by its reader** (#518) | capacity alone no longer gates the fast path: a reader asking for history arms the ring on the spot, so an unread one is neither written nor paid for. With #1 gone, nothing is left in this preset to observe a publish — see §5 |
+| 3 | `src/Harbor.Hosting/HarborComposeOptions.cs:124-128` | `CliDefault()` — scrollback 1000, no sinks | **retention, armed by its reader** (#518) | same as #2, and with #1 removed this preset is now structurally identical to #4 |
+| 4 | `src/Harbor.Hosting/HarborComposeOptions.cs:131-134` | `DesktopDefault()` — no sink, default capacity | **retention, armed by its reader** (#518) | same as #2 — no sink, and nobody reads the ring |
 | 5 | `src/Harbor.Hosting/HarborComposeOptions.cs:73` | `EventBusMiddlewares` factory | **n/a (wiring)** | the composition-time channel through which #1/#4 reach the bus; `null` means "no sinks", never "sniff later" |
 | 6 | `src/Harbor.Hosting/Modules/ConfigurationModule.cs:70-74` | the one place a bus is constructed in production | **n/a (wiring)** | computes the mandatory set once and hands the bus to DI; the verdict never depends on DI order |
 | 7 | `src/Harbor.Registries/Events/TypeFilterMiddleware.cs` | type allowlist filter | **mandatory** | same reason as a filter should have: it is a contract on what the projections downstream may see, so bypassing it would push unapproved event types into rendered state. Since #478 the verdict is earned rather than assumed — the constructor rejects an empty allowlist, so a mandatory sink cannot be one that admits everything (`tests/Harbor.Architecture.Tests/TypeFilterRegistrationTests.cs` fails the build on a typeless product call site) |
@@ -58,9 +58,9 @@ publish path re-derives it, and no sink type is special-cased by name.
 | 10 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:401-410`, counters at `:582-605` | queue-age envelope (`PublishedCount`, `InflightPublishCount`, `OldestPendingAge`, `MaxDispatchDuration`) | **accounting/telemetry — skipped, but counted** | the envelope is deliberately not entered on the fast path (#47/S2 computes percentiles over completed slow-path publishes only). The skip is not silent: `FastPathCount` makes the total publish count exact (`FastPathCount + PublishedCount`) |
 | 11 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:418` | `LogDebug("Publishing event: …")` | **optional (diagnostic)** | a log line; not a record anyone reconciles against |
 | 12 | `src/Harbor.Plugins.Host/NullEventBus.cs:11` | no-op bus for the standalone MCP plugin host | **optional (all sinks absent by construction)** | there is no subscriber, no retention and no sink, so every publish is unobservable *by design of the host*, not by accident of a guard |
-| 13 | `contrib/apps/Harbor.App.Wpf/App.xaml.cs:176` | `AddSingleton<IEventBus, InMemoryEventBus>()` | **mandatory retention** | no scrollback override → library default capacity → not eligible |
-| 14 | `contrib/apps/Harbor.App.Maui/MauiProgram.cs:76` | `AddSingleton<IEventBus, InMemoryEventBus>()` | **mandatory retention** | same as #13 |
-| 15 | `apps/Harbor.App.Avalonia/AppHost.cs:75` + `src/Harbor.Hosting/Modules/ConfigurationModule.cs:70-74` | desktop preset through `AddHarbor` | **mandatory retention** | no sink, default capacity → not eligible |
+| 13 | `contrib/apps/Harbor.App.Wpf/App.xaml.cs:176` | `AddSingleton<IEventBus, InMemoryEventBus>()` | **retention, armed by its reader** (#518) | no scrollback override → library default capacity. Listed for completeness only: `contrib/` is unmaintained and outside CI, so its composition is not exercised by anything in this repo |
+| 14 | `contrib/apps/Harbor.App.Maui/MauiProgram.cs:76` | `AddSingleton<IEventBus, InMemoryEventBus>()` | **retention, armed by its reader** (#518) | same as #13 |
+| 15 | `apps/Harbor.App.Avalonia/AppHost.cs:75` + `src/Harbor.Hosting/Modules/ConfigurationModule.cs:70-74` | desktop preset through `AddHarbor` | **retention, armed by its reader** (#518) | no sink, default capacity → **eligible**, 200/200 (§5) |
 | 16 | `src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs:58`, `src/Harbor.Abstractions/Plugins/IPlugin.cs:123`, `src/Harbor.Hosting/Modules/PluginLoadHostAdapter.cs:104` | the bus handed to plugins | **optional** | third-party code: a plugin subscription is an extension point, and it must not be able to defeat the fast path for the host. The host's own state never depends on a plugin observing an event |
 | 17 | `tests/Harbor.Core.Tests/EventBusMiddlewareTests.cs:14,29,44,58,71,93,107` + stubs at `:277-310` | pass-through / drop / transform / throwing / recording fakes | **mandatory (interface default)** | they are the pipeline's own test surface; declaring nothing must keep them on the full path, and the default does exactly that |
 | 18 | `tests/Harbor.Ipc.Tests/TestHost.cs:30`, `tests/Harbor.Plugins.Runtime.Tests/TestSupport/FakePluginLoadHost.cs:76`, `tests/Harbor.LoadTests/MultiSessionLoadHarness.cs:101`, `tests/Harbor.App.Cli.Tests/CellForgeReplSmokeTests.cs:49` | test buses | **mandatory retention / n/a** | constructed with the default capacity; they are not the case under test |
@@ -93,18 +93,26 @@ recorded, because they answer #44's topology question.
 ## 4. The guard, term by term
 
 ```
-fast path  ⇔  _fastPathEligible (composition-time constant)
+fast path  ⇔  !_hasMandatorySink && !_retentionArmed
               && _subscriptions.IsEmpty (lock-free snapshot read)
 
-_fastPathEligible = _maxScrollback == 0 && !_hasMandatorySink
 _hasMandatorySink = any(sink.SinkKind == Mandatory)   // read once, ctor
+_retentionArmed   = a GetScrollback call has happened // latches, #518
 ```
 
 | Term | What it rules out | What it would cost to drop it |
 |---|---|---|
 | zero subscribers | a live projection, renderer or IPC client | the user watches a session that never advances |
-| `maxScrollback == 0` | a history read | `GetScrollback` silently returns nothing |
+| `!_retentionArmed` (#518) | a **future** history read | a ring nobody has read costs a slot write under a lock on every publish, and — because its mere capacity used to fail this term — it kept every shipped preset off the fast path |
 | no mandatory sink | state / audit / accounting / telemetry | the exact silent-loss class #47 forbids |
+
+The scrollback term changed in #518. It used to be `maxScrollback == 0`, a
+*configured capacity*: a bus holding 1000 slots for a reader that never came was
+indistinguishable, to the guard, from a bus holding 1000 slots for a reader that
+might. It is now the *arming flag*, set by the first `GetScrollback` call — so the
+term is true exactly when there is a ring being maintained, which is the only
+state in which a history read can observe anything. A `maxScrollback <= 0` bus has
+no ring and can never be armed, so it keeps the pre-#518 behaviour.
 
 When the fast path qualifies but **optional** sinks are attached, the bus drains
 them inline (`DrainOptionalSinksAsync`,
@@ -127,33 +135,85 @@ row; each row prints its own fraction to stdout):
 
 | Composition | Sinks | Scrollback | Measured qualifying fraction | Why |
 |---|---|---|---|---|
-| CLI preset (`HostBuilder.CliOptions`) | none (the typeless filter was removed in #478) | 1000 | **0 / 200 = 0 %** | retention capacity alone |
-| Desktop preset (`DesktopDefault`, Avalonia host) | none | default (1000) | **0 / 200 = 0 %** | retention capacity alone |
-| Headless (scrollback off, no sinks) | none | 0 | **200 / 200 = 100 %** | the qualifying case |
+| CLI preset (`HostBuilder.CliOptions`) | none (the typeless filter was removed in #478) | 1000, unread | **200 / 200 = 100 %** | no sink (#478), and an unread ring is not maintained (#518) |
+| Desktop preset (`DesktopDefault`, Avalonia host) | none | default (1000), unread | **200 / 200 = 100 %** | no sink, and an unread ring is not maintained — so the publish is unobservable |
+| Headless (scrollback off, no sinks) | none | 0 | **200 / 200 = 100 %** | the qualifying case, unchanged |
 | Headless + sampler | `SamplingMiddleware` (optional) | 0 | **200 / 200 = 100 %**, drained 200× | optional sinks do not disqualify |
 | Headless + type filter | `TypeFilterMiddleware` (mandatory) | 0 | **0 / 200 = 0 %** | a mandatory sink alone is enough |
 
-So: **with today's presets, 0 % of production publishes qualify.** That is the
-honest number, and it is the reason the guard was never the bottleneck to
-optimise. The value of the change is that the number is now (a) measurable at
-runtime from two counters, (b) reachable for any host that turns retention off,
-and (c) safe to rely on, because the two terms that gate it are enumerated in
-§2 rather than guessed.
+So: **every shipped preset now qualifies in full — 200/200.** Two independent
+changes got there, and neither would have got there alone:
+
+- **#478** removed the CLI preset's typeless `TypeFilterMiddleware`. It declared
+  itself **mandatory** while admitting every event it was supposed to police, so
+  the CLI was paying the mandatory-sink cost for a filter that dropped nothing.
+- **#518** stopped configured capacity from gating the fast path. Retention is
+  armed by the first `GetScrollback` call, so a ring nobody reads is not
+  maintained and not paid for.
+
+The order matters for reading the history: the CLI preset was originally kept off
+the fast path by **both** terms, and this file's first version of this sentence
+credited only the mandatory verdict. #478 then deleted the sink term and left
+capacity as the sole remaining reason — and #518 deleted that. The desktop preset
+had **no sinks at all** from the start, so it was never entitled to that
+explanation: it was being held out by the scrollback term alone.
+
+What survives as a genuine guarantee is the **last** row, not a shipped preset: a
+`TypeFilterMiddleware` carrying a real allowlist. That one earns its mandatory
+verdict (the constructor rejects an empty one since #478), and it correctly keeps
+the bus off the fast path — a filter is a contract on what projections may see,
+not a listener.
 
 The cost side of the same question (what a qualifying publish actually costs)
 is measured in `docs/BENCHMARKS.md` §5.4: **1.46 ns / 0 B** with no sink,
 **14.5 ns / 0 B** with an optional sink drained, against 83.5 ns / 112 B
-(mandatory sink) and 159.2 ns / 200 B (one subscriber).
+(mandatory sink) and 159.2 ns / 200 B (one subscriber). Those timings are **not
+re-measured for #518** and still describe the pre-#518 path; the qualification
+fractions above are exact because CI asserts them, not because they were eyeballed.
 
-### Follow-up (not in this slice)
+### Follow-up: resolved by #518
 
-`GetScrollback` has **no production caller** on this branch (only the interface,
-`NullEventBus`, the bus itself and tests). The 1000-slot retention that
-disqualifies every shipped preset is therefore written on every publish and read
-by nobody. Whether the shipped presets should retain at all is a topology
-decision, not a local optimisation — filed against #44, deliberately **not**
-changed here: doing it silently would have been the "blind bypass" this slice
-exists to prevent.
+This section used to read:
+
+> `GetScrollback` has **no production caller** on this branch (only the interface,
+> `NullEventBus`, the bus itself and tests). The 1000-slot retention that
+> disqualifies every shipped preset is therefore written on every publish and read
+> by nobody. Whether the shipped presets should retain at all is a topology
+> decision, not a local optimisation — filed against #44, deliberately **not**
+> changed here: doing it silently would have been the "blind bypass" this slice
+> exists to prevent.
+
+The topology decision was taken in #44 and is recorded in
+`docs/EVENT_TOPOLOGY.md` §4: **retention is part of the bus contract** — history
+is an explicit pull via `GetScrollback`, and it is the only replay primitive below
+the IPC edge. #518 therefore did *not* delete the ring, and the reason is worth
+recording, because "no production callers" was never a safe deletion criterion
+here:
+
+- `IEventBus` is public in the **zero-dependency** `Harbor.Abstractions` assembly
+  that every plugin references. Removing a member from it is a source and binary
+  break for out-of-tree plugins, not a dead-code delete.
+- `IPluginLoadHost.EventBus` hands a **live bus to plugin code**
+  (`PluginRegistrar` → `SandboxedPluginTool`), and the desktop app declares
+  `[Exposes(typeof(IEventBus))]` as a validated DI capability. A plugin can call
+  `GetScrollback` at any moment.
+- There is no caller census that can prove absence across that boundary.
+
+What *was* provable — and wrong — is the cost, so that is what changed: the ring
+is now maintained only once a reader exists. A guard was written **before** the
+change (`EventBusRetentionArmingGuardTests`, plus the two flipped preset rows in
+`EventBusSinkCompositionTests`) and pins both halves, so the fast path cannot be
+won by silently dropping history: unread ring is free, armed ring retains every
+later publish and leaves the fast path.
+
+The second flipped row is the CLI preset. It is the one place where two
+independent corrections had to be reconciled rather than applied one after the
+other. #478 left it with no sinks at all, so its 1000-slot capacity became the
+only remaining reason it could not take the fast path; #518 then removed that
+too. Both changes are kept, neither is softened — the CLI preset is 200/200 for
+the sum of two independent corrections, and the two rows are asserted separately
+so a future re-divergence between the CLI and the desktop composition is visible
+instead of averaged away.
 
 ## 6. What this slice deliberately does not do
 

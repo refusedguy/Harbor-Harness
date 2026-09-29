@@ -90,6 +90,11 @@ public class EventTopologySemanticsTests
     public async Task Scrollback_EvictsOldest_NoLossBelowCapacity()
     {
         var bus = new InMemoryEventBus(maxScrollback: 3);
+
+        // #518: arm retention before publishing — history starts at the first
+        // read, so a ring nobody has read yet is not maintained.
+        _ = bus.GetScrollback(3);
+
         for (int i = 0; i < 5; i++)
         {
             await bus.PublishAsync(new TurnStartEvent(i));
@@ -105,6 +110,11 @@ public class EventTopologySemanticsTests
     public async Task LateSubscriber_SeesFutureOnly_ScrollbackIsSnapshot()
     {
         var bus = new InMemoryEventBus(maxScrollback: 8);
+
+        // #518: arm retention first — history begins at the first read, so the
+        // two publishes below are the ones the snapshot is expected to carry.
+        _ = bus.GetScrollback(8);
+
         await bus.PublishAsync(new TurnStartEvent(0));
         await bus.PublishAsync(new TurnStartEvent(1));
 

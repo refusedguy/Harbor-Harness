@@ -8,9 +8,10 @@ namespace Harbor.Registries.Tests;
 ///     through <see cref="InMemoryEventBus.PublishAsync" /> (#391).
 /// </summary>
 /// <remarks>
-///     The fast path is an early return guarded by the composition-time constant
-///     <c>_fastPathEligible</c> (<c>maxScrollback == 0 &amp;&amp; no mandatory sink</c>)
-///     plus a lock-free read of <c>_subscriptions.IsEmpty</c>; the no-middleware
+///     The fast path is an early return guarded by two terms — no
+///     <c>EventBusSinkKind.Mandatory</c> sink, and an unarmed scrollback ring
+///     (#518; <c>GetScrollback</c> is what arms it) — plus a lock-free read of
+///     <c>_subscriptions.IsEmpty</c>; the no-middleware
 ///     case then hands back the cached <c>Task.CompletedTask</c> instead of entering
 ///     <c>DrainOptionalSinksAsync</c> (src/Harbor.Registries/Events/InMemoryEventBus.cs).
 ///     Nothing observable distinguishes it from the slow path except that it never
@@ -53,16 +54,19 @@ public class EventBusFastPathTests
 
     /// <summary>
     ///     Counterpart to <see cref="PublishAsync_ZeroSubscribersNoScrollback_TakesFastPath" />:
-    ///     enabling scrollback alone is enough to leave the fast path, so the
+    ///     a reader of the scrollback ring is enough to leave the fast path, so the
     ///     scrollback-on rows of the benchmark measure the slow path (ring append +
-    ///     middleware pipeline) and not a zero-alloc early return.
+    ///     middleware pipeline) and not a zero-alloc early return. Since #518 it is
+    ///     the <em>read</em>, not the configured capacity, that arms the ring —
+    ///     a bus holding 8 slots that nobody reads is still eligible.
     /// </summary>
     [Test]
-    public async Task PublishAsync_ZeroSubscribersWithScrollback_LeavesFastPath()
+    public async Task PublishAsync_ZeroSubscribersWithArmedScrollback_LeavesFastPath()
     {
         var bus = new InMemoryEventBus(maxScrollback: 8);
         var evt = new TurnStartEvent(1);
 
+        _ = bus.GetScrollback(8); // arm retention
         await bus.PublishAsync(evt);
 
         await Assert.That(bus.PublishedCount).IsEqualTo(1);

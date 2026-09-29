@@ -59,6 +59,11 @@ public class EventBusTests
     public async Task GetScrollback_ReturnsRecentEvents()
     {
         var bus = new InMemoryEventBus(maxScrollback: 5);
+
+        // #518: arm retention — history starts at the first read, so the ring is
+        // not maintained for these publishes until somebody asks for it.
+        _ = bus.GetScrollback(5);
+
         for (int i = 0; i < 10; i++)
         {
             await bus.PublishAsync(new TurnStartEvent(i));
@@ -81,6 +86,11 @@ public class EventBusTests
     public async Task GetScrollback_DoesNotDrainBuffer_SecondCallSeesSameHistory()
     {
         var bus = new InMemoryEventBus(maxScrollback: 8);
+
+        // #518: arm retention before publishing (see
+        // EventBusRetentionArmingGuardTests for the full arming contract).
+        _ = bus.GetScrollback(8);
+
         for (int i = 0; i < 5; i++)
         {
             await bus.PublishAsync(new TurnStartEvent(i));
@@ -144,6 +154,13 @@ public class EventBusTests
     public async Task PublishAsync_PerDeltaShapes_DeliverIdentically(int shape)
     {
         var bus = new InMemoryEventBus(maxScrollback: 8);
+
+        // #518: arm retention so the ring is actually maintained for the publish
+        // below — otherwise this subscriber-only bus would take the slow path
+        // without ever writing a slot, and the scrollback tail assertion below
+        // would be reading an empty ring.
+        _ = bus.GetScrollback(8);
+
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
 

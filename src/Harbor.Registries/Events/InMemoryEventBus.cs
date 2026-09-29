@@ -32,20 +32,38 @@ namespace Harbor.Abstractions.Events;
 ///         safe) and allocates nothing. Readers receive a point-in-time copy.
 ///     </para>
 ///     <para>
+///         <b>Retention is armed by its reader (#518).</b> The ring exists so that
+///         history is available as an explicit pull
+///         (<see cref="GetScrollback" />; declared contract in
+///         <c>docs/EVENT_TOPOLOGY.md</c> §4, #44). Until the first read no ring is
+///         maintained: capacity alone used to cost a slot write under a lock on
+///         every publish and, worse, made <see cref="FastPathEligible" /> false
+///         for every shipped preset — 0/200 qualifying publishes on CLI and
+///         desktop, 200/200 only headless, for a ring that nothing read. The
+///         first <see cref="GetScrollback" /> call arms retention permanently; from
+///         then on history is maintained and the full path is taken. The ring was
+///         <b>not</b> deleted: <see cref="IEventBus" /> is public in the
+///         zero-dependency <c>Harbor.Abstractions</c> assembly that every plugin
+///         references, and a live bus is handed to out-of-tree plugin code via
+///         <c>IPluginLoadHost.EventBus</c> — so "no production callers" is not a
+///         provable claim here; only the cost was provably wrong.
+///     </para>
+///     <para>
 ///         Performance characteristics:
 ///         <list type="bullet">
 ///             <item>
-///                 <see cref="PublishAsync" /> fast path: when scrollback is
-///                 disabled (<c>maxScrollback &lt;= 0</c>), no sink registered
-///                 <see cref="EventBusSinkKind.Mandatory" />, and there are
-///                 zero subscribers, the method returns before touching any
-///                 collection — zero allocation, synchronous completion. The
-///                 mandatory/optional verdict is declared by each sink and
-///                 computed once in the constructor
-///                 (<see cref="HasMandatorySink" />,
-///                 <see cref="FastPathEligible" />), never sniffed per publish;
-///                 the enumeration behind it is
-///                 <c>docs/EVENT_BUS_SINKS.md</c> (#47/S3). Optional sinks that
+///                 <see cref="PublishAsync" /> fast path: when no sink
+///                 registered <see cref="EventBusSinkKind.Mandatory" />, the ring
+///                 is unarmed (<c>maxScrollback &lt;= 0</c>, or no reader yet),
+///                 and there are zero subscribers, the method returns before
+///                 touching any collection — zero allocation, synchronous
+///                 completion. The mandatory/optional verdict is declared by each
+///                 sink and computed once in the constructor
+///                 (<see cref="HasMandatorySink" />); it is never sniffed per
+///                 publish, and the enumeration behind it is
+///                 <c>docs/EVENT_BUS_SINKS.md</c> (#47/S3).
+///                 <see cref="FastPathEligible" /> adds one lock-free read of the
+///                 arming flag. Optional sinks that
 ///                 are attached on this path are still drained, and both the
 ///                 drain and any drop are counted
 ///                 (<see cref="OptionalSinkDrainCount" />,
@@ -59,9 +77,10 @@ namespace Harbor.Abstractions.Events;
 ///                 <see cref="ImmutableArray{T}" />.
 ///             </item>
 ///             <item>
-///                 Scrollback: <see cref="GetScrollback" /> copies the requested
-///                 tail under the scrollback lock into an exact-size array —
-///                 no state mutation, no blocking, repeatable reads.
+///                 Scrollback: <see cref="GetScrollback" /> arms retention and
+///                 copies the requested tail under the scrollback lock into an
+///                 exact-size array — no state mutation, no blocking, repeatable
+///                 reads.
 ///             </item>
 ///             <item>
 ///                 Queue-age instrumentation (#47): every slow-path publish takes
@@ -160,13 +179,33 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     private readonly bool _hasMandatorySink;
 
     /// <summary>
-    ///     Whether this bus is <em>able</em> to take the zero-subscriber fast
-    ///     path: scrollback disabled and no mandatory sink (#47/S3). A
-    ///     composition-time constant, published as <see cref="FastPathEligible" />
-    ///     so the decision is observable from outside the class instead of being
-    ///     a claim buried in a boolean expression.
+    ///     Whether the scrollback ring is currently being maintained (#518).
     /// </summary>
-    private readonly bool _fastPathEligible;
+    /// <remarks>
+    ///     <para>
+    ///         Retention used to be armed by capacity alone, which meant a ring
+    ///         that nobody ever read still cost a slot write under a lock on every
+    ///         publish <em>and</em> silently disqualified the fast path for every
+    ///         shipped preset (<c>EventBusScrollback = 1000</c> → 0/200 qualifying
+    ///         publishes on CLI and desktop).
+    ///     </para>
+    ///     <para>
+    ///         It is now armed by the first call to <see cref="GetScrollback" />.
+    ///         A ring is a potential, not an obligation: until somebody asks for
+    ///         history there is nothing to retain, and the publish is genuinely
+    ///         unobservable. The transition is one-way (<c>false</c> → <c>true</c>),
+    ///         so <c>volatile</c> is sufficient — no lock, no ABA, and the
+    ///         publish path stays a single lock-free read.
+    ///     </para>
+    ///     <para>
+    ///         Deleting the ring instead was rejected: <see cref="IEventBus" /> is
+    ///         public in the zero-dependency <c>Harbor.Abstractions</c> assembly
+    ///         every plugin references, and a live bus is handed to out-of-tree
+    ///         plugin code via <c>IPluginLoadHost.EventBus</c>. See
+    ///         <c>tests/Harbor.Core.Tests/EventBusRetentionArmingGuardTests.cs</c>.
+    ///     </para>
+    /// </remarks>
+    private volatile bool _retentionArmed;
 
     /// <summary>
     ///     Pre-allocated scrollback slots. Fixed capacity
@@ -325,7 +364,10 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             }
         }
 
-        _fastPathEligible = _maxScrollback == 0 && !_hasMandatorySink;
+        // #518: no _fastPathEligible field any more. It is now
+        // `!_hasMandatorySink && !_retentionArmed` — a constant in
+        // _hasMandatorySink, and a lock-free read of an unarmed ring, which
+        // starts out true and latches false the first time a reader appears.
     }
 
     /// <summary>
@@ -338,13 +380,19 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     public bool HasMandatorySink => _hasMandatorySink;
 
     /// <summary>
-    ///     Whether this bus is able to take the zero-subscriber fast path:
-    ///     scrollback disabled and no mandatory sink (#47/S3). A composition-time
-    ///     constant, not a per-publish guess — <see cref="FastPathCount" />
-    ///     divided by <c>FastPathCount + PublishedCount</c> is the measured
-    ///     fraction of publishes that actually qualified on this bus.
+    ///     Whether this bus is able to take the zero-subscriber fast path: no
+    ///     mandatory sink, and no reader of the scrollback ring (#47/S3, #518).
     /// </summary>
-    public bool FastPathEligible => _fastPathEligible;
+    /// <remarks>
+    ///     The mandatory-sink half is a composition-time constant; the
+    ///     scrollback half latches from <c>true</c> to <c>false</c> when the first
+    ///     <see cref="GetScrollback" /> call arms retention, so unlike the
+    ///     pre-#518 form of this property it is not constant for the lifetime of
+    ///     the bus. <see cref="FastPathCount" /> divided by
+    ///     <c>FastPathCount + PublishedCount</c> remains the measured fraction of
+    ///     publishes that actually qualified.
+    /// </remarks>
+    public bool FastPathEligible => !_hasMandatorySink && !_retentionArmed;
 
     /// <inheritdoc />
     public Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
@@ -355,7 +403,14 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
         //    read. The verdict for every registered sink is enumerated in
         //    docs/EVENT_BUS_SINKS.md — the guard was not tightened before that
         //    table existed.
-        if (_fastPathEligible)
+        //
+        // #518: the second term is now an ARMED scrollback ring rather than a
+        // configured capacity. "Nothing retained" has to mean "nothing to
+        // retain", not "a ring with 1000 slots that nobody reads" — the latter
+        // made this term false for every shipped preset and cost 0/200
+        // qualifying publishes in production. `_retentionArmed` latches false on
+        // the first GetScrollback call, so a reader still pays the full price.
+        if (!_hasMandatorySink && !_retentionArmed)
         {
             // Volatile-free read of the snapshot: ImmutableArray<T> is
             // reference-sized, and the existing slow path reads the same field
@@ -546,7 +601,21 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     /// <inheritdoc />
     public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents)
     {
-        if (_maxScrollback == 0 || maxEvents <= 0)
+        if (_maxScrollback == 0)
+        {
+            return Array.Empty<AgentEvent>();
+        }
+
+        // #518: this call IS the reader, so it is what arms retention. The flag
+        // is set BEFORE the snapshot lock, never after: once armed, every
+        // publish that reads the flag appends to the ring, so history is
+        // complete from this point on. Publishes that raced the arm (they read
+        // the flag as false microseconds earlier) are the only ones a reader can
+        // miss — an acceptable, documented gap for a diagnostic pull, and the
+        // price of not maintaining a ring for nobody.
+        _retentionArmed = true;
+
+        if (maxEvents <= 0)
         {
             return Array.Empty<AgentEvent>();
         }
@@ -584,9 +653,9 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     /// </summary>
     private void AppendScrollback(AgentEvent @event)
     {
-        if (_maxScrollback == 0)
+        if (_maxScrollback == 0 || !_retentionArmed)
         {
-            return; // scrollback disabled
+            return; // scrollback disabled, or no reader has asked for history yet (#518)
         }
 
         lock (_scrollbackLock)
