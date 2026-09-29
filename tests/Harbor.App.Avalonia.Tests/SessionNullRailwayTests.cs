@@ -39,7 +39,7 @@ public class SessionNullRailwayTests
         private readonly CancellationTokenSource _cts = new();
         public CancellationToken AbortToken => _cts.Token;
         public void RequestAbort() => _cts.Cancel();
-        public AgentState State { get; set; } = AgentState.Idle("none", AgentDefinition.CodeDefault("m", "p"));
+        public Maybe<AgentState> State { get; set; } = Maybe.From(AgentState.Idle("none", AgentDefinition.CodeDefault("m", "p")));
         public Task<Result> PromptAsync(string text, CancellationToken ct = default) => Task.FromResult(Result.Success());
         public Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) => Task.FromResult(Result.Success());
         public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;

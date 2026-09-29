@@ -19,7 +19,7 @@ internal sealed class AgentCommand : IReplCommand
     {
         ArgumentNullException.ThrowIfNull(ctx);
         var host = ctx.Host;
-        if (host.Agent.State.IsRunning)
+        if (host.Agent.IsRunning())
         {
             host.Bridge.AppendSystemLine("⚠ Agent is busy — wait for completion or press Esc / Ctrl+C to abort.");
             host.WakeUp();

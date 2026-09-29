@@ -248,13 +248,15 @@ public class SteeringDeliveryTests
         subject.Initialize(session, agent);
 
         Task<Result> firstRun = subject.PromptAsync("start working");
-        await Assert.That(subject.State.IsRunning).IsTrue();
+        // #559: the unbound-agent case is decided once, by AgentStateProbe.
+        await Assert.That(subject.IsRunning()).IsTrue();
 
         // B1: while running, this must SUCCEED immediately and route to Steer().
         Result second = await subject.PromptAsync("use --verbose please");
 
         await Assert.That(second.IsSuccess).IsTrue();
-        await Assert.That(subject.State.IsRunning).IsTrue();
+        // #559: the unbound-agent case is decided once, by AgentStateProbe.
+        await Assert.That(subject.IsRunning()).IsTrue();
 
         releaseRun.TrySetResult();
         Result first = await firstRun;

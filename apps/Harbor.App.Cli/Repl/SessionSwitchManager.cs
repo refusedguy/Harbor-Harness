@@ -192,7 +192,7 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
                 return "⇄ уже в этой сессии";
             }
 
-            if (host.Agent.State.IsRunning)
+            if (host.Agent.IsRunning())
             {
                 return "⇄ агент занят — сессия не переключена";
             }

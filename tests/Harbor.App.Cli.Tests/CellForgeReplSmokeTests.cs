@@ -163,17 +163,22 @@ public class CellForgeReplSmokeTests
             var placeholderDef = new AgentDefinition(
                 AgentName.Create("unbound"), "Unbound", "pre-init",
                 "mock-model", "mock", PermissionRuleset.Default);
-            State = AgentState.Idle(sessionId, placeholderDef);
+            _state = AgentState.Idle(sessionId, placeholderDef);
         }
 
         public CancellationToken AbortToken => _abortSource.Token;
         public void RequestAbort() => _abortSource.Cancel();
         private readonly CancellationTokenSource _abortSource = new();
-        public AgentState State { get; private set; }
+        // #559: Maybe-shaped, like the interface. This double deliberately
+        // pre-binds a placeholder definition (it drives the REPL smoke path, which
+        // requires a bound agent), so the projection never yields None here.
+        public Maybe<AgentState> State => Maybe.From(_state);
+
+        private AgentState _state;
 
         public void Initialize(Session session, AgentDefinition agent)
         {
-            State = AgentState.Idle(session.Id, agent);
+            _state = AgentState.Idle(session.Id, agent);
         }
 
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) =>
@@ -181,7 +186,7 @@ public class CellForgeReplSmokeTests
 
         public async Task<Result> PromptAsync(string text, CancellationToken ct = default)
         {
-            State = State with { IsRunning = true };
+            _state = _state with { IsRunning = true };
             try
             {
                 var user = new UserMessage(
@@ -209,7 +214,7 @@ public class CellForgeReplSmokeTests
             }
             finally
             {
-                State = State with { IsRunning = false };
+                _state = _state with { IsRunning = false };
             }
         }
 

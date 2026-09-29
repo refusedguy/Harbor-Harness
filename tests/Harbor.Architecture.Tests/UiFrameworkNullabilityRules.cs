@@ -13,9 +13,10 @@
 //
 // SCOPE. Deliberately src/Harbor.Ui.Framework* only. The composition root
 // (src/Harbor.Hosting, HarborCompositionContext) carried the same five members
-// and is gated separately by HostingCompositionNullabilityRules (#562);
-// IAgent.State is still unowned. Widening THIS gate would make it red on a tree
-// this PR is not changing.
+// and is gated separately by HostingCompositionNullabilityRules (#562).
+// IAgent.State was the third such lie; #559 removed it by typing the property as
+// Maybe<AgentState>, and AgentStateContractRules guards that contract. Widening
+// THIS gate would make it red on a tree this PR is not changing.
 //
 // WHAT IS ALLOWED, and why — recorded once in SourceNullabilityScan, which now
 // owns the shared scanner: `default!` is a different idiom with a legitimate

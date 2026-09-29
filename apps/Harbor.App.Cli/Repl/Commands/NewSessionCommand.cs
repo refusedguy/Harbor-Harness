@@ -18,7 +18,7 @@ internal sealed class NewSessionCommand : IReplCommand
     {
         ArgumentNullException.ThrowIfNull(ctx);
         var host = ctx.Host;
-        if (host.Agent.State.IsRunning)
+        if (host.Agent.IsRunning())
         {
             host.Bridge.AppendSystemLine("⚠ Cannot create session while running");
             host.WakeUp();

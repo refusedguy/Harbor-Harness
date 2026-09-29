@@ -20,7 +20,7 @@ public sealed class TracingAgentProxy(IAgent inner, IMetrics metrics, ITracer tr
 {
     private int _turnCounter;
 
-    public AgentState State => inner.State;
+    public Maybe<AgentState> State => inner.State;
 
     public CancellationToken AbortToken => inner.AbortToken;
 
@@ -47,9 +47,13 @@ public sealed class TracingAgentProxy(IAgent inner, IMetrics metrics, ITracer tr
 
     private async Task<Result> InstrumentTurn(Func<Task<Result>> run)
     {
-        // State is null before Initialize; fall back to unknown tags.
-        string agentName = inner.State?.Agent.Name.Value ?? "unknown";
-        string? sessionId = inner.State?.SessionId;
+        // #559: an agent that has not been Initialize'd yet has no state to tag with,
+        // so the span carries "unknown"/no session rather than dereferencing a
+        // snapshot that does not exist. One read of the property so a rebind in
+        // between cannot split the two values.
+        Maybe<AgentState> state = inner.State;
+        string agentName = state.HasValue ? state.Value.Agent.Name.Value : "unknown";
+        string? sessionId = state.HasValue ? state.Value.SessionId : null;
 
         using Harbor.Diagnostics.ITelemetrySpan? span = tracer.StartSpan(
             "agent.turn",

@@ -100,9 +100,20 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
 
     public async Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
     {
-        _layout.Model = agent.State.Agent.Model;
-        _layout.Provider = agent.State.Agent.ProviderId;
-        _layout.Agent = agent.State.Agent.Name.Value;
+        // #559: an agent built before Initialize has no state, and a CONSTRUCTOR is the
+        // worst place to find that out — the caller cannot sequence around it. The
+        // runtime banner is therefore only published once the agent is bound; the
+        // TEA store keeps its own defaults until then instead of being handed a
+        // fabricated Model/Provider/AgentName triple.
+        // `State` is a Maybe struct, so the absent case needs HasValue — an empty
+        // property pattern would match the WRAPPER (a struct is never null) and
+        // bind `bound` to the Maybe instead of the state.
+        if (agent.State is { HasValue: true, Value: var bound })
+        {
+            _layout.Model = bound.Agent.Model;
+            _layout.Provider = bound.Agent.ProviderId;
+            _layout.Agent = bound.Agent.Name.Value;
+        }
 
         // #190: single cancellation ingress. The renderer keeps its logger-only
         // ctor (own solution, contrib hosts construct it directly), so the
@@ -328,7 +339,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
     {
         while (!_stop)
         {
-            if (agent.State.IsRunning)
+            if (agent.IsRunning())
             {
                 _footer = "[yellow]⏳ Working…[/]  [grey](Esc = abort, wheel/PageUp/Down = scroll)[/]";
                 _layout.Footer = _footer;
@@ -394,7 +405,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
 
     private async Task RunWaitLoopAsync(IAgent agent, CancellationToken ct)
     {
-        while (agent.State.IsRunning && !_stop)
+        while (agent.IsRunning() && !_stop)
         {
             if (ct.IsCancellationRequested)
             {

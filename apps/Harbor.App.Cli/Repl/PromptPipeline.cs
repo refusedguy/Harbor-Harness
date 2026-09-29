@@ -48,7 +48,7 @@ internal sealed class PromptPipeline(
     private volatile bool _usageDirty;
 
     /// <summary>True while a turn runs or a queued prompt waits on the latch.</summary>
-    public bool IsBusy => _promptInFlight || host.Agent.State.IsRunning;
+    public bool IsBusy => _promptInFlight || host.Agent.IsRunning();
 
     /// <summary>Transport hint from the OSC 99 capability probe (frame thread).</summary>
     public DesktopNotifyKind NotifyHint { get; set; }
@@ -82,7 +82,7 @@ internal sealed class PromptPipeline(
         // Queued prompts (claude-style): typing while busy appends to the
         // queue instead of refusing — drained in order when the loop idles.
         // Slash commands still resolve immediately (UI ops, no model turn).
-        if (host.Agent.State.IsRunning || _promptInFlight)
+        if (host.Agent.IsRunning() || _promptInFlight)
         {
             if (!text.StartsWith('/'))
             {
@@ -173,7 +173,7 @@ internal sealed class PromptPipeline(
     private void OnLongTurnNotifyFire(object? state)
     {
         DisarmLongTurnNotify();
-        if (!host.Agent.State.IsRunning)
+        if (!host.Agent.IsRunning())
         {
             return; // turn finished inside the window — nothing to notify about
         }
@@ -223,7 +223,7 @@ internal sealed class PromptPipeline(
         {
             DisarmLongTurnNotify();
             _promptInFlight = false;
-            if (!host.Agent.State.IsRunning)
+            if (!host.Agent.IsRunning())
             {
                 host.Status.Mode = StatusBarMode.Idle;
                 ResetRetryCountdown();
@@ -240,9 +240,17 @@ internal sealed class PromptPipeline(
     ///     names come from the live agent state, matching what
     ///     <c>DefaultAgent.PromptAsync(string)</c> would have stamped.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    ///     The agent has no bound session yet. The only caller is the image
+    ///     branch of <see cref="RunPromptAsync" />, so reaching here unbound means
+    ///     a bridge was driven before <c>ReplRunner</c> called
+    ///     <c>IAgent.Initialize</c> — naming that beats an NRE three frames deeper
+    ///     (#559).
+    /// </exception>
     private UserMessage BuildUserMessage(string text, IReadOnlyList<ImageAttachment> images)
     {
-        var state = host.Agent.State;
+        AgentState state = host.Agent.State.GetValueOrThrow(
+            "Harbor REPL built a user message from an agent that has not been initialized.");
         return new UserMessage(
             Guid.NewGuid().ToString("N"),
             state.SessionId,
@@ -312,7 +320,7 @@ internal sealed class PromptPipeline(
     {
         if (evt is MessageUpdateEvent { LlmEvent: ErrorEvent { Kind: var kind } }
             && ProviderErrors.IsTransient(kind)
-            && host.Agent.State.IsRunning)
+            && host.Agent.IsRunning())
         {
             _retryAttempt++;
             _retryMax = MaxStreamRetries;
@@ -322,7 +330,7 @@ internal sealed class PromptPipeline(
             host.Status.Retry = RetryCountdown.Line(_retryAttempt, _retryMax, _retryTotalSec);
         }
         else if (evt is ToolExecutionUpdateEvent { RetryAttempt: not null, RetryMaxAttempts: not null } retry
-            && host.Agent.State.IsRunning)
+            && host.Agent.IsRunning())
         {
             _retryAttempt = retry.RetryAttempt.Value;
             _retryMax = retry.RetryMaxAttempts.Value;
