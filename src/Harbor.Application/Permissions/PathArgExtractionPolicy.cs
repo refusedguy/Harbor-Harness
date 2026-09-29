@@ -41,11 +41,17 @@ public sealed class PathArgExtractionPolicy : IPathExtractionPolicy
     ///     The path-taking builtin tools, read out of the safety declarations. A
     ///     separate frozen set would be a list, and a list is what #595 is about.
     /// </summary>
-    private static readonly FrozenSet<string> DefaultTools = FrozenSet.ToFrozenSet(
-        BuiltinToolSafetyProfiles.All
-            .Where(d => d.Profile.ArgKind == ToolArgKind.Path)
-            .Select(d => d.ToolName),
-        StringComparer.Ordinal);
+    /// <remarks>
+    ///     Written as an iterator for the same reason
+    ///     <see cref="PathGuardSafetyPolicy" /> reads its builtin set that way: the
+    ///     project globally imports <c>ZLinq</c>, so a <c>Where</c>/<c>Select</c> chain
+    ///     over a <c>List&lt;T&gt;</c> binds to the ZLinq operator and yields a
+    ///     <c>ValueEnumerable</c> that <c>FrozenSet.ToFrozenSet</c> will not take. A
+    ///     <c>yield return</c> loop is plain <c>IEnumerable&lt;T&gt;</c> and sidesteps
+    ///     the whole question.
+    /// </remarks>
+    private static readonly FrozenSet<string> DefaultTools = BuiltinPathTools()
+        .ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>Shared stateless instance (default tool set).</summary>
     public static readonly PathArgExtractionPolicy Instance = new();
@@ -63,6 +69,23 @@ public sealed class PathArgExtractionPolicy : IPathExtractionPolicy
     public PathArgExtractionPolicy(IEnumerable<string> tools)
     {
         _tools = tools.ToFrozenSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    ///     The names of every builtin that declares a <see cref="ToolArgKind.Path" />
+    ///     argument — the same rows <see cref="PathGuardSafetyPolicy" /> derives its
+    ///     guard from, read once so the two can never disagree about which tools are
+    ///     path-taking.
+    /// </summary>
+    private static IEnumerable<string> BuiltinPathTools()
+    {
+        foreach (ToolSafetyDeclaration declaration in BuiltinToolSafetyProfiles.All)
+        {
+            if (declaration.Profile.ArgKind == ToolArgKind.Path)
+            {
+                yield return declaration.ToolName;
+            }
+        }
     }
 
     /// <inheritdoc />
