@@ -48,31 +48,13 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     }
 
     /// <summary>
-    ///     Open the SSE channel, POST one JSON-RPC request and return the first
-    ///     <c>message</c> frame answering <paramref name="expectedId" /> (caller
-    ///     disposes). Returns null when the stream ends without a matching frame
-    ///     (callers treat that as a transport failure and may retry).
-    ///     Compat wrapper over <see cref="TryRoundTripAsync" />: terminal transport
-    ///     failures map to null, so this method only throws on user cancellation
-    ///     or disposal.
-    /// </summary>
-    public async Task<JsonDocument?> RoundTripAsync(
-        JsonElement request,
-        int? expectedId = null,
-        CancellationToken cancellationToken = default)
-    {
-        Result<Maybe<JsonDocument>> roundTrip =
-            await TryRoundTripAsync(request, expectedId, cancellationToken).ConfigureAwait(false);
-        return roundTrip.Match(static doc => doc.HasValue ? doc.Value : null, _ => null);
-    }
-
-    /// <summary>
-    ///     Result railway for the round-trip (#201 C4): expected network failures
-    ///     (closed SSE stream, message-endpoint errors, client-side timeout)
-    ///     surface as <c>Failure(endpoint + attempts + latency + cause)</c> instead of
-    ///     throwing (<c>IOException</c>/<c>HttpRequestException</c>/<c>TimeoutException</c>
-    ///     no longer escape). Retry/timeout policy stays inside; user cancellation
-    ///     and disposal still throw.
+    ///     Result railway for the round-trip (#201 C4, sealed to the interface in
+    ///     #587): expected network failures (closed SSE stream, message-endpoint
+    ///     errors, client-side timeout) surface as
+    ///     <c>Failure(endpoint + attempts + latency + cause)</c> instead of throwing
+    ///     (<c>IOException</c>/<c>HttpRequestException</c>/<c>TimeoutException</c> no
+    ///     longer escape). Retry/timeout policy stays inside; user cancellation and
+    ///     disposal still throw.
     ///     <c>Maybe.None</c> means "succeeded, and the answer legitimately carries no
     ///     document" (202 Accepted, empty body) — a different state from a failure,
     ///     which is why the value is a <see cref="Maybe{T}" /> and not a null.
@@ -111,7 +93,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                string cause = $"MCP SSE endpoint did not respond within {_requestTimeout.TotalSeconds:F0}s.";
+                string cause = $"server did not respond within {_requestTimeout.TotalSeconds:F0}s";
                 if (attempt >= MaxAttempts)
                     return Fail<Maybe<JsonDocument>>(sw, attempt, cause);
 
@@ -192,7 +174,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             string? line = await streamReader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line is null)
             {
-                return Result.Failure<Maybe<JsonDocument>>("MCP SSE stream closed before announcing an endpoint.");
+                return Result.Failure<Maybe<JsonDocument>>("SSE stream closed before announcing an endpoint.");
             }
 
             if (reader.Feed(line) is { } ev && ev.Event == "endpoint")
@@ -220,7 +202,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             string? line = await streamReader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line is null)
             {
-                return Result.Failure<Maybe<JsonDocument>>("MCP SSE stream closed before a response arrived.");
+                return Result.Failure<Maybe<JsonDocument>>("SSE stream closed before a response arrived.");
             }
 
             if (reader.Feed(line) is { Event: "message" } ev
@@ -258,7 +240,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             return Result.Success();
         }
 
-        return Result.Failure($"MCP {what} returned {(int)response.StatusCode}.");
+        return Result.Failure($"{what} returned {(int)response.StatusCode}");
     }
 
     private async Task<Result<Maybe<string>>> TryGetOAuthTokenAsync(CancellationToken cancellationToken)
@@ -279,9 +261,10 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         }
     }
 
+    /// <summary>See <see cref="McpHttpTransport.Fail{T}" /> — same one-line contract, SSE wording.</summary>
     private Result<T> Fail<T>(Stopwatch sw, int attempts, string cause)
     {
-        string error = $"MCP SSE round-trip to {_endpoint} failed after {attempts} attempt(s) in {sw.Elapsed.TotalMilliseconds:0}ms: {cause}";
+        string error = $"SSE {_endpoint} failed after {attempts} attempt(s) in {sw.Elapsed.TotalMilliseconds:0}ms: {cause}";
         _logger?.LogError("MCP SSE transport failure: {Error}", error);
         return Result.Failure<T>(error);
     }
