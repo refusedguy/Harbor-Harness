@@ -221,38 +221,68 @@ public class PostFxTests
     [Test]
     public async Task Timeline_PublishesGateGlowRegions_AndStopsOnDecision()
     {
-        var timeline = new VirtualizedChatTimeline { EnablePostFx = true };
-        var gate = new ApprovalGateView("bash", "ls -la /tmp");
-        timeline.Append(gate);
-        _ = timeline.PrepareFrame(60, 10);
-        timeline.CurrentTick = 100;
-        gate.BeginWarnPulse(100);
+        // #648 — this test was the one flake in the shard. It is the only
+        // method here that re-derived a colour from the GLOBAL palette after
+        // the value under test had been captured: Paint publishes the ledger
+        // accent from ChatPalette.Warning, and the expectation below was
+        // recomputed by a second PanelFx.WarnTone call — two awaits later. A
+        // theme switch landing in that window made two different catalog
+        // projections meet and the equality failed (observed on four unrelated
+        // PRs). Every sibling test snapshots the palette into a local first,
+        // which is why this read as method-scoped rather than class-scoped.
+        //
+        // Pin the catalog for the paint and materialize the expectation under
+        // the same pin, so both sides resolve against ONE projection — the
+        // PanelFxTests.BlendRegion_WideChar idiom. Belt to the braces of the
+        // bare [NotInParallel] now on the palette-mutating classes: their old
+        // ("pty") key excluded only other "pty" tests, never a reader.
+        ChatPalette.PinFrame();
+        try
+        {
+            var timeline = new VirtualizedChatTimeline { EnablePostFx = true };
+            var gate = new ApprovalGateView("bash", "ls -la /tmp");
+            timeline.Append(gate);
+            _ = timeline.PrepareFrame(60, 10);
+            timeline.CurrentTick = 100;
+            gate.BeginWarnPulse(100);
 
-        var regions = new GlowRegion[VirtualizedChatTimeline.MaxFxDamage];
+            var regions = new GlowRegion[VirtualizedChatTimeline.MaxFxDamage];
 
-        // Pulse peak (¼ cycle): full-intensity region with the painted accent.
-        timeline.CurrentTick = 100 + (PanelFx.PulseFrames / 4);
-        timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
-        int count = timeline.ConsumeGlowRegions(regions);
-        await Assert.That(count).IsEqualTo(1);
-        await Assert.That(regions[0].Intensity).IsGreaterThan(0.0);
-        await Assert.That(regions[0].Bounds.Height).IsGreaterThan(0);
-        await Assert.That(regions[0].Accent).IsEqualTo(PanelFx.WarnTone(100, 100 + (PanelFx.PulseFrames / 4)).Fg);
+            // Pulse peak (¼ cycle): full-intensity region with the painted accent.
+            long peakTick = 100 + (PanelFx.PulseFrames / 4);
+            timeline.CurrentTick = peakTick;
 
-        // Pulse trough (¾ cycle — sine negative → clamped 0): the region is
-        // STILL published at zero so the glow can be cleared on the terminal.
-        timeline.CurrentTick = 100 + PanelFx.PulseFrames + ((PanelFx.PulseFrames * 3) / 4);
-        timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
-        count = timeline.ConsumeGlowRegions(regions);
-        await Assert.That(count).IsEqualTo(1);
-        await Assert.That(regions[0].Intensity).IsEqualTo(0.0);
+            // Resolved under the pin, before any await: the ledger captures
+            // WarnTone(PulseBirthTick, CurrentTick) during the paint below, so
+            // this must be derived from the same catalog, not a later one.
+            PackedColor expectedAccent = PanelFx.WarnTone(100, peakTick).Fg;
 
-        // Decision kills the glow feed.
-        _ = gate.TryDecide(ApprovalChoice.Deny);
-        timeline.CurrentTick++;
-        timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
-        count = timeline.ConsumeGlowRegions(regions);
-        await Assert.That(count).IsEqualTo(0);
+            timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
+            int count = timeline.ConsumeGlowRegions(regions);
+            await Assert.That(count).IsEqualTo(1);
+            await Assert.That(regions[0].Intensity).IsGreaterThan(0.0);
+            await Assert.That(regions[0].Bounds.Height).IsGreaterThan(0);
+            await Assert.That(regions[0].Accent).IsEqualTo(expectedAccent);
+
+            // Pulse trough (¾ cycle — sine negative → clamped 0): the region is
+            // STILL published at zero so the glow can be cleared on the terminal.
+            timeline.CurrentTick = 100 + PanelFx.PulseFrames + ((PanelFx.PulseFrames * 3) / 4);
+            timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
+            count = timeline.ConsumeGlowRegions(regions);
+            await Assert.That(count).IsEqualTo(1);
+            await Assert.That(regions[0].Intensity).IsEqualTo(0.0);
+
+            // Decision kills the glow feed.
+            _ = gate.TryDecide(ApprovalChoice.Deny);
+            timeline.CurrentTick++;
+            timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
+            count = timeline.ConsumeGlowRegions(regions);
+            await Assert.That(count).IsEqualTo(0);
+        }
+        finally
+        {
+            ChatPalette.UnpinFrame();
+        }
     }
 
     [Test]

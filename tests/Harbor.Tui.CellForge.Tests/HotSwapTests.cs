@@ -12,7 +12,11 @@ namespace Harbor.Tui.CellForge.Tests;
 /// no torn frames. Theme swaps publish a new palette catalog mid-stream while
 /// the pinned frame snapshot keeps every painted cell on one coherent palette.
 /// </summary>
-[NotInParallel("pty")]
+// #648: bare [NotInParallel] = one at a time GLOBALLY, not a shared key. These
+// tests Apply themes to the process-global palette, which every painter in this
+// assembly reads; a constraint key only excludes same-key tests, so the old
+// ("pty") key never kept a reader from observing a mid-test swap.
+[NotInParallel]
 public class HotSwapTests
 {
     /// <summary>Resets the two process-wide statics this class mutates. The

@@ -8,7 +8,11 @@ namespace Harbor.Tui.CellForge.Tests;
 /// poll, keeps the previous theme on parse failures, and stays quiet when the
 /// file is untouched. Uses the public Poll() — no wall-clock flakiness.
 /// </summary>
-[NotInParallel("pty")] // mutates global theme state
+// #648: bare [NotInParallel] = one at a time GLOBALLY. The watcher applies
+// themes to the process-global palette, which every painter in this assembly
+// reads; the old ("pty") constraint key only excluded other "pty" tests, so
+// unkeyed readers still ran through the swap.
+[NotInParallel]
 public class ThemeFileWatcherTests
 {
     private string _path = null!;
@@ -67,9 +71,10 @@ public class ThemeFileWatcherTests
         await File.WriteAllTextAsync(_path, """{ "name": "good", "accent": "#666666" }""");
         watcher.Poll();
         // Deterministic core: this watcher's own application record. The
-        // global Current is NOT asserted here — under a parallel runner
-        // another theme test may hold the palette between our Poll and the
-        // read; ambient assertions live only behind NotInParallel keys.
+        // global Current is NOT asserted here — it was reachable only because
+        // this class is now [NotInParallel] (one at a time globally, #648), so
+        // no other theme test can hold the palette between our Poll and a read
+        // of the shared static.
         await Assert.That(watcher.LastApplied.Value.Name).IsEqualTo("good");
 
         await File.WriteAllTextAsync(_path, "totally not json");

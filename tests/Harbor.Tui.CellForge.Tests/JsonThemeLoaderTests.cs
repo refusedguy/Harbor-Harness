@@ -10,9 +10,11 @@ namespace Harbor.Tui.CellForge.Tests;
 /// (omitted slots merge over the active theme), error reporting, and file
 /// loading.
 /// </summary>
-// #58-followup: applies themes to the global palette — serialize vs other
-// theme/palette readers like the golden classes do.
-[NotInParallel("pty")]
+// #648: bare [NotInParallel] = one at a time GLOBALLY, not a shared key. These
+// tests Apply themes to the process-global palette, which every painter in this
+// assembly reads; a constraint key only excludes same-key tests, so the old
+// ("pty") key never kept a reader from observing a mid-test swap.
+[NotInParallel]
 public class JsonThemeLoaderTests
 {
     // Order hygiene (matches HotSwap/Switch/FileWatcher): several tests Apply

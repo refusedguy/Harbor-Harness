@@ -6,10 +6,14 @@ namespace Harbor.DesignSystem.Tests;
 /// Marketplace live-reload: polling picks up new/changed theme files and
 /// applies them to TerminalColorPalette; invalid files report errors and keep
 /// the last applied theme. Watchers run with autoStart=false for full
-/// determinism. Keyed with the other palette-mutating classes — the palette
-/// is global static state.
+/// determinism. Run one-at-a-time — the palette is process-global static state.
+///
+/// #648: bare [NotInParallel] (one at a time GLOBALLY), not a shared key. Per
+/// TUnit's contract a constraint key only excludes tests that SHARE the key, so
+/// ("terminal-color-palette") kept these mutators away from each other and from
+/// nothing else; unkeyed readers could still observe a mid-test theme swap.
 /// </summary>
-[NotInParallel("terminal-color-palette")]
+[NotInParallel]
 public class ThemeDirectoryWatcherTests
 {
     private static string TempDir()
