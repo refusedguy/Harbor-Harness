@@ -10,6 +10,7 @@ using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Events;
 
 namespace Harbor.App.Cli.Tests;
 

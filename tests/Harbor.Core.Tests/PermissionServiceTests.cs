@@ -6,6 +6,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Agents;
 namespace Harbor.Core.Tests;
 /// <summary>
 ///     Tests for <see cref="PermissionService" /> — verifies the allow / ask / deny branches

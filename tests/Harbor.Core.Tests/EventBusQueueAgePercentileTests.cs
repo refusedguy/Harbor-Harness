@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Events;
 
 namespace Harbor.Core.Tests;
 

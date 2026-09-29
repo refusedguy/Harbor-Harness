@@ -16,6 +16,8 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Commands;
 using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.Logging;
+using Harbor.Registries.Agents;
+using Harbor.Registries.Tools;
 
 namespace Harbor.App.Cli.Repl;
 

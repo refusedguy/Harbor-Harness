@@ -3,6 +3,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.State;
+using Harbor.Registries.Agents;
 
 namespace Harbor.App.Cli.Repl.Commands;
 

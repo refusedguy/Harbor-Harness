@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using TUnit.Assertions;
+using Harbor.Registries.Events;
 
 namespace Harbor.Registries.Tests;
 

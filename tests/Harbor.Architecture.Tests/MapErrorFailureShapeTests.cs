@@ -68,6 +68,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Agents;
 
 namespace Harbor.Architecture.Tests;
 

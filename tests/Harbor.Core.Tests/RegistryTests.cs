@@ -6,6 +6,8 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.Registries.Providers;
+using Harbor.Registries.Tools;
 namespace Harbor.Core.Tests;
 public class RegistryTests
 {

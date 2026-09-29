@@ -9,6 +9,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Providers;
 namespace Harbor.Core.Tests;
 /// <summary>
 ///     Tests for <see cref="CompactionService" />: the <see cref="CompactionService.ShouldCompact" />

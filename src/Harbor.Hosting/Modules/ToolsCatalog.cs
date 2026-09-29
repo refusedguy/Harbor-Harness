@@ -6,6 +6,8 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;
+using Harbor.Registries.Agents;
+using Harbor.Registries.Tools;
 
 namespace Harbor.Hosting;
 

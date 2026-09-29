@@ -6,6 +6,7 @@ using Harbor.E2E.Framework;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using TUnit.Assertions;
+using Harbor.Registries.Events;
 
 namespace Harbor.LoadTests;
 

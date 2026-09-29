@@ -9,6 +9,7 @@ using Harbor.Application.Sessions;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+using Harbor.Registries.Providers;
 
 namespace Harbor.Core.Tests;
 

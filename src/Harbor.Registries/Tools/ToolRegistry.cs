@@ -1,8 +1,7 @@
 using System.Collections.Frozen;
-using Harbor.Registries.Tools;
 using Microsoft.Extensions.Logging;
 using NonBlocking;
-namespace Harbor.Abstractions.Tools;
+namespace Harbor.Registries.Tools;
 /// <summary>
 ///     Thread-safe tool registry with frozen lookup table for fast resolution.
 ///     Implements Registry pattern (GOF).

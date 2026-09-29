@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Events;
+using Harbor.Registries.Events;
 
 namespace Harbor.Benchmarks;
 

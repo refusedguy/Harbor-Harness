@@ -13,6 +13,9 @@ using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Agents;
+using Harbor.Registries.Tools;
+using Harbor.Registries.Events;
 
 namespace Harbor.LoadTests;
 

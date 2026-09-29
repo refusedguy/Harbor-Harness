@@ -4,6 +4,8 @@ using Harbor.Abstractions.Providers;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.State;
+using Harbor.Registries.Agents;
+using Harbor.Registries.Providers;
 
 namespace Harbor.App.Cli.Repl.Commands;
 

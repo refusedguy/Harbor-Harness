@@ -4,6 +4,7 @@ using Harbor.Application.Configuration;
 using Harbor.Providers.Ollama;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
+using Harbor.Registries.Providers;
 #if HARBOR_WITH_ALL_PROVIDERS
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;

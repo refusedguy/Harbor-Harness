@@ -13,6 +13,7 @@ using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Tui.CellForge.Widgets;
 using Microsoft.Extensions.Logging;
+using Harbor.Registries.Providers;
 
 namespace Harbor.App.Cli.Repl;
 

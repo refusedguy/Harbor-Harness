@@ -17,6 +17,8 @@ using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
 using System.Collections.Immutable;
 using TUnit.Assertions;
+using Harbor.Registries.Agents;
+using Harbor.Registries.Providers;
 
 namespace Harbor.App.Cli.Tests;
 

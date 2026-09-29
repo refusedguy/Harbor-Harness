@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using TUnit.Assertions;
+using Harbor.Registries.Providers;
 
 namespace Harbor.Registries.Tests;
 

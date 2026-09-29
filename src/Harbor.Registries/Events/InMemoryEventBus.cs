@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-namespace Harbor.Abstractions.Events;
+namespace Harbor.Registries.Events;
 /// <summary>
 ///     In-memory pub/sub event bus. Implements Observer pattern (GOF).
 ///     Thread-safe. Bounded scrollback backed by a fixed-capacity ring

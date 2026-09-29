@@ -3,6 +3,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Tools;
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Registries.Agents;
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
