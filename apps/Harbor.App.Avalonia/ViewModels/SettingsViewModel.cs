@@ -26,8 +26,34 @@ namespace Harbor.App.Avalonia.ViewModels;
 ///         <see cref="ICommonConfigStore.SaveAsync(CommonConfig, CancellationToken)" />
 ///         and <see cref="IAppConfigStore{T}.SaveAsync(T, CancellationToken)" />,
 ///         both of which write atomically (temp file + rename) under a
-///         SemaphoreSlim. No env-var mutation — the previous implementation
-///         only set process env vars, which silently disappeared on restart.
+///         SemaphoreSlim.
+///     </para>
+///     <para>
+///         <b>No env-var mutation (#677).</b> An earlier revision called
+///         <c>Environment.SetEnvironmentVariable</c> for <c>HARBOR_MODEL</c> /
+///         <c>HARBOR_STORAGE</c> / <c>HARBOR_LOGLEVEL</c> / <c>OLLAMA_HOST</c>.
+///         That is process state, not session state, and it was dead: every one
+///         of those names is read ONCE during <c>AddHarbor</c> —
+///         <c>StorageModule</c> resolves the backend,
+///         <c>ConfigurationModule</c> resolves the model,
+///         <c>ProviderFactories</c> snapshots <c>OLLAMA_HOST</c> into an
+///         <c>HttpClient</c> — so nothing re-reads them after startup and the
+///         write could not have changed the running app. It only leaked the
+///         user's choice into every other component in the process, and into
+///         every test that ran after it. Persistence is the config file, which
+///         is what the next launch reads.
+///     </para>
+///     <para>
+///         <b>No chosen defaults (#677).</b> Every field below is shown exactly
+///         as the config record holds it, empty included. <c>CommonConfig</c>
+///         owns the defaults (<c>DefaultProvider = "anthropic"</c>,
+///         <c>LogLevel = "info"</c>, <c>AvaloniaConfig.FontFamily = "Inter"</c>),
+///         and <c>StorageBackend = ""</c> means "not chosen" so the composition
+///         preset resolves it (ADR-008 — CLI <c>jsonl</c>, desktop
+///         <c>memory</c>). This view-model used to substitute <c>"ollama"</c>
+///         and <c>"jsonl"</c> for those, which both disagreed with the core
+///         and made the preset unreachable — the user could not unset the field,
+///         because reopening the wizard wrote <c>"jsonl"</c> straight back.
 ///     </para>
 ///     <para>
 ///         <b>Cancel:</b> re-reads the persisted config and resets every
@@ -47,23 +73,47 @@ public sealed partial class SettingsViewModel : ObservableObject
     private AvaloniaConfig _app;
     private CommonConfig _common;
 
+    /// <summary>
+    ///     Full model id exactly as the config record holds it. Empty is a
+    ///     legitimate stored value and is shown as such — see the class remarks.
+    /// </summary>
     [ObservableProperty]
     private string _defaultModel = string.Empty;
 
+    /// <summary>
+    ///     Provider id exactly as the config record holds it. The record's own
+    ///     default is <c>"anthropic"</c>
+    ///     (<see cref="CommonConfig.DefaultProvider" />); this field never
+    ///     supplies one.
+    /// </summary>
     [ObservableProperty]
-    private string _defaultProvider = "ollama";
+    private string _defaultProvider = string.Empty;
 
+    /// <summary>Font family exactly as <c>AvaloniaConfig.FontFamily</c> holds it.</summary>
     [ObservableProperty]
-    private string _fontFamily = "Inter";
+    private string _fontFamily = string.Empty;
 
+    /// <summary>Log level exactly as <c>CommonConfig.LogLevel</c> holds it.</summary>
     [ObservableProperty]
-    private string _logLevel = "info";
+    private string _logLevel = string.Empty;
 
+    /// <summary>
+    ///     Ollama endpoint as it was read from the process environment at
+    ///     startup. Display-only: <c>ProviderFactories</c> snapshots it into an
+    ///     <c>HttpClient</c> while <c>AddHarbor</c> composes, so nothing this
+    ///     screen does can change a running app. A running app's endpoint is a
+    ///     launch-time input, not a setting (#677).
+    /// </summary>
     [ObservableProperty]
     private string _ollamaHost = string.Empty;
 
+    /// <summary>
+    ///     Storage backend exactly as the config record holds it. <c>""</c> means
+    ///     "not chosen" and is shown as an empty selection — the composition
+    ///     preset decides (ADR-008).
+    /// </summary>
     [ObservableProperty]
-    private string _storageBackend = "jsonl";
+    private string _storageBackend = string.Empty;
 
     /// <summary>Construct the settings view-model and load the persisted config.</summary>
     /// <param name="themeReader">Read-only view of the active theme (for <c>ThemeSettings</c>).</param>
@@ -111,14 +161,22 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         ThemeSettings = new ThemeSettingsViewModel(themeReader, themeApplier)
         {
-            Theme = string.IsNullOrEmpty(_common.Theme) ? "system" : _common.Theme
+            Theme = _common.Theme ?? string.Empty
         };
-        DefaultProvider = string.IsNullOrEmpty(_common.DefaultProvider) ? "ollama" : _common.DefaultProvider;
+        // #677: every field is shown EXACTLY as the record holds it. An absent
+        // key already yields the record's own default (CommonConfig.DefaultProvider
+        // = "anthropic", LogLevel = "info", AvaloniaConfig.FontFamily = "Inter"),
+        // and an empty StorageBackend means "not chosen" so the composition
+        // preset resolves it. Substituting a literal here is what made the UI say
+        // "ollama" where the core says "anthropic" and "jsonl" where the desktop
+        // preset says "memory" — and it put the preset permanently out of reach.
+        DefaultProvider = _common.DefaultProvider ?? string.Empty;
         DefaultModel = _common.DefaultModel ?? string.Empty;
-        FontFamily = string.IsNullOrEmpty(_app.FontFamily) ? "Inter" : _app.FontFamily;
-        StorageBackend = string.IsNullOrEmpty(_common.StorageBackend) ? "jsonl" : _common.StorageBackend;
-        LogLevel = string.IsNullOrEmpty(_common.LogLevel) ? "info" : _common.LogLevel;
-        OllamaHost = Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? "http://localhost:11434";
+        FontFamily = _app.FontFamily ?? string.Empty;
+        StorageBackend = _common.StorageBackend ?? string.Empty;
+        LogLevel = _common.LogLevel ?? string.Empty;
+        // Read-only display of a launch-time input — see the _ollamaHost doc.
+        OllamaHost = Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? string.Empty;
 
         LoadProviderConfigs();
     }
@@ -187,20 +245,30 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>
     ///     Save settings: persist CommonConfig + AvaloniaConfig to disk, apply
-    ///     the theme immediately, and emit a success toast. No env-var
-    ///     mutation — the user's choice survives a restart because it's in
-    ///     the JSON files.
+    ///     the theme immediately, and emit a success toast.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The user's choice survives a restart because it is in the JSON
+    ///         files, which is what the next launch reads. This method writes
+    ///         nothing else — in particular it does NOT touch
+    ///         <c>Environment</c> (#677). An earlier revision mirrored the
+    ///         values into <c>HARBOR_MODEL</c> / <c>HARBOR_STORAGE</c> /
+    ///         <c>HARBOR_LOGLEVEL</c> / <c>OLLAMA_HOST</c>, which is process
+    ///         state: every one of those names is read once while
+    ///         <c>AddHarbor</c> composes, so the write reached nothing and
+    ///         outlived the session in a way the user cannot see or undo.
+    ///     </para>
+    ///     <para>
+    ///         An unset <see cref="StorageBackend" /> is written back as unset.
+    ///         That is the point: the next launch falls through to the
+    ///         composition preset, and this screen is not the thing that picks a
+    ///         backend.
+    ///     </para>
+    /// </remarks>
     [RelayCommand]
     private async Task SaveAsync()
     {
-        // Persist the env-var-style overrides too, so legacy code that still
-        // reads HARBOR_* env vars sees the new values within this process.
-        Environment.SetEnvironmentVariable("HARBOR_MODEL", $"{DefaultProvider}/{DefaultModel}");
-        Environment.SetEnvironmentVariable("HARBOR_STORAGE", StorageBackend);
-        Environment.SetEnvironmentVariable("HARBOR_LOGLEVEL", LogLevel);
-        Environment.SetEnvironmentVariable("OLLAMA_HOST", OllamaHost);
-
         _common = _common with
         {
             Theme = ThemeSettings.Theme,
@@ -225,9 +293,11 @@ public sealed partial class SettingsViewModel : ObservableObject
             // Apply the theme immediately so the user sees the change without
             // a restart. ThemeService.Apply(string) handles dark/light/system.
             ThemeSettings.Apply(ThemeSettings.Theme);
+            // ollamaHost is logged for traceability only: it is a launch-time
+            // input, not something this save can change.
             _logger.LogInformation(
-                "Settings saved: theme={Theme}, provider={Provider}, model={Model}, storage={Storage}, log={LogLevel}, font={Font}",
-                ThemeSettings.Theme, DefaultProvider, DefaultModel, StorageBackend, LogLevel, FontFamily);
+                "Settings saved: theme={Theme}, provider={Provider}, model={Model}, storage={Storage}, log={LogLevel}, font={Font}, ollamaHost={OllamaHost}",
+                ThemeSettings.Theme, DefaultProvider, DefaultModel, StorageBackend, LogLevel, FontFamily, OllamaHost);
             _toasts.Show($"Settings saved — theme: {ThemeSettings.Theme}, model: {DefaultProvider}/{DefaultModel}.", ToastKind.Success);
         }
         else
@@ -242,12 +312,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void Cancel()
     {
-        ThemeSettings.Theme = _common.Theme;
-        DefaultProvider = _common.DefaultProvider;
-        DefaultModel = _common.DefaultModel;
-        FontFamily = _app.FontFamily;
-        StorageBackend = _common.StorageBackend;
-        LogLevel = _common.LogLevel;
+        ThemeSettings.Theme = _common.Theme ?? string.Empty;
+        DefaultProvider = _common.DefaultProvider ?? string.Empty;
+        DefaultModel = _common.DefaultModel ?? string.Empty;
+        FontFamily = _app.FontFamily ?? string.Empty;
+        StorageBackend = _common.StorageBackend ?? string.Empty;
+        LogLevel = _common.LogLevel ?? string.Empty;
     }
 
     /// <summary>
