@@ -140,22 +140,25 @@ public class WordDiffBoundsTests
     [Test]
     public async Task PairRun_LopsidedPairJustOverTheProductCap_IsLeftUnpaired()
     {
-        // The other side of the same boundary, and the case that actually needed
-        // thought: the character cap and the cell cap are DIFFERENT axes, and
-        // the natural fixture straddles both. 2 800 filler tokens is 5 562 chars
-        // — past MaxPairableLineChars, so PairRun would decline it on the wrong
-        // cap and the test would prove nothing.
+        // The other side of the same boundary, and the case that needed the
+        // arithmetic: the character cap and the cell cap are DIFFERENT axes, and
+        // the obvious fixture straddles both. 2 800 filler tokens is 5 599 chars,
+        // so PairRun would decline it on the CHARACTER cap and the test would
+        // prove nothing about the product cap.
         //
-        // Single-character tokens on both sides separate the axes: 2 802 tokens
-        // is 2 803 cells, and 5 603 chars. Against 6 tokens that is
-        // 2 803 × 7 = 19 621 cells — over the 16 384 cap, under the 4 KiB
-        // character cap. Over the cells, inside the characters, which is the
-        // only place a product cap can be tested.
-        string longRow = string.Join(' ', Enumerable.Repeat("x", 2_802));
-        string shortRow = string.Join(' ', Enumerable.Repeat("y", 6));
+        // Single-character tokens separate the axes. 1 800 tokens is 3 599 chars
+        // (inside 4 KiB, so the row is considered at all) and 1 801 cells;
+        // against 9 tokens that is 1 801 × 10 = 18 010 cells, over the 16 384
+        // cap. Over the cells, inside the characters — the only place a product
+        // cap can be tested at all.
+        const int longTokens = 1_800;
+        const int shortTokens = 9;
+        string longRow = string.Join(' ', Enumerable.Repeat("x", longTokens));
+        string shortRow = string.Join(' ', Enumerable.Repeat("y", shortTokens));
 
         await Assert.That(longRow.Length).IsLessThan(WordDiff.MaxPairableLineChars);
-        await Assert.That((2_802 + 1) * (6 + 1)).IsGreaterThan(WordDiff.MaxLcsMatrixCells);
+        await Assert.That((longTokens + 1) * (shortTokens + 1))
+            .IsGreaterThan(WordDiff.MaxLcsMatrixCells);
 
         IReadOnlyList<DiffLine> lines =
         [
