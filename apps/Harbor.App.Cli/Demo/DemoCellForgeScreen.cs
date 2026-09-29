@@ -68,8 +68,12 @@ internal sealed class DemoCellForgeScreen
     /// <summary>Target number of replay chunks (and therefore screens) per recorded turn.</summary>
     private const int TargetChunks = 12;
 
-    /// <summary>Chunks a replayed approval card stays pending before it resolves.</summary>
-    private const int GateHoldChunks = 2;
+    /// <summary>
+    ///     Frames a replayed approval card stays open before it resolves — the
+    ///     beat a human takes to read the card and press a key, with the tool
+    ///     result deliberately held back until the decision is stamped.
+    /// </summary>
+    private const int GateHoldFrames = 3;
 
     /// <summary>Longest one-line tool detail printed on the approval card.</summary>
     private const int MaxDetailChars = 96;
@@ -198,8 +202,6 @@ internal sealed class DemoCellForgeScreen
         }
 
         // 3. Replay onto the screen, one chunk per painted frame.
-        ApprovalGateView? gate = null;
-        int gateHeld = 0;
         foreach (var chunk in SplitChunks(recorded))
         {
             foreach (AgentEvent evt in chunk.Events)
@@ -209,24 +211,45 @@ internal sealed class DemoCellForgeScreen
 
             // The scripted asker resolves the request silently (see
             // DemoRuntime), so the card is replayed here: it lands on the frame
-            // that carries the tool call, hangs for GateHoldChunks frames the
-            // way a human would take to press a key, then commits.
-            if (gate is null && chunk.Tool.HasValue)
+            // that carries the tool call, then hangs for GateHoldFrames frames
+            // with *no further events fed* — the beat a human takes to read the
+            // card and press a key. Without that pause the tool result lands
+            // while the gate is still open and the card reads as an
+            // after-the-fact annotation on an already-completed call.
+            if (chunk.Tool.HasValue)
             {
-                gate = _bridge.RequestApprovalGate(chunk.Tool.Value.Name, chunk.Tool.Value.Detail);
-                gateHeld = 0;
-            }
+                ApprovalGateView gate = _bridge.RequestApprovalGate(chunk.Tool.Value.Name, chunk.Tool.Value.Detail);
+                for (int held = 0; held < GateHoldFrames; held++)
+                {
+                    await StepAsync(HoldFrames, ct).ConfigureAwait(false);
+                }
 
-            // Synthetic monotonic clock: the stream pacer and the tool-card
-            // timers read it, so the reveal is a function of the step index.
-            _nowMs += StepMs;
-            _bridge.Tick(_nowMs);
-
-            if (gate is not null && ++gateHeld >= GateHoldChunks)
-            {
                 gate.TryDecide(ApprovalChoice.Approve);
-                gate = null;
+                await StepAsync(HoldFrames, ct).ConfigureAwait(false);
             }
+            else
+            {
+                await StepAsync(HoldFrames, ct).ConfigureAwait(false);
+            }
+        }
+
+        await HoldAsync(SettleHoldFrames, ct).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    ///     One replay step: advance the synthetic clock, let the bridge drain its
+    ///     queues, paint the frame, then hold it. The clock is synthetic on
+    ///     purpose — the stream pacer and the tool-card timers read it, so the
+    ///     reveal is a function of the step index rather than of the wall clock.
+    /// </summary>
+    private async Task StepAsync(int holdFrames, CancellationToken ct)
+    {
+        _nowMs += StepMs;
+        _bridge.Tick(_nowMs);
+        await RenderAsync().ConfigureAwait(false);
+        await HoldAsync(holdFrames, ct).ConfigureAwait(false);
+    }
 
             await RenderAsync().ConfigureAwait(false);
             await HoldAsync(HoldFrames, ct).ConfigureAwait(false);

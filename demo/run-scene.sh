@@ -179,9 +179,10 @@ if [[ "$tui" == "cellforge" ]]; then
   # The shell prompt the recorder's terminal prints once this script returns
   # would repaint the restored console mid-tail, and where it lands is a race
   # against the sampler — one pass would show it, the next would not. Holding
-  # past the tape's trailing Sleep keeps the last captured screen a function of
-  # the demo alone. It costs nothing: the recorder has already stopped.
-  sleep "${DEMO_CELLFORGE_EXIT_HOLD:-20}"
+  # past the tape's trailing Sleep means the prompt can only ever arrive after
+  # the recorder has stopped. Costs nothing: by then the demo has painted
+  # everything it is going to paint.
+  sleep "${DEMO_CELLFORGE_EXIT_HOLD:-$(( ${DEMO_TAPE_TAIL_SECONDS:-34} + 30 ))}"
 elif [[ -n "$line_hold" ]]; then
   "$cli" --demo --scene "$scene" --tui "$tui" --chunk-delay "$chunk_delay" "${extra[@]+"${extra[@]}"}" \
     | scrub | pace

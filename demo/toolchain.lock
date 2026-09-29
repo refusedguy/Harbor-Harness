@@ -117,13 +117,14 @@ DEMO_LINE_HOLD=0.25
 # sequences. 250 ms = 3 x 1/12 s, the same multiple DEMO_LINE_HOLD uses.
 DEMO_CELLFORGE_STEP_MS=250
 
-# Seconds the cell-diff path holds after the CLI exits, before the script
-# returns. The shell prompt the recorder's terminal prints afterwards repaints
-# the restored console, and whether a sampling tick lands before or after it is
-# a race - one pass would show the prompt, the next would not. Holding past the
-# tape's trailing Sleep removes the race; the recorder has already stopped by
-# then, so it costs nothing.
-DEMO_CELLFORGE_EXIT_HOLD=20
+# The cell-diff path holds after the CLI exits, before the script returns.
+# Optional override: when set, run-scene.sh sleeps this many seconds instead of
+# the derived default (DEMO_TAPE_TAIL_SECONDS + 30). The shell prompt the
+# recorder's terminal prints afterwards repaints the restored console, and
+# whether a sampling tick lands before or after it is a race - one pass would
+# show the prompt, the next would not. Holding past the tape's trailing Sleep
+# means the prompt can only ever arrive after the recorder has stopped, so it
+# costs nothing.
 
 # Trailing Sleep every tape records. The cell-diff scenes are longer than the
 # line ones (boot plus a fixed number of held frames, not one held line each),
