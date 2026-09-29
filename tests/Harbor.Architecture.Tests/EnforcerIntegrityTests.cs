@@ -522,7 +522,7 @@ public sealed class EnforcerIntegrityTests
             "FullLayerMatrixTests.DocumentedExceptions",
             FullLayerMatrixTests.DocumentedExceptions.SelectMany(
                 static entry => entry.Value.Select(
-                    e => new ExemptionReason.Row($"{entry.Key} -> {e.Target}", e.Reason, TrackedBy: null))));
+                    e => (Key: $"{entry.Key} -> {e.Target}", Row: new ExemptionReason.Row(e.Reason, null)))));
 
         await Assert.That(failures.Count).IsEqualTo(0).Because(string.Join("\n", failures));
     }
@@ -543,7 +543,7 @@ public sealed class EnforcerIntegrityTests
         var failures = ExemptionReason.RowsWithoutAReason(
             "EnforcerIntegrityTests.DeclaredButUnboundProjectReferences",
             DeclaredButUnboundProjectReferences.Select(
-                static r => new ExemptionReason.Row($"{r.From} -> {r.To}", r.Reason, TrackedBy: null)));
+                static r => (Key: $"{r.From} -> {r.To}", Row: new ExemptionReason.Row(r.Reason, null))));
 
         await Assert.That(failures.Count).IsEqualTo(0).Because(string.Join("\n", failures));
     }

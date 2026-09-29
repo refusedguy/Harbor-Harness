@@ -90,15 +90,16 @@ public sealed class ReflectionConventionRule
     ///     has to be justified in review (see
     ///     <see cref="The_Plugin_Allowance_Is_NonEmpty_Scoped_And_Explained" />).
     /// </summary>
-    private static readonly ExemptionReason.Row[] AllowedProjectPrefixes =
+    private static readonly (string Prefix, ExemptionReason.Row Allowance)[] AllowedProjectPrefixes =
     [
-        new(
+        (
             "src/Harbor.Plugins.",
-            "Loading code at run time IS the plugin product: CS-source plugins are compiled "
-            + "in-memory by Roslyn and DLL plugins are loaded so a swap needs no host restart, "
-            + "which is why Harbor.Plugins.Host exists as a separate process. Not debt — the one "
-            + "place the capability is wanted. Docs: docs/ARCHITECTURE_LAYERS.md §5.8.",
-            TrackedBy: null),
+            new ExemptionReason.Row(
+                "Loading code at run time IS the plugin product: CS-source plugins are compiled "
+                + "in-memory by Roslyn and DLL plugins are loaded so a swap needs no host restart, "
+                + "which is why Harbor.Plugins.Host exists as a separate process. Not debt — the one "
+                + "place the capability is wanted. Docs: docs/ARCHITECTURE_LAYERS.md §5.8.",
+                TrackedBy: null)),
     ];
 
     /// <summary>
@@ -131,7 +132,7 @@ public sealed class ReflectionConventionRule
 
     /// <summary>Whether <paramref name="projectDir" /> sits under one of the allowed prefixes.</summary>
     private static bool IsAllowed(string projectDir) =>
-        AllowedProjectPrefixes.Any(row => projectDir.StartsWith(row.Key, StringComparison.Ordinal));
+        AllowedProjectPrefixes.Any(a => projectDir.StartsWith(a.Prefix, StringComparison.Ordinal));
 
     /// <summary>
     ///     Every forbidden construct in the named files. A file that cannot be read
@@ -261,7 +262,7 @@ public sealed class ReflectionConventionRule
         failures.AddRange(
             ExemptionReason.RowsWithoutAReason(
                 "ReflectionConventionRule.AllowedProjectPrefixes",
-                AllowedProjectPrefixes));
+                AllowedProjectPrefixes.Select(static a => (a.Prefix, a.Allowance))));
 
         // Every real project directory, so "this prefix matches something" can be
         // answered from the repository rather than assumed.
@@ -270,17 +271,17 @@ public sealed class ReflectionConventionRule
             .Where(static dir => dir.Length > 0)
             .ToHashSet(StringComparer.Ordinal);
 
-        foreach (ExemptionReason.Row row in AllowedProjectPrefixes)
+        foreach ((string prefix, ExemptionReason.Row _) in AllowedProjectPrefixes)
         {
             var matched = realProjectDirs
-                .Where(dir => dir.StartsWith(row.Key, StringComparison.Ordinal))
+                .Where(dir => dir.StartsWith(prefix, StringComparison.Ordinal))
                 .OrderBy(static dir => dir, StringComparer.Ordinal)
                 .ToList();
 
             if (matched.Count == 0)
             {
                 failures.Add(
-                    $"prefix '{row.Key}' matches no real project directory. An exemption that "
+                    $"prefix '{prefix}' matches no real project directory. An exemption that "
                     + "matches nothing is a satisfied constraint enforcing nothing: the rule would be "
                     + "green because it is looking at no file, not because the code is clean.");
                 continue;
@@ -289,7 +290,7 @@ public sealed class ReflectionConventionRule
             foreach (string dir in matched.Where(dir => !dir.StartsWith("src/Harbor.Plugins.", StringComparison.Ordinal)))
             {
                 failures.Add(
-                    $"prefix '{row.Key}' reaches '{dir}', which is not in the plugin family. The "
+                    $"prefix '{prefix}' reaches '{dir}', which is not in the plugin family. The "
                     + "exemption is one fact — plugins load code the host did not compile — so a second "
                     + "one is a change to the CONVENTION, not a row to add. Change the rule text and the "
                     + "doc in the same review, so the widening is visible instead of silent.");

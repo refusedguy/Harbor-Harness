@@ -693,7 +693,11 @@ public sealed class PresentationCapabilityRules
         };
 
     /// <summary>Shared empty row set, so a lookup miss allocates nothing per assembly.</summary>
-    private static readonly Dictionary<string, ExemptionReason.Row> EmptyRows = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, ExemptionReason.Row> EmptyBaselineRows
+        = new(StringComparer.Ordinal);
+
+    /// <summary>The same, for the permanent-capability table, whose value is a bare reason.</summary>
+    private static readonly Dictionary<string, string> EmptyPermanentRows = new(StringComparer.Ordinal);
 
     // ---------------------------------------------------------------------
     // The RESOLVED list — violations that were tracked and are being deleted.
@@ -1207,10 +1211,8 @@ public sealed class PresentationCapabilityRules
             ExemptionReason.RowsWithoutAReason(
                 "PresentationCapabilityRules.KnownViolations",
                 KnownViolations.SelectMany(
-                    static entry => entry.Value.Select(kv => new ExemptionReason.Row(
-                        $"{entry.Key} / {kv.Key}",
-                        kv.Value.Reason,
-                        kv.Value.TrackedBy)))));
+                    static entry => entry.Value.Select(
+                        kv => (Key: $"{entry.Key} / {kv.Key}", Row: kv.Value)))));
 
         // The permanent-capability table obeys the same integrity rules, minus the
         // tracking URL (there is no fix to schedule) and plus two of its own: a
@@ -1287,12 +1289,12 @@ public sealed class PresentationCapabilityRules
             var baseline = KnownViolations.TryGetValue(
                 assemblyName, out Dictionary<string, ExemptionReason.Row>? rows)
                 ? rows
-                : EmptyRows;
+                : EmptyBaselineRows;
 
             Dictionary<string, string> permanent = PermanentCapabilities.TryGetValue(
                 assemblyName, out Dictionary<string, string>? permanentRows)
                 ? permanentRows
-                : EmptyRows;
+                : EmptyPermanentRows;
 
             foreach (IGrouping<string, CapabilityHit> byType in scan.Hits
                 .Where(hit => hit.RuleId == rule.Id)
