@@ -47,9 +47,8 @@ public class AbstractionsSplitLayerRules
     // Harbor project references are allowed.
     // #451: the empty Harbor.Core facade was deleted; Harbor.Application and
     // Harbor.Registries are the two real owners it forwarded to.
-    private static readonly string[] NoHarborProjectRefs =
+    internal static readonly string[] NoHarborProjectRefs =
     [
-        "Harbor.Domain",
         "Harbor.Extensions",
         "Harbor.Abstractions",
         "Harbor.Terminal.Abstractions",
@@ -84,10 +83,9 @@ public class AbstractionsSplitLayerRules
     // StringBuilderPool, FrozenSet materializers, generic MemoryPack
     // round-trips) — zero Harbor project references are allowed. Consumers
     // that use the helpers reference Harbor.Extensions directly.
-    private static readonly string[] ExtensionsForbiddenRefs =
+    internal static readonly string[] ExtensionsForbiddenRefs =
     [
         "Harbor.Abstractions.Contracts",
-        "Harbor.Domain",
         "Harbor.Abstractions",
         "Harbor.Terminal.Abstractions",
         "Harbor.Application",
@@ -121,9 +119,8 @@ public class AbstractionsSplitLayerRules
     // (interfaces reference contract types like Session, AgentMessage). Pool
     // helpers (Harbor.Extensions) are not re-exported — direct consumers
     // reference Harbor.Extensions themselves.
-    private static readonly string[] AbstractionsForbiddenRefs =
+    internal static readonly string[] AbstractionsForbiddenRefs =
     [
-        "Harbor.Domain",
         "Harbor.Extensions",
         "Harbor.Terminal.Abstractions",
         "Harbor.Application",

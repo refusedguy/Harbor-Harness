@@ -56,12 +56,11 @@ public class LayerDependencyTests
     // layer (Harbor.Abstractions, Harbor.Terminal.Abstractions) must NOT reference.
     // Harbor.Application and Harbor.Registries are Application-layer assemblies
     // that the Domain layer must also not reference.
-    private static readonly string[] NonDomainHarborAssemblies =
+    internal static readonly string[] NonDomainHarborAssemblies =
     [
         "Harbor.Application",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
-        "Harbor.Scripting",
         "Harbor.Providers.OpenAiCompatible",
         "Harbor.Providers.Anthropic",
         "Harbor.Providers.OpenAI",
@@ -76,12 +75,11 @@ public class LayerDependencyTests
     // The set of Harbor assemblies that Infrastructure projects must NOT reference.
     // (Infrastructure → Domain only; never Application, never other Infrastructure,
     // never Presentation.)
-    private static readonly string[] NonDomainNonSelfHarborAssemblies =
+    internal static readonly string[] NonDomainNonSelfHarborAssemblies =
     [
         "Harbor.Application",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
-        "Harbor.Scripting",
         "Harbor.App.Cli"
     ];
 
@@ -155,8 +153,7 @@ public class LayerDependencyTests
             "Harbor.Plugins.Instantiation",
             "Harbor.Plugins.Registration",
             "Harbor.Plugins.Hosting",
-            "Harbor.Scripting",
-            "Harbor.Scripting.Abstractions",
+                "Harbor.Scripting.Abstractions",
             "Harbor.Scripting.Storage",
             "Harbor.Scripting.Compilation",
             "Harbor.Scripting.Engines",
@@ -197,8 +194,7 @@ public class LayerDependencyTests
             "Harbor.Plugins.Instantiation",
             "Harbor.Plugins.Registration",
             "Harbor.Plugins.Hosting",
-            "Harbor.Scripting",
-            "Harbor.Scripting.Abstractions",
+                "Harbor.Scripting.Abstractions",
             "Harbor.Scripting.Storage",
             "Harbor.Scripting.Compilation",
             "Harbor.Scripting.Engines",
@@ -241,8 +237,7 @@ public class LayerDependencyTests
         [
             "Harbor.Application",
             "Harbor.Registries",
-            "Harbor.Scripting",
-            "Harbor.Providers.OpenAiCompatible",
+                "Harbor.Providers.OpenAiCompatible",
             "Harbor.Providers.Anthropic",
             "Harbor.Providers.OpenAI",
             "Harbor.Providers.Ollama",
@@ -352,8 +347,7 @@ public class LayerDependencyTests
             "Harbor.Application",
             "Harbor.Registries",
             "Harbor.Plugins.Runtime",
-            "Harbor.Scripting",
-            "Harbor.Providers.OpenAiCompatible",
+                "Harbor.Providers.OpenAiCompatible",
             "Harbor.Providers.Anthropic",
             "Harbor.Providers.OpenAI",
             "Harbor.Providers.Ollama",

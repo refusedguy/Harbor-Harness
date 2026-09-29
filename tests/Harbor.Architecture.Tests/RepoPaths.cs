@@ -7,6 +7,8 @@
 // throwing, so a published or trimmed test host degrades to "nothing to check"
 // instead of failing the Release build with an unrelated error.
 
+using System.Xml.Linq;
+
 namespace Harbor.Architecture.Tests;
 
 /// <summary>
@@ -17,6 +19,11 @@ internal static class RepoPaths
 {
     /// <summary>The solution file that marks the repository root.</summary>
     private const string RootMarker = "Harbor.slnx";
+
+    // MSBuild is case-insensitive on Windows and case-sensitive on Linux; a glob
+    // for "Harbor.slnx" therefore fails to find a checkout whose solution file is
+    // upper-cased. Probe both spellings when walking up from the test bin directory.
+    private static readonly string[] RootMarkers = [RootMarker, "Harbor.SLNX"];
 
     /// <summary>Repo-relative path of the README template, quoted in failure messages.</summary>
     internal const string ReadmeTemplateRelativePath = "docs/standards/README-template.md";
@@ -61,6 +68,154 @@ internal static class RepoPaths
         return null;
     }
 
+    /// <summary>Absolute path of the <c>src/&lt;projectDir&gt;</c> directory, or <c>null</c> outside a checkout.</summary>
+    internal static string? FindProjectDir(string projectDir)
+        => RepoRoot is null ? null : Path.Combine(RepoRoot, "src", projectDir);
+
+    /// <summary>
+    ///     Every project in the repository mapped to its produced assembly simple
+    ///     name (the <c>&lt;AssemblyName&gt;</c> property, defaulting to the project
+    ///     directory name).
+    /// </summary>
+    /// <remarks>
+    ///     This is the ground truth for "does this assembly name exist?". Several
+    ///     architecture rules used to name assemblies that no project produces (e.g.
+    ///     <c>Harbor.Scripting</c> — a project family, never an assembly), which
+    ///     makes such a constraint vacuous: it can never fail. Checking names
+    ///     against the real project inventory turns that class of typo/rename/deletion
+    ///     into a hard failure.
+    /// </remarks>
+    internal static IReadOnlyDictionary<string, string> EnumerateRepoAssemblyNames()
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (RepoRoot is null)
+        {
+            return result;
+        }
+
+        foreach (string csproj in Directory.GetFiles(RepoRoot, "*.csproj", SearchOption.AllDirectories))
+        {
+            if (csproj.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                || csproj.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                || csproj.Contains($"{Path.DirectorySeparatorChar}.worktrees{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string projectDir = Path.GetFileName(Path.GetDirectoryName(csproj)!);
+            result[ReadAssemblyName(csproj, projectDir)] = projectDir;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    ///     Reads a csproj and returns the project directory names it declares as a
+    ///     <c>&lt;ProjectReference&gt;</c>, split by whether the reference is
+    ///     consumed as an analyzer/source generator.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The IL-level matrix rules (<c>Assembly.GetReferencedAssemblies()</c>)
+    ///         cannot see a <c>&lt;ProjectReference&gt;</c> whose types are never
+    ///         bound — Roslyn drops the assembly from the consumer's reference list.
+    ///         Reading the csproj directly closes that hole: a declared edge must be
+    ///         justified in the matrix even when it produces no IL.
+    ///     </para>
+    ///     <para>
+    ///         <c>OutputItemType=Analyzer</c> references are source generators, not
+    ///         layer dependencies, and are reported separately so they have to be
+    ///         declared explicitly rather than silently ignored.
+    ///     </para>
+    /// </remarks>
+    /// <returns>(reference project dir names, analyzer project dir names)</returns>
+    internal static (string[] References, string[] Analyzers) ReadProjectReferences(string csprojPath)
+    {
+        var references = new List<string>();
+        var analyzers = new List<string>();
+
+        XDocument document;
+        try
+        {
+            document = XDocument.Load(csprojPath, LoadOptions.None);
+        }
+        catch (Exception ex) when (ex is IOException or System.Xml.XmlException)
+        {
+            return ([], []);
+        }
+
+        string projectDir = Path.GetDirectoryName(csprojPath)!;
+        foreach (XElement element in document.Descendants().Where(e => e.Name.LocalName == "ProjectReference"))
+        {
+            string? include = element.Attribute("Include")?.Value;
+            if (string.IsNullOrWhiteSpace(include))
+            {
+                continue;
+            }
+
+            string resolved = Path.GetFullPath(
+                Path.Combine(projectDir, include.Replace('\\', Path.DirectorySeparatorChar)));
+            string name = Path.GetFileNameWithoutExtension(resolved);
+
+            string? outputItemType = element.Elements()
+                .FirstOrDefault(e => e.Name.LocalName == "OutputItemType")?.Value;
+            if (string.Equals(outputItemType, "Analyzer", StringComparison.Ordinal))
+            {
+                analyzers.Add(name);
+            }
+            else
+            {
+                references.Add(name);
+            }
+        }
+
+        return ([.. references], [.. analyzers]);
+    }
+
+    /// <summary>Every <c>*.cs</c> file under a project directory, excluding build output.</summary>
+    internal static IReadOnlyList<string> EnumerateCsFiles(string projectDir)
+    {
+        if (RepoRoot is null)
+        {
+            return [];
+        }
+
+        string dir = Path.Combine(RepoRoot, "src", projectDir);
+        if (!Directory.Exists(dir))
+        {
+            return [];
+        }
+
+        return
+        [
+            .. Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories)
+                .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                            && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                .OrderBy(p => p, StringComparer.Ordinal)
+        ];
+    }
+
+    private static string ReadAssemblyName(string csprojPath, string projectDir)
+    {
+        try
+        {
+            XDocument document = XDocument.Load(csprojPath, LoadOptions.None);
+            foreach (XElement element in document.Descendants())
+            {
+                if (element.Name.LocalName == "AssemblyName" && element.Value.Length > 0)
+                {
+                    return element.Value.Trim();
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or System.Xml.XmlException)
+        {
+            // Fall through to the directory-name default.
+        }
+
+        return projectDir;
+    }
+
     /// <summary>Whether a csproj opts into NuGet packing.</summary>
     internal static bool IsPackable(string csprojPath)
     {
@@ -83,9 +238,12 @@ internal static class RepoPaths
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, RootMarker)))
+            foreach (string marker in RootMarkers)
             {
-                return dir.FullName;
+                if (File.Exists(Path.Combine(dir.FullName, marker)))
+                {
+                    return dir.FullName;
+                }
             }
 
             dir = dir.Parent;

@@ -26,9 +26,16 @@
     <!-- Facade depends on Hosting (which transitively pulls in Abstractions,
          Storage, Compilation, Instantiation, Registration). -->
     <ProjectReference Include="..\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
-    <!-- Tui.Abstractions is needed because CsPluginLoader.cs references
-         Harbor.Terminal.Abstractions.Plugins.ITuiPlugin for legacy logging. -->
-    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <!--
+      #450: the former reference to Harbor.Terminal.Abstractions is GONE. It was
+      declared on the assumption that CsPluginLoader.cs names
+      Harbor.Terminal.Abstractions.Plugins.ITuiPlugin, but no file in this
+      project referenced it — Roslyn therefore emitted no AssemblyRef, so every
+      IL-based layering rule was blind to the edge and it silently rotted here.
+      EnforcerIntegrityTests.DeclaredProjectReferences_AreJustifiedByTheMatrix
+      now checks the csproj itself, so a declared-but-unjustified edge fails
+      instead of hiding.
+    -->
   </ItemGroup>
 
   <ItemGroup>

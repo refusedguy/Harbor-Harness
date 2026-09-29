@@ -16,22 +16,17 @@
 // a row here — otherwise AllSrcAssembliesAreCovered fails loudly. See
 // docs/ARCHITECTURE_LAYERS.md §2 for the canonical matrix this encodes.
 //
-// Out of scope by design:
-//   - Harbor.CodeGen — build tool, not part of Harbor.slnx.
-//   - Harbor.Plugins.Host — OutputType=Exe out-of-process MCP stdio server
-//     (assembly 'harbor-plugins-host'): an app/composition-root like apps/*.
-//   - Harbor.Providers.Shared — shared-source folder (no .csproj): SsePump.cs /
-//     OpenAiWire.cs are <Compile Include> linked into the four provider
-//     assemblies, so there is no separate assembly to put on the matrix.
-//   - apps/* entry points (Harbor.App.Cli, Harbor.App.Avalonia) — composition
-//     roots are allowed to reference anything; there is nothing to forbid.
+// Out of scope by design — see OutOfScopeAssemblies for the authoritative list
+// with a reason per entry. EnforcerIntegrityTests.SrcProjects_AreAllClassified
+// fails when a src project is in neither this table nor that list, so the
+// "out of scope" set can no longer grow silently (the #450 regression class).
 
 namespace Harbor.Architecture.Tests;
 
 public class FullLayerMatrixTests
 {
     /// <summary>Layers a src assembly can belong to.</summary>
-    private enum Layer
+    internal enum Layer
     {
         /// <summary>Pure contracts / BCL-only helpers. Bottom of the pyramid.</summary>
         Domain,
@@ -45,7 +40,42 @@ public class FullLayerMatrixTests
         CompositionRoot,
     }
 
-    private sealed record Row(Layer Layer, string[] Allowed);
+    internal sealed record Row(Layer Layer, string[] Allowed);
+
+    /// <summary>
+    ///     src projects deliberately NOT on the matrix, each with the reason. Every
+    ///     entry must have a non-empty reason —
+    ///     <c>EnforcerIntegrityTests.SrcProjects_AreAllClassified</c> enforces it.
+    /// </summary>
+    internal static readonly Dictionary<string, string> OutOfScopeAssemblies = new(StringComparer.Ordinal)
+    {
+        // Roslyn source-generator project (referenced with
+        // OutputItemType=Analyzer by the projects that need generated code). It
+        // produces no runtime assembly, so there is no layer edge to constrain.
+        ["Harbor.CodeGen"] = "Source-generator project; consumed via OutputItemType=Analyzer, emits no runtime assembly.",
+
+        // Harbor.Plugins.Host.csproj produces the assembly 'harbor-plugins-host'
+        // (OutputType=Exe): an out-of-process MCP stdio server, i.e. an
+        // app/composition root like apps/*. It may reference anything.
+        ["Harbor.Plugins.Host"] = "OutputType=Exe out-of-process MCP stdio server (assembly 'harbor-plugins-host') — a composition root.",
+    };
+
+    /// <summary>
+    ///     <c>src/</c> folders that hold shared source but produce no assembly —
+    ///     their files are <c>&lt;Compile Include&gt;</c>-linked into several
+    ///     projects, so there is nothing to put on the matrix. Tracked here so the
+    ///     "no csproj" case is an explicit, checked statement rather than an
+    ///     unlisted directory.
+    /// </summary>
+    internal static readonly string[] SharedSourceFolders = ["Harbor.Providers.Shared"];
+
+    /// <summary>
+    ///     Projects referenced as source generators (OutputItemType=Analyzer).
+    ///     A generator is a build-time dependency, not a layer edge, so it is
+    ///     excluded from the matrix — but it must be declared here, so that a
+    ///     NEW analyzer reference cannot slip past unnoticed.
+    /// </summary>
+    internal static readonly string[] SourceGeneratorProjects = ["Harbor.CodeGen"];
 
     // The single source of truth for "which src assemblies exist AND are under
     // enforcement". LayerDependencyTests.AllExpectedHarborAssembliesAreLoaded
@@ -77,6 +107,11 @@ public class FullLayerMatrixTests
         "Harbor.Tui.AnsiPlain",
         "Harbor.Tui.CellForge.Engine",
         "Harbor.Tui.CellForge",
+        // #450: was reachable from Harbor.Hosting but present in NEITHER this
+        // inventory, the matrix, nor an out-of-scope list — i.e. its own
+        // dependencies were unbounded. SharpConsoleUI is a third-party renderer
+        // library (external/ConsoleEx), referenced only for the renderer it wraps.
+        "Harbor.Tui.NickConsoleEx",
         // Application
         "Harbor.Application",
         "Harbor.Registries",
@@ -109,42 +144,70 @@ public class FullLayerMatrixTests
         "Harbor.Hosting",
     ];
 
+    /// <summary>
+    ///     One (from → to) edge that violates the naive layer rules. Unlike a
+    ///     project-granular allow, an exception is <b>file-scoped</b>: only the
+    ///     source files listed in <see cref="Sites" /> may bind a type from the
+    ///     target assembly. A new file reaching into the target assembly fails
+    ///     <c>EnforcerIntegrityTests.DocumentedExceptions_AreScopedToNamedFiles</c>,
+    ///     so an exception can no longer hide future violations.
+    /// </summary>
+    internal sealed record DocumentedException(string Target, string Reason, string[] Sites);
+
     // (from → to) edges that violate the naive layer rules but are accepted,
     // each with its reason. Anything NOT listed here is a hard failure.
-    private static readonly Dictionary<string, string[]> DocumentedExceptions = new()
+    internal static readonly Dictionary<string, DocumentedException[]> DocumentedExceptions = new()
     {
-        // #188 (part of #96) Presentation → Application tech debt, owner: architecture, sprint: next:
-        // Desktop.Abstractions uses ProviderPresets (Harbor.Application.Configuration)
-        // in ProviderModelPickerViewModel / OnboardingViewModel. Direct
-        // Harbor.Application ref (the Harbor.Core facade was removed in #188 and
-        // the facade itself deleted in #451).
-        // Future fix: move preset catalog to Domain (Harbor.Abstractions.Providers).
+        // #188 (part of #96) Presentation → Application tech debt, owner: architecture:
+        // ProviderModelPickerViewModel / OnboardingViewModel consume ProviderPresets
+        // from Harbor.Application.Configuration. The Harbor.Core facade that used to
+        // carry this edge was removed in #188 and the facade itself deleted in #451.
+        // Future fix: move the preset catalog to Domain (Harbor.Abstractions.Providers)
+        // — tracked per site, so the debt cannot spread past these two files.
         ["Harbor.Desktop.Abstractions"] =
         [
-            "Harbor.Application",
+            new DocumentedException(
+                "Harbor.Application",
+                "#188/#96 Presentation→Application debt: ProviderPresets catalog. Fix: move presets to Domain (Harbor.Abstractions.Providers).",
+                [
+                    "ViewModels/OnboardingViewModel.cs",
+                    "ViewModels/ProviderModelPickerViewModel.cs",
+                ]),
         ],
         // ITuiPlugin / TUI vocabulary lives in Terminal.Abstractions by design;
         // plugin-surface assemblies legitimately reach Presentation for it.
         ["Harbor.Plugins.Abstractions"] =
         [
-            "Harbor.Terminal.Abstractions",
-            // Plugin manifests describe TUI state projections.
-            "Harbor.Ui.Framework.State",
+            new DocumentedException(
+                "Harbor.Terminal.Abstractions",
+                "ITuiPlugin is TUI vocabulary; the plugin contract surface must name it.",
+                ["IPluginLoadHost.cs"]),
+            new DocumentedException(
+                "Harbor.Ui.Framework.State",
+                "Plugin manifests describe TUI state projections (panel payloads).",
+                ["IPluginLoadHost.cs"]),
         ],
         ["Harbor.Plugins.Compilation"] =
         [
-            // Compile-time reference passing includes ITuiPlugin vocabulary.
-            "Harbor.Terminal.Abstractions",
+            new DocumentedException(
+                "Harbor.Terminal.Abstractions",
+                "Compile-time reference passing builds ITuiPlugin vocabulary for the plugin.",
+                ["PluginAssemblyReferences.cs"]),
         ],
         ["Harbor.Plugins.Registration"] =
         [
-            "Harbor.Terminal.Abstractions",
-            // Registered TUI plugins carry view-model/state payloads.
-            "Harbor.Ui.Framework.State",
+            new DocumentedException(
+                "Harbor.Terminal.Abstractions",
+                "ITuiPlugin is TUI vocabulary; the registrar registers TUI plugins.",
+                ["PluginRegistrar.cs"]),
+            new DocumentedException(
+                "Harbor.Ui.Framework.State",
+                "Registered TUI plugins carry view-model/state payloads.",
+                ["PanelRegistryPluginAdapter.cs", "PluginRegistrar.cs"]),
         ],
     };
 
-    private static readonly Dictionary<string, Row> Matrix = new()
+    internal static readonly Dictionary<string, Row> Matrix = new()
     {
         // ---- Domain -------------------------------------------------------
         ["Harbor.Abstractions.Contracts"] = new(Layer.Domain, []),
@@ -152,16 +215,22 @@ public class FullLayerMatrixTests
         ["Harbor.Extensions"] = new(Layer.Domain, []),
         ["Harbor.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions.Contracts"]),
         ["Harbor.Ipc.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions"]),
-        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions"]),
+        // #450: the ProjectReference to Harbor.Abstractions is declared but the
+        // assembly binds no type from it (the IL gate confirms no AssemblyRef), so
+        // the row is narrowed to empty and the reference is listed as
+        // declared-but-unbound. An earlier attempt to keep the entry, on the
+        // theory that the SDK-generated AssemblyInfo forces the reference, was
+        // wrong — the compiled reference list is the authority.
+        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, []),
 
         // ---- Presentation -------------------------------------------------
-        ["Harbor.Terminal.Abstractions"] = new(Layer.Presentation, ["Harbor.Abstractions", "Harbor.Ui.Framework"]),
-        ["Harbor.Ui.Framework"] = new(Layer.Presentation,
-        [
-            "Harbor.Ui.Framework.Abstractions", "Harbor.Ui.Framework.State",
-            "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.ViewModels",
-            "Harbor.Ui.Framework.Projection", "Harbor.Ui.Framework.Sessions",
-        ]),
+        // #450: "Harbor.Ui.Framework" was permitted here but never used. The
+        // project is an empty meta-package shell (no .cs files at all), so no
+        // consumer can bind a type from it and Roslyn never emits the
+        // AssemblyRef — the edge was unenforceable permission. Removed; the leaf
+        // Ui.Framework.* modules are the real dependencies.
+        ["Harbor.Terminal.Abstractions"] = new(Layer.Presentation, ["Harbor.Abstractions"]),
+        ["Harbor.Ui.Framework"] = new(Layer.Presentation, []),
         ["Harbor.Ui.Framework.State"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.Abstractions",
                 // #33 T1: KeyEventAdapter consumes the BCL-only UiKeyDto key
@@ -169,13 +238,13 @@ public class FullLayerMatrixTests
                 // old Rendering→State one; Presentation→Presentation conforms.
                 "Harbor.Ui.Framework.Rendering"]),
         ["Harbor.Ui.Framework.Reducers"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State"]),
+            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State"]),
         ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Reducers", "Harbor.Ui.Framework.Abstractions"]),
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Reducers"]),
         ["Harbor.Ui.Framework.ViewModels"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions"]),
+            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services"]),
         ["Harbor.Ui.Framework.Projection"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
+            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
              // RgbColor is defined in the standalone DesignSystem package but
              // keeps its historical Projection namespace for compatibility.
              "Harbor.DesignSystem"]),
@@ -191,8 +260,7 @@ public class FullLayerMatrixTests
         // (and no Projection edge: unrealized, and State→Rendering plus
         // Rendering→Projection→State would be an MSBuild cycle).
         ["Harbor.Ui.Framework.Rendering"] = new(Layer.Presentation,
-            ["Harbor.DesignSystem", "Harbor.Desktop.Animations",
-                // #75: canonical ctx% helper (ContextUsage) — Presentation → Domain is rule-conforming.
+            ["Harbor.DesignSystem", // #75: canonical ctx% helper (ContextUsage) — Presentation → Domain is rule-conforming.
                 "Harbor.Abstractions.Contracts"]),
         // HDS v1 token catalog — standalone leaf: ZERO Harbor references. The
         // design-system package ships RgbColor (under the historical Projection
@@ -200,24 +268,30 @@ public class FullLayerMatrixTests
         // Projection/Rendering/CellForge/apps all resolve them from here.
         ["Harbor.DesignSystem"] = new(Layer.Presentation, []),
         ["Harbor.Ui.Framework.Sessions"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.ViewModels", "Harbor.Ui.Framework.Abstractions"]),
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions"]),
+        // #450: "Harbor.Terminal.Abstractions" and "Harbor.Ui.Framework" were both
+        // permitted but never referenced. Terminal.Abstractions is dead permission
+        // (no file names the ITuiRenderer/ITuiView vocabulary); Ui.Framework is an
+        // empty assembly (see the Terminal.Abstractions row). The leaf
+        // Ui.Framework.* modules below are what this project actually binds.
         ["Harbor.Desktop.Abstractions"] = new(Layer.Presentation,
         [
-            "Harbor.Abstractions", "Harbor.Terminal.Abstractions",
-            "Harbor.Ui.Framework", "Harbor.Ui.Framework.ViewModels",
+            "Harbor.Abstractions",
+            "Harbor.Ui.Framework.ViewModels",
             "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services",
             "Harbor.Ui.Framework.Sessions",
         ]),
         ["Harbor.Desktop.Shared"] = new(Layer.Presentation,
             // #462: Commands/SlashCommands projects the shared SlashCommandCatalog
             // (Ui.Framework.Abstractions, Domain) rather than a private literal copy.
-            ["Harbor.Desktop.Abstractions", "Harbor.Ui.Framework", "Harbor.Ui.Framework.Abstractions"]),
+            // #450: "Harbor.Ui.Framework" removed — empty assembly, never bound.
+            ["Harbor.Desktop.Abstractions", "Harbor.Ui.Framework.Abstractions"]),
         // RgbColor is defined in Harbor.DesignSystem (standalone package); the
         // token types come through that same reference.
         ["Harbor.Desktop.Animations"] = new(Layer.Presentation,
             ["Harbor.DesignSystem"]),
         ["Harbor.Tui.Notifications"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
+            [ "Harbor.Abstractions.Contracts", "Harbor.Terminal.Abstractions"]),
         // renderer-unification Phase 4: Ansi + Plain merged into one assembly;
         // styling flows through IEscapeCodeStrategy (Ansi / Null impls).
         // Issue #77: chat writes land in the DI-shared UiStore (Presentation→
@@ -229,9 +303,7 @@ public class FullLayerMatrixTests
         // the State KeyEventAdapter over the shared UiKeyDto vocabulary, cell
         // styles via DesignSystem tokens, shared blocks via Ui.Framework.Rendering.
         ["Harbor.Tui.CellForge.Engine"] = new(Layer.Presentation,
-            [
-                "Harbor.Abstractions",
-                "Harbor.Ui.Framework.State",
+            [ "Harbor.Ui.Framework.State",
                 "Harbor.Ui.Framework.Rendering",
                 "Harbor.DesignSystem",
             ]),
@@ -258,8 +330,15 @@ public class FullLayerMatrixTests
                 "Harbor.Ui.Framework.ViewModels",
                 "Harbor.Ui.Framework.Sessions",
                 "Harbor.Ui.Framework.Abstractions",
-                "Harbor.DesignSystem", "Harbor.Desktop.Animations",
-            ]),
+                "Harbor.DesignSystem", ]),
+        // #450: SharpConsoleUI-based renderer (HARBOR_TUI=nickconsoleex), wired
+        // behind HarborWithNickConsoleEx. It lives in src/ and Harbor.Hosting
+        // references it, so it belongs on the matrix like any other Presentation
+        // assembly: it may reach Domain (Abstractions facade) + the TUI vocabulary
+        // (Terminal.Abstractions) and nothing else. The third-party
+        // SharpConsoleUI project it wraps is not a Harbor assembly.
+        ["Harbor.Tui.NickConsoleEx"] = new(Layer.Presentation,
+            [ "Harbor.Abstractions.Contracts", "Harbor.Terminal.Abstractions"]),
 
         // ---- Application ----------------------------------------------------
         ["Harbor.Application"] = new(Layer.Application,
@@ -291,16 +370,23 @@ public class FullLayerMatrixTests
         ["Harbor.Lsp"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
         ["Harbor.Terminal.Pty"] = new(Layer.Infrastructure, []),
         ["Harbor.Logging"] = new(Layer.Infrastructure, []),
-        ["Harbor.Transport.Remote"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
+        ["Harbor.Transport.Remote"] = new(Layer.Infrastructure, ["Harbor.Abstractions.Contracts"]),
         ["Harbor.Telemetry.Core"] = new(Layer.Infrastructure,
             ["Harbor.Diagnostics.Abstractions", "Harbor.Abstractions"]),
-        ["Harbor.Telemetry.Otlp"] = new(Layer.Infrastructure, ["Harbor.Telemetry.Core"]),
+        // #450: the IL gate proved this assembly emits no AssemblyRef for
+        // Telemetry.Core, so the permission was dead weight.
+        ["Harbor.Telemetry.Otlp"] = new(Layer.Infrastructure, []),
         ["Harbor.Ipc.Client"] = new(Layer.Infrastructure,
             ["Harbor.Ipc.Abstractions", "Harbor.Abstractions"]),
+        // #450: the IL-based checks proved the Ipc.Abstractions edge is real for
+        // InProcess (the in-memory transport binds the shared IPC channel
+        // contracts) — an earlier narrowing of this row was wrong and reverted.
         ["Harbor.Ipc.InProcess"] = new(Layer.Infrastructure,
             ["Harbor.Ipc.Abstractions", "Harbor.Abstractions"]),
+        // #450: "Harbor.Application" was permitted but never referenced — an
+        // Infrastructure → Application edge that was pure dead permission.
         ["Harbor.Ipc.Server"] = new(Layer.Infrastructure,
-            ["Harbor.Ipc.Abstractions", "Harbor.Abstractions", "Harbor.Application"]),
+            ["Harbor.Ipc.Abstractions", "Harbor.Abstractions"]),
         ["Harbor.Plugins.Storage"] = new(Layer.Infrastructure, ["Harbor.Plugins.Abstractions"]),
         ["Harbor.Plugins.Compilation"] = new(Layer.Infrastructure,
             ["Harbor.Plugins.Abstractions", "Harbor.Abstractions"]),
@@ -308,11 +394,14 @@ public class FullLayerMatrixTests
             ["Harbor.Plugins.Abstractions", "Harbor.Abstractions"]),
         ["Harbor.Plugins.Registration"] = new(Layer.Infrastructure,
             ["Harbor.Plugins.Abstractions", "Harbor.Plugins.Instantiation", "Harbor.Abstractions"]),
+        // #450: Storage / Compilation / Instantiation / Registration were permitted
+        // but never bound — PluginHost composes the machinery through the
+        // Plugins.Abstractions contracts only. That is exactly the "declares 5
+        // targets, uses 1" rot #450 was filed for; the four are removed here and
+        // their ProjectReferences are tracked as known-vestigial edges.
         ["Harbor.Plugins.Hosting"] = new(Layer.Infrastructure,
         [
-            "Harbor.Plugins.Abstractions", "Harbor.Plugins.Storage",
-            "Harbor.Plugins.Compilation", "Harbor.Plugins.Instantiation",
-            "Harbor.Plugins.Registration",
+            "Harbor.Plugins.Abstractions",
         ]),
         // ---- CompositionRoot -----------------------------------------------
         ["Harbor.Hosting"] = new(Layer.CompositionRoot,
@@ -323,24 +412,24 @@ public class FullLayerMatrixTests
             "Harbor.Application", "Harbor.Registries",
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
+            // #450: "Harbor.Ui.Framework.Sessions" was removed here on the theory
+            // that no file named the namespace, but the IL reference is real (the
+            // IL gate caught the regression), so it is permitted again.
             "Harbor.Ui.Framework.Sessions",
-            "Harbor.Storage.Jsonl", "Harbor.Storage.Memory", "Harbor.Storage.Sqlite",
-            "Harbor.Tui.AnsiPlain",
+            "Harbor.Storage.Jsonl", "Harbor.Storage.Memory", "Harbor.Tui.AnsiPlain",
             "Harbor.Tui.CellForge",
-            "Harbor.Providers.Ollama", "Harbor.Providers.OpenAiCompatible",
-            "Harbor.Providers.Anthropic", "Harbor.Providers.OpenAI",
-            "Harbor.Tools.Builtin", "Harbor.Lsp", "Harbor.Ipc.Abstractions",
+            "Harbor.Providers.Ollama", "Harbor.Providers.OpenAiCompatible", "Harbor.Tools.Builtin", "Harbor.Lsp", "Harbor.Ipc.Abstractions",
             "Harbor.Ipc.InProcess", "Harbor.Ipc.Server", "Harbor.Ipc.Client",
-            "Harbor.Plugins.Runtime", "Harbor.Plugins.Storage",
+            // #450: "Harbor.Plugins.Runtime" and "Harbor.Ui.Framework.Sessions"
+            // were permitted but never bound — the composition root composes the
+            // plugin family through Plugins.Hosting/Abstractions and the session
+            // slice through Hosting's own modules. Dead permission, removed.
+            "Harbor.Plugins.Storage",
             "Harbor.Plugins.Compilation", "Harbor.Plugins.Instantiation",
             "Harbor.Plugins.Registration", "Harbor.Plugins.Hosting",
             // Trust gate (IPluginSource/PluginScript contract) composed in RegistriesModule:
             "Harbor.Plugins.Abstractions",
-            // contrib/tui renderer references live outside src/:
-            "Harbor.Tui.Spectre", "Harbor.Tui.Spectre.Fullscreen",
-            "Harbor.Tui.SpectreTui", "Harbor.Tui.TerminalGui",
-            "Harbor.Tui.Termina", "Harbor.Tui.RazorConsole",
-            // renderer-unification Phase 3: nickprotop/ConsoleEx wrapper,
+            // contrib/tui renderer references live outside src/: // renderer-unification Phase 3: nickprotop/ConsoleEx wrapper,
             // wired behind HarborWithNickConsoleEx (mutually exclusive with
             // HarborWithSpectreTui — see Harbor.Hosting.csproj).
             "Harbor.Tui.NickConsoleEx",
@@ -367,7 +456,7 @@ public class FullLayerMatrixTests
     ///       types, so consumer IL legitimately emits the Contracts AssemblyRef);
     ///     - plus this row's documented exceptions.
     /// </summary>
-    private static HashSet<string> ExpandAllowed(string name, Row row)
+    internal static HashSet<string> ExpandAllowed(string name, Row row)
     {
         var allowed = row.Allowed.ToHashSet();
         if (allowed.Contains("Harbor.Abstractions"))
@@ -376,7 +465,7 @@ public class FullLayerMatrixTests
         }
         if (DocumentedExceptions.TryGetValue(name, out var exc))
         {
-            allowed.UnionWith(exc);
+            allowed.UnionWith(exc.Select(e => e.Target));
         }
         return allowed;
     }
@@ -499,11 +588,11 @@ public class FullLayerMatrixTests
             }
 
             var refs = ArchitectureTestHelpers.GetReferencedAssemblyNames(asm);
-            foreach (string to in excs)
+            foreach (var exc in excs)
             {
-                if (!refs.Contains(to))
+                if (!refs.Contains(exc.Target))
                 {
-                    failures.Add($"{from} -> {to}: exception is stale (reference no longer exists); remove it");
+                    failures.Add($"{from} -> {exc.Target}: exception is stale (reference no longer exists); remove it");
                 }
             }
         }
