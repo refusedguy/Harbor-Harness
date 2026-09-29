@@ -380,15 +380,31 @@ public class ViewRegistryFreezeAllocationTests
     private const int ViewCount = 4;
 
     /// <summary>
-    ///     Reports a measurement to the TUnit test output. CI does not capture
-    ///     the process stdout, so this (not <c>Console.WriteLine</c>) is what
-    ///     puts the delta in the Actions log; the console line is kept for
-    ///     local runs.
+    ///     Reports a measurement so the number is retrievable from a CI run.
+    ///     TUnit does not echo per-test output to the console, and CI does not
+    ///     capture process stdout — so the delta goes out as a test artifact
+    ///     (<c>gh run download</c>), with the console line kept for local runs.
     /// </summary>
     private static void Report(string message)
     {
-        TestContext.Current?.Output.WriteLine(message);
         Console.WriteLine(message);
+        var context = TestContext.Current;
+        if (context is null) return;
+
+        context.Output.WriteLine(message);
+        try
+        {
+            var dir = context.OutputDirectory ?? Directory.GetCurrentDirectory();
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, "#490-registry-freeze-alloc.txt");
+            File.AppendAllText(path, message + Environment.NewLine);
+            context.Output.AttachArtifact(path, "490-registry-freeze-alloc", "text/plain");
+        }
+        catch (Exception ex)
+        {
+            // Never fail the tripwire over reporting.
+            context.Output.WriteLine($"#490 report attach failed: {ex.Message}");
+        }
     }
 
     /// <summary>
