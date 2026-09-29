@@ -11,27 +11,17 @@
 // now `required`, which makes the compiler state the invariant instead of a
 // comment. This file stops the next contributor from putting one back.
 //
-// SCOPE. Deliberately src/Harbor.Ui.Framework* only. The same pattern exists
-// elsewhere in the repo (HarborCompositionContext, IAgent.State) and those are
-// owned by their own issues — widening this gate would make it red on a tree this
-// PR is not changing.
+// SCOPE. Deliberately src/Harbor.Ui.Framework* only. The composition root
+// (src/Harbor.Hosting, HarborCompositionContext) carried the same five members
+// and is gated separately by HostingCompositionNullabilityRules (#562);
+// IAgent.State is still unowned. Widening THIS gate would make it red on a tree
+// this PR is not changing.
 //
-// WHAT IS ALLOWED, and why.
-//
-//   * `default!` is NOT matched. It is a different idiom with a legitimate use:
-//     StoreSubscriberViewModel.Selector<T>._last holds a `default(T)` sentinel
-//     behind a `_has` flag, and reads it only when the flag is set. Converting
-//     that to Maybe<T> would add an allocation per selector per frame to model an
-//     absence that is already impossible. That is a judgement call recorded once
-//     here rather than re-litigated at every site.
-//
-//   * The literal `null!` inside a comment or a doc comment is not matched. A
-//     contributor documenting *why* they did not use `null!` must not fail this
-//     gate, so comments are stripped before matching. String literals are not
-//     stripped — the risk of a false positive there is smaller than the risk of
-//     writing a comment-stripper with a string-literal state machine.
-
-using System.Text.RegularExpressions;
+// WHAT IS ALLOWED, and why — recorded once in SourceNullabilityScan, which now
+// owns the shared scanner: `default!` is a different idiom with a legitimate
+// use (StoreSubscriberViewModel.Selector<T>._last holds a default(T) sentinel
+// behind a flag), and the literal `null!` inside a comment must not fail the
+// gate.
 
 namespace Harbor.Architecture.Tests;
 
@@ -57,71 +47,9 @@ namespace Harbor.Architecture.Tests;
 /// </remarks>
 public class UiFrameworkNullabilityRules
 {
-    /// <summary>
-    ///     Matches the <c>null!</c> token pair. The leading group rejects a
-    ///     preceding word character so an identifier such as <c>xNull!</c> cannot
-    ///     match; the trailing group rejects a following word character so
-    ///     documentation like <c>null!x</c> cannot either.
-    /// </summary>
-    private static readonly Regex NullForgivingOnNull = new(@"(?<!\w)null!(?!\w)", RegexOptions.Compiled);
-
-    /// <summary>Matches one or more consecutive single-line comments.</summary>
-    private static readonly Regex LineComment = new(@"//[^\n]*", RegexOptions.Compiled);
-
-    /// <summary>Matches a /* … *&#47; block, including the newlines it spans.</summary>
-    private static readonly Regex BlockComment = new(@"/\*.*?\*/", RegexOptions.Singleline | RegexOptions.Compiled);
-
     /// <summary>Every <c>.cs</c> file under the TEA state layer, sorted for a stable failure message.</summary>
-    private static IReadOnlyList<string> EnumerateUiFrameworkSources()
-    {
-        if (RepoPaths.RepoRoot is not { } root)
-        {
-            return [];
-        }
-
-        string src = Path.Combine(root, "src");
-        if (!Directory.Exists(src))
-        {
-            return [];
-        }
-
-        var found = new List<string>();
-        foreach (string dir in Directory.GetDirectories(src, "Harbor.Ui.Framework*"))
-        {
-            found.AddRange(Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories));
-        }
-
-        // Never descend into build output — a stale obj/ copy would be counted as
-        // a second occurrence of every violation.
-        return
-        [
-            .. found.Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                                && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-                  .OrderBy(p => p, StringComparer.Ordinal)
-        ];
-    }
-
-    /// <summary>
-    ///     Blanks out one block-comment match, preserving every newline so line numbers
-    ///     computed downstream still point at the right source line.
-    /// </summary>
-    private static string BlankOutComment(Match match)
-    {
-        var blank = new char[match.Length];
-        for (int i = 0; i < match.Length; i++)
-        {
-            blank[i] = match.Value[i] == '\n' ? '\n' : ' ';
-        }
-
-        return new string(blank);
-    }
-
-    /// <summary>
-    ///     Strips comments so documentation about the rule cannot trip it.
-    ///     <see cref="LineComment" /> runs last because it cannot span a line.
-    /// </summary>
-    private static string StripComments(string source) =>
-        LineComment.Replace(BlockComment.Replace(source, BlankOutComment), " ");
+    private static IReadOnlyList<string> EnumerateUiFrameworkSources() =>
+        SourceNullabilityScan.EnumerateSources("Harbor.Ui.Framework*");
 
     /// <summary>
     ///     No file under <c>src/Harbor.Ui.Framework*/</c> initialises a field or
@@ -137,34 +65,8 @@ public class UiFrameworkNullabilityRules
     [Test]
     public async Task Assert_NoNullForgivingNullInUiFramework()
     {
-        var violations = new List<string>();
-        string? root = RepoPaths.RepoRoot;
-
-        foreach (string file in EnumerateUiFrameworkSources())
-        {
-            string source;
-            try
-            {
-                source = File.ReadAllText(file);
-            }
-            catch (IOException)
-            {
-                continue;
-            }
-
-            // Split after stripping, so a line number here indexes the real source.
-            string[] lines = StripComments(source).Split('\n');
-            for (int i = 0; i < lines.Length; i++)
-            {
-                if (!NullForgivingOnNull.IsMatch(lines[i]))
-                {
-                    continue;
-                }
-
-                string rel = root is null ? file : Path.GetRelativePath(root, file);
-                violations.Add($"{rel}({i + 1}): {lines[i].Trim()}");
-            }
-        }
+        IReadOnlyList<string> violations =
+            SourceNullabilityScan.FindNullForgivingNull(EnumerateUiFrameworkSources());
 
         await Assert.That(violations).IsEmpty()
             .Because(

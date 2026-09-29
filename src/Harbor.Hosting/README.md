@@ -20,7 +20,7 @@ The **composition root** for all Harbor applications. `Registration.AddHarbor(..
 
 - **`Registration.AddHarbor(IServiceCollection, HarborComposeOptions, ILoggerFactory?)`**: registers the full Harbor graph. Call order is fixed and architecture-tested.
 - **`HarborComposeOptions`**: `HarborDir`, `DefaultStorageBackend`, `DefaultTuiRenderer`, `EventBusMiddlewares`, `EventBusScrollback`, `ConfigPath`, `AgentModelSource`, `ProviderFlavor`, `ToolSetKind`.
-- **`HarborCompositionContext`**: resolved options + `Common` config + `Harbor` config + `EventBus` + `Registries`.
+- **`HarborCompositionContext`**: resolved options + `Common` config + `Harbor` config + `EventBus` + `Registries`. `EventBus` and `Registries` are assigned exactly once — by `AddHarborConfiguration` and `AddHarborRegistries` — and a module that reads one before its owner ran gets an `InvalidOperationException` naming the member and the module, not a null (#562). `HarborRegistries` takes its four registries as constructor arguments, so a half-built bundle cannot be represented.
 - **Feature flags**: controlled via MSBuild properties (`HarborWithPlugins`, `HarborWithSpectreTui`, `HarborWithAllProviders`, `HarborWithAllTools`) → `#if` constants inside modules.
 
 ## Dependencies
@@ -34,7 +34,7 @@ The **composition root** for all Harbor applications. `Registration.AddHarbor(..
 
 ## Tests
 
-`tests/Harbor.Hosting.Tests/` — covers `AddHarbor` call order and `HarborComposeOptions` defaults.
+`tests/Harbor.Hosting.Tests/` — covers `AddHarbor` call order and `HarborComposeOptions` defaults, and composes the DI modules in a deliberately wrong order to pin that a reorder fails loudly (`CompositionContextInitializationTests`).
 
 ## Build
 
@@ -44,5 +44,5 @@ dotnet build src/Harbor.Hosting/Harbor.Hosting.csproj
 
 ## Known limitations
 
-- All app hosts must call `AddHarbor` exactly once; module ordering is not configurable.
+- All app hosts must call `AddHarbor` exactly once; module ordering is not configurable. A module invoked out of order now throws at composition time instead of composing against an unassigned member.
 - Feature flags are compile-time (`#if`), not runtime — switching a flag requires a rebuild.

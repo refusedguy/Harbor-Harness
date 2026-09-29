@@ -1,0 +1,142 @@
+// SourceNullabilityScan.cs — the text scanner behind the two `null!` gates.
+//
+// `null!` compiles away: by the time an assembly is loaded there is nothing
+// left to inspect, so the only way to see the null-forgiving operator is the
+// source text. Two gates need that scan (the TEA state layer and the
+// composition root), so the regexes and the comment stripper live here once
+// instead of twice — a gate that copied the scanner would be free to drift
+// from the rule it claims to enforce.
+//
+// WHAT IS ALLOWED, and why.
+//
+//   * `default!` is NOT matched. It is a different idiom with a legitimate use:
+//     a `default(T)` sentinel held behind a flag and read only when the flag
+//     is set. Converting that to Maybe<T> would add an allocation to model an
+//     absence that is already impossible. See UiFrameworkNullabilityRules for
+//     the worked example.
+//
+//   * The literal `null!` inside a comment or a doc comment is not matched. A
+//     contributor documenting *why* they did not use `null!` must not fail the
+//     gate, so comments are blanked out (newlines preserved, so a line number
+//     still indexes the real source) before matching. String literals are not
+//     stripped — the risk of a false positive there is smaller than the risk
+//     of writing a comment-stripper with a string-literal state machine.
+
+using System.Text.RegularExpressions;
+
+namespace Harbor.Architecture.Tests;
+
+/// <summary>
+///     Finds `= null!` / `= null!;` initialisers in a slice of <c>src/</c>, by
+///     project directory.
+/// </summary>
+internal static class SourceNullabilityScan
+{
+    /// <summary>
+    ///     Matches the <c>null!</c> token pair. The leading group rejects a
+    ///     preceding word character so an identifier such as <c>xNull!</c>
+    ///     cannot match; the trailing group rejects a following word character
+    ///     so documentation like <c>null!x</c> cannot either.
+    /// </summary>
+    private static readonly Regex NullForgivingOnNull = new(@"(?<!\w)null!(?!\w)", RegexOptions.Compiled);
+
+    /// <summary>Matches one or more consecutive single-line comments.</summary>
+    private static readonly Regex LineComment = new(@"//[^\n]*", RegexOptions.Compiled);
+
+    /// <summary>Matches a C-style block comment, including the newlines it spans.</summary>
+    private static readonly Regex BlockComment = new(@"/\*.*?\*/", RegexOptions.Singleline | RegexOptions.Compiled);
+
+    /// <summary>
+    ///     Every <c>.cs</c> file under <c>src/</c> in a directory matching
+    ///     <paramref name="directoryGlob" />, sorted for a stable failure
+    ///     message. Returns empty when the repository root is not discoverable
+    ///     (a published test host) — each gate pairs this with its own
+    ///     discoverability self-check so an empty slice cannot pass vacuously.
+    /// </summary>
+    internal static IReadOnlyList<string> EnumerateSources(string directoryGlob)
+    {
+        if (RepoPaths.RepoRoot is not { } root)
+        {
+            return [];
+        }
+
+        string src = Path.Combine(root, "src");
+        if (!Directory.Exists(src))
+        {
+            return [];
+        }
+
+        var found = new List<string>();
+        foreach (string dir in Directory.GetDirectories(src, directoryGlob))
+        {
+            found.AddRange(Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories));
+        }
+
+        // Never descend into build output — a stale obj/ copy would be counted as
+        // a second occurrence of every violation.
+        return
+        [
+            .. found.Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                                && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                  .OrderBy(p => p, StringComparer.Ordinal)
+        ];
+    }
+
+    /// <summary>
+    ///     One <c>relative-path(line): offending text</c> entry per
+    ///     <c>null!</c> that is not inside a comment, sorted by file.
+    /// </summary>
+    internal static IReadOnlyList<string> FindNullForgivingNull(IEnumerable<string> files)
+    {
+        string? root = RepoPaths.RepoRoot;
+        var violations = new List<string>();
+
+        foreach (string file in files)
+        {
+            string source;
+            try
+            {
+                source = File.ReadAllText(file);
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+
+            // Split after stripping, so a line number here indexes the real source.
+            string[] lines = StripComments(source).Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (NullForgivingOnNull.IsMatch(lines[i]))
+                {
+                    string rel = root is null ? file : Path.GetRelativePath(root, file);
+                    violations.Add($"{rel}({i + 1}): {lines[i].Trim()}");
+                }
+            }
+        }
+
+        return violations;
+    }
+
+    /// <summary>
+    ///     Blanks out one block-comment match, preserving every newline so line numbers
+    ///     computed downstream still point at the right source line.
+    /// </summary>
+    private static string BlankOutComment(Match match)
+    {
+        var blank = new char[match.Length];
+        for (int i = 0; i < match.Length; i++)
+        {
+            blank[i] = match.Value[i] == '\n' ? '\n' : ' ';
+        }
+
+        return new string(blank);
+    }
+
+    /// <summary>
+    ///     Strips comments so documentation about the rule cannot trip it.
+    ///     <see cref="LineComment" /> runs last because it cannot span a line.
+    /// </summary>
+    private static string StripComments(string source) =>
+        LineComment.Replace(BlockComment.Replace(source, BlankOutComment), " ");
+}

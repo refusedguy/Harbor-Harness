@@ -28,6 +28,14 @@ public static class Registration
                 .AddHarborTui(ctx)
                 .AddHarborIpc(ctx);
 
+        // #562: the two state members a module owns (EventBus, Registries) refuse
+        // to be read before they are assigned, which catches a reader that moved
+        // ahead of its owner. This catches the other half of a bad edit here —
+        // an owner that was dropped from the chain, or moved after every reader,
+        // in which case nothing read the hole during composition and the process
+        // would only discover it on first use.
+        ctx.AssertFullyInitialized();
+
         return ctx;
     }
 }

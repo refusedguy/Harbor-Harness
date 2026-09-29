@@ -51,6 +51,15 @@
     <DefineConstants Condition="'$(HarborWithPlugins)' != 'true' AND '$(HarborWithSpectreTui)' != 'true' AND '$(HarborWithAllProviders)' != 'true' AND '$(HarborWithAllTools)' != 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
   </PropertyGroup>
 
+  <!--
+    #562: the composition-order guard drives the internal AddHarbor* modules
+    directly, composing them in a deliberately wrong order to assert that a
+    reorder fails loudly instead of handing a module a null member.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Hosting.Tests"/>
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Base graph: abstractions + contracts + application pipeline + desktop config types (composition root: references Harbor.Application + Harbor.Registries directly) -->
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>

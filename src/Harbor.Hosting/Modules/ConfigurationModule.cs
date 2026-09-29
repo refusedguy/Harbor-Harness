@@ -67,11 +67,13 @@ internal static class ConfigurationModule
         services.AddSingleton(ctx.Common);
 
         // ---- event bus: constructed explicitly, registered as instance -----
+        // #562: assigned through the set-once door, so a context that never ran
+        // this module hands out a named error on read instead of a null bus.
         var middlewares = options.EventBusMiddlewares?.Invoke(loggerFactory) ?? Array.Empty<IEventBusMiddleware>();
         var eventBusLogger = loggerFactory.CreateLogger<InMemoryEventBus>();
-        ctx.EventBus = options.EventBusScrollback is { } scrollback
+        ctx.SetEventBus(options.EventBusScrollback is { } scrollback
             ? new InMemoryEventBus(eventBusLogger, maxScrollback: scrollback, middlewares.ToArray())
-            : new InMemoryEventBus(eventBusLogger);
+            : new InMemoryEventBus(eventBusLogger));
 
         return ctx;
     }
