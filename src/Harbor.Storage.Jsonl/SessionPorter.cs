@@ -197,20 +197,35 @@ public sealed class JsonlSessionPorter : ISessionPorter
     /// import must tolerate legacy PascalCase aliases, which the span parser
     /// deliberately rejects.
     /// </summary>
+    /// <remarks>
+    ///     #550: the DECODE sits inside the <c>Result.Try</c>, not in a <c>Bind</c>
+    ///     after it. The part factories raise a <see cref="JsonException" /> for a part
+    ///     they cannot rebuild, and a throw from inside a <c>Bind</c> lambda escapes the
+    ///     <c>Result</c> altogether — so a line carrying one unreadable part would abort
+    ///     the whole import instead of skipping that line. It already could: a part
+    ///     missing a member used to throw <c>KeyNotFoundException</c> from
+    ///     <c>GetProperty</c> on this very path.
+    /// </remarks>
     private static Result<AgentMessage> DecodeMessageLine(string sessionId, string line)
     {
         // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
-        // wrapping a throwing call in a Result: same catch scope, same text.
+        // wrapping a throwing call in a Result: same catch scope, same text. Both the
+        // document parse and the decode it feeds are inside the lambda, so every way a
+        // body line can be unreadable arrives on the same rail and is logged as one
+        // skipped line.
+        //
+        // The trailing .Bind(x => x) is the repo's flattening idiom and it is not
+        // decoration: 3.7.0 has Try<T>(Func<T>), NOT Try<T>(Func<Result<T>>), so the
+        // lambda's own Result is the T here and the rail has to be joined by hand —
+        // the same shape SqliteSessionStore.DeleteMessagesAfterAsync uses.
         return Result.Try(
-                () => JsonDocument.Parse(line),
-                ex => $"malformed JSON line: {ex.Message}")
-            .Bind(doc =>
+            () =>
             {
-                using (doc)
-                {
-                    return JsonlMessageCodec.DeserializeMessage(sessionId, doc.RootElement);
-                }
-            });
+                using var doc = JsonDocument.Parse(line);
+                return JsonlMessageCodec.DeserializeMessage(sessionId, doc.RootElement);
+            },
+            ex => $"malformed JSON line: {ex.Message}")
+            .Bind(x => x);
     }
 
     /// <summary>

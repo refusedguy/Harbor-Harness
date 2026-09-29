@@ -41,9 +41,16 @@ internal sealed class ContentPartListJsonConverter : JsonConverter<IReadOnlyList
         {
             if (reader.TokenType == JsonTokenType.EndArray)
                 return parts;
+
+            // #550: an element that does not decode is no longer skipped. This
+            // converter is the LAST place a lost part could be hidden, and skipping
+            // here is what turned "this build cannot read that part" into a silently
+            // shorter assistant turn reloaded from the row. The per-element converter
+            // now refuses a part it cannot rebuild, naming the tag; the check below is
+            // only the belt to those braces, so a null here can never again become a
+            // missing part.
             ContentPart? part = SqliteMappers.ContentPartJsonConverter.Instance.Read(ref reader, typeof(ContentPart), options);
-            if (part is not null)
-                parts.Add(part);
+            parts.Add(part ?? throw new JsonException("A message part entry did not decode and must not be skipped."));
         }
 
         throw new JsonException("Unterminated message parts array.");

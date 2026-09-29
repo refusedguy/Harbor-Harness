@@ -28,6 +28,14 @@ namespace Harbor.Storage.Jsonl;
 ///         fast path covers every value this store writes; anything else
 ///         falls back to <see cref="StopReasonJsonConverter.Parse"/>).
 ///     </para>
+///     <para>
+///         <b>#550:</b> one thing deliberately no longer mirrors the old
+///         parser. A <c>parts</c> entry this build cannot rebuild used to yield
+///         <see langword="null" /> and be skipped, so a session written by a
+///         newer Harbor reloaded here with the unknown part missing and nothing
+///         logged. It is refused by name now; see <see cref="BuildContentPart"/>
+///         for why there is no third option.
+///     </para>
 /// </remarks>
 internal static class JsonlLineParser
 {
@@ -479,18 +487,21 @@ internal static class JsonlLineParser
             if (reader.TokenType != JsonTokenType.StartObject)
                 continue;
 
-            ContentPart? part = ParseSinglePart(ref reader);
-            if (part is not null)
-                parts.Add(part);
+            // #550: there is no null to skip any more. A part that cannot be rebuilt
+            // names its tag and takes the record with it (see BuildContentPart) —
+            // the previous `if (part is not null)` is exactly the line that let a
+            // part disappear from a reloaded transcript without a word.
+            parts.Add(ParseSinglePart(ref reader));
         }
 
         return parts;
     }
 
-    /// <summary>Parses one object of the <c>parts</c> array; unknown/incomplete parts yield null.</summary>
-    private static ContentPart? ParseSinglePart(ref Utf8JsonReader reader)
+    /// <summary>Parses one object of the <c>parts</c> array, or throws naming what is wrong with it.</summary>
+    private static ContentPart ParseSinglePart(ref Utf8JsonReader reader)
     {
         PartType partType = PartType.Unknown;
+        ReadOnlySpan<byte> tag = default;
         string? text = null;
         string? partId = null;
         string? toolName = null;
@@ -511,7 +522,11 @@ internal static class JsonlLineParser
             switch (MatchPartProperty(pProp))
             {
                 case PartProperty.Type:
-                    partType = MatchPartType(reader.ValueSpan);
+                    // Borrowed, not copied: the tag is only ever turned into a string
+                    // on the throw path, so the success path allocates nothing more
+                    // than it did before (#460's read gate measures exactly this).
+                    tag = reader.ValueSpan;
+                    partType = MatchPartType(tag);
                     break;
                 case PartProperty.Text:
                     text = reader.GetString();
@@ -541,12 +556,32 @@ internal static class JsonlLineParser
             }
         }
 
-        return BuildContentPart(partType, text, partId, toolName, args, hasArgs, path, mimeType, sizeBytes);
+        return BuildContentPart(partType, tag, text, partId, toolName, args, hasArgs, path, mimeType, sizeBytes);
     }
 
-    /// <summary>Builds a <see cref="ContentPart" /> from scanned fields; null when incomplete/unknown.</summary>
-    private static ContentPart? BuildContentPart(
+    /// <summary>Builds a <see cref="ContentPart" /> from scanned fields, or refuses the record by name.</summary>
+    /// <remarks>
+    ///     #550. This is a tag → type factory, not a walk over the part union, so
+    ///     <see cref="ContentPartVisitor{TResult}" /> never reached it and every arm
+    ///     used to fall into <c>_ => null</c>, which the caller skipped: a session
+    ///     written by a NEWER Harbor reloaded in this one with the unknown part
+    ///     missing and nothing anywhere saying why. Both refusals are loud and both
+    ///     name the part, because the reader has no honest third option — there is no
+    ///     union case that stands for "a part I could not read", and inventing one
+    ///     would be the same loss with a nicer shape.
+    ///     <list type="bullet">
+    ///         <item>An unknown tag is version skew: this build is older than the
+    ///         file, and the operator is the only one who can resolve that.</item>
+    ///         <item>A known tag missing a field is a corrupt record: the line
+    ///         claims a part it does not contain.</item>
+    ///     </list>
+    ///     The throw rides the store's existing per-record failure channel —
+    ///     <see cref="ParseAssistantPayload" /> catches it, names the message, and
+    ///     the reader logs it while still returning the rest of the transcript.
+    /// </remarks>
+    private static ContentPart BuildContentPart(
         PartType partType,
+        ReadOnlySpan<byte> tag,
         string? text,
         string? partId,
         string? toolName,
@@ -563,9 +598,32 @@ internal static class JsonlLineParser
             PartType.ToolCall when partId is not null && toolName is not null && hasArgs
                 => new ToolCallPart(partId, toolName, args),
             PartType.File when path is not null && mimeType is not null => new FilePart(path, mimeType, sizeBytes),
-            _ => null
+
+            PartType.Text => throw new JsonException("content part of type 'text' is missing 'text'"),
+            PartType.Thinking => throw new JsonException("content part of type 'thinking' is missing 'text'"),
+            PartType.ToolCall => throw new JsonException(
+                "content part of type 'tool_call' is missing 'id', 'toolName' or 'args'"),
+            PartType.File => throw new JsonException(
+                "content part of type 'file' is missing 'path', 'mimeType' or 'sizeBytes'"),
+
+            // The foreign-tag refusal is the catch-all rather than one arm per enum
+            // member. An enum with an explicit underlying type carries unnamed values,
+            // and a set of named arms does NOT make the switch expression exhaustive
+            // (CS8524) — a named `PartType.Unknown` arm would not have covered them.
+            // Every unnamed value is the same refusal anyway: a tag this build has no
+            // row for.
+            _ => throw new JsonException(
+                $"content part type '{TagName(tag)}' is not known to this build — this session was written by a newer Harbor, and the record is refused rather than read with the part missing"),
         };
     }
+
+    /// <summary>
+    ///     The offending tag, spelled out for a diagnostic. Only ever called from a
+    ///     <c>throw</c> expression, so the one string it allocates cannot reach the
+    ///     read hot path.
+    /// </summary>
+    private static string TagName(ReadOnlySpan<byte> tag) =>
+        tag.IsEmpty ? "<no 'type' discriminator>" : System.Text.Encoding.UTF8.GetString(tag);
 
     // ── Property matchers (zero-alloc, UTF-8 span compare) ─────────────────
 

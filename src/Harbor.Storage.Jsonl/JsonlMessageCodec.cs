@@ -42,14 +42,23 @@ internal static class JsonlMessageCodec
     ///     <see cref="JsonlCodecContext" />) instead of anonymous types.
     /// </summary>
     /// <remarks>
-    ///     <b>#51:</b> <see cref="ToolResultEntry.Metadata" /> is deliberately
-    ///     dropped here. It is <c>object?</c>-typed (arbitrary runtime content),
-    ///     so the source-generated <see cref="JsonlCodecContext" /> has no
-    ///     <c>TypeInfo</c> for it and serialization throws per turn whenever a
-    ///     tool attaches non-null metadata. The read path
-    ///     (<see cref="JsonlLineParser" />) never restores metadata either, and
-    ///     the <c>ToolResult.Success/Error</c> contract documents it as
-    ///     "not serialized" — dropping on write is fidelity-neutral.
+    ///     <para>
+    ///         <b>#51:</b> <see cref="ToolResultEntry.Metadata" /> is deliberately
+    ///         dropped here. It is <c>object?</c>-typed (arbitrary runtime content),
+    ///         so the source-generated <see cref="JsonlCodecContext" /> has no
+    ///         <c>TypeInfo</c> for it and serialization throws per turn whenever a
+    ///         tool attaches non-null metadata. The read path
+    ///         (<see cref="JsonlLineParser" />) never restores metadata either, and
+    ///         the <c>ToolResult.Success/Error</c> contract documents it as
+    ///         "not serialized" — dropping on write is fidelity-neutral.
+    ///     </para>
+    ///     <para>
+    ///         <b>#550:</b> a message kind this build does not know is refused
+    ///         rather than written out as a placeholder payload. The callers
+    ///         (<see cref="JsonlSessionStore" />, <see cref="SessionPorter" />) run
+    ///         inside a <c>Result.Try</c> and surface the refusal as a logged error,
+    ///         which is the same treatment the SQLite writer has had since #461.
+    ///     </para>
     /// </remarks>
     public static object SerializeMessagePayload(AgentMessage message)
     {
@@ -67,7 +76,7 @@ internal static class JsonlMessageCodec
                 SummaryFirstKeptId: a.SummaryFirstKeptId),
             ToolResultMessage tr => new ToolResultPayload(
                 tr.Results.Select(r => new ToolResultEntry(r.ToolCallId, r.ToolName, r.Output, r.IsError)).ToArray()),
-            _ => new UnknownPartPayload("unknown")
+            _ => throw Unsupported(message.Role, message.GetType().Name, "message")
         };
     }
 
@@ -75,14 +84,32 @@ internal static class JsonlMessageCodec
     ///     Project a single <see cref="ContentPart" /> into its JSON shape
     ///     using a named DTO type (AOT-registered).
     /// </summary>
+    /// <remarks>
+    ///     #550: the former <c>_ => new UnknownPartPayload("unknown")</c> wrote a
+    ///     part this codec's own readers cannot decode — the read side dropped it, so
+    ///     a message written by a build that knew the kind came back without it. The
+    ///     refusal matches <see cref="ContentPartVisitor{TResult}.Accept" />, which is
+    ///     what the SQLite writer has done since #461: a store must not persist
+    ///     something it will not read back.
+    /// </remarks>
     public static object SerializePart(ContentPart part) => part switch
     {
         TextPart t => new TextPartPayload("text", t.Text),
         ThinkingPart th => new ThinkingPartPayload("thinking", th.Text),
         ToolCallPart tc => new ToolCallPartPayload("tool_call", tc.Id, tc.ToolName, tc.Args),
         FilePart f => new FilePartPayload("file", f.Path, f.MimeType, f.SizeBytes),
-        _ => new UnknownPartPayload("unknown")
+        _ => throw Unsupported(part.Type, part.GetType().Name, "part")
     };
+
+    /// <summary>
+    ///     The refusal for a kind the codec has no shape for. Mirrors
+    ///     <see cref="ContentPartVisitor{TResult}.VisitUnknown" /> so both stores
+    ///     report the same class of drift the same way.
+    /// </summary>
+    private static NotSupportedException Unsupported(string tag, string typeName, string what) =>
+        new($"{what} kind '{typeName}' (type discriminator '{tag}') has no JSONL shape. "
+            + "A new subtype must ship with a SerializePart/SerializeMessagePayload arm; writing a placeholder "
+            + "would persist a record the read path cannot read back.");
 
     /// <summary>
     ///     Project the images a user attached to a turn (issue #386). Returns
@@ -215,33 +242,52 @@ internal static class JsonlMessageCodec
         if (!payload.TryGetProperty("parts", out var partsEl) || partsEl.ValueKind != JsonValueKind.Array)
             return Result.Failure<AgentMessage>($"assistant message {id}: missing 'parts'");
 
-        var parts = new List<ContentPart>();
-        foreach (var partEl in partsEl.EnumerateArray())
-        {
-            var part = DeserializePart(partEl);
-            if (part is not null) parts.Add(part);
-        }
-
         if (!payload.TryGetProperty("stopReason", out var srEl) || srEl.ValueKind != JsonValueKind.String)
             return Result.Failure<AgentMessage>($"assistant message {id}: missing 'stopReason'");
 
         bool isSummary = payload.TryGetProperty("isSummary", out var s) && s.GetBoolean();
         string? summaryFirstKeptId = payload.TryGetProperty("summaryFirstKeptId", out var sf) ? sf.GetString() : null;
 
-        return Result.Try(() => Enum.Parse<StopReason>(srEl.GetString()!, true),
-                ex => $"assistant message {id}: invalid stopReason: {ex.Message}")
-            .Bind(stopReason => RequiredModel(payload, id).Map(model => (AgentMessage)new AssistantMessage(
-                id,
-                sessionId,
-                createdAt,
-                parts,
-                stopReason,
-                ParseUsage(payload),
-                model,
-                parentId,
-                isSummary,
-                summaryFirstKeptId)));
+        // #550: the parts array has no null-skipping filter any more. A part that does
+        // not decode names its tag, and the message fails with it — the importer then
+        // logs one skipped line and imports the rest, instead of a part going missing
+        // from the imported session without a word. MapError puts the message id on the
+        // refusal, because "a line was skipped" is not actionable in a large export.
+        return DecodeParts(partsEl)
+            .MapError(error => $"assistant message {id}: {error}")
+            .Bind(parts => Result.Try(() => Enum.Parse<StopReason>(srEl.GetString()!, true),
+                    ex => $"assistant message {id}: invalid stopReason: {ex.Message}")
+                .Map(stopReason => (stopReason, parts)))
+            .Bind(x => RequiredModel(payload, id)
+                .Map(model => (AgentMessage)new AssistantMessage(
+                    id,
+                    sessionId,
+                    createdAt,
+                    x.parts,
+                    x.stopReason,
+                    ParseUsage(payload),
+                    model,
+                    parentId,
+                    isSummary,
+                    summaryFirstKeptId)));
     }
+
+    /// <summary>
+    ///     Decode a persisted <c>parts</c> array. Every entry must decode: a part this
+    ///     build cannot rebuild is not a part the reader may drop, and the only other
+    ///     option — a shorter message than the one that was written — is the bug.
+    /// </summary>
+    private static Result<IReadOnlyList<ContentPart>> DecodeParts(JsonElement partsEl) =>
+        Result.Try<IReadOnlyList<ContentPart>>(
+            () =>
+            {
+                var parts = new List<ContentPart>(partsEl.GetArrayLength());
+                foreach (var partEl in partsEl.EnumerateArray())
+                    parts.Add(DeserializePart(partEl));
+
+                return parts;
+            },
+            ex => ex.Message);
 
     /// <summary>
     ///     Legacy-tolerant usage reader: pre-V4 files stored Usage PascalCase
@@ -317,26 +363,79 @@ internal static class JsonlMessageCodec
     }
 
     /// <summary>
-    ///     Parse a single <see cref="ContentPart" /> from its JSON shape.
-    ///     Returns null for unknown <c>type</c> values (forward-compat
-    ///     with future part types).
+    ///     Parse a single JSONL part back into its <see cref="ContentPart" />.
     /// </summary>
-    public static ContentPart? DeserializePart(JsonElement element)
+    /// <remarks>
+    ///     #550 — this is a tag → type factory, not a walk over the part union, so
+    ///     <see cref="ContentPartVisitor{TResult}" /> never reached it and its
+    ///     <c>_ => null</c> fed a <c>DeserializePart(partEl) is not null</c> filter in
+    ///     <see cref="DecodeAssistant" />: a part tag this build does not know vanished
+    ///     from the reloaded transcript with no error anywhere. Every refusal here is
+    ///     loud, and refusing an unknown tag is the *only* honest answer — the union has
+    ///     no case for "a part I could not read", and the "forward-compat with future
+    ///     part types" this used to claim described a data loss, not a compatibility.
+    ///     The store's own read path refuses the same tags the same way
+    ///     (<see cref="JsonlLineParser" />); the two have to agree.
+    /// </remarks>
+    /// <exception cref="JsonException">
+    ///     The tag is unknown to this build, or the part is missing a member its tag
+    ///     requires. Both name the part.
+    /// </exception>
+    public static ContentPart DeserializePart(JsonElement element)
     {
-        string? type = element.GetProperty("type").GetString();
-        return type switch
+        if (!element.TryGetProperty("type", out var typeElement) || typeElement.ValueKind != JsonValueKind.String)
         {
-            "text" => new TextPart(element.GetProperty("text").GetString()!),
-            "thinking" => new ThinkingPart(element.GetProperty("text").GetString()!),
-            "tool_call" => new ToolCallPart(
-                element.GetProperty("id").GetString()!,
-                element.GetProperty("toolName").GetString()!,
-                element.GetProperty("args").Deserialize<JsonElement>()),
-            "file" => new FilePart(
-                element.GetProperty("path").GetString()!,
-                element.GetProperty("mimeType").GetString()!,
-                element.GetProperty("sizeBytes").GetInt64()),
-            _ => null
-        };
+            throw new JsonException("content part has no 'type' discriminator, so it cannot be rebuilt.");
+        }
+
+        string type = typeElement.GetString()!;
+        switch (type)
+        {
+            case "text":
+                return new TextPart(RequiredString(element, "text", type));
+            case "thinking":
+                return new ThinkingPart(RequiredString(element, "text", type));
+            case "tool_call":
+                return new ToolCallPart(
+                    RequiredString(element, "id", type),
+                    RequiredString(element, "toolName", type),
+                    // Tolerated exactly as before: a tool_call row with no args at all
+                    // is read with an undefined element, which is a faithful reading of
+                    // "this part carries no arguments".
+                    element.TryGetProperty("args", out var args) ? args.Deserialize<JsonElement>() : default);
+            case "file":
+                return new FilePart(
+                    RequiredString(element, "path", type),
+                    RequiredString(element, "mimeType", type),
+                    RequiredInt64(element, "sizeBytes", type));
+            default:
+                throw new JsonException(
+                    $"content part type '{type}' is not known to this build — this payload was written by a newer Harbor, "
+                    + "and the message is refused rather than read with the part missing");
+        }
+    }
+
+    /// <summary>
+    ///     A mandatory string member of a part. A missing one used to reach
+    ///     <c>GetProperty</c> and throw <see cref="KeyNotFoundException" /> straight out
+    ///     of the porter's decode, where nothing was waiting to catch it — the whole
+    ///     import died instead of one line being skipped. It is a named
+    ///     <see cref="JsonException" /> now, which the caller's <c>Result.Try</c> turns
+    ///     into the per-line diagnostic that path already has a channel for.
+    /// </summary>
+    private static string RequiredString(JsonElement element, string field, string tag)
+    {
+        if (!element.TryGetProperty(field, out var value) || value.ValueKind != JsonValueKind.String)
+            throw new JsonException($"content part of type '{tag}' is missing '{field}'.");
+
+        return value.GetString()!;
+    }
+
+    private static long RequiredInt64(JsonElement element, string field, string tag)
+    {
+        if (!element.TryGetProperty(field, out var value) || value.ValueKind != JsonValueKind.Number)
+            throw new JsonException($"content part of type '{tag}' is missing '{field}'.");
+
+        return value.GetInt64();
     }
 }
