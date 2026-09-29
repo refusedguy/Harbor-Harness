@@ -383,7 +383,13 @@ public class FullLayerMatrixTests
         ["Harbor.Tools.Builtin"] = new(Layer.Infrastructure,
             ["Harbor.Abstractions", "Harbor.Extensions"]),
         ["Harbor.Lsp"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
-        ["Harbor.Terminal.Pty"] = new(Layer.Infrastructure, []),
+        // #672: the PTY host owns the spawn, so it also owns the seam the desktop
+        // pane launches through and the PermissionRuleset that gates it. That
+        // contract (ITerminalPaneLauncher) and PermissionRuleset are both in the
+        // Domain facade, which Infrastructure may reference — the direction the
+        // whole Infrastructure section already uses. Application cannot hold the
+        // implementation instead: it sits a layer ABOVE this assembly.
+        ["Harbor.Terminal.Pty"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
         ["Harbor.Logging"] = new(Layer.Infrastructure, []),
         ["Harbor.Transport.Remote"] = new(Layer.Infrastructure, ["Harbor.Abstractions.Contracts"]),
         ["Harbor.Telemetry.Core"] = new(Layer.Infrastructure,

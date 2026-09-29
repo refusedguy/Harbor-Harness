@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Harbor.Terminal.Pty;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 

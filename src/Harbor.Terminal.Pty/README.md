@@ -10,13 +10,59 @@ Windows ConPTY is a documented follow-up, not an omission.
 
 ## What it is
 
-A **leaf library with no Harbor project references at all** — the lowest layer
-in the tree. It owns a PTY master file descriptor and a child process, and
-exposes raw bytes. It performs no terminal emulation and no UI.
+A low-level library: it owns a PTY master file descriptor and a child process,
+and exposes raw bytes. It performs no terminal emulation and no UI.
+
+Since #672 it carries one Harbor reference, `Harbor.Abstractions` (Domain) —
+for `ITerminalPaneLauncher` and `PermissionRuleset`. That direction is the
+normal one for Infrastructure, and it is what lets the permission gate live
+next to the spawn it guards. Application cannot hold the implementation
+instead: Application sits a layer *above* this assembly.
 
 ## Public API
 
-Two files, one public type each.
+### `PermissionGatedTerminalPaneLauncher` (the seam, #672)
+
+```csharp
+public sealed class PermissionGatedTerminalPaneLauncher : ITerminalPaneLauncher
+{
+    public const string PanePermission = "terminal";
+
+    public PermissionGatedTerminalPaneLauncher(PermissionRuleset ruleset);
+
+    public Result<ITerminalPane> Launch(
+        TerminalPaneRequest request,
+        CancellationToken cancellationToken = default);
+}
+```
+
+**Every launch is gated.** The launcher consults a `PermissionRuleset` and
+refuses unless `terminal` evaluates to `Allow`; a refusal is a
+`Result.Failure` whose text the UI renders verbatim, and no process is started.
+The ruleset is a required constructor argument on purpose — a launcher that had
+to guess would guess "allowed", which is the defect #672 exists to remove.
+
+Two rulesets are consulted, and the order matters:
+
+1. **`bash` — denial is final.** Checked first, so the message names the
+   stronger reason. A `Deny` under `bash` (including the command-shape guard,
+   which denies destructive commands before any rule walk) refuses the pane no
+   matter what the pane's own rule says. This closes the footgun where
+   "deny `bash`" fenced the agent out while the desktop app kept a shell.
+2. **`terminal` — must be explicitly allowed.** The pane's own knob.
+
+The permission is deliberately **not** spelled `bash`. `BashSafetyPolicy`
+allows a command only when the whole argv matches an allow rule token-for-token,
+which suits one-shot command lines and not a program launch: under `bash` the
+pane could only be enabled by naming the exact shell path, e.g.
+`/bin/zsh -i`. A dedicated name with no safety policy attached means
+`{"terminal": {"*": "allow"}}` is honoured predictably.
+
+`PermissionRuleset.Default` has no `terminal` rule, and an unmatched permission
+evaluates to `Ask`, which the launcher treats as a refusal — so **the pane is
+denied until an operator opts in**. That is the safe direction: it launches an
+interactive shell carrying the full inherited environment, and until #672 it
+launched with no gate at all.
 
 ### `PtyProcess`
 
@@ -75,20 +121,33 @@ to `false` to require an absolute path.
 
 ## Wiring
 
-There is **no DI module and no `HARBOR_*` env var** — this is a plain library
-that the desktop app constructs directly. Its single production consumer is
-[`apps/Harbor.App.Avalonia`](../../apps/Harbor.App.Avalonia), in the terminal
-pane view models:
+There is **no DI module and no `HARBOR_*` env var** — the desktop app
+constructs this directly. Its single production consumer is
+[`apps/Harbor.App.Avalonia`](../../apps/Harbor.App.Avalonia):
 
-- `TerminalPaneViewModel` — checks `PtyProcess.IsSupported` first and, on an
-  unsupported platform, closes the pane with an explanatory message instead of
-  throwing; then `PtyProcess.Start(new PtyStartSpec(Title, Args: ["-i"], WorkingDirectory: …))`.
-  The default shell is `$SHELL`, falling back to `/bin/sh`.
-- `FloatingTerminalViewModel` — the same over a floating pane.
+```csharp
+services.AddSingleton<ITerminalPaneLauncher>(sp => new PermissionGatedTerminalPaneLauncher(
+    PermissionRuleset.Default));
+```
 
-Note the defensive shape there: `Start` is used inside a `try`, because the
-throwing variant is the convenient one at a call site that already guards on
-`IsSupported`.
+**The composition root is the only place that may choose the ruleset.** That is
+the point of #672: the policy is one greppable line in the container rather than
+a side effect buried in a ViewModel constructor.
+
+`TerminalPaneViewModel` receives `ITerminalPaneLauncher` and calls
+`TerminalPaneRequest.InteractiveShell(WorkingDirectory, Title)`. It no longer
+names `PtyProcess` at all — it cannot fork, and there is nothing to fake behind.
+`FloatingTerminalViewModel` composes panes over that.
+
+The default shell is still `$SHELL`, falling back to `/bin/sh`, resolved by the
+ViewModel: reading the environment is a presentation concern, so
+`TerminalPaneRequest.InteractiveShell` takes the executable as an argument
+rather than looking it up itself.
+
+Unsupported platforms need no special case in the ViewModel any more — the
+launcher reports `unsupported-platform` as a `Result.Failure` and the pane
+renders it, alongside permission denials and bad shell paths, through the same
+branch.
 
 ## Usage
 
@@ -120,17 +179,24 @@ int exit = await pty.WaitForExitAsync(ct);
 
 ## Dependencies
 
-**No Harbor project references at all** — this is a leaf. Its only package
-reference is `CSharpFunctionalExtensions` for the `Result` start boundary.
+One Harbor project reference, `Harbor.Abstractions` (Domain), added in #672 for
+`ITerminalPaneLauncher` and `PermissionRuleset`. Package references:
+`CSharpFunctionalExtensions` for the `Result` boundaries.
 
-Referenced by `apps/Harbor.App.Avalonia` and `tests/Harbor.Terminal.Pty.Tests`.
-The absence of a `Harbor.*` edge is what keeps it usable from any host.
+Referenced by `apps/Harbor.App.Avalonia`, `tests/Harbor.Terminal.Pty.Tests` and
+`tests/Harbor.Architecture.Tests`.
+
+The edge points inward only. This assembly is Infrastructure and Application
+lives above it, so the gated launcher cannot be implemented in Application
+without either inverting that direction or forking a second spawn path — the
+duplication #672 removes.
 
 ## Known limitations
 
-- **No Windows support.** `IsSupported` is `false` and ConPTY is unimplemented;
-  callers must check it (as `TerminalPaneViewModel` does) or the libc `DllImport`
-  will fail.
+- **No Windows support.** `IsSupported` is `false` and ConPTY is unimplemented.
+  The launcher reports this as a `Result.Failure` rather than throwing, so
+  callers get a message instead of a `DllImport` fault; code using `PtyProcess`
+  directly must still check `IsSupported` first.
 - **No terminal emulation.** You get raw bytes; grid rendering, alternate-screen
   handling, bracketed paste and colour parsing are the consumer's job. This is
   why the desktop panes pair it with a rendering layer.

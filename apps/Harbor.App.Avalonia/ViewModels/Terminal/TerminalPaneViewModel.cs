@@ -1,26 +1,46 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Terminal;
 using Harbor.Abstractions.Tools;
-using Harbor.Terminal.Pty;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Avalonia.ViewModels.Terminal;
 
 /// <summary>
-///     One PTY-backed terminal pane. The child shell runs out-of-process
-///     inside a real pseudo-terminal rooted at <see cref="WorkingDirectory" />
-///     with the full inherited environment; raw output is decoded
-///     incrementally (UTF-8 across chunk boundaries is safe), ANSI control
-///     sequences are stripped, and the tail is capped so every pane keeps an
-///     independent bounded history.
+///     One terminal pane. The child shell runs out-of-process inside a real
+///     pseudo-terminal rooted at <see cref="WorkingDirectory" /> with the full
+///     inherited environment; raw output is decoded incrementally (UTF-8 across
+///     chunk boundaries is safe), ANSI control sequences are stripped, and the tail
+///     is capped so every pane keeps an independent bounded history.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>#672 — this type no longer forks anything.</b> It used to start the PTY
+///         session straight from its constructor, which meant a real interactive
+///         shell carrying the user's whole environment was launched outside the
+///         <c>ITool</c>/<c>PermissionRuleset</c> seam, with no cancellation point and
+///         nothing to fake under test. The launch now goes through
+///         <see cref="ITerminalPaneLauncher" />, whose only registered implementation
+///         consults the permission ruleset and refuses unless the launch is
+///         permitted. A refusal is rendered into <see cref="OutputText" /> verbatim,
+///         because a pane that silently does not open is indistinguishable from a
+///         bug.
+///     </para>
+///     <para>
+///         What is left in this class is presentation: decode, bound the buffer,
+///         marshal onto the UI thread. The argv decision itself is
+///         <see cref="TerminalPaneRequest.InteractiveShell" />, stated once in the
+///         contract rather than re-spelled at every call site.
+///     </para>
+/// </remarks>
 public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposable
 {
     private const int MaxBufferChars = 200_000;
 
-    private readonly PtyProcess? _pty;
+    private readonly ITerminalPane? _pane;
     private readonly IDispatcherAdapter _dispatcher;
     private readonly ILogger _logger;
     private readonly StringBuilder _buffer = new();
@@ -47,6 +67,7 @@ public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposabl
     public TerminalPaneViewModel(
         IDispatcherAdapter dispatcher,
         ILogger<TerminalPaneViewModel> logger,
+        ITerminalPaneLauncher launcher,
         string? workingDirectory = null,
         string? shell = null)
     {
@@ -55,29 +76,25 @@ public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposabl
         WorkingDirectory = workingDirectory ?? Environment.CurrentDirectory;
         Title = shell ?? Environment.GetEnvironmentVariable("SHELL") ?? "/bin/sh";
 
-        if (!PtyProcess.IsSupported)
+        Result<ITerminalPane> started =
+            launcher.Launch(TerminalPaneRequest.InteractiveShell(WorkingDirectory, Title));
+
+        // One branch for every refusal — unsupported platform, permission denial,
+        // a bad shell path. To this ViewModel they are the same thing: no pane.
+        if (started.IsFailure)
         {
             IsClosed = true;
-            OutputText = "PTY sessions are not supported on this platform (Windows ConPTY is a follow-up).";
+            OutputText = started.Error;
+            _logger.LogWarning("Terminal pane refused (cwd={Cwd}, shell={Shell}): {Reason}",
+                WorkingDirectory, Title, started.Error);
             return;
         }
 
-        try
-        {
-            _pty = PtyProcess.Start(new PtyStartSpec(
-                Title,
-                Args: ["-i"],
-                WorkingDirectory: WorkingDirectory));
-            _pty.OutputReceived += OnOutputReceived;
-            _pty.OutputClosed += OnOutputClosed;
-            _logger.LogInformation("PTY pane started: {Shell} pid={Pid} cwd={Cwd}", Title, _pty.Pid, WorkingDirectory);
-        }
-        catch (Exception ex)
-        {
-            IsClosed = true;
-            OutputText = $"Failed to start terminal: {ex.Message}";
-            _logger.LogWarning(ex, "PTY pane start failed (cwd={Cwd})", WorkingDirectory);
-        }
+        _pane = started.Value;
+        _pane.OutputReceived += OnOutputReceived;
+        _pane.OutputClosed += OnOutputClosed;
+        _logger.LogInformation("PTY pane started: {Shell} pid={Pid} cwd={Cwd}",
+            Title, _pane.Pid, WorkingDirectory);
     }
 
     /// <summary>Recent output history (bounded tail) — per-pane, never shared.</summary>
@@ -89,16 +106,16 @@ public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposabl
     /// <summary>Submit the input line to the shell (Enter).</summary>
     public void Submit()
     {
-        if (_pty is null || IsClosed) return;
+        if (_pane is null || IsClosed) return;
         string line = InputText;
         InputText = string.Empty;
         try
         {
-            _pty.WriteLine(line);
+            _pane.WriteLine(line);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "PTY write failed (pid={Pid})", _pty.Pid);
+            _logger.LogWarning(ex, "PTY write failed (pid={Pid})", _pane.Pid);
         }
     }
 
@@ -118,7 +135,7 @@ public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposabl
         InputText = _historyIndex == _commandHistory.Count ? string.Empty : _commandHistory[_historyIndex];
     }
 
-    private void OnOutputReceived(object? sender, PtyOutputEventArgs e)
+    private void OnOutputReceived(object? sender, TerminalOutputEventArgs e)
     {
         // Incremental decode: UTF-8 sequences can split across PTY chunks.
         char[] chars = new char[e.Data.Length];
@@ -148,10 +165,10 @@ public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposabl
 
     public void Dispose()
     {
-        if (_pty is null) return;
-        _pty.OutputReceived -= OnOutputReceived;
-        _pty.OutputClosed -= OnOutputClosed;
-        // PtyProcess is IAsyncDisposable; sync dispose sites (window close, pane close)
+        if (_pane is null) return;
+        _pane.OutputReceived -= OnOutputReceived;
+        _pane.OutputClosed -= OnOutputClosed;
+        // ITerminalPane is IAsyncDisposable; sync dispose sites (window close, pane close)
         // start the teardown and observe faults — never an unobserved fire-and-forget.
         //
         // #569: this was already correct (hand-rolled ContinueWith + OnlyOnFaulted),
@@ -160,7 +177,7 @@ public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposabl
         // observe a fire-and-forget in this shell, instead of two spellings that
         // a contributor has to choose between correctly.
         TaskFireAndForget.Forget(
-            _pty.DisposeAsync().AsTask(),
+            _pane.DisposeAsync().AsTask(),
             ex => _logger.LogWarning(ex, "PTY dispose failed"));
     }
 }
