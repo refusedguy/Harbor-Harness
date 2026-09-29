@@ -88,8 +88,11 @@ public sealed class WhichKeyHelpOverlay
 
     /// <summary>
     ///     Dismiss. The context is deliberately NOT cleared: a host primes it with
-    ///     <see cref="SetContext" /> while hidden so the next <see cref="Show()" /> can
-    ///     paint a context section. The shown flag is the state; the context is content.
+    ///     <see cref="SetContext" /> while hidden and then hands it to
+    ///     <see cref="Show(WhichKeyContext?)" />. The shown flag is the state; the context
+    ///     is content. Note that <see cref="Show(WhichKeyContext?)" /> assigns its argument
+    ///     unconditionally, so calling it with no argument clears the primed context — that
+    ///     is pre-existing behaviour, not something this wave changed.
     /// </summary>
     public void Hide()
     {

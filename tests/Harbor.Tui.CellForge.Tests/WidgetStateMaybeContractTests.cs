@@ -161,11 +161,11 @@ public class WidgetStateMaybeContractTests
     }
 
     [Test]
-    public async Task WhichKey_Hide_KeepsPrimedContext_ForTheNextShow()
+    public async Task WhichKey_Hide_DoesNotClearTheContext()
     {
-        // Behaviour preservation: Hide() deliberately does not clear the context, because a
-        // host primes it with SetContext while hidden and expects the next Show() to paint a
-        // context section. Clearing it would have been a silent behaviour change.
+        // Behaviour preservation: Hide() clears the shown flag and nothing else, so a host
+        // can prime the context with SetContext while hidden and pass it to the Show(context)
+        // that follows. Clearing it in Hide() would have been a silent behaviour change.
         var overlay = new WhichKeyHelpOverlay();
         overlay.SetContext(new WhichKeyContext("timeline", null));
         overlay.Hide();
@@ -173,9 +173,26 @@ public class WidgetStateMaybeContractTests
         await Assert.That(overlay.IsShown).IsFalse();
         await Assert.That(overlay.Context.HasValue).IsTrue()
             .Because("The shown flag is the state; the context is content the host supplied.");
+    }
+
+    [Test]
+    public async Task WhichKey_ShowWithoutContext_ReplacesAPrimedContext()
+    {
+        // Pre-existing behaviour, unchanged by #592, and the reason the test above stops at
+        // Hide(): Show() assigns unconditionally, so its default null argument overwrites a
+        // primed context with None. That was true before the conversion too — the old
+        // `public void Show(WhichKeyContext? context = null) { _context = context; }` did
+        // exactly the same assignment. Pinned here so that "Hide() keeps the context" is not
+        // misread as "the context survives Show()": it survives to be passed, not to persist.
+        var overlay = new WhichKeyHelpOverlay();
+        overlay.SetContext(new WhichKeyContext("timeline", null));
+        overlay.Hide();
 
         overlay.Show();
-        await Assert.That(overlay.Context.Value.FocusedPanelId).IsEqualTo("timeline");
+
+        await Assert.That(overlay.IsShown).IsTrue();
+        await Assert.That(overlay.Context.HasNoValue).IsTrue()
+            .Because("Show() with no argument means 'no context', not 'keep the one I had'.");
     }
 
     [Test]
