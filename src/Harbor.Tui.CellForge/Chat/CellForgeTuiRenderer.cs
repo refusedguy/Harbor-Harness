@@ -52,6 +52,15 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     private readonly UiStore _store;
     private readonly ISessionManager? _sessions;
+
+    /// <summary>
+    ///     Typed dependencies handed to every <see cref="PanelContext" /> this
+    ///     renderer builds (#470). Built once from what the host injected — the
+    ///     per-frame context no longer carries a container. Named
+    ///     <c>PanelDeps</c> rather than <c>PanelServices</c> so the member never
+    ///     shadows the type inside this class.
+    /// </summary>
+    public PanelServices PanelDeps { get; }
     private UiStore? _subscribedStore;
     private readonly StatusBarViewModel _statusVm;
     private readonly ChatHistoryViewModel _chatVm;
@@ -106,7 +115,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         ChatHistoryViewModel? chatVm = null,
         InputViewModel? inputVm = null,
         UiStore? store = null,
-        ISessionManager? sessions = null)
+        ISessionManager? sessions = null,
+        PanelServices? panelServices = null)
         : base(logger)
     {
         // Issue #77: the DI-shared store is injected by the composition root
@@ -117,6 +127,11 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         // Track D (#27): per-session store from the session manager when a
         // composed host provides one; otherwise the fallback above.
         _sessions = sessions;
+        // #470: an ISessionManager IS an IPanelSessionGateway, so the renderer
+        // can fill the typed panel bag itself; a host that wants the session
+        // store / registry / diagnostics too passes a prebuilt PanelServices.
+        PanelDeps = panelServices
+            ?? new PanelServices { Store = _store, Sessions = sessions };
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
@@ -135,13 +150,17 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         ChatHistoryViewModel? chatVm = null,
         InputViewModel? inputVm = null,
         UiStore? store = null,
-        ISessionManager? sessions = null)
+        ISessionManager? sessions = null,
+        PanelServices? panelServices = null)
         : base(logger)
     {
         // Issue #77: see the primary ctor — injected shared store or a
         // private one when null.
         _store = store ?? new UiStore();
         _sessions = sessions;
+        // #470: see the primary ctor.
+        PanelDeps = panelServices
+            ?? new PanelServices { Store = _store, Sessions = sessions };
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;

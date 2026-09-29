@@ -186,6 +186,5 @@ public class McpWireAllocTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }

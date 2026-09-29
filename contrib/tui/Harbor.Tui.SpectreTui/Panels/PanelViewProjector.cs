@@ -23,10 +23,11 @@ namespace Harbor.Tui.SpectreTui.Panels;
 internal sealed class PanelViewProjector
 {
 
-    public PanelViewProjector(ChatViewProjector chat, PanelRegistry registry)
+    public PanelViewProjector(ChatViewProjector chat, PanelRegistry registry, PanelServices? services = null)
     {
         Chat = chat;
         Registry = registry;
+        Services = services ?? PanelServices.Empty;
     }
 
     /// <summary>Expose the underlying chat projector for the screen.</summary>
@@ -37,6 +38,17 @@ internal sealed class PanelViewProjector
 
     /// <summary>The panel registry (for key routing / size queries).</summary>
     public PanelRegistry Registry
+    {
+        get;
+    }
+
+    /// <summary>
+    ///     Typed panel dependencies (#470) handed to every
+    ///     <see cref="PanelContext" /> this projector builds. Before #470 the
+    ///     Build path passed no dependencies at all while the key path passed the
+    ///     raw container, so a panel behaved differently on paint than on keypress.
+    /// </summary>
+    public PanelServices Services
     {
         get;
     }
@@ -61,7 +73,7 @@ public IReadOnlyDictionary<string, IWidget> BuildWidgets(int historyHeight, UiSt
     return map;
 }
 
-private static void AddStack(
+private void AddStack(
     Dictionary<string, IWidget> map,
     string stackName,
     TuiPanelPlacement placement,
@@ -79,7 +91,7 @@ private static void AddStack(
         int width = view.GetSize(p.Id);
         int height = Math.Max(2, width);
         // Real geometry is measured by Spectre.Tui later — pass best-effort hints.
-        var ctx = new PanelContext(state, 80, height);
+        var ctx = new PanelContext(state, 80, height, Services);
         try
         {
             var widget = p.Build(ctx) as IWidget;

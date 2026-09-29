@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Text;
 using Harbor.Abstractions.Lsp;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -20,7 +19,22 @@ public sealed class ReadTool : ITool
     private const int DefaultLineLimit = 2000; // full-file safety when no limit given
     private readonly ILogger<ReadTool> _logger;
 
-    public ReadTool(ILogger<ReadTool> logger) { _logger = logger; }
+    /// <summary>Language server used by the auto-open hook; null when the host wired no LSP.</summary>
+    private readonly ILspService? _lsp;
+
+    /// <summary>Construct a read tool, optionally with a language server.</summary>
+    /// <param name="logger">Logger for diagnostics.</param>
+    /// <param name="lsp">
+    ///     Optional language server (#470). Injected by
+    ///     <c>ToolsCatalog.CreateToolRegistry</c>; the tool used to reach for the
+    ///     per-call service provider that the agent loop always handed it as
+    ///     null, so the auto-open hook was dead in production.
+    /// </param>
+    public ReadTool(ILogger<ReadTool> logger, ILspService? lsp = null)
+    {
+        _logger = logger;
+        _lsp = lsp;
+    }
 
     public ToolName Name => ToolName.Create("read");
     public string DisplayName => "Read";
@@ -230,7 +244,7 @@ public sealed class ReadTool : ITool
 
         _logger.LogDebug("Read complete: {Lines} lines, Truncated={Truncated}", taken, truncatedByLines || truncatedByChars);
 
-        await OpenInLanguageServerAsync(context, path, cancellationToken).ConfigureAwait(false);
+        await OpenInLanguageServerAsync(path, cancellationToken).ConfigureAwait(false);
 
         return ToolResult.Success(
             sb.ToString(),
@@ -250,13 +264,13 @@ public sealed class ReadTool : ITool
     ///     <c>lsp</c> queries (diagnostics/definition/references) see the
     ///     content. Best-effort — LSP must never break a read.
     /// </summary>
-    private async Task OpenInLanguageServerAsync(
-        ToolContext context, string path, CancellationToken cancellationToken)
+    private async Task OpenInLanguageServerAsync(string path, CancellationToken cancellationToken)
     {
         try
         {
-            // #63 legitimate: optional per-call enrichment — see EditTool.
-            if (context.Services?.GetService<ILspService>() is not { } lsp)
+            // #470: ctor-injected by the composition root; absent LSP just means
+            // no auto-open enrichment (never a throw, never a service lookup).
+            if (_lsp is not { } lsp)
                 return;
             if (!lsp.SupportsFile(path))
                 return;

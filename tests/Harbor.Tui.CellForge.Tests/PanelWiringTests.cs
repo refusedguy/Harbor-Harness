@@ -19,21 +19,6 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class PanelWiringTests
 {
-    private sealed class FakeServices : IServiceProvider
-    {
-        private readonly Dictionary<Type, object> _map = new();
-
-        public FakeServices Add<T>(T instance)
-            where T : class
-        {
-            _map[typeof(T)] = instance;
-            return this;
-        }
-
-        public object? GetService(Type serviceType) =>
-            _map.TryGetValue(serviceType, out var value) ? value : null;
-    }
-
     private static readonly string[] ExpectedOrder =
     [
         "help",
@@ -225,10 +210,10 @@ public class PanelWiringTests
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new AppMsg.TogglePanel("help"));
         _ = store.Dispatch(new AppMsg.FocusPanel("help"));
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new PanelServices { Store = store };
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
-            owner.Registry, store.State, UiKey.ForChar('?'), services, store: store);
+            owner.Registry, store.State, UiKey.ForChar('?'), services);
 
         await Assert.That(consumed).IsTrue();
         await Assert.That(store.State.Ui.PanelStates["help"]).IsEqualTo(TuiPanelState.Hidden);
@@ -243,10 +228,10 @@ public class PanelWiringTests
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new AppMsg.TogglePanel("logs"));
         _ = store.Dispatch(new AppMsg.FocusPanel("logs"));
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new PanelServices { Store = store };
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
-            owner.Registry, store.State, new UiKey(UiKeyCode.F12), services, store: store);
+            owner.Registry, store.State, new UiKey(UiKeyCode.F12), services);
 
         await Assert.That(consumed).IsTrue();
         await Assert.That(store.State.Ui.PanelStates["logs"]).IsEqualTo(TuiPanelState.Hidden);
@@ -260,10 +245,10 @@ public class PanelWiringTests
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new AppMsg.TogglePanel("help")); // Visible, never focused
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new PanelServices { Store = store };
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
-            owner.Registry, store.State, UiKey.ForChar('?'), services, store: store);
+            owner.Registry, store.State, UiKey.ForChar('?'), services);
 
         await Assert.That(consumed).IsFalse();
         await Assert.That(store.State.Ui.PanelStates["help"]).IsEqualTo(TuiPanelState.Visible);
@@ -277,10 +262,10 @@ public class PanelWiringTests
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new AppMsg.FocusPanel("help"));
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new PanelServices { Store = store };
 
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
-            new PanelRegistry(), store.State, UiKey.ForChar('?'), services, store: store);
+            new PanelRegistry(), store.State, UiKey.ForChar('?'), services);
 
         await Assert.That(consumed).IsFalse();
     }
@@ -293,11 +278,11 @@ public class PanelWiringTests
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new AppMsg.FocusPanel("todo-list"));
-        var services = new FakeServices().Add<UiStore>(store);
+        var services = new PanelServices { Store = store };
 
         // Todo-list is non-interactive: OnKey returns false, routing must surface it.
         bool consumed = ChatScreenPanelDock.RoutePanelKey(
-            owner.Registry, store.State, UiKey.ForChar('j'), services, store: store);
+            owner.Registry, store.State, UiKey.ForChar('j'), services);
 
         await Assert.That(consumed).IsFalse();
     }

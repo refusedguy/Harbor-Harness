@@ -13,12 +13,12 @@ namespace Harbor.Tui.CellForge.Panels;
 //     (the architecture matrix forbids it) — CellForgePanelAdapter already
 //     flattens string / IReadOnlyList<string> widgets without a ToString
 //     round-trip.
-//     Purity: every Build reads only ctx.State (+ DI services for help/logs,
-//     the filesystem for file-tree) and returns freshly allocated rows — safe
-//     to call from the render thread. OnKey never mutates UiState; state
-//     transitions go through the explicit ctx.Store (#63). A null store /
-//     service provider degrades gracefully: the key is still reported as
-//     consumed, help/logs render fallback rows.
+//     Purity: every Build reads only ctx.State (+ the typed PanelServices
+//     bag for help/logs, the filesystem for file-tree) and returns freshly
+//     allocated rows — safe to call from the render thread. OnKey never
+//     mutates UiState; state transitions go through ctx.Deps.Store (#470).
+//     A missing store or missing bag member degrades gracefully: the key is
+//     still reported as consumed, help/logs render fallback rows.
 // </remarks>
 
 /// <summary>

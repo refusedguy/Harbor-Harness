@@ -16,7 +16,7 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     id (<c>PanelCursors</c> / <c>PanelDirs</c>, FP-005/TEA, #360):
 ///     <c>Build</c> resolves them from <c>ctx.State</c> (missing key = cursor 0 /
 ///     process working directory) and <c>OnKey</c> folds moves through
-///     <c>ctx.Store</c> via <c>AppMsg.SetPanelCursor</c> /
+///     <c>ctx.Deps.Store</c> via <c>AppMsg.SetPanelCursor</c> /
 ///     <c>AppMsg.SetPanelDirectory</c> (descend/parent resets the cursor to 0
 ///     atomically in the reducer). The filesystem listing itself stays a
 ///     provider-local cache — the reducer must never do I/O — invalidated
@@ -88,7 +88,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
                 {
                     MoveToDirectory(ctx, current.FullPath);
                 }
-                else if (ctx.Store is UiStore store)
+                else if (ctx.Deps.Store is { } store)
                 {
                     _ = store.Dispatch(new AppMsg.KeyInput(ChatAction.Submit, UiKey.ForChar('\r')));
                 }
@@ -117,7 +117,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
                     _fallbackCursor = next;
                 }
 
-                if (ctx.Store is UiStore store)
+                if (ctx.Deps.Store is { } store)
                 {
                     _ = store.Dispatch(new AppMsg.SetPanelCursor(Id, next));
                 }
@@ -138,7 +138,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
                     _fallbackCursor = next;
                 }
 
-                if (ctx.Store is UiStore store)
+                if (ctx.Deps.Store is { } store)
                 {
                     _ = store.Dispatch(new AppMsg.SetPanelCursor(Id, next));
                 }
@@ -182,7 +182,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
             _entriesDir = string.Empty;
         }
 
-        if (ctx.Store is UiStore store)
+        if (ctx.Deps.Store is { } store)
         {
             _ = store.Dispatch(new AppMsg.SetPanelDirectory(Id, dir));
         }

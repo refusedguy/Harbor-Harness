@@ -1,14 +1,14 @@
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Tui.CellForge.Panels;
 
 /// <summary>
 ///     Cell-native help panel: shared <see cref="HelpKeymap"/> hotkey rows plus one
-///     row per registered panel (from <see cref="IPanelRegistry"/> in
-///     <c>ctx.Services</c>) plus the slash command list. <c>?</c> while focused
+///     row per registered panel (from <see cref="IPanelRegistry"/> on
+///     <see cref="PanelServices"/>) plus the slash command list. <c>?</c> while
+///     focused
 ///     dispatches <c>AppMsg.TogglePanel("help")</c>.
 /// </summary>
 public sealed class CellForgeHelpPanel : CellForgePanelBase
@@ -40,9 +40,9 @@ public sealed class CellForgeHelpPanel : CellForgePanelBase
 
         rows.Add(string.Empty);
         rows.Add("Panels");
-        // #63 legitimate: framework-created panels cannot take DI — the
-        // registry lookup stays on ctx.Services (UiStore travels via ctx.Store).
-        var registry = ctx.Services?.GetService<IPanelRegistry>();
+        // #470: the registry is an explicitly typed field on PanelServices,
+        // filled by the composition root (UiStore travels as Deps.Store).
+        var registry = ctx.Deps.PanelRegistry;
         if (registry is null || registry.All.Count == 0)
         {
             rows.Add("  (no panels)");
@@ -78,8 +78,8 @@ public sealed class CellForgeHelpPanel : CellForgePanelBase
     {
         if (key.Code == UiKeyCode.Char && key.Character == '?')
         {
-            // #63: explicit store from the host (no Services lookup).
-            if (ctx.Store is UiStore store)
+            // #470: the store is an explicit field on PanelServices — no lookup.
+            if (ctx.Deps.Store is { } store)
             {
                 _ = store.Dispatch(new AppMsg.TogglePanel(Id));
             }

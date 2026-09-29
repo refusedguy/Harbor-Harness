@@ -21,9 +21,10 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 ///         is the user-facing surface for that buffer.
 ///     </para>
 ///     <para>
-///         <b>Source:</b> resolves <see cref="IDiagnosticsPanel" /> from
-///         <see cref="PanelContext.Services" />. Falls back to an empty
-///         placeholder when no panel is registered (e.g. unit tests).
+///         <b>Source:</b> reads the <see cref="IDiagnosticsPanel" /> the host put
+///         on <c>PanelContext.Deps</c> (#470: a typed field, not a per-frame
+///         container lookup). Falls back to an empty placeholder when the host
+///         registered no panel (e.g. unit tests).
 ///     </para>
 ///     <para>
 ///         <b>Rendering:</b> shows the last N entries (driven by available
@@ -88,19 +89,16 @@ public sealed class LogsPanel : IPanelProvider
         // (ClosePanel) before the key reaches us.
         if (key.Code == UiKeyCode.F12)
         {
-            if (ctx.Services?.GetService(typeof(UiStore)) is UiStore store)
+            if (ctx.Deps.Store is { } store)
                 store.Dispatch(new AppMsg.TogglePanel(Id));
             return true;
         }
         return false;
     }
 
-    private static IDiagnosticsPanel? ResolvePanel(PanelContext ctx)
-    {
-        if (ctx.Services is null)
-            return null;
-        return ctx.Services.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel;
-    }
+    // #470: the log buffer is a typed field on PanelServices, filled by the
+    // composition root — no per-frame container lookup.
+    private static IDiagnosticsPanel? ResolvePanel(PanelContext ctx) => ctx.Deps.Diagnostics;
 
     private static string StyleRow(string row)
     {

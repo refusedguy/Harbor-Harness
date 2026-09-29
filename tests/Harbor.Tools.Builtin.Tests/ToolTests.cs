@@ -91,8 +91,7 @@ public class ReadToolTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }
 
 public class WriteToolTests
@@ -149,8 +148,7 @@ public class WriteToolTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }
 
 public class EditToolTests
@@ -250,8 +248,7 @@ public class EditToolTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }
 
 public class GlobToolTests
@@ -292,8 +289,7 @@ public class GlobToolTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }
 
 public class GrepToolTests
@@ -357,8 +353,7 @@ public class GrepToolTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }
 
 public class BashToolTests
@@ -396,6 +391,5 @@ public class BashToolTests
         CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }

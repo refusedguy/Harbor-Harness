@@ -28,21 +28,6 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class CellForgeSubagentsPanelTests
 {
-    private sealed class FakeServices : IServiceProvider
-    {
-        private readonly Dictionary<Type, object> _map = new();
-
-        public FakeServices Add<T>(T instance)
-            where T : class
-        {
-            _map[typeof(T)] = instance;
-            return this;
-        }
-
-        public object? GetService(Type serviceType) =>
-            _map.TryGetValue(serviceType, out var value) ? value : null;
-    }
-
     private sealed class FakeSessionManager : ISessionManager
     {
         private readonly Dictionary<string, SessionContext> _contexts = new(StringComparer.Ordinal);
@@ -90,6 +75,8 @@ public class CellForgeSubagentsPanelTests
 
         public Task<bool> OpenSessionAsync(string sessionId) => Task.FromResult(true);
 
+        public Task<bool> OpenPanelSessionAsync(string sessionId) => OpenSessionAsync(sessionId);
+
         public Task<Result<Session>> BranchActiveAsync() =>
             Task.FromResult(Result.Failure<Session>("Not supported in tests."));
 
@@ -100,6 +87,23 @@ public class CellForgeSubagentsPanelTests
         public event Action<string, SessionStatus>? StatusChanged;
 
         public event Action<string, int>? MessageCountChanged;
+
+        // ── IPanelSessionGateway (#470) ─────────────────────────────────────
+        // Flat per-session projection the framework panels read. Fakes have no
+        // live router/git tracker, so everything degrades to "unknown" — exactly
+        // the null-tolerance the panels are required to handle.
+        public string? GetDirectory(string sessionId) =>
+            _contexts.TryGetValue(sessionId, out var ctx) ? ctx.Session.Directory : null;
+
+        public string? GetStatusText(string sessionId) =>
+            _contexts.TryGetValue(sessionId, out var ctx) ? ctx.StatusText : null;
+
+        public string? GetBranch(string sessionId) => null;
+
+        public bool GetIsDirty(string sessionId) => false;
+
+        public bool? GetIsSubagent(string sessionId) =>
+            _contexts.TryGetValue(sessionId, out var ctx) ? ctx.Session.IsSubagent() : null;
     }
 
     /// <summary>Multi-session store fake with write counters (read-only assertions).</summary>
@@ -203,7 +207,7 @@ public class CellForgeSubagentsPanelTests
         Guid.NewGuid().ToString("N"), sessionId, Now, parts,
         StopReason.Stop, new Usage(0, 0), "m");
 
-    private static PanelContext Ctx(UiState state, IServiceProvider? services = null) =>
+    private static PanelContext Ctx(UiState state, PanelServices? services = null) =>
         new(state, 120, 40, services);
 
     private static UiState StateWithActive(string activeSessionId) =>
@@ -326,7 +330,9 @@ public class CellForgeSubagentsPanelTests
         var store = new RecordingStore(new[] { stored });
         var manager = new FakeSessionManager();
         manager.AddContext(stored, SessionStatus.Working);
-        var services = new FakeServices().Add<ISessionStore>(store).Add<ISessionManager>(manager);
+        // #470: typed bag — the session store and the live-status gateway are
+        // named fields, so a missing one is visible instead of a silent null.
+        var services = new PanelServices { SessionStore = store, Sessions = manager };
         var panel = new CellForgeSubagentsPanel();
 
         string text = Joined(panel.Build(Ctx(StateWithActive("parent"), services)));
@@ -346,7 +352,7 @@ public class CellForgeSubagentsPanelTests
             ["sub1"] = [User("sub1", "do the thing"), Assistant("sub1", new TextPart("did it"))],
         };
         var store = new RecordingStore(new[] { session }, messages);
-        var services = new FakeServices().Add<ISessionStore>(store);
+        var services = new PanelServices { SessionStore = store };
         var panel = new CellForgeSubagentsPanel();
         var ctx = Ctx(StateWithActive("parent"), services);
 
@@ -375,7 +381,7 @@ public class CellForgeSubagentsPanelTests
         };
         var store = new RecordingStore(new[] { session }, messages);
         var uiStore = SeededSubagentsStore();
-        var services = new FakeServices().Add<ISessionStore>(store).Add<UiStore>(uiStore);
+        var services = new PanelServices { SessionStore = store, Store = uiStore };
         var panel = new CellForgeSubagentsPanel();
         var ctx = Ctx(StateWithActive("parent"), services);
         var inputBefore = uiStore.State.Ui.Input;
@@ -413,13 +419,10 @@ public class CellForgeSubagentsPanelTests
         var store = new RecordingStore(new[] { session });
         var manager = new FakeSessionManager();
         var uiStore = SeededSubagentsStore();
-        var services = new FakeServices()
-            .Add<ISessionStore>(store)
-            .Add<ISessionManager>(manager)
-            .Add<UiStore>(uiStore);
+        // Explicit store: the host puts its UiStore on PanelServices (#470).
+        var services = new PanelServices { SessionStore = store, Sessions = manager, Store = uiStore };
         var panel = new CellForgeSubagentsPanel();
-        // Explicit store: the host wires ctx.Store for state transitions (#63).
-        var ctx = new PanelContext(StateWithActive("parent"), 120, 40, services, uiStore);
+        var ctx = new PanelContext(StateWithActive("parent"), 120, 40, services);
 
         _ = panel.Build(ctx);
         await Assert.That(panel.OnKey(new UiKey(UiKeyCode.Escape), ctx)).IsTrue();

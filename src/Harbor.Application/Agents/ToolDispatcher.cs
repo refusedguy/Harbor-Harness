@@ -433,8 +433,7 @@ public sealed class ToolDispatcher(
                 }
 
                 return asked.Value;
-            },
-            null!);
+            });
     }
 
     /// <summary>

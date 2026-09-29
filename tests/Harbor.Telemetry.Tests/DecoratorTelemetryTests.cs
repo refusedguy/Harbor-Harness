@@ -264,8 +264,7 @@ public class DecoratorTelemetryTests : IDisposable
         CancellationToken.None,
         [],
         (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 
     private static LlmRequest Request() => new(
         "test-model",

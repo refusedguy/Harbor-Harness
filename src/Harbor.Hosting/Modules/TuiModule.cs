@@ -72,7 +72,9 @@ internal static class TuiModule
 
             pipeline.Register("cellforge", () => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
                 sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>(),
-                store: sp.GetRequiredService<UiStore>()));
+                store: sp.GetRequiredService<UiStore>(),
+                // #470: typed panel dependencies, resolved once here.
+                panelServices: Harbor.Ui.Framework.Panels.PanelServices.FromContainer(sp)));
             pipeline.Register("ansi", () => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(
                 sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>(),
                 store: sp.GetRequiredService<UiStore>()));

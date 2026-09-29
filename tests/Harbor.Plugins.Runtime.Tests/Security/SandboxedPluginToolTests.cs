@@ -30,8 +30,7 @@ public sealed class SandboxedPluginToolTests
         Abort: CancellationToken.None,
         Messages: Array.Empty<AgentMessage>(),
         ReportProgress: (_, _) => Task.CompletedTask,
-        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        Services: null!);
+        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 
     private static JsonElement Args(string json) =>
         JsonDocument.Parse(json).RootElement.Clone();

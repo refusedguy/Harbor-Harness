@@ -74,7 +74,11 @@ internal sealed class CellForgeTuiRendererFactory : ITuiRendererFactory
         // the pipeline restores them across renderer swaps.
         new Harbor.Tui.CellForge.CellForgeTuiRenderer(
             sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>(),
-            store: sp.GetRequiredService<UiStore>());
+            store: sp.GetRequiredService<UiStore>(),
+            // #470: one composition-time projection of the container into the
+            // typed bag the panels read. The per-frame PanelContext carries this
+            // value, never the IServiceProvider.
+            panelServices: Harbor.Ui.Framework.Panels.PanelServices.FromContainer(sp));
 }
 
 #if HARBOR_WITH_NICK_CONSOLE_EX

@@ -11,26 +11,11 @@ namespace Harbor.Tui.CellForge.Tests;
 /// <summary>
 ///     CF-E-002 contract tests for the 9 cell-native builtin panels: identity
 ///     (Id/Title/Placement/Size), <c>Build</c> on empty + populated + clipped +
-///     null-Services states, and <c>OnKey</c> consumption. No Spectre, no
+///     dependency-free states, and <c>OnKey</c> consumption. No Spectre, no
 ///     filesystem fixtures (file-tree reads the real CWD read-only).
 /// </summary>
 public class CellForgeBuiltinPanelsTests
 {
-    private sealed class FakeServices : IServiceProvider
-    {
-        private readonly Dictionary<Type, object> _map = new();
-
-        public FakeServices Add<T>(T instance)
-            where T : class
-        {
-            _map[typeof(T)] = instance;
-            return this;
-        }
-
-        public object? GetService(Type serviceType) =>
-            _map.TryGetValue(serviceType, out var value) ? value : null;
-    }
-
     private sealed class StubPanel : IPanelProvider
     {
         public string Id => "stub-a";
@@ -46,8 +31,9 @@ public class CellForgeBuiltinPanelsTests
         public bool OnKey(UiKey key, PanelContext ctx) => false;
     }
 
-    private static PanelContext Ctx(UiState state, int width = 80, int height = 24, IServiceProvider? services = null, UiStore? store = null) =>
-        new(state, width, height, services, store);
+    // #470: panels read typed dependencies, never a container.
+    private static PanelContext Ctx(UiState state, int width = 80, int height = 24, PanelServices? services = null) =>
+        new(state, width, height, services);
 
     private static UiState StateWithLines(params ChatLine[] lines) =>
         new UiState
@@ -397,7 +383,7 @@ public class CellForgeBuiltinPanelsTests
     {
         var registry = new PanelRegistry();
         _ = registry.Register(new StubPanel());
-        var services = new FakeServices().Add<IPanelRegistry>(registry);
+        var services = new PanelServices { PanelRegistry = registry };
         string text = Joined(new CellForgeHelpPanel().Build(Ctx(new UiState(), services: services)));
         await Assert.That(text).Contains("stub-a");
         await Assert.That(text).DoesNotContain("(no panels)");
@@ -407,8 +393,8 @@ public class CellForgeBuiltinPanelsTests
     public async Task Help_OnKey_QuestionMark_DispatchesToggle()
     {
         var store = SeededStore("help", 48);
-        var services = new FakeServices().Add<UiStore>(store);
-        bool consumed = new CellForgeHelpPanel().OnKey(UiKey.ForChar('?'), Ctx(store.State, services: services, store: store));
+        var services = new PanelServices { Store = store };
+        bool consumed = new CellForgeHelpPanel().OnKey(UiKey.ForChar('?'), Ctx(store.State, services: services));
         await Assert.That(consumed).IsTrue();
         await Assert.That(store.State.Ui.PanelStates["help"]).IsEqualTo(TuiPanelState.Visible);
     }
@@ -437,7 +423,7 @@ public class CellForgeBuiltinPanelsTests
     [Test]
     public async Task Logs_EmptyBuffer_RendersPlaceholder()
     {
-        var services = new FakeServices().Add<IDiagnosticsPanel>(new InMemoryDiagnosticsPanel());
+        var services = new PanelServices { Diagnostics = new InMemoryDiagnosticsPanel() };
         string text = Joined(new CellForgeLogsPanel().Build(Ctx(new UiState(), services: services)));
         await Assert.That(text).Contains("No log entries yet.");
     }
@@ -447,7 +433,7 @@ public class CellForgeBuiltinPanelsTests
     {
         var diagnostics = new InMemoryDiagnosticsPanel();
         diagnostics.Log(LogLevel.Warning, "Harbor.Core.AgentLoop", "hello world");
-        var services = new FakeServices().Add<IDiagnosticsPanel>(diagnostics);
+        var services = new PanelServices { Diagnostics = diagnostics };
         string text = Joined(new CellForgeLogsPanel().Build(Ctx(new UiState(), services: services)));
         await Assert.That(text).Contains("WARN");
         await Assert.That(text).Contains("AgentLoop");
@@ -458,8 +444,8 @@ public class CellForgeBuiltinPanelsTests
     public async Task Logs_OnKey_F12_DispatchesToggle()
     {
         var store = SeededStore("logs", 10);
-        var services = new FakeServices().Add<UiStore>(store);
-        bool consumed = new CellForgeLogsPanel().OnKey(new UiKey(UiKeyCode.F12), Ctx(store.State, services: services, store: store));
+        var services = new PanelServices { Store = store };
+        bool consumed = new CellForgeLogsPanel().OnKey(new UiKey(UiKeyCode.F12), Ctx(store.State, services: services));
         await Assert.That(consumed).IsTrue();
         await Assert.That(store.State.Ui.PanelStates["logs"]).IsEqualTo(TuiPanelState.Visible);
     }

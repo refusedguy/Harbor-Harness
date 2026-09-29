@@ -126,7 +126,7 @@ public sealed class FileTreePanel : IPanelProvider
                         _displayDir = entry.FullPath;
                         _cursor = 0;
                     }
-                    else if (ctx.Services?.GetService(typeof(UiStore)) is UiStore store)
+                    else if (ctx.Deps.Store is { } store)
                     {
                         // Dispatch a slash-prompt that the host's slash handler
                         // routes to the read tool (if registered).

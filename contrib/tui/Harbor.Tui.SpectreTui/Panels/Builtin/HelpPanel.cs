@@ -9,9 +9,9 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 ///     hotkeys (Alt+1..Alt+9), and the available slash commands. Toggled with <c>?</c>.
 /// </summary>
 /// <remarks>
-///     Reads the active <see cref="ChatKeyMap" /> from the supplied
-///     <see cref="PanelContext.Services" /> if present (the host registers a singleton
-///     <c>ChatKeyMap</c> per interactive renderer). Hotkey rows come from the shared
+///     Reads the registered panels from the <see cref="PanelServices" /> the host
+///     attached to the <see cref="PanelContext" /> (#470 — a typed field, not a
+///     service locator). Hotkey rows come from the shared
 ///     <see cref="HelpKeyMap" /> table (matching <see cref="ChatKeyMap" />'s default
 ///     entries) so the Spectre and CellForge help panels cannot drift apart.
 /// </remarks>
@@ -46,13 +46,16 @@ public sealed class HelpPanel : IPanelProvider
 
         // Registered panels section.
         p.Lines.Add(TextLine.FromMarkup("[bold]Panels[/]"));
+        // #470: the registry is a typed field on PanelServices, not a per-frame
+        // container lookup. "no bag at all" and "empty registry" stay distinct
+        // messages so a mis-wired host stays visible.
         if (ctx.Services is null)
         {
             p.Lines.Add(TextLine.FromMarkup("  [grey](no service provider)[/]"));
         }
         else
         {
-            var registry = ctx.Services.GetService(typeof(IPanelRegistry)) as IPanelRegistry;
+            var registry = ctx.Deps.PanelRegistry;
             if (registry is null || registry.All.Count == 0)
             {
                 p.Lines.Add(TextLine.FromMarkup("  [grey](no panels registered)[/]"));
@@ -98,7 +101,7 @@ public sealed class HelpPanel : IPanelProvider
         // (ClosePanel) before the key reaches us, so we only deal with '?' here.
         if (key.Code == UiKeyCode.Char && key.Character == '?')
         {
-            if (ctx.Services?.GetService(typeof(UiStore)) is UiStore store)
+            if (ctx.Deps.Store is { } store)
                 store.Dispatch(new AppMsg.TogglePanel(Id));
             return true;
         }
