@@ -17,8 +17,10 @@ namespace Harbor.Application.Notifications;
 ///     process is. It also owns the process LIFETIME, which the old in-backend
 ///     code did not: the backends started a <c>Process</c>, waited three seconds
 ///     and walked away, so a notifier that hung stayed hung and its handle was
-///     left for the finalizer. Here the child is disposed deterministically and
-///     killed when the timeout expires.
+///     left for the finalizer. Here the child is disposed deterministically, and
+///     it is killed either when the timeout expires or when the caller's token
+///     fires — the second case is the one the old code had no way to express,
+///     since the token never reached it.
 /// </para>
 /// <para>
 ///     No stderr redirection, unlike the code this replaces. It was set there
@@ -76,16 +78,38 @@ public sealed class ProcessNotificationRunner(ILogger<ProcessNotificationRunner>
                 return;
             }
 
-            if (!process.WaitForExit(TimeoutMs, cancellationToken))
+            // Cancellation kills the child rather than abandoning it — a renderer
+            // on its way down must not leave a notifier running. Registering on
+            // the token does that without making this async, and without the
+            // sync-over-async a CancellationToken-aware WaitForExit would have
+            // forced here: Process offers no token overload of the synchronous
+            // WaitForExit(int) at all.
+            using CancellationTokenRegistration onCancel =
+                cancellationToken.Register(() => TryKill(process, fileName));
+
+            if (process.WaitForExit(TimeoutMs))
             {
-                TryKill(process, fileName);
-                logger.LogDebug("{FileName} did not exit within {TimeoutMs}ms; killed.", fileName, TimeoutMs);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    // The wait ended because the child was killed, not because it
+                    // finished. Same shutdown as the pre-check above, one step later.
+                    logger.LogDebug("Stopped waiting for {FileName}: the caller was cancelled.", fileName);
+                }
+
+                return;
             }
+
+            TryKill(process, fileName);
+            logger.LogDebug("{FileName} did not exit within {TimeoutMs}ms; killed.", fileName, TimeoutMs);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            // Cancelled mid-wait: the same shutdown as above, one step later.
-            logger.LogDebug("Stopped waiting for {FileName}: the caller was cancelled.", fileName);
+            // Unreachable through WaitForExit, which cannot throw it — but the
+            // catch is the difference between "cancellation is handled" and
+            // "cancellation is handled today, by an implementation detail of a
+            // BCL overload". The exception is passed along because a catch clause
+            // that logs without it is a diagnostic that cannot be acted on (S6667).
+            logger.LogDebug(ex, "Stopped waiting for {FileName}: the caller was cancelled.", fileName);
         }
         catch (Exception ex)
         {
