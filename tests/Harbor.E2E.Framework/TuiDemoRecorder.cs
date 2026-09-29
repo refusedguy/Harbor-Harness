@@ -8,8 +8,8 @@ public sealed record TuiDemoRecordingOptions
     /// <summary>Demo scene to play (<c>hero | markdown | approval | all</c> — see <c>harbor demo</c>).</summary>
     public required string Scene { get; init; }
 
-    /// <summary>Renderer id passed through to <c>harbor demo --tui</c> (<c>ansi</c> or <c>plain</c>).</summary>
-    public string TuiName { get; init; } = "ansi";
+    /// <summary>Renderer id passed through to <c>harbor demo --tui</c> (<c>cellforge</c>, <c>ansi</c> or <c>plain</c>).</summary>
+    public string TuiName { get; init; } = "cellforge";
 
     /// <summary>Final GIF path. Relative paths resolve against the repo root (lazygit-style <c>*-compressed.gif</c>).</summary>
     public string OutputGif { get; init; } = "assets/demo/demo.gif";
@@ -18,7 +18,13 @@ public sealed record TuiDemoRecordingOptions
     public int FrameIntervalMs { get; init; } = 100;
 
     /// <summary>Wall-clock cap for the recording so a hung child cannot spin the capture loop forever.</summary>
-    public int MaxSeconds { get; init; } = 30;
+    /// <remarks>
+    ///     The cell-diff backend holds every painted frame for HARBOR_DEMO_STEP_MS
+    ///     so the recorded screen sequence stays reproducible, which makes the run
+    ///     longer than the line renderers'. The default covers boot plus the whole
+    ///     playback with room to spare.
+    /// </remarks>
+    public int MaxSeconds { get; init; } = 45;
 }
 
 /// <summary>Result of one demo recording: the assembled GIF plus its provenance.</summary>

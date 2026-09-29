@@ -23,6 +23,15 @@
 #      holds each output line for a fixed number of frame intervals. Two runs of
 #      every scene produce byte-identical output, and the captured screens match.
 #
+#      The canonical CellForge backend (issue #440) cannot go through that pipe at
+#      all: it owns the alternate screen and paints whole frames through one backend
+#      write, so stdout must stay the tty and no scrubber may sit in the middle of a
+#      frame. For those tapes the same two guarantees are met one level down instead
+#      — `harbor demo --tui cellforge` never prints the nondeterministic tokens, and
+#      its playback holds each painted frame for DEMO_CELLFORGE_STEP_MS (a whole
+#      number of 1/GIF_FPS intervals, the same rule DEMO_LINE_HOLD follows for
+#      lines). The record-twice check below is what proves it, for both kinds.
+#
 #   3. FRAME PACING — tools/demo_repro.py re-paces each capture onto a fixed
 #      cadence (demo/toolchain.lock: GIF_STATE_FRAMES per screen, GIF_TAIL_FRAMES
 #      for the settled screen, GIF_FRAMES as the hard ceiling). The frame count and

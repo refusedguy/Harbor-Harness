@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # demo/run-scene.sh — the scripted HARBOR_DEMO run every tape records.
 #
-#   demo/run-scene.sh <hero|markdown|approval|all> [ansi|plain] [-- extra CLI args]
+#   demo/run-scene.sh <hero|markdown|approval|all> [ansi|plain|cellforge] [-- extra CLI args]
 #
 # Why a wrapper instead of `Type "./Harbor.App.Cli --demo --scene hero --tui ansi"`
 # straight into the tape (issue #426):
@@ -27,6 +27,24 @@
 #      intervals), which guarantees every screen is sampled on every pass. Measured
 #      on the hero tape: byte-identical output at 0.25 s per line; drifting frames
 #      at 0.167 s and with no pacing at all.
+#
+# The `cellforge` backend is the exception to points 2 and 4, and the exception is
+# structural rather than a hole in the guarantees (issue #440). CellForge is a
+# cell-diff renderer: it takes over the alternate screen buffer and paints whole
+# frames through one backend write, so
+#
+#   * stdout must stay the tty. A pipe here would make the renderer measure a
+#     fallback 80x24 grid instead of the recorded window, and `scrub`/`pace`
+#     would inject bytes straight into the middle of a painted frame. The two
+#     nondeterministic tokens therefore never reach it at all: the throw-away
+#     HOME prints as `<demo-home>` and the per-scene stopwatch is not printed
+#     (the cell-diff playback replays the recorded turn instead of timing it).
+#   * pacing is the renderer's own: `harbor demo --tui cellforge` paints one
+#     frame per step and holds it for HARBOR_DEMO_STEP_MS, a whole number of
+#     1/GIF_FPS sampling intervals — the same frame-locked contract, enforced
+#     where the frames are produced.
+#   * HARBOR_MASCOT=off keeps the ambient cat (a wall-clock blink) out of the
+#     captured pixels.
 #
 # The equivalent manual invocation is printed with --explain and is exactly what
 # the tapes run, minus the credential scrub and the line pacing:
@@ -54,7 +72,7 @@ tui="${2:-ansi}"
 [[ $# -gt 0 ]] && shift
 extra=("$@")
 
-[[ -n "$scene" ]] || { echo "Usage: run-scene.sh <hero|markdown|approval|all> [ansi|plain] [-- args]" >&2; exit 2; }
+[[ -n "$scene" ]] || { echo "Usage: run-scene.sh <hero|markdown|approval|all> [ansi|plain|cellforge] [-- args]" >&2; exit 2; }
 
 [[ -f "$LOCK" ]] || die "missing $LOCK"
 # shellcheck disable=SC1090
@@ -87,6 +105,12 @@ export TERM="${TERM:-xterm-256color}"
 export HARBOR_DEMO=1
 export HARBOR_LOGLEVEL="${HARBOR_LOGLEVEL:-Warning}"
 export HARBOR_SKIP_ONBOARDING=1
+# The ambient cat blinks on a wall-clock cycle (MascotDirector reads
+# Environment.TickCount64), which is exactly the kind of asynchronous motion the
+# line renderer hides behind the held-output pacing. The cell-diff renderer has no
+# such hiding place — its frames are the recording — so the documented kill-switch
+# is pinned here for every backend.
+export HARBOR_MASCOT=off
 # Prompt is pinned so the recording never captures a cwd/hostname/branch line.
 export PS1="${DEMO_PROMPT:-harbor-demo\$ }"
 # Same fixed throw-away HOME every run: `harbor demo` overrides HOME itself, but
@@ -132,14 +156,41 @@ pace() { # pace: one line, flush, then hold for a whole number of frame interval
 }
 
 set -o pipefail
-if [[ -n "$line_hold" ]]; then
+if [[ "$tui" == "cellforge" ]]; then
+  # --- 3b. cell-diff playback: no pipe, no scrub, no pace ------------------
+  # The renderer owns the alternate screen buffer and ships each frame through
+  # one backend write, so nothing may sit between it and the terminal: a pipe
+  # would replace the measured window with the 80x24 fallback grid and
+  # `scrub`/`pace` would write into the middle of a painted frame. Both
+  # nondeterministic tokens are therefore never produced (the HOME prints as
+  # `<demo-home>`, the stopwatch is not printed), and the pacing moves *inside*
+  # the renderer, which holds every painted frame for HARBOR_DEMO_STEP_MS — a
+  # whole number of 1/GIF_FPS sampling intervals, exactly like `pace` above.
+  #
+  # HARBOR_DEMO_STEP_MS comes from the lock next to GIF_FPS, so the two cannot
+  # drift apart: a step shorter than two sampling intervals would let a screen
+  # slip between two captures and the record-twice check would then compare
+  # different screen sequences.
+  export HARBOR_DEMO_STEP_MS="${DEMO_CELLFORGE_STEP_MS:-250}"
+  set +e
+  "$cli" --demo --scene "$scene" --tui "$tui" --chunk-delay "$chunk_delay" "${extra[@]+"${extra[@]}"}"
+  status=$?
+  set -e
+  # The shell prompt the recorder's terminal prints once this script returns
+  # would repaint the restored console mid-tail, and where it lands is a race
+  # against the sampler — one pass would show it, the next would not. Holding
+  # past the tape's trailing Sleep keeps the last captured screen a function of
+  # the demo alone. It costs nothing: the recorder has already stopped.
+  sleep "${DEMO_CELLFORGE_EXIT_HOLD:-20}"
+elif [[ -n "$line_hold" ]]; then
   "$cli" --demo --scene "$scene" --tui "$tui" --chunk-delay "$chunk_delay" "${extra[@]+"${extra[@]}"}" \
     | scrub | pace
+  status=$?
 else
   "$cli" --demo --scene "$scene" --tui "$tui" --chunk-delay "$chunk_delay" "${extra[@]+"${extra[@]}"}" \
     | scrub
+  status=$?
 fi
-status=$?
 
 # If the CLI died, the pipeline's exit status would mask it under `set -e`; report both.
 if [[ $status -ne 0 ]]; then
