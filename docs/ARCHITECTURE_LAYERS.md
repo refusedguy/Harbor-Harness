@@ -659,11 +659,16 @@ while enforcing nothing — which is the failure mode these rules exist to preve
 `FullLayerMatrixTests` + `CellForgeGraphRules` are all green. The previously cited counts
 (46 tests = 21 reflection + 25 NetArchTest, 54 executed cases) are historical.
 
-**The CAPABILITY rules added in #455 have 15 known violations, in 9 types across 4 of the
+**The CAPABILITY rules added in #455 have 13 known violations, in 7 types across 4 of the
 18 Presentation assemblies.** They are not skipped: each is a row in
 `PresentationCapabilityRules.KnownViolations` that a rule holds only while it is still
 exactly reproduced, and each carries a tracking issue. Fourteen Presentation assemblies
 are clean and fully enforced.
+
+Two rows left that count in #668: the terminal `JsonThemeLoader` and `ThemeFileWatcher`
+were not a filesystem permission but a second implementation of theme loading beside
+`Harbor.DesignSystem`'s `ThemeStore`. They read through `IThemeStore` now, and
+`ThemeStoreSeamRules` fails if a second implementation of that port appears.
 
 A further capability is recorded in `PermanentCapabilities` — not a violation, so not
 counted above. See "Permanent capabilities" in §5.6.
@@ -676,7 +681,7 @@ counted above. See "Permanent capabilities" in §5.6.
 | Rule | Violating types | Assemblies | Tracking issues |
 |---|---:|---:|---|
 | `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 1 | 1 | [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (jump palette) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 8 | 4 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (theme loader/watcher, file tree) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 6 | 4 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (file tree) |
 | `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 6 | 4 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (file tree) |
 | `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | 0 | 0 | — clean, unbaselined |
 | `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | 0 | 0 | — clean, unbaselined |

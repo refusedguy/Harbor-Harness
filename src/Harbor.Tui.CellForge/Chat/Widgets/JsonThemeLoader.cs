@@ -5,18 +5,30 @@ using Harbor.Ui.Framework.Projection;
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-///     Static parser for terminal JSON theme documents. Pure: reads a theme
-///     document and returns the merged <see cref="HarborTheme" /> — it holds no
-///     state and applies nothing.
+///     Static parser for terminal JSON theme documents. Pure: parses a theme
+///     document held in memory and returns the merged <see cref="HarborTheme" />
+///     — it holds no state, applies nothing, and touches no disk.
 /// </summary>
 /// <remarks>
-///     This type deliberately does <em>not</em> implement
-///     <see cref="Harbor.Ui.Framework.Services.IThemeService" /> (or its
-///     read / apply / watch role interfaces): the terminal renderer drives
-///     <c>TerminalColorPalette</c> directly, so there is no apply / watch role
-///     for it to honour. Previously it declared the fat interface anyway and
-///     threw <see cref="NotImplementedException" /> from every apply member —
-///     which crashed the moment anything registered it (see #469).
+///     <para>
+///         This type deliberately does <em>not</em> implement
+///         <see cref="Harbor.Ui.Framework.Services.IThemeService" /> (or its
+///         read / apply / watch role interfaces): the terminal renderer drives
+///         <c>TerminalColorPalette</c> directly, so there is no apply / watch role
+///         for it to honour. Previously it declared the fat interface anyway and
+///         threw <see cref="NotImplementedException" /> from every apply member —
+///         which crashed the moment anything registered it (see #469).
+///     </para>
+///     <para>
+///         It also no longer reads the disk (#668). It used to carry a public
+///         static <c>LoadFile(string)</c> that read a file and parsed it — the
+///         second implementation of what <see cref="IThemeStore" /> already did,
+///         reachable from Presentation without naming anything. Reading a theme
+///         file is now <see cref="IThemeStore.LoadFile" />, and
+///         <c>ThemeFileWatcher</c> takes the store as a constructor argument.
+///         What is left here is the part that is genuinely this type's: the
+///         terminal palette, and a pure parse over a string.
+///     </para>
 /// </remarks>
 public static class JsonThemeLoader
 {
@@ -48,24 +60,6 @@ public static class JsonThemeLoader
     public static RgbColor CostLow => Default.Success;
     public static RgbColor CostMid => Default.Warning;
     public static RgbColor CostHigh => Default.Error;
-
-    /// <summary>Read and parse a theme JSON file from disk.</summary>
-    public static Result<HarborTheme> LoadFile(string path)
-    {
-        try
-        {
-            if (!File.Exists(path))
-            {
-                return Result.Failure<HarborTheme>($"theme file not found: {path}");
-            }
-
-            return Parse(File.ReadAllText(path));
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<HarborTheme>($"theme load failed: {ex.Message}");
-        }
-    }
 
     /// <summary>Parse a theme JSON string, falling back to the active palette.</summary>
     public static Result<HarborTheme> Parse(string json)

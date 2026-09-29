@@ -11,9 +11,21 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// (not FileSystemWatcher) keeps behaviour deterministic across terminals,
 /// network mounts and CI. Parse failures keep the last applied theme.
 /// </summary>
+/// <remarks>
+///     Both the stat and the read go through the injected
+///     <see cref="IThemeStore" /> (#668). This type used to own the stat itself
+///     (<c>File.Exists</c> + <c>File.GetLastWriteTimeUtc</c>) and then reach the
+///     read through a <c>JsonThemeLoader.LoadFile</c> that did its own
+///     <c>File.Exists</c> + <c>File.ReadAllText</c> + parse — so one
+///     read-and-parse-and-stat was spelled out twice, in two files, both in a
+///     Presentation assembly, and neither named a shared owner. The store is a
+///     required argument on purpose: a defaulted one would let this widget
+///     quietly reconstruct its own reader, which is the defect.
+/// </remarks>
 public sealed class ThemeFileWatcher : IDisposable
 {
     private readonly string _path;
+    private readonly IThemeStore _store;
     private readonly Action<HarborTheme>? _onApplied;
     private readonly Action<string>? _onError;
     private readonly Timer _timer;
@@ -28,43 +40,49 @@ public sealed class ThemeFileWatcher : IDisposable
     /// </summary>
     public Maybe<HarborTheme> LastApplied { get; private set; } = Maybe<HarborTheme>.None;
 
-    public ThemeFileWatcher(string path, Action<HarborTheme>? onApplied = null, Action<string>? onError = null)
+    public ThemeFileWatcher(
+        string path,
+        IThemeStore store,
+        Action<HarborTheme>? onApplied = null,
+        Action<string>? onError = null)
     {
+        ArgumentNullException.ThrowIfNull(store);
         _path = path;
+        _store = store;
         _onApplied = onApplied;
         _onError = onError;
         _lastWriteUtc = InitialStamp();
         _timer = new Timer(_ => Poll(), null, Interval, Interval);
     }
 
-    private DateTime InitialStamp() => File.Exists(_path) ? File.GetLastWriteTimeUtc(_path) : DateTime.MinValue;
+    private DateTime InitialStamp()
+        => _store.TryGetLastWriteUtc(_path, out var stamp) ? stamp : DateTime.MinValue;
 
     /// <summary>One poll cycle — exposed for deterministic testing.</summary>
     public void Poll()
     {
         try
         {
-            if (!File.Exists(_path))
+            if (!_store.TryGetLastWriteUtc(_path, out var stamp))
             {
                 return;
             }
 
-            var stamp = File.GetLastWriteTimeUtc(_path);
             if (stamp == _lastWriteUtc)
             {
                 return;
             }
 
             _lastWriteUtc = stamp;
-            var result = JsonThemeLoader.LoadFile(_path);
+            ThemeParseResult result = _store.LoadFile(_path);
             if (result.IsSuccess)
             {
-                LastApplied = Maybe.From(result.Value);
+                LastApplied = Maybe.From(result.Theme);
                 if (_onApplied is null)
                 {
-                    TerminalColorPalette.Apply(result.Value);
+                    TerminalColorPalette.Apply(result.Theme);
                 }
-                _onApplied?.Invoke(result.Value);
+                _onApplied?.Invoke(result.Theme);
             }
             else
             {

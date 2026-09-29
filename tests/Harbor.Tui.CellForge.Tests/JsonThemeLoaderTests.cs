@@ -106,31 +106,8 @@ public class JsonThemeLoaderTests
         await Assert.That(result.Value.Name).IsEqualTo("custom");
     }
 
-    [Test]
-    public async Task LoadFile_MissingFile_FailsCleanly()
-    {
-        var result = JsonThemeLoader.LoadFile("/nonexistent/harbor-theme.json");
-
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("not found");
-    }
-
-    [Test]
-    public async Task LoadFile_ReadsDisk()
-    {
-        string path = Path.Combine(Path.GetTempPath(), $"harbor-theme-{Guid.NewGuid():N}.json");
-        try
-        {
-            await File.WriteAllTextAsync(path, """{ "name": "disk", "accent": "#abcdef" }""");
-            var result = JsonThemeLoader.LoadFile(path);
-
-            await Assert.That(result.IsSuccess).IsTrue();
-            await Assert.That(result.Value.Name).IsEqualTo("disk");
-            await Assert.That(result.Value.Accent).IsEqualTo(new RgbColor(0xAB, 0xCD, 0xEF));
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
+    // The LoadFile half of this file moved to ThemeStoreTests: reading a theme
+    // file is IThemeStore.LoadFile since #668, and that test belongs with the
+    // type that owns the read rather than with the parser that used to
+    // duplicate it. See ThemeStoreSeamRules.
 }

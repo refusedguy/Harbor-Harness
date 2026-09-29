@@ -148,4 +148,122 @@ public class ThemeStoreTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    // ---------------------------------------------------------------------
+    // IThemeStore — the port every theme reader now goes through (#668).
+    // ---------------------------------------------------------------------
+
+    [Test]
+    public async Task LoadFile_MissingFile_FailsCleanly()
+    {
+        var result = new ThemeStore(TempDir()).LoadFile("/nonexistent/harbor-theme.json");
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Error).Contains("not found");
+    }
+
+    [Test]
+    public async Task LoadFile_ReadsDisk()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-theme-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(path, """{ "name": "disk", "accent": "#abcdef" }""");
+
+            var result = new ThemeStore(TempDir()).LoadFile(path);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Theme.Name).IsEqualTo("disk");
+            await Assert.That(result.Theme.Accent).IsEqualTo(new RgbColor(0xAB, 0xCD, 0xEF));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Test]
+    public async Task LoadFile_MalformedJson_Fails_And_ThrowsNothing()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-theme-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(path, "{ not json ");
+
+            var result = new ThemeStore(TempDir()).LoadFile(path);
+
+            await Assert.That(result.IsSuccess).IsFalse();
+            // `.Count`, not IsNotEmpty(): TUnit routes IsEmpty/IsNotEmpty by the
+            // STATIC collection type, and IReadOnlyList is not a shape it names.
+            await Assert.That(result.Errors.Count).IsGreaterThan(0);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Test]
+    public async Task TryGetLastWriteUtc_MissingFile_IsFalse()
+    {
+        bool found = new ThemeStore(TempDir()).TryGetLastWriteUtc(
+            Path.Combine(Path.GetTempPath(), $"harbor-absent-{Guid.NewGuid():N}.json"),
+            out _);
+
+        await Assert.That(found).IsFalse();
+    }
+
+    [Test]
+    public async Task TryGetLastWriteUtc_ExistingFile_IsTrue_AndCarriesARealStamp()
+    {
+        string dir = TempDir();
+        try
+        {
+            string path = Path.Combine(dir, "t.json");
+            var store = new ThemeStore(dir);
+
+            await File.WriteAllTextAsync(path, """{ "name": "a" }""");
+
+            await Assert.That(store.TryGetLastWriteUtc(path, out var stamp)).IsTrue();
+            // A real stamp, not the default a "could not read" answer leaves
+            // behind — the two are otherwise indistinguishable to a caller that
+            // only looks at the value. What the stamp DOES on rewrite is
+            // deliberately not asserted: filesystem timestamp granularity is
+            // coarse enough that a same-tick rewrite may not move it, and
+            // change detection needs its own clock, which is what
+            // ThemeFileWatcherTests drives through a fake store.
+            await Assert.That(stamp).IsNotEqualTo(DateTime.MinValue);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task ThemeStore_Is_The_Port_And_LoadFile_Is_What_Scan_Uses()
+    {
+        // The seam is only worth anything if Scan and an outside caller read
+        // through the same member. ScanUserFiles routes every entry through
+        // LoadFile; pinning the two answers agree is what stops a future
+        // second read-and-parse from being added next to them unnoticed.
+        string dir = TempDir();
+        try
+        {
+            string path = Path.Combine(dir, "same.json");
+            await File.WriteAllTextAsync(path, """{ "name": "same", "accent": "#0a0b0c" }""");
+            var store = new ThemeStore(dir);
+
+            var entry = store.Scan().Single(e => e.FileName == "same.json");
+            var direct = store.LoadFile(path);
+
+            await Assert.That(entry.IsValid).IsTrue();
+            await Assert.That(direct.IsSuccess).IsTrue();
+            await Assert.That(entry.Theme).IsEqualTo(direct.Theme);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }
