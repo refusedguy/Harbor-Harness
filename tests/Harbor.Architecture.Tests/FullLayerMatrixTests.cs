@@ -215,7 +215,10 @@ public class FullLayerMatrixTests
         ["Harbor.Extensions"] = new(Layer.Domain, []),
         ["Harbor.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions.Contracts"]),
         ["Harbor.Ipc.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions"]),
-        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions"]),
+        // The ProjectReference to Harbor.Abstractions is declared but binds no
+        // type (the assembly's own contracts are BCL-only), so it produces no IL
+        // edge — see EnforcerIntegrityTests.DeclaredButUnboundProjectReferences.
+        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, []),
 
         // ---- Presentation -------------------------------------------------
         // #450: "Harbor.Ui.Framework" was permitted here but never used. The
@@ -379,12 +382,11 @@ public class FullLayerMatrixTests
         ["Harbor.Telemetry.Otlp"] = new(Layer.Infrastructure, ["Harbor.Telemetry.Core"]),
         ["Harbor.Ipc.Client"] = new(Layer.Infrastructure,
             ["Harbor.Ipc.Abstractions", "Harbor.Abstractions"]),
-        // #450: "Harbor.Ipc.Abstractions" was permitted but is bound by no file —
-        // the in-process transport works over the in-memory bus, not the shared
-        // IPC contract types. The declared ProjectReference is a known-vestigial
-        // edge (EnforcerIntegrityTests.DeclaredButUnboundProjectReferences).
+        // #450: the IL-based checks proved the Ipc.Abstractions edge is real for
+        // InProcess (the in-memory transport binds the shared IPC channel
+        // contracts) — an earlier narrowing of this row was wrong and reverted.
         ["Harbor.Ipc.InProcess"] = new(Layer.Infrastructure,
-            ["Harbor.Abstractions"]),
+            ["Harbor.Ipc.Abstractions", "Harbor.Abstractions"]),
         // #450: "Harbor.Application" was permitted but never referenced — an
         // Infrastructure → Application edge that was pure dead permission.
         ["Harbor.Ipc.Server"] = new(Layer.Infrastructure,

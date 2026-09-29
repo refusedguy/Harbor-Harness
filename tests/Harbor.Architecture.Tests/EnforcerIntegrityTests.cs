@@ -55,24 +55,26 @@ public sealed class EnforcerIntegrityTests
     /// </summary>
     internal static readonly UnboundReference[] DeclaredButUnboundProjectReferences =
     [
+        new("Harbor.Ui.Framework.Abstractions", "Harbor.Abstractions",
+            "#450: declared but binds no type — the assembly's own contracts are BCL-only, so the edge produces no IL."),
+        new("Harbor.Terminal.Abstractions", "Harbor.Ui.Framework",
+            "#450/#542: declared but binds no type — Harbor.Ui.Framework is an empty assembly (see issue #542)."),
         new("Harbor.Plugins.Hosting", "Harbor.Plugins.Storage",
-            "#450: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove with the tracked issue."),
+            "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
         new("Harbor.Plugins.Hosting", "Harbor.Plugins.Compilation",
-            "#450: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove with the tracked issue."),
+            "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
         new("Harbor.Plugins.Hosting", "Harbor.Plugins.Instantiation",
-            "#450: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove with the tracked issue."),
+            "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
         new("Harbor.Plugins.Hosting", "Harbor.Plugins.Registration",
-            "#450: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove with the tracked issue."),
+            "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
         new("Harbor.Hosting", "Harbor.Tui.CellForge.Engine",
-            "#450: pre-existing vestigial edge — DI wires the CellForge renderer, not the engine assembly directly. Remove with the tracked issue."),
+            "#450/#546: pre-existing vestigial edge — DI wires the CellForge renderer, not the engine assembly directly. Remove the reference; see issue #546."),
         new("Harbor.Desktop.Abstractions", "Harbor.Terminal.Abstractions",
-            "#450: pre-existing vestigial edge — no TUI vocabulary is bound from this assembly. Remove with the tracked issue."),
+            "#450/#543: pre-existing vestigial edge — no TUI vocabulary is bound from this assembly. Remove the reference; see issue #543."),
         new("Harbor.Desktop.Abstractions", "Harbor.Ui.Framework",
-            "#450: pre-existing vestigial edge — the leaf Ui.Framework.* modules are referenced directly. Remove with the tracked issue."),
+            "#450/#542: pre-existing vestigial edge — the leaf Ui.Framework.* modules are referenced directly; Harbor.Ui.Framework itself is empty. See issue #542."),
         new("Harbor.Desktop.Shared", "Harbor.Ui.Framework",
-            "#450: pre-existing vestigial edge — the leaf Ui.Framework.* modules are referenced directly. Remove with the tracked issue."),
-        new("Harbor.Ipc.InProcess", "Harbor.Ipc.Abstractions",
-            "#450: pre-existing vestigial edge — the in-process transport binds no shared IPC contract type. Remove with the tracked issue."),
+            "#450/#544: pre-existing vestigial edge — the leaf Ui.Framework.* modules are referenced directly; Harbor.Ui.Framework itself is empty. See issue #544."),
     ];
 
     /// <summary>
@@ -676,8 +678,16 @@ public sealed class EnforcerIntegrityTests
     /// <summary>Path of a source file relative to its project directory.</summary>
     private static string ProjectRelative(string path, string projectDir)
     {
+        string? root = RepoPaths.RepoRoot;
+        if (root is null)
+        {
+            return Path.GetFileName(path);
+        }
+
+        // Absolute on both sides: the test host's working directory is the test
+        // bin folder, not the repository root, so a relative prefix never matches.
         string full = Path.GetFullPath(path);
-        string prefix = Path.GetFullPath(Path.Combine("src", projectDir)) + Path.DirectorySeparatorChar;
+        string prefix = Path.GetFullPath(Path.Combine(root, "src", projectDir)) + Path.DirectorySeparatorChar;
         return full.StartsWith(prefix, StringComparison.Ordinal) ? full[prefix.Length..] : Path.GetFileName(full);
     }
 }
