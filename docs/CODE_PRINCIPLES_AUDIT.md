@@ -170,6 +170,26 @@ private static readonly AsyncLocal<Dictionary<int, string>?> _currentStream = ne
 > (tests/Harbor.Architecture.Tests/ProviderIdDispatchRule.cs) now fails the build on
 > any provider-keyed switch arm anywhere in `src/`+`apps/`, and reads the ids it
 > hunts from `providers/*.json` so the guard re-points itself as the catalogue grows.
+>
+> **Follow-up (#680): the same shape on the tool side, and it had multiplied.**
+> A provider-id table was one file; the tool-glyph equivalent was THREE — in
+> `ChatViewModelBase`, in the Avalonia `UiRenderEngine` (whose ten names carried
+> *different* glyphs), and in `PanelRows` — and all three keyed the web-fetch arm
+> as `"web_fetch"` while the tool is `webfetch`, so that arm was dead everywhere.
+> `ToolGlyphTableRule` (tests/Harbor.Architecture.Tests) now fails the build on
+> any tool-name-keyed glyph arm in `src/`+`apps/`, reading its names from
+> `BuiltinToolSafetyProfiles.All` (#557's inventory) unioned with every
+> `ToolName.Create("…")` literal — so it re-points itself as the catalogue grows.
+>
+> The worse half of #680 was not Open/Closed but **information loss**: the UI
+> rebuilt each tool card by parsing its own rendered string `"→ edit {…}"` back
+> into a structured call, and the parser never set `IsDiffTool` — so the branch
+> that should have carried the diff into the UI was dead code, and no amount of
+> care about the catalogue would have restored it. Structure now travels in
+> `ChatDomainState.ToolCalls` (`ToolCallSnapshot`) from the reducer, which derives
+> the diff payload once. The lesson generalises past glyphs: **a renderer that
+> re-parses its own output is not displaying the data it was given, it is
+> reconstructing a lossy copy of it.**
 
 **Файл:** `src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs`  
 **Severity:** medium  
