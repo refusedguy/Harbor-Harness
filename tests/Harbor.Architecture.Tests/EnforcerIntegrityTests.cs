@@ -606,29 +606,41 @@ public sealed class EnforcerIntegrityTests
         return new HashSet<string>(StringComparer.Ordinal);
     }
 
+    /// <summary>Matching runs over checked-in source only; the timeout satisfies the regex-analyzer rule.</summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(5);
+
+    // Regex sources use verbatim strings (@"") throughout: several patterns end
+    // with a '"' or contain '"""' sequences, which a raw string literal cannot
+    // express without a 4-quote delimiter.
     private static readonly Regex NamespacePattern = new(
-        """^\s*namespace\s+([A-Za-z0-9_.]+)\s*[;{]""",
-        RegexOptions.Multiline | RegexOptions.CultureInvariant);
+        @"^\s*namespace\s+([A-Za-z0-9_.]+)\s*[;{]",
+        RegexOptions.Multiline | RegexOptions.CultureInvariant,
+        RegexTimeout);
 
     private static readonly Regex UsingPattern = new(
-        """^\s*(?:global\s+)?using\s+(?:static\s+)?([A-Za-z0-9_.]+)\s*;""",
-        RegexOptions.Multiline | RegexOptions.CultureInvariant);
+        @"^\s*(?:global\s+)?using\s+(?:static\s+)?([A-Za-z0-9_.]+)\s*;",
+        RegexOptions.Multiline | RegexOptions.CultureInvariant,
+        RegexTimeout);
 
     private static readonly Regex QualifiedPattern = new(
-        """\b(Harbor(?:\.[A-Za-z0-9_]+)+)""",
-        RegexOptions.CultureInvariant);
+        @"\b(Harbor(?:\.[A-Za-z0-9_]+)+)",
+        RegexOptions.CultureInvariant,
+        RegexTimeout);
 
     private static readonly Regex BlockCommentPattern = new(
-        """/\*.*?\*/""",
-        RegexOptions.Singleline | RegexOptions.CultureInvariant);
+        @"/\*.*?\*/",
+        RegexOptions.Singleline | RegexOptions.CultureInvariant,
+        RegexTimeout);
 
     private static readonly Regex LineCommentPattern = new(
-        """//[^\n]*""",
-        RegexOptions.CultureInvariant);
+        @"//[^\n]*",
+        RegexOptions.CultureInvariant,
+        RegexTimeout);
 
     private static readonly Regex StringPattern = new(
-        """"(?:[^"\\\n]|\\.)*""",
-        RegexOptions.CultureInvariant);
+        @"""(?:[^""\\\n]|\\.)*""",
+        RegexOptions.CultureInvariant,
+        RegexTimeout);
 
     private static IEnumerable<string> DeclaredNamespaces(string code)
         => NamespacePattern.Matches(code).Select(m => m.Groups[1].Value);
