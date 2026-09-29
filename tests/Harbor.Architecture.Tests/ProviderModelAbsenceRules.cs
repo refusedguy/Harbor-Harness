@@ -113,8 +113,14 @@ public sealed class ProviderModelAbsenceRules
     [Test]
     public async Task ResolveProviderModelFromConfigAsync_ReturnsMaybeOfModelRef()
     {
-        MethodInfo method = typeof(SessionFactory)
-            .GetMethod(nameof(SessionFactory.ResolveProviderModelFromConfigAsync))!;
+        // Explicit binding flags and types, not `GetMethod(name)`: the build is a
+        // zero-warnings gate, and REFL008/REFL029 flag the loose overload.
+        MethodInfo method = typeof(SessionFactory).GetMethod(
+            nameof(SessionFactory.ResolveProviderModelFromConfigAsync),
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly,
+            binder: null,
+            [typeof(SessionFactory)],
+            modifiers: null)!;
 
         await Assert.That(method.ReturnType).IsEqualTo(typeof(Task<Maybe<ModelRef>>))
             .Because(

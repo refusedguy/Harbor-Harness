@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
@@ -118,13 +119,18 @@ public sealed class SessionLifecycleService : ISessionLifecycle
         // session was created around.
         var agentDef = _factory.ResolveDefaultAgentDefinition();
 
-        (string? providerId, string? modelId) = await _factory.ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
-        if (string.IsNullOrEmpty(providerId) || string.IsNullOrEmpty(modelId))
+        // #598: the `|| IsNullOrEmpty` guard was this caller re-deriving what the
+        // value now states. Note that it was the OPPOSITE spelling of the one in
+        // CreateDefaultAsync, over the same pair, in the same assembly.
+        Maybe<ModelRef> configured = await _factory.ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
+        if (configured.HasNoValue)
         {
             _logger.LogInformation("RebindFromCommonConfig: no provider/model in config, keeping current agent");
             return;
         }
 
+        string providerId = configured.Value.ProviderId.Value;
+        string modelId = configured.Value.ModelId;
         agentDef = agentDef.WithModel(modelId, providerId);
         var session = _router.ActiveContext.Session with { ProviderId = providerId, Model = modelId };
         _router.ActiveContext.Session = session;
