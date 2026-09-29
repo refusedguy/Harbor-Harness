@@ -27,21 +27,30 @@ public sealed record ActiveMessage(
 /// <param name="TokensOut">Cumulative output tokens.</param>
 /// <param name="CostUsd">
 ///     Cumulative cost in USD as the core priced it, or a lower bound when
-///     <paramref name="CostKnown" /> is <see langword="false" />.
+///     <paramref name="IsCostUnpriced" /> is <see langword="true" />.
 /// </param>
-/// <param name="CostKnown">
-///     Whether the core could price the session. Defaults to
-///     <see langword="true" /> so a locally built snapshot means "nothing
-///     unpriced happened" until the core says otherwise; when it is
-///     <see langword="false" /> the cost cell renders as "—", because a zero
-///     there reads as "free" and is false for a paid provider whose catalogue
-///     entry carries no rates.
+/// <param name="IsCostUnpriced">
+///     The core could NOT price the session — the model publishes no rate table,
+///     so <paramref name="CostUsd" /> is a floor. The cost cell then renders as
+///     an em dash, because a zero there reads as "free" and is false for a paid
+///     provider whose catalogue entry carries no rates.
+///     <para>
+///         <b>Polarity is deliberate and load-bearing:</b> the flag is
+///         "unpriced", never "priced", because a struct's zero value is
+///         <c>default(CostSnapshot)</c> — the value every state that never
+///         mentions a cost carries (<c>ChatDomainState.Empty</c>, a fresh
+///         <c>UiState</c>, a test's hand-built state). A positive flag would make
+///         "no data at all" render as "price unknown" on every screen in the
+///         product, which is how the first version of #653 turned a status line
+///         into "—" in the golden frames. Zero must mean "renders exactly as it
+///         did before the flag existed".
+///     </para>
 /// </param>
 public readonly record struct CostSnapshot(
     long TokensIn,
     long TokensOut,
     decimal CostUsd,
-    bool CostKnown = true);
+    bool IsCostUnpriced = false);
 
 /// <summary>
 ///     Renderer-agnostic, immutable UI snapshot. The single source of truth that

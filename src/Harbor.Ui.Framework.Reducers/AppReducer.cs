@@ -197,7 +197,7 @@ public static partial class AppReducer
                 stats.Metadata.TokensInput,
                 stats.Metadata.TokensOutput,
                 stats.Metadata.Cost,
-                stats.Metadata.IsCostKnown)
+                !stats.Metadata.IsCostKnown)
         };
     }
 

@@ -382,6 +382,11 @@ public class ProjectionCoalescingAllocationTests
                 new MessageUpdateEvent(new TextDeltaEvent("t1", "c"), partial),
                 new MessageUpdateEvent(new ThinkingDeltaEvent("h1", "hmm"), partial),
                 new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(1000, 500)), partial),
+                // #653: the token/cost totals the sidebar caches arrive from the
+                // CORE, not from the step-finish event — that event is usage for
+                // the prompt bar only, and pricing it here is what the two
+                // deleted $3/$15 constants used to do.
+                new SessionStatsEvent("s1", new SessionMetadata(0.0105m, 1000, 500, 0, 0, 0, 1, null)),
                 new MessageUpdateEvent(new TextDeltaEvent("t1", "d"), partial),
                 new MessageUpdateEvent(new TextDeltaEvent("t1", "e"), partial),
             ];

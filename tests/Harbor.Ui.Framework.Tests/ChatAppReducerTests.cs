@@ -217,7 +217,7 @@ public class ChatAppReducerTests
         await Assert.That(state.Chat.Cost.CostUsd).IsEqualTo(0.1878m);
         await Assert.That(state.Chat.Cost.TokensIn).IsEqualTo(1_234);
         await Assert.That(state.Chat.Cost.TokensOut).IsEqualTo(567);
-        await Assert.That(state.Chat.Cost.CostKnown).IsTrue();
+        await Assert.That(state.Chat.Cost.IsCostUnpriced).IsFalse();
     }
 
     /// <summary>
@@ -266,8 +266,8 @@ public class ChatAppReducerTests
         var state = Stats("s1", new SessionMetadata(
             0m, 10_000, 2_000, 0, 0, 0, 1, null, IsCostKnown: false));
 
-        await Assert.That(state.Chat.Cost.CostKnown).IsFalse();
-        await Assert.That(StatusBarText.CostCell(state.Chat.Cost.CostUsd, state.Chat.Cost.CostKnown))
+        await Assert.That(state.Chat.Cost.IsCostUnpriced).IsTrue();
+        await Assert.That(StatusBarText.CostCell(state.Chat.Cost.CostUsd, state.Chat.Cost.IsCostUnpriced))
             .IsEqualTo("—");
     }
 

@@ -101,8 +101,8 @@ public class StatusSnapshotTests
 
         var snapshot = ReplLifecycle.BuildStatusSnapshot(null, store.State, 61_600, 196, Rows, Total);
 
-        await Assert.That(snapshot.Chat.Cost.CostKnown).IsFalse();
-        await Assert.That(StatusBarText.CostCell(snapshot.Chat.Cost.CostUsd, snapshot.Chat.Cost.CostKnown))
+        await Assert.That(snapshot.Chat.Cost.IsCostUnpriced).IsTrue();
+        await Assert.That(StatusBarText.CostCell(snapshot.Chat.Cost.CostUsd, snapshot.Chat.Cost.IsCostUnpriced))
             .IsEqualTo("—");
         await Assert.That(Footer(snapshot)).DoesNotContain("$0.0000");
         await Assert.That(Footer(snapshot)).Contains("—");
@@ -122,19 +122,21 @@ public class StatusSnapshotTests
 
     /// <summary>
     ///     #653, end to end through the real store: the LLM's own step-finish
-    ///     event moves no money and no tokens. 61.6k in + 196 out is the exact
-    ///     pair that used to print $0.1878 on a free model.
+    ///     event moves no money. 61.6k in + 196 out is the exact pair that used
+    ///     to print $0.1878 on a free model. (The REPL's token CELL comes from
+    ///     the tracker's pull feed, which BuildStatusSnapshot takes as an
+    ///     argument — the claim under test is the reducer's own state.)
     /// </summary>
     [Test]
-    public async Task StepFinishAlone_MovesNoCost_NoTokens()
+    public async Task StepFinishAlone_MovesNoCost()
     {
         var store = new UiStore();
         StepFinished(store, 61_600, 196);
 
         var snapshot = ReplLifecycle.BuildStatusSnapshot(null, store.State, 61_600, 196, Rows, Total);
 
+        await Assert.That(store.State.Chat.Cost.CostUsd).IsEqualTo(0m);
         await Assert.That(snapshot.Chat.Cost.CostUsd).IsEqualTo(0m);
-        await Assert.That(snapshot.Chat.Cost.TokensIn).IsEqualTo(0);
         await Assert.That(Footer(snapshot)).DoesNotContain("$0.1878");
     }
 

@@ -415,7 +415,7 @@ public static class ChatAppReducer
                     stats.Metadata.TokensInput,
                     stats.Metadata.TokensOutput,
                     stats.Metadata.Cost,
-                    stats.Metadata.IsCostKnown)
+                    !stats.Metadata.IsCostKnown)
             }
         };
     }

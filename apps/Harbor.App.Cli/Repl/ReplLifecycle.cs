@@ -465,6 +465,10 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     {
         var storeChat = storeState.Chat;
         decimal costUsd = storeChat.Cost.CostUsd;
+        // #653: the "the core could not price this" bit rides along with the
+        // number, or an unpriced model would render a bare 0 here while the
+        // reducer's own state says otherwise.
+        bool costUnpriced = storeChat.Cost.IsCostUnpriced;
 
         // Same range the projector derives from the snapshot it is handed, so
         // the memo key and the painted text can never disagree.
@@ -479,6 +483,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             && prev.Chat.Cost.TokensIn == tokensIn
             && prev.Chat.Cost.TokensOut == tokensOut
             && prev.Chat.Cost.CostUsd == costUsd
+            && prev.Chat.Cost.IsCostUnpriced == costUnpriced
             && prev.Ui.ScrollOffset == scrollOffset
             && prev.Ui.ViewportLines == viewportLines
             && prev.Ui.TotalLines == totalLines)
@@ -494,7 +499,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 Model = storeChat.Model,
                 Provider = storeChat.Provider,
                 AgentName = storeChat.AgentName,
-                Cost = new CostSnapshot(tokensIn, tokensOut, costUsd)
+                Cost = new CostSnapshot(tokensIn, tokensOut, costUsd, costUnpriced)
             },
             Ui = new TerminalUiState
             {
