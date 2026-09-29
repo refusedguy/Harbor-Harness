@@ -320,9 +320,16 @@ public sealed class HandRolledResultShapeTests
 
     /// <summary>True when a scanned type is the #588 shape.</summary>
     private static bool IsRule3Violation((string File, int Line, string TypeName, string Body) type) =>
-        ValueShapedDeclaration.IsMatch(DeclarationLineOf(type.Body))
-        && NullableStringErrorMember.IsMatch(type.Body)
-        && !DelegatesToCfeResult.IsMatch(type.Body);
+        IsRule3Violation(DeclarationLineOf(type.Body), type.Body);
+
+    /// <summary>
+    ///     The rule itself, over raw text, so the positive controls drive the same
+    ///     predicate the tree walk does instead of a paraphrase of it.
+    /// </summary>
+    private static bool IsRule3Violation(string declarationLine, string body) =>
+        ValueShapedDeclaration.IsMatch(declarationLine)
+        && NullableStringErrorMember.IsMatch(body)
+        && !DelegatesToCfeResult.IsMatch(body);
 
     [Test]
     public async Task Rule3_NoValueShapedTypeCarriesANullableStringErrorChannel()
@@ -422,15 +429,15 @@ public sealed class HandRolledResultShapeTests
 
         IReadOnlyList<(string TypeName, int Line, string Body)> flagged =
         [
-            .. found.Where(t => DeclaresResultFlag.IsMatch(t.Body)
-                               || NullableStringErrorMember.IsMatch(t.Body)
-                               || CoalescedEmptyError.IsMatch(t.Body))
+            .. found.Where(t => IsRule3Violation(DeclarationLineOf(t.Body), t.Body))
         ];
 
         await Assert.That(flagged.Select(t => t.TypeName).ToList()).IsEquivalentTo(new[] { "ModelBatch" })
             .Because(
-                "Of the three, only ModelBatch carries a result-shaped error channel. If the outer "
-                + "class or the sibling is reported, the match has widened beyond the banned shape.");
+                "Of the three, only ModelBatch is the banned shape. The outer class is a `class` and "
+                + "the sibling carries nothing, so neither is value-shaped. If the outer class is "
+                + "reported, Rule 3 has stopped requiring value-shapedness and will fire on every "
+                + "record in the tree that happens to mention a nullable string named Error.");
     }
 
     [Test]
@@ -466,10 +473,7 @@ public sealed class HandRolledResultShapeTests
 
         IReadOnlyList<(string TypeName, int Line, string Body)> flagged =
         [
-            .. ScanText(legal)
-                .Where(t => ValueShapedDeclaration.IsMatch(DeclarationLineOf(t.Body))
-                            && NullableStringErrorMember.IsMatch(t.Body)
-                            && !DelegatesToCfeResult.IsMatch(t.Body))
+            .. ScanText(legal).Where(t => IsRule3Violation(DeclarationLineOf(t.Body), t.Body))
         ];
 
         await Assert.That(flagged.Count).IsEqualTo(0)

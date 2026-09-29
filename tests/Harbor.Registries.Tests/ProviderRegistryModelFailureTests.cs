@@ -195,10 +195,11 @@ public class ProviderRegistryModelFailureTests
         await Assert.That(result.IsFailure).IsTrue()
             .Because("no provider answered, so there is nothing to return");
 
-        await Assert.That(result.Error).Contains("alpha: alpha-down").Contains("beta: beta-down")
+        await Assert.That(result.Error).Contains("alpha: alpha-down")
             .Because(
                 "one 'id: reason' line per failed provider, each naming the provider that actually "
-                + "failed rather than whichever one happened to occupy the slot");
+                + "failed rather than whichever one happened to occupy the fan-out slot");
+        await Assert.That(result.Error).Contains("beta: beta-down");
     }
 
     /// <summary>
@@ -242,10 +243,11 @@ public class ProviderRegistryModelFailureTests
         var result = await registry.GetAllModelsAsync();
 
         await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("timed out after 5000 ms").Contains("probe cancelled")
+        await Assert.That(result.Error).Contains("timed out after 5000 ms")
             .Because(
-                "the per-provider budget is 5 s, and the cancellation's own message is the only thing "
-                + "that distinguishes that budget from the caller's token or the provider itself");
+                "the per-provider budget is 5 s, and the bare literal \"timeout\" that used to stand "
+                + "in for it said nothing about which of the three cancellations this was");
+        await Assert.That(result.Error).Contains("probe cancelled");
     }
 
     /// <summary>
@@ -268,6 +270,6 @@ public class ProviderRegistryModelFailureTests
 
         await Assert.That(result.IsSuccess).IsTrue()
             .Because("an empty catalogue is a successful fetch of nothing, not a failed fetch");
-        await Assert.That(result.Value).IsEmpty();
+        await Assert.That(result.Value.Count).IsEqualTo(0);
     }
 }
