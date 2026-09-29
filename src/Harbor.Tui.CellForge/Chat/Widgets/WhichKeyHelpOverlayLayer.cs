@@ -27,10 +27,29 @@ public sealed class WhichKeyHelpOverlayLayer : IOverlayLayer
 
     public Rect Bounds => _overlay.ComputeBox(_viewport);
 
-    public bool Visible =>
-        _overlay.Visible &&
-        Bounds.Width >= WhichKeyHelpOverlay.MinWidth &&
-        Bounds.Height >= WhichKeyHelpOverlay.MinHeight;
+    /// <summary>
+    ///     True when the box fits the viewport at the minimum dimensions. This is a
+    ///     GEOMETRY answer, not a state answer: it was inlined into
+    ///     <see cref="Visible" /> below, which made <c>Visible</c> a second and
+    ///     independent definition of "is this overlay showing" — so a shown overlay
+    ///     reported <c>Visible == false</c> on a small terminal and the host could not
+    ///     tell a too-small box from a hidden overlay. Now the two questions are
+    ///     separately named and the layer has one authority:
+    ///     <c>IsShown</c> for state (from <see cref="WhichKeyHelpOverlay" />) and this
+    ///     for room. Both must hold to paint, which is what the old conjunction said —
+    ///     only now it is legible.
+    /// </summary>
+    public bool HasRoom
+    {
+        get
+        {
+            Rect box = Bounds;
+            return box.Width >= WhichKeyHelpOverlay.MinWidth &&
+                   box.Height >= WhichKeyHelpOverlay.MinHeight;
+        }
+    }
+
+    public bool Visible => _overlay.IsShown && HasRoom;
 
     public bool Opaque => true;
 
@@ -48,7 +67,7 @@ public sealed class WhichKeyHelpOverlayLayer : IOverlayLayer
     public void Paint(ScreenBuffer buffer, Rect clip)
     {
         ArgumentNullException.ThrowIfNull(buffer);
-        if (!_overlay.Visible)
+        if (!_overlay.IsShown)
         {
             return;
         }

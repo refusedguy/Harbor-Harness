@@ -1,5 +1,7 @@
 using Harbor.Ui.Framework.Rendering;
 
+using CSharpFunctionalExtensions;
+
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
@@ -54,8 +56,13 @@ public sealed class ImageViewerOverlay
     /// <summary>Zoom in percent, always within [<see cref="MinZoom" />, <see cref="MaxZoom" />].</summary>
     public int Zoom => _zoom;
 
-    /// <summary>The block under inspection, or null while closed.</summary>
-    public ImageBlock? Source => _block;
+    /// <summary>
+    ///     The block under inspection, or <see cref="Maybe{T}.None" /> while closed. The
+    ///     closed state is a real state, so the public signature says so instead of
+    ///     leaving every consumer to invent a null check (#592). The backing field stays
+    ///     nullable — internal representation is free; the SIGNATURE is the contract.
+    /// </summary>
+    public Maybe<ImageBlock> Source => Maybe.From(_block);
 
     /// <summary>
     /// Opens the viewer over <paramref name="block"/>. Zoom resets to 100% —

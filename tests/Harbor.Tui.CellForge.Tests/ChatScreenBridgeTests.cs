@@ -50,7 +50,7 @@ public class ChatScreenBridgeTests
 
         var card = (ToolCallBlock)tl.BlockAt(3);
         await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Ok);
-        await Assert.That(card.Body!.Output).IsEqualTo("file body");
+        await Assert.That(card.Body.Value.Output).IsEqualTo("file body");
         await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Idle);
     }
 
@@ -131,7 +131,7 @@ public class ChatScreenBridgeTests
         var tl = panel.Timeline;
         var card = (ToolCallBlock)tl.BlockAt(tl.Count - 1);
         await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Error);
-        await Assert.That(card.Body!.Duration).IsEqualTo(TimeSpan.FromMilliseconds(50));
+        await Assert.That(card.Body.Value.Duration).IsEqualTo(TimeSpan.FromMilliseconds(50));
     }
 
     [Test]
@@ -149,11 +149,11 @@ public class ChatScreenBridgeTests
         var card = (ToolCallBlock)tl.BlockAt(tl.Count - 1);
         await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Error);
         await Assert.That(card.IsExpanded).IsFalse();
-        await Assert.That(card.Body!.Output).IsEqualTo(blob);
+        await Assert.That(card.Body.Value.Output).IsEqualTo(blob);
 
         card.ToggleExpanded();
         await Assert.That(card.IsExpanded).IsTrue();
-        await Assert.That(card.Body.Output).IsEqualTo(blob);
+        await Assert.That(card.Body.Value.Output).IsEqualTo(blob);
     }
 
     // ── CE-4 З.2: живой REPL ──────────────────────────────────────────────

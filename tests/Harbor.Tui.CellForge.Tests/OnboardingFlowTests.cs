@@ -57,7 +57,7 @@ public class OnboardingFlowTests
         await Assert.That(flow.Dialog.Kind).IsEqualTo(DialogKind.Alert);
         await Assert.That(flow.Dialog.Title).IsEqualTo("Welcome to Harbor");
         await Assert.That(flow.IsComplete).IsFalse();
-        await Assert.That(flow.Result).IsNull();
+        await Assert.That(flow.Result.HasNoValue).IsTrue();
     }
 
     [Test]
@@ -82,7 +82,7 @@ public class OnboardingFlowTests
         flow.HandleKey(EnterKey);
 
         await Assert.That(flow.Step).IsEqualTo(OnboardingStep.Auth);
-        await Assert.That(flow.SelectedProvider).IsEqualTo(Kilo);
+        await Assert.That(flow.SelectedProvider.Value).IsEqualTo(Kilo);
         await Assert.That(flow.Dialog.Title.Contains("kilocode")).IsTrue();
     }
 
@@ -96,7 +96,7 @@ public class OnboardingFlowTests
         flow.HandleKey(EnterKey);
 
         await Assert.That(flow.Step).IsEqualTo(OnboardingStep.Model);
-        await Assert.That(flow.SelectedProvider).IsEqualTo(Ollama);
+        await Assert.That(flow.SelectedProvider.Value).IsEqualTo(Ollama);
     }
 
     [Test]
@@ -167,9 +167,9 @@ public class OnboardingFlowTests
         flow.HandleKey(EnterKey); // done
 
         await Assert.That(flow.IsComplete).IsTrue();
-        await Assert.That(flow.Result!.KeyAlreadyConfigured).IsTrue();
-        await Assert.That(flow.Result.ApiKey).IsNull();
-        await Assert.That(flow.Result.Model).IsEqualTo("anthropic/claude-sonnet-4-20250514");
+        await Assert.That(flow.Result.Value.KeyAlreadyConfigured).IsTrue();
+        await Assert.That(flow.Result.Value.ApiKey).IsNull();
+        await Assert.That(flow.Result.Value.Model).IsEqualTo("anthropic/claude-sonnet-4-20250514");
     }
 
     [Test]
@@ -189,11 +189,11 @@ public class OnboardingFlowTests
 
         await Assert.That(flow.IsComplete).IsTrue();
         await Assert.That(flow.Dialog.Visible).IsFalse();
-        await Assert.That(flow.Result!.Completed).IsTrue();
-        await Assert.That(flow.Result.ProviderId).IsEqualTo("ollama");
-        await Assert.That(flow.Result.Model).IsEqualTo("ollama/llama3.2");
-        await Assert.That(flow.Result.ApiKey).IsNull();
-        await Assert.That(flow.Result.KeyAlreadyConfigured).IsFalse();
+        await Assert.That(flow.Result.Value.Completed).IsTrue();
+        await Assert.That(flow.Result.Value.ProviderId).IsEqualTo("ollama");
+        await Assert.That(flow.Result.Value.Model).IsEqualTo("ollama/llama3.2");
+        await Assert.That(flow.Result.Value.ApiKey).IsNull();
+        await Assert.That(flow.Result.Value.KeyAlreadyConfigured).IsFalse();
     }
 
     [Test]
@@ -210,10 +210,10 @@ public class OnboardingFlowTests
         flow.HandleKey(EnterKey);
         flow.HandleKey(EnterKey);
 
-        await Assert.That(flow.Result!.Completed).IsTrue();
-        await Assert.That(flow.Result.ProviderId).IsEqualTo("kilocode");
-        await Assert.That(flow.Result.Model).IsEqualTo("kilocode/my-model");
-        await Assert.That(flow.Result.ApiKey).IsEqualTo("klo_123");
+        await Assert.That(flow.Result.Value.Completed).IsTrue();
+        await Assert.That(flow.Result.Value.ProviderId).IsEqualTo("kilocode");
+        await Assert.That(flow.Result.Value.Model).IsEqualTo("kilocode/my-model");
+        await Assert.That(flow.Result.Value.ApiKey).IsEqualTo("klo_123");
     }
 
     [Test]
@@ -228,7 +228,7 @@ public class OnboardingFlowTests
         flow.HandleKey(EnterKey);
         flow.HandleKey(EnterKey);
 
-        await Assert.That(flow.Result!.Model).IsEqualTo("otherprov/some-model");
+        await Assert.That(flow.Result.Value.Model).IsEqualTo("otherprov/some-model");
     }
 
     [Test]
@@ -250,7 +250,7 @@ public class OnboardingFlowTests
         flow.HandleKey(EnterKey);
         flow.HandleKey(EnterKey);
 
-        await Assert.That(flow.Result!.Model).IsEqualTo("kilocode/beta");
+        await Assert.That(flow.Result.Value.Model).IsEqualTo("kilocode/beta");
     }
 
     [Test]
@@ -261,7 +261,7 @@ public class OnboardingFlowTests
         flow.HandleKey(EscKey);
 
         await Assert.That(flow.IsComplete).IsTrue();
-        await Assert.That(flow.Result!.Completed).IsFalse();
+        await Assert.That(flow.Result.Value.Completed).IsFalse();
         await Assert.That(flow.Dialog.Visible).IsFalse();
     }
 
@@ -276,8 +276,8 @@ public class OnboardingFlowTests
         flow.HandleKey(EscKey);
 
         await Assert.That(flow.IsComplete).IsTrue();
-        await Assert.That(flow.Result!.Completed).IsFalse();
-        await Assert.That(flow.Result.ProviderId).IsEqualTo(string.Empty);
+        await Assert.That(flow.Result.Value.Completed).IsFalse();
+        await Assert.That(flow.Result.Value.ProviderId).IsEqualTo(string.Empty);
     }
 
     [Test]
@@ -292,7 +292,7 @@ public class OnboardingFlowTests
         await Assert.That(flow.Step).IsEqualTo(OnboardingStep.Done);
         flow.HandleKey(EscKey);
 
-        await Assert.That(flow.Result!.Completed).IsFalse();
+        await Assert.That(flow.Result.Value.Completed).IsFalse();
     }
 
     [Test]
@@ -305,7 +305,7 @@ public class OnboardingFlowTests
         flow.HandleKey(EnterKey);
 
         await Assert.That(flow.IsComplete).IsTrue();
-        await Assert.That(flow.Result!.Completed).IsFalse();
+        await Assert.That(flow.Result.Value.Completed).IsFalse();
     }
 
     [Test]
@@ -325,6 +325,6 @@ public class OnboardingFlowTests
         flow.Start();
 
         await Assert.That(flow.IsComplete).IsTrue();
-        await Assert.That(flow.Result!.Completed).IsFalse();
+        await Assert.That(flow.Result.Value.Completed).IsFalse();
     }
 }

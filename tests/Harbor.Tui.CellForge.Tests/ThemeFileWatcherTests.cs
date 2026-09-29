@@ -34,13 +34,13 @@ public class ThemeFileWatcherTests
         using var watcher = new ThemeFileWatcher(_path);
 
         watcher.Poll(); // first sight — same stamp as initial, no apply yet
-        await Assert.That(watcher.LastApplied).IsNull();
+        await Assert.That(watcher.LastApplied.HasNoValue).IsTrue();
 
         await File.WriteAllTextAsync(_path, """{ "name": "v2", "accent": "#222222" }""");
         watcher.Poll();
 
-        await Assert.That(watcher.LastApplied).IsNotNull();
-        await Assert.That(watcher.LastApplied!.Name).IsEqualTo("v2");
+        await Assert.That(watcher.LastApplied.HasValue).IsTrue();
+        await Assert.That(watcher.LastApplied.Value.Name).IsEqualTo("v2");
         // Global ambient intentionally not asserted (see below).
     }
 
@@ -70,12 +70,12 @@ public class ThemeFileWatcherTests
         // global Current is NOT asserted here — under a parallel runner
         // another theme test may hold the palette between our Poll and the
         // read; ambient assertions live only behind NotInParallel keys.
-        await Assert.That(watcher.LastApplied!.Name).IsEqualTo("good");
+        await Assert.That(watcher.LastApplied.Value.Name).IsEqualTo("good");
 
         await File.WriteAllTextAsync(_path, "totally not json");
         watcher.Poll();
 
-        await Assert.That(watcher.LastApplied!.Name).IsEqualTo("good"); // unchanged
+        await Assert.That(watcher.LastApplied.Value.Name).IsEqualTo("good"); // unchanged
         await Assert.That(error).IsNotNull();
     }
 
@@ -85,6 +85,6 @@ public class ThemeFileWatcherTests
         using var watcher = new ThemeFileWatcher(_path); // never created
 
         watcher.Poll();
-        await Assert.That(watcher.LastApplied).IsNull();
+        await Assert.That(watcher.LastApplied.HasNoValue).IsTrue();
     }
 }

@@ -108,9 +108,9 @@ public class TaskCardTests
 
             // Expand reveals the full child transcript + final answer.
             card.SetExpanded(true);
-            await Assert.That(card.Body!.Output.Contains("⚙ read")).IsTrue();
-            await Assert.That(card.Body.Output.Contains("⚙ grep")).IsTrue();
-            await Assert.That(card.Body.Output.Contains("found it")).IsTrue();
+            await Assert.That(card.Body.Value.Output.Contains("⚙ read")).IsTrue();
+            await Assert.That(card.Body.Value.Output.Contains("⚙ grep")).IsTrue();
+            await Assert.That(card.Body.Value.Output.Contains("found it")).IsTrue();
         }
     }
 
@@ -138,8 +138,8 @@ public class TaskCardTests
             bridge.Tick(1200);
             await bus.PublishAsync(new ToolExecutionEndEvent("task1", ToolResult.Success("final answer"), IsError: false));
             var card = (ToolCallBlock)panel.Timeline.BlockAt(panel.Timeline.Count - 1);
-            await Assert.That(card.Body!.Output.Contains("secret child text")).IsTrue();
-            await Assert.That(card.Body.Output.Contains("final answer")).IsTrue();
+            await Assert.That(card.Body.Value.Output.Contains("secret child text")).IsTrue();
+            await Assert.That(card.Body.Value.Output.Contains("final answer")).IsTrue();
         }
     }
 

@@ -144,7 +144,7 @@ public class ToolCallBlockMapperTests
         block.Complete(new ToolResultBody("boom", isError: true, TimeSpan.FromMilliseconds(5)));
         block.Complete(new ToolResultBody("second", isError: false, TimeSpan.FromMilliseconds(9)));
         await Assert.That(block.Status).IsEqualTo(ToolCallStatus.Error);
-        await Assert.That(block.Body!.Output).IsEqualTo("boom");
+        await Assert.That(block.Body.Value.Output).IsEqualTo("boom");
         await Assert.That(block.StatusPill).IsEqualTo("err");
     }
 
