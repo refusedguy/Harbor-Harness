@@ -319,7 +319,15 @@ internal sealed class ReplRunner
         return result.IsSuccess ? 0 : 1;
     }
 
-    private async Task<int> RunLineReplAsync(Session session)
+    /// <summary>
+    ///     Line-buffered REPL loop for renderers that are not
+    ///     <see cref="IInteractiveTuiRenderer" />. Internal so the end-of-input
+    ///     contract is testable (#589) — this loop is what spun at 100% CPU on
+    ///     Ctrl-D and on any exhausted pipe, and a hang is only observable by
+    ///     driving the loop itself. The contract itself is pinned separately in
+    ///     <c>ReadLineAbsenceContractTests</c> and <c>TuiReadLineContractRules</c>.
+    /// </summary>
+    internal async Task<int> RunLineReplAsync(Session session)
     {
         _logger.LogInformation("Line REPL starting");
         while (true)
