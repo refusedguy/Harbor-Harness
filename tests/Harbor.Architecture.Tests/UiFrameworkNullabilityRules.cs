@@ -102,27 +102,26 @@ public class UiFrameworkNullabilityRules
     }
 
     /// <summary>
-    ///     Strips comments so documentation about the rule cannot trip it.
-    ///     Newlines inside a block comment are preserved so the line numbers reported
-    ///     in a failure message still point at the right source line.
+    ///     Blanks out one block-comment match, preserving every newline so line numbers
+    ///     computed downstream still point at the right source line.
     /// </summary>
-    private static string StripComments(string source)
+    private static string BlankOutComment(Match match)
     {
-        string withoutBlocks = BlockComment.Replace(
-            source,
-            static Match m =>
-            {
-                var blank = new char[m.Length];
-                for (int i = 0; i < m.Length; i++)
-                {
-                    blank[i] = m.Value[i] == '\n' ? '\n' : ' ';
-                }
+        var blank = new char[match.Length];
+        for (int i = 0; i < match.Length; i++)
+        {
+            blank[i] = match.Value[i] == '\n' ? '\n' : ' ';
+        }
 
-                return new string(blank);
-            });
-
-        return LineComment.Replace(withoutBlocks, " ");
+        return new string(blank);
     }
+
+    /// <summary>
+    ///     Strips comments so documentation about the rule cannot trip it.
+    ///     <see cref="LineComment" /> runs last because it cannot span a line.
+    /// </summary>
+    private static string StripComments(string source) =>
+        LineComment.Replace(BlockComment.Replace(source, BlankOutComment), " ");
 
     /// <summary>
     ///     No file under <c>src/Harbor.Ui.Framework*/</c> initialises a field or
@@ -153,28 +152,17 @@ public class UiFrameworkNullabilityRules
                 continue;
             }
 
-            string stripped = StripComments(source);
-            int line = 0;
-            int index = 0;
-            while (index < stripped.Length)
+            // Split after stripping, so a line number here indexes the real source.
+            string[] lines = StripComments(source).Split('\n');
+            for (int i = 0; i < lines.Length; i++)
             {
-                if (stripped[index] == '\n')
+                if (!NullForgivingOnNull.IsMatch(lines[i]))
                 {
-                    line++;
-                    index++;
-                    continue;
-                }
-
-                Match match = NullForgivingOnNull.Match(stripped, index);
-                if (!match.Success)
-                {
-                    index++;
                     continue;
                 }
 
                 string rel = root is null ? file : Path.GetRelativePath(root, file);
-                violations.Add($"{rel}({line + 1}): {match.Value}");
-                index = match.Index + match.Length;
+                violations.Add($"{rel}({i + 1}): {lines[i].Trim()}");
             }
         }
 
