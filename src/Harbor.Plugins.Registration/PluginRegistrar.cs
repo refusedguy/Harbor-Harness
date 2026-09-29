@@ -65,54 +65,54 @@ public sealed class PluginRegistrar : IPluginRegistrar
         if (initResult.IsFailure)
             return initResult;
 
-        try
-        {
-            if (plugin.Instance is IToolPlugin toolPlugin)
+        // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
+        // wrapping a throwing call in a Result: same catch scope, same text.
+        // The nested panel-plugin catch below is deliberately kept — it logs
+        // and CONTINUES rather than failing the whole registration.
+        return Result.Try(
+            () =>
             {
-                toolPlugin.RegisterTools(new ToolRegistryBuilderAdapter(
-                    host,
-                    plugin.Instance.Name,
-                    plugin.DeclaredCapabilities,
-                    _audit,
-                    _logger,
-                    _loggerFactory));
-            }
-            if (plugin.Instance is IProviderPlugin providerPlugin)
-            {
-                providerPlugin.RegisterProviders(new ProviderRegistryBuilderAdapter(host, _logger, _loggerFactory));
-            }
-            if (plugin.Instance is IAgentPlugin agentPlugin)
-            {
-                agentPlugin.RegisterAgents(new AgentRegistryBuilderAdapter(host, _logger));
-            }
-            if (plugin.Instance is ITuiPlugin tuiPlugin)
-            {
-                var r = host.RegisterTuiPlugin(tuiPlugin);
-                if (r.IsFailure)
-                    _logger.LogWarning("Failed to register TUI plugin {Name}: {Error}", tuiPlugin.Name, r.Error);
-            }
-            if (plugin.Instance is ITuiPanelPlugin panelPlugin)
-            {
-                // Give the plugin a thin IPanelRegistry adapter that routes Register()
-                // calls back into the host. The host stores them; the active
-                // PanelRegistry (owned by the SpectreTUI renderer) picks them up when
-                // the renderer starts.
-                try
+                if (plugin.Instance is IToolPlugin toolPlugin)
                 {
-                    panelPlugin.RegisterPanels(new PanelRegistryPluginAdapter(host, _logger));
+                    toolPlugin.RegisterTools(new ToolRegistryBuilderAdapter(
+                        host,
+                        plugin.Instance.Name,
+                        plugin.DeclaredCapabilities,
+                        _audit,
+                        _logger,
+                        _loggerFactory));
                 }
-                catch (Exception ex)
+                if (plugin.Instance is IProviderPlugin providerPlugin)
                 {
-                    _logger.LogWarning(ex, "ITuiPanelPlugin.RegisterPanels threw for {Name}", panelPlugin.Name);
+                    providerPlugin.RegisterProviders(new ProviderRegistryBuilderAdapter(host, _logger, _loggerFactory));
                 }
-            }
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure($"Register threw: {ex.Message}");
-        }
-
-        return Result.Success();
+                if (plugin.Instance is IAgentPlugin agentPlugin)
+                {
+                    agentPlugin.RegisterAgents(new AgentRegistryBuilderAdapter(host, _logger));
+                }
+                if (plugin.Instance is ITuiPlugin tuiPlugin)
+                {
+                    var r = host.RegisterTuiPlugin(tuiPlugin);
+                    if (r.IsFailure)
+                        _logger.LogWarning("Failed to register TUI plugin {Name}: {Error}", tuiPlugin.Name, r.Error);
+                }
+                if (plugin.Instance is ITuiPanelPlugin panelPlugin)
+                {
+                    // Give the plugin a thin IPanelRegistry adapter that routes Register()
+                    // calls back into the host. The host stores them; the active
+                    // PanelRegistry (owned by the SpectreTUI renderer) picks them up when
+                    // the renderer starts.
+                    try
+                    {
+                        panelPlugin.RegisterPanels(new PanelRegistryPluginAdapter(host, _logger));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "ITuiPanelPlugin.RegisterPanels threw for {Name}", panelPlugin.Name);
+                    }
+                }
+            },
+            ex => $"Register threw: {ex.Message}");
     }
 
     // ── Registry builder adapters ────────────────────────────────────────────────

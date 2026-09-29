@@ -189,20 +189,18 @@ public sealed class JsonlSessionPorter : ISessionPorter
     /// </summary>
     private static Result<AgentMessage> DecodeMessageLine(string sessionId, string line)
     {
-        JsonDocument doc;
-        try
-        {
-            doc = JsonDocument.Parse(line);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<AgentMessage>($"malformed JSON line: {ex.Message}");
-        }
-
-        using (doc)
-        {
-            return JsonlMessageCodec.DeserializeMessage(sessionId, doc.RootElement);
-        }
+        // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
+        // wrapping a throwing call in a Result: same catch scope, same text.
+        return Result.Try(
+                () => JsonDocument.Parse(line),
+                ex => $"malformed JSON line: {ex.Message}")
+            .Bind(doc =>
+            {
+                using (doc)
+                {
+                    return JsonlMessageCodec.DeserializeMessage(sessionId, doc.RootElement);
+                }
+            });
     }
 
     /// <summary>
@@ -212,24 +210,23 @@ public sealed class JsonlSessionPorter : ISessionPorter
     ///     <see cref="Maybe{T}" /> rather than a null riding the
     ///     <see cref="Result" /> rail (#199).
     /// </summary>
-    private static async Task<Result<Maybe<string>>> TryReadNonEmptyLineAsync(TextReader reader)
-    {
-        try
-        {
-            while (true)
+    private static Task<Result<Maybe<string>>> TryReadNonEmptyLineAsync(TextReader reader) =>
+        // Result.Try (CSharpFunctionalExtensions 3.7.0) wraps the throwing read
+        // in a Result; the loop then distinguishes EOF (Maybe.None) from a real
+        // line (Maybe.From) — absence is not an error, so EOF stays a success.
+        Result.Try(
+            async () =>
             {
-                string? line = await reader.ReadLineAsync().ConfigureAwait(false);
-                if (line is null)
-                    return Result.Success(Maybe<string>.None);
-                if (line.Trim().Length > 0)
-                    return Result.Success(Maybe<string>.From(line));
-            }
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<Maybe<string>>(ex.Message);
-        }
-    }
+                while (true)
+                {
+                    string? line = await reader.ReadLineAsync().ConfigureAwait(false);
+                    if (line is null)
+                        return Maybe<string>.None;
+                    if (line.Trim().Length > 0)
+                        return Maybe<string>.From(line);
+                }
+            },
+            ex => ex.Message);
 
     /// <summary>
     ///     Body-line read for the import loop: EOF ends the import, a mid-stream
