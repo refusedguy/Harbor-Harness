@@ -13,11 +13,36 @@ public sealed record IdentityConfig(
     public const string FallbackModel = "kilocode/tencent/hy3:free";
     public const string FallbackAgent = "code";
 
+    /// <summary>
+    ///     The typed form of <see cref="FallbackModel" />, parsed from it rather than
+    ///     spelled again.
+    /// </summary>
+    /// <remarks>
+    ///     #599: this constant used to be spelled a SECOND time seven lines below, with
+    ///     the model half recovered by <c>"tencent/hy3:free".Split('/')[1]</c> — an
+    ///     expression that yields <c>"hy3:free"</c>, so the two copies disagreed and a
+    ///     default install rendered one model id while the constant promised another.
+    ///     That raw split was also unguarded and count-unlimited, so it silently
+    ///     truncated any multi-segment model id (<c>kilo-auto/free</c> became
+    ///     <c>kilo-auto</c>). <c>ModelRef.TryParse</c> is the only function in
+    ///     the repo written to read a <c>provider/model</c> reference — it splits with
+    ///     count 2, so every model segment survives — so the default goes through it.
+    ///     <para>
+    ///         The value itself (<c>tencent/hy3:free</c>) is the one
+    ///         <c>providers/kilocode.json</c> declares as the gateway's
+    ///         <c>defaultModel</c>, which is where <see cref="ProviderPresets" /> projects
+    ///         it from; a test ties the two together.
+    ///     </para>
+    /// </remarks>
+    public static readonly ModelRef FallbackModelRef = ParseFallbackModel();
+
     // #195: fresh instance per access — a shared static would turn any
-    // future mutable member into a process-wide global variable.
+    // future mutable member into a process-wide global variable. The two
+    // members below are immutable value objects, so sharing them is value
+    // semantics, not shared mutable state.
     public static IdentityConfig Default => new(
         ProviderId.Create(FallbackProvider),
-        ModelRef.Create(ProviderId.Create(FallbackProvider), "tencent/hy3:free".Split('/')[1]),
+        FallbackModelRef,
         AgentName.Create(FallbackAgent));
 
     public ProviderId EffectiveProvider => Provider ?? ProviderId.Create(FallbackProvider);
@@ -35,6 +60,24 @@ public sealed record IdentityConfig(
         if (preset is not null)
             return ModelRef.TryParse($"{EffectiveProvider}/{preset.DefaultModel}");
         return ModelRef.TryParse($"{EffectiveProvider}/default");
+    }
+
+    /// <summary>
+    ///     Turn <see cref="FallbackModel" /> into a <see cref="ModelRef" />. Total by
+    ///     construction: the happy path is the parse, and the shape the constant is
+    ///     required to keep is pinned by a test.
+    /// </summary>
+    private static ModelRef ParseFallbackModel()
+    {
+        var parsed = ModelRef.TryParse(FallbackModel);
+        if (parsed.IsSuccess)
+            return parsed.Value;
+
+        // Unreachable while the constant holds its "provider/model" shape. Falling
+        // back to the whole constant as the model id keeps this path total — a throw
+        // in a static initializer would reach callers as a TypeInitializationException
+        // from IdentityConfig.Default, which the startup path of every app reads.
+        return ModelRef.Create(ProviderId.Create(FallbackProvider), FallbackModel);
     }
 }
 

@@ -35,8 +35,16 @@ internal sealed class NewSessionCommand : IReplCommand
 
         var configResult = await host.ConfigStore
             .LoadAsync(ct).ConfigureAwait(false);
-        string provider = configResult.IsSuccess ? configResult.Value.Provider : "kilocode";
-        string model = configResult.IsSuccess ? configResult.Value.Model : "tencent/hy3:free";
+        // #599: derived from IdentityConfig, never spelled here — a config that
+        // failed to load must not become a second home for the default model id.
+        string provider = configResult.IsSuccess
+            ? configResult.Value.Provider
+            : IdentityConfig.FallbackProvider;
+        // A session records the BARE model id (the provider travels beside it), so
+        // this is the model half of the same single source.
+        string model = configResult.IsSuccess
+            ? configResult.Value.Model
+            : IdentityConfig.FallbackModelRef.ModelId;
 
         var newSession = await store.CreateAsync(Environment.CurrentDirectory, host.SessionModel.Agent, provider, model, ct).ConfigureAwait(false);
         if (newSession.IsFailure)
