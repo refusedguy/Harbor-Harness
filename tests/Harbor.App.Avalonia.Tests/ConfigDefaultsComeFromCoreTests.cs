@@ -51,7 +51,25 @@ namespace Harbor.App.Avalonia.Tests;
 ///     Issue #677: a view-model renders the config it was handed and writes back
 ///     exactly that — it chooses no default and mutates no process state.
 /// </summary>
-[NotInParallel("avalonia-headless")]
+// KEYLESS on purpose, and this is the load-bearing detail.
+//
+// These tests plant HARBOR_STORAGE / HARBOR_MODEL / HARBOR_LOGLEVEL / OLLAMA_HOST
+// process-wide, because that is the only way to prove the settings VM does not
+// write them. A NAMED key would only serialise against other classes carrying the
+// SAME key — and every other class in this assembly is free to run alongside.
+// AppHostDiTests composes the real container, which reads HARBOR_STORAGE once per
+// composition, so it would pick up the sentinel and die with
+// "Unknown HARBOR_STORAGE: 'harbor-677-sentinel-1'" — 29 failures, on a
+// schedule that made it read as a flake rather than as a collision.
+//
+// Keyless [NotInParallel] is the form that means "runs completely alone". The
+// cost is real and accepted: this class is slow, and holding the whole assembly
+// alone while it runs is the price of touching process state.
+//
+// The finally-block also restores the REAL prior values, snapshotted before the
+// sentinels were planted — restoring the sentinels themselves is a self-restoring
+// write, which is precisely what this test claims to detect.
+[NotInParallel]
 public class ConfigDefaultsComeFromCoreTests
 {
     /// <summary>Process-wide env names the old Save path wrote. #677 removed the writes.</summary>
@@ -182,10 +200,22 @@ public class ConfigDefaultsComeFromCoreTests
         // compare-against-current check.
         (string Name, string Value)[] sentinels =
             [.. ProcessEnvNames.Select((name, i) => (Name: name, Value: $"harbor-677-sentinel-{i}"))];
-        Dictionary<string, string> before = sentinels.ToDictionary(s => s.Name, s => s.Value, StringComparer.Ordinal);
 
+        // Snapshot the REAL values BEFORE planting the sentinels. The previous
+        // version built `before` from the sentinels themselves, so the finally
+        // below restored the sentinels instead of the environment — and they
+        // outlived the test. HARBOR_STORAGE was read once per composition, so
+        // every later DI test in this assembly died on
+        // "Unknown HARBOR_STORAGE: 'harbor-677-sentinel-1'" — 29 failures that
+        // only appeared when a scheduling order put them after this test, which
+        // is why it looked like a flake and not like a leak.
+        //
+        // A null is a real, meaningful prior state: the variable was unset.
+        // Restoring "unset" therefore has to null it, not store an empty string.
+        Dictionary<string, string?> before = new(StringComparer.Ordinal);
         foreach ((string name, string value) in sentinels)
         {
+            before[name] = Environment.GetEnvironmentVariable(name);
             Environment.SetEnvironmentVariable(name, value);
         }
 
@@ -215,7 +245,7 @@ public class ConfigDefaultsComeFromCoreTests
         }
         finally
         {
-            foreach ((string name, string value) in before)
+            foreach ((string name, string? value) in before)
             {
                 Environment.SetEnvironmentVariable(name, value);
             }
