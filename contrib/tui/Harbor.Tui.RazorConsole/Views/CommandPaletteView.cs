@@ -1,13 +1,19 @@
 using System.Text;
 using Harbor.Tui.RazorConsole.Rendering;
-using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.Projection;
 namespace Harbor.Tui.RazorConsole.Views;
 /// <summary>
 ///     Ctrl+P command palette: fuzzy-search over slash commands + registered
 ///     panels + recent sessions. Pure projection — selection state lives in
 ///     <see cref="CommandPaletteState" /> (held by the caller).
 /// </summary>
+/// <remarks>
+///     Row selection and untrusted-text scrubbing are shared with the Termina and
+///     TerminalGui shells through <see cref="PaletteRows" />; this class only adds
+///     the RazorConsole-specific half — Spectre markup: every value is passed
+///     through <see cref="RazorMarkdownRenderer.Escape" /> so a title reading
+///     <c>[/]</c> cannot close the colour tag it sits in (issue #554).
+/// </remarks>
 public sealed class CommandPaletteView
 {
     /// <summary>Render the palette popup. <paramref name="query" /> filters the items.</summary>
@@ -15,36 +21,25 @@ public sealed class CommandPaletteView
     {
         var sb = new StringBuilder(256);
         sb.Append("[cyan]┌─ command palette ─────────────┐[/]\n");
-        sb.Append($"[grey]│ [/][yellow]{RazorMarkdownRenderer.Escape(query)}[/][grey]▍[/]\n");
+        sb.Append($"[grey]│ [/][yellow]{RazorMarkdownRenderer.Escape(PaletteRows.Sanitize(query))}[/][grey]▍[/]\n");
 
-        int shown = 0;
-        foreach (string cmd in ChatCommands.Slash)
+        foreach (PaletteRow row in PaletteRows.Build(query, panels, sessions))
         {
-            if (!string.IsNullOrEmpty(query) && !cmd.Contains(query, StringComparison.OrdinalIgnoreCase))
-                continue;
-            sb.Append($"[grey]│ [/][white]{cmd}[/]\n");
-            if (++shown >= 8) break;
-        }
-
-        foreach (string p in panels)
-        {
-            if (!string.IsNullOrEmpty(query) && !p.Contains(query, StringComparison.OrdinalIgnoreCase))
-                continue;
-            sb.Append($"[grey]│ [/][blue]panel: {RazorMarkdownRenderer.Escape(p)}[/]\n");
-            if (++shown >= 12) break;
-        }
-
-        foreach (string sess in sessions)
-        {
-            if (!string.IsNullOrEmpty(query) && !sess.Contains(query, StringComparison.OrdinalIgnoreCase))
-                continue;
-            sb.Append($"[grey]│ [/][magenta]session: {RazorMarkdownRenderer.Escape(sess)}[/]\n");
-            if (++shown >= 16) break;
+            var (markup, text) = Style(row);
+            sb.Append($"[grey]│ [/][{markup}]{RazorMarkdownRenderer.Escape(text)}[/]\n");
         }
 
         sb.Append("[grey]└──────────────────────────────┘[/]\n");
         return sb.ToString();
     }
+
+    /// <summary>Row colour plus the prefix the row kind carries. Text is pre-sanitized.</summary>
+    private static (string Markup, string Text) Style(PaletteRow row) => row.Kind switch
+    {
+        PaletteRowKind.Panel => ("blue", $"panel: {row.Text}"),
+        PaletteRowKind.Session => ("magenta", $"session: {row.Text}"),
+        _ => ("white", row.Text),
+    };
 }
 
 /// <summary>Mutable palette state held by the bridge (query + open flag).</summary>

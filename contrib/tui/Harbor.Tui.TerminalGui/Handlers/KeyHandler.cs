@@ -1,26 +1,33 @@
+using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.TerminalGui.Handlers;
 /// <summary>
-///     Maps a BCL <see cref="ConsoleKeyInfo" /> (which Terminal.Gui v2 can
-///     convert its native <c>Key</c> into via <c>ConsoleKeyInfo</c> mapping)
-///     into the framework-neutral <see cref="UiKey" />, resolves the
-///     <see cref="ChatAction" /> via <see cref="ChatKeyMap" />, and dispatches
-///     a <see cref="AppMsg.KeyInput" /> through the supplied <see cref="UiStore" />.
-///     Returns the resulting <see cref="TuiEffect" /> so the caller can
+///     Resolves a raw <see cref="ConsoleKeyInfo" /> to a framework-neutral
+///     <see cref="UiKey" />, asks <see cref="ChatKeyMap" /> which
+///     <see cref="ChatAction" /> it means, and dispatches the resulting
+///     <see cref="AppMsg.KeyInput" /> into the <see cref="UiStore" /> this shell
+///     owns. Returns the resulting <see cref="TuiEffect" /> so the caller can
 ///     execute side-effects via <c>TuiEffectHost</c>.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         Terminal.Gui v2's <c>Key</c> type is a struct with named static
-///         instances (<c>Key.Enter</c>, <c>Key.Up</c>, …) rather than an
-///         enum. Mapping them directly to <see cref="UiKey" /> would require
-///         a per-key switch that fights the v2 API. Instead the renderer
-///         converts its <c>Key</c> into a <see cref="ConsoleKeyInfo" /> first
-///         (Terminal.Gui ships <c>ConsoleKeyInfoMap</c> helpers for this) and
-///         feeds it here, so this handler stays identical to the Termina and
-///         RazorConsole versions — single source of truth for key routing.
+///         instances (<c>Key.Enter</c>, <c>Key.Up</c>, …) rather than an enum.
+///         Mapping those directly to <see cref="UiKey" /> would need a per-key
+///         switch that fights the v2 API, so <c>TerminalGuiRenderer</c> converts
+///         its <c>Key</c> into a <see cref="ConsoleKeyInfo" /> first and feeds it
+///         here.
+///     </para>
+///     <para>
+///         The <c>ConsoleKey</c> → key-vocabulary table is NOT here, and this file
+///         is NOT the single source of truth for key routing — it is owned by
+///         <see cref="ConsoleKeyMapper" /> in
+///         <c>Harbor.Ui.Framework.Rendering</c>, which the RazorConsole and
+///         Termina shells call as well (issue #554). Before that, three
+///         byte-identical copies of the switch existed and this one merely claimed
+///         to be the master copy.
 ///     </para>
 /// </remarks>
 public sealed class KeyHandler
@@ -51,52 +58,10 @@ public sealed class KeyHandler
         return _store.Dispatch(new AppMsg.KeyInput(action, key));
     }
 
-    /// <summary>Map a <see cref="ConsoleKeyInfo" /> to a framework-neutral <see cref="UiKey" />.</summary>
-    public static UiKey ToUiKey(ConsoleKeyInfo info)
-    {
-        var mods = KeyModifierSet.None;
-        if ((info.Modifiers & ConsoleModifiers.Shift) != 0) mods |= KeyModifierSet.Shift;
-        if ((info.Modifiers & ConsoleModifiers.Control) != 0) mods |= KeyModifierSet.Ctrl;
-        if ((info.Modifiers & ConsoleModifiers.Alt) != 0) mods |= KeyModifierSet.Alt;
-
-        // LF (0x0A) is how some terminals report Ctrl+J (no Ctrl flag, Key=J or
-        // Enter with a line-feed char). Preserve it as a character so the central
-        // ChatKeyMap resolves it to JumpPalette; plain Enter arrives as '\r'.
-        if (info.KeyChar == '\n')
-            return UiKey.ForChar('\n', mods);
-
-        if (info.KeyChar is >= (char)32 and not (char)127)
-            return UiKey.ForChar(info.KeyChar, mods);
-
-        var code = info.Key switch
-        {
-            ConsoleKey.UpArrow => UiKeyCode.Up,
-            ConsoleKey.DownArrow => UiKeyCode.Down,
-            ConsoleKey.LeftArrow => UiKeyCode.Left,
-            ConsoleKey.RightArrow => UiKeyCode.Right,
-            ConsoleKey.PageUp => UiKeyCode.PageUp,
-            ConsoleKey.PageDown => UiKeyCode.PageDown,
-            ConsoleKey.Home => UiKeyCode.Home,
-            ConsoleKey.End => UiKeyCode.End,
-            ConsoleKey.Enter => UiKeyCode.Enter,
-            ConsoleKey.Escape => UiKeyCode.Escape,
-            ConsoleKey.Backspace => UiKeyCode.Backspace,
-            ConsoleKey.Tab => UiKeyCode.Tab,
-            ConsoleKey.F1 => UiKeyCode.F1,
-            ConsoleKey.F2 => UiKeyCode.F2,
-            ConsoleKey.F3 => UiKeyCode.F3,
-            ConsoleKey.F4 => UiKeyCode.F4,
-            ConsoleKey.F5 => UiKeyCode.F5,
-            ConsoleKey.F6 => UiKeyCode.F6,
-            ConsoleKey.F7 => UiKeyCode.F7,
-            ConsoleKey.F8 => UiKeyCode.F8,
-            ConsoleKey.F9 => UiKeyCode.F9,
-            ConsoleKey.F10 => UiKeyCode.F10,
-            ConsoleKey.F11 => UiKeyCode.F11,
-            // F12 toggles the in-TUI diagnostics / logs panel (ChatAction.ToggleLogsPanel).
-            ConsoleKey.F12 => UiKeyCode.F12,
-            _ => UiKeyCode.None
-        };
-        return new UiKey(code, mods);
-    }
+    /// <summary>
+    ///     Map a <see cref="ConsoleKeyInfo" /> to a framework-neutral <see cref="UiKey" />
+    ///     through the shared console-key mapper.
+    /// </summary>
+    public static UiKey ToUiKey(ConsoleKeyInfo info) =>
+        KeyEventAdapter.ToUiKey(ConsoleKeyMapper.FromConsoleKeyInfo(info));
 }

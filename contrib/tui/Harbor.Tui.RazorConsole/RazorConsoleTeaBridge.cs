@@ -14,6 +14,17 @@ namespace Harbor.Tui.RazorConsole;
 ///     Push / Submit / Toast surface so the legacy <c>ChatBridge</c> can route
 ///     events through the shared reducer instead of duplicating state.
 /// </summary>
+/// <remarks>
+///     <para>
+///         F12 toggles the in-TUI diagnostics / logs panel
+///         (<c>ChatAction.ToggleLogsPanel</c>), and the shared
+///         <see cref="Harbor.Ui.Framework.Rendering.Input.ConsoleKeyMapper" />
+///         maps it for every shell — but RazorConsole's <c>TextInput</c>
+///         component does not surface a raw F12 to this bridge, so the
+///         documented user-facing escape hatch here is <c>/logs</c> (see
+///         <see cref="DumpDiagnostics" /> and docs/TUI_FEATURE_GAPS.md).
+///     </para>
+/// </remarks>
 public sealed class RazorConsoleTeaBridge : IDisposable
 {
     private readonly ILogger _logger;

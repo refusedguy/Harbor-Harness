@@ -54,13 +54,13 @@ src/Harbor.Tui.RazorConsole/
 ├── RazorConsoleTeaBridge.cs         ← UiStore + TuiEffectHost + KeyHandler wrapper (TEA path)
 ├── ChatTui.razor                    ← root component (existing, R3-style ChatBridge)
 ├── Views/
-│   ├── ChatView.cs                  ← UiState → Spectre markup strings (with markdown + GFM tables)
+│   ├── ChatView.cs                  ← UiScreenModel → Spectre markup strings (with markdown + GFM tables)
 │   ├── InputView.cs                 ← input box with caret + slash autocomplete
 │   ├── StatusBarView.cs             ← provider/model/agent/tokens/cost/status/scroll%
 │   ├── SessionSidebarView.cs        ← panel list (uses IPanelRegistry + UiState.Ui.PanelStates)
-│   └── CommandPaletteView.cs        ← Ctrl+P fuzzy search popup
+│   └── CommandPaletteView.cs        ← Ctrl+P popup over the shared PaletteRows + Spectre markup escape
 ├── Handlers/
-│   ├── KeyHandler.cs                ← ConsoleKeyInfo → UiKey → ChatAction → AppMsg dispatch
+│   ├── KeyHandler.cs                ← dispatches into the store; the ConsoleKeyInfo → UiKey table is the shared ConsoleKeyMapper
 │   └── ScrollHandler.cs             ← pure scroll math (rows-from-bottom)
 └── Rendering/
     ├── RazorColorMapper.cs          ← ChatRole → Spectre Color + label + markup string
@@ -72,6 +72,25 @@ src/Harbor.Tui.RazorConsole/
 `RazorConsoleTeaBridge` wraps `UiStore` + `TuiEffectHost` + `KeyHandler`. The renderer's `RenderAsync` dual-dispatches every `AgentEvent` to BOTH the legacy `ChatBridge` (drives the `ChatTui.razor` component's `StateChanged` event) AND the new `TeaBridge` (drives the 13-feature surface via `UiStore`). No duplicate state — `Tea` is the single source of truth for the new Views/Handlers.
 
 The legacy `ChatBridge` (with its `List<ChatLine>` + `StreamBuffer` + `ThinkBuffer` + `Status`) is the existing reactive store that `ChatTui.razor` subscribes to via `StateChanged`. It's slated for removal once `ChatTui.razor` learns to project from `UiStore.State` directly (which would make it a true SpectreTui-equivalent).
+
+## Parity with the sibling shells
+
+This package is one of three near-identical shells (`Harbor.Tui.RazorConsole`,
+`Harbor.Tui.Termina`, `Harbor.Tui.TerminalGui`), all compiled into the default
+CLI build. They have drifted before — in palette escaping, in the role a
+thinking body is drawn with, and in whether streaming is appended by the view or
+by the projection (#554). Three pieces are therefore shared rather than copied:
+
+- `Harbor.Ui.Framework.Rendering.Input.ConsoleKeyMapper` — the one
+  `ConsoleKey` → `UiKey` switch; `KeyHandler` only dispatches into the store.
+- `Harbor.Ui.Framework.Projection.PaletteRows` — the palette rows, with
+  untrusted text scrubbed of escape sequences and control characters.
+- The `ChatView.Build(UiScreenModel, int bodyWidth)` shape — every shell reads
+  the projected transcript, which already carries the streaming tail.
+
+`contrib/tests/Harbor.Tui.Contrib.Tests/ContribBackendParityTests.cs` runs one
+scenario through all three and compares them; change one shell's behaviour and
+that test is what tells you the other two now disagree.
 
 ## See also
 

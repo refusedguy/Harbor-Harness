@@ -12,6 +12,7 @@ Renderer-agnostic projection of `UiState` into `UiScreenModel`. The bridge betwe
 |-----------|----------|
 | `Projection/` | `IUiProjector`, `DefaultUiProjector`, `IUiViewport`, `UiScreenModel` record hierarchy (`UiHeaderModel`, `UiTranscriptModel`, `UiInputModel`, `UiStatusBarModel`), `UiRenderedLine`, `StyledSpan`, `RgbColor` |
 | `Projection/StatusBarFacts.cs` | `StatusBarFacts` — the status bar's cells (chrome, status, agent, tokens, cost, scroll) derived from `UiState` exactly once (#488). |
+| `Projection/PaletteRows.cs` | `PaletteRows` / `PaletteRow` — the shared Ctrl+P command-palette rows (slash commands + panels + sessions) with untrusted text scrubbed of ANSI escape sequences and control characters, so every shell renders the same inert rows (#554). |
 | `Rendering/` | `ChatStreamingPresenter` — derives `SessionStatus` and streaming flags from `UiState`. |
 
 ## Public API summary

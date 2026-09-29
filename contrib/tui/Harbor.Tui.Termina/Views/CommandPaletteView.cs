@@ -1,7 +1,6 @@
 using System.Text;
 using Harbor.Tui.Termina.Rendering;
-using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.Projection;
 using TerminaColor = Termina.Terminal.Color;
 
 namespace Harbor.Tui.Termina.Views;
@@ -11,6 +10,13 @@ namespace Harbor.Tui.Termina.Views;
 ///     <see cref="CommandPaletteState" /> (held by the caller). The renderer
 ///     only emits the visible rows.
 /// </summary>
+/// <remarks>
+///     Row selection and untrusted-text scrubbing are shared with the RazorConsole
+///     and TerminalGui shells through <see cref="PaletteRows" />, which drops ANSI
+///     escape sequences and control characters from every value before it reaches
+///     a terminal (issue #554). This class only adds the Termina-specific half —
+///     24-bit colour around text that is already inert.
+/// </remarks>
 public sealed class CommandPaletteView
 {
     /// <summary>Render the palette popup. <paramref name="query" /> filters the items.</summary>
@@ -19,40 +25,27 @@ public sealed class CommandPaletteView
         var sb = new StringBuilder(256);
         sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Cyan, "┌─ command palette ─────────────┐\n"));
         sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "│ "))
-            .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Yellow, query))
+            .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Yellow, PaletteRows.Sanitize(query)))
             .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "▍\n"));
 
-        int shown = 0;
-        foreach (string cmd in ChatCommands.Slash)
+        foreach (PaletteRow row in PaletteRows.Build(query, panels, sessions))
         {
-            if (!string.IsNullOrEmpty(query) && !cmd.Contains(query, StringComparison.OrdinalIgnoreCase))
-                continue;
+            var (color, text) = Style(row);
             sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "│ "))
-                .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.White, cmd)).Append('\n');
-            if (++shown >= 8) break;
-        }
-
-        foreach (string p in panels)
-        {
-            if (!string.IsNullOrEmpty(query) && !p.Contains(query, StringComparison.OrdinalIgnoreCase))
-                continue;
-            sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "│ "))
-                .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Blue, $"panel: {p}")).Append('\n');
-            if (++shown >= 12) break;
-        }
-
-        foreach (string sess in sessions)
-        {
-            if (!string.IsNullOrEmpty(query) && !sess.Contains(query, StringComparison.OrdinalIgnoreCase))
-                continue;
-            sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "│ "))
-                .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Magenta, $"session: {sess}")).Append('\n');
-            if (++shown >= 16) break;
+                .Append(TerminaMarkdownRenderer.Ansi(color, text)).Append('\n');
         }
 
         sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "└──────────────────────────────┘\n"));
         return sb.ToString();
     }
+
+    /// <summary>Row colour plus the prefix the row kind carries. Text is pre-sanitized.</summary>
+    private static (TerminaColor Color, string Text) Style(PaletteRow row) => row.Kind switch
+    {
+        PaletteRowKind.Panel => (TerminaColor.Blue, $"panel: {row.Text}"),
+        PaletteRowKind.Session => (TerminaColor.Magenta, $"session: {row.Text}"),
+        _ => (TerminaColor.White, row.Text),
+    };
 }
 
 /// <summary>Mutable palette state held by the bridge (query + open flag).</summary>

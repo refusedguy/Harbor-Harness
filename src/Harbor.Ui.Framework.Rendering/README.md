@@ -38,7 +38,10 @@ serve CellForge, the Avalonia desktop app and the Blazor surface.
 `KeyEvent`, `KeyCode`, `KeyEventType`, `KeyModifiers`, and the
 `UiKeyDto`/`UiKeyKind`/`UiKeyMods` record struct with `IKeyVocabulary` and
 `DefaultKeyVocabulary` ([`IKeyVocabulary.cs`](./Input/IKeyVocabulary.cs)).
-`KeyEventMapper` maps the vocabulary onto a concrete backend; `IFocusTarget` is
+`KeyEventMapper` maps a decoded `KeyEvent` onto that vocabulary and
+`ConsoleKeyMapper.FromConsoleKeyInfo(ConsoleKeyInfo)` maps a BCL
+`Console.ReadKey` press — the one `ConsoleKey` switch in the repository, shared
+by the RazorConsole / Termina / TerminalGui shells (#554). `IFocusTarget` is
 the focus-stack contract.
 
 ### Cell-diff protocol

@@ -12,6 +12,10 @@
     <ProjectReference Include="..\..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+    <!-- #554: ConsoleKeyMapper (the one ConsoleKey → key-vocabulary table this
+         shell shares with Termina + RazorConsole) lives in the renderer-agnostic
+         Rendering leaf. Presentation → Presentation, same shape as CellForge. -->
+    <ProjectReference Include="..\..\..\src\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
   </ItemGroup>
   <ItemGroup>
