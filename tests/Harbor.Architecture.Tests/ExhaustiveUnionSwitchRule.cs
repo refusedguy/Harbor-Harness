@@ -36,19 +36,22 @@
 //
 // THE BASELINE IS THE POINT
 // -------------------------
-// 17 sites in the tree currently carry a wildcard arm over one of these unions,
-// and they are all REAL findings — #556 (`ChatRole` label mapping written 4x,
-// all four `_ =>` arms silently relabelling a new role), #578 (the reducers),
-// #575 (the Avalonia router). They are listed, each with the issue that owns
-// removing it, and the rule holds only if the current set is a SUBSET of the
-// baseline: new wildcard arms are red on the spot, and fixing one is a one-line
-// deletion from the table.
+// 11 sites in the tree currently carry a wildcard arm over one of these unions,
+// and they are all REAL findings — #578 (the reducers), #575 (the Avalonia
+// router), and the four remaining #556 `ChatRole` switches that are not the
+// chat-band label/markdown policy. They are listed, each with the issue that
+// owns removing it, and the rule holds only if the current set is a SUBSET of
+// the baseline: new wildcard arms are red on the spot, and fixing one is a
+// one-line deletion from the table.
 //
-// The ratchet has already fired once: #495 (the two `AgentEvent ->
-// HarborEvent` IPC projections) was four rows here and was fixed on dev while
-// this file was being written. WildcardBaseline_IsLive turned those four rows
-// into a build failure, which is the intended behaviour — a row that outlives
-// its violation is a stale amnesty.
+// The ratchet has fired twice. #495 (the two `AgentEvent ->
+// HarborEvent` IPC projections) was four rows here and was fixed on dev
+// while this file was being written. #556 then removed six more: the four
+// chat-band mappers now take their label/markdown/slot from one table, and
+// ChatMessageFormatter and DefaultUiProjector name every arm. Each of those
+// was a one-line deletion, and WildcardBaseline_IsLive turns a row that
+// outlives its violation into a build failure — so a stale amnesty is
+// impossible.
 //
 // WHAT THIS DOES NOT CATCH, and it is worth knowing: a MISSING arm with no
 // default. `ChatScreenBridge.HandleEvent` has no wildcard arm and still has no
@@ -596,27 +599,20 @@ public sealed class ExhaustiveUnionSwitchRule
         [new("src/Harbor.Ui.Framework.Reducers/SessionsReducer.cs", "AgentEvent")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/578",
 
-        // #556 — `ChatRole -> (label, markdown?)` written four times, all
-        // four `_ =>` arms silently relabelling a new role.
+        // #556 — `ChatRole -> (label, markdown?)` written four times, all four
+        // `_ =>` arms silently relabelling a new role. That half is FIXED: the
+        // policy now lives once in ChatRolePresentation as a table with a loud
+        // guard, and the four backends key their palettes on ChatColorSlot, so
+        // the four chat-band rows below are gone. The rows that remain are the
+        // OTHER ChatRole switches #556 has not collapsed yet — a different
+        // vocabulary in each — still owned by #556.
         [new("src/Harbor.Ui.Framework.ViewModels/ViewModels/ChatLineViewModel.cs", "ChatRole")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/556",
         [new("src/Harbor.Ui.Framework.State/ToolCallKey.cs", "ChatRole")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/556",
-        [new("src/Harbor.Ui.Framework.Projection/Projection/DefaultUiProjector.cs", "ChatRole")] =
-            "https://github.com/refusedguy/Harbor-Harness/issues/556",
         [new("src/Harbor.Desktop.Abstractions/ViewModels/ChatViewModelBase.cs", "ChatRole")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/556",
         [new("src/Harbor.Storage.Jsonl/JsonlLineParser.cs", "ChatRole")] =
-            "https://github.com/refusedguy/Harbor-Harness/issues/556",
-        [new("contrib/tui/Harbor.Tui.SpectreTui/View/ChatMessageFormatter.cs", "ChatRole")] =
-            "https://github.com/refusedguy/Harbor-Harness/issues/556",
-        [new("contrib/tui/Harbor.Tui.SpectreTui/View/ChatMarkup.cs", "ChatRole")] =
-            "https://github.com/refusedguy/Harbor-Harness/issues/556",
-        [new("contrib/tui/Harbor.Tui.TerminalGui/Rendering/TerminalGuiColorMapper.cs", "ChatRole")] =
-            "https://github.com/refusedguy/Harbor-Harness/issues/556",
-        [new("contrib/tui/Harbor.Tui.Termina/Rendering/TerminaColorMapper.cs", "ChatRole")] =
-            "https://github.com/refusedguy/Harbor-Harness/issues/556",
-        [new("contrib/tui/Harbor.Tui.RazorConsole/Rendering/RazorColorMapper.cs", "ChatRole")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/556",
 
         // #575 — the canonical renderer. `ChatScreenBridge.HandleEvent` is NOT a

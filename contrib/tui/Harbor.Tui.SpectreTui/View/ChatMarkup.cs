@@ -1,5 +1,4 @@
-﻿using Spectre.Console;
-namespace Harbor.Tui.SpectreTui.View;
+﻿namespace Harbor.Tui.SpectreTui.View;
 /// <summary>Shared escape / truncate / status styling. No layout, no history.</summary>
 internal static class ChatMarkup
 {
@@ -22,17 +21,5 @@ internal static class ChatMarkup
         "error" => "[white on red] ERR [/]",
         "idle" => "[grey]idle[/]",
         _ => $"[grey]{Escape(status)}[/]"
-    };
-
-    public static Color BodyColor(ChatRoleColor role) => role switch
-    {
-        ChatRoleColor.User => Color.Green,
-        ChatRoleColor.Assistant => Color.White,
-        ChatRoleColor.Thinking => Color.Grey,
-        ChatRoleColor.Tool => Color.Blue,
-        ChatRoleColor.ToolResult => Color.Grey,
-        ChatRoleColor.System => Color.Grey,
-        ChatRoleColor.Error => Color.Red,
-        _ => Color.White
     };
 }

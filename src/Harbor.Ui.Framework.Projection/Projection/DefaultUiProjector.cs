@@ -444,25 +444,31 @@ public sealed class DefaultUiProjector : IUiProjector
         return StatusProjector.ProjectFooter(state);
     }
 
-    private static IReadOnlyList<StyledSpan> ResolveSpans(ChatRole role, string text)
+    private static IReadOnlyList<StyledSpan> ResolveSpans(ChatRole role, string text) =>
+        ImmutableArray.Create(
+            new StyledSpan(text, null, null, false, false, false, false, SpanStyle(role)));
+
+    /// <summary>
+    ///     The projected-span vocabulary for a role (UiSpanStyle — a different
+    ///     vocabulary from ChatRolePresentation's label/markdown/slot policy).
+    ///     Every arm named, no wildcard (docs/PATTERNS.md §"Type unions"): a new
+    ///     ChatRole falls out of the switch and hits the throw below, instead of
+    ///     being projected as Default.
+    /// </summary>
+    private static UiSpanStyle SpanStyle(ChatRole role)
     {
-        var spans = ImmutableArray.CreateBuilder<StyledSpan>();
-
-        var style = role switch
+        switch (role)
         {
-            ChatRole.User => UiSpanStyle.RoleUser,
-            ChatRole.Assistant => UiSpanStyle.RoleAssistant,
-            ChatRole.Thinking => UiSpanStyle.Default,
-            ChatRole.Tool => UiSpanStyle.Tool,
-            ChatRole.ToolResult => UiSpanStyle.Default,
-            ChatRole.System => UiSpanStyle.RoleSystem,
-            ChatRole.Error => UiSpanStyle.Danger,
-            _ => UiSpanStyle.Default
-        };
+            case ChatRole.User: return UiSpanStyle.RoleUser;
+            case ChatRole.Assistant: return UiSpanStyle.RoleAssistant;
+            case ChatRole.Thinking: return UiSpanStyle.Default;
+            case ChatRole.Tool: return UiSpanStyle.Tool;
+            case ChatRole.ToolResult: return UiSpanStyle.Default;
+            case ChatRole.System: return UiSpanStyle.RoleSystem;
+            case ChatRole.Error: return UiSpanStyle.Danger;
+        }
 
-        spans.Add(new StyledSpan(text, null, null, false, false, false, false, style));
-
-        return spans.ToImmutable();
+        throw ChatRolePresentation.Unhandled(role);
     }
 
     private static DateTime ResolveTailTimestamp(UiState state, ProjectionCache? cache)

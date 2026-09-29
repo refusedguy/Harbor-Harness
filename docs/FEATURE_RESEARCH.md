@@ -2445,7 +2445,7 @@ Every theme is defined using full RGB values. At startup, Grok quantizes all col
 
 `GrokNight` and `GrokDay` use neutral grays that quantize cleanly. `TokyoNight`, `RosePineMoon`, `OscuraMidnight` use distinctive tinted backgrounds that lose their character when quantized — which is why the theme picker **hides** them on non-truecolor terminals.
 
-This is the second big lesson for Harbor: **our themes should be defined in RGB but rendered through a quantizer that downgrades gracefully to 256/16 colours for users on macOS Terminal.app or over SSH without truecolor**. We currently hard-code ANSI colours in `ChatRoleColor.cs`; we should switch to RGB + quantizer.
+This is the second big lesson for Harbor: **our themes should be defined in RGB but rendered through a quantizer that downgrades gracefully to 256/16 colours for users on macOS Terminal.app or over SSH without truecolor**. We currently hard-code ANSI colours per backend (`RazorColorMapper`, `TerminaColorMapper`, `TerminalGuiColorMapper`, SpectreTui's `ChatMessageFormatter` — each mapping the shared `ChatColorSlot` to its own palette); we should switch to RGB + quantizer.
 
 #### 11.6.2 Typography
 

@@ -47,7 +47,7 @@
 │   ── ChatMarkdown          (inline md → TextSpan, cached)          │
 │   ── ChatTableRenderer     (GFM table → TextLine grid)             │
 │   ── ChatMarkup            (escape / truncate / status pill)       │
-│   ── ChatRoleColor         (enum → Color)                          │
+│       └─ label / markdown / slot: ChatRolePresentation (общий)    │
 └────────────────────────────────────────────────────────────────────┘
                               ▲
                               │ reads
@@ -287,32 +287,97 @@ public static void AppendRole(List<TextLine> target, ChatRole role, string conte
 }
 
 public static TextLine RoleHeader(ChatRole role) {
-    (string label, var style) = role switch {
-        ChatRole.User       => ("you",       bold green),
-        ChatRole.Assistant  => ("assistant", bold aqua),
-        ChatRole.Thinking   => ("thinking",  italic grey),
-        ChatRole.Tool       => ("tool",      bold blue),
-        ChatRole.ToolResult => ("result",    grey),
-        ChatRole.System     => ("system",    grey),
-        ChatRole.Error      => ("error",     bold red),
-        _                   => ("msg",       white),
-    };
+    // label + slot — общая таблица, см. §7.1
+    var style = HeaderStyle(role);
     return new TextLine()
-        + "─ " (grey) + label (style) + " ─" (grey);
+        + "─ " (grey) + ChatRolePresentation.Label(role) (style) + " ─" (grey);
+}
+
+// Только акцент полосы. Оттенок берётся из слота (ToColor ниже), а не из
+// второй таблицы по ролям. Default-рука бросает, а не придумывает стиль.
+private static Style HeaderStyle(ChatRole role) {
+    var color = ToColor(role);
+    return role switch {
+        ChatRole.User       => bold(color),
+        ChatRole.Assistant  => bold(color),
+        ChatRole.Thinking   => italic(color),
+        ChatRole.Tool       => bold(color),
+        ChatRole.ToolResult => color,
+        ChatRole.System     => color,
+        ChatRole.Error      => bold(color),
+    };
 }
 ```
 
-**Цветовая палитра:**
+**Цветовая палитра тела** (та же, что у полосы — hue = слот роли):
 
-| Role | Color | Style |
-|---|---|---|
-| User | Green | Bold |
-| Assistant | White | (default) |
-| Thinking | Grey | Italic |
-| Tool | Blue | Bold |
-| ToolResult | Grey | (default) |
-| System | Grey | (default) |
-| Error | Red | Bold |
+| Role | Slot | Color | Style |
+|---|---|---|---|
+| User | `User` | Green | Bold |
+| Assistant | `Assistant` | White | Bold |
+| Thinking | `Muted` | Grey | Italic |
+| Tool | `Tool` | Blue | Bold |
+| ToolResult | `Muted` | Grey | (default) |
+| System | `Muted` | Grey | (default) |
+| Error | `Danger` | Red | Bold |
+
+### 7.1. ChatRolePresentation — единственная таблица роли
+
+`ChatRole` → (label, markdown?, слот оттенка) лежит **один раз** в
+`src/Harbor.Ui.Framework.Projection/Projection/ChatRolePresentation.cs`
+(`Harbor.Ui.Framework.Projection`, namespace `Harbor.Ui.Framework.Projection`).
+Её используют все четыре чат-бэкенда: `RazorColorMapper`,
+`TerminaColorMapper`, `TerminalGuiColorMapper` и `ChatMessageFormatter`.
+
+```csharp
+// Одна строка на ChatRole, в порядке объявления (User = 0 … Error = 6).
+private static readonly ChatRolePolicy?[] Policies =
+[
+    new("you",       true,  ChatColorSlot.User),       // ChatRole.User
+    new("assistant", true,  ChatColorSlot.Assistant), // ChatRole.Assistant
+    new("thinking",  false, ChatColorSlot.Muted),     // ChatRole.Thinking
+    new("tool",      false, ChatColorSlot.Tool),      // ChatRole.Tool
+    new("result",    false, ChatColorSlot.Muted),     // ChatRole.ToolResult
+    new("system",    true,  ChatColorSlot.Muted),     // ChatRole.System
+    new("error",     false, ChatColorSlot.Danger)     // ChatRole.Error
+];
+
+public static ChatRolePolicy Describe(ChatRole role)
+{
+    int index = (int)role;
+    if ((uint)index >= (uint)Policies.Length || Policies[index] is not { } policy)
+        throw Unhandled(role);
+    return policy;
+}
+```
+
+Правила, из-за которых это не разъезжается (#556):
+
+- **Почему таблица, а не `switch`.** docs/PATTERNS.md §"Type unions" требует
+  от `switch` по union'у Harbor называть каждую руку и не иметь wildcard, и
+  `ExhaustiveUnionSwitchRule` проверяет это сканом исходников (`_ =>`,
+  `default:`). `switch`-**expression** это требование выполнить не может:
+  компилятор отвергает вариант без discard как `CS8524` («not exhaustive,
+  involving an unnamed enum value»), а не считает его полным. Значит
+  компиляторно-чистые формы — только wildcard (запрещён) или `switch`-
+  statement (молча проваливается мимо). Таблица — третий путь: строка на роль,
+  явный громкий guard перед ней и длина, которую reflection-тест сверяет с
+  `Enum.GetValues<ChatRole>()`.
+- **Guard громкий, а не тихий.** Необработанная роль — новый член `ChatRole`,
+  для которого не добавили строку, либо значение вне диапазона — бросает
+  `ArgumentOutOfRangeException` с текстом «что именно дописать», а не
+  переименовывается в `"msg"`. `ChatRole` не персистится (его рождает
+  `SessionFactory.MessageToChatLine` в памяти), так что значение вне таблицы —
+  это всегда забытая строка, а не битые данные.
+- **Конкретный оттенок — свой у каждого бэкенда.** Общий — *слот*, а не цвет:
+  Termina красит в 24-bit RGB, Terminal.Gui — в своих ANSI-именах (`Bright*`).
+  Инвариант, который проверяется тестом: две роли с одним слотом получают
+  один цвет **внутри** одного бэкенда.
+- **Акцент (bold/italic) — тоже per-backend.** Полосу с толщиной умеет рисовать
+  только SpectreTUI; у остальных нет такой поверхности.
+- Тест-покрытие: `contrib/tests/Harbor.Tui.Contrib.Tests/ChatRolePresentationTests.cs`
+  обходит `Enum.GetValues<ChatRole>()` и проверяет, что таблица полна и все
+  четыре бэкенда выводят label/markdown/слот из неё.
 
 ---
 
