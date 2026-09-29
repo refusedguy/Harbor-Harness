@@ -173,6 +173,27 @@ public sealed class ThemeStore : IThemeStore
     /// Resolves a theme by name (case-insensitive). A user theme with the same
     /// name wins over the built-in; unknown names return null.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The built-in lookup below is a loop, not
+    ///         <c>HarborTheme.BuiltIn.FirstOrDefault(...)</c>, and the reason is
+    ///         #536's move rather than taste. In <c>Harbor.DesignSystem</c> the
+    ///         assembly had no PackageReference, so no <c>Maybe</c> was reachable
+    ///         here and the null-returning LINQ was unremarkable.
+    ///         <c>Harbor.Hosting</c> IS a guarded project for
+    ///         <c>MaybeAbsenceTests.GuardedProjects_DeclareNoAbsenceViaFirstOrDefault</c>,
+    ///         which is right to fire: <c>FirstOrDefault</c> returning null to mean
+    ///         "absent" is exactly <c>Maybe&lt;T&gt;.None</c> wearing a nullable.
+    ///     </para>
+    ///     <para>
+    ///         Written as a loop it also matches the user-theme branch directly
+    ///         above, so one method now answers "did I find it" the same way twice.
+    ///         The signature is deliberately still <c>HarborTheme?</c>: promoting it
+    ///         to <c>Maybe&lt;HarborTheme&gt;</c> is a public API change to a type
+    ///         this commit only RELOCATES, and it deserves its own decision rather
+    ///         than riding along inside a move.
+    ///     </para>
+    /// </remarks>
     public HarborTheme? Resolve(string name)
     {
         foreach (var entry in ScanUserFiles())
@@ -183,7 +204,15 @@ public sealed class ThemeStore : IThemeStore
             }
         }
 
-        return HarborTheme.BuiltIn.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+        foreach (var theme in HarborTheme.BuiltIn)
+        {
+            if (string.Equals(theme.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return theme;
+            }
+        }
+
+        return null;
     }
 
     private IReadOnlyList<ThemeEntry> ScanUserFiles()
