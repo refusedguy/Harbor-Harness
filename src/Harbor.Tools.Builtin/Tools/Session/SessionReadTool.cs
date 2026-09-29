@@ -140,8 +140,19 @@ public sealed class SessionReadTool : ITool
         sb.Append("status: ").Append(session.Status.ToString().ToLowerInvariant())
             .Append(", outcome: ").Append(outcome)
             .Append(", messages: ").Append(revision).Append(", revision: ").Append(revision).AppendLine();
-        sb.Append("tokens: ").Append(session.Metadata.TokensInput).Append("↑ ").Append(session.Metadata.TokensOutput).Append("↓, cost: $")
-            .Append(session.Metadata.Cost.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture)).AppendLine();
+        sb.Append("tokens: ").Append(session.Metadata.TokensInput).Append("↑ ").Append(session.Metadata.TokensOutput).Append("↓, cost: ");
+        // #653: a session whose model publishes no rates has a cost FLOOR, not a
+        // total, and "$0.0000" here would tell the model the session was free.
+        if (session.Metadata.IsCostKnown)
+        {
+            sb.Append('$').Append(session.Metadata.Cost.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture));
+        }
+        else
+        {
+            sb.Append("unknown (model publishes no price)");
+        }
+
+        sb.AppendLine();
         if (steeredBy.Count > 0)
         {
             sb.Append("steered by: ").AppendLine(string.Join(", ", steeredBy));

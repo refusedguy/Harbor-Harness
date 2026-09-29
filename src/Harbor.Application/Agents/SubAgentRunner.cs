@@ -142,7 +142,14 @@ public sealed class SubAgentRunner(
             SingleWriter = false
         });
 
-        var context = new DefaultSessionContext(session, messages.Value, store, steering);
+        // A sub-run has no UI attached to its own session, so its context is built
+        // without an event bus: the live totals a session publishes exist for the
+        // session someone is watching, and this one's cost reaches the parent
+        // through PropagateChildCostAsync instead. The store record is still
+        // written with the sub-agent's real rates (TurnRunner resolves them).
+        var context = await DefaultSessionContext.CreateAsync(
+            session, messages.Value, store, steering, eventBus: null, ct, logger)
+            .ConfigureAwait(false);
 
         try
         {
@@ -467,7 +474,17 @@ public sealed class SubAgentRunner(
                 return;
             }
 
-            var stored = await store.UpdateStatsAsync(parentSessionId, stats.Value.AddUsage(childUsage), ct)
+            // #653: the child's model is NOT resolved here — this class holds no
+            // provider catalogue, only the store, the loop and a logger. So the
+            // delta is folded unpriced (Pricing.Unknown) and the parent's record
+            // says so via IsCostKnown=false, instead of borrowing a rate that
+            // belongs to some other model. The token counters still land in full;
+            // only the money is a floor, and the status bar reports "unknown"
+            // rather than quoting a number.
+            var stored = await store.UpdateStatsAsync(
+                    parentSessionId,
+                    stats.Value.AddUsage(childUsage, Pricing.Unknown),
+                    ct)
                 .ConfigureAwait(false);
             if (stored.IsFailure)
                 logger.LogWarning(

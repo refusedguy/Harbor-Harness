@@ -18,14 +18,23 @@ namespace Harbor.Storage.Shared;
 
 /// <summary>
 ///     Derives <see cref="SessionMetadata" /> from a message list by summing
-///     <see cref="Usage" /> over assistant messages. Total cost is always
-///     zero (cost attribution lives elsewhere); non-assistant messages carry
-///     no usage and contribute only ordering.
+///     <see cref="Usage" /> over assistant messages. Token counters are exact
+///     because every message carries its own usage; the cost is NOT derivable
+///     here and says so (see <see cref="SessionMetadata.IsCostKnown" />).
 /// </summary>
 internal static class SessionStatsAggregator
 {
     public static SessionMetadata Aggregate(IReadOnlyList<AgentMessage> messages)
     {
+        // #653: this used to be a bare `0m` presented as a total cost, which
+        // read as "the session was free". It is not a total and never was: a
+        // message history records what was SPENT IN TOKENS, never the rates the
+        // provider billed it at, so no fold over it can produce a price. The
+        // honest output is a floor flagged unknown — the live core fold
+        // (SessionMetadata.AddUsage, driven by the resolved ModelInfo.Pricing)
+        // is what fills the real number in. Pricing here would also need the
+        // store to resolve model rates, which puts a business rule in the
+        // storage layer to compute a number the core already knows.
         decimal cost = 0m;
         int inputTokens = 0;
         int outputTokens = 0;
@@ -55,6 +64,7 @@ internal static class SessionStatsAggregator
             cacheRead,
             cacheWrite,
             count,
-            null);
+            null,
+            IsCostKnown: false);
     }
 }

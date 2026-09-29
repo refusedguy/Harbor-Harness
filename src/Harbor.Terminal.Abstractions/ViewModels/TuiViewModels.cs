@@ -32,6 +32,17 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
 
     [ObservableProperty]
     private decimal _cost;
+
+    /// <summary>
+    ///     Whether <see cref="_cost" /> is a priced total (#653). False when the
+    ///     core reported that the model publishes no price — then the cell reads
+    ///     "—" instead of "$0.0000", which is a claim ("this was free") that is
+    ///     true for Ollama and false for a paid provider whose catalogue entry
+    ///     carries no rates. Defaults to true, so every path that predates the
+    ///     flag renders exactly as it did.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isCostKnown = true;
     [ObservableProperty]
     private string _model = string.Empty;
 
@@ -91,7 +102,13 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
         }
     }
 
-    private string CostText => "$" + Cost.ToString("F4", CultureInfo.InvariantCulture);
+    /// <summary>
+    ///     The cost cell: the priced total, or "—" when the core could not price
+    ///     this model (#653). Never a zero standing in for an unknown price.
+    /// </summary>
+    private string CostText => IsCostKnown
+        ? "$" + Cost.ToString("F4", CultureInfo.InvariantCulture)
+        : "—";
 
     /// <inheritdoc />
     public string Id => "status-bar";
@@ -124,7 +141,9 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
                     QueuedCount--;
                 break;
             case SessionStatsEvent ss:
+                // #653: the core owns the number — assign it, never re-derive it.
                 Cost = ss.Metadata.Cost;
+                IsCostKnown = ss.Metadata.IsCostKnown;
                 TokensIn = ss.Metadata.TokensInput;
                 TokensOut = ss.Metadata.TokensOutput;
                 break;

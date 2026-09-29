@@ -82,7 +82,7 @@ public readonly record struct StatusBarFacts(
             StatusStyle: statusStyle,
             Agent: string.IsNullOrEmpty(state.Chat.AgentName) ? null : "agent " + state.Chat.AgentName,
             Tokens: StatusBarText.TokensCell(cost.TokensIn, cost.TokensOut),
-            Cost: StatusBarText.CostCell(cost.CostUsd),
+            Cost: StatusBarText.CostCell(cost.CostUsd, cost.CostKnown),
             Scroll: maxScroll == 0 ? "live" : $"scroll {state.Ui.ScrollOffset * 100 / maxScroll}%");
     }
 }

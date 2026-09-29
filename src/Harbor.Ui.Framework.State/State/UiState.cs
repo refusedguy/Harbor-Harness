@@ -19,15 +19,29 @@ public sealed record ActiveMessage(
 }
 
 /// <summary>
-///     Running cost/token accounting for the session status line.
+///     Running cost/token accounting for the session status line. Every value is
+///     copied from the core's <c>SessionStatsEvent</c> — the UI framework
+///     displays them and never forms one (#653).
 /// </summary>
 /// <param name="TokensIn">Cumulative input tokens.</param>
 /// <param name="TokensOut">Cumulative output tokens.</param>
-/// <param name="CostUsd">Cumulative estimated cost in USD.</param>
+/// <param name="CostUsd">
+///     Cumulative cost in USD as the core priced it, or a lower bound when
+///     <paramref name="CostKnown" /> is <see langword="false" />.
+/// </param>
+/// <param name="CostKnown">
+///     Whether the core could price the session. Defaults to
+///     <see langword="true" /> so a locally built snapshot means "nothing
+///     unpriced happened" until the core says otherwise; when it is
+///     <see langword="false" /> the cost cell renders as "—", because a zero
+///     there reads as "free" and is false for a paid provider whose catalogue
+///     entry carries no rates.
+/// </param>
 public readonly record struct CostSnapshot(
     long TokensIn,
     long TokensOut,
-    decimal CostUsd);
+    decimal CostUsd,
+    bool CostKnown = true);
 
 /// <summary>
 ///     Renderer-agnostic, immutable UI snapshot. The single source of truth that

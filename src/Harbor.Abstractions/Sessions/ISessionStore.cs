@@ -183,9 +183,22 @@ public interface ISessionContext
     public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default);
 
     /// <summary>
-    ///     Add the usage from one LLM call to the session's aggregated stats.
+    ///     Add the usage from one LLM call to the session's aggregated stats,
+    ///     priced with that call's model rates, and publish the new total as a
+    ///     <see cref="Events.SessionStatsEvent" />.
     /// </summary>
+    /// <remarks>
+    ///     #653: the caller passes <paramref name="pricing" /> because the model
+    ///     is resolved in the core (the agent loop resolved it to make the call),
+    ///     and a model is the only thing that carries rates. The context folds
+    ///     the delta and publishes; the presentation layer reads that number and
+    ///     computes nothing.
+    /// </remarks>
     /// <param name="usage">The usage to add.</param>
+    /// <param name="pricing">
+    ///     Rates of the model that produced <paramref name="usage" />;
+    ///     <see cref="Models.Pricing.Unknown" /> when it publishes none.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
-    public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default);
+    public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default);
 }

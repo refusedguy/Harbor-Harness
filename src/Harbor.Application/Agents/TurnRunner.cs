@@ -221,7 +221,11 @@ internal sealed class TurnRunner(
         if (finalUsage != null)
         {
             tokenTracker.RecordTurnUsage(finalUsage);
-            await session.UpdateStatsAsync(finalUsage, ct).ConfigureAwait(false);
+            // #653: the model that just made this call is the only thing that
+            // knows what it cost, so its own rate table rides along with the
+            // usage. The context folds and publishes the total; no renderer
+            // prices anything (CostPricedInCoreRules).
+            await session.UpdateStatsAsync(finalUsage, model.Pricing, ct).ConfigureAwait(false);
         }
 
         // 7. Turn-end decision. A run ends when the turn produced no

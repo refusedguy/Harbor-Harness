@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.State;
 
@@ -35,6 +34,7 @@ public static partial class AppReducer
         MessageEndEvent => OnMessageEnd(state),
         ToolExecutionStartEvent tes => OnToolStart(state, tes),
         ToolExecutionEndEvent tee => OnToolEnd(state, tee),
+        SessionStatsEvent ss => OnSessionStats(state, ss),
         CompactionStartedEvent => state with { Status = "compacting" },
         CompactionCompletedEvent cc => OnCompactionCompleted(state, cc),
         AgentErrorEvent err => OnAgentError(state, err),
@@ -92,7 +92,7 @@ public static partial class AppReducer
         {
             Lines = state.Lines.Add(new ChatLine(ChatRole.Tool, $"→ {tcs.ToolName}", tcs.Id))
         },
-        StepFinishEvent sf when sf.Usage is not null => OnStepFinish(FlushPending(state), sf.Usage),
+        StepFinishEvent => FlushPending(state),
         _ => state
     };
 
@@ -162,16 +162,41 @@ public static partial class AppReducer
         };
     }
 
-    private static AppState OnStepFinish(AppState state, Usage usage)
+    /// <summary>
+    ///     Adopt the session totals the core published — tokens AND cost — in one
+    ///     assignment.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #653: these are absolute session-cumulative totals, not a delta, so
+    ///         they are ASSIGNED. A delta folded here would put a second opinion
+    ///         about a bill the core already computed into the status bar; the cost
+    ///         also arrives with the core's answer to "is this model's price
+    ///         published at all", so an unpriced model renders "—" instead of a
+    ///         fabricated "$0.0000".
+    ///     </para>
+    ///     <para>
+    ///         A totals event for a DIFFERENT session is dropped — sub-agent runs
+    ///         publish their own, and adopting them would replace the parent's
+    ///         numbers with the child's. An unknown active session accepts
+    ///         anything.
+    ///     </para>
+    /// </remarks>
+    private static AppState OnSessionStats(AppState state, SessionStatsEvent stats)
     {
-        long nextIn = state.Cost.TokensIn + usage.InputTokens;
-        long nextOut = state.Cost.TokensOut + usage.OutputTokens;
+        SessionId? active = (state.Chrome ?? new AppState.ChromeState()).ActiveSessionId;
+        if (active is not null && !string.Equals(active.Value, stats.SessionId, StringComparison.Ordinal))
+        {
+            return state;
+        }
+
         return state with
         {
             Cost = new CostSnapshot(
-                nextIn,
-                nextOut,
-                state.Cost.CostUsd + EstimateCost(usage.InputTokens, usage.OutputTokens))
+                stats.Metadata.TokensInput,
+                stats.Metadata.TokensOutput,
+                stats.Metadata.Cost,
+                stats.Metadata.IsCostKnown)
         };
     }
 
@@ -249,7 +274,4 @@ public static partial class AppReducer
         var chrome = state.Chrome ?? new AppState.ChromeState();
         return state with { Chrome = chrome with { ActiveSessionId = SessionId.Create(sce.SessionId) } };
     }
-
-    private static decimal EstimateCost(int inputTokens, int outputTokens) =>
-        inputTokens / 1_000_000m * 3m + outputTokens / 1_000_000m * 15m;
 }
