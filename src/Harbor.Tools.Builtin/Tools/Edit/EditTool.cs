@@ -39,6 +39,10 @@ public sealed class EditTool : ITool
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
 
     public string DisplayName => "Edit";
+
+    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
+    public string Glyph => "✎";
+
     public string Description =>
         "Replace text in a file. Single: oldString→newString. Multi: edits[]. " +
         "oldString must be unique unless replaceAll=true.";

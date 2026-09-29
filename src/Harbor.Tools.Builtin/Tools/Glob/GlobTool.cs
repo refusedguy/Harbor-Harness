@@ -31,6 +31,10 @@ public sealed class GlobTool : ITool
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
 
     public string DisplayName => "Glob";
+
+    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
+    public string Glyph => "🌐";
+
     public string Description =>
         "Find files matching a glob (e.g. **/*.cs, src/**/*.ts). " +
         "Returns relative paths. Prunes VCS/build folders by default " +

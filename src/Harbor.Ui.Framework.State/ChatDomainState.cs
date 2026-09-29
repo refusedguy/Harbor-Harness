@@ -15,6 +15,20 @@ public sealed record ChatDomainState
     /// <summary>The full transcript (user/assistant/tool/… lines), oldest first.</summary>
     public ImmutableArray<ChatLine> Lines { get; init; } = ImmutableArray<ChatLine>.Empty;
 
+    /// <summary>
+    ///     Structured tool invocations, in call order — what renderers read to draw
+    ///     a tool card (#680).
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="Lines" /> holds the RENDERED transcript, where a tool start is
+    ///     the single string <c>"→ edit {…}"</c>. It is a display format, and the two
+    ///     were being used interchangeably: the chat view-model parsed that string
+    ///     back to recover the name and arguments, and in doing so dropped the diff
+    ///     payload. This is the structure, carried beside the display text rather
+    ///     than recovered from it.
+    /// </remarks>
+    public ImmutableArray<ToolCallSnapshot> ToolCalls { get; init; } = ImmutableArray<ToolCallSnapshot>.Empty;
+
     /// <summary>Live streaming message (text + thinking) for the current turn.</summary>
     public ActiveMessage Active { get; init; } = ActiveMessage.Empty;
 
@@ -134,6 +148,63 @@ public sealed record ChatDomainState
     /// </summary>
     public ChatDomainState AddLine(ChatRole role, string text, string? toolCallId = null) =>
         this with { Lines = Lines.Add(new ChatLine(role, text, toolCallId)) };
+
+    /// <summary>
+    ///     Record a tool invocation, replacing any earlier snapshot with the same
+    ///     id (#680). A pre-execution placeholder and the real start event share
+    ///     one <c>ToolCallId</c>, so upsert — not append — is what keeps the list
+    ///     one entry per call.
+    /// </summary>
+    public ChatDomainState PutToolCall(ToolCallSnapshot call)
+    {
+        var builder = ImmutableArray.CreateBuilder<ToolCallSnapshot>(ToolCalls.Length);
+        bool replaced = false;
+        foreach (ToolCallSnapshot existing in ToolCalls)
+        {
+            if (existing.Id == call.Id)
+            {
+                builder.Add(call);
+                replaced = true;
+            }
+            else
+            {
+                builder.Add(existing);
+            }
+        }
+
+        if (!replaced)
+        {
+            builder.Add(call);
+        }
+
+        return this with { ToolCalls = builder.ToImmutable() };
+    }
+
+    /// <summary>
+    ///     Close an in-flight call with its result. An id we have not seen is
+    ///     ignored: an end event with no start carries no name, no glyph and no
+    ///     arguments, and inventing a card from it would show the user an empty
+    ///     one.
+    /// </summary>
+    public ChatDomainState CompleteToolCall(string toolCallId, ToolCallState status, string resultPreview)
+    {
+        var builder = ImmutableArray.CreateBuilder<ToolCallSnapshot>(ToolCalls.Length);
+        bool changed = false;
+        foreach (ToolCallSnapshot existing in ToolCalls)
+        {
+            if (existing.Id == toolCallId)
+            {
+                builder.Add(existing with { Status = status, ResultPreview = resultPreview });
+                changed = true;
+            }
+            else
+            {
+                builder.Add(existing);
+            }
+        }
+
+        return changed ? this with { ToolCalls = builder.ToImmutable() } : this;
+    }
 
     /// <summary>
     ///     Replace a line at the given index (used only for in-place edits if needed).

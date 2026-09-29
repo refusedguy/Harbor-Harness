@@ -160,8 +160,20 @@ public static class ChatAppReducer
         MessageStartEvent => OnMessageStart(state),
         MessageUpdateEvent mu => OnMessageUpdate(state, mu),
         MessageEndEvent => OnMessageEnd(state),
-        ToolExecutionStartEvent tes => state.AddLine(ChatRole.Tool, FormatToolStart(tes), tes.ToolCallId),
-        ToolExecutionEndEvent tee => state.AddLine(ChatRole.ToolResult, FormatToolEnd(tee), tee.ToolCallId),
+// The transcript line is the DISPLAY text; Chat.ToolCalls is the STRUCTURE (#680).
+        // Both are written here so a renderer can read the call instead of parsing
+        // the line it is about to draw. The diff payload is derived once, here,
+        // rather than once per rendering path.
+        ToolExecutionStartEvent tes => state
+            .PutToolCall(ToolCallSnapshot.Start(
+                tes.ToolCallId, tes.ToolName, tes.Glyph, tes.Args.GetRawText()))
+            .AddLine(ChatRole.Tool, FormatToolStart(tes), tes.ToolCallId),
+        ToolExecutionEndEvent tee => state
+            .CompleteToolCall(
+                tee.ToolCallId,
+                tee.IsError ? ToolCallState.Error : ToolCallState.Success,
+                FormatToolResultPreview(tee))
+            .AddLine(ChatRole.ToolResult, FormatToolEnd(tee), tee.ToolCallId),
         SessionStatsEvent ss => OnSessionStats(state, ss),
         CompactionStartedEvent => state with { Chat = state.Chat with { Status = "compacting" } },
         CompactionCompletedEvent cc => OnCompactionCompleted(state, cc),
@@ -327,7 +339,15 @@ public static class ChatAppReducer
     {
         TextDeltaEvent td => WithTextDelta(state, td.Delta),
         ThinkingDeltaEvent thd => WithThinkingDelta(state, thd.Delta),
-        ToolCallStartEvent tcs => FlushPending(state).AddLine(ChatRole.Tool, $"→ {tcs.ToolName}", tcs.Id),
+// The card appears the moment the model NAMES the tool, before execution — the
+        // same two-phase lifecycle the transcript already models (a start line,
+        // then a start-with-args line). Before #680 the UI scraped the name off
+        // this display line to build the card; now the reducer publishes a
+        // name-only placeholder and ToolExecutionStartEvent upgrades it with the
+        // arguments, the glyph and the diff payload (#680).
+        ToolCallStartEvent tcs => FlushPending(state)
+            .PutToolCall(ToolCallSnapshot.Named(tcs.Id, tcs.ToolName))
+            .AddLine(ChatRole.Tool, $"→ {tcs.ToolName}", tcs.Id),
         StepFinishEvent sf => NoteRequestSize(FlushPending(state), sf.Usage),
         _ => state
     };
@@ -506,9 +526,21 @@ public static class ChatAppReducer
     private static string FormatToolEnd(ToolExecutionEndEvent tee)
     {
         string label = tee.IsError ? "✗" : "✓";
+        return $"{label} {FormatToolResultPreview(tee)}";
+    }
+
+    /// <summary>
+    ///     The bare result text, budgeted to what a tool card shows. Split out of
+    ///     <see cref="FormatToolEnd" /> because the status glyph belongs to the
+    ///     transcript line only — the structured snapshot carries the result
+    ///     without it, so a renderer no longer strips a "✓ "/"✗ " prefix back off
+    ///     a string to recover the result (#680).
+    /// </summary>
+    private static string FormatToolResultPreview(ToolExecutionEndEvent tee)
+    {
         string output = tee.Result.Output ?? string.Empty;
         string preview = output.Length > 600 ? output[..600] + "..." : output;
-        return $"{label} {preview.Trim()}";
+        return preview.Trim();
     }
 
     private static UiState WithStatus(this UiState state, string status) =>

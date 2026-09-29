@@ -209,8 +209,12 @@ public sealed class ToolDispatcher(
 
         ITool tool = resolved.Value;
 
-        await eventBus.PublishAsync(new ToolExecutionStartEvent(
-            toolCall.Id, toolCall.ToolName, toolCall.Args), ct).ConfigureAwait(false);
+        // The tool's own Glyph rides the event (#680): every renderer draws the
+        // icon from this field instead of keeping a tool-name-keyed table of its
+        // own. Publishing it here is what makes adding a tool touch no UI code.
+        await eventBus.PublishAsync(
+            new ToolExecutionStartEvent(toolCall.Id, toolCall.ToolName, toolCall.Args, tool.Glyph),
+            ct).ConfigureAwait(false);
         logger.LogDebug("Tool execution start: {ToolName} (call {CallId})", toolCall.ToolName, toolCall.Id);
 
         // A9: arm the per-call deadline (if configured). The linked token is

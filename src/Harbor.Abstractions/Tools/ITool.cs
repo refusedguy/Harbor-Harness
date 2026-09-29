@@ -30,6 +30,32 @@ public interface ITool
     public string DisplayName { get; }
 
     /// <summary>
+    ///     Glyph shown next to the tool's name in every UI surface (#680).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Declared HERE, beside <see cref="DisplayName" />, because the glyph
+    ///         used to live in hand-written tables inside the UI layer — one per
+    ///         rendering path, two of them disagreeing, and all three keyed the
+    ///         web-fetch tool as <c>"web_fetch"</c> while the tool is
+    ///         <c>"webfetch"</c>. Adding a tool meant editing those tables.
+    ///     </para>
+    ///     <para>
+    ///         It travels with the call: <see cref="Abstractions.Contracts.Events.ToolExecutionStartEvent" />
+    ///         carries it into the UI state, and every renderer reads it from there.
+    ///         No renderer owns a tool-name-keyed glyph map any more, and
+    ///         <c>ToolGlyphTableRule</c> fails the build if one reappears.
+    ///     </para>
+    ///     <para>
+    ///         The default is deliberately CONSERVATIVE: a tool that declares none
+    ///         renders <see cref="ToolGlyphs.Default" />, which is visibly unspecific
+    ///         rather than silently wrong — the direction docs/PATTERNS.md requires a
+    ///         default interface member to fail in.
+    ///     </para>
+    /// </remarks>
+    public string Glyph => ToolGlyphs.Default;
+
+    /// <summary>
     ///     One-line description shown to the model in the tool definition.
     /// </summary>
     public string Description { get; }

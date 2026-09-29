@@ -89,6 +89,73 @@ public class PanelExtractorsTests
         await Assert.That(changes.Count).IsEqualTo(4);
         string sorted = string.Join("|", changes.Select(c => c.ToolName).OrderBy(n => n));
         await Assert.That(sorted).IsEqualTo("edit|patch|read|write");
+
+        // #680: the lines-only overload has no tool declarations in hand, so it
+        // leaves the glyph empty rather than guessing one from the name. The
+        // panel falls back to a neutral marker; it does not own a table.
+        await Assert.That(changes.All(c => c.Glyph.Length == 0)).IsTrue();
+    }
+
+    /// <summary>
+    ///     #680: the state overload carries the glyph the core published, so the
+    ///     diff panel draws what each tool declared instead of consulting a table
+    ///     of its own. This table was the FOURTH such table; the three chat-card
+    ///     ones already disagreed with each other.
+    /// </summary>
+    [Test]
+    public async Task ExtractRecentChanges_CarriesThePublishedGlyph()
+    {
+        var lines = new List<ChatLine>
+        {
+            Tool("→ edit  {\"path\":\"a.cs\"}", "t1"),
+            ToolResult("✓ @@ -1 +1 @@\n-old\n+new", "t1"),
+        };
+
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Lines = lines.ToImmutableArray(),
+                ToolCalls =
+                [
+                    new ToolCallSnapshot(
+                        "t1", "edit", "✎", """{"path":"a.cs"}""",
+                        ToolCallState.Success, "done", IsDiffTool: true, DiffFilePath: "a.cs"),
+                ],
+            },
+        };
+
+        IReadOnlyList<PanelFileChange> changes = PanelExtractors.ExtractRecentChanges(state, 8);
+
+        await Assert.That(changes.Count).IsEqualTo(1);
+        await Assert.That(changes[0].Glyph).IsEqualTo("✎")
+            .Because("the glyph is the calling tool's own declaration, read from the published "
+                   + "snapshot — not a value this projection looks up by tool name");
+    }
+
+    /// <summary>
+    ///     A row with no published glyph renders the neutral marker rather than
+    ///     the wrong icon — the fallback a caller cannot confuse for a tool's.
+    /// </summary>
+    [Test]
+    public async Task DiffRows_MissingGlyph_RendersNeutralMarker()
+    {
+        List<string> rows = PanelRows.DiffRows(
+            [new PanelFileChange("edit", "a.cs", string.Empty, false)], 40);
+
+        await Assert.That(rows.Any(r => r.Contains("a.cs", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(rows.Any(r => r.StartsWith("·", StringComparison.Ordinal))).IsTrue()
+            .Because("an absent glyph falls back to the neutral marker, not to a guessed tool icon");
+    }
+
+    /// <summary>The published glyph is what the row actually draws.</summary>
+    [Test]
+    public async Task DiffRows_DrawsTheCarriedGlyph()
+    {
+        List<string> rows = PanelRows.DiffRows(
+            [new PanelFileChange("edit", "a.cs", string.Empty, false, "✎")], 40);
+
+        await Assert.That(rows.Any(r => r.StartsWith("✎", StringComparison.Ordinal))).IsTrue();
     }
 
     [Test]

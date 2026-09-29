@@ -39,6 +39,10 @@ public sealed class TaskTool : ITool
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
 
     public string DisplayName => "Task";
+
+    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
+    public string Glyph => "☐";
+
     public string Description =>
         "Delegate a self-contained task to a sub-agent (explore, plan, or custom agents marked as sub-agents). " +
         "The sub-agent runs in its own isolated session with its own context window and tool access; " +

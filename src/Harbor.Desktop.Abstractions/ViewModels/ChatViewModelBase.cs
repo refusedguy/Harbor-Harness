@@ -5,7 +5,6 @@ using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.Logging;
-using ToolCallState = Harbor.Ui.Framework.ToolCallState;
 using ToolCallViewModel = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
@@ -107,10 +106,17 @@ public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
     public ObservableCollection<ChatLineViewModel> Lines { get; } = new();
 
     /// <summary>
-    ///     Visible tool-call cards (one per tool invocation). Updated
-    ///     incrementally as <see cref="ChatRole.Tool" /> /
-    ///     <see cref="ChatRole.ToolResult" /> lines arrive.
+    ///     Visible tool-call cards (one per tool invocation), projected from
+    ///     <see cref="ChatDomainState.ToolCalls" /> by
+    ///     <see cref="ToolCallProjection" /> (#680).
     /// </summary>
+    /// <remarks>
+    ///     This collection used to be rebuilt by parsing the rendered transcript
+    ///     line <c>"→ edit {…}"</c> back into a call, with a hand-written glyph
+    ///     table for ten builtin tools. Both are gone: the reducer publishes the
+    ///     structure, the view-model reads it, and the glyph is the calling tool's
+    ///     own.
+    /// </remarks>
     public ObservableCollection<ToolCallViewModel> ToolCalls { get; } = new();
 
     /// <summary>
@@ -170,119 +176,7 @@ public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
             Lines.Add(new ChatLineViewModel(line.Role, line.Text));
     }
 
-    private void SyncToolCalls(UiState state)
-    {
-        var existingById = new Dictionary<string, ToolCallViewModel>(StringComparer.Ordinal);
-        for (int i = 0; i < ToolCalls.Count; i++)
-            existingById[ToolCalls[i].Id] = ToolCalls[i];
-
-        var ordered = new List<ToolCallViewModel>(state.Chat.Lines.Length);
-
-        for (int i = 0; i < state.Chat.Lines.Length; i++)
-        {
-            var line = state.Chat.Lines[i];
-            if (line.ToolCallId is null) continue;
-
-            if (line.Role == ChatRole.Tool)
-            {
-                var parsed = ParseToolLine(line.Text, line.ToolCallId);
-                if (parsed is null) continue;
-
-                if (existingById.TryGetValue(parsed.Id, out var existing))
-                {
-                    existing.ToolName = parsed.ToolName;
-                    existing.ArgsPreview = parsed.ArgsPreview;
-                    existing.IconText = parsed.IconText;
-                    if (parsed.IsDiffTool)
-                    {
-                        existing.IsDiffTool = true;
-                        existing.DiffFilePath = parsed.DiffFilePath;
-                        existing.DiffPreview = parsed.DiffPreview;
-                        existing.DiffFull = parsed.DiffFull;
-                    }
-                    ordered.Add(existing);
-                }
-                else
-                {
-                    ordered.Add(parsed);
-                }
-            }
-            else if (line.Role == ChatRole.ToolResult && existingById.TryGetValue(line.ToolCallId!, out var entry))
-            {
-                entry.Complete(
-                    line.Text.StartsWith("✗", StringComparison.Ordinal) ? ToolCallState.Error : ToolCallState.Success,
-                    FormatResultPreview(line.Text),
-                    TimeSpan.Zero);
-                ordered.Add(entry);
-            }
-        }
-
-        if (ToolCalls.Count != ordered.Count)
-        {
-            ToolCalls.Clear();
-            foreach (var tc in ordered)
-                ToolCalls.Add(tc);
-            return;
-        }
-
-        for (int i = 0; i < ToolCalls.Count; i++)
-        {
-            if (ToolCalls[i] != ordered[i])
-                ToolCalls[i] = ordered[i];
-        }
-    }
-
-    private static ToolCallViewModel? ParseToolLine(string text, string toolCallId)
-    {
-        if (string.IsNullOrEmpty(text) || text.Length < 2 || text[0] != '→')
-            return null;
-
-        int spaceIdx = text.IndexOf(' ', 2);
-        string toolName;
-        string argsJson;
-        if (spaceIdx < 0)
-        {
-            toolName = text[2..];
-            argsJson = "{}";
-        }
-        else
-        {
-            toolName = text[2..spaceIdx];
-            argsJson = text[(spaceIdx + 1)..].TrimStart();
-        }
-
-        var vm = new ToolCallViewModel
-        {
-            Id = toolCallId,
-            ToolName = toolName,
-            ArgsPreview = argsJson == "{}" ? string.Empty : argsJson,
-            IconText = toolName switch
-            {
-                "edit" => "✎",
-                "write" => "✚",
-                "read" => "▸",
-                "patch" => "⌥",
-                "bash" => "$",
-                "grep" => "🔍",
-                "glob" => "🌐",
-                "ls" => "📁",
-                "task" => "☐",
-                "web_fetch" => "🌍",
-                _ => "?"
-            }
-        };
-
-        return vm;
-    }
-
-    private static string FormatResultPreview(string resultText)
-    {
-        if (string.IsNullOrEmpty(resultText))
-            return string.Empty;
-        if (resultText.Length >= 2 && (resultText[0] == '✓' || resultText[0] == '✗') && resultText[1] == ' ')
-            return resultText[2..];
-        return resultText;
-    }
+    private void SyncToolCalls(UiState state) => ToolCallProjection.Reconcile(state, ToolCalls);
 
     /// <summary>
     ///     Apply declared selectors against the new state snapshot and sync

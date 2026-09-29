@@ -30,6 +30,10 @@ public sealed class LsTool : ITool
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
 
     public string DisplayName => "List";
+
+    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
+    public string Glyph => "📁";
+
     public string Description =>
         "List directory contents. Entries: [dir]/[file] with size and modified time for files. " +
         "Recursive mode prunes VCS/build folders and caps total entries.";

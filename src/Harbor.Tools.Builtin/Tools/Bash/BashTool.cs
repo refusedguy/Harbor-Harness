@@ -18,6 +18,10 @@ public sealed class BashTool : ITool
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command();
 
     public string DisplayName => "Bash";
+
+    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
+    public string Glyph => "$";
+
     public string Description => "Execute a shell command. Output is captured and returned. Commands run in the current working directory. Use `cwd` to override.";
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
     public string? PromptSnippet => "bash: Execute shell commands";

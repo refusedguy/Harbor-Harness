@@ -118,6 +118,10 @@ public sealed class WebFetchTool : ITool
     /// <inheritdoc />
     public string DisplayName => "WebFetch";
 
+    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
+    public string Glyph => "🌍";
+
+
     /// <inheritdoc />
     public string Description =>
         "Fetch a URL and return markdown-converted content. HTML is stripped to text + " +

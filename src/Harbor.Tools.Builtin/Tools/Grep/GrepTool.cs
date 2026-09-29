@@ -43,6 +43,10 @@ public sealed class GrepTool : ITool
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
 
     public string DisplayName => "Grep";
+
+    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
+    public string Glyph => "🔍";
+
     public string Description =>
         "Search file contents with regex. Returns matching lines as file:line:content. " +
         "Recurses from path; skips VCS/build dirs and binary files.";
