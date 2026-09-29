@@ -5,6 +5,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugin.WebSearch;
@@ -45,6 +46,10 @@ public sealed class WebSearchPlugin : IToolPlugin
 public sealed class WebSearchTool : ITool
 {
     public ToolName Name => ToolName.Create("websearch");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
     public string DisplayName => "Web Search";
     public string Description => "Search the web using DuckDuckGo. Returns titles, URLs, and snippets of top results. No API key needed.";
     public ExecutionMode ExecutionMode => ExecutionMode.Parallel;

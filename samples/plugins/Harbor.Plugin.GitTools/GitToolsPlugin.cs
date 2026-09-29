@@ -5,6 +5,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugin.GitTools;
@@ -29,6 +30,10 @@ public sealed class GitToolsPlugin : IToolPlugin
 public sealed class GitTool : ITool
 {
     public ToolName Name => ToolName.Create("git");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command("args");
+
     public string DisplayName => "Git";
     public string Description => "Run git commands. Safer than bash because it validates the command and parses output for common operations.";
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;

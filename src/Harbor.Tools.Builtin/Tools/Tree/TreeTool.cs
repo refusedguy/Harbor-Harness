@@ -39,6 +39,9 @@ public sealed class TreeTool : ITool
     public ToolName Name => ToolName.Create("tree");
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
+    /// <inheritdoc />
     public string DisplayName => "Tree";
 
     /// <inheritdoc />

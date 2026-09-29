@@ -29,6 +29,9 @@ public sealed class RipGrepTool : ITool
     public ToolName Name => ToolName.Create("ripgrep");
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
+    /// <inheritdoc />
     public string DisplayName => "RipGrep";
 
     /// <inheritdoc />

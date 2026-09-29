@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
@@ -7,6 +8,7 @@ using Harbor.Abstractions.Tools;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels.Terminal;
 using Harbor.Application.Agents;
+using Harbor.Application.Git;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
@@ -103,6 +105,9 @@ internal static class ServiceRegistration
         // publish the same instance under the narrow name so the panel bag is
         // actually filled instead of silently degrading.
         services.AddSingleton<Harbor.Ui.Framework.Panels.IPanelSessionGateway>(sp => sp.GetRequiredService<SessionManager>());
+        // #537: the Presentation side (GitService) no longer forks `git`. The
+        // read-only query contract is Domain; the process spawn is Application.
+        services.AddSingleton<IGitQuery, ProcessGitQuery>();
         services.AddSingleton<GitService>();
         services.AddSingleton<ToastService>();
         services.AddSingleton<IToastService>(sp => sp.GetRequiredService<ToastService>());

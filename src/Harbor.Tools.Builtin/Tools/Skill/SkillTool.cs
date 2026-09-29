@@ -76,6 +76,9 @@ public sealed class SkillTool : ITool
     public ToolName Name => ToolName.Create("skill");
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
+    /// <inheritdoc />
     public string DisplayName => "Skill";
 
     /// <inheritdoc />

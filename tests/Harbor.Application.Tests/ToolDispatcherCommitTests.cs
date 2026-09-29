@@ -70,6 +70,10 @@ public class ToolDispatcherCommitTests
         public TaskCompletionSource<bool> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public ToolName Name => ToolName.Create("counter");
+
+        /// <inheritdoc />
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
         public string DisplayName => "Counter";
         public string Description => "Counts starts for the commit barrier.";
         public ExecutionMode ExecutionMode => ExecutionMode.Parallel;

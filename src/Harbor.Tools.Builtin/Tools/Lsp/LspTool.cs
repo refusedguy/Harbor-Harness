@@ -38,6 +38,9 @@ public sealed class LspTool : ITool
     public ToolName Name => ToolName.Create("lsp");
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
+    /// <inheritdoc />
     public string DisplayName => "LSP";
 
     /// <inheritdoc />

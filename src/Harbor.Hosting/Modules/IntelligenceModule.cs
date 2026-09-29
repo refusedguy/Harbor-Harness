@@ -30,7 +30,12 @@ internal static class IntelligenceModule
             sp.GetRequiredService<ILogger<PermissionService>>(),
             workspaceRoot: Directory.GetCurrentDirectory(),
             configStore: sp.GetService<IConfigStore>(),
-            pathPolicies: sp.GetServices<IPathExtractionPolicy>()));
+            pathPolicies: sp.GetServices<IPathExtractionPolicy>(),
+            // #557: the guards are the ones the TOOL REGISTRY derived from what each
+            // tool declares on ITool.SafetyProfile — not a static name list. Read
+            // through a delegate so a tool registered later (a plugin, a hot reload)
+            // is guarded from its very first permission check.
+            safetyPolicies: () => sp.GetRequiredService<IToolRegistry>().SafetyPolicies));
         // #49 PR1: runtime-owned approval/cancellation coordinator — the single
         // ingress for run cancellation and the linearization point for gate
         // decisions vs cancel. Stateless w.r.t. the agent (takes IAgentRunner

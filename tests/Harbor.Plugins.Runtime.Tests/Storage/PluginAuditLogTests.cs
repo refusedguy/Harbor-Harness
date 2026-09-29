@@ -177,6 +177,10 @@ public sealed class PluginAuditLogTests : IDisposable
     private sealed class FakeSearchTool : ITool
     {
         public ToolName Name => ToolName.Create("web_search");
+
+        /// <inheritdoc />
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
         public string DisplayName => "Web Search";
         public string Description => "Fake search tool";
         public ExecutionMode ExecutionMode => ExecutionMode.Sequential;

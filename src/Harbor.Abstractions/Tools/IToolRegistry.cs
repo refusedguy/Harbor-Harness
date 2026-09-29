@@ -48,6 +48,31 @@ public interface IToolRegistry
     public Result<ITool> GetTool(ToolName name);
 
     /// <summary>
+    ///     The argument-safety policies implied by the tools currently registered —
+    ///     every path-taking tool guarded, every shell tool deny-listed against
+    ///     destructive commands, both derived from what each
+    ///     <see cref="ITool" /> declares on <see cref="ITool.SafetyProfile" />.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>#557.</b> This set is the answer to "which tools does the path
+    ///         traversal guard cover?". It used to be a private literal inside
+    ///         <c>PathGuardSafetyPolicy</c> that nobody updated when a tool was added,
+    ///         and a path-taking write tool left out of it was a permission bypass:
+    ///         <c>new("mytool", "src/*", Allow)</c> authorised
+    ///         <c>src/../../../etc/passwd</c>. Deriving it here means the coverage
+    ///         cannot lag behind the registry — registering a tool is what guards it.
+    ///     </para>
+    ///     <para>
+    ///         <see cref="IPermissionService" /> passes this straight into
+    ///         <c>PermissionRuleset.Evaluate</c>. Implementations MUST keep it in step
+    ///         with <see cref="GetAllTools" />: recompute (or invalidate a cache) on
+    ///         every register and unregister.
+    ///     </para>
+    /// </remarks>
+    public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies { get; }
+
+    /// <summary>
     ///     Register a tool. Fails if a tool with the same name is already registered.
     /// </summary>
     /// <param name="tool">The tool to register.</param>

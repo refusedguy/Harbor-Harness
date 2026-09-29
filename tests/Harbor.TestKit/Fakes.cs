@@ -46,6 +46,10 @@ public sealed class FakeToolRegistry(params ITool[] tools) : IToolRegistry
     public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
         => Snapshot();
 
+    // #557: derived from the tools themselves, exactly like the production registry.
+    public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies => ToolSafetyPolicies.Build(
+        _tools.Values.Select(t => new ToolSafetyDeclaration(t.Name.Value, t.SafetyProfile)));
+
     public Result<ITool> GetTool(ToolName name) =>
         _tools.TryGetValue(name.Value, out ITool? tool)
             ? Result.Success(tool)
@@ -86,6 +90,9 @@ public sealed class CountingTool : ITool
     public List<string> ExecutedArgs { get; } = [];
 
     public ToolName Name => ToolName.Create("counter");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
 
     public string DisplayName => "Counter";
 

@@ -27,6 +27,9 @@ public sealed class PatchTool : ITool
     public ToolName Name => ToolName.Create("patch");
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
+    /// <inheritdoc />
     public string DisplayName => "Patch";
 
     /// <inheritdoc />

@@ -8,6 +8,7 @@ using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
@@ -62,6 +63,9 @@ public sealed class HelloTool : ITool
 
     /// <inheritdoc />
     public ToolName Name => ToolName.Create("hello");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
 
     /// <inheritdoc />
     public string DisplayName => "Hello";

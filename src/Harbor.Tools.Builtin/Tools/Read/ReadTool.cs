@@ -37,6 +37,10 @@ public sealed class ReadTool : ITool
     }
 
     public ToolName Name => ToolName.Create("read");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
     public string DisplayName => "Read";
     public string Description =>
         "Read a file. Text: returns numbered lines (use offset/limit for large files). " +

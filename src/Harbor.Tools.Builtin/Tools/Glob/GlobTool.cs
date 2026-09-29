@@ -26,6 +26,10 @@ public sealed class GlobTool : ITool
     public GlobTool(ILogger<GlobTool> logger) { _logger = logger; }
 
     public ToolName Name => ToolName.Create("glob");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
     public string DisplayName => "Glob";
     public string Description =>
         "Find files matching a glob (e.g. **/*.cs, src/**/*.ts). " +

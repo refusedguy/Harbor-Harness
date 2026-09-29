@@ -28,6 +28,8 @@ public class ToolRegistryResolveShapeTests
     {
         public ToolName Name { get; } = ToolName.Create(name);
 
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
         public string DisplayName => Name.Value;
         public string Description => "Resolve-shape test stub.";
         public ExecutionMode ExecutionMode => ExecutionMode.Parallel;

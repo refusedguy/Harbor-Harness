@@ -35,6 +35,11 @@ public sealed class ToolRegistry : IToolRegistry
     // readers never observe a torn view; dropping it drops the filtered cache too.
     private volatile IToolSource? _frozenSource;
 
+    // #557: the safety policies implied by the registered tools, rebuilt on every
+    // registration change so the traversal guard can never lag behind the registry
+    // (the failure the hand-maintained PathGuardSafetyPolicy.DefaultTools list had).
+    private volatile IReadOnlyList<IArgSafetyPolicy> _safetyPolicies = ToolSafetyPolicies.Build([]);
+
     /// <summary>
     ///     Construct an empty registry reading from the live dictionary until
     ///     <see cref="Freeze" /> publishes a frozen snapshot.
@@ -95,6 +100,25 @@ public sealed class ToolRegistry : IToolRegistry
         return Result.Failure($"Tool '{name}' is not registered.");
     }
 
+    /// <inheritdoc />
+    public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies => _safetyPolicies;
+
+    /// <summary>
+    ///     Assembles the guard set from what is registered right now (#557).
+    ///     Rebuilt on each registration change — registration is a startup/reload
+    ///     event, never a hot-path call, and a stale guard set is a bypass.
+    /// </summary>
+    private IReadOnlyList<IArgSafetyPolicy> BuildSafetyPolicies()
+    {
+        var declarations = new List<ToolSafetyDeclaration>(_tools.Count);
+        foreach (var tool in _tools.Values)
+        {
+            declarations.Add(new ToolSafetyDeclaration(tool.Name.Value, tool.SafetyProfile));
+        }
+
+        return ToolSafetyPolicies.Build(declarations);
+    }
+
     /// <summary>
     ///     Freeze the current tool set for fast lock-free lookups.
     ///     Call after all tools are registered at startup.
@@ -117,6 +141,11 @@ public sealed class ToolRegistry : IToolRegistry
         // the ConcurrentDictionary slow path). Both outcomes are safe. Dropping
         // the snapshot also drops its memoized per-ruleset arrays.
         Interlocked.Exchange(ref _frozenSource, (IToolSource?)null);
+        // #557: the guard set follows the registry in lockstep. A window exists
+        // between the interlocked null above and this assignment, so a concurrent
+        // reader can observe the old snapshot with the old policies or the new one
+        // with the new ones — never a registered tool whose guard is missing.
+        _safetyPolicies = BuildSafetyPolicies();
     }
 
     /// <summary>

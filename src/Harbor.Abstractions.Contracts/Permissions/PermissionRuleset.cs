@@ -102,16 +102,23 @@ public sealed record PermissionRuleset
     public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies => _safetyPolicies;
 
     /// <summary>
-    ///     The default argument-safety strategies: <see cref="BashSafetyPolicy.Instance" />
-    ///     and <see cref="PathGuardSafetyPolicy.Instance" />. Extend per-ruleset via the
-    ///     constructor (like <c>ProviderConfig.Quirks</c>) to guard a new path-like or
-    ///     exec-style tool without editing the contract.
+    ///     The builtin argument-safety strategies, assembled from the safety profiles
+    ///     the builtin tools declare in <see cref="BuiltinToolSafetyProfiles" /> — a
+    ///     <see cref="BashSafetyPolicy" /> over the command tools and a
+    ///     <see cref="PathGuardSafetyPolicy" /> over the path tools.
     /// </summary>
-    public static IReadOnlyList<IArgSafetyPolicy> DefaultSafetyPolicies { get; } = new IArgSafetyPolicy[]
-    {
-        BashSafetyPolicy.Instance,
-        PathGuardSafetyPolicy.Instance
-    };
+    /// <remarks>
+    ///     <para>
+    ///         This is the FALLBACK set, for callers that evaluate a ruleset without a
+    ///         tool registry in hand. The live <c>IPermissionService</c> overrides it per
+    ///         call through <see cref="Evaluate(string, string, IReadOnlyList{IArgSafetyPolicy}?)" />
+    ///         with policies built from the tools that actually registered, so a tool
+    ///         added to the registry is guarded the moment it exists and cannot be
+    ///         omitted from a list to create a bypass (#557).
+    ///     </para>
+    /// </remarks>
+    public static IReadOnlyList<IArgSafetyPolicy> DefaultSafetyPolicies { get; } =
+        ToolSafetyPolicies.Build(BuiltinToolSafetyProfiles.All);
 
     /// <summary>
     ///     An empty ruleset — no rules, every action falls through to <see cref="PermissionAction.Ask" />.
@@ -232,18 +239,36 @@ public sealed record PermissionRuleset
     ///     </para>
     /// </remarks>
     public PermissionAction Evaluate(string permission, string argPath)
+        => Evaluate(permission, argPath, null);
+
+    /// <summary>
+    ///     Evaluate with an explicit safety-policy set — the overload the live
+    ///     enforcement point uses so the guards come from the tools that actually
+    ///     registered rather than from a static list (#557).
+    /// </summary>
+    /// <param name="permission">The permission name (typically the tool name).</param>
+    /// <param name="argPath">The argument path (file path, command string, etc.).</param>
+    /// <param name="policies">
+    ///     Safety policies to consult. <see langword="null" /> falls back to this
+    ///     ruleset's own <see cref="SafetyPolicies" />.
+    /// </param>
+    /// <returns>The action to take; <see cref="PermissionAction.Ask" /> if no rule matches.</returns>
+    public PermissionAction Evaluate(
+        string permission,
+        string argPath,
+        IReadOnlyList<IArgSafetyPolicy>? policies)
     {
         var rules = _sortedRules;
-        var policies = _safetyPolicies;
+        var effectivePolicies = policies ?? _safetyPolicies;
 
         // Hoist per-call policy work (argv parsing) out of the rule loop: run
         // pre-walk short-circuits and collect extra deny targets once. Applicable
         // policies are usually 0-1, so this stays allocation-free in practice.
         IReadOnlyList<string>? extraDenyTargets = null;
         bool hasApplicablePolicy = false;
-        for (int p = 0; p < policies.Count; p++)
+        for (int p = 0; p < effectivePolicies.Count; p++)
         {
-            var policy = policies[p];
+            var policy = effectivePolicies[p];
             if (!policy.AppliesTo(permission)) continue;
             hasApplicablePolicy = true;
 
@@ -269,7 +294,7 @@ public sealed record PermissionRuleset
 
             if (rule.Action == PermissionAction.Allow
                 && hasApplicablePolicy
-                && SuppressAllow(policies, permission, rule.Pattern, argPath))
+                && SuppressAllow(effectivePolicies, permission, rule.Pattern, argPath))
             {
                 continue; // Allow must not match; anything else falls through to Ask.
             }

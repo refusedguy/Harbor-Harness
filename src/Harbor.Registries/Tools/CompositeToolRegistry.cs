@@ -9,6 +9,33 @@ public sealed class CompositeToolRegistry : IToolRegistry
     // #183: single volatile publish-once snapshot — see FrozenToolView.
     private volatile FrozenToolView? _frozenView;
 
+    // #557: the guard set implied by the tools the sources expose, rebuilt on every
+    // AddSource so a path-taking tool is guarded by being registered, never by
+    // being remembered in a list.
+    private volatile IReadOnlyList<IArgSafetyPolicy> _safetyPolicies = ToolSafetyPolicies.Build([]);
+
+    /// <inheritdoc />
+    public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies => _safetyPolicies;
+
+    /// <summary>Derives the guard set from every source's tool list (#557).</summary>
+    private IReadOnlyList<IArgSafetyPolicy> BuildSafetyPolicies()
+    {
+        var declarations = new List<ToolSafetyDeclaration>();
+        foreach (var source in _sources)
+        {
+            foreach (var descriptor in source.GetAllTools())
+            {
+                Result<ITool> resolved = source.GetTool(descriptor.Name);
+                if (resolved.IsSuccess)
+                {
+                    declarations.Add(new ToolSafetyDeclaration(descriptor.Name.Value, resolved.Value.SafetyProfile));
+                }
+            }
+        }
+
+        return ToolSafetyPolicies.Build(declarations);
+    }
+
     public void AddSource(IToolSource source)
     {
         _sources.Add(source);
@@ -114,6 +141,10 @@ public sealed class CompositeToolRegistry : IToolRegistry
     private void InvalidateFrozenSnapshot()
     {
         Interlocked.Exchange(ref _frozenView, null);
+        // #557: same contract as ToolRegistry — the guard set is derived from what
+        // the sources expose, so a path-taking tool in a source is guarded without
+        // any list to update.
+        _safetyPolicies = BuildSafetyPolicies();
     }
 
     private static ToolDescriptor ToDescriptor(ITool t) => new(

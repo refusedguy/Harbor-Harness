@@ -42,6 +42,10 @@ public class ToolDispatcherAskUserTests
         public string? ObservedAction;
 
         public ToolName Name => ToolName.Create("askecho");
+
+        /// <inheritdoc />
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
         public string DisplayName => "AskEcho";
         public string Description => "Echoes the Ask verdict back as output.";
         public ExecutionMode ExecutionMode => ExecutionMode.Parallel;

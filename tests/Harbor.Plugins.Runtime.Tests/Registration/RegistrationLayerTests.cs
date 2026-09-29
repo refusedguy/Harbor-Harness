@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Registration;
@@ -149,6 +150,10 @@ public sealed class RegistrationLayerTests
     {
         public FakeTool(string name) { Name = ToolName.Create(name); }
         public ToolName Name { get; }
+
+        /// <inheritdoc />
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
         public string DisplayName => "fake";
         public string Description => "fake";
         public JsonDocument ParameterSchema =>

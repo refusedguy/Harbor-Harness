@@ -37,6 +37,10 @@ public sealed class SessionSteerTool : ITool
     }
 
     public ToolName Name => ToolName.Create("session_steer");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
     public string DisplayName => "Session Steer";
 
     public string Description =>

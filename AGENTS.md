@@ -292,6 +292,23 @@ public sealed class MyTool : ITool
 }
 ```
 
+> **`ITool.SafetyProfile` is required (#557) and has no default.** Declare what your
+> tool's rule-matched argument is:
+>
+> ```csharp
+> public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();     // "path" — traversal guard applies
+> public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command();  // "command" — destructive-command deny
+> public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;     // a name/URL: explicit opt-out
+> ```
+>
+> The path-traversal guard used to be gated on membership of a hand-maintained name
+> list inside `PathGuardSafetyPolicy`. Omitting a path-taking write tool from it was
+> a silent permission bypass (`new("mytool","src/*",Allow)` authorised
+> `src/../../../etc/passwd`). `IToolRegistry.SafetyPolicies` is now derived from
+> these declarations, and the required member is what makes that derivation total.
+> Picking `Opaque` for a tool that does take a path re-opens the hole — the
+> registration guard test (`BuiltinToolSafetyDeclarationsTests`) says so out loud.
+
 Register in `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (in `CreateToolRegistry`):
 ```csharp
 tb.AddTool(() => new MyTool(loggerFactory.CreateLogger<MyTool>()));

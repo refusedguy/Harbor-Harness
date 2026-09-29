@@ -44,6 +44,9 @@ public sealed class McpPromptTool : ITool
     public ToolName Name => ToolName.Create("mcp_prompt");
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
+    /// <inheritdoc />
     public string DisplayName => "MCP Prompt";
 
     /// <inheritdoc />

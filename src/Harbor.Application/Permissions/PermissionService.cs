@@ -17,6 +17,17 @@ public sealed class PermissionService : IPermissionService
     private readonly IPathExtractionPolicy[] _pathPolicies;
 
     /// <summary>
+    ///     Supplies the argument-safety policies assembled from the tools that
+    ///     actually registered (<c>IToolRegistry.SafetyPolicies</c>), so the traversal
+    ///     guard covers every path-taking tool that exists rather than the ones
+    ///     someone remembered to list (#557). A delegate, not a captured list, so a
+    ///     tool registered later (a plugin, a hot reload) is guarded from its first
+    ///     check. <see langword="null" /> falls back to each ruleset's own
+    ///     <c>PermissionRuleset.DefaultSafetyPolicies</c>.
+    /// </summary>
+    private readonly Func<IReadOnlyList<IArgSafetyPolicy>>? _safetyPolicies;
+
+    /// <summary>
     ///     Persisted user decisions (A2): agent name → rule key ("toolName:argPath") → the
     ///     rule recorded when the user answered a prompt with "always". Consulted before
     ///     prompting and merged into <see cref="GetRuleset" /> so the decision survives
@@ -51,13 +62,20 @@ public sealed class PermissionService : IPermissionService
     ///     is used. <see cref="LegacyArgExtractionPolicy" /> is appended as the terminal
     ///     fallback when absent, so dispatch is total.
     /// </param>
+    /// <param name="safetyPolicies">
+    ///     Optional supplier of argument-safety policies (#557). Wire it to
+    ///     <c>IToolRegistry.SafetyPolicies</c> so a newly registered path-taking tool
+    ///     is guarded without editing any list. When <see langword="null" />, each
+    ///     agent ruleset's own <c>SafetyPolicies</c> is used.
+    /// </param>
     public PermissionService(
         IAgentRegistry agents,
         ILogger<PermissionService> logger,
         Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? userAsker = null,
         string? workspaceRoot = null,
         IConfigStore? configStore = null,
-        IEnumerable<IPathExtractionPolicy>? pathPolicies = null)
+        IEnumerable<IPathExtractionPolicy>? pathPolicies = null,
+        Func<IReadOnlyList<IArgSafetyPolicy>>? safetyPolicies = null)
     {
         _agents = agents;
         _logger = logger;
@@ -65,6 +83,7 @@ public sealed class PermissionService : IPermissionService
         _workspaceRoot = workspaceRoot;
         _configStore = configStore;
         _pathPolicies = ResolvePolicies(pathPolicies);
+        _safetyPolicies = safetyPolicies;
 
         // #82: never block the ctor on IO (sync-over-async deadlocks under any
         // SynchronizationContext). The persisted-permissions load runs in the
@@ -89,9 +108,10 @@ public sealed class PermissionService : IPermissionService
         string? workspaceRoot = null,
         IConfigStore? configStore = null,
         IEnumerable<IPathExtractionPolicy>? pathPolicies = null,
+        Func<IReadOnlyList<IArgSafetyPolicy>>? safetyPolicies = null,
         CancellationToken ct = default)
     {
-        var service = new PermissionService(agents, logger, userAsker, workspaceRoot, configStore, pathPolicies);
+        var service = new PermissionService(agents, logger, userAsker, workspaceRoot, configStore, pathPolicies, safetyPolicies);
         await service.EnsureLoadedAsync(ct).ConfigureAwait(false);
         return service;
     }
@@ -140,7 +160,10 @@ public sealed class PermissionService : IPermissionService
         CancellationToken ct)
     {
         var extraction = NormalizePathExtraction(toolName, args, _workspaceRoot ?? Environment.CurrentDirectory);
-        var action = agent.Permission.Evaluate(toolName, extraction.ArgPath);
+        // #557: the safety policies are the ones derived from the tools that
+        // actually registered, not a static name list — so a path-taking tool that
+        // nobody remembered to list is still guarded.
+        var action = agent.Permission.Evaluate(toolName, extraction.ArgPath, _safetyPolicies?.Invoke());
 
         // Workspace confinement (A1/A2): a path that resolves outside the workspace root —
         // or the process working directory when no explicit root is configured — must never

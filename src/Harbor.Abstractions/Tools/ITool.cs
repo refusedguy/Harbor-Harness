@@ -45,6 +45,30 @@ public interface ITool
     public ExecutionMode ExecutionMode { get; }
 
     /// <summary>
+    ///     How the permission system must treat this tool's arguments (#557).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Required, with no default.</b> The path-traversal guard that stops
+    ///         <c>new("write", "src/*", Allow)</c> from authorising
+    ///         <c>src/../../../etc/passwd</c> used to be gated on membership of a
+    ///         hand-maintained name list inside <c>PathGuardSafetyPolicy</c>. A new
+    ///         path-taking write tool that failed to join the list was not merely
+    ///         unlisted — the guard reported <c>AppliesTo == false</c>, the
+    ///         suppression never ran, and the rule authorised the traversal. Nothing
+    ///         warned and nothing failed.
+    ///     </para>
+    ///     <para>
+    ///         The list is gone: the guard set is assembled by
+    ///         <c>ToolSafetyPolicies.Build</c> from what tools actually registered.
+    ///         Declaring here is what feeds it, and because the member has no default
+    ///         implementation the compiler refuses a tool that has not declared — the
+    ///         one enforcement point that cannot drift.
+    ///     </para>
+    /// </remarks>
+    public ToolSafetyProfile SafetyProfile { get; }
+
+    /// <summary>
     ///     Optional one-line snippet injected into the system prompt's "Available Tools" list.
     /// </summary>
     public string? PromptSnippet { get; }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugin.FileTree;
@@ -34,6 +35,10 @@ public sealed class TreeTool : ITool
     ];
 
     public ToolName Name => ToolName.Create("tree");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
+
     public string DisplayName => "Tree";
     public string Description => "Display directory structure as a tree. Useful for understanding project layout. Honors common ignore patterns (node_modules, bin, obj, .git, etc.).";
     public ExecutionMode ExecutionMode => ExecutionMode.Parallel;

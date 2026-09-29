@@ -4,3 +4,6 @@
 // Harbor.Plugins.Abstractions via ProjectReference (no namespace import needed
 // when the consumer file adds `using Harbor.Plugins.Abstractions;` at the top).
 global using CSharpFunctionalExtensions;
+
+// #557: ITool.SafetyProfile — the required per-tool permission declaration.
+global using Harbor.Abstractions.Permissions;

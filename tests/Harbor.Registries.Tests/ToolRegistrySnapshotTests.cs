@@ -21,6 +21,10 @@ public class ToolRegistrySnapshotTests
         public NamedStubTool(string name) => Name = ToolName.Create(name);
 
         public ToolName Name { get; }
+
+        /// <inheritdoc />
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
         public string DisplayName => Name.Value;
         public string Description => "Snapshot test stub.";
         public ExecutionMode ExecutionMode => ExecutionMode.Parallel;

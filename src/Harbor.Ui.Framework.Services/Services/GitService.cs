@@ -1,77 +1,63 @@
-using System.Diagnostics;
+using Harbor.Abstractions.Git;
 using Microsoft.Extensions.Logging;
+
 namespace Harbor.Ui.Framework.Services;
+
 /// <summary>
-///     Fetches git status for a working directory — branch name + dirty/clean.
-///     Runs `git rev-parse --abbrev-ref HEAD` and `git status --porcelain`.
-///     Returns (null, false) if the directory is not a git repo.
+///     Reactive wrapper that adapts <see cref="IGitQuery" /> to the session
+///     view-model's <see cref="GitSessionInfo" />. It no longer touches the
+///     filesystem or forks a process (#537): the query contract is Domain, the
+///     process spawn is Application, and this type only maps one to the other.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Permission gating — a decision, not an oversight.</b> This is UI
+///         chrome: it renders a branch badge for a directory the user opened, is
+///         driven by no model, and every query behind <see cref="IGitQuery" /> is
+///         read-only. It is therefore NOT routed through
+///         <c>PermissionRuleset</c>: prompting the user to approve reading their own
+///         branch name would be noise, and the commands carry no agent intent. The
+///         agent's own git access is a different path entirely — it goes through the
+///         <c>bash</c> tool, where <c>PermissionRuleset.Default</c> allows
+///         <c>git status</c>/<c>git diff</c>/<c>git log</c> and asks on anything
+///         else. <c>GitServicePermissionGatingTests</c> pins both halves.
+///     </para>
+/// </remarks>
 public sealed class GitService
 {
+    private readonly IGitQuery _queries;
     private readonly ILogger<GitService> _logger;
 
-    public GitService(ILogger<GitService> logger)
+    /// <summary>Construct a wrapper over the injected git query seam.</summary>
+    /// <param name="queries">The read-only git queries (Domain contract).</param>
+    /// <param name="logger">Logger for diagnostics.</param>
+    public GitService(IGitQuery queries, ILogger<GitService> logger)
     {
+        _queries = queries;
         _logger = logger;
     }
 
     /// <summary>Get git info for a directory.</summary>
     public GitSessionInfo GetGitStatus(string directory)
     {
-        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
-            return GitSessionInfo.Empty;
-
         try
         {
-            string? branch = RunGit(directory, "rev-parse", "--abbrev-ref", "HEAD");
-            if (string.IsNullOrEmpty(branch))
-                return GitSessionInfo.Empty;
-
-            string? status = RunGit(directory, "status", "--porcelain");
-            bool isDirty = !string.IsNullOrEmpty(status?.Trim());
-            int dirtyCount = isDirty ? status!.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries).Length : 0;
-
-            string? lastCommit = RunGit(directory, "log", "-1", "--format=%cr");
-            string? commitTime = null;
-            if (!string.IsNullOrEmpty(lastCommit))
+            GitWorkspaceStatus status = _queries.GetStatus(directory);
+            if (string.IsNullOrEmpty(status.Branch))
             {
-                commitTime = lastCommit.Trim();
+                return GitSessionInfo.Empty;
             }
 
-            return new GitSessionInfo(branch.Trim(), isDirty, dirtyCount, commitTime);
+            return new GitSessionInfo(
+                status.Branch,
+                status.IsDirty,
+                status.DirtyFileCount,
+                status.LastCommitRelative);
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Git status failed for {Dir}", directory);
             return GitSessionInfo.Empty;
         }
-    }
-
-    private static string? RunGit(string workingDir, params string[] args)
-    {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "git",
-            WorkingDirectory = workingDir,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        foreach (string a in args)
-            psi.ArgumentList.Add(a);
-
-        using var process = Process.Start(psi);
-        if (process is null) return null;
-        if (!process.WaitForExit(TimeSpan.FromSeconds(3)))
-        {
-            try { process.Kill(); }
-            catch
-            { /* process already exited */
-            }
-            return null;
-        }
-        if (process.ExitCode != 0) return null;
-        return process.StandardOutput.ReadToEnd();
     }
 }

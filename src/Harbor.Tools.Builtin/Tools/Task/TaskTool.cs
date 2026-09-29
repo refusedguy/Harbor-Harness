@@ -34,6 +34,10 @@ public sealed class TaskTool : ITool
     }
 
     public ToolName Name => ToolName.Create("task");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
     public string DisplayName => "Task";
     public string Description =>
         "Delegate a self-contained task to a sub-agent (explore, plan, or custom agents marked as sub-agents). " +

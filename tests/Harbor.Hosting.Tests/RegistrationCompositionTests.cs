@@ -61,27 +61,35 @@ public class RegistrationCompositionTests
     // ── Full preset (CLI default) ────────────────────────────────────────
 
     [Test]
-    public async Task AddHarbor_Full14_RegistersAll16Tools()
+    public async Task AddHarbor_Full14_RegistersExactlyTheTwentyBuiltinTools()
     {
         using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
         var names = ToolNames(sp);
-        // Full preset: 10 standard (read/write/edit/bash/glob/grep/ls/patch/notebook/tree) + 6 full-only
-        // (task/webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt) + lsp + skill = 18.
-        // Self-adjusting: verify all known tools are present and no duplicates, without hardcoding
-        // the exact count. Adding a new tool will require updating this list, but the count check
-        // below (frozen-registry equivalence) will stay green.
-        var expectedFull = new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt", "lsp", "skill" };
-        // Self-adjusting: exact count will drift when new tools are added — pin that at least the
-        // 18 known tools are present and there are no duplicates. The frozen-registry equivalence
-        // test below guarantees the total count is consistent.
-        await Assert.That(names.Count).IsGreaterThanOrEqualTo(expectedFull.Length);
-        foreach (string full in expectedFull)
+        // Full preset: 10 standard (read/write/edit/bash/glob/grep/ls/patch/notebook/tree)
+        // + skill + lsp + 6 full-only (task/webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt)
+        // + session_read/session_steer (registered when a session store is composed)
+        // = 20.
+        //
+        // #557: this assertion used to be `IsGreaterThanOrEqualTo(expected.Length)`
+        // against an 18-name manifest that had already rotted — `session_read` and
+        // `session_steer` were missing — and it was GREEN, which is the whole
+        // problem. A guard weakened until it stops failing is not a guard. The
+        // comparison is now exact-set: a name that stops registering, a name that
+        // starts registering without a row here, and a duplicate all fail.
+        var expectedFull = new[]
         {
-            await Assert.That(names).Contains(full);
-        }
+            "read", "write", "edit", "bash", "glob", "grep", "ls", "skill",
+            "task", "webfetch", "session_read", "session_steer",
+            "patch", "notebook", "ripgrep", "tree", "lsp",
+            "mcp", "read_mcp_resource", "mcp_prompt",
+        };
 
-        await Assert.That(names.Distinct().Count()).IsEqualTo(names.Count);
+        await Assert.That(names.Count).IsEqualTo(expectedFull.Length)
+            .Because("the manifest and the registry must agree exactly; a silent "
+                     + "drift in either direction is what this test exists to catch");
+        await Assert.That(names.OrderBy(n => n, StringComparer.Ordinal).ToArray())
+            .IsEquivalentTo(expectedFull.OrderBy(n => n, StringComparer.Ordinal).ToArray());
     }
 
     // ── Standard preset (desktop subset) ─────────────────────────────────

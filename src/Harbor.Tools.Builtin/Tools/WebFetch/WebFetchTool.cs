@@ -113,6 +113,9 @@ public sealed class WebFetchTool : ITool
     public ToolName Name => ToolName.Create("webfetch");
 
     /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
+    /// <inheritdoc />
     public string DisplayName => "WebFetch";
 
     /// <inheritdoc />

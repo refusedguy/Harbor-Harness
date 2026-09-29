@@ -172,6 +172,10 @@ public class ToolRegistryTests
     private sealed class StubTool : ITool
     {
         public ToolName Name => ToolName.Create("stub_tool");
+
+        /// <inheritdoc />
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
         public string DisplayName => "Stub Tool";
         public string Description => "A stub tool for testing.";
         public ExecutionMode ExecutionMode => ExecutionMode.Parallel;

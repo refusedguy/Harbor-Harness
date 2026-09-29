@@ -13,6 +13,10 @@ public sealed class BashTool : ITool
     public BashTool(ILogger<BashTool> logger) { _logger = logger; }
 
     public ToolName Name => ToolName.Create("bash");
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command();
+
     public string DisplayName => "Bash";
     public string Description => "Execute a shell command. Output is captured and returned. Commands run in the current working directory. Use `cwd` to override.";
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;

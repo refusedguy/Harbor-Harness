@@ -58,19 +58,42 @@ public interface IArgSafetyPolicy
 }
 
 /// <summary>
-///     Builtin <see cref="IArgSafetyPolicy" /> for the <c>bash</c> tool.
+///     Builtin <see cref="IArgSafetyPolicy" /> for shell-execution tools.
 /// </summary>
 /// <remarks>
-///     Stateless singleton — safe to share across rulesets and threads.
+///     <para>
+///         Stateless once constructed (the tool set is frozen at construction) —
+///         safe to share across rulesets and threads. The tool set is the set of
+///         tools declaring <see cref="ToolSafetyProfile.Command" />, assembled by
+///         <see cref="ToolSafetyPolicies.Build" /> from what registered; the
+///         parameterless constructor keeps the historical single-tool
+///         <c>bash</c> set for callers that have no registry.
+///     </para>
 /// </remarks>
 public sealed class BashSafetyPolicy : IArgSafetyPolicy
 {
-    /// <summary>Shared stateless instance used by <see cref="PermissionRuleset.DefaultSafetyPolicies" />.</summary>
+    private static readonly FrozenSet<string> BashOnly = new[] { "bash" }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Shared stateless instance over the <c>bash</c> tool alone.</summary>
     public static readonly BashSafetyPolicy Instance = new();
 
+    private readonly FrozenSet<string> _tools;
+
+    /// <summary>Construct a policy guarding <c>bash</c> alone.</summary>
+    public BashSafetyPolicy()
+        : this(BashOnly)
+    {
+    }
+
+    /// <summary>Construct a policy guarding a declared set of shell tools (case-insensitive).</summary>
+    /// <param name="tools">Names of the tools whose argument is a shell command.</param>
+    public BashSafetyPolicy(IEnumerable<string> tools)
+    {
+        _tools = tools.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+    }
+
     /// <inheritdoc />
-    public bool AppliesTo(string permission) =>
-        permission.Equals("bash", StringComparison.OrdinalIgnoreCase);
+    public bool AppliesTo(string permission) => _tools.Contains(permission);
 
     /// <inheritdoc />
     public PermissionAction? PreEvaluate(string argPath) =>
@@ -98,33 +121,59 @@ public sealed class BashSafetyPolicy : IArgSafetyPolicy
 ///     an argument — it can only match that one string.
 /// </summary>
 /// <remarks>
-///     Stateless (the tool set is fixed at construction) — safe to share across
-///     rulesets and threads. Construct with a custom tool set to guard a new
-///     path-like tool without editing the contract.
+///     <para>
+///         Stateless once constructed (the tool set is frozen at construction) —
+///         safe to share across rulesets and threads.
+///     </para>
+///     <para>
+///         <b>#557 — the tool set is derived, not maintained.</b> This policy used
+///         to carry a private <c>DefaultTools</c> literal with a comment admitting
+///         that adding a tool required editing it. A path-taking write tool left out
+///         of that literal got <see cref="AppliesTo" /> == <see langword="false" />,
+///         so <see cref="SuppressAllow" /> never ran and
+///         <c>new("mytool", "src/*", Allow)</c> authorised
+///         <c>src/../../../etc/passwd</c> — a permission bypass with no test, no
+///         warning and no compile error. The set is now assembled by
+///         <see cref="ToolSafetyPolicies.Build" /> from the
+///         <see cref="ToolSafetyProfile" /> every registered tool declares on
+///         <c>ITool.SafetyProfile</c>. The parameterless constructor falls back to
+///         the builtin declarations, which the registration guard test keeps in sync
+///         with what <c>ToolsCatalog</c> actually registers.
+///     </para>
 /// </remarks>
 public sealed class PathGuardSafetyPolicy : IArgSafetyPolicy
 {
-    private static readonly FrozenSet<string> DefaultTools = new[]
-    {
-        "read", "write", "edit", "ls", "glob", "grep", "tree", "ripgrep", "notebook", "patch", "mcp"
-    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>Shared stateless instance (default tool set) used by <see cref="PermissionRuleset.DefaultSafetyPolicies" />.</summary>
+    /// <summary>Shared stateless instance over the builtin path tools.</summary>
     public static readonly PathGuardSafetyPolicy Instance = new();
 
     private readonly FrozenSet<string> _tools;
 
-    /// <summary>Construct a guard for the default path-like tool set.</summary>
+    /// <summary>Construct a guard over the builtin path-taking tools.</summary>
     public PathGuardSafetyPolicy()
-        : this(DefaultTools)
+        : this(BuiltinPathTools())
     {
     }
 
-    /// <summary>Construct a guard for a custom path-like tool set (case-insensitive).</summary>
+    /// <summary>Construct a guard for a declared path-like tool set (case-insensitive).</summary>
     /// <param name="tools">Tool names to guard.</param>
     public PathGuardSafetyPolicy(IEnumerable<string> tools)
     {
         _tools = tools.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    ///     The path-taking tool names in <see cref="BuiltinToolSafetyProfiles" />.
+    ///     Derived, never a private literal — the audit point of #557.
+    /// </summary>
+    private static IEnumerable<string> BuiltinPathTools()
+    {
+        foreach (ToolSafetyDeclaration declaration in BuiltinToolSafetyProfiles.All)
+        {
+            if (declaration.Profile.ArgKind == ToolArgKind.Path)
+            {
+                yield return declaration.ToolName;
+            }
+        }
     }
 
     /// <inheritdoc />
