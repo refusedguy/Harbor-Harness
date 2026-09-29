@@ -54,11 +54,13 @@ public sealed class McpToolTool : ITool
     ///         from a tool that is still path-treated.
     ///     </para>
     ///     <para>
-    ///         This is a known disagreement with the schema, not an accident.
-    ///         Reconciling <c>PathArgExtractionPolicy</c>'s hand-maintained list with
-    ///         these declarations is tracked in #595; until then the declaration states
-    ///         what the permission core actually DOES, which is the property the guard
-    ///         depends on.
+    ///         This is a known disagreement with the schema, not an accident. #595
+    ///         removed the hand-maintained list this referred to:
+    ///         <c>PathArgExtractionPolicy</c> now reads the
+    ///         <see cref="ToolArgKind.Path" /> declarations themselves, so declaring
+    ///         Path here is what puts <c>mcp</c> in that set — and that declaration is
+    ///         also the only place the two facts can be read together, which is what
+    ///         keeps the disagreement visible instead of silent.
     ///     </para>
     /// </remarks>
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();

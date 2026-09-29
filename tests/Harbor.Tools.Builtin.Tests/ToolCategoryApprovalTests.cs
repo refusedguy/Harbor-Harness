@@ -34,9 +34,35 @@ public class ToolCategoryApprovalTests
     [Test]
     public async Task ToolsWithoutCategory_AreUnaffectedByCategoryRules()
     {
-        // "task" belongs to NO category and has no exact rule → Ask fallback;
-        // it must NOT be caught by the exec/network/read category rules.
-        await Assert.That(Ruleset.Evaluate("task", "*")).IsEqualTo(PermissionAction.Ask);
+        // A tool that declares no category matches no category rule, so it falls
+        // through to the Ask default. "mcp_prompt" is used here rather than "task"
+        // because #595 put both on the declaration: `task` is Exec-class and
+        // `mcp_prompt` is MCP-class, so neither is unclassified any more. The
+        // unclassified case is now a PLUGIN tool, which is what it always was in
+        // practice — the builtin table used to under-report, not over-report.
+        await Assert.That(Ruleset.Evaluate("a_plugin_tool", "*")).IsEqualTo(PermissionAction.Ask);
+
+        // And the categories that ARE declared still gate their members.
+        await Assert.That(Ruleset.Evaluate("mcp_prompt", "*")).IsEqualTo(PermissionAction.Ask);
+    }
+
+    /// <summary>
+    ///     #595: every registered builtin now declares a category. The table used
+    ///     to hold 13 of 20, so seven tools matched no category rule at all while
+    ///     the class doc promised "category rules gate whole classes".
+    /// </summary>
+    [Test]
+    public async Task Every_Declared_Builtin_Tool_Has_A_Category()
+    {
+        var unclassified = BuiltinToolSafetyProfiles.All
+            .Where(d => d.Category is null)
+            .Select(d => d.ToolName)
+            .ToArray();
+
+        await Assert.That(unclassified).IsEmpty()
+            .Because("a builtin with no category matches no category rule, so a user's "
+                   + "new(\"write\", \"*\", Allow) silently stops applying to it the day it "
+                   + "is added. Declare the category on the tool instead (#595).");
     }
 
     [Test]

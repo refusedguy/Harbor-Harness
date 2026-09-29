@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Permissions;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework;
 
@@ -43,9 +44,27 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
     /// <summary>Member cards in arrival order (completed or still running).</summary>
     public IReadOnlyList<ToolCallBlock> Members => _members;
 
-    /// <summary>Read-only context tools coalesced by this group (opencode gather set).</summary>
+    /// <summary>
+    ///     Read-only context tools coalesced by this group (opencode gather set).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Read off the tools' own declared <see cref="ToolCategory.Read" />
+    ///         class rather than a hand-written list (#595). The list it replaces
+    ///         carried <c>"list"</c>, which no tool has ever registered — a row that
+    ///         could never fire, in the same shape as the <c>"web_fetch"</c> arm
+    ///         #680 removed from the glyph catalogues. Reading the declaration makes
+    ///         the set correct by construction: a tool joins it by being classified
+    ///         Read, not by someone remembering to add a row here.
+    ///     </para>
+    ///     <para>
+    ///         A tool that declares no category is not Read, so a plugin tool is not
+    ///         folded into a read group unless it says it is read-only.
+    ///     </para>
+    /// </remarks>
     public static bool IsReadOnlyTool(string toolName) =>
-        toolName is "read" or "glob" or "grep" or "ls" or "list" or "tree" or "ripgrep";
+        ToolCategories.TryClassify(toolName, out ToolCategory category)
+        && category == ToolCategory.Read;
 
     internal void AddMember(ToolCallBlock member)
     {
