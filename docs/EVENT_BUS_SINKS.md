@@ -46,13 +46,13 @@ publish path re-derives it, and no sink type is special-cased by name.
 
 | # | Site | Sink | Verdict | Reason (what breaks if the event is silently dropped) |
 |---|---|---|---|---|
-| 1 | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs:123-125` | `TypeFilterMiddleware` (CLI preset) | **mandatory** | it is the event-type contract every CLI projection is built on; unfiltered events reaching a renderer/bridge is a state break, not a lost log line |
+| 1 | *removed in #478* — was `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` | ~~`TypeFilterMiddleware` (CLI preset)~~ | **n/a — deleted** | it was registered with NO allowed types, so it admitted every event while still declaring **mandatory**: the CLI paid the mandatory-sink cost (fast path off, queue-age envelope built) for a filter that dropped nothing. Deleting it is delivery-neutral — the filter passed everything — and it was the one term in this table that was not true |
 | 2 | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs:123` | `EventBusScrollback = 1000` (retention) | **mandatory retention** (for `GetScrollback`) | a reader asking for history would get an empty answer; the guard honours retention regardless of who reads it (§5) |
 | 3 | `src/Harbor.Hosting/HarborComposeOptions.cs:124-128` | `CliDefault()` — scrollback 1000, no sinks | **mandatory retention** | same as #2; the bus is therefore not fast-path eligible |
 | 4 | `src/Harbor.Hosting/HarborComposeOptions.cs:131-134` | `DesktopDefault()` — no sink, default capacity | **mandatory retention** | same as #2; no sink does not mean eligible |
 | 5 | `src/Harbor.Hosting/HarborComposeOptions.cs:73` | `EventBusMiddlewares` factory | **n/a (wiring)** | the composition-time channel through which #1/#4 reach the bus; `null` means "no sinks", never "sniff later" |
 | 6 | `src/Harbor.Hosting/Modules/ConfigurationModule.cs:70-74` | the one place a bus is constructed in production | **n/a (wiring)** | computes the mandatory set once and hands the bus to DI; the verdict never depends on DI order |
-| 7 | `src/Harbor.Registries/Events/TypeFilterMiddleware.cs:39` | type allowlist filter | **mandatory** | same reason as #1 — it is declared, not inferred, and the no-allowlist construction is a configuration, not a licence to be skipped |
+| 7 | `src/Harbor.Registries/Events/TypeFilterMiddleware.cs` | type allowlist filter | **mandatory** | same reason as a filter should have: it is a contract on what the projections downstream may see, so bypassing it would push unapproved event types into rendered state. Since #478 the verdict is earned rather than assumed — the constructor rejects an empty allowlist, so a mandatory sink cannot be one that admits everything (`tests/Harbor.Architecture.Tests/TypeFilterRegistrationTests.cs` fails the build on a typeless product call site) |
 | 8 | `src/Harbor.Registries/Events/SamplingMiddleware.cs:34` | rate limiter for `MessageUpdateEvent` | **optional** | its own job is to drop events for cheaper rendering; nothing downstream becomes *wrong* without it, only less sampled. It is drained on the fast path anyway |
 | 9 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:300` | the publish guard itself | **n/a (decision)** | the only place a publish may be short-circuited; §3 |
 | 10 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:401-410`, counters at `:582-605` | queue-age envelope (`PublishedCount`, `InflightPublishCount`, `OldestPendingAge`, `MaxDispatchDuration`) | **accounting/telemetry — skipped, but counted** | the envelope is deliberately not entered on the fast path (#47/S2 computes percentiles over completed slow-path publishes only). The skip is not silent: `FastPathCount` makes the total publish count exact (`FastPathCount + PublishedCount`) |
@@ -127,7 +127,7 @@ row; each row prints its own fraction to stdout):
 
 | Composition | Sinks | Scrollback | Measured qualifying fraction | Why |
 |---|---|---|---|---|
-| CLI preset (`HostBuilder.CliOptions`) | `TypeFilterMiddleware` (mandatory) | 1000 | **0 / 200 = 0 %** | both the mandatory sink and the retention capacity disqualify |
+| CLI preset (`HostBuilder.CliOptions`) | none (the typeless filter was removed in #478) | 1000 | **0 / 200 = 0 %** | retention capacity alone |
 | Desktop preset (`DesktopDefault`, Avalonia host) | none | default (1000) | **0 / 200 = 0 %** | retention capacity alone |
 | Headless (scrollback off, no sinks) | none | 0 | **200 / 200 = 100 %** | the qualifying case |
 | Headless + sampler | `SamplingMiddleware` (optional) | 0 | **200 / 200 = 100 %**, drained 200× | optional sinks do not disqualify |

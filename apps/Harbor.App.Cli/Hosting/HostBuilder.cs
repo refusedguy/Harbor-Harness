@@ -1,8 +1,6 @@
-using Harbor.Abstractions.Events;
 using Harbor.App.Cli.Configuration;
 using Harbor.App.Cli.Demo;
 using Harbor.Application.Configuration;
-using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Hosting;
 using Harbor.Telemetry;
@@ -114,7 +112,27 @@ internal static partial class HostBuilder
         }
     }
 
-    /// <summary>CLI preset (di-design §3.3): jsonl storage, scrollback + TypeFilter middleware.</summary>
+    /// <summary>
+    ///     CLI preset (di-design §3.3): jsonl storage + scrollback, and
+    ///     <b>no event-bus middleware</b>.
+    /// </summary>
+    /// <remarks>
+    ///     #478: this preset used to register
+    ///     <c>new TypeFilterMiddleware(lf.CreateLogger&lt;TypeFilterMiddleware&gt;())</c>
+    ///     — with no allowed types. That is not "filter everything", it is a filter
+    ///     that admits every event while still declaring
+    ///     <c>EventBusSinkKind.Mandatory</c>,
+    ///     which <c>InMemoryEventBus</c> reads once in its constructor and which
+    ///     therefore kept the CLI bus off its fast path on every publish. The
+    ///     registration bought the mandatory-sink cost and returned nothing, and
+    ///     its doc-comment promised configuration-driven filtering that no config
+    ///     key ever fed. Removing it changes no event delivery: the filter passed
+    ///     everything before, and nothing is registered now. The class stays, and
+    ///     its constructor now rejects a typeless allowlist, so re-adding it means
+    ///     naming the event types it is meant to admit —
+    ///     <c>tests/Harbor.Architecture.Tests/TypeFilterRegistrationTests.cs</c>
+    ///     fails the build if a product call site forgets.
+    /// </remarks>
     private static HarborComposeOptions CliOptions(
         string harborDir,
         CliConfig cliConfig,
@@ -126,8 +144,10 @@ internal static partial class HostBuilder
         // #47/S2: export the event-bus queue-age percentiles to telemetry and
         // to the per-run log (harbor logs --last) every 30s.
         EventBusQueueAgeReportInterval = EventBusQueueAgeReporter.DefaultReportInterval,
-        EventBusMiddlewares = lf =>
-            new IEventBusMiddleware[] { new TypeFilterMiddleware(lf.CreateLogger<TypeFilterMiddleware>()) },
+        // #478: no EventBusMiddlewares — see the CliOptions remarks. The filter
+        // registered here carried no allowed types and admitted every event, so
+        // dropping it is delivery-neutral; what it stops is a Mandatory sink that
+        // filtered nothing keeping the CLI off the fast path.
         DefaultTuiRenderer = cliConfig.DefaultTuiRenderer,
         RuntimeSwappable = cliConfig.RuntimeSwappable,
         Configuration = configuration,

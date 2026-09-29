@@ -53,10 +53,11 @@ public class EventBusSinkCompositionTests
 
     /// <summary>
     ///     The CLI preset exactly as <c>HostBuilder.CliOptions</c> builds it:
-    ///     1000-slot scrollback plus the type filter. The filter is a MANDATORY
-    ///     sink (a filter is a contract on what projections may see, not a
-    ///     listener), so no publish may be short-circuited here — and the
-    ///     measurement is the point, not the assertion of a guess.
+    ///     1000-slot scrollback and <b>no middleware</b> (#478 removed the
+    ///     typeless <c>TypeFilterMiddleware</c> that used to sit here). Retention
+    ///     capacity alone keeps the fast path out of reach, and the mandatory-sink
+    ///     term is gone — which is the honest outcome: that sink was mandatory in
+    ///     name only, admitting every event it was supposed to police.
     /// </summary>
     [Test]
     public async Task CliPreset_ZeroSubscribers_DoesNotQualify()
@@ -65,20 +66,18 @@ public class EventBusSinkCompositionTests
         {
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",
-            EventBusScrollback = 1000,
-            EventBusMiddlewares = lf => new IEventBusMiddleware[]
-            {
-                new TypeFilterMiddleware(lf.CreateLogger<TypeFilterMiddleware>())
-            }
+            EventBusScrollback = 1000
         });
 
         Console.WriteLine($"eventbus-s3-fraction: cli-preset fast={fast} slow={slow} → {fast / (double)Publishes:P2} qualify");
 
-        await Assert.That(bus.HasMandatorySink).IsTrue()
-            .Because("TypeFilterMiddleware declares EventBusSinkKind.Mandatory (docs/EVENT_BUS_SINKS.md)");
+        await Assert.That(bus.HasMandatorySink).IsFalse()
+            .Because(
+                "#478: the CLI registers no sink. The TypeFilterMiddleware it used to register was declared "
+                + "Mandatory while admitting every event, so it disqualified the fast path for nothing.");
         await Assert.That(bus.FastPathEligible).IsFalse();
         await Assert.That(fast).IsEqualTo(0)
-            .Because("a mandatory sink and 1000 scrollback slots both rule the fast path out");
+            .Because("1000 scrollback slots alone disqualify the fast path; a mandatory sink is no longer part of the reason");
         await Assert.That(slow).IsEqualTo(Publishes);
     }
 
@@ -132,7 +131,11 @@ public class EventBusSinkCompositionTests
     /// <summary>
     ///     A mandatory sink alone is enough — with zero subscribers and zero
     ///     scrollback, the event still has to reach the sink that declared it
-    ///     mandatory, so the bus stays on the full path.
+    ///     mandatory, so the bus stays on the full path. The filter carries a real
+    ///     allowlist (#478): a sink may only claim the mandatory verdict if it
+    ///     actually restricts what the projections downstream get to see. The
+    ///     published <c>TurnStartEvent</c> is on the allowlist and still passes the
+    ///     filter — this row is about the SINK being mandatory, not about dropping.
     /// </summary>
     [Test]
     public async Task ScrollbackOff_MandatorySink_StillDisqualifies()
@@ -144,12 +147,15 @@ public class EventBusSinkCompositionTests
             EventBusScrollback = 0,
             EventBusMiddlewares = lf => new IEventBusMiddleware[]
             {
-                new TypeFilterMiddleware(lf.CreateLogger<TypeFilterMiddleware>())
+                new TypeFilterMiddleware(
+                    lf.CreateLogger<TypeFilterMiddleware>(), typeof(TurnStartEvent))
             }
         });
 
         Console.WriteLine($"eventbus-s3-fraction: headless+filter fast={fast} slow={slow} → {fast / (double)Publishes:P2} qualify");
 
+        await Assert.That(bus.HasMandatorySink).IsTrue()
+            .Because("TypeFilterMiddleware declares EventBusSinkKind.Mandatory (docs/EVENT_BUS_SINKS.md)");
         await Assert.That(bus.FastPathEligible).IsFalse();
         await Assert.That(fast).IsEqualTo(0);
         await Assert.That(slow).IsEqualTo(Publishes);
