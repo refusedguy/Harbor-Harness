@@ -37,6 +37,8 @@
 //      it to" test.
 //   3. NonVacuity_GrandfatheredViolations_AreStillReal + the per-assembly
 //      non-zero type count — the baseline cannot rot into a blanket permission.
+//   4. PermanentCapabilities_AreAllCurrentlyRealized — same guarantee for the
+//      permanent-capability table, which carries a reason instead of an issue.
 //
 // GRANDFATHERING: the honest part
 // --------------------------------
@@ -55,6 +57,26 @@
 // site, not silently tolerated. The liveness test above is what stops a row
 // from outliving its violation. This mirrors
 // `FullLayerMatrixTests.DocumentedExceptions_AllCurrentlyRealized`.
+//
+// PERMANENT CAPABILITIES — the row that is never a violation (#669)
+// ------------------------------------------------------------------
+// A baseline row is a promise TO FIX: it names the issue that will delete it.
+// Reading the console is not that. `TerminalInputStream` wraps the inherited
+// fd 0 in a `FileStream` because `Console.OpenStandardInput` makes the runtime
+// rewrite slave-side termios on first read, which turns Ctrl+C into SIGINT —
+// see that class's doc. That capability is real, permanent and legitimate: fd 0
+// is the renderer's input medium, so no refactor removes it short of deleting
+// the renderer. Filed under `NoFiles` it misread as "renderers may touch the
+// filesystem" — the precedent a future illegitimate `FileStream` needs — and it
+// made #538's "delete the baseline rows" checkbox unreachable, since the row
+// could be neither deleted nor kept without sitting in the wrong table.
+//
+// Such capabilities go in `PermanentCapabilities`, valued by their REASON
+// rather than a tracking issue: there is no fix to schedule, and the reason is
+// the entire justification. `PermanentCapabilities_AreAllCurrentlyRealized`
+// gives it the baseline's anti-rot guarantee, and
+// `RuleTable_And_Baseline_Are_WellFormed` rejects a blank reason and an entry
+// that shadows a baseline row.
 //
 // DELIBERATELY NOT RULES (and why — do not "helpfully" add them)
 // --------------------------------------------------------------
@@ -515,14 +537,6 @@ public sealed class PresentationCapabilityRules
             [NoDirectories + " Harbor.Tui.CellForge.Panels.CellForgeFileTreePanel"] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/538",
         },
-        ["Harbor.Tui.CellForge.Engine"] = new(StringComparer.Ordinal)
-        {
-            // Input/TerminalInputStream.cs:26 — FileStream over the inherited fd 0.
-            // It is not a file, it is a terminal; filed anyway so the judgement
-            // call is explicit rather than accidental.
-            [NoFiles + " Harbor.Tui.CellForge.Input.TerminalInputStream"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/538",
-        },
         ["Harbor.DesignSystem"] = new(StringComparer.Ordinal)
         {
             // ThemeStore.cs (File :117,:122,:176; Directory :69,:71,:151,:152) and
@@ -562,6 +576,55 @@ public sealed class PresentationCapabilityRules
                 "https://github.com/refusedguy/Harbor-Harness/issues/535",
         },
     };
+
+    /// <summary>
+    ///     Capabilities a Presentation assembly owns by construction and will
+    ///     never give up, keyed exactly like <see cref="KnownViolations" /> but
+    ///     valued by REASON instead of a tracking issue.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Split out from the baseline in #669. A <see cref="KnownViolations" />
+    ///         row means "this is wrong, here is the issue that fixes it" — the
+    ///         liveness test enforces that promise by failing when the row goes
+    ///         stale. A row whose capability is permanent can keep the promise only
+    ///         by never being fixed, so it breaks the promise it is making: it
+    ///         reads as precedent to the next person, and it makes the owning
+    ///         issue's "delete the baseline rows" checkbox unreachable, because the
+    ///         row can be neither deleted (removing it breaks the build) nor kept
+    ///         without sitting in the wrong table.
+    ///     </para>
+    ///     <para>
+    ///         No tracking issue, deliberately: there is no fix to schedule. The
+    ///         reason IS the entry, which is why it is mandatory —
+    ///         <c>RuleTable_And_Baseline_Are_WellFormed</c> rejects a blank one
+    ///         and <c>PermanentCapabilities_AreAllCurrentlyRealized</c> rejects a
+    ///         stale one, so this table cannot rot into a blanket permission any
+    ///         more than the baseline can.
+    ///     </para>
+    /// </remarks>
+    private static readonly Dictionary<string, Dictionary<string, string>> PermanentCapabilities
+        = new(StringComparer.Ordinal)
+        {
+            ["Harbor.Tui.CellForge.Engine"] = new(StringComparer.Ordinal)
+            {
+                // Input/TerminalInputStream.cs:26 — FileStream over the inherited
+                // fd 0. Not a violation and not fixable: fd 0 is the renderer's
+                // input medium and reading the console is renderer work, so the
+                // only refactor that removes this deletes the renderer.
+                //
+                // Why a FileStream rather than Console.OpenStandardInput: the
+                // runtime rewrites slave-side termios on the first read from the
+                // stream it hands back, re-enabling ISIG and turning Ctrl+C into
+                // SIGINT instead of the 0x03 byte the key loop expects. Reading the
+                // raw fd skips that rewrite. See the class doc for the full story.
+                [NoFiles + " Harbor.Tui.CellForge.Input.TerminalInputStream"] =
+                    "The console device, not storage: fd 0 is the renderer's input medium.",
+            },
+        };
+
+    /// <summary>Shared empty row set, so a lookup miss allocates nothing per assembly.</summary>
+    private static readonly Dictionary<string, string> EmptyRows = new(StringComparer.Ordinal);
 
     private static readonly Lazy<IReadOnlyDictionary<string, Assembly>> LoadedAssemblies =
         new(ArchitectureTestHelpers.LoadHarborAssemblies);
@@ -745,6 +808,56 @@ public sealed class PresentationCapabilityRules
     }
 
     /// <summary>
+    ///     Every permanent-capability entry must still match a real hit — the same
+    ///     anti-rot guarantee <see cref="NonVacuity_GrandfatheredViolations_AreStillReal" />
+    ///     gives the baseline. Without it this table grows silently, and the next
+    ///     site gets filed here by reflex rather than by judgement.
+    /// </summary>
+    [Test]
+    public async Task PermanentCapabilities_AreAllCurrentlyRealized()
+    {
+        var failures = new List<string>();
+
+        foreach (var (assemblyName, byKey) in PermanentCapabilities)
+        {
+            AssemblyScan scan = Probe(RequireLoaded(assemblyName));
+            var real = scan.Hits
+                .Select(static hit => (hit.RuleId, hit.DeclaringType))
+                .ToHashSet();
+
+            foreach (var (key, reason) in byKey)
+            {
+                if (string.IsNullOrWhiteSpace(reason))
+                {
+                    failures.Add($"{assemblyName} / {key}: permanent capability states no reason");
+                }
+
+                int sep = key.IndexOf(' ');
+                if (sep <= 0)
+                {
+                    failures.Add($"{assemblyName}: malformed permanent-capability key '{key}' — "
+                        + "expected '<ruleId> <typeName>'");
+                    continue;
+                }
+
+                if (real.Contains((key[..sep], key[(sep + 1)..])))
+                {
+                    continue;
+                }
+
+                failures.Add(
+                    $"{assemblyName} / {key}: stale — the probe finds no such capability any more, "
+                    + "so the entry excuses nothing. Delete it. " + reason);
+            }
+        }
+
+        await Assert.That(failures).IsEmpty()
+            .Because("A permanent-capability entry that no longer matches reality is a lie: it lets "
+                   + "a type be re-added under a renamed key with nobody noticing. "
+                   + string.Join("\n", failures));
+    }
+
+    /// <summary>
     ///     #669 — a baseline row is a PROMISE TO FIX. Every row carries a tracking
     ///     issue that plans the refactor, and #538's checkbox counts rows deleted.
     ///     Reading the console is not that: fd 0 is the renderer's input medium,
@@ -877,6 +990,48 @@ public sealed class PresentationCapabilityRules
             }
         }
 
+        // The permanent-capability table obeys the same integrity rules, minus the
+        // tracking URL (there is no fix to schedule) and plus two of its own: a
+        // blank reason, and an entry that shadows a baseline row. The second one
+        // is the #669 bug in general form — the same capability counted twice,
+        // once as debt and once as a permission, so the debt count never moves.
+        foreach (var (assemblyName, byKey) in PermanentCapabilities)
+        {
+            if (!presentation.Contains(assemblyName))
+            {
+                failures.Add($"permanent capability names '{assemblyName}', which the layer matrix "
+                    + "does not classify as Presentation — the entry would excuse nothing");
+            }
+
+            foreach (var (key, reason) in byKey)
+            {
+                int sep = key.IndexOf(' ');
+                if (sep <= 0)
+                {
+                    continue; // already reported by the liveness test
+                }
+
+                if (!ruleIds.Contains(key[..sep]))
+                {
+                    failures.Add($"permanent capability '{key}' references unknown rule id '{key[..sep]}'");
+                }
+
+                if (string.IsNullOrWhiteSpace(reason))
+                {
+                    failures.Add($"permanent capability '{key}' states no reason — the reason is the "
+                        + "only thing separating a permission from a debt");
+                }
+
+                if (KnownViolations.TryGetValue(assemblyName, out Dictionary<string, string>? rows)
+                    && rows.ContainsKey(key))
+                {
+                    failures.Add($"'{key}' is listed BOTH as a baseline violation and as a permanent "
+                        + $"capability in '{assemblyName}'. Pick one: a violation is tracked to a fix, "
+                        + "a permanent capability carries its reason.");
+                }
+            }
+        }
+
         await Assert.That(failures).IsEmpty()
             .Because(string.Join("\n", failures));
     }
@@ -909,13 +1064,19 @@ public sealed class PresentationCapabilityRules
 
             var baseline = KnownViolations.TryGetValue(assemblyName, out Dictionary<string, string>? rows)
                 ? rows
-                : new Dictionary<string, string>(StringComparer.Ordinal);
+                : EmptyRows;
+
+            Dictionary<string, string> permanent = PermanentCapabilities.TryGetValue(
+                assemblyName, out Dictionary<string, string>? permanentRows)
+                ? permanentRows
+                : EmptyRows;
 
             foreach (IGrouping<string, CapabilityHit> byType in scan.Hits
                 .Where(hit => hit.RuleId == rule.Id)
                 .GroupBy(static hit => hit.DeclaringType))
             {
-                if (baseline.ContainsKey(rule.Id + " " + byType.Key))
+                string key = rule.Id + " " + byType.Key;
+                if (baseline.ContainsKey(key) || permanent.ContainsKey(key))
                 {
                     continue;
                 }
@@ -932,7 +1093,9 @@ public sealed class PresentationCapabilityRules
                     + " Tracked by: NO TRACKING ISSUE — this is NEW I/O in the Presentation layer. "
                     + "Open an issue, then either move the I/O behind a Domain contract plus an "
                     + "Infrastructure implementation, or add an explicit baseline row with that "
-                    + "issue URL. Do not widen an existing row to cover it.");
+                    + "issue URL. Do not widen an existing row to cover it. If this assembly owns "
+                    + "the capability for good (the console device, for instance), record it in "
+                    + "PermanentCapabilities with its reason instead — never as a baseline row.");
             }
         }
 

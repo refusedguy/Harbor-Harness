@@ -13,8 +13,11 @@ Two halves of the layering contract, both mechanically enforced:
    exercise: `PresentationCapabilityRules` (issue #455). Walks each Presentation
    assembly's IL with Mono.Cecil and fails on subprocess spawn, `System.IO.File`,
    `System.IO.Directory`, network and reflection emit. Existing violations are
-   held in an enforced `KnownViolations` baseline with a tracking issue per site —
-   see ARCHITECTURE_LAYERS.md §3 and §5.6.
+   held in an enforced `KnownViolations` baseline with a tracking issue per site.
+   Capabilities an assembly owns for good and will never give up — the console
+   device a renderer reads — live in a separate `PermanentCapabilities` table
+   valued by their reason, not a fix that will never be scheduled (#669).
+   See ARCHITECTURE_LAYERS.md §3 and §5.6.
 3. **Single-source rules** — a domain fact decided in one place, not re-derived
    per consumer: `SessionStatusSourceRule` (#687, a status is not re-derived from
    the transcript), `SessionStatusTableRule` (#663, one label/brush table),
