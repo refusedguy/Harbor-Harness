@@ -159,7 +159,8 @@ public class McpRemoteTransportTests
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("invalid_grant");
-        await Assert.That(server.HandledRequests).IsEmpty();
+        // A rejected grant must not have spent a round-trip proving it.
+        await Assert.That(server.HandledRequests).IsEqualTo(0);
     }
 
     /// <summary>
@@ -179,7 +180,7 @@ public class McpRemoteTransportTests
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
         await RoundTripAndAssertAsync(transport, request.RootElement.Clone(), 1);
 
-        await Assert.That(server.HandledRequests.Count).IsGreaterThanOrEqualTo(1);
+        await Assert.That(server.HandledRequests).IsGreaterThanOrEqualTo(1);
         foreach (string? header in server.AuthHeaders)
         {
             await Assert.That(header).IsNull();
@@ -350,7 +351,7 @@ public class McpRemoteTransportTests
             Result<string> result = await registry.InvokeAsync("anon", "tools/list", args.RootElement);
 
             await Assert.That(result.IsSuccess).IsTrue();
-            await Assert.That(server.HandledRequests.Count).IsGreaterThanOrEqualTo(1);
+            await Assert.That(server.HandledRequests).IsGreaterThanOrEqualTo(1);
         }
         finally
         {

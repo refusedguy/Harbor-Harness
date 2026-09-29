@@ -326,7 +326,9 @@ public sealed class McpOAuthTokenShapeRules
             scanned.Add((Path.GetRelativePath(root, file).Replace('\\', '/'), MatchOutcomePrefix(File.ReadAllText(file))));
         }
 
-        return [.. scanned.OrderBy(s => s.File, StringComparer.Ordinal)];
+        // Element names, not tuple names: `scanned` holds unnamed tuples, so the
+        // sort key has to be read positionally.
+        return [.. scanned.OrderBy(static s => s.Item1, StringComparer.Ordinal)];
     }
 
     /// <summary>
