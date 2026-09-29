@@ -320,8 +320,12 @@ jobs:
       # shard, which skips every following step without it — i.e. exactly when
       # the measurement is most wanted. Reporting only, never a gate: the
       # script exits 0 on a missing or corrupt TRX set.
+      # `shell: bash` is explicit because test-os reuses this step on
+      # windows-latest, where the default shell is pwsh and a trailing `\` is
+      # a ParserError, not a line continuation.
       - name: Report test measurements (issue #618)
         if: always()
+        shell: bash
         run: |
           python3 tools/test-measurements.py "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
@@ -577,8 +581,11 @@ jobs:
       # question a reader otherwise has to ask by hand is precisely "does this
       # number differ on windows/macOS?", and `test-os` is the only place that
       # can be answered. `if: always()` so a failing OS still reports.
+      # `shell: bash` — the windows-latest default shell is pwsh, where the
+      # trailing `\` in the command below is a ParserError, not a continuation.
       - name: Report test measurements (issue #618)
         if: always()
+        shell: bash
         run: |
           python3 tools/test-measurements.py "TestResults/${{ matrix.os }}" \
             --summary "$GITHUB_STEP_SUMMARY"
