@@ -32,7 +32,8 @@ public static class TerminalGuiColorMapper
         // the removed "same hue" comment used to promise did not exist (#556).
         ChatColorSlot.Muted => TerminalColor.Gray,
         ChatColorSlot.Tool => TerminalColor.BrightBlue,
-        ChatColorSlot.Danger => TerminalColor.BrightRed
+        ChatColorSlot.Danger => TerminalColor.BrightRed,
+        _ => throw ChatRolePresentation.UnhandledSlot(slot)
     };
 
     /// <summary>Header label shown in the <c>─ role ─</c> band.</summary>

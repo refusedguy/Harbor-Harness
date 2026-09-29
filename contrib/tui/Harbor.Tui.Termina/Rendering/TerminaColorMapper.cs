@@ -31,7 +31,8 @@ public static class TerminaColorMapper
         // removed "same hue" comment used to promise did not exist (#556).
         ChatColorSlot.Muted => Color.Gray,
         ChatColorSlot.Tool => Color.Blue,
-        ChatColorSlot.Danger => Color.Red
+        ChatColorSlot.Danger => Color.Red,
+        _ => throw ChatRolePresentation.UnhandledSlot(slot)
     };
 
     /// <summary>Header label shown in the <c>─ role ─</c> band.</summary>

@@ -448,10 +448,10 @@ public sealed class DefaultUiProjector : IUiProjector
     {
         var spans = ImmutableArray.CreateBuilder<StyledSpan>();
 
-        // No wildcard arm (#556): a new ChatRole must be a CS8509 build break
-        // here, not a line silently projected as Default. Note this is the
-        // projected-span vocabulary (UiSpanStyle), not the chat-band policy —
-        // labels, markdown rule and palette slot live in ChatRolePresentation.
+        // Loud default (#556): a new ChatRole must not be silently projected as
+        // Default. Note this is the projected-span vocabulary (UiSpanStyle), not
+        // the chat-band policy — labels, markdown rule and palette slot live in
+        // ChatRolePresentation.
         var style = role switch
         {
             ChatRole.User => UiSpanStyle.RoleUser,
@@ -460,7 +460,8 @@ public sealed class DefaultUiProjector : IUiProjector
             ChatRole.Tool => UiSpanStyle.Tool,
             ChatRole.ToolResult => UiSpanStyle.Default,
             ChatRole.System => UiSpanStyle.RoleSystem,
-            ChatRole.Error => UiSpanStyle.Danger
+            ChatRole.Error => UiSpanStyle.Danger,
+            _ => throw ChatRolePresentation.Unhandled(role)
         };
 
         spans.Add(new StyledSpan(text, null, null, false, false, false, false, style));

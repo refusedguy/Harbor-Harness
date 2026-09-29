@@ -16,12 +16,12 @@ namespace Harbor.Tui.Tests;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The compiler is the first line of defence: <c>Describe</c> is a switch
-///         expression with no discard arm, so a new enum member is <c>CS8509</c>.
-///         These tests are the second line — they walk
-///         <see cref="Enum.GetValues{TEnum}()" />, so the policy is pinned as a
-///         table and every backend is proven to derive from it rather than
-///         re-deciding it.
+///         C# refuses to check enum exhaustiveness here (a discard-free switch
+///         over <see cref="ChatRole" /> is <c>CS8524</c>, not a total match), so
+///         the guarantee is split in two: the runtime default arm
+///         <em>throws</em> — a new role is loud, never <c>"msg"</c> — and these
+///         tests walk <see cref="Enum.GetValues{TEnum}()" />, so the policy is
+///         pinned as a table and a role added without a pinned row fails CI.
 ///     </para>
 ///     <para>
 ///         Deliberately not covered here: the desktop bubble label
@@ -75,7 +75,6 @@ public class ChatRolePresentationTests
         {
             string label = ChatRolePresentation.Label(role);
 
-            await Assert.That(label).IsNotNull().Because($"{role} must have a header label");
             await Assert.That(label).IsNotEmpty().Because($"{role} must not render a blank header");
             await Assert.That(label).IsEqualTo(Row(role).Label).Because($"the {role} header label changed");
         }
@@ -235,5 +234,48 @@ public class ChatRolePresentationTests
             await Assert.That(TerminalGuiMarkdownRenderer.RenderHeader(role))
                 .IsEqualTo($"─ {ChatRolePresentation.Label(role)} ─")
                 .Because($"Terminal.Gui painted {role} with something other than the shared label");
+    }
+
+    [Test]
+    public async Task AnUnhandledRole_ThrowsInsteadOfBeingRelabelled()
+    {
+        // The "loud" half of the guarantee. ChatRole has no member outside the
+        // pinned seven, so this is exactly what a future ChatRole member hits if
+        // its author forgets the table — it must never come back as "msg".
+        ChatRole imaginary = (ChatRole)byte.MaxValue;
+
+        ArgumentOutOfRangeException fromTable =
+            Assert.Throws<ArgumentOutOfRangeException>(() => ChatRolePresentation.Describe(imaginary));
+        ArgumentOutOfRangeException fromLabel =
+            Assert.Throws<ArgumentOutOfRangeException>(() => ChatRolePresentation.Label(imaginary));
+        ArgumentOutOfRangeException fromSlot =
+            Assert.Throws<ArgumentOutOfRangeException>(() => ChatRolePresentation.Slot(imaginary));
+        ArgumentOutOfRangeException fromBackend =
+            Assert.Throws<ArgumentOutOfRangeException>(() => RazorColorMapper.ToLabel(imaginary));
+
+        await Assert.That(fromTable.Message.Contains("ChatRolePresentation.Describe", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(fromLabel.Message.Contains("ChatRolePresentationTests.Pinned", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(fromSlot.Message.Contains("ChatRolePresentationTests.Pinned", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(fromBackend.Message.Contains("ChatRolePresentation.Describe", StringComparison.Ordinal)).IsTrue();
+    }
+
+    [Test]
+    public async Task AnUnhandledSlot_ThrowsInEveryBackendPalette()
+    {
+        // The same guarantee one level down: no backend answers an unknown slot
+        // with a colour, because "some colour" is how a role silently repaints.
+        ChatColorSlot imaginary = (ChatColorSlot)byte.MaxValue;
+
+        ArgumentOutOfRangeException razor =
+            Assert.Throws<ArgumentOutOfRangeException>(() => RazorColorMapper.ToColor(imaginary));
+        ArgumentOutOfRangeException termina =
+            Assert.Throws<ArgumentOutOfRangeException>(() => TerminaColorMapper.ToColor(imaginary));
+        ArgumentOutOfRangeException terminalGui =
+            Assert.Throws<ArgumentOutOfRangeException>(() => TerminalGuiColorMapper.ToColor(imaginary));
+        ArgumentOutOfRangeException spectre =
+            Assert.Throws<ArgumentOutOfRangeException>(() => ChatMessageFormatter.ToColor(imaginary));
+
+        foreach (ArgumentOutOfRangeException ex in new[] { razor, termina, terminalGui, spectre })
+            await Assert.That(ex.Message.Contains("ChatColorSlot", StringComparison.Ordinal)).IsTrue();
     }
 }

@@ -18,10 +18,16 @@ namespace Harbor.Ui.Framework.Projection;
 ///         <c>"msg"</c> in every renderer with no warning and no failing test.
 ///     </para>
 ///     <para>
-///         <b>No wildcard arm, on purpose.</b> <see cref="Describe" /> is a
-///         switch expression over <see cref="ChatRole" /> with no discard arm, so
-///         the compiler reports <c>CS8509</c> the moment a new role is added to
-///         the enum. The next role is a build break, not a silent relabel.
+///         <b>The wildcard arm throws, on purpose.</b> C# will not check enum
+///         exhaustiveness for us here — a switch expression over
+///         <see cref="ChatRole" /> without a discard arm is rejected with
+///         <c>CS8524</c> ("not exhaustive, involving an unnamed enum value"), not
+///         accepted as a total match. So the default arm is a throw rather than
+///         a quiet answer: a new role that nobody wired up fails loudly with the
+///         fix in the message, instead of rendering as <c>"msg"</c> in every
+///         backend. <c>ChatRole</c> is never persisted (it is produced in-memory
+///         by <c>SessionFactory.MessageToChatLine</c>), so an unhandled value
+///         cannot come from stored data — it is always a missing table row.
 ///     </para>
 ///     <para>
 ///         <b>What is shared, what is not.</b> Label, markdown rule and colour
@@ -52,6 +58,11 @@ public static class ChatRolePresentation
     ///     The whole policy for one role in a single tuple, so label, markdown
     ///     rule and slot can never be decided in different places.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     <paramref name="role" /> has no row here. That means a
+    ///     <see cref="ChatRole" /> member was added without updating this table —
+    ///     loud by design, see the remarks.
+    /// </exception>
     public static (string Label, bool Markdown, ChatColorSlot Slot) Describe(ChatRole role) => role switch
     {
         ChatRole.User => ("you", true, ChatColorSlot.User),
@@ -60,6 +71,28 @@ public static class ChatRolePresentation
         ChatRole.Tool => ("tool", false, ChatColorSlot.Tool),
         ChatRole.ToolResult => ("result", false, ChatColorSlot.Muted),
         ChatRole.System => ("system", true, ChatColorSlot.Muted),
-        ChatRole.Error => ("error", false, ChatColorSlot.Danger)
+        ChatRole.Error => ("error", false, ChatColorSlot.Danger),
+        _ => throw Unhandled(role)
     };
+
+    /// <summary>
+    ///     The one error this table can raise. Shared with the span-style and
+    ///     palette tables so all of them name the same fix.
+    /// </summary>
+    public static ArgumentOutOfRangeException Unhandled(ChatRole role) => new(
+        "role",
+        role,
+        "No ChatRole presentation row — add the role to ChatRolePresentation.Describe "
+        + "and to ChatRolePresentationTests.Pinned, then give it a ChatColorSlot.");
+
+    /// <summary>
+    ///     The same throw for a <see cref="ChatColorSlot" /> that no backend
+    ///     palette covers. Slots only originate from
+    ///     <see cref="Slot(ChatRole)" />, so reaching this is a missing palette
+    ///     arm, not bad data.
+    /// </summary>
+    public static ArgumentOutOfRangeException UnhandledSlot(ChatColorSlot slot) => new(
+        "slot",
+        slot,
+        "No palette entry for this ChatColorSlot — add it to every backend's slot→colour table.");
 }

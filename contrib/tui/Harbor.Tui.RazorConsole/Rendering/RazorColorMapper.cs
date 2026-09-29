@@ -27,7 +27,8 @@ public static class RazorColorMapper
         ChatColorSlot.Assistant => SpectreColor.White,
         ChatColorSlot.Muted => SpectreColor.Grey,
         ChatColorSlot.Tool => SpectreColor.Blue,
-        ChatColorSlot.Danger => SpectreColor.Red
+        ChatColorSlot.Danger => SpectreColor.Red,
+        _ => throw ChatRolePresentation.UnhandledSlot(slot)
     };
 
     /// <summary>Header label shown in the <c>─ role ─</c> band.</summary>
@@ -50,7 +51,8 @@ public static class RazorColorMapper
         ChatColorSlot.Assistant => "white",
         ChatColorSlot.Muted => "grey",
         ChatColorSlot.Tool => "blue",
-        ChatColorSlot.Danger => "red"
+        ChatColorSlot.Danger => "red",
+        _ => throw ChatRolePresentation.UnhandledSlot(slot)
     };
 
     /// <summary>True if the role's body should be rendered with markdown spans.</summary>

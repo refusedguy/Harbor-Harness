@@ -23,8 +23,8 @@ namespace Harbor.Ui.Framework.Projection;
 ///         transcript band.
 ///     </para>
 ///     <para>
-///         Adding a member is a compile error in every backend palette table —
-///         they are switch expressions without a wildcard arm. See
+///         Every backend palette table ends in a throw rather than a colour, so
+///         an unhandled slot is loud instead of silently repainted. See
 ///         <see cref="ChatRolePresentation" /> for the role→slot table.
 ///     </para>
 /// </remarks>

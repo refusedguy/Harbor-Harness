@@ -58,7 +58,8 @@ internal static class ChatMessageFormatter
             ChatRole.Tool => new Style(color, null, Decoration.Bold),
             ChatRole.ToolResult => new Style(color),
             ChatRole.System => new Style(color),
-            ChatRole.Error => new Style(color, null, Decoration.Bold)
+            ChatRole.Error => new Style(color, null, Decoration.Bold),
+            _ => throw ChatRolePresentation.Unhandled(role)
         };
     }
 
@@ -124,6 +125,7 @@ internal static class ChatMessageFormatter
         ChatColorSlot.Assistant => Color.White,
         ChatColorSlot.Muted => Color.Grey,
         ChatColorSlot.Tool => Color.Blue,
-        ChatColorSlot.Danger => Color.Red
+        ChatColorSlot.Danger => Color.Red,
+        _ => throw ChatRolePresentation.UnhandledSlot(slot)
     };
 }
