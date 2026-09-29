@@ -36,15 +36,27 @@
 //
 // THE BASELINE IS THE POINT
 // -------------------------
-// 21 sites in the tree currently carry a wildcard arm over one of these unions,
-// and they are all REAL findings — #495 (two `AgentEvent -> HarborEvent`
-// switches with `_ => null` silently dropping a new event type on one host),
-// #556 (`ChatRole` label mapping written 4x, all four `_ =>` arms silently
-// relabelling a new role), #567 (a new tool-call state rendered as `running`
-// forever). They are listed, each with the issue that owns removing it, and the
-// rule holds only if the current set is a SUBSET of the baseline: new wildcard
-// arms are red on the spot, and fixing one is a two-line deletion from the
-// table.
+// 17 sites in the tree currently carry a wildcard arm over one of these unions,
+// and they are all REAL findings — #556 (`ChatRole` label mapping written 4x,
+// all four `_ =>` arms silently relabelling a new role), #578 (the reducers),
+// #575 (the Avalonia router). They are listed, each with the issue that owns
+// removing it, and the rule holds only if the current set is a SUBSET of the
+// baseline: new wildcard arms are red on the spot, and fixing one is a one-line
+// deletion from the table.
+//
+// The ratchet has already fired once: #495 (the two `AgentEvent ->
+// HarborEvent` IPC projections) was four rows here and was fixed on dev while
+// this file was being written. WildcardBaseline_IsLive turned those four rows
+// into a build failure, which is the intended behaviour — a row that outlives
+// its violation is a stale amnesty.
+//
+// WHAT THIS DOES NOT CATCH, and it is worth knowing: a MISSING arm with no
+// default. `ChatScreenBridge.HandleEvent` has no wildcard arm and still has no
+// `CompactionFailedEvent` arm, so the event falls through the switch and
+// nothing happens. A wildcard arm invents an answer; a missing arm simply does
+// not, and no rule keyed on the default arm can see it. That is #578 rule 1's
+// per-union reflection exhaustiveness test, which lands with each union's
+// refactor per #578's own sequencing.
 //
 // #578 is explicit that this is the sequencing: "Add the guard in the same PR
 // as the refactor of each union. Do NOT try to land one giant enforcement PR."
@@ -562,63 +574,60 @@ public sealed class ExhaustiveUnionSwitchRule
     /// </summary>
     private static readonly Dictionary<SiteKey, string> WildcardBaseline = new()
     {
-            // #495 — two AgentEvent -> HarborEvent projections whose `_ => null`
-            // silently dropped a new event type on one host. The wire union is
-            // intentionally narrower than AgentEvent, so the arm is *justified*
-            // here; what is missing is the log + counter #578 rule 2 demands.
-            [new("src/Harbor.Ipc.InProcess/InProcessHarborClient.cs", "AgentEvent")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/495",
-            [new("src/Harbor.Ipc.InProcess/InProcessHarborClient.cs", "LlmEvent")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/495",
-            [new("src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs", "AgentEvent")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/495",
-            [new("src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs", "LlmEvent")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/495",
+        // NOTE: the two IPC projections (`InProcessHarborClient.ProjectEvent` and
+        // `EventBroadcaster.ProjectEvent`) were four rows here. #495 was fixed on
+        // dev while this file was being written and they are gone — which is the
+        // ratchet working: WildcardBaseline_IsLive fails the moment a row outlives
+        // its violation, so a fix is a one-line deletion and a stale amnesty is
+        // impossible.
 
-            // #578 rule 1, the reducers. The Store + reducer half of the
-            // convention: every arm named, no default inventing an answer.
-            [new("src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs", "AgentEvent")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/578",
-            [new("src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs", "LlmEvent")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/578",
-            [new("src/Harbor.Ui.Framework.Reducers/AppReducer.cs", "AgentEvent")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/578",
-            [new("src/Harbor.Ui.Framework.Reducers/AppReducer.cs", "LlmEvent")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/578",
-            [new("src/Harbor.Ui.Framework.Reducers/ChatViewReducer.cs", "AgentEvent")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/578",
-            [new("src/Harbor.Ui.Framework.Reducers/SessionsReducer.cs", "AgentEvent")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/578",
+        // #578 rule 1, the reducers. The Store + reducer half of the
+        // convention: every arm named, no default inventing an answer.
+        [new("src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs", "AgentEvent")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/578",
+        [new("src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs", "LlmEvent")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/578",
+        [new("src/Harbor.Ui.Framework.Reducers/AppReducer.cs", "AgentEvent")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/578",
+        [new("src/Harbor.Ui.Framework.Reducers/AppReducer.cs", "LlmEvent")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/578",
+        [new("src/Harbor.Ui.Framework.Reducers/ChatViewReducer.cs", "AgentEvent")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/578",
+        [new("src/Harbor.Ui.Framework.Reducers/SessionsReducer.cs", "AgentEvent")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/578",
 
-            // #556 — `ChatRole -> (label, markdown?)` written four times, all
-            // four `_ =>` arms silently relabelling a new role.
-            [new("src/Harbor.Ui.Framework.ViewModels/ViewModels/ChatLineViewModel.cs", "ChatRole")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [new("src/Harbor.Ui.Framework.State/ToolCallKey.cs", "ChatRole")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [new("src/Harbor.Ui.Framework.Projection/Projection/DefaultUiProjector.cs", "ChatRole")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [new("src/Harbor.Desktop.Abstractions/ViewModels/ChatViewModelBase.cs", "ChatRole")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [new("src/Harbor.Storage.Jsonl/JsonlLineParser.cs", "ChatRole")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [new("contrib/tui/Harbor.Tui.SpectreTui/View/ChatMessageFormatter.cs", "ChatRole")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [new("contrib/tui/Harbor.Tui.SpectreTui/View/ChatMarkup.cs", "ChatRole")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [new("contrib/tui/Harbor.Tui.TerminalGui/Rendering/TerminalGuiColorMapper.cs", "ChatRole")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [new("contrib/tui/Harbor.Tui.Termina/Rendering/TerminaColorMapper.cs", "ChatRole")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [new("contrib/tui/Harbor.Tui.RazorConsole/Rendering/RazorColorMapper.cs", "ChatRole")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/556",
+        // #556 — `ChatRole -> (label, markdown?)` written four times, all
+        // four `_ =>` arms silently relabelling a new role.
+        [new("src/Harbor.Ui.Framework.ViewModels/ViewModels/ChatLineViewModel.cs", "ChatRole")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/556",
+        [new("src/Harbor.Ui.Framework.State/ToolCallKey.cs", "ChatRole")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/556",
+        [new("src/Harbor.Ui.Framework.Projection/Projection/DefaultUiProjector.cs", "ChatRole")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/556",
+        [new("src/Harbor.Desktop.Abstractions/ViewModels/ChatViewModelBase.cs", "ChatRole")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/556",
+        [new("src/Harbor.Storage.Jsonl/JsonlLineParser.cs", "ChatRole")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/556",
+        [new("contrib/tui/Harbor.Tui.SpectreTui/View/ChatMessageFormatter.cs", "ChatRole")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/556",
+        [new("contrib/tui/Harbor.Tui.SpectreTui/View/ChatMarkup.cs", "ChatRole")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/556",
+        [new("contrib/tui/Harbor.Tui.TerminalGui/Rendering/TerminalGuiColorMapper.cs", "ChatRole")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/556",
+        [new("contrib/tui/Harbor.Tui.Termina/Rendering/TerminaColorMapper.cs", "ChatRole")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/556",
+        [new("contrib/tui/Harbor.Tui.RazorConsole/Rendering/RazorColorMapper.cs", "ChatRole")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/556",
 
-            // #575 — the canonical renderer. ChatScreenBridge's 18-arm switch
-            // has no wildcard, which is why the drift there was INVISIBLE:
-            // CompactionFailedEvent simply fell through and did nothing.
-            [new("apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs", "AgentEvent")] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/575",
-        };
+        // #575 — the canonical renderer. `ChatScreenBridge.HandleEvent` is NOT a
+        // row: its 18-arm switch has no wildcard arm, which is exactly why the
+        // drift there was invisible — `CompactionFailedEvent` fell straight
+        // through and did nothing. A missing arm without a default is the more
+        // dangerous shape, and this file only catches the default kind. The row
+        // below is the Avalonia router, which does carry one.
+        [new("apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs", "AgentEvent")] =
+            "https://github.com/refusedguy/Harbor-Harness/issues/575",
+    };
 
     // =====================================================================
     // 1. The rule.

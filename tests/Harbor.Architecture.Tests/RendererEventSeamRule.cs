@@ -767,7 +767,14 @@ public sealed class RendererEventSeamRule
 
         public override ITuiRenderContext Context => throw new NotImplementedException();
 
-        public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
+        /// <remarks>
+        ///     Returns <see cref="Maybe{T}" />, not <c>Result&lt;string&gt;</c>:
+        ///     <c>ITuiRenderer.ReadLineAsync</c> was changed to signal EOF
+        ///     structurally (#589) and every override in the tree follows it. The
+        ///     probe renderer is never called — it exists so the two declarations
+        ///     below are real overrides the IL walker can see.
+        /// </remarks>
+        public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
             => throw new NotImplementedException();
 
         public override Task<Result> WriteAsync(string text, CancellationToken ct = default)
