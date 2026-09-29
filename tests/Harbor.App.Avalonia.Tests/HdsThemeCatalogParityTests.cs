@@ -172,13 +172,26 @@ public class HdsThemeCatalogParityTests
     ///     it: <c>CatppuccinMocha</c> reads as "Catppuccin Mocha", single-word
     ///     names are left alone. A label is presentation, not a design token.
     /// </summary>
+    /// <remarks>
+    ///     Runs in a headless session like its siblings: the label reaches the
+    ///     caller through <see cref="HdsThemeCatalog.Find" />, which resolves the
+    ///     palette dictionary, and that needs Avalonia's asset loader. Outside a
+    ///     session <c>Find</c> returns <c>null</c> — the degraded path the other
+    ///     tests in this class exist to rule out.
+    /// </remarks>
     [Test]
+    [Retry(3)]
     public async Task DisplayName_Is_Derived_From_The_Palette_Id()
     {
-        await Assert.That(HdsThemeCatalog.Find("CatppuccinMocha")?.DisplayName).IsEqualTo("Catppuccin Mocha");
-        await Assert.That(HdsThemeCatalog.Find("Vapor")?.DisplayName).IsEqualTo("Vapor");
-        await Assert.That(HdsThemeCatalog.Find("Lumen")?.DisplayName).IsEqualTo("Lumen");
-        await Assert.That(HdsThemeCatalog.Find("NoSuchPalette")).IsNull();
+        await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
+        await session.Dispatch(async () =>
+        {
+            await Assert.That(HdsThemeCatalog.Find("CatppuccinMocha")?.DisplayName).IsEqualTo("Catppuccin Mocha");
+            await Assert.That(HdsThemeCatalog.Find("Vapor")?.DisplayName).IsEqualTo("Vapor");
+            await Assert.That(HdsThemeCatalog.Find("Lumen")?.DisplayName).IsEqualTo("Lumen");
+            await Assert.That(HdsThemeCatalog.Find("HarborDesignTokens")?.DisplayName).IsEqualTo("Harbor Design Tokens");
+            await Assert.That(HdsThemeCatalog.Find("NoSuchPalette")).IsNull();
+        }, CancellationToken.None);
     }
 
     private static Color ColorOf(IBrush brush) =>
