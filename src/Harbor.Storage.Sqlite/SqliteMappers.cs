@@ -194,38 +194,69 @@ internal static class SqliteMappers
                     el.TryGetProperty("path", out var p) ? p.GetString()! : el.GetProperty("Path").GetString()!,
                     el.TryGetProperty("mimeType", out var mt) ? mt.GetString()! : el.GetProperty("MimeType").GetString()!,
                     el.TryGetProperty("sizeBytes", out var sb) ? sb.GetInt64() : el.GetProperty("SizeBytes").GetInt64()),
+                // Read is a TAG -> TYPE factory, not a walk over the part union, so
+                // there is no visitor to route it through: an unrecognised tag is
+                // reported as null and the enclosing array converter skips it
+                // (ContentPartListJsonConverter). Deliberately unchanged in #461 —
+                // making both read paths (here and Harbor.Storage.Jsonl) fail loud
+                // on a foreign tag is a separate change.
                 _ => null
             };
         }
 
+        /// <summary>
+        ///     #461: the write side is a per-kind walk, so it goes through
+        ///     <see cref="ContentPartVisitor{TResult}" />. A part kind the
+        ///     serializer was never taught now throws instead of being written
+        ///     out as an empty <c>{}</c> object that no reader can decode.
+        /// </summary>
         public override void Write(Utf8JsonWriter writer, ContentPart value, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
-            switch (value)
-            {
-                case TextPart t:
-                    writer.WriteString("type", "text");
-                    writer.WriteString("text", t.Text);
-                    break;
-                case ThinkingPart th:
-                    writer.WriteString("type", "thinking");
-                    writer.WriteString("text", th.Text);
-                    break;
-                case ToolCallPart tc:
-                    writer.WriteString("type", "tool_call");
-                    writer.WriteString("id", tc.Id);
-                    writer.WriteString("toolName", tc.ToolName);
-                    writer.WritePropertyName("args");
-                    JsonSerializer.Serialize(writer, tc.Args, options);
-                    break;
-                case FilePart f:
-                    writer.WriteString("type", "file");
-                    writer.WriteString("path", f.Path);
-                    writer.WriteString("mimeType", f.MimeType);
-                    writer.WriteNumber("sizeBytes", f.SizeBytes);
-                    break;
-            }
+            new PartWriter(writer, options).Accept(value);
             writer.WriteEndObject();
+        }
+
+        /// <summary>
+        ///     Per-kind JSON shape for one <see cref="ContentPart" />. The property
+        ///     names and the order the old switch wrote them in are the on-disk
+        ///     contract — unchanged.
+        /// </summary>
+        private sealed class PartWriter(Utf8JsonWriter writer, JsonSerializerOptions options)
+            : ContentPartVisitor<PartWriter>
+        {
+            public override PartWriter Visit(TextPart part)
+            {
+                writer.WriteString("type", "text");
+                writer.WriteString("text", part.Text);
+                return this;
+            }
+
+            public override PartWriter Visit(ThinkingPart part)
+            {
+                writer.WriteString("type", "thinking");
+                writer.WriteString("text", part.Text);
+                return this;
+            }
+
+            public override PartWriter Visit(ToolCallPart part)
+            {
+                writer.WriteString("type", "tool_call");
+                writer.WriteString("id", part.Id);
+                writer.WriteString("toolName", part.ToolName);
+                writer.WritePropertyName("args");
+                JsonSerializer.Serialize(writer, part.Args, options);
+                return this;
+            }
+
+            public override PartWriter Visit(FilePart part)
+            {
+                writer.WriteString("type", "file");
+                writer.WriteString("path", part.Path);
+                writer.WriteString("mimeType", part.MimeType);
+                writer.WriteNumber("sizeBytes", part.SizeBytes);
+                return this;
+            }
         }
     }
 }

@@ -98,10 +98,18 @@ public interface ITokenEstimator
 ///     higher token density of CJK text. Adds a fixed 100-token per-message overhead for
 ///     structural framing.
 ///     <para>
-///         Performance: <see cref="EstimateMessage" /> uses index-based for loops instead of
-///         LINQ <c>Sum</c> (which allocates an iterator). <see cref="ToolCallPart.Args.GetRawText" />
-///         is invoked at most once per part — the previous code called it on every estimate
-///         of a tool-call part, allocating a fresh string each time.
+///         Performance: the walk goes through <see cref="AgentMessageVisitor{TResult}" />
+///         / <see cref="ContentPartVisitor{TResult}" />, whose <c>Walk</c> uses
+///         index-based for loops instead of LINQ <c>Sum</c> (which allocates an
+///         iterator). <see cref="ToolCallPart.Args.GetRawText" /> is invoked at most once
+///         per part — the previous code called it on every estimate of a tool-call part,
+///         allocating a fresh string each time.
+///     </para>
+///     <para>
+///         #461: the per-kind dispatch used to be a <c>switch</c> per level of the
+///         message tree, copied by every consumer. An unrecognised message or part
+///         kind used to fall into a <c>default:</c> arm and be estimated at a flat
+///         50 tokens; it is now refused loudly.
 ///     </para>
 /// </remarks>
 public sealed class HeuristicTokenEstimator : ITokenEstimator
@@ -125,36 +133,78 @@ public sealed class HeuristicTokenEstimator : ITokenEstimator
     }
 
     /// <inheritdoc />
-    public int EstimateMessage(AgentMessage message)
+    public int EstimateMessage(AgentMessage message) => new MessageVisitor(this).Accept(message);
+
+    /// <summary>Message-level arm: three roles, each with its framing overhead.</summary>
+    private sealed class MessageVisitor(HeuristicTokenEstimator owner)
+        : AgentMessageVisitor<int>
     {
-        switch (message)
+        private readonly PartVisitor _parts = new(owner);
+
+        public override int Visit(UserMessage message) => owner.Estimate(message.Content) + 100;
+
+        public override int Visit(AssistantMessage message)
         {
-            case UserMessage u:
-                return Estimate(u.Content) + 100;
-            case AssistantMessage a:
-                // For-loop over Parts replaces `a.Parts.Sum(EstimatePart)` — avoids the
-                // LINQ iterator + delegate allocation per message.
+            _parts.Reset();
+            _parts.Walk(message.Parts);
+            return _parts.Total + 100;
+        }
+
+        public override int Visit(ToolResultMessage message)
+        {
+            var results = message.Results;
+            int sum = 0;
+            for (int i = 0; i < results.Count; i++)
             {
-                var parts = a.Parts;
-                int sum = 0;
-                for (int i = 0; i < parts.Count; i++)
-                {
-                    sum += EstimatePart(parts[i]);
-                }
-                return sum + 100;
+                sum += owner.Estimate(results[i].Output);
             }
-            case ToolResultMessage tr:
-            {
-                var results = tr.Results;
-                int sum = 0;
-                for (int i = 0; i < results.Count; i++)
-                {
-                    sum += Estimate(results[i].Output);
-                }
-                return sum + 100;
-            }
-            default:
-                return 50;
+
+            return sum + 100;
+        }
+    }
+
+    /// <summary>
+    ///     Part-level arm (#461). Reuses one visitor across an assistant turn and
+    ///     accumulates into <see cref="Total" />, so a message walk allocates a
+    ///     single visitor instead of one per part.
+    /// </summary>
+    private sealed class PartVisitor(HeuristicTokenEstimator owner) : ContentPartVisitor<PartVisitor>
+    {
+        internal int Total { get; private set; }
+
+        internal void Reset() => Total = 0;
+
+        public override PartVisitor Visit(TextPart part)
+        {
+            Total += owner.Estimate(part.Text);
+            return this;
+        }
+
+        public override PartVisitor Visit(ThinkingPart part)
+        {
+            Total += owner.Estimate(part.Text);
+            return this;
+        }
+
+        public override PartVisitor Visit(ToolCallPart part)
+        {
+            // Cache GetRawText() — it allocates a new string every call and is on the
+            // hot path (token estimation runs on every compaction check, every turn).
+            // Note: JsonElement.GetRawText() returns the same string the JsonDocument
+            // was parsed from; we can compute its length cheaply via ValueKind + a
+            // single allocation rather than re-callers across turns.
+            Total += part.ToolName.Length + owner.Estimate(part.Args.GetRawText());
+            return this;
+        }
+
+        /// <summary>
+        ///     A file is billed at a flat 200 tokens — the bytes are not walked.
+        ///     Was an explicit case before #461, stays one.
+        /// </summary>
+        public override PartVisitor Visit(FilePart part)
+        {
+            Total += 200;
+            return this;
         }
     }
 
@@ -178,27 +228,5 @@ public sealed class HeuristicTokenEstimator : ITokenEstimator
             total += EstimateMessage(m);
         }
         return total;
-    }
-
-    private int EstimatePart(ContentPart part)
-    {
-        switch (part)
-        {
-            case TextPart t:
-                return Estimate(t.Text);
-            case ThinkingPart th:
-                return Estimate(th.Text);
-            case ToolCallPart tc:
-                // Cache GetRawText() — it allocates a new string every call and is on the
-                // hot path (token estimation runs on every compaction check, every turn).
-                // Note: JsonElement.GetRawText() returns the same string the JsonDocument
-                // was parsed from; we can compute its length cheaply via ValueKind + a
-                // single allocation rather than re-callers across turns.
-                return tc.ToolName.Length + Estimate(tc.Args.GetRawText());
-            case FilePart:
-                return 200;
-            default:
-                return 50;
-        }
     }
 }

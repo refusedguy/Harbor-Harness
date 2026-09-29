@@ -741,56 +741,89 @@ public sealed class CompactionService(
         return builder.ToString();
     }
 
-    private static void AppendFormattedMessage(StringBuilder builder, AgentMessage msg)
+    /// <summary>
+    ///     Renders one message into the summarization prompt. #461: the per-kind
+    ///     dispatch lives in <see cref="FormattedMessageVisitor" />; an unknown
+    ///     role now throws instead of being stringified by a <c>default:</c> arm.
+    /// </summary>
+    private static void AppendFormattedMessage(StringBuilder builder, AgentMessage msg) =>
+        new FormattedMessageVisitor(builder).Accept(msg);
+
+    /// <summary>
+    ///     Message-level arm of the summarization formatter. Byte-for-byte the
+    ///     shape the previous switch produced, separators included.
+    /// </summary>
+    private sealed class FormattedMessageVisitor(StringBuilder builder)
+        : AgentMessageVisitor<FormattedMessageVisitor>
     {
-        switch (msg)
+        private readonly FormattedPartVisitor _parts = new(builder);
+
+        public override FormattedMessageVisitor Visit(UserMessage message)
         {
-            case UserMessage u:
-                builder.Append(u.Content);
-                break;
-            case AssistantMessage a:
+            builder.Append(message.Content);
+            return this;
+        }
+
+        public override FormattedMessageVisitor Visit(AssistantMessage message)
+        {
+            var parts = message.Parts;
+            for (int i = 0; i < parts.Count; i++)
             {
-                var parts = a.Parts;
-                for (int i = 0; i < parts.Count; i++)
-                {
-                    if (i > 0) builder.Append('\n');
-                    AppendFormattedPart(builder, parts[i]);
-                }
-                break;
+                if (i > 0) builder.Append('\n');
+                _parts.Accept(parts[i]);
             }
-            case ToolResultMessage tr:
+
+            return this;
+        }
+
+        public override FormattedMessageVisitor Visit(ToolResultMessage message)
+        {
+            var results = message.Results;
+            for (int i = 0; i < results.Count; i++)
             {
-                var results = tr.Results;
-                for (int i = 0; i < results.Count; i++)
-                {
-                    if (i > 0) builder.Append('\n');
-                    var r = results[i];
-                    builder.Append("[tool:").Append(r.ToolName).Append("] ").Append(r.Output);
-                }
-                break;
+                if (i > 0) builder.Append('\n');
+                var r = results[i];
+                builder.Append("[tool:").Append(r.ToolName).Append("] ").Append(r.Output);
             }
-            default:
-                builder.Append(msg.ToString() ?? string.Empty);
-                break;
+
+            return this;
         }
     }
 
-    private static void AppendFormattedPart(StringBuilder builder, ContentPart part)
+    /// <summary>
+    ///     Part-level arm of the summarization formatter (#461). Each part kind is
+    ///     an explicit decision rather than a <c>switch</c> arm that a new
+    ///     <see cref="ContentPart" /> subtype would fall straight through.
+    /// </summary>
+    private sealed class FormattedPartVisitor(StringBuilder builder)
+        : ContentPartVisitor<FormattedPartVisitor>
     {
-        switch (part)
+        public override FormattedPartVisitor Visit(TextPart part)
         {
-            case TextPart t:
-                builder.Append(t.Text);
-                break;
-            case ThinkingPart th:
-                builder.Append("[thinking] ").Append(th.Text);
-                break;
-            case ToolCallPart tc:
-                // GetRawText() allocates a string each call; this is the only call site in
-                // the formatter, so the cost is one allocation per tool-call part per
-                // summarization — acceptable for compaction (runs rarely).
-                builder.Append("[tool_call:").Append(tc.ToolName).Append("] ").Append(tc.Args.GetRawText());
-                break;
+            builder.Append(part.Text);
+            return this;
         }
+
+        public override FormattedPartVisitor Visit(ThinkingPart part)
+        {
+            builder.Append("[thinking] ").Append(part.Text);
+            return this;
+        }
+
+        public override FormattedPartVisitor Visit(ToolCallPart part)
+        {
+            // GetRawText() allocates a string each call; this is the only call site in
+            // the formatter, so the cost is one allocation per tool-call part per
+            // summarization — acceptable for compaction (runs rarely).
+            builder.Append("[tool_call:").Append(part.ToolName).Append("] ").Append(part.Args.GetRawText());
+            return this;
+        }
+
+        /// <summary>
+        ///     File parts carry no summarizable prose — the path and MIME type are
+        ///     noise in a conversation summary. Explicitly a no-op so a future
+        ///     subtype can never be mistaken for this one.
+        /// </summary>
+        public override FormattedPartVisitor Visit(FilePart part) => this;
     }
 }

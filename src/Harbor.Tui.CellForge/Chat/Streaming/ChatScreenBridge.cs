@@ -452,44 +452,94 @@ public sealed class ChatScreenBridge : IDisposable
         }
     }
 
-    private void AppendHistoryMessage(AgentMessage message)
+    /// <summary>
+    ///     Replays one history message into the timeline. #461: the per-kind
+    ///     dispatch lives in <see cref="HistoryVisitor" />, so a new
+    ///     <see cref="AgentMessage" /> or <see cref="ContentPart" /> subtype is a
+    ///     build break here instead of a part that quietly never paints.
+    /// </summary>
+    private void AppendHistoryMessage(AgentMessage message) =>
+        new HistoryVisitor(this).Accept(message);
+
+    private sealed class HistoryVisitor(ChatScreenBridge bridge) : AgentMessageVisitor<HistoryVisitor>
     {
-        switch (message)
+        public override HistoryVisitor Visit(UserMessage message)
         {
-            case UserMessage user:
-                _panel.Timeline.Append(new UserBlock(user.Content));
-                break;
-
-            case AssistantMessage assistant:
-                var text = new StringBuilder();
-                foreach (var part in assistant.Parts)
-                {
-                    switch (part)
-                    {
-                        case TextPart tp:
-                            text.AppendLine(tp.Text);
-                            break;
-                        case FilePart { MimeType: var mime } file when mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase):
-                            // Порядок карточек = порядку частей: накопленный
-                            // текст коммитится перед изображением.
-                            if (text.Length > 0)
-                            {
-                                _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString(), _streams.ModelHeader()));
-                                text.Clear();
-                            }
-
-                            _cards.AppendImageCard(file.Path, mime, file.SizeBytes, file.Data);
-                            break;
-                    }
-                }
-
-                if (text.Length > 0)
-                {
-                    _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString(), _streams.ModelHeader()));
-                }
-
-                break;
+            bridge._panel.Timeline.Append(new UserBlock(message.Content));
+            return this;
         }
+
+        public override HistoryVisitor Visit(AssistantMessage message)
+        {
+            var parts = new HistoryPartVisitor(bridge);
+            parts.Walk(message.Parts);
+            parts.Flush();
+            return this;
+        }
+
+        /// <summary>
+        ///     Tool results are already in the transcript as their own tool lines
+        ///     (see the live-render path); replaying them here would double them.
+        ///     The old switch had no arm for this role — now it says so.
+        /// </summary>
+        public override HistoryVisitor Visit(ToolResultMessage message) => this;
+    }
+
+    /// <summary>
+    ///     Per-part timeline shape for a replayed assistant turn. The commit
+    ///     order — text block, then image cards, in part order — is what the
+    ///     golden baselines lock in, and it is unchanged.
+    /// </summary>
+    private sealed class HistoryPartVisitor(ChatScreenBridge bridge) : ContentPartVisitor<HistoryPartVisitor>
+    {
+        private readonly StringBuilder _text = new();
+
+        /// <summary>Commits the trailing text block, if any is still buffered.</summary>
+        internal void Flush()
+        {
+            if (_text.Length > 0)
+            {
+                bridge._panel.Timeline.Append(new AssistantMarkdownBlock(_text.ToString(), bridge._streams.ModelHeader()));
+            }
+        }
+
+        public override HistoryPartVisitor Visit(TextPart part)
+        {
+            _text.AppendLine(part.Text);
+            return this;
+        }
+
+        public override HistoryPartVisitor Visit(FilePart part)
+        {
+            string mime = part.MimeType;
+            if (!mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                // Non-image files have no timeline card; the old switch skipped
+                // them here too. Explicit so a new kind cannot ride along.
+                return this;
+            }
+
+            // Порядок карточек = порядку частей: накопленный
+            // текст коммитится перед изображением.
+            if (_text.Length > 0)
+            {
+                bridge._panel.Timeline.Append(new AssistantMarkdownBlock(_text.ToString(), bridge._streams.ModelHeader()));
+                _text.Clear();
+            }
+
+            bridge._cards.AppendImageCard(part.Path, mime, part.SizeBytes, part.Data);
+            return this;
+        }
+
+        /// <summary>
+        ///     Reasoning and tool calls are streamed live as their own blocks, so
+        ///     the replayed history stays text + image only. The old switch had no
+        ///     arms for them at all.
+        /// </summary>
+        public override HistoryPartVisitor Visit(ThinkingPart part) => this;
+
+        /// <inheritdoc cref="Visit(ThinkingPart)" />
+        public override HistoryPartVisitor Visit(ToolCallPart part) => this;
     }
 
     // ── Stream compatibility shims (internals now owned by StreamCoalescer) ──

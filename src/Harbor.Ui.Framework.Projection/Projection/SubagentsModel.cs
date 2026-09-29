@@ -122,77 +122,109 @@ public static class SubagentsModel
         int budget = Math.Max(1, width - 10);
         for (int i = 0; i < messages.Count; i++)
         {
-            string body = messages[i] switch
-            {
-                UserMessage user => PanelText.SingleLine(user.Content),
-                AssistantMessage assistant => SummarizeAssistant(assistant),
-                ToolResultMessage tool => SummarizeToolResults(tool),
-                _ => string.Empty,
-            };
-            string role = messages[i] switch
-            {
-                UserMessage => "you",
-                AssistantMessage => "agent",
-                ToolResultMessage => "tool",
-                _ => "?",
-            };
+            // #461: role + body come from ONE dispatch now — they used to be two
+            // hand-rolled switches over the same message, each with a silent
+            // "?" / empty-string arm for a role the panel did not know.
+            (string role, string body) = new TranscriptRowVisitor().Accept(messages[i]);
             rows.Add($"{role}: {PanelText.Truncate(body, budget)}".TrimEnd());
         }
 
         return rows;
     }
 
-    private static string SummarizeAssistant(AssistantMessage assistant)
+    /// <summary>Message-level arm of the transcript row: role label + single-line body.</summary>
+    private sealed class TranscriptRowVisitor : AgentMessageVisitor<(string Role, string Body)>
     {
-        string? joined = null;
-        List<string>? toolNames = null;
-        var parts = assistant.Parts;
-        for (int i = 0; i < parts.Count; i++)
+        public override (string Role, string Body) Visit(UserMessage message) =>
+            ("you", PanelText.SingleLine(message.Content));
+
+        public override (string Role, string Body) Visit(AssistantMessage message) =>
+            ("agent", SummarizeAssistant(message));
+
+        public override (string Role, string Body) Visit(ToolResultMessage message) =>
+            ("tool", SummarizeToolResults(message));
+
+        private static string SummarizeAssistant(AssistantMessage assistant)
         {
-            if (parts[i] is TextPart text && !string.IsNullOrWhiteSpace(text.Text))
+            var visitor = new AssistantSummaryVisitor();
+            visitor.Walk(assistant.Parts);
+            return visitor.Summary;
+        }
+
+        private static string SummarizeToolResults(ToolResultMessage tool)
+        {
+            var results = tool.Results;
+            if (results.Count == 0)
+                return "(no results)";
+            if (results.Count == 1)
+                return SummarizeOneResult(results[0]);
+            int errors = 0;
+            for (int i = 0; i < results.Count; i++)
             {
-                string single = PanelText.SingleLine(text.Text);
-                joined = joined is null ? single : $"{joined} {single}";
+                if (results[i].IsError)
+                    errors++;
             }
-            else if (parts[i] is ToolCallPart call)
+
+            return errors == 0
+                ? $"({results.Count} results, ok)"
+                : $"({results.Count} results, {errors} error(s))";
+        }
+
+        private static string SummarizeOneResult(ToolResultEntry result)
+        {
+            string verdict = result.IsError ? "error" : "ok";
+            string output = PanelText.SingleLine(result.Output);
+            return string.IsNullOrEmpty(output)
+                ? $"{result.ToolName}: {verdict}"
+                : $"{result.ToolName}: {verdict} {output}";
+        }
+    }
+
+    /// <summary>
+    ///     Part-level arm of the assistant summary (#461): prose is joined into
+    ///     one line, tool calls fall back to their names, and the two kinds that
+    ///     have no place in a read-only one-line row are explicit no-ops.
+    /// </summary>
+    private sealed class AssistantSummaryVisitor : ContentPartVisitor<AssistantSummaryVisitor>
+    {
+        private string? _joined;
+        private List<string>? _toolNames;
+
+        internal string Summary
+        {
+            get
             {
-                toolNames ??= new List<string>(2);
-                toolNames.Add(call.ToolName);
+                if (!string.IsNullOrEmpty(_joined))
+                    return _joined;
+                if (_toolNames is { Count: > 0 })
+                    return $"[tool_call: {string.Join(", ", _toolNames)}]";
+                return "(no text)";
             }
         }
 
-        if (!string.IsNullOrEmpty(joined))
-            return joined;
-        if (toolNames is { Count: > 0 })
-            return $"[tool_call: {string.Join(", ", toolNames)}]";
-        return "(no text)";
-    }
-
-    private static string SummarizeToolResults(ToolResultMessage tool)
-    {
-        var results = tool.Results;
-        if (results.Count == 0)
-            return "(no results)";
-        if (results.Count == 1)
-            return SummarizeOneResult(results[0]);
-        int errors = 0;
-        for (int i = 0; i < results.Count; i++)
+        public override AssistantSummaryVisitor Visit(TextPart part)
         {
-            if (results[i].IsError)
-                errors++;
+            if (!string.IsNullOrWhiteSpace(part.Text))
+            {
+                string single = PanelText.SingleLine(part.Text);
+                _joined = _joined is null ? single : $"{_joined} {single}";
+            }
+
+            return this;
         }
 
-        return errors == 0
-            ? $"({results.Count} results, ok)"
-            : $"({results.Count} results, {errors} error(s))";
+        public override AssistantSummaryVisitor Visit(ToolCallPart part)
+        {
+            (_toolNames ??= new List<string>(2)).Add(part.ToolName);
+            return this;
+        }
+
+        /// <summary>Reasoning is not part of a one-line transcript row.</summary>
+        public override AssistantSummaryVisitor Visit(ThinkingPart part) => this;
+
+        /// <inheritdoc cref="Visit(ThinkingPart)" />
+        public override AssistantSummaryVisitor Visit(FilePart part) => this;
     }
 
-    private static string SummarizeOneResult(ToolResultEntry result)
-    {
-        string verdict = result.IsError ? "error" : "ok";
-        string output = PanelText.SingleLine(result.Output);
-        return string.IsNullOrEmpty(output)
-            ? $"{result.ToolName}: {verdict}"
-            : $"{result.ToolName}: {verdict} {output}";
-    }
+
 }

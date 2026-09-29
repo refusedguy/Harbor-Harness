@@ -14,6 +14,7 @@ The **pure contract/data layer** of Harbor — value objects, domain events, mes
 |-----------|----------|
 | `Models/` | `Session`, `SessionMetadata`, `Usage`, `Pricing`, `AgentMessage` hierarchy (`UserMessage`, `AssistantMessage`, `ContentPart`, `TextPart`, `ToolResultMessage`), `MemoryPackFormatters` |
 | `Models/Identifiers/` | `SessionId`, `MessageId`, `AgentId`, `ProviderId`, `ToolName` — `ValueObject`-based identifiers with validation |
+| `Models/Visitors/` | `AgentMessageVisitor<TResult>`, `ContentPartVisitor<TResult>` — the single GoF traversal over the two message sum types (#461) |
 | `Events/` | `AgentEvent` discriminated union (`AgentStartEvent`, `TurnStartEvent`, `MessageStartEvent`, `ToolExecutionStartEvent`, etc.), `LlmStreamErrorException`, `ProviderErrorKind`, `ProviderErrors` |
 | `Permissions/` | `PermissionRuleset`, `PermissionRule`, `PermissionAction`, `BashArgMatcher`, `ToolCategory` |
 
@@ -22,6 +23,7 @@ The **pure contract/data layer** of Harbor — value objects, domain events, mes
 - **Identifiers**: `SessionId.Create/New/TryCreate`, `MessageId`, `ProviderId`, `ToolName` — all immutable value objects.
 - **Session model**: `Session.Create(...)`, `SessionMetadata`, `Usage`, `Pricing.CalculateCost(...)`.
 - **Messages**: `AgentMessage` record hierarchy with `AppendText`, `AppendThinking`, `AppendToolCall`.
+- **Message walks**: `AgentMessageVisitor<TResult>` / `ContentPartVisitor<TResult>` — one `Accept`/`Walk` dispatch for the message and part unions. Arms are `abstract` (a walker must decide what every kind does) and an unrecognised kind throws instead of being dropped, so extending either union cannot silently regress a consumer.
 - **Events**: `AgentEvent` base record with `Timestamp`; sealed subtypes for every agent/tool lifecycle event.
 - **Permissions**: `PermissionRuleset.Default/Empty`, `Merge`, `Evaluate`; `BashArgMatcher.IsDestructiveCommand/HasShellMetacharacters`.
 - **Serialization**: `MemoryPackFormatters` for `JsonElement` and message types.
