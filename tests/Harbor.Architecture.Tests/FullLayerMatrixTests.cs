@@ -238,13 +238,13 @@ public class FullLayerMatrixTests
                 // old Rendering→State one; Presentation→Presentation conforms.
                 "Harbor.Ui.Framework.Rendering"]),
         ["Harbor.Ui.Framework.Reducers"] = new(Layer.Presentation,
-            [ "Harbor.Ui.Framework.State"]),
+            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State"]),
         ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Reducers"]),
         ["Harbor.Ui.Framework.ViewModels"] = new(Layer.Presentation,
-            [ "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services"]),
+            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services"]),
         ["Harbor.Ui.Framework.Projection"] = new(Layer.Presentation,
-            [ "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
+            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
              // RgbColor is defined in the standalone DesignSystem package but
              // keeps its historical Projection namespace for compatibility.
              "Harbor.DesignSystem"]),
@@ -291,7 +291,7 @@ public class FullLayerMatrixTests
         ["Harbor.Desktop.Animations"] = new(Layer.Presentation,
             ["Harbor.DesignSystem"]),
         ["Harbor.Tui.Notifications"] = new(Layer.Presentation,
-            [ "Harbor.Terminal.Abstractions"]),
+            [ "Harbor.Abstractions.Contracts", "Harbor.Terminal.Abstractions"]),
         // renderer-unification Phase 4: Ansi + Plain merged into one assembly;
         // styling flows through IEscapeCodeStrategy (Ansi / Null impls).
         // Issue #77: chat writes land in the DI-shared UiStore (Presentation→
@@ -338,7 +338,7 @@ public class FullLayerMatrixTests
         // (Terminal.Abstractions) and nothing else. The third-party
         // SharpConsoleUI project it wraps is not a Harbor assembly.
         ["Harbor.Tui.NickConsoleEx"] = new(Layer.Presentation,
-            [ "Harbor.Terminal.Abstractions"]),
+            [ "Harbor.Abstractions.Contracts", "Harbor.Terminal.Abstractions"]),
 
         // ---- Application ----------------------------------------------------
         ["Harbor.Application"] = new(Layer.Application,
@@ -370,10 +370,12 @@ public class FullLayerMatrixTests
         ["Harbor.Lsp"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
         ["Harbor.Terminal.Pty"] = new(Layer.Infrastructure, []),
         ["Harbor.Logging"] = new(Layer.Infrastructure, []),
-        ["Harbor.Transport.Remote"] = new(Layer.Infrastructure, ["Harbor.Abstractions"]),
+        ["Harbor.Transport.Remote"] = new(Layer.Infrastructure, ["Harbor.Abstractions.Contracts"]),
         ["Harbor.Telemetry.Core"] = new(Layer.Infrastructure,
             ["Harbor.Diagnostics.Abstractions", "Harbor.Abstractions"]),
-        ["Harbor.Telemetry.Otlp"] = new(Layer.Infrastructure, ["Harbor.Telemetry.Core"]),
+        // #450: the IL gate proved this assembly emits no AssemblyRef for
+        // Telemetry.Core, so the permission was dead weight.
+        ["Harbor.Telemetry.Otlp"] = new(Layer.Infrastructure, []),
         ["Harbor.Ipc.Client"] = new(Layer.Infrastructure,
             ["Harbor.Ipc.Abstractions", "Harbor.Abstractions"]),
         // #450: the IL-based checks proved the Ipc.Abstractions edge is real for

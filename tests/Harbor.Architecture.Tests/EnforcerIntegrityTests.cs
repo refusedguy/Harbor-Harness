@@ -55,6 +55,8 @@ public sealed class EnforcerIntegrityTests
     /// </summary>
     internal static readonly UnboundReference[] DeclaredButUnboundProjectReferences =
     [
+        new("Harbor.Ui.Framework", "Harbor.Ui.Framework.Abstractions",
+            "#450/#542: the aggregator project has no code of its own, so none of its six ProjectReferences bind a type. See issue #542."),
         new("Harbor.Hosting", "Harbor.Providers.Anthropic",
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
         new("Harbor.Hosting", "Harbor.Providers.OpenAI",
