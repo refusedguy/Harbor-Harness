@@ -155,7 +155,7 @@ public static class ProviderPresetCatalog
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 // §4.6-ok: discovery resilience — an unreadable directory is skipped, not fatal.
-                logger?.LogWarning("Skipping provider presets from '{Dir}': {Error}", dir, ex.Message);
+                logger?.LogWarning(ex, "Skipping provider presets from '{Dir}': {Error}", dir, ex.Message);
                 continue;
             }
 
@@ -194,7 +194,7 @@ public static class ProviderPresetCatalog
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logger?.LogWarning("Skipping provider preset config '{Path}': {Error}", path, ex.Message);
+            logger?.LogWarning(ex, "Skipping provider preset config '{Path}': {Error}", path, ex.Message);
             return null;
         }
     }
