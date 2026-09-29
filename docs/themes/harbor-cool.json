@@ -1,0 +1,17 @@
+{
+  "name": "harbor-cool",
+  "accent": "#4CC2FF",
+  "success": "#62D9B4",
+  "warning": "#FFB454",
+  "error": "#FF6B8B",
+  "tool": "#82AAFF",
+  "system": "#68A8F2",
+  "user": "#B8C4D4",
+  "background": "#0A0F14",
+  "panel": "#0D1219",
+  "surface": "#121826",
+  "surface2": "#1A2233",
+  "border": "#1F2A3D",
+  "muted": "#5C6F87",
+  "text": "#B8C4D4"
+}

@@ -30,11 +30,18 @@ internal static class StorageModule
         string envStorage = Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? string.Empty;
         string requested = string.IsNullOrWhiteSpace(envStorage) ? defaultStorage : envStorage.Trim();
 
-        FrozenDictionary<string, ISessionStoreFactory> registry = SessionStoreRegistry.Build();
+        // #581: the id list in the error text is derived from the registry the
+        // resolution actually used. It used to be a hand-written string constant
+        // next to the factory array that no test compared to it, so registering a
+        // backend without editing the string produced a message that lied about
+        // the available set. `Build` also folds in the plugin-contributed backends
+        // (IPluginLoadHost.RegisterSessionStore), so those are named too.
+        FrozenDictionary<string, ISessionStoreFactory> registry =
+            SessionStoreRegistry.Build(ctx.Registries.SessionStores);
         if (!SessionStoreRegistry.TryResolve(registry, requested, out ISessionStoreFactory? factory) || factory is null)
         {
             throw new ArgumentException(
-                $"Unknown HARBOR_STORAGE: '{requested}'. Expected one of: {SessionStoreRegistry.KnownIds}.");
+                $"Unknown HARBOR_STORAGE: '{requested}'. Expected one of: {string.Join(", ", registry.Keys.Order(StringComparer.Ordinal))}.");
         }
 
         ctx.Logger.LogInformation("Storage backend: {Storage}", factory.BackendId);

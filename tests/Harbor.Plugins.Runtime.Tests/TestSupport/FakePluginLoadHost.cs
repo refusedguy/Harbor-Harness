@@ -4,8 +4,10 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
+using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Plugins;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Configuration;
@@ -22,7 +24,10 @@ public sealed class FakePluginLoadHost : IPluginLoadHost
     private readonly ConcurrentDictionary<AgentName, AgentDefinition> _agents = new();
     private readonly List<IPanelProvider> _panelProviders = new();
     private readonly ConcurrentDictionary<ProviderId, Func<ILlmClient>> _providers = new();
+    private readonly ConcurrentDictionary<string, Func<ISessionStore>> _sessionStores = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ITool> _tools = new();
+    private readonly ConcurrentDictionary<string, (IReadOnlyList<string>? Aliases, Func<ITuiRenderer> Factory)> _tuiBackends =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly List<ITuiPlugin> _tuiPlugins = new();
 
     /// <summary>Initialize the fake host with empty registries.</summary>
@@ -111,4 +116,26 @@ public sealed class FakePluginLoadHost : IPluginLoadHost
         lock (_panelProviders) { _panelProviders.Add(panel); }
         return Result.Success();
     }
+
+    /// <inheritdoc />
+    public Result RegisterSessionStore(string backendId, Func<ISessionStore> factory) =>
+        string.IsNullOrWhiteSpace(backendId)
+            ? Result.Failure("Session-store backend id must be a non-empty string.")
+            : _sessionStores.TryAdd(backendId, factory)
+                ? Result.Success()
+                : Result.Failure($"Session store '{backendId}' already registered.");
+
+    /// <inheritdoc />
+    public Result RegisterTuiBackend(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory) =>
+        string.IsNullOrWhiteSpace(backendId)
+            ? Result.Failure("TUI backend id must be a non-empty string.")
+            : _tuiBackends.TryAdd(backendId, (aliases, factory))
+                ? Result.Success()
+                : Result.Failure($"TUI backend '{backendId}' already registered.");
+
+    /// <summary>Backend ids registered via <see cref="RegisterSessionStore" />.</summary>
+    public IReadOnlyList<string> RegisteredSessionStores => _sessionStores.Keys.ToArray();
+
+    /// <summary>Backend ids registered via <see cref="RegisterTuiBackend" />.</summary>
+    public IReadOnlyList<string> RegisteredTuiBackends => _tuiBackends.Keys.ToArray();
 }

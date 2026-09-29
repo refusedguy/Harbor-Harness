@@ -1,4 +1,5 @@
 #if HARBOR_WITH_PLUGINS
+using System.Collections.Concurrent;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -34,6 +35,22 @@ internal sealed class PluginLoadHost : IPluginLoadHost
     private readonly IToolRegistry _tools;
     private readonly object _tuiLock = new();
     private readonly List<ITuiPlugin> _tuiPlugins = new();
+
+    /// <summary>
+    ///     Session-store backends contributed via <see cref="RegisterSessionStore" />,
+    ///     read by <c>StorageModule</c> when it builds the storage registry.
+    /// </summary>
+    public ConcurrentDictionary<string, Func<ISessionStore>> SessionStores { get; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    ///     TUI backends contributed via <see cref="RegisterTuiBackend" />, read by
+    ///     <c>TuiModule</c> when it builds the backend registry — which is the same
+    ///     registry the runtime-swap table is derived from, so a plugin backend is
+    ///     listed by <c>/renderer</c> and can be swapped to without a second list.
+    /// </summary>
+    public ConcurrentDictionary<string, PluginTuiBackend> TuiBackends { get; } =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public PluginLoadHost(
         IServiceCollection services,
@@ -131,6 +148,50 @@ internal sealed class PluginLoadHost : IPluginLoadHost
 
     /// <inheritdoc />
     public Result RegisterPanelProvider(IPanelProvider panel) => Panels.Register(panel);
+
+    /// <inheritdoc />
+    public Result RegisterSessionStore(string backendId, Func<ISessionStore> factory)
+    {
+        if (string.IsNullOrWhiteSpace(backendId))
+        {
+            return Result.Failure("Session-store backend id must be a non-empty string.");
+        }
+
+        if (factory is null)
+        {
+            return Result.Failure($"Session-store backend '{backendId}' has no factory.");
+        }
+
+        string id = backendId.Trim().ToLowerInvariant();
+        if (!SessionStores.TryAdd(id, factory))
+        {
+            return Result.Failure($"Session-store backend '{id}' is already registered; skipping duplicate.");
+        }
+
+        return Result.Success();
+    }
+
+    /// <inheritdoc />
+    public Result RegisterTuiBackend(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory)
+    {
+        if (string.IsNullOrWhiteSpace(backendId))
+        {
+            return Result.Failure("TUI backend id must be a non-empty string.");
+        }
+
+        if (factory is null)
+        {
+            return Result.Failure($"TUI backend '{backendId}' has no factory.");
+        }
+
+        string id = backendId.Trim().ToLowerInvariant();
+        if (!TuiBackends.TryAdd(id, new PluginTuiBackend(aliases, factory)))
+        {
+            return Result.Failure($"TUI backend '{id}' is already registered; skipping duplicate.");
+        }
+
+        return Result.Success();
+    }
 }
 #endif
 // HARBOR_MINIMAL: PluginLoadHost is omitted — the entire Harbor.Plugins.*

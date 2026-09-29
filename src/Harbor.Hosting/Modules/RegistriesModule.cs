@@ -182,6 +182,27 @@ internal static class RegistriesModule
 #pragma warning disable RS0030 // Sync-over-async at startup — same pattern as config load.
         var pluginResult = pluginRuntime.LoadAllAsync(pluginHost).GetAwaiter().GetResult();
 #pragma warning restore RS0030
+
+        // #581: publish the two backend axes the plugin host accepted. StorageModule and
+        // TuiModule run AFTER AddHarborRegistries in the fixed composition order
+        // (Registration.cs), so the maps are fully populated by the time they build
+        // their registries. Startup-only, by the same contract as every other
+        // registration: a reload pass composes its own load host over a throwaway
+        // service collection, so a backend it registers cannot reach the already-built
+        // storage singleton or the swap table.
+        ctx.Registries.SessionStores = pluginHost.SessionStores;
+        ctx.Registries.TuiBackends = pluginHost.TuiBackends;
+        if (!pluginHost.SessionStores.IsEmpty)
+        {
+            ctx.Logger.LogInformation(
+                "Plugin session-store backends: {Ids}", string.Join(", ", pluginHost.SessionStores.Keys));
+        }
+
+        if (!pluginHost.TuiBackends.IsEmpty)
+        {
+            ctx.Logger.LogInformation(
+                "Plugin TUI backends: {Ids}", string.Join(", ", pluginHost.TuiBackends.Keys));
+        }
         if (pluginResult.IsSuccess) // §4.6-ok: ветка логирования успеха/провала, не конверсия.
         {
             ctx.Logger.LogInformation("Loaded {Count} CS plugin(s)", pluginResult.Value.Count);

@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Collections.Immutable;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -9,11 +10,18 @@ namespace Harbor.Hosting;
 // construction moved out of TuiModule into one strategy per backend.
 // Adding a backend = adding one factory class + one list entry below —
 // no more N-way edits across #if branches in sync.
+//
+// Issue #581/#584 — `ITuiRendererFactory` was `internal` (less accessible than
+// the `ITuiRenderer` it produces) and the factory array was maintained a
+// second time in `TuiModule`, where six of the ten backends were missing, so
+// `/renderer` under-reported what was compiled in. The interface and the
+// registry are public; `TuiModule` now walks this one array to build the
+// runtime-swap target table, so a backend can no longer be half-registered.
 
 /// <summary>
 ///     Construction strategy for one TUI backend id.
 /// </summary>
-internal interface ITuiRendererFactory
+public interface ITuiRendererFactory
 {
     /// <summary>Canonical backend id (lowercase). Used for logging, pipeline ids and runtime swap targets.</summary>
     string BackendId { get; }
@@ -95,6 +103,48 @@ internal sealed class NickConsoleExTuiRendererFactory : ITuiRendererFactory
 }
 #endif
 
+/// <summary>
+///     Wraps a plugin-contributed <c>Func&lt;ITuiRenderer&gt;</c> (the shape
+///     <c>IPluginLoadHost.RegisterTuiBackend</c> accepts) as an
+///     <see cref="ITuiRendererFactory" />, so a plugin backend lands in the same
+///     registry as a compiled-in one and therefore in the same runtime-swap table
+///     (#581/#584).
+/// </summary>
+public sealed class PluginTuiRendererFactory : ITuiRendererFactory
+{
+    private readonly Func<ITuiRenderer> _factory;
+
+    /// <summary>Wrap a plugin renderer factory under <paramref name="backendId" />.</summary>
+    /// <param name="backendId">Backend id the plugin registered it under.</param>
+    /// <param name="aliases">Legacy/alternate spellings, resolved to <paramref name="backendId" />.</param>
+    /// <param name="factory">Constructs the renderer; invoked lazily by the DI factory lambda.</param>
+    public PluginTuiRendererFactory(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(backendId);
+        BackendId = backendId.Trim().ToLowerInvariant();
+        Aliases = aliases ?? [];
+        _factory = factory ?? throw new ArgumentNullException(nameof(factory));
+    }
+
+    /// <inheritdoc />
+    public string BackendId { get; }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> Aliases { get; }
+
+    /// <inheritdoc />
+    public ITuiRenderer Create(IServiceProvider sp) => _factory();
+}
+
+/// <summary>
+///     A TUI backend a plugin contributed through
+///     <c>IPluginLoadHost.RegisterTuiBackend</c>: the id it was registered under, its
+///     optional alias spellings, and the lazy constructor.
+/// </summary>
+/// <param name="Aliases">Legacy/alternate spellings resolved to the canonical id.</param>
+/// <param name="Factory">Constructs the renderer; invoked only when it is resolved.</param>
+public sealed record PluginTuiBackend(IReadOnlyList<string>? Aliases, Func<ITuiRenderer> Factory);
+
 #if HARBOR_WITH_SPECTRE_TUI
 /// <summary>Interactive Spectre shell (<c>HARBOR_TUI=spectre</c>).</summary>
 internal sealed class SpectreTuiRendererFactory : ITuiRendererFactory
@@ -171,20 +221,36 @@ internal sealed class RazorConsoleRendererFactory : ITuiRendererFactory
 ///     rule, no silent default (unknown ids fall back loudly — TuiModule
 ///     logs a warning naming the requested id).
 /// </summary>
-internal static class TuiBackendRegistry
+public static class TuiBackendRegistry
 {
 #if HARBOR_WITH_SPECTRE_TUI
     /// <summary>The single fallback rule when Spectre backends are compiled in: unknown ids render ANSI.</summary>
-    internal const string FallbackBackendId = "ansi";
+    public const string FallbackBackendId = "ansi";
 #else
     /// <summary>The single fallback rule without Spectre: unknown ids render plain.</summary>
-    internal const string FallbackBackendId = "plain";
+    public const string FallbackBackendId = "plain";
 #endif
 
     /// <summary>Build the id/alias → factory index for the compiled-in backends.</summary>
-    internal static FrozenDictionary<string, ITuiRendererFactory> Build()
+    public static FrozenDictionary<string, ITuiRendererFactory> Build() =>
+        Build(ImmutableDictionary<string, PluginTuiBackend>.Empty);
+
+    /// <summary>
+    ///     Build the id/alias → factory index, folding in plugin-contributed backends.
+    /// </summary>
+    /// <param name="pluginBackends">
+    ///     Backends a plugin registered through
+    ///     <c>IPluginLoadHost.RegisterTuiBackend</c>. A plugin id (or alias) that collides
+    ///     with a compiled-in one wins, so a plugin can replace a built-in backend —
+    ///     that is what the door means, and the collision is loud rather than silent.
+    ///     The input is read here and never retained, so the dictionary is still built
+    ///     fresh, and renderer construction stays lazy: the
+    ///     <c>Func&lt;ITuiRenderer&gt;</c> runs only when the renderer is resolved.
+    /// </param>
+    public static FrozenDictionary<string, ITuiRendererFactory> Build(
+        IReadOnlyDictionary<string, PluginTuiBackend> pluginBackends)
     {
-        ITuiRendererFactory[] factories =
+        List<ITuiRendererFactory> factories =
         [
             new PlainTuiRendererFactory(),
             new AnsiTuiRendererFactory(),
@@ -201,6 +267,11 @@ internal static class TuiBackendRegistry
             new RazorConsoleRendererFactory(),
 #endif
         ];
+        foreach (KeyValuePair<string, PluginTuiBackend> entry in pluginBackends)
+        {
+            factories.Add(new PluginTuiRendererFactory(entry.Key, entry.Value.Aliases, entry.Value.Factory));
+        }
+
         var index = new Dictionary<string, ITuiRendererFactory>(StringComparer.OrdinalIgnoreCase);
         foreach (ITuiRendererFactory factory in factories)
         {
@@ -219,7 +290,7 @@ internal static class TuiBackendRegistry
     ///     Normalization (trim + case-insensitive + aliases) is uniform
     ///     across builds; unknown ids hit <see cref="FallbackBackendId"/>.
     /// </summary>
-    internal static ITuiRendererFactory Resolve(
+    public static ITuiRendererFactory Resolve(
         FrozenDictionary<string, ITuiRendererFactory> registry,
         string rawId)
     {

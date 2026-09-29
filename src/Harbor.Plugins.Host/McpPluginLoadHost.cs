@@ -4,8 +4,10 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
+using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Plugins;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Configuration;
@@ -69,6 +71,23 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost
     {
         LoggerFactory.CreateLogger<McpPluginLoadHost>()
             .LogInformation("Plugin panel '{Id}' is not exposed over MCP; ignoring.", panel.Id);
+        return Result.Success();
+    }
+
+    // #581: the MCP stdio server exposes tools only. These two doors exist so the
+    // interface stays uniformly implementable — an MCP-hosted plugin calling them
+    // gets a loud "not exposed" log instead of a compile error against a sealed seam.
+    public Result RegisterSessionStore(string backendId, Func<ISessionStore> factory)
+    {
+        LoggerFactory.CreateLogger<McpPluginLoadHost>()
+            .LogInformation("Plugin session store '{Id}' is not exposed over MCP; ignoring.", backendId);
+        return Result.Success();
+    }
+
+    public Result RegisterTuiBackend(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory)
+    {
+        LoggerFactory.CreateLogger<McpPluginLoadHost>()
+            .LogInformation("Plugin TUI backend '{Id}' is not exposed over MCP; ignoring.", backendId);
         return Result.Success();
     }
 }

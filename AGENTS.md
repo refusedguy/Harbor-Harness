@@ -192,11 +192,15 @@ I want to...
 │
 ├── ...add a new storage backend (Redis, Postgres, ...)
 │   └─→ docs/EXAMPLES.md §17 (Implement a custom session store)
-│      Implement ISessionStore, register in HostBuilder.RegisterStorage.
+│      Implement ISessionStoreFactory, add it to the array in
+│      src/Harbor.Hosting/Modules/SessionStoreRegistry.cs — that array is the only
+│      declaration (the id list in the error text derives from it, #581).
 │
 ├── ...add a new TUI renderer (GUI, web, ...)
 │   └─→ docs/EXAMPLES.md §18 (Switch TUI renderer) + AGENTS.md §Add a TUI view
-│      Implement ITuiRenderer, add an ITuiRendererFactory in src/Harbor.Hosting/Modules/TuiBackendRegistry.cs.
+│      Implement ITuiRendererFactory, add it to the array in
+│      src/Harbor.Hosting/Modules/TuiBackendRegistry.cs. Nothing else to edit: the
+│      /renderer swap table is derived from that same array (#584).
 │
 ├── ...add a TUI view (status panel, file tree, diagnostics, ...)
 │   └─→ docs/EXAMPLES.md §19 (Add a TUI view model) + §20 (Add a TUI view)
