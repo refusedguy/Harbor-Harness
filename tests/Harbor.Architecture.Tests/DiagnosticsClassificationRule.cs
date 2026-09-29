@@ -495,7 +495,7 @@ public sealed class DiagnosticsClassificationRule
                 + "Add a detector to "
                 + DiagnosticsClassificationProbe.CanonicalDetectorFile
                 + " and call it from there — a renderer may not carry its own copy. Duplicated: "
-                + (offenders.Length == 0 ? "(none)" : string.Join(" | ", offenders)));
+                + (offenders.Count == 0 ? "(none)" : string.Join(" | ", offenders)));
     }
 
     /// <summary>
@@ -520,7 +520,7 @@ public sealed class DiagnosticsClassificationRule
                 + "never-connected path #674 found in SideBarView.Project — the counts have to come out "
                 + "of UiState, whatever that state currently holds (an empty snapshot included, which "
                 + "is honest: no language server has published anything). Offending sites: "
-                + (offenders.Length == 0 ? "(none)" : string.Join(" | ", offenders)));
+                + (offenders.Count == 0 ? "(none)" : string.Join(" | ", offenders)));
     }
 
     // =====================================================================

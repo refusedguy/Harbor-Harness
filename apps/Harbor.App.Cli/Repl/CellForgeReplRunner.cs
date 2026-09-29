@@ -109,15 +109,16 @@ internal sealed class CellForgeReplRunner(
     internal readonly UiStore _replStore = new();
 
     /// <summary>
-    ///     Pushes the headless core's diagnostic snapshots into
-    ///     <see cref="_replStore" /> (#674). Held for its <see cref="IDisposable" />
-    ///     lifetime: the aggregator is a process singleton, so an un-unsubscribed
-    ///     handler here would keep dispatching into a store the REPL has left.
-    ///     Null when the host registered no aggregator — the panel then reads an
-    ///     empty snapshot, which is honest rather than stale.
+    ///     The core→store pipe for diagnostics (#674). Built in
+    ///     <see cref="RunAsync" /> rather than in a field initializer: C# forbids
+    ///     an initializer from reading another instance field, and the store it
+    ///     writes to is itself one. Startup is the right moment anyway — it is
+    ///     where the seed push happens, and it has to happen before the first
+    ///     frame, not lazily on first read. Disposed in the lifecycle's finally:
+    ///     the aggregator is a process singleton, so an un-unsubscribed handler
+    ///     would keep dispatching into a store the REPL has left.
     /// </summary>
-    internal readonly DiagnosticsSync? _diagnosticsSync =
-        diagnosticsAggregator is null ? null : new DiagnosticsSync(_replStore, diagnosticsAggregator, logger);
+    internal DiagnosticsSync? _diagnosticsSync;
 
     internal readonly StatusViewModel _status = screen.Status.Vm;
     internal readonly ComposerController _composer = screen.Composer.Composer;
@@ -347,7 +348,16 @@ internal sealed class CellForgeReplRunner(
     ///     Runs the REPL until quit. Returns the exit code
     ///     (slash <c>/exit</c> wins over the loop's own, mirroring legacy).
     /// </summary>
-    public Task<int> RunAsync(CancellationToken ct = default) => Lifecycle.RunAsync(ct);
+    public Task<int> RunAsync(CancellationToken ct = default)
+    {
+        // #674: open the diagnostics pipe before the first frame, so anything the
+        // core already classified is in the store the sidebar and panel read.
+        _diagnosticsSync ??= diagnosticsAggregator is null
+            ? null
+            : new DiagnosticsSync(_replStore, diagnosticsAggregator, logger);
+
+        return Lifecycle.RunAsync(ct);
+    }
 
     /// <summary>
     /// Heartbeat condition (#170): the Running/Compacting spinner plus any
