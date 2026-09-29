@@ -214,7 +214,7 @@ public class SlashCommandArgumentPassingTests
     public async Task PermissionsSet_ReachesTheRuleWriter()
     {
         var permissions = new RecordingPermissionService();
-        List<string> lines = await DispatchAsync("/permissions bash src/** deny", permissions: permissions);
+        List<string> lines = await DispatchAsync("/permissions bash src/** deny", new InMemoryConfigStore(), permissions);
 
         await Assert.That(lines.Any(l => l.Contains("Set permission: bash src/**"))).IsTrue()
             .Because(
@@ -233,7 +233,7 @@ public class SlashCommandArgumentPassingTests
     public async Task PermissionsClear_ClearsInsteadOfListing()
     {
         var permissions = new RecordingPermissionService();
-        List<string> lines = await DispatchAsync("/permissions clear", permissions: permissions);
+        List<string> lines = await DispatchAsync("/permissions clear", new InMemoryConfigStore(), permissions);
 
         await Assert.That(lines.Any(l => l.Contains("Cleared all persisted permission rules"))).IsTrue()
             .Because("`/permissions clear` is a verb, not a rule, and only the `clear` branch can say this.");
