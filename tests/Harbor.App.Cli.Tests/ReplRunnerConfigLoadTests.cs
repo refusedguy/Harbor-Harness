@@ -316,7 +316,7 @@ public class ReplRunnerConfigLoadTests
     {
         var authStore = new AuthStore(configStore);
         return new ReplRunner(
-            logger ?? NullLogger<ReplRunner>.Instance,
+            logger ?? (ILogger<ReplRunner>)NullLogger<ReplRunner>.Instance,
             configStore,
             authStore,
             new OnboardingWizard(configStore, authStore),
