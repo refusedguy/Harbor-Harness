@@ -289,4 +289,57 @@ public class ProviderPresetsTests
         await Assert.That(presets.Count).IsEqualTo(1);
         await Assert.That(presets[0].DisplayName).IsEqualTo("Mine");
     }
+
+    // ---- #560: the picker glyph is DATA on the provider's own config ----
+
+    [Test]
+    public async Task FromJson_Icon_ComesFromTheConfigNotFromACodeTable()
+    {
+        // Pre-#560 the glyph lived in a 13-arm `switch` in the desktop wizard, so a
+        // new provider needed an edit to existing C# and a forgotten one failed
+        // silently (generic wrench). The projection is now the only place the field
+        // is read, exactly like displayName and priority.
+        const string withIcon = """{ "id": "glyphed", "icon": "🎯", "baseUrl": "http://x/v1" }""";
+
+        var presets = ProviderPresetCatalog.FromJson(new[] { withIcon });
+
+        await Assert.That(presets[0].Icon).IsEqualTo("🎯");
+    }
+
+    [Test]
+    public async Task FromJson_MissingIcon_FallsBackToTheSharedDefault()
+    {
+        // `icon` is optional: a user-dropped config need not carry one, and an
+        // absent glyph must render the generic wrench rather than an empty cell.
+        const string noIcon = """{ "id": "plain", "baseUrl": "http://x/v1" }""";
+
+        var presets = ProviderPresetCatalog.FromJson(new[] { noIcon });
+
+        await Assert.That(presets[0].Icon).IsEqualTo(ProviderPresets.DefaultIcon);
+    }
+
+    [Test]
+    public async Task EveryBundledConfig_DeclaresItsOwnIcon()
+    {
+        // The regression this closes: a config that forgets `icon` renders the
+        // default wrench and nothing fails. Asserting it here means the JSON is the
+        // source of the glyph for all 13 rows, not for the handful someone
+        // remembered to migrate.
+        string? dir = FindProvidersDirectory();
+        await Assert.That(dir).IsNotNull();
+
+        string[] files = Directory.GetFiles(dir!, "*.json");
+        await Assert.That(files.Length).IsGreaterThan(0);
+
+        foreach (string file in files)
+        {
+            string fileId = Path.GetFileNameWithoutExtension(file);
+            var preset = ProviderPresets.All.FirstOrDefault(p => p.Id == fileId);
+            await Assert.That(preset).IsNotNull().Because(fileId + " must appear in the catalogue");
+            await Assert.That(preset!.Icon).IsNotEqualTo(ProviderPresets.DefaultIcon)
+                .Because(
+                    fileId + " declares no `icon`, so the picker would silently show the generic "
+                    + "wrench — add an \"icon\" field to providers/" + fileId + ".json");
+        }
+    }
 }

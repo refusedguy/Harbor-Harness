@@ -241,8 +241,9 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         // PROD-UI-0 З.1: single source of truth — the wizard catalogue is
         // derived from <see cref="ProviderPresets" /> (the same presets the
         // CLI wizard and /auth use). No per-VM hardcoded provider list: a new
-        // preset automatically appears here. Icons are pure presentation and
-        // stay in a small id→glyph map with a generic fallback.
+        // preset automatically appears here, glyph included — it is read from the
+        // provider's own providers/<id>.json rather than from an id→glyph switch
+        // that adding a provider would have forced us to edit (#560).
         Providers = new ObservableCollection<OnboardingProviderOption>(
             ProviderPresets.All.Select(p => new OnboardingProviderOption(
                 p.Id,
@@ -250,32 +251,13 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
                 p.EnvVarName,
                 p.RequiresApiKey,
                 p.DefaultModel,
-                IconFor(p.Id))));
+                p.Icon)));
 
         // Default-select Ollama (works offline, no key needed) so the user
         // can finish onboarding without typing anything.
         Providers.First(p => p.Id == "ollama").IsSelected = true;
         RefreshSelectedProvider();
     }
-
-    /// <summary>Glyph shown next to a provider row; presentation-only mapping.</summary>
-    private static string IconFor(string id) => id switch
-    {
-        "anthropic" => "🤖",
-        "openai" => "🌐",
-        "openrouter" => "🛰️",
-        "deepseek" => "🐋",
-        "groq" => "⚡",
-        "mistral" => "🌬️",
-        "xai" => "✖️",
-        "together" => "🤝",
-        "fireworks" => "🎆",
-        "cerebras" => "🧠",
-        "kilocode" => "⌨️",
-        "ollama" => "🦙",
-        "vllm" => "🚀",
-        _ => "🔧"
-    };
 
     /// <summary>Provider catalogue shown on step 2.</summary>
     public ObservableCollection<OnboardingProviderOption> Providers { get; }

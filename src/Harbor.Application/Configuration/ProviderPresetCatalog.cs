@@ -27,6 +27,7 @@ namespace Harbor.Application.Configuration;
 ///             <item><description><c>authEnvVar</c> → <c>EnvVarName</c> (the one reason <c>kilocode</c> → <c>KILO_API_KEY</c> works).</description></item>
 ///             <item><description><c>setupHint</c> → <c>SetupHint</c>.</description></item>
 ///             <item><description><c>priority</c> → onboarding order (lower first; unset sorts after every declared one).</description></item>
+///             <item><description><c>icon</c> → the picker glyph (#560; defaults to <see cref="ProviderPresets.DefaultIcon" /> when absent).</description></item>
 ///         </list>
 ///     </para>
 ///     <para>
@@ -225,7 +226,11 @@ public static class ProviderPresetCatalog
                 GetString(root, "defaultModel") ?? "",
                 !authType.Equals("none", StringComparison.OrdinalIgnoreCase),
                 GetString(root, "authEnvVar"),
-                GetString(root, "setupHint"));
+                GetString(root, "setupHint"),
+                // #560: the glyph is data on the provider's own config, not a row
+                // in a hand-maintained id→icon switch. Same reason `displayName`
+                // and `priority` are read here and nowhere else.
+                GetString(root, "icon") ?? ProviderPresets.DefaultIcon);
 
             return new Projected(preset, GetInt(root, "priority") ?? DefaultPriority);
         }

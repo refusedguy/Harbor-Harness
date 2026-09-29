@@ -1,3 +1,5 @@
+using Harbor.Application.Configuration;
+
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -14,7 +16,12 @@ public sealed partial class OnboardingProviderOption : ObservableObject
     private bool _isSelected;
 
     /// <summary>Construct a provider option.</summary>
-    public OnboardingProviderOption(string id, string displayName, string? authEnvVar, bool requiresKey, string defaultModel, string icon = "🔧")
+    /// <param name="icon">
+    ///     Glyph from the provider's own <c>providers/&lt;id&gt;.json</c> (#560).
+    ///     Defaults to <see cref="ProviderPresets.DefaultIcon" /> so a config that
+    ///     declares none still renders.
+    /// </param>
+    public OnboardingProviderOption(string id, string displayName, string? authEnvVar, bool requiresKey, string defaultModel, string icon = ProviderPresets.DefaultIcon)
     {
         Id = id;
         DisplayName = displayName;

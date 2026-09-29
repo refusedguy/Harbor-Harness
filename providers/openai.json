@@ -117,5 +117,6 @@
     "cacheControl": "false",
     "maxTokensField": "max_completion_tokens"
   },
+  "icon": "🌐",
   "priority": 30
 }

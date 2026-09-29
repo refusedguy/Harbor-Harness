@@ -40,6 +40,12 @@ public static class ProviderPresets
     /// <param name="RequiresApiKey">Whether the provider needs an API key.</param>
     /// <param name="EnvVarName">Optional preset env var name (e.g. <c>KILO_API_KEY</c>).</param>
     /// <param name="SetupHint">Optional setup hint URL/message shown in onboarding.</param>
+    /// <param name="Icon">
+    ///     Emoji glyph shown next to the provider row (#560). Declared by the
+    ///     provider's own <c>providers/&lt;id&gt;.json</c> — it used to be a
+    ///     13-arm <c>switch</c> in the desktop wizard, which meant adding a provider
+    ///     required editing existing C# and forgetting it failed silently.
+    /// </param>
     public sealed record Preset(
         string Id,
         string DisplayName,
@@ -47,5 +53,13 @@ public static class ProviderPresets
         string DefaultModel,
         bool RequiresApiKey,
         string? EnvVarName,
-        string? SetupHint);
+        string? SetupHint,
+        string Icon = ProviderPresets.DefaultIcon);
+
+    /// <summary>
+    ///     Glyph used when a config declares no <c>icon</c> — a generic wrench rather
+    ///     than an empty cell. A config is not required to carry an icon; the picker
+    ///     just shows this instead.
+    /// </summary>
+    public const string DefaultIcon = "\U0001F527";
 }

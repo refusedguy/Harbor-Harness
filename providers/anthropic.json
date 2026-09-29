@@ -94,5 +94,6 @@
     "cacheControl": "true",
     "systemPrompt": "system"
   },
+  "icon": "🤖",
   "priority": 20
 }
