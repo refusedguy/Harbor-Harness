@@ -500,15 +500,22 @@ public sealed class LogLevelMnemonicRule
             .OrderBy(f => f, StringComparer.Ordinal)
             .ToArray();
 
-        await Assert.That(definitionSites).IsEqualTo(new[] { LogLevelMnemonicProbe.CanonicalFile })
+        // Compared as a joined scalar, not as an array. The set is already
+        // distinct and sorted, so the join is order-deterministic, and this
+        // dodges any question about how a collection assertion compares two
+        // arrays — the failure message then names the offenders outright.
+        await Assert.That(string.Join(" | ", definitionSites))
+            .IsEqualTo(LogLevelMnemonicProbe.CanonicalFile)
             .Because(
                 "the mnemonic is a shared string format, so its spelling must live once. A second "
                 + "site is a second table that can drift from the first — which is exactly what #563 "
-                + "found: the panel answered an unknown level with \"????\" while the file loggers "
-                + "answered `level.ToString().ToUpperInvariant()`, so the same event rendered as "
-                + "\"????\" in the logs panel and \"VERBOSE\" in the log file. Call "
-                + $"`LogLevelTag.For(level)` from {LogLevelMnemonicProbe.CanonicalFile} instead of "
-                + "switching on the level yourself.");
+                + "found: the panel answered an unknown level with a 4-question-mark sentinel while "
+                + "the file loggers answered `level.ToString().ToUpperInvariant()`, so one event "
+                + "rendered as the sentinel in the logs panel and as \"VERBOSE\" in the log file. "
+                + "Call `LogLevelTag.For(level)` instead of switching on the level yourself. "
+                + "Found: " + (definitionSites.Length == 0
+                    ? "(nothing — the scan graded no table at all, which is its own failure)"
+                    : string.Join(" | ", definitionSites)));
     }
 
     /// <summary>
@@ -583,10 +590,14 @@ public sealed class LogLevelMnemonicRule
         string[] named = [.. canonical[0].Members];
         string[] expected = [.. Enum.GetNames<LogLevel>().OrderBy(n => n, StringComparer.Ordinal)];
 
-        await Assert.That(named).IsEqualTo(expected)
+        // Joined scalars, not array-to-array: the member set is sorted on both
+        // sides, so the join is deterministic and the failure message lists the
+        // members outright.
+        await Assert.That(string.Join(" | ", named)).IsEqualTo(string.Join(" | ", expected))
             .Because("the canonical table must name every LogLevel member (read by reflection, so a "
                    + "member added later is covered without editing this test). A member missing here "
-                   + $"means {LogLevelMnemonicProbe.CanonicalFile} would render it through a wildcard.");
+                   + $"means {LogLevelMnemonicProbe.CanonicalFile} would render it through a wildcard. "
+                   + $"Scanned: {string.Join(" | ", named)}. Expected: {string.Join(" | ", expected)}.");
     }
 
     /// <summary>
@@ -675,13 +686,17 @@ public sealed class LogLevelMnemonicRule
             .Because("the first snippet's `_ => \"????\"` arm is the divergent fallback rule 2 "
                    + "rejects");
 
-        await Assert.That(duplicateTables[0].Members).IsEqualTo(new[] { "Trace", "Warning" })
+        await Assert.That(string.Join(" | ", duplicateTables[0].Members))
+            .IsEqualTo("Trace | Warning")
             .Because("the probe must read the union members the arms name, or rule 2 cannot tell a "
-                   + "table from an unrelated switch");
+                   + "table from an unrelated switch. Scanned: "
+                   + string.Join(" | ", duplicateTables[0].Members));
 
-        await Assert.That(duplicateSentinels).IsEqualTo(new[] { "src/Somewhere/Duplicate.cs" })
-            .Because("the first snippet emits the retired \"????\" sentinel, which rule 3 must catch "
-                   + "on its own so it cannot reappear outside a switch");
+        await Assert.That(string.Join(" | ", duplicateSentinels))
+            .IsEqualTo("src/Somewhere/Duplicate.cs")
+            .Because("the first snippet emits the retired 4-question-mark sentinel, which rule 3 must "
+                   + "catch on its own so it cannot reappear outside a switch. Scanned: "
+                   + (duplicateSentinels.Count == 0 ? "(nothing)" : string.Join(" | ", duplicateSentinels)));
 
         await Assert.That(canonicalTables.Count).IsEqualTo(1)
             .Because("the second snippet is a LogLevel-to-text table in the canonical file, so the "
