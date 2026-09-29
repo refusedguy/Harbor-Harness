@@ -711,6 +711,7 @@ dotnet run --project apps/Harbor.App.Cli -- sessions
 3. **Event bus decoupling** — TUI subscribes to events, doesn't call Core directly.
 4. **Plugin system** — extensions go in `IPlugin`, not in Core.
 5. **NativeAOT-readiness** — Core code must be AOT-compatible. No reflection emit, no `Assembly.Load`.
+6. **Reflection is allowed in tests, forbidden in `src/`+`apps/` — plugins excepted** (#626, enforced by `ReflectionConventionRule`). The dynamic-code family (`Assembly.Load`/`LoadFrom`/`LoadFile`, `AssemblyLoadContext`, `Reflection.Emit`, `TypeBuilder`, `DynamicMethod`, `AppDomain.DefineDynamicAssembly`) may appear only under `src/Harbor.Plugins.*`, which needs it because loading code at run time IS the plugin product. `GetProperty("…")` on a `JsonElement` is a JSON key, not reflection, and is deliberately not covered. Full text and the un-classified remainder: [docs/ARCHITECTURE_LAYERS.md §5.8](./docs/ARCHITECTURE_LAYERS.md#58-the-reflection-convention--allowed-in-tests-banned-in-product-plugins-excepted).
 
 ## When stuck
 

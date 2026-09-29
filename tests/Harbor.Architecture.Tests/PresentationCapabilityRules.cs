@@ -58,6 +58,13 @@
 // from outliving its violation. This mirrors
 // `FullLayerMatrixTests.DocumentedExceptions_AllCurrentlyRealized`.
 //
+// Since #626 each row ALSO carries a mandatory reason. The URL says where the
+// debt is tracked; only the reason says why the violation is tolerated HERE, and
+// it has to be written on the row — a comment above the row is invisible to
+// every tool that reads this table, so "paste the link" used to be a complete
+// entry and the argument was optional. The check is `ExemptionReason`, shared
+// with three other permission tables; see the note on the declaration below.
+//
 // PERMANENT CAPABILITIES — the row that is never a violation (#669)
 // ------------------------------------------------------------------
 // A baseline row is a promise TO FIX: it names the issue that will delete it.
@@ -491,7 +498,27 @@ public sealed class PresentationCapabilityRules
     // fails the build when the row goes stale.
     // ---------------------------------------------------------------------
 
-    private static readonly Dictionary<string, Dictionary<string, string>> KnownViolations = new(StringComparer.Ordinal)
+    // THE ROW CARRIES A REASON, NOT JUST A LINK (#626)
+    // -----------------------------------------------
+    // A row here is a permission that says "this Presentation type may touch the
+    // filesystem until <issue> fixes it". Until #626 it was valued by the issue
+    // URL alone, and the argument for tolerating it lived in a `//` comment above
+    // the row — which nothing can read. That is the form an exception takes when
+    // nobody has to justify it: paste the URL, move on. Six months later the row
+    // is stale, the liveness test fires, and the cheap repair is to re-add it,
+    // because nothing ON the row says what it was for.
+    //
+    // So a row is now `ExemptionReason.Row`: `Why` (mandatory — the argument) and
+    // `TrackedBy` (the issue that will delete it). The link says where the debt
+    // is; only the reason says why it is tolerated HERE, and
+    // RuleTable_And_Baseline_Are_WellFormed rejects a row carrying only the
+    // former. The check itself is deliberately NOT re-written here: it is
+    // `ExemptionReason.RowsWithoutAReason`, shared with the plugin allowance in
+    // ReflectionConventionRule and the matrix exceptions in EnforcerIntegrityTests.
+    // ---------------------------------------------------------------------
+
+    private static readonly Dictionary<string, Dictionary<string, ExemptionReason.Row>> KnownViolations
+        = new(StringComparer.Ordinal)
     {
         // #536 RESOLVED: the four Harbor.DesignSystem rows are GONE — not
         // re-baselined, not narrowed, and the `["Harbor.DesignSystem"]` entry is
@@ -562,8 +589,9 @@ public sealed class PresentationCapabilityRules
         {
             // Chat/Panels/CellForgeJumpPalettePanel.cs:330,:343 — ProcessStartInfo
             // / Process.Start to run the jump-to-definition search.
-            [NoSubprocess + " Harbor.Tui.CellForge.Panels.CellForgeJumpPalettePanel"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/538",
+            [NoSubprocess + " Harbor.Tui.CellForge.Panels.CellForgeJumpPalettePanel"] = new(
+                Reason: null,
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/538"),
             // #668 RESOLVED: the JsonThemeLoader / ThemeFileWatcher rows are GONE
             // — not re-baselined. Those two were a second implementation of theme
             // loading sitting next to Harbor.DesignSystem's ThemeStore, and a
@@ -593,22 +621,28 @@ public sealed class PresentationCapabilityRules
             // Domain — see the layer-matrix exception on its Harbor.Application
             // edge (#188) and docs/ARCHITECTURE_LAYERS.md §1's
             // ICommonConfigReader cycle note.
-            [NoFiles + " Harbor.Desktop.Abstractions.Configuration.JsonAppConfigStore`1"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/534",
-            [NoFiles + " Harbor.Desktop.Abstractions.Configuration.JsonCommonConfigStore"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/534",
-            [NoDirectories + " Harbor.Desktop.Abstractions.Configuration.JsonAppConfigStore`1"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/534",
-            [NoDirectories + " Harbor.Desktop.Abstractions.Configuration.JsonCommonConfigStore"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/534",
+            [NoFiles + " Harbor.Desktop.Abstractions.Configuration.JsonAppConfigStore`1"] = new(
+                Reason: null,
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
+            [NoFiles + " Harbor.Desktop.Abstractions.Configuration.JsonCommonConfigStore"] = new(
+                Reason: null,
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
+            [NoDirectories + " Harbor.Desktop.Abstractions.Configuration.JsonAppConfigStore`1"] = new(
+                Reason: null,
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
+            [NoDirectories + " Harbor.Desktop.Abstractions.Configuration.JsonCommonConfigStore"] = new(
+                Reason: null,
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
         },
         ["Harbor.Desktop.Shared"] = new(StringComparer.Ordinal)
         {
             // Services/RecentItemsService.cs:89,:90,:117 (File) and :110 (Directory).
-            [NoFiles + " Harbor.Desktop.Shared.Services.RecentItemsService"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/535",
-            [NoDirectories + " Harbor.Desktop.Shared.Services.RecentItemsService"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/535",
+            [NoFiles + " Harbor.Desktop.Shared.Services.RecentItemsService"] = new(
+                Reason: null,
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/535"),
+            [NoDirectories + " Harbor.Desktop.Shared.Services.RecentItemsService"] = new(
+                Reason: null,
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/535"),
         },
     };
 
@@ -659,7 +693,7 @@ public sealed class PresentationCapabilityRules
         };
 
     /// <summary>Shared empty row set, so a lookup miss allocates nothing per assembly.</summary>
-    private static readonly Dictionary<string, string> EmptyRows = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, ExemptionReason.Row> EmptyRows = new(StringComparer.Ordinal);
 
     // ---------------------------------------------------------------------
     // The RESOLVED list — violations that were tracked and are being deleted.
@@ -857,13 +891,13 @@ public sealed class PresentationCapabilityRules
                 .Select(static hit => (hit.RuleId, hit.DeclaringType))
                 .ToHashSet();
 
-            foreach (var (key, trackedBy) in byKey)
+            foreach (var (key, row) in byKey)
             {
                 int sep = key.IndexOf(' ');
                 if (sep <= 0)
                 {
                     failures.Add($"{assemblyName}: malformed baseline key '{key}' — expected "
-                        + $"'<ruleId> <typeName>'; tracked by {trackedBy}");
+                        + $"'<ruleId> <typeName>'; tracked by {row.TrackedBy}");
                     continue;
                 }
 
@@ -876,7 +910,7 @@ public sealed class PresentationCapabilityRules
                 failures.Add(
                     $"{assemblyName} / {ruleId} / {typeName}: baseline row is stale — the probe "
                     + "finds no such violation any more. Delete the row and close the issue. "
-                    + $"Tracked by {trackedBy}.");
+                    + $"Tracked by {row.TrackedBy}. Reason it was tolerated: {row.Reason}");
             }
         }
 
@@ -1061,7 +1095,7 @@ public sealed class PresentationCapabilityRules
 
         foreach (var (assemblyName, byKey) in KnownViolations)
         {
-            foreach (var (key, trackedBy) in byKey)
+            foreach (var (key, row) in byKey)
             {
                 foreach (var (permanentKey, reason) in permanent)
                 {
@@ -1073,7 +1107,7 @@ public sealed class PresentationCapabilityRules
                     failures.Add(
                         $"{assemblyName} / {key}: this is a PERMANENT capability, not a fixable "
                         + $"violation — {reason} Listed under a capability rule and tracked by "
-                        + $"{trackedBy}, it misfiles a permission as debt, teaches the next "
+                        + $"{row.TrackedBy}, it misfiles a permission as debt, teaches the next "
                         + "FileStream that renderers may touch the filesystem, and blocks that "
                         + "issue's 'delete the baseline row' checkbox. Record it as a permanent "
                         + "capability with the reason attached instead.");
@@ -1088,8 +1122,9 @@ public sealed class PresentationCapabilityRules
     ///     Rule-table and baseline integrity: rule ids unique and non-blank, every
     ///     rule states what it forbids and why, every rule and every baseline row
     ///     names a rule that exists, every baseline row points at a tracking
-    ///     issue, and no baseline row names an assembly the layer matrix does not
-    ///     classify as Presentation (a typo there would grandf nothing).
+    ///     issue AND states a reason (#626), and no baseline row names an assembly
+    ///     the layer matrix does not classify as Presentation (a typo there would
+    ///     grandf nothing).
     /// </summary>
     [Test]
     public async Task RuleTable_And_Baseline_Are_WellFormed()
@@ -1141,7 +1176,7 @@ public sealed class PresentationCapabilityRules
                     + "classify as Presentation — the row would grandf nothing");
             }
 
-            foreach (var (key, trackedBy) in byKey)
+            foreach (var (key, row) in byKey)
             {
                 int sep = key.IndexOf(' ');
                 if (sep <= 0)
@@ -1154,12 +1189,28 @@ public sealed class PresentationCapabilityRules
                     failures.Add($"baseline row '{key}' references unknown rule id '{key[..sep]}'");
                 }
 
-                if (!trackedBy.Contains("https://github.com/", StringComparison.Ordinal))
+                if ((row.TrackedBy ?? string.Empty).Contains("https://github.com/", StringComparison.Ordinal) is false)
                 {
-                    failures.Add($"baseline row '{key}' has no tracking issue URL (got '{trackedBy}')");
+                    failures.Add($"baseline row '{key}' has no tracking issue URL (got '{row.TrackedBy}')");
                 }
             }
         }
+
+        // #626 — THE REASON IS MANDATORY, on this table and on every other. This
+        // is the check that stops an exception from being added silently: a
+        // baseline row used to be valued by its issue URL alone, with the
+        // argument in a comment no tool can read, so "paste the link" was a
+        // complete row. The check itself lives in ExemptionReason because three
+        // other permission tables now ask the identical question, and a third
+        // blank-check written slightly differently is how the answer drifts.
+        failures.AddRange(
+            ExemptionReason.RowsWithoutAReason(
+                "PresentationCapabilityRules.KnownViolations",
+                KnownViolations.SelectMany(
+                    static entry => entry.Value.Select(kv => new ExemptionReason.Row(
+                        $"{entry.Key} / {kv.Key}",
+                        kv.Value.Reason,
+                        kv.Value.TrackedBy)))));
 
         // The permanent-capability table obeys the same integrity rules, minus the
         // tracking URL (there is no fix to schedule) and plus two of its own: a
@@ -1193,7 +1244,7 @@ public sealed class PresentationCapabilityRules
                         + "only thing separating a permission from a debt");
                 }
 
-                if (KnownViolations.TryGetValue(assemblyName, out Dictionary<string, string>? rows)
+                if (KnownViolations.TryGetValue(assemblyName, out Dictionary<string, ExemptionReason.Row>? rows)
                     && rows.ContainsKey(key))
                 {
                     failures.Add($"'{key}' is listed BOTH as a baseline violation and as a permanent "
@@ -1233,7 +1284,8 @@ public sealed class PresentationCapabilityRules
                 continue;
             }
 
-            var baseline = KnownViolations.TryGetValue(assemblyName, out Dictionary<string, string>? rows)
+            var baseline = KnownViolations.TryGetValue(
+                assemblyName, out Dictionary<string, ExemptionReason.Row>? rows)
                 ? rows
                 : EmptyRows;
 

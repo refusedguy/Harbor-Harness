@@ -506,14 +506,44 @@ public sealed class EnforcerIntegrityTests
     ///     Every document exception must carry a reason. A reasonless exception is
     ///     indistinguishable from an accident.
     /// </summary>
+    /// <remarks>
+    ///     #626: the check moved to <see cref="ExemptionReason" /> rather than
+    ///     being re-implemented here. Four tables in this project grant a
+    ///     permission, and this one used to be the only place that asked the
+    ///     question — with a bare <c>IsNullOrWhiteSpace</c>, while the table that
+    ///     most needs the answer (the tracked-violation baseline) was not asking
+    ///     at all. The check is now written once and every table routes through
+    ///     it, so a fourth copy cannot appear beside the third.
+    /// </remarks>
     [Test]
     public async Task DocumentedExceptions_AllHaveReasons()
     {
-        var failures = FullLayerMatrixTests.DocumentedExceptions
-            .SelectMany(entry => entry.Value.Select(e => (entry.Key, Exception: e)))
-            .Where(e => string.IsNullOrWhiteSpace(e.Exception.Reason))
-            .Select(e => $"{e.Key} -> {e.Exception.Target}: exception has no reason")
-            .ToList();
+        var failures = ExemptionReason.RowsWithoutAReason(
+            "FullLayerMatrixTests.DocumentedExceptions",
+            FullLayerMatrixTests.DocumentedExceptions.SelectMany(
+                static entry => entry.Value.Select(
+                    e => new ExemptionReason.Row($"{entry.Key} -> {e.Target}", e.Reason, TrackedBy: null))));
+
+        await Assert.That(failures.Count).IsEqualTo(0).Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     A declared-but-unbound <c>&lt;ProjectReference&gt;</c> is a permission
+    ///     nothing checked, for as long as the table existed: it carried a
+    ///     <c>Reason</c> and no test ever read it. The edge is invisible to every
+    ///     IL rule by construction, so the reason is the only thing standing
+    ///     between "this reference is declared and will be removed" and "this
+    ///     reference is declared" — with the same #450 answer copied into every
+    ///     row, which is how a table stops being per-site and starts being a form
+    ///     letter.
+    /// </summary>
+    [Test]
+    public async Task DeclaredButUnboundProjectReferences_AllHaveReasons()
+    {
+        var failures = ExemptionReason.RowsWithoutAReason(
+            "EnforcerIntegrityTests.DeclaredButUnboundProjectReferences",
+            DeclaredButUnboundProjectReferences.Select(
+                static r => new ExemptionReason.Row($"{r.From} -> {r.To}", r.Reason, TrackedBy: null)));
 
         await Assert.That(failures.Count).IsEqualTo(0).Because(string.Join("\n", failures));
     }

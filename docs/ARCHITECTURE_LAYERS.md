@@ -645,6 +645,92 @@ feeds the probe a synthetic violation and REQUIRES a hit, alongside snippets it 
 report. A probe whose matchers stopped working reports nothing, and the rule goes green
 while enforcing nothing — which is the failure mode these rules exist to prevent.
 
+### 5.8 The reflection convention — allowed in tests, banned in product, plugins excepted
+
+> **Reflection is allowed in tests. It is forbidden in shipped product code, except in
+> the `src/Harbor.Plugins.*` family, which needs it deliberately.**
+
+Until [#626](https://github.com/refusedguy/Harbor-Harness/issues/626) this existed only as
+an emergent property of the `ReflectionAnalyzers` (`REFL*`) diagnostics plus the
+zero-warning bar. Nothing in the repo said it was a rule, so a contributor adding
+`Assembly.Load` somewhere new had no way to know it was the thing the codebase is built to
+avoid. Enforced by `ReflectionConventionRule`.
+
+**What is banned, and where.** The dynamic-code family — `Assembly.Load` / `LoadFrom` /
+`LoadFile`, `AssemblyLoadContext`, `Reflection.Emit`, `TypeBuilder`, `DynamicMethod`,
+`AppDomain.DefineDynamicAssembly` — may appear only under `src/Harbor.Plugins.`. These are
+one capability, not seven: a run-time-loaded or emitted assembly is invisible to NativeAOT,
+appears in no `<ProjectReference>`, and is therefore invisible to every reference rule in
+§5.1–§5.2. A guard naming only `Assembly.Load(` would be satisfied by switching to
+`AssemblyLoadContext`. The scan covers the product trees `src/` and `apps/`.
+
+**What is deliberately NOT banned.** `GetMethod("Name")` / `GetProperty("Name")` /
+`GetField("Name")` looks like the same thing and is not. Over `src/` and `apps/` the
+overwhelming majority of that shape is `JsonElement.GetProperty` / `TryGetProperty` — a
+JSON key, not a CLR member, where the string *is* the call. A blanket ban would fire on
+every tool's argument reader and every provider payload builder, and the cheapest way to
+green such a ban is to suppress it, at which point it enforces nothing. **The
+classification that would be needed before that form can be ruled on is NOT DONE** — do
+not add a rule over it on the strength of a count.
+
+Three facts the survey did establish, recorded because they are the non-obvious part:
+
+* The dynamic-load/emit family has **exactly one** real site in `src/`, and it is in the
+  allowed family: `CollectiblePluginLoadContext` in
+  `src/Harbor.Plugins.Compilation/`, which derives from `AssemblyLoadContext`. Every other
+  occurrence of these names in `src/` is inside a `///` comment.
+* `apps/` has **zero**.
+* One real Type-level reflection outside the plugins is **not** covered by this rule:
+  `src/Harbor.Desktop.Shared/Locators/ViewModelLocator.cs` calls
+  `typeof(ServiceProviderServiceExtensions).GetMethods()` and `MakeGenericMethod` to build
+  a service call. That is member-by-reflection, not assembly loading, so banning it here
+  would widen the rule on a guess about intent. Recorded as **out of scope**, not approved.
+
+**Why the plugin exception is the product, not debt.** CS-source plugins are compiled
+in-memory with Roslyn and run with full trust; DLL plugins are loaded at run time so a swap
+needs no host restart; `Harbor.Plugins.Host` is the separate-process boundary. The
+allowance is therefore a permission carrying a **reason**, not a TODO — the point is that
+the next contributor reads it as a decision and does not "fix" it like a bug.
+
+**Non-vacuity, in three places.** A guard that names a path nobody occupies is the
+NetArchTest trap in a new coat:
+
+1. `The_Plugin_Allowance_Is_Not_A_Dead_Prefix` — the allowance must be **occupied** by a
+   real forbidden construct. An unused exemption is a comment with a table around it, and a
+   renamed construct leaves the rule green while the thing it describes is gone.
+2. `The_Plugin_Allowance_Is_NonEmpty_Scoped_And_Explained` — the prefix must match real
+   project directories, must carry a reason, and must not reach past the plugin family. A
+   prefix that matches nothing is a satisfied constraint enforcing nothing.
+3. `NonVacuity_The_Forbidden_Construct_Matcher_Fires_On_A_Planted_Offender_Only` — the
+   matcher is handed ten synthetic snippets and must report six, staying silent on JSON
+   property access, on `///` prose that quotes the construct, and on a non-dynamic
+   `Assembly` member.
+
+**Why "tests are allowed" is proved rather than asserted.** The convention leans on
+`SourceScan`'s `tests/` exclusion, so
+`NonVacuity_Discovery_Sees_The_Product_Tree_And_Excludes_Tests_On_Purpose` requires the
+excluded tree to really contain what the rule bans: `tests/Harbor.Architecture.Tests/GlobalUsings.cs`
+calls `Assembly.Load` in `ArchitectureTestHelpers.LoadHarborAssemblies`. If that stops being
+true, the exclusion has become an accident and the scope statement above is a lie.
+
+### 5.9 An exemption row must state a reason
+
+Five tables in the architecture tests grant a permission: the Presentation capability
+baseline, the permanent-capability table, `FullLayerMatrixTests.DocumentedExceptions`, the
+declared-but-unbound `<ProjectReference>` list, and the reflection plugin allowance. Before
+[#626](https://github.com/refusedguy/Harbor-Harness/issues/626) each asked "does this row
+have a reason?" in its own words, and the table that most needed the answer — the
+tracked-violation baseline — did not ask at all: its value was the issue URL, and the
+argument for tolerating the violation lived in a `//` comment that no tool can read.
+
+`ExemptionReason.RowsWithoutAReason` is now the single answer, and a row that fails it does
+not pass. Three rules, the third being the one that matters: not blank; not the tracking
+issue again (a URL names where the debt is, not why it is tolerated here); and at least 40
+characters, so `later` and `TODO` stop counting as reasons. Whether the reason is *true*,
+and whether the debt still exists, are separate questions — those are answered by liveness,
+since every baseline row is re-probed against reality and fails when the violation it
+grandfathers is gone.
+
 ---
 
 ## 6. Known violations
