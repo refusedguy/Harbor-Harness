@@ -88,7 +88,7 @@ internal static class JsonProviderDiscovery
                     }
                     #pragma warning disable CFE0001
                     // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
-                    // if (IsFailure) { log; continue; } loop-continue guard
+                    // Guard upstream is an loop-continue guard.
                     var config = result.Value;
                     #pragma warning restore CFE0001
                     if (config.ApiType != "openai-compatible")
@@ -162,7 +162,7 @@ public static void RegisterJsonProviders(
 
                 #pragma warning disable CFE0001
                 // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
-                // if (IsFailure) { log to stderr; continue; } loop-continue guard
+                // Guard upstream is an loop-continue guard.
                 var config = loaded.Value;
                 #pragma warning restore CFE0001
                 if (config is null || string.IsNullOrEmpty(config.Id)) continue;

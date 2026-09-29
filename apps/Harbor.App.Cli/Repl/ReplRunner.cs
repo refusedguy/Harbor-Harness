@@ -193,7 +193,7 @@ internal sealed class ReplRunner
                 SlashCommandOutcome outcome = await _slashes.HandleAsync(
                     #pragma warning disable CFE0001
                     // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
-                    // if (sessionResult.IsFailure) { log; print; return; } early-return guard.
+                    // Guard upstream is an early-return guard..
                     // The .Value is read inside a slash-handler lambda, further from the guard than the
                     // analyzer's body walk models.
                     raw, _renderer, _agent, _agentRegistry, _configStore, _authStore, _providers, sessionResult.Value).ConfigureAwait(false);

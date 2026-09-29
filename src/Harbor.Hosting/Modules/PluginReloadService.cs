@@ -241,7 +241,7 @@ public sealed class PluginReloadService
         {
             #pragma warning disable CFE0001
             // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
-            // if (IsFailure) { log; return summary; } early-return guard
+            // Guard upstream is an early return.
             foreach (var p in result.Value)
             #pragma warning restore CFE0001
             {

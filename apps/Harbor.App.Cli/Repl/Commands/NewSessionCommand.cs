@@ -68,18 +68,18 @@ internal sealed class NewSessionCommand : IReplCommand
             {
                 #pragma warning disable CFE0001
                 // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
-                // if (newSession.IsFailure) { print; return; } early-return guard
+                // Guard upstream is an early return.
                 SessionId = newSession.Value.Id,
                 #pragma warning restore CFE0001
                 #pragma warning disable CFE0001
                 // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
-                // if (newSession.IsFailure) { print; return; } early-return guard
+                // Guard upstream is an early return.
                 SessionTitle = newSession.Value.Title,
                 #pragma warning restore CFE0001
                 Model = $"{provider}/{model}",
                 #pragma warning disable CFE0001
                 // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
-                // if (newSession.IsFailure) { print; return; } early-return guard
+                // Guard upstream is an early return.
                 Agent = newSession.Value.Agent,
                 #pragma warning restore CFE0001
                 MessageCount = 0,

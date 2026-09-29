@@ -164,7 +164,7 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
         {
             #pragma warning disable CFE0001
             // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
-            // if (IsFailure) { return Result.Failure(...); } early return
+            // Guard upstream is an early return.
             foreach (var m in modelsResult.Value.Where(m => m.ProviderId == group.Id))
             #pragma warning restore CFE0001
             {

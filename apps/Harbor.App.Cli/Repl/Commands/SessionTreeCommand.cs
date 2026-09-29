@@ -54,7 +54,7 @@ internal sealed class SessionTreeCommand : IReplCommand
         {
             #pragma warning disable CFE0001
             // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
-            // if (list.IsFailure || count == 0) { print; return; } early-return guard
+            // Guard upstream is an early return.
             var s = result.Value[i];
             #pragma warning restore CFE0001
             seeds.Add(new SessionTreeSeed(
