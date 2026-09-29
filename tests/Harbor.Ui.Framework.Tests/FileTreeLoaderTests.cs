@@ -67,7 +67,7 @@ public sealed class FileTreeLoaderTests
     public async Task Request_ReturnsBeforeTheWalkCompletes()
     {
         // The gate is not a style preference: Request runs on the render thread.
-        var gate = new TaskCompletionSource();
+        var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var lister = new GatedLister(gate.Task);
         using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
         var store = new UiStore();
@@ -76,7 +76,7 @@ public sealed class FileTreeLoaderTests
         await Assert.That(lister.Started.Task.IsCompleted).IsTrue()
             .Because("Request has to have reached the port synchronously to have started it");
 
-        gate.SetResult();
+        gate.SetResult(true);
         await Settled(loader);
     }
 
@@ -105,6 +105,27 @@ public sealed class FileTreeLoaderTests
 
         slow.Release();
         await Settled(loader);
+    }
+
+    [Test]
+    public async Task AnUncancelledWalk_StillPublishesItsResult()
+    {
+        // Paired with TwoPanels_AreTrackedIndependently: that test proves panel B
+        // did not cancel panel A, this one proves panel A then finished normally.
+        // Neither holds alone — a source cancelled by everything and a walk that
+        // never completes both satisfy "was not cancelled".
+        var lister = new CountingLister { Hangs = true };
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = PointedAt(DirA);
+
+        loader.Request(PanelId, DirA, store);
+        await lister.Started.Task;
+
+        lister.Release.TrySetResult(true);
+        await Settled(loader);
+
+        await Assert.That(store.State.Ui.FileTreeFor(PanelId, DirA).Status).IsEqualTo(AsyncStatus.Success)
+            .Because("a walk nothing cancelled must still publish its result");
     }
 
     [Test]
@@ -165,7 +186,7 @@ public sealed class FileTreeLoaderTests
         // The race the reducer's guard exists for, driven end to end: walk A
         // starts, the user navigates to B, A finally answers. The store must end
         // up describing B.
-        var gateA = new TaskCompletionSource();
+        var gateA = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var lister = new SequencedLister(DirA, gateA.Task);
         using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
         var store = PointedAt(DirA);
@@ -176,8 +197,10 @@ public sealed class FileTreeLoaderTests
         store.Dispatch(new AppMsg.SetPanelDirectory(PanelId, DirB));
         loader.Request(PanelId, DirB, store);
 
-        // A now completes, late and stale.
-        gateA.SetResult(Result.Success(new DirectoryListing(DirA, [Entry("from-a")])));
+        // A now completes, late and stale. The lister answers with A's own
+        // directory, because that is the case that matters: a result must not be
+        // able to relabel itself as the directory the panel is now on.
+        gateA.SetResult(true);
         await Settled(loader);
 
         FileTreeSnapshot shown = store.State.Ui.FileTreeFor(PanelId, DirB);
@@ -275,7 +298,7 @@ public sealed class FileTreeLoaderTests
         loader.Dispose();
 
         await Assert.That(lister.Token.IsCancellationRequested).IsTrue();
-        lister.Release();
+        lister.Release.TrySetResult(true);
         await Settled(loader);
     }
 
@@ -365,6 +388,7 @@ public sealed class FileTreeLoaderTests
 
         public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        /// <summary>Lets a <see cref="Hangs" /> walk finish, so the test does not leave one running.</summary>
         public TaskCompletionSource<bool> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public CancellationToken Token { get; private set; }
@@ -450,6 +474,19 @@ public sealed class FileTreeLoaderTests
                 await _release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
 
+            return Result.Success(new DirectoryListing(directory, [Entry("one")]));
+        }
+    }
+
+    /// <summary>A lister that stalls every walk until told to answer.</summary>
+    private sealed class GatedLister(Task gate) : IDirectoryLister
+    {
+        public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<Result<DirectoryListing>> ListAsync(string directory, CancellationToken cancellationToken = default)
+        {
+            Started.TrySetResult(true);
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             return Result.Success(new DirectoryListing(directory, [Entry("one")]));
         }
     }

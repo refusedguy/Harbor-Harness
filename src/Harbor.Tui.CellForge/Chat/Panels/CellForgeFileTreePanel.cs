@@ -141,49 +141,11 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
         {
             case 'j':
             case 'J':
-            {
-                string dir = ctx.State.Ui.ResolvePanelDirectory(Id);
-                int count = ctx.State.Ui.FileTreeFor(Id, dir).Entries.Length;
-                int next;
-                lock (_gate)
-                {
-                    int current = ResolveCursor(ctx, count);
-                    next = count > 0
-                        ? Math.Min(count - 1, current + 1)
-                        : current;
-                    _fallbackCursor = next;
-                }
-
-                if (ctx.Deps.Store is { } store)
-                {
-                    _ = store.Dispatch(new AppMsg.SetPanelCursor(Id, next));
-                }
-
-                return true;
-            }
+                return MoveCursor(ctx, +1);
 
             case 'k':
             case 'K':
-            {
-                string dir = ctx.State.Ui.ResolvePanelDirectory(Id);
-                int count = ctx.State.Ui.FileTreeFor(Id, dir).Entries.Length;
-                int next;
-                lock (_gate)
-                {
-                    int current = ResolveCursor(ctx, count);
-                    next = count > 0
-                        ? Math.Max(0, current - 1)
-                        : current;
-                    _fallbackCursor = next;
-                }
-
-                if (ctx.Deps.Store is { } store)
-                {
-                    _ = store.Dispatch(new AppMsg.SetPanelCursor(Id, next));
-                }
-
-                return true;
-            }
+                return MoveCursor(ctx, -1);
 
             case 'h':
             case 'H':
@@ -224,6 +186,34 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    ///     <c>j</c>/<c>k</c>: step the cursor by <paramref name="delta" />, clamped
+    ///     to the loaded listing. One method for both directions because they
+    ///     differed only in the sign, and the duplication had already produced two
+    ///     copies of the store lookup that have to stay in step.
+    /// </summary>
+    private bool MoveCursor(PanelContext ctx, int delta)
+    {
+        string dir = ctx.State.Ui.ResolvePanelDirectory(Id);
+        int count = ctx.State.Ui.FileTreeFor(Id, dir).Entries.Length;
+        int next;
+        lock (_gate)
+        {
+            int current = ResolveCursor(ctx, count);
+            next = count > 0
+                ? Math.Clamp(current + delta, 0, count - 1)
+                : current;
+            _fallbackCursor = next;
+        }
+
+        if (ctx.Deps.Store is { } store)
+        {
+            _ = store.Dispatch(new AppMsg.SetPanelCursor(Id, next));
+        }
+
+        return true;
     }
 
     private void MoveToDirectory(PanelContext ctx, string dir)
