@@ -81,6 +81,20 @@ public abstract record ChatAppMsg : AppMsg
         ImmutableArray<SessionInfo> Sessions,
         SessionId? ActiveSessionId) : ChatAppMsg;
 
+    /// <summary>
+    ///     Host-side diagnostics sync (issue #674): the whole classified
+    ///     snapshot from the headless core, language-server rows and tool-output
+    ///     rows both tagged by <see cref="DiagnosticIssue.Source" />.
+    /// </summary>
+    /// <remarks>
+    ///     Same shape as <see cref="SyncSessions" /> and for the same reason: the
+    ///     core counts, the host pushes, the store holds, the renderer draws. The
+    ///     message carries no instruction — it replaces the snapshot outright, so
+    ///     a renderer can never hold a half-updated mix of old and new rows.
+    /// </remarks>
+    /// <param name="Diagnostics">The classified snapshot, exactly as the core composed it.</param>
+    public sealed record SyncDiagnostics(ImmutableArray<DiagnosticIssue> Diagnostics) : ChatAppMsg;
+
     // ── tab strip (#388, slice 1/3 — state + transitions only, no renderer) ──
 
     /// <summary>

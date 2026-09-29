@@ -61,6 +61,13 @@ public static class ChatAppReducer
         {
             Chat = state.Chat with { Sessions = ss.Sessions, ActiveSessionId = ss.ActiveSessionId }
         }),
+        // The snapshot arrives already classified from the headless core (#674);
+        // the reducer only replaces it. No inspection, no counting, no regex —
+        // a reducer that classified anything would be doing the core's job.
+        ChatAppMsg.SyncDiagnostics sd => ReduceResult.NoOp(state with
+        {
+            Chat = state.Chat with { Diagnostics = sd.Diagnostics }
+        }),
         ChatAppMsg.OpenTab ot => OpenTab(state, ot.Tab),
         ChatAppMsg.ActivateTab at => ActivateTab(state, at.SessionId),
         ChatAppMsg.CloseTab ct => CloseTab(state, ct.SessionId),

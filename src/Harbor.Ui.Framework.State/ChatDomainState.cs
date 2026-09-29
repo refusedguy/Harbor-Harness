@@ -77,6 +77,31 @@ public sealed record ChatDomainState
     /// <summary>Whether the session list is currently loading.</summary>
     public bool IsLoading { get; init; }
 
+    /// <summary>
+    ///     Classified diagnostics, pushed in by the host from the headless core
+    ///     (<c>Harbor.Application.Diagnostics.DiagnosticsAggregator</c>) through
+    ///     <see cref="ChatAppMsg.SyncDiagnostics" />.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         These arrive ALREADY CLASSIFIED. The UI framework never inspects a
+    ///         tool's output to decide that a line is an error, and never asks a
+    ///         language server anything: it reads this array and draws it. That is
+    ///         the whole contract, and #674 is why it is written down — the
+    ///         projection layer used to parse the <c>bash</c> tool's output with
+    ///         its own regexes and present the result as diagnostics, in the same
+    ///         panel as (and instead of) the language server's.
+    ///     </para>
+    ///     <para>
+    ///         <see cref="DiagnosticIssue.Source" /> keeps the two producers apart,
+    ///         so a renderer sections them instead of summing them into one
+    ///         heading. The array is empty until a language server publishes
+    ///         something or a tool prints a log worth reading — which is an honest
+    ///         «nothing yet», not a missing connection.
+    ///     </para>
+    /// </remarks>
+    public ImmutableArray<DiagnosticIssue> Diagnostics { get; init; } = ImmutableArray<DiagnosticIssue>.Empty;
+
     public static readonly ChatDomainState Empty = new();
 
     /// <summary>
