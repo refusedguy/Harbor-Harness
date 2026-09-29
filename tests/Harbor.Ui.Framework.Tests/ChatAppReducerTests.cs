@@ -272,27 +272,20 @@ public class ChatAppReducerTests
     }
 
     /// <summary>
-    ///     #653: sub-agent runs publish their own totals; adopting one would
-    ///     replace the parent's numbers with the child's.
+    ///     #653: a state that never mentioned a cost renders exactly as it did
+    ///     before the flag existed. <c>CostSnapshot</c> is a struct, so
+    ///     <c>default</c> is what <c>ChatDomainState.Empty</c>, a fresh
+    ///     <c>UiState</c> and half the test suite carry; had the flag been
+    ///     "priced", every one of those screens would have read "price unknown".
     /// </summary>
     [Test]
-    public async Task SessionStats_ForAnotherSession_IsDropped()
+    public async Task AnUnsetCostSnapshot_ReadsAsPriced()
     {
-        var state = new UiState
-        {
-            Chat = ChatDomainState.Empty with
-            {
-                ActiveSessionId = SessionId.Create("parent"),
-                Cost = new CostSnapshot(100, 50, 0.0105m)
-            }
-        };
+        var state = new UiState();
 
-        var next = ChatAppReducer.Update(state,
-            new ChatAppMsg.Agent(new SessionStatsEvent("child", new SessionMetadata(
-                9.99m, 999, 999, 0, 0, 0, 7, null)))).State;
-
-        await Assert.That(next.Chat.Cost.CostUsd).IsEqualTo(0.0105m);
-        await Assert.That(next.Chat.Cost.TokensIn).IsEqualTo(100);
+        await Assert.That(state.Chat.Cost.IsCostUnpriced).IsFalse();
+        await Assert.That(StatusBarText.CostCell(state.Chat.Cost.CostUsd, state.Chat.Cost.IsCostUnpriced))
+            .IsNull();
     }
 
     private static UiState Stats(string sessionId, SessionMetadata metadata) =>

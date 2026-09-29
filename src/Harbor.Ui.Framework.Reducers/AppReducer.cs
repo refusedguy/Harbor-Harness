@@ -177,29 +177,19 @@ public static partial class AppReducer
     ///         fabricated "$0.0000".
     ///     </para>
     ///     <para>
-    ///         A totals event for a DIFFERENT session is dropped — sub-agent runs
-    ///         publish their own, and adopting them would replace the parent's
-    ///         numbers with the child's. An unknown active session accepts
-    ///         anything.
+    ///         No session check here, for the same reason as the chat reducer: a
+    ///         session's events reach its own store, and a sub-agent run
+    ///         publishes no totals of its own.
     ///     </para>
     /// </remarks>
-    private static AppState OnSessionStats(AppState state, SessionStatsEvent stats)
+    private static AppState OnSessionStats(AppState state, SessionStatsEvent stats) => state with
     {
-        SessionId? active = (state.Chrome ?? new AppState.ChromeState()).ActiveSessionId;
-        if (active is not null && !string.Equals(active.Value, stats.SessionId, StringComparison.Ordinal))
-        {
-            return state;
-        }
-
-        return state with
-        {
-            Cost = new CostSnapshot(
-                stats.Metadata.TokensInput,
-                stats.Metadata.TokensOutput,
-                stats.Metadata.Cost,
-                !stats.Metadata.IsCostKnown)
-        };
-    }
+        Cost = new CostSnapshot(
+            stats.Metadata.TokensInput,
+            stats.Metadata.TokensOutput,
+            stats.Metadata.Cost,
+            !stats.Metadata.IsCostKnown)
+    };
 
     private static AppState OnMessageEnd(AppState state)
     {

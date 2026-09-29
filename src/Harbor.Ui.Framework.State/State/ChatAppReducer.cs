@@ -393,32 +393,26 @@ public static class ChatAppReducer
     ///         renders "—" instead of a fabricated "$0.0000".
     ///     </para>
     ///     <para>
-    ///         A totals event for a DIFFERENT session is dropped: sub-agent runs
-    ///         publish their own, and adopting them would replace the parent's
-    ///         numbers with the child's. An unknown active session accepts
-    ///         anything — the state has not been told which session it shows yet.
+    ///         No session check here on purpose. A session's events reach its own
+    ///         store (see <c>UiEventRouter</c> / <c>SessionManager</c>), and a
+    ///         sub-agent run publishes no totals of its own — it propagates its
+    ///         cost into the parent record instead. A reducer-level "is this my
+    ///         session?" filter would duplicate that isolation with a heuristic
+    ///         that silently drops the real number the moment the two ids
+    ///         disagree.
     ///     </para>
     /// </remarks>
-    private static UiState OnSessionStats(UiState state, SessionStatsEvent stats)
+    private static UiState OnSessionStats(UiState state, SessionStatsEvent stats) => state with
     {
-        SessionId? active = state.Chat.ActiveSessionId;
-        if (active is not null && !string.Equals(active.Value, stats.SessionId, StringComparison.Ordinal))
+        Chat = state.Chat with
         {
-            return state;
+            Cost = new CostSnapshot(
+                stats.Metadata.TokensInput,
+                stats.Metadata.TokensOutput,
+                stats.Metadata.Cost,
+                !stats.Metadata.IsCostKnown)
         }
-
-        return state with
-        {
-            Chat = state.Chat with
-            {
-                Cost = new CostSnapshot(
-                    stats.Metadata.TokensInput,
-                    stats.Metadata.TokensOutput,
-                    stats.Metadata.Cost,
-                    !stats.Metadata.IsCostKnown)
-            }
-        };
-    }
+    };
 
     private static UiState OnMessageEnd(UiState state)
     {
