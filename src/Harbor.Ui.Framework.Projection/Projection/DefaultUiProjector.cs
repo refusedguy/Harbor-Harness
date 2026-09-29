@@ -51,14 +51,47 @@ namespace Harbor.Ui.Framework.Projection;
 ///         the tool-card paths join on.
 ///     </para>
 ///     <para>
-///         <b>Thread-safety:</b> the projector holds mutable cache state and
-///         is NOT thread-safe. Call <see cref="Project" /> from a single render
-///         loop — every built-in renderer already constructs its own instance.
+///         <b>Thread-safety (#605):</b> the projector holds one mutable field —
+///         the projection cache — and it is <c>volatile</c>. Publication is
+///         therefore safe: a caller either reads <see langword="null" /> or a
+///         fully-initialised <see cref="ProjectionCache" />, never a reference
+///         whose fields are still at their defaults. The cache object is written
+///         once, in the single object initialiser at the end of
+///         <see cref="Project" />, and is never mutated afterwards, so a shared
+///         instance cannot hand out a torn model. This is the same
+///         release/acquire pair <c>UiStore._state</c> documents for exactly the
+///         same reason, and it is what makes the desktop host's
+///         <c>AddSingleton&lt;DefaultUiProjector&gt;</c> honest.
+///     </para>
+///     <para>
+///         Sharing is <b>memory</b>-safe; it is not <b>free</b>. The cache is a
+///         single-slot memo, so two callers projecting different states evict
+///         one another (a lost cache update, never a wrong one), and the #94
+///         stale-drop path means a caller may legitimately receive a screen
+///         built from a newer revision than the state it passed — the same
+///         result the single-caller path can already produce. The intended
+///         usage is still one render loop per instance; a second one costs
+///         projection throughput, not correctness.
+///     </para>
+///     <para>
+///         The claim that "every built-in renderer already constructs its own
+///         instance" was false for the only shipped DI host and has been
+///         removed. Renderers that construct their own still may;
+///         <c>DefaultUiProjector</c> no longer depends on it.
 ///     </para>
 /// </remarks>
 public sealed class DefaultUiProjector : IUiProjector
 {
-    private ProjectionCache? _cache;
+    // #605: the desktop host registers this type as a singleton
+    // (apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs), so Project
+    // must be safe to call from more than one thread. `volatile` supplies the
+    // release on the write below and the acquire on the read in Project, which
+    // is what makes the six `required` models of ProjectionCache visible to a
+    // second thread the moment it can see the reference. Without it, ECMA-335
+    // permits observing the reference while the fields are still default —
+    // turning a cache miss into a NullReferenceException at the three reuse
+    // sites below. Same rationale UiStore._state records at UiStore.cs:66-71.
+    private volatile ProjectionCache? _cache;
 
     /// <inheritdoc />
     public UiScreenModel Project(UiState state)
@@ -393,9 +426,12 @@ public sealed class DefaultUiProjector : IUiProjector
     ///     <para>
     ///         Every dereference of this cache is guarded by a <c>ReferenceEquals</c> or a
     ///         fingerprint comparison against the state being projected, so <b>publication</b>
-    ///         is the one remaining assumption: the cache is written by the render thread and
-    ///         read by it. See #605 — the field holding it is not <c>volatile</c>, and the
-    ///         desktop host registers the projector as a singleton.
+    ///         is the one remaining assumption. #605 closed it: the field holding this cache
+    ///         is <c>volatile</c>, so a second thread that can see the reference is
+    ///         guaranteed to see every member below assigned, even though the desktop host
+    ///         registers the projector as a singleton. "Read-only thereafter" is what makes
+    ///         the release/acquire pair sufficient — a lock would be needed only if this
+    ///         object were ever mutated after publication.
     ///     </para>
     /// </remarks>
     private sealed class ProjectionCache
