@@ -84,6 +84,23 @@ internal static class RegistriesModule
         var eventBus = ctx.EventBus;
         var panelRegistry = new PanelRegistry(ctx.LoggerFactory.CreateLogger<PanelRegistry>());
 
+        // #562: publish the bundle BEFORE the plugin pipeline runs, because that
+        // pipeline writes the two plugin-contributed maps onto it. The four
+        // registries themselves are constructor arguments from here on — the
+        // plugin loader already received them as parameters — so the bundle can
+        // no longer be half-built, and a module that runs before this one reads
+        // ctx.Registries gets a named InvalidOperationException rather than a
+        // member typed non-nullable and holding null.
+        //
+        // Assigning the bundle before Freeze() is deliberate and does not weaken
+        // the §3.5 invariant: Freeze() mutates the registry OBJECTS, and the only
+        // reader in this window is the plugin loader, which is ordered to run
+        // before the freeze precisely so plugins can still register into them.
+        // Every consumer of the four registries gets them either from the
+        // instrumented views published below (after the freeze) or from a later
+        // module in AddHarbor's chain.
+        ctx.SetRegistries(new HarborRegistries(agentRegistry, toolRegistry, providerRegistry, panelRegistry));
+
 #if HARBOR_WITH_PLUGINS
         IReadOnlyList<LoadedPlugin>? startupLoaded = null;
         LoadPlugins(services, ctx, eventBus, toolRegistry, providerRegistry, agentRegistry, panelRegistry,
@@ -106,11 +123,6 @@ internal static class RegistriesModule
         services.AddSingleton<IMcpRegistry>(mcpRegistry);
         services.AddSingleton(panelRegistry);
         services.AddSingleton<IPanelRegistry>(panelRegistry);
-
-        ctx.Registries.Agents = agentRegistry;
-        ctx.Registries.Tools = toolRegistry;
-        ctx.Registries.Providers = providerRegistry;
-        ctx.Registries.Panels = panelRegistry;
 
 #if HARBOR_WITH_PLUGINS
         services.AddSingleton(sp =>
