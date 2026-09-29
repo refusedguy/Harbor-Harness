@@ -204,6 +204,12 @@ internal sealed class CellForgeReplRunner(
     private SessionTitleService? _titles;
     internal SessionTitleService Titles => _titles ??= new SessionTitleService(this, logger);
     internal ThemeFileWatcher? _themeWatcher;
+
+    /// <summary>Themes-directory live-reload (#622) — the additive half of the
+    /// theme axis: a theme is a file in <c>~/.harbor/themes</c>, so adding one
+    /// edits no code. Mutually exclusive with <see cref="_themeWatcher" />, which
+    /// watches the single <c>HARBOR_THEME_FILE</c> that takes precedence.</summary>
+    internal ThemeDirectoryWatcher? _themeDirectoryWatcher;
     private ReplInputLoop? _input;
     internal ReplInputLoop Input => _input ??= new ReplInputLoop(this);
     private ReplCommandHost? _commands;
