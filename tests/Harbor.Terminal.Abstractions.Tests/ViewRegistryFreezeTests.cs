@@ -394,7 +394,7 @@ public class ViewRegistryFreezeAllocationTests
         context.Output.WriteLine(message);
         try
         {
-            var dir = context.OutputDirectory ?? Directory.GetCurrentDirectory();
+            var dir = TestContext.OutputDirectory ?? Directory.GetCurrentDirectory();
             Directory.CreateDirectory(dir);
             var path = Path.Combine(dir, "#490-registry-freeze-alloc.txt");
             File.AppendAllText(path, message + Environment.NewLine);
