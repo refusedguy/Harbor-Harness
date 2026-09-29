@@ -5,8 +5,12 @@ using Harbor.Ui.Framework.Rendering.Widgets;
 
 namespace Harbor.DesignSystem.Tests;
 
-/// <summary>Tool status pill styles — serialized (shared key) to avoid cross-test theme races.</summary>
-[NotInParallel("terminal-color-palette")]
+/// <summary>Tool status pill styles — run one-at-a-time: palette state is global.</summary>
+// #648: bare [NotInParallel] (one at a time GLOBALLY), not a shared key. These
+// tests Apply themes to the process-global TerminalColorPalette that every
+// painter in this assembly reads; a constraint key only excludes same-key
+// tests, so ("terminal-color-palette") never excluded an unkeyed reader.
+[NotInParallel]
 public class ChatPaletteToolPillTests
 {
     [After(Test)]

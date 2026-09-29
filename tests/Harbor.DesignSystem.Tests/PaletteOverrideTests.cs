@@ -3,8 +3,13 @@ using Harbor.Ui.Framework.Projection;
 
 namespace Harbor.DesignSystem.Tests;
 
-/// <summary>Static palette state — serialized (shared key) to avoid cross-test theme races.</summary>
-[NotInParallel("terminal-color-palette")]
+/// <summary>Static palette state — run one-at-a-time: it is process-global.</summary>
+// #648: bare [NotInParallel] (one at a time GLOBALLY), not a shared key. Per
+// TUnit's contract a constraint key only excludes tests that SHARE the key, so
+// ("terminal-color-palette") kept these mutators away from each other and from
+// nothing else — every unkeyed reader in this assembly could still observe a
+// half-applied theme. A process-global mutation needs global exclusivity.
+[NotInParallel]
 public class PaletteOverrideTests
 {
     [After(Test)]

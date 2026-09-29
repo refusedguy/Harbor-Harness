@@ -9,10 +9,19 @@ namespace Harbor.Tui.CellForge.Tests;
 /// <summary>
 /// Theme switching contract: TerminalColorPalette.Apply swaps tokens atomically
 /// and ChatPalette re-projects its styles; re-applying the same instance is a
-/// no-op. Tests restore HarborDark and run serialized — the palette is global
-/// static state shared with every other painter in this assembly.
+/// no-op. Tests restore HarborDark and run one-at-a-time — the palette is
+/// global static state shared with every other painter in this assembly.
 /// </summary>
-[NotInParallel("pty")]
+// #648: bare [NotInParallel] (= one test at a time GLOBALLY), not the old
+// ("pty") key. TerminalColorPalette.Apply publishes a new ChatPalette catalog
+// that every painter in this assembly reads. Per TUnit's own contract a
+// constraint key only excludes tests that SHARE the key — "Tests with no
+// overlapping constraint keys can still run in parallel with each other" — so
+// ("pty") serialized these mutators against each other and against nothing
+// else. Unkeyed readers ran straight through the swap, which is how
+// PostFxTests.Timeline_PublishesGateGlowRegions_AndStopsOnDecision failed on
+// four unrelated PRs. A process-global mutation needs global exclusivity.
+[NotInParallel]
 public class ThemeSwitchTests
 {
     [After(Test)]
