@@ -1,41 +1,42 @@
-using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.Projection;
 using Termina.Terminal;
+
 namespace Harbor.Tui.Termina.Rendering;
+
 /// <summary>
-///     Maps a <see cref="ChatRole" /> to its Termina <see cref="Color" /> and
-///     human-readable label, matching the SpectreTui ChatMessageFormatter palette
-///     so all four renderers paint the same role with the same hue.
+///     Maps a <see cref="ChatRole" /> onto Termina's 24-bit RGB palette.
 /// </summary>
+/// <remarks>
+///     Label, markdown rule and colour slot all come from the single shared
+///     <see cref="ChatRolePresentation" /> table (#556); this class only decides
+///     what a <see cref="ChatColorSlot" /> looks like in Termina. The four chat
+///     backends share the slot, not the colour — their palettes genuinely
+///     differ, so no "same hue" claim is made here (see the note in
+///     <see cref="ChatRolePresentation" />).
+/// </remarks>
 public static class TerminaColorMapper
 {
     /// <summary>Termina color used for the role's body text.</summary>
-    public static Color ToColor(ChatRole role) => role switch
+    public static Color ToColor(ChatRole role) => ToColor(ChatRolePresentation.Slot(role));
+
+    /// <summary>Termina color for a slot — the Termina palette table.</summary>
+    public static Color ToColor(ChatColorSlot slot) => slot switch
     {
-        ChatRole.User => Color.Green,
-        ChatRole.Assistant => Color.White,
-        ChatRole.Thinking => Color.DarkGray,
-        ChatRole.Tool => Color.Blue,
-        ChatRole.ToolResult => Color.Gray,
-        ChatRole.System => Color.Gray,
-        ChatRole.Error => Color.Red,
-        _ => Color.White
+        ChatColorSlot.User => Color.Green,
+        ChatColorSlot.Assistant => Color.White,
+
+        // One grey for the whole muted family (thinking, tool result, system).
+        // This was Color.DarkGray for thinking alone — exactly the drift the
+        // removed "same hue" comment used to promise did not exist (#556).
+        ChatColorSlot.Muted => Color.Gray,
+        ChatColorSlot.Tool => Color.Blue,
+        ChatColorSlot.Danger => Color.Red
     };
 
     /// <summary>Header label shown in the <c>─ role ─</c> band.</summary>
-    public static string ToLabel(ChatRole role) => role switch
-    {
-        ChatRole.User => "you",
-        ChatRole.Assistant => "assistant",
-        ChatRole.Thinking => "thinking",
-        ChatRole.Tool => "tool",
-        ChatRole.ToolResult => "result",
-        ChatRole.System => "system",
-        ChatRole.Error => "error",
-        _ => "msg"
-    };
+    public static string ToLabel(ChatRole role) => ChatRolePresentation.Label(role);
 
     /// <summary>True if the role's body should be rendered with markdown spans.</summary>
-    public static bool SupportsMarkdown(ChatRole role) =>
-        role is ChatRole.Assistant or ChatRole.User or ChatRole.System;
+    public static bool SupportsMarkdown(ChatRole role) => ChatRolePresentation.UsesMarkdown(role);
 }

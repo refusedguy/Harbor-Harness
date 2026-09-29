@@ -20,7 +20,7 @@ public static class TerminalGuiMarkdownRenderer
     /// <summary>
     ///     Render the body text into a sequence of display lines. Tables are
     ///     expanded inline. Color is applied separately by the view layer
-    ///     based on <see cref="TerminalGuiColorMapper.ToColor" />.
+    ///     based on <see cref="TerminalGuiColorMapper.ToColor(ChatRole)" />.
     /// </summary>
     public static IReadOnlyList<string> RenderBody(ChatRole role, string content, int maxWidth = 0)
     {

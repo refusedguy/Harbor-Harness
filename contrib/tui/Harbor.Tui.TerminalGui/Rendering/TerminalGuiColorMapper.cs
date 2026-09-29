@@ -1,42 +1,43 @@
-using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.Projection;
 using TerminalColor = Terminal.Gui.Drawing.Color;
 
 namespace Harbor.Tui.TerminalGui.Rendering;
+
 /// <summary>
-///     Maps a <see cref="ChatRole" /> to a Terminal.Gui v2
-///     <see cref="TerminalColor" /> + label, matching the SpectreTui palette
-///     so all four renderers paint the same role with the same hue.
+///     Maps a <see cref="ChatRole" /> onto a Terminal.Gui v2
+///     <see cref="TerminalColor" />.
 /// </summary>
+/// <remarks>
+///     Label, markdown rule and colour slot all come from the single shared
+///     <see cref="ChatRolePresentation" /> table (#556); this class only decides
+///     what a <see cref="ChatColorSlot" /> looks like in Terminal.Gui's ANSI
+///     vocabulary. The four chat backends share the slot, not the colour — their
+///     palettes genuinely differ, so no "same hue" claim is made here (see the
+///     note in <see cref="ChatRolePresentation" />).
+/// </remarks>
 public static class TerminalGuiColorMapper
 {
     /// <summary>Terminal.Gui color used for the role's body text.</summary>
-    public static TerminalColor ToColor(ChatRole role) => role switch
+    public static TerminalColor ToColor(ChatRole role) => ToColor(ChatRolePresentation.Slot(role));
+
+    /// <summary>Terminal.Gui color for a slot — the Terminal.Gui palette table.</summary>
+    public static TerminalColor ToColor(ChatColorSlot slot) => slot switch
     {
-        ChatRole.User => TerminalColor.BrightGreen,
-        ChatRole.Assistant => TerminalColor.White,
-        ChatRole.Thinking => TerminalColor.DarkGray,
-        ChatRole.Tool => TerminalColor.BrightBlue,
-        ChatRole.ToolResult => TerminalColor.Gray,
-        ChatRole.System => TerminalColor.Gray,
-        ChatRole.Error => TerminalColor.BrightRed,
-        _ => TerminalColor.White
+        ChatColorSlot.User => TerminalColor.BrightGreen,
+        ChatColorSlot.Assistant => TerminalColor.White,
+
+        // One grey for the whole muted family (thinking, tool result, system).
+        // This was TerminalColor.DarkGray for thinking alone — exactly the drift
+        // the removed "same hue" comment used to promise did not exist (#556).
+        ChatColorSlot.Muted => TerminalColor.Gray,
+        ChatColorSlot.Tool => TerminalColor.BrightBlue,
+        ChatColorSlot.Danger => TerminalColor.BrightRed
     };
 
     /// <summary>Header label shown in the <c>─ role ─</c> band.</summary>
-    public static string ToLabel(ChatRole role) => role switch
-    {
-        ChatRole.User => "you",
-        ChatRole.Assistant => "assistant",
-        ChatRole.Thinking => "thinking",
-        ChatRole.Tool => "tool",
-        ChatRole.ToolResult => "result",
-        ChatRole.System => "system",
-        ChatRole.Error => "error",
-        _ => "msg"
-    };
+    public static string ToLabel(ChatRole role) => ChatRolePresentation.Label(role);
 
     /// <summary>True if the role's body should be rendered with markdown spans.</summary>
-    public static bool SupportsMarkdown(ChatRole role) =>
-        role is ChatRole.Assistant or ChatRole.User or ChatRole.System;
+    public static bool SupportsMarkdown(ChatRole role) => ChatRolePresentation.UsesMarkdown(role);
 }
