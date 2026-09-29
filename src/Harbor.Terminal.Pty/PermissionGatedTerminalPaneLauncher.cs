@@ -98,9 +98,15 @@ public sealed class PermissionGatedTerminalPaneLauncher : ITerminalPaneLauncher
             Cols: request.Cols,
             Rows: request.Rows));
 
-        return started.IsFailure
-            ? started.ConvertFailure<ITerminalPane>()
-            : Result.Success<ITerminalPane>(new PtyTerminalPane(started.Value));
+        // Explicit early return rather than a ternary: the CFE0001 guard cannot see
+        // that a ternary's `started.Value` is reached only on the IsFailure == false
+        // branch, and shipped code is held to that guard at error severity (§ROP).
+        if (started.IsFailure)
+        {
+            return started.ConvertFailure<ITerminalPane>();
+        }
+
+        return Result.Success<ITerminalPane>(new PtyTerminalPane(started.Value));
     }
 
     /// <summary>

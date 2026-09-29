@@ -81,6 +81,10 @@ public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposabl
 
         // One branch for every refusal — unsupported platform, permission denial,
         // a bad shell path. To this ViewModel they are the same thing: no pane.
+        //
+        // Early return rather than a ternary on `started.Value`: the CFE0001 guard
+        // cannot prove the value is only read on the success branch, and apps/ is
+        // held to that guard at error severity (only tests/ are exempt).
         if (started.IsFailure)
         {
             IsClosed = true;

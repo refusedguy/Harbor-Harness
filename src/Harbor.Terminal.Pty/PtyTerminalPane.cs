@@ -9,26 +9,33 @@ namespace Harbor.Terminal.Pty;
 ///     <see cref="ITerminalPaneLauncher" /> would have leaked the process handle
 ///     straight back into Presentation, which is the coupling #672 removes.
 /// </summary>
-internal sealed class PtyTerminalPane(PtyProcess process) : ITerminalPane
+internal sealed class PtyTerminalPane : ITerminalPane
 {
-    private readonly PtyProcess _process = process;
+    private readonly PtyProcess _process;
+
+    /// <summary>Wrap a live PTY session in the Domain handle.</summary>
+    /// <param name="process">The session to adapt. Not null: the launcher only constructs this on success.</param>
+    public PtyTerminalPane(PtyProcess process)
+    {
+        ArgumentNullException.ThrowIfNull(process);
+        _process = process;
+        _process.OutputReceived += OnOutputReceived;
+        _process.OutputClosed += OnOutputClosed;
+    }
 
     /// <inheritdoc />
     public int Pid => _process.Pid;
 
-    /// <inheritdoc />
-    public event EventHandler<TerminalOutputEventArgs>? OutputReceived
-    {
-        add => _process.OutputReceived += OnOutputReceived;
-        remove => _process.OutputReceived -= OnOutputReceived;
-    }
+    /// <summary>
+    ///     A plain field-like event, subscribed through <see cref="_process" />'s own
+    ///     events in the constructor. An add/remove accessor pair cannot work here:
+    ///     forwarding one requires <c>OutputReceived?.Invoke</c> on the right-hand
+    ///     side, which is not a legal use of an event outside += / -= (CS0079).
+    /// </summary>
+    public event EventHandler<TerminalOutputEventArgs>? OutputReceived;
 
-    /// <inheritdoc />
-    public event EventHandler? OutputClosed
-    {
-        add => _process.OutputClosed += OnOutputClosed;
-        remove => _process.OutputClosed -= OnOutputClosed;
-    }
+    /// <inheritdoc cref="OutputReceived" />
+    public event EventHandler? OutputClosed;
 
     /// <inheritdoc />
     public void WriteLine(string line) => _process.WriteLine(line);
