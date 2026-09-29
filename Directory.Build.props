@@ -273,9 +273,26 @@
       <HarborArchGateLog>$(IntermediateOutputPath)harbor-arch-gate.log</HarborArchGateLog>
     </PropertyGroup>
     <Message Importance="high" Text="[arch-gate] Harbor architecture tests: $(TargetFileName)" />
-    <Exec Command="dotnet exec &quot;$(TargetPath)&quot; > &quot;$(HarborArchGateLog)&quot; 2>&amp;1 || { tail -30 &quot;$(HarborArchGateLog)&quot;; exit 1; }"
+    <!--
+      ConsoleToMSBuild="true": MSBuild captures and writes the output itself, so
+      the log file is produced by the task rather than by shell redirection. The
+      previous form redirected with `> log` and then ran `tail -30` on failure to
+      surface diagnostics - but `tail` does not exist on Windows, so the
+      test-os (windows-latest) job failed with exit code 9009 ("command not
+      found") the moment the gate ran there. The gate is OS-agnostic now and the
+      failure diagnostics still reach the build log.
+    -->
+    <Exec Command="dotnet exec &quot;$(TargetPath)&quot;"
           IgnoreExitCode="false"
-          ConsoleToMSBuild="false" />
+          ConsoleToMSBuild="true">
+      <Output TaskParameter="ExitCode" PropertyName="HarborArchGateExitCode" />
+    </Exec>
+    <ReadLinesFromFile File="$(HarborArchGateLog)"
+                      Condition="'$(HarborArchGateExitCode)' != '0' AND Exists('$(HarborArchGateLog)')">
+      <Output TaskParameter="Lines" ItemName="HarborArchGateLogLines" />
+    </ReadLinesFromFile>
+    <Error Condition="'$(HarborArchGateExitCode)' != '0'"
+           Text="Harbor architecture tests failed (exit code $(HarborArchGateExitCode)). Full log: $(HarborArchGateLog)%0A%0A@(HarborArchGateLogLines)" />
   </Target>
 
 </Project>
