@@ -34,10 +34,12 @@ public class BuiltinToolSafetyDeclarationsTests
     private static string TempHarborDir() =>
         Path.Combine(Path.GetTempPath(), "harbor-hosting-tests", Guid.NewGuid().ToString("N"));
 
-    private static ServiceProvider Compose() =>
-        new ServiceCollection()
-            .AddHarbor(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" })
-            .BuildServiceProvider();
+    private static ServiceProvider Compose()
+    {
+        var services = new ServiceCollection();
+        services.AddHarbor(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
+        return services.BuildServiceProvider();
+    }
 
     [Test]
     public async Task Every_Registered_Tool_Is_Covered_By_The_Fallback_Table_With_The_Same_Profile()

@@ -85,7 +85,7 @@ public class RegistrationCompositionTests
             "mcp", "read_mcp_resource", "mcp_prompt",
         };
 
-        await Assert.That(names.Length).IsEqualTo(expectedFull.Length)
+        await Assert.That(names.Count).IsEqualTo(expectedFull.Length)
             .Because("the manifest and the registry must agree exactly; a silent "
                      + "drift in either direction is what this test exists to catch");
         await Assert.That(names.OrderBy(n => n, StringComparer.Ordinal).ToArray())

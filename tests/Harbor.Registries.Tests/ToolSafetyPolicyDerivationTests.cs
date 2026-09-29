@@ -253,7 +253,7 @@ public class ToolSafetyPolicyDerivationTests
     [Test]
     public async Task Build_BlankToolName_Throws()
     {
-        var ex = await Assert.Throws<InvalidOperationException>(() =>
+        var ex = Assert.Throws<InvalidOperationException>(() =>
         {
             ToolSafetyPolicies.Build([new ToolSafetyDeclaration("  ", ToolSafetyProfile.Path())]);
         });
@@ -264,7 +264,7 @@ public class ToolSafetyPolicyDerivationTests
     [Test]
     public async Task Build_BlankArgumentName_Throws()
     {
-        var ex = await Assert.Throws<InvalidOperationException>(() =>
+        var ex = Assert.Throws<InvalidOperationException>(() =>
         {
             ToolSafetyPolicies.Build(
                 [new ToolSafetyDeclaration("x", new ToolSafetyProfile(ToolArgKind.Path, " "))]);
@@ -276,7 +276,7 @@ public class ToolSafetyPolicyDerivationTests
     [Test]
     public async Task Build_ConflictingDuplicate_Throws()
     {
-        var ex = await Assert.Throws<InvalidOperationException>(() =>
+        var ex = Assert.Throws<InvalidOperationException>(() =>
         {
             ToolSafetyPolicies.Build(
             [
@@ -289,9 +289,9 @@ public class ToolSafetyPolicyDerivationTests
     }
 
     [Test]
-    public async Task Build_NullDeclarations_Throws()
+    public void Build_NullDeclarations_Throws()
     {
-        await Assert.Throws<ArgumentNullException>(() =>
+        Assert.Throws<ArgumentNullException>(() =>
         {
             ToolSafetyPolicies.Build(null!);
         });
