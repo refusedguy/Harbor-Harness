@@ -55,6 +55,8 @@ public sealed class EnforcerIntegrityTests
     /// </summary>
     internal static readonly UnboundReference[] DeclaredButUnboundProjectReferences =
     [
+        new("Harbor.Transport.Remote", "Harbor.Abstractions",
+            "#450: the assembly binds Harbor.Abstractions.Contracts (the contract types it actually uses), not the facade, so the declared facade reference produces no IL."),
         new("Harbor.Ui.Framework", "Harbor.Ui.Framework.Abstractions",
             "#450/#542: the aggregator project has no code of its own, so none of its six ProjectReferences bind a type. See issue #542."),
         new("Harbor.Hosting", "Harbor.Providers.Anthropic",
