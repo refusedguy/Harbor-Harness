@@ -54,6 +54,14 @@ internal sealed class ContextSegmentSync
         RefreshContextSegment();
     }
 
+    /// <summary>
+    ///     The size of the request the provider last accepted, or 0 when this
+    ///     process has seen none (#651). The same figure the bar is drawn from —
+    ///     which is why the token cell and the bar cannot disagree: the cell says
+    ///     how full the window is, the sum says what six requests cost.
+    /// </summary>
+    public long LastRequestTokens => _hasUsage ? _usedTokens : 0;
+
     private void RefreshContextSegment()
     {
         if (_contextWindow <= 0 || !_hasUsage)

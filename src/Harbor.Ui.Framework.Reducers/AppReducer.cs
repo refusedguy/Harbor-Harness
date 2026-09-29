@@ -93,9 +93,23 @@ public static partial class AppReducer
         {
             Lines = state.Lines.Add(new ChatLine(ChatRole.Tool, $"→ {tcs.ToolName}", tcs.Id))
         },
-        StepFinishEvent => FlushPending(state),
+        StepFinishEvent sf => NoteRequestSize(FlushPending(state), sf.Usage),
         _ => state
     };
+
+    /// <summary>
+    ///     Records what the context OCCUPIES, from the request the provider just
+    ///     accepted (#651) — the same rule <c>ChatAppReducer</c> applies on the
+    ///     TEA path. <c>Usage.InputTokens</c> is one request's full input (the
+    ///     system prompt and the entire history, re-read every turn), so summing
+    ///     it yields the bill and never a window; the occupied figure is the one
+    ///     a status cell shows. Money is untouched — the paid totals arrive on
+    ///     <see cref="SessionStatsEvent" /> and are the core's (#653).
+    /// </summary>
+    private static AppState NoteRequestSize(AppState state, Usage? usage) =>
+        usage is null
+            ? state
+            : state with { Cost = state.Cost with { ContextTokens = usage.InputTokens } };
 
     /// <summary>
     ///     Append a text delta to the chunked pending buffer and rebuild the
@@ -181,6 +195,12 @@ public static partial class AppReducer
     ///         session's events reach its own store, and a sub-agent run
     ///         publishes no totals of its own.
     ///     </para>
+    ///     <para>
+    ///         #651: the occupied context carried over from the last
+    ///         <see cref="StepFinishEvent" /> is preserved rather than cleared —
+    ///         these totals describe the whole session, and only a new request may
+    ///         replace the size of the last one.
+    ///     </para>
     /// </remarks>
     private static AppState OnSessionStats(AppState state, SessionStatsEvent stats) => state with
     {
@@ -188,7 +208,8 @@ public static partial class AppReducer
             stats.Metadata.TokensInput,
             stats.Metadata.TokensOutput,
             stats.Metadata.Cost,
-            !stats.Metadata.IsCostKnown)
+            !stats.Metadata.IsCostKnown,
+            state.Cost.ContextTokens)
     };
 
     private static AppState OnMessageEnd(AppState state)

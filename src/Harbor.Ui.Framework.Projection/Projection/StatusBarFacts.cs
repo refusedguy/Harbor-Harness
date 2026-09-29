@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.State;
 
 namespace Harbor.Ui.Framework.Projection;
@@ -30,7 +31,13 @@ namespace Harbor.Ui.Framework.Projection;
 /// <param name="Status">Center status cell with its glyph ("▌ running").</param>
 /// <param name="StatusStyle">Style for <paramref name="Status" />; renderers map it to their own accent.</param>
 /// <param name="Agent">Right agent cell ("agent code"), or null when no agent is named.</param>
-/// <param name="Tokens">Right token cell ("1.2K↑ 300↓"), or null when no tokens were spent.</param>
+/// <param name="Tokens">
+///     Right token cell ("10.3K↑ 300↓") — the context the session occupies and
+///     the output generated, or null when neither moved (#651). The input side
+///     is deliberately NOT the session-cumulative input total: that is what the
+///     provider bills, and printing it as "how full am I" made the counter grow
+///     with the turn count while the prompt stood still.
+/// </param>
 /// <param name="Cost">Right cost cell ("$0.0042"), or null when nothing was spent.</param>
 /// <param name="Scroll">Right scroll cell ("live" / "scroll 50%"); always present.</param>
 public readonly record struct StatusBarFacts(
@@ -81,7 +88,18 @@ public readonly record struct StatusBarFacts(
             Status: glyph + " " + status,
             StatusStyle: statusStyle,
             Agent: string.IsNullOrEmpty(state.Chat.AgentName) ? null : "agent " + state.Chat.AgentName,
-            Tokens: StatusBarText.TokensCell(cost.TokensIn, cost.TokensOut),
+
+            // #651: the input side of the cell is what the context OCCUPIES (the
+            // last request's prompt tokens, the figure the ctx bar beside it has
+            // read since #630), not the sum of every request's full input — that
+            // sum is the bill, and on turn N it reads as N × the context. The
+            // output side stays cumulative: nothing re-reads generated tokens,
+            // so their total is a true one. The cost cell keeps the core's money
+            // over the same sum (#653) — a cell that hid the sum would be
+            // understating what the provider charged.
+            Tokens: StatusBarText.TokensCell(
+                ContextUsage.DisplayedInputTokens(cost.ContextTokens, cost.TokensIn),
+                cost.TokensOut),
             Cost: StatusBarText.CostCell(cost.CostUsd, cost.IsCostUnpriced),
             Scroll: maxScroll == 0 ? "live" : $"scroll {state.Ui.ScrollOffset * 100 / maxScroll}%");
     }

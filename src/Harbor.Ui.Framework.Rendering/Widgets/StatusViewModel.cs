@@ -19,7 +19,13 @@ public sealed class StatusViewModel
     /// <summary>Cumulative cost text ("$0.0031") — rightmost, dies first.</summary>
     public string? Cost { get; set; }
 
-    /// <summary>Token totals text ("12.3k↑ 4.5k↓") — second from the right.</summary>
+    /// <summary>
+    ///     Token cell text ("10.3k↑ 300↓") — second from the right. The input
+    ///     side is the context the session OCCUPIES, the same figure the ctx
+    ///     segment above it is drawn from; the output side is the session total,
+    ///     because generated tokens are never re-read and so really do add up
+    ///     (#651).
+    /// </summary>
     public string? Tokens { get; set; }
 
     /// <summary>Retry countdown line ("retry 2/3 in 4s") — a fixed-priority
@@ -73,11 +79,19 @@ public sealed class StatusViewModel
     public void ClearContext() => ContextTokensUsed = null;
 
     /// <summary>
-    ///     Formats usage numbers once per change, not per frame. #653: both
-    ///     numbers are the core's, copied from <c>SessionStatsEvent</c> — this
-    ///     widget computes no cost.
+    ///     Formats usage numbers once per change, not per frame. #653: the cost
+    ///     is the core's, copied from <c>SessionStatsEvent</c> — this widget
+    ///     computes no cost. #651: <paramref name="inputTokens" /> is the
+    ///     RESOLVED display figure (the occupied context, or the session total
+    ///     when no request has been seen — see
+    ///     <c>ContextUsage.DisplayedInputTokens</c>), not the paid total: the
+    ///     sum of every request's full input is the bill, and printing it as
+    ///     "how full am I" made the counter grow with the turn count.
     /// </summary>
-    /// <param name="inputTokens">Cumulative input tokens.</param>
+    /// <param name="inputTokens">
+    ///     Input tokens to display — the occupied context, or the session
+    ///     cumulative total when no request has been observed in this process.
+    /// </param>
     /// <param name="outputTokens">Cumulative output tokens.</param>
     /// <param name="costUsd">
     ///     Cumulative cost as the core priced it, or <see langword="null" /> when
@@ -99,7 +113,9 @@ public sealed class StatusViewModel
 
     /// <summary>Token-only pull feed (host polling <c>ITokenTracker.GetStats()</c>):
     /// refreshes the token segment and PRESERVES any cost a richer source
-    /// already reported — pull feeds must never erase event-pushed cost.</summary>
+    /// already reported — pull feeds must never erase event-pushed cost. A
+    /// tracker only ever accumulates, so what arrives here is the paid total:
+    /// on a running session the event feed owns this cell (#651).</summary>
     public void SetUsage(long inputTokens, long outputTokens)
     {
         Tokens = FormatCount(inputTokens) + "↑ " + FormatCount(outputTokens) + "↓";
