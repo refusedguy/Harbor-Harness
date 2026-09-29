@@ -32,7 +32,7 @@
 #
 #   `--min-files` / `--min-refs` / `--min-lines` make a narrowed scan fail
 #   instead of passing quietly. They are set ~20% below today's numbers (310
-#   markdown files, 770 link refs, 73871 lines) and are a ratchet: a PR that
+#   markdown files, 770 link refs, 74109 lines) and are a ratchet: a PR that
 #   legitimately removes documents lowers them in the same diff, where a
 #   reviewer can see it. A script that scans zero paths and exits 0 is the
 #   same failure mode this gate exists to end.

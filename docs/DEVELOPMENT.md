@@ -115,7 +115,7 @@ Three things make this a real gate rather than decoration:
    then asserts the exit code *and* the diagnostic. A checker edited until it
    matches nothing goes red here instead of reporting "clean" forever.
 2. **A narrowed scan is a failure.** The `--min-*` floors are set ~20% below
-   today's numbers (310 files, 770 link refs, 73871 lines). Scanning zero
+   today's numbers (311 files, 770 link refs, 74109 lines). Scanning zero
    files, or a tenth of them, exits 1 — a script that examined nothing cannot
    report that everything is fine. The floors are a ratchet: a PR that really
    removes documents lowers them in the same diff, where a reviewer sees it.
