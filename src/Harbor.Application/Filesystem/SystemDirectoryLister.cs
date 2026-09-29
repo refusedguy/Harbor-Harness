@@ -163,29 +163,35 @@ public sealed class SystemDirectoryLister : IDirectoryLister
     private static DirectoryEntry Describe(FileSystemInfo info)
     {
         bool isDir = info is DirectoryInfo;
-
-        // Attributes is one syscall's worth of data we already paid for. A file
-        // that vanishes between the enumeration and this read (a rotating log, a
-        // build artefact) throws instead of returning a flag, and the entry is
-        // simply omitted rather than shown as a broken row.
-        bool hidden;
-        try
-        {
-            hidden = (info.Attributes & FileAttributes.Hidden) != 0;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return new DirectoryEntry(info.Name, info.FullName, isDir, IsHiddenByName(info.Name));
-        }
-
-        return new DirectoryEntry(info.Name, info.FullName, isDir, hidden);
+        return new DirectoryEntry(info.Name, info.FullName, isDir, IsHidden(info));
     }
 
     /// <summary>
-    ///     Dot-prefix fallback for an entry whose attributes could not be read.
-    ///     Not a heuristic dressed as a fact: on every platform Harbor targets, a
-    ///     leading dot IS the hidden marker, and the alternative is dropping the
-    ///     row.
+    ///     The filesystem's own hidden attribute, and nothing else.
     /// </summary>
-    private static bool IsHiddenByName(string name) => name.StartsWith('.');
+    /// <remarks>
+    ///     A dot-prefix fallback was tried here and removed. It is tempting — a
+    ///     leading dot reads as "hidden" to a developer — but it is not what the
+    ///     flag means: on Windows a dot-prefixed directory carries no hidden
+    ///     attribute at all, so the same tree would render differently per
+    ///     platform, and the only way to test it is a per-OS branch. The row
+    ///     marker is cosmetic; making it consistent is worth more than making it
+    ///     clever, and the attribute is the one answer that means the same thing
+    ///     everywhere.
+    /// </remarks>
+    private static bool IsHidden(FileSystemInfo info)
+    {
+        // Attributes is one read of data the enumeration already paid for. An
+        // entry that vanishes between the two (a rotating log, a build artefact)
+        // throws instead of answering, and the honest result for "I could not
+        // find out" is "not marked hidden" — never a guess.
+        try
+        {
+            return (info.Attributes & FileAttributes.Hidden) != 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 }
