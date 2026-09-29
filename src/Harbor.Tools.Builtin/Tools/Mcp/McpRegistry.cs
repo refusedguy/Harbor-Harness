@@ -413,16 +413,29 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         {
             int id = Interlocked.Increment(ref _nextId);
             using var requestDoc = McpJsonRpc.BuildRequest(id, method, args);
-            JsonDocument? response = await transport
-                .RoundTripAsync(requestDoc.RootElement, id, cancellationToken)
+            Result<Maybe<JsonDocument>> roundTrip = await transport
+                .TryRoundTripAsync(requestDoc.RootElement, id, cancellationToken)
                 .ConfigureAwait(false);
-            if (response is null)
+
+            // #587: the transport's own diagnostic is what the reader gets. It already
+            // names the endpoint, the HTTP status, the attempt count and the latency;
+            // the only thing missing here is which registered server we were talking
+            // to, so that is the only thing prepended. `MapError` would rewrite the
+            // error too but cannot help with the second branch below, and this is a
+            // three-outcome match (fail / no document / document) — a railway with
+            // two rails would be a worse fit than three straight-line reads.
+            if (roundTrip.IsFailure)
+                return Result.Failure<string>($"MCP server '{server}': {roundTrip.Error}");
+
+            // The one case that legitimately has no diagnostic: the server answered,
+            // and the answer carries no document (202 Accepted, empty body). Reporting
+            // it as anything else would re-invent the conflation this seam removed.
+            Maybe<JsonDocument> maybeResponse = roundTrip.Value;
+            if (maybeResponse.HasNoValue)
                 return Result.Failure<string>($"MCP server '{server}' returned no response.");
 
-            using (response)
-            {
-                return ProcessResponse(response, server, method, entry);
-            }
+            using JsonDocument response = maybeResponse.Value;
+            return ProcessResponse(response, server, method, entry);
         }
         catch (Exception ex)
         {
