@@ -1,0 +1,407 @@
+using System.Collections.Immutable;
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Filesystem;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.Services;
+using Harbor.Ui.Framework.State;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Harbor.Ui.Framework.Tests;
+
+/// <summary>
+///     Issue #667 — the file-tree seam. These tests exist because the thing they
+///     cover used to be untestable: the listing was a private field on the panel
+///     and the walk was inline in <c>Build</c>, so the only way to exercise
+///     "what happens when the directory walk is slow" was to make a real
+///     directory walk slow.
+/// </summary>
+/// <remarks>
+///     The four properties pinned here are the ones the design actually rests
+///     on. Everything else is plumbing.
+/// </remarks>
+public sealed class FileTreeLoaderTests
+{
+    private const string PanelId = "file-tree";
+    private const string DirA = "/tmp/harbor-667-a";
+    private const string DirB = "/tmp/harbor-667-b";
+
+    // ── the demand signal is cheap and idempotent ─────────────────────────
+
+    [Test]
+    [Arguments("", "")]
+    [Arguments("file-tree", "")]
+    [Arguments("", "/tmp/x")]
+    public async Task Request_WithABlankArgument_IsIgnored(string panelId, string directory)
+    {
+        // The "means CWD" empty string must never reach the port: the resolver is
+        // the panel's job (TerminalUiState.ResolvePanelDirectory), and a request
+        // carrying it would be answered with a listing whose Directory field
+        // disagrees with what the reducer compares against.
+        var lister = new CountingLister();
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+
+        loader.Request(panelId, directory, PointedAt(DirA));
+        await Settled(loader);
+
+        await Assert.That(lister.Calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Request_ForTheSameDirectoryTwice_StartsOneWalk()
+    {
+        var lister = new CountingLister();
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = new UiStore();
+
+        loader.Request(PanelId, DirA, store);
+        loader.Request(PanelId, DirA, store);
+        loader.Request(PanelId, DirA, store);
+
+        await Settled(loader);
+        await Assert.That(lister.Calls).IsEqualTo(1)
+            .Because("Build asks on every frame; a loader that re-walked per frame would "
+                   + "make the panel's own demand signal into the busy-work it replaced");
+    }
+
+    [Test]
+    public async Task Request_ReturnsBeforeTheWalkCompletes()
+    {
+        // The gate is not a style preference: Request runs on the render thread.
+        var gate = new TaskCompletionSource();
+        var lister = new GatedLister(gate.Task);
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = new UiStore();
+
+        loader.Request(PanelId, DirA, store); // must not block on `gate`
+        await Assert.That(lister.Started.Task.IsCompleted).IsTrue()
+            .Because("Request has to have reached the port synchronously to have started it");
+
+        gate.SetResult();
+        await Settled(loader);
+    }
+
+    [Test]
+    public async Task TwoPanels_AreTrackedIndependently()
+    {
+        // A per-panel source, not a global one: navigating one panel's directory
+        // must not cancel another panel's load.
+        var slow = new CountingLister { Hangs = true };
+        using var loader = new FileTreeLoader(slow, NullLogger<FileTreeLoader>.Instance);
+        var store = new UiStore();
+        store.Dispatch(new AppMsg.SetPanelDirectory("tree-a", DirA));
+        store.Dispatch(new AppMsg.SetPanelDirectory("tree-b", DirB));
+
+        // Panel A's walk hangs on the shared lister; panel B's request must not
+        // cancel it, which is only true because the CTS is per panel id.
+        loader.Request("tree-a", DirA, store);
+        await slow.Started.Task;
+        loader.Request("tree-b", DirB, store);
+
+        await Assert.That(slow.Token.IsCancellationRequested).IsFalse()
+            .Because("panel-b's walk must not have cancelled panel-a's in-flight one; a "
+                   + "single global CTS would make two panels fight over one token");
+
+        slow.Release();
+        await Settled(loader);
+    }
+
+    [Test]
+    public async Task Request_WithNoStore_IsANoOp()
+    {
+        // The degraded host (no store, no loader) must not fall back to reading
+        // the disk — that fallback is the defect.
+        var lister = new CountingLister();
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+
+        loader.Request(PanelId, DirA, null);
+        await Settled(loader);
+
+        await Assert.That(lister.Calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Request_AfterASettledLoad_DoesNotWalkAgain()
+    {
+        var lister = new CountingLister();
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = new UiStore();
+
+        loader.Request(PanelId, DirA, store);
+        await Settled(loader);
+        loader.Request(PanelId, DirA, store);
+        await Settled(loader);
+
+        await Assert.That(lister.Calls).IsEqualTo(1);
+    }
+
+    // ── supersession: a late result must never repaint a left directory ────
+
+    [Test]
+    public async Task NavigatingAway_CancelsTheWalkInFlight()
+    {
+        var first = new TaskCompletionSource();
+        var lister = new SequencedLister(DirA, first.Task);
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = PointedAt(DirA);
+
+        loader.Request(PanelId, DirA, store);
+        await lister.Started.Task;
+
+        loader.Request(PanelId, DirB, store);
+
+        await Assert.That(lister.Token.IsCancellationRequested).IsTrue()
+            .Because("the whole reason the loader owns a CTS: a walk the user has "
+                   + "navigated away from must be stoppable, not merely ignored later");
+
+        first.TrySetCanceled();
+        await Settled(loader);
+    }
+
+    [Test]
+    public async Task ASlowWalkForAnOldDirectory_DoesNotPublishOverTheNewOne()
+    {
+        // The race the reducer's guard exists for, driven end to end: walk A
+        // starts, the user navigates to B, A finally answers. The store must end
+        // up describing B.
+        var gateA = new TaskCompletionSource();
+        var lister = new SequencedLister(DirA, gateA.Task);
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = PointedAt(DirA);
+
+        loader.Request(PanelId, DirA, store);
+        await lister.Started.Task;
+
+        store.Dispatch(new AppMsg.SetPanelDirectory(PanelId, DirB));
+        loader.Request(PanelId, DirB, store);
+
+        // A now completes, late and stale.
+        gateA.SetResult(Result.Success(new DirectoryListing(DirA, [Entry("from-a")])));
+        await Settled(loader);
+
+        FileTreeSnapshot shown = store.State.Ui.FileTreeFor(PanelId, DirB);
+        await Assert.That(shown.Directory).IsEqualTo(DirB)
+            .Because("a result addressed to a directory the panel left is not a result "
+                   + "for anything the user is looking at");
+    }
+
+    [Test]
+    public async Task TheReducerDropsAResultForADirectoryThePanelLeft()
+    {
+        // Pinned separately from the loader, because the two halves are
+        // independent defences: the loader can be bypassed, replaced or simply
+        // re-implemented, and the guard has to hold in the state machine itself.
+        var store = PointedAt(DirB);
+        store.Dispatch(new AppMsg.SetFileTreeLoaded(
+            PanelId,
+            DirA,
+            [new FileTreeEntry("from-a", DirA + "/from-a", false, false)]));
+
+        await Assert.That(store.State.Ui.FileTrees.ContainsKey(PanelId)).IsFalse();
+    }
+
+    [Test]
+    public async Task TheReducerAcceptsAResultForTheDirectoryThePanelIsOn()
+    {
+        var store = PointedAt(DirB);
+        store.Dispatch(new AppMsg.SetFileTreeLoaded(
+            PanelId,
+            DirB,
+            [new FileTreeEntry("from-b", DirB + "/from-b", false, false)]));
+
+        await Assert.That(store.State.Ui.FileTreeFor(PanelId, DirB).Entries.Length).IsEqualTo(1);
+    }
+
+    // ── failure and cancellation are different things ─────────────────────
+
+    [Test]
+    public async Task AFailedWalk_PublishesTheReason_NotAnException()
+    {
+        var lister = new CountingLister { Failure = "permission denied" };
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = PointedAt(DirA);
+
+        loader.Request(PanelId, DirA, store);
+        await Settled(loader);
+
+        FileTreeSnapshot snapshot = store.State.Ui.FileTreeFor(PanelId, DirA);
+        await Assert.That(snapshot.Status).IsEqualTo(AsyncStatus.Error);
+        await Assert.That(snapshot.Error).IsEqualTo("permission denied");
+    }
+
+    [Test]
+    public async Task AThrowingWalk_BecomesAFailedSnapshot_RatherThanEscaping()
+    {
+        var lister = new CountingLister { Throws = new InvalidOperationException("boom") };
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = PointedAt(DirA);
+
+        loader.Request(PanelId, DirA, store);
+        await Settled(loader);
+
+        await Assert.That(store.State.Ui.FileTreeFor(PanelId, DirA).Status).IsEqualTo(AsyncStatus.Error)
+            .Because("the contract says expected failures are Results, so a throw is a bug — "
+                   + "but a bug in a background task must not be able to take the renderer down");
+    }
+
+    [Test]
+    public async Task ACancelledWalk_LeavesNoErrorSnapshot()
+    {
+        // Cancellation is not a failure. Painting "cannot read" for a walk the
+        // user themselves superseded would be a lie they have to read.
+        var lister = new CountingLister { Throws = new OperationCanceledException() };
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = PointedAt(DirA);
+
+        loader.Request(PanelId, DirA, store);
+        await Settled(loader);
+
+        await Assert.That(store.State.Ui.FileTreeFor(PanelId, DirA).Status).IsNotEqualTo(AsyncStatus.Error);
+    }
+
+    // ── lifecycle ─────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task Dispose_CancelsEverythingInFlight()
+    {
+        var lister = new CountingLister { Hangs = true };
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = PointedAt(DirA);
+
+        loader.Request(PanelId, DirA, store);
+        await lister.Started.Task;
+
+        loader.Dispose();
+
+        await Assert.That(lister.Token.IsCancellationRequested).IsTrue();
+        lister.Release();
+        await Settled(loader);
+    }
+
+    [Test]
+    public async Task Dispose_IsIdempotent()
+    {
+        using var loader = new FileTreeLoader(new CountingLister(), NullLogger<FileTreeLoader>.Instance);
+        loader.Dispose();
+        await Assert.That(async () => loader.Dispose()).ThrowsNothing();
+    }
+
+    [Test]
+    public async Task AfterDispose_RequestIsIgnored()
+    {
+        var lister = new CountingLister();
+        var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        loader.Dispose();
+
+        loader.Request(PanelId, DirA, PointedAt(DirA));
+        await Settled(loader);
+
+        await Assert.That(lister.Calls).IsEqualTo(0)
+            .Because("a renderer shutting down must not be able to start new walks");
+    }
+
+    [Test]
+    public async Task CancelPanelLoad_StopsTheWalk_AndKeepsTheSettledListing()
+    {
+        // The store entry is a true statement about that directory; cancelling a
+        // refresh in progress must not throw it away.
+        var lister = new CountingLister { Hangs = true };
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = PointedAt(DirA);
+        store.Dispatch(new AppMsg.SetFileTreeLoaded(
+            PanelId,
+            DirA,
+            [new FileTreeEntry("kept", DirA + "/kept", false, false)]));
+
+        loader.Request(PanelId, DirA, store); // no-op: already settled
+        await Settled(loader);
+        await Assert.That(store.State.Ui.FileTreeFor(PanelId, DirA).Entries.Length).IsEqualTo(1);
+
+        loader.CancelPanelLoad(PanelId);
+        await Assert.That(store.State.Ui.FileTreeFor(PanelId, DirA).Entries.Length).IsEqualTo(1);
+    }
+
+    // ── fixtures ──────────────────────────────────────────────────────────
+
+    /// <summary>A store whose panel is pointed at <paramref name="dir" />.</summary>
+    private static UiStore PointedAt(string dir)
+    {
+        var store = new UiStore();
+        store.Dispatch(new AppMsg.SetPanelDirectory(PanelId, dir));
+        return store;
+    }
+
+    private static DirectoryEntry Entry(string name) => new(name, "/x/" + name, false, false);
+
+    /// <summary>
+    ///     Waits until nothing is in flight. Polls rather than sleeping a fixed
+    ///     amount, so the suite is neither flaky on a loaded machine nor slow on
+    ///     an idle one.
+    /// </summary>
+    private static async Task Settled(FileTreeLoader loader)
+    {
+        for (int i = 0; i < 500 && loader.InFlightCount > 0; i++)
+        {
+            await Task.Delay(10);
+        }
+    }
+
+    private class CountingLister : IDirectoryLister
+    {
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public string? Failure { get; init; }
+
+        public Exception? Throws { get; init; }
+
+        public bool Hangs { get; init; }
+
+        public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public CancellationToken Token { get; private set; }
+
+        public async Task<Result<DirectoryListing>> ListAsync(string directory, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _calls);
+            Token = cancellationToken;
+            Started.TrySetResult(true);
+
+            if (Hangs)
+            {
+                await Release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (Throws is not null)
+            {
+                throw Throws;
+            }
+
+            return Failure is null
+                ? Result.Success(new DirectoryListing(directory, [Entry("one")]))
+                : Result.Failure<DirectoryListing>(Failure);
+        }
+    }
+
+    /// <summary>A lister that stalls one specific directory until told to answer.</summary>
+    private sealed class SequencedLister(string gatedDirectory, Task gate) : IDirectoryLister
+    {
+        public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public CancellationToken Token { get; private set; }
+
+        public async Task<Result<DirectoryListing>> ListAsync(string directory, CancellationToken cancellationToken = default)
+        {
+            Token = cancellationToken;
+            Started.TrySetResult(true);
+            if (string.Equals(directory, gatedDirectory, StringComparison.Ordinal))
+            {
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return Result.Success(new DirectoryListing(directory, [Entry("one")]));
+        }
+    }
+}

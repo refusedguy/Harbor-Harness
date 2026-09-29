@@ -555,4 +555,177 @@ public class CellForgeBuiltinPanelsTests
         string text = Joined(panel.Build(ctx));
         await Assert.That(text).Contains("File Tree");
     }
+
+    // ── #667: the panel is now a pure reader of state ─────────────────────
+    //
+    // Before this issue the panel listed the real working directory from Build.
+    // There was no fixture to assert against, because there was nothing to
+    // assert: the only observable was "it did not crash". These tests give the
+    // panel an observable — the state it renders — and pin the one thing that
+    // must be true of a view with a demand signal: the signal is a REQUEST, and
+    // what gets drawn comes from the store and nowhere else.
+
+    [Test]
+    public async Task FileTree_RendersEntriesFromState_NotFromDisk()
+    {
+        // A directory name that cannot exist on any test machine, so if the panel
+        // were still reading the disk this row could not appear.
+        var snapshot = FileTreeSnapshot.Completed(
+            "/nowhere/loaded-from-state",
+            [new FileTreeEntry("alpha.txt", "/nowhere/loaded-from-state/alpha.txt", false, false)]);
+
+        var state = new UiState
+        {
+            Ui = new TerminalUiState
+            {
+                PanelDirs = ImmutableDictionary<string, string>.Empty.Add("file-tree", "/nowhere/loaded-from-state"),
+                FileTrees = ImmutableDictionary<string, FileTreeSnapshot>.Empty.Add("file-tree", snapshot),
+            },
+        };
+
+        string text = Joined(new CellForgeFileTreePanel().Build(Ctx(state)));
+        await Assert.That(text).Contains("alpha.txt");
+    }
+
+    [Test]
+    public async Task FileTree_AsksTheLoader_AndRendersNothingUntilItAnswers()
+    {
+        var loader = new RecordingLoader();
+        var store = new UiStore();
+        string dir = Path.Combine(Path.GetTempPath(), "harbor-667-no-such-dir");
+        var state = new UiState
+        {
+            Ui = new TerminalUiState
+            {
+                PanelDirs = ImmutableDictionary<string, string>.Empty.Add("file-tree", dir),
+            },
+        };
+
+        string text = Joined(new CellForgeFileTreePanel().Build(
+            Ctx(state, services: new PanelServices { Store = store, FileTrees = loader })));
+
+        await Assert.That(loader.Requests).HasCount(1);
+        await Assert.That(loader.Requests[0]).IsEqualTo(("file-tree", dir));
+        await Assert.That(text).Contains("File Tree")
+            .Because("the panel must still draw its frame; an unloaded tree is a state, not a blank");
+    }
+
+    [Test]
+    public async Task FileTree_WithoutALoader_DegradesInsteadOfReadingTheDisk()
+    {
+        // No IFileTreeLoader in the bag: the panel must still render, and must
+        // not have quietly become a filesystem reader again.
+        var store = new UiStore();
+        string text = Joined(new CellForgeFileTreePanel().Build(
+            Ctx(new UiState(), services: new PanelServices { Store = store })));
+        await Assert.That(text).Contains("File Tree");
+    }
+
+    [Test]
+    public async Task FileTree_Build_DoesNotRaiseOnAStoreWithNoLoader()
+    {
+        // The degraded path has no loader to call, so nothing about the request
+        // branch may dereference null. Two frames, to be sure it is stable and
+        // not just survivable once.
+        var panel = new CellForgeFileTreePanel();
+        var store = new UiStore();
+        var services = new PanelServices { Store = store };
+        _ = Joined(panel.Build(Ctx(new UiState(), services: services)));
+        string second = Joined(panel.Build(Ctx(store.State, services: services)));
+        await Assert.That(second).Contains("File Tree");
+    }
+
+    [Test]
+    public async Task FileTree_Refresh_InvalidatesTheListing()
+    {
+        // `r` used to clear a private cache field. It now clears STATE, so the
+        // reload is observable: the snapshot is gone and the next frame asks
+        // again.
+        var store = new UiStore();
+        string dir = Path.Combine(Path.GetTempPath(), "harbor-667-refresh");
+        var state = new UiState
+        {
+            Ui = new TerminalUiState
+            {
+                PanelDirs = ImmutableDictionary<string, string>.Empty.Add("file-tree", dir),
+                FileTrees = ImmutableDictionary<string, FileTreeSnapshot>.Empty.Add(
+                    "file-tree",
+                    FileTreeSnapshot.Completed(dir, [new FileTreeEntry("x", dir + "/x", false, false)])),
+            },
+        };
+
+        var services = new PanelServices { Store = store, FileTrees = new RecordingLoader() };
+        var panel = new CellForgeFileTreePanel();
+        var ctx = Ctx(state, services: services);
+
+        await Assert.That(Joined(panel.Build(ctx))).Contains("x");
+
+        await Assert.That(panel.OnKey(UiKey.ForChar('r'), ctx)).IsTrue();
+
+        await Assert.That(store.State.Ui.FileTrees["file-tree"].Status).IsEqualTo(AsyncStatus.Idle)
+            .Because("`r` must drop the listing so the next demand re-loads; a refresh "
+                   + "that left the old rows in state would be a no-op with a keypress attached");
+    }
+
+    [Test]
+    public async Task FileTree_Enter_DescendsIntoADirectoryFromState()
+    {
+        var store = new UiStore();
+        string dir = Path.Combine(Path.GetTempPath(), "harbor-667-descend");
+        string child = Path.Combine(dir, "child");
+        var state = new UiState
+        {
+            Ui = new TerminalUiState
+            {
+                PanelDirs = ImmutableDictionary<string, string>.Empty.Add("file-tree", dir),
+                FileTrees = ImmutableDictionary<string, FileTreeSnapshot>.Empty.Add(
+                    "file-tree",
+                    FileTreeSnapshot.Completed(dir, [new FileTreeEntry("child", child, true, false)])),
+            },
+        };
+
+        var services = new PanelServices { Store = store };
+        bool consumed = new CellForgeFileTreePanel().OnKey(
+            new UiKey(UiKeyCode.Enter),
+            Ctx(state, services: services));
+
+        await Assert.That(consumed).IsTrue();
+        await Assert.That(store.State.Ui.PanelDirs["file-tree"]).IsEqualTo(child);
+    }
+
+    [Test]
+    public async Task FileTree_IgnoresASnapshotForADirectoryThePanelLeft()
+    {
+        // The staleness guard, seen from the panel: state holds a perfectly good
+        // listing for a directory the panel is no longer pointed at, and none for
+        // the one it is. The panel must render the current directory as
+        // unloaded, not the stale entries.
+        var state = new UiState
+        {
+            Ui = new TerminalUiState
+            {
+                PanelDirs = ImmutableDictionary<string, string>.Empty.Add("file-tree", "/nowhere/current"),
+                FileTrees = ImmutableDictionary<string, FileTreeSnapshot>.Empty.Add(
+                    "file-tree",
+                    FileTreeSnapshot.Completed(
+                        "/nowhere/stale",
+                        [new FileTreeEntry("ghost.txt", "/nowhere/stale/ghost.txt", false, false)])),
+            },
+        };
+
+        string text = Joined(new CellForgeFileTreePanel().Build(Ctx(state)));
+        await Assert.That(text).DoesNotContain("ghost.txt");
+    }
+
+    private sealed class RecordingLoader : IFileTreeLoader
+    {
+        public List<(string PanelId, string Directory)> Requests { get; } = [];
+
+        public List<string> Cancels { get; } = [];
+
+        public void Request(string panelId, string directory, UiStore? store) =>
+            Requests.Add((panelId, directory));
+
+        public void CancelPanelLoad(string panelId) => Cancels.Add(panelId);
+    }
 }
