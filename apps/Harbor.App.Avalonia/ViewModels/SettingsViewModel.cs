@@ -118,6 +118,16 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Construct the settings view-model and load the persisted config.</summary>
     /// <param name="themeReader">Read-only view of the active theme (for <c>ThemeSettings</c>).</param>
     /// <param name="themeApplier">Theme applier forwarded to <c>ThemeSettings</c>.</param>
+    /// <param name="logger">Sink for view-model diagnostics.</param>
+    /// <param name="loggerFactory">Factory for the per-session loggers this view-model creates.</param>
+    /// <param name="toasts">Transient notifications surface for the user.</param>
+    /// <param name="commonStore">Cross-desktop configuration, the one both apps read.</param>
+    /// <param name="appStore">Avalonia-only configuration layered over the common store.</param>
+    /// <param name="providers">Provider registry, for the model picker.</param>
+    /// <param name="authResolver">
+    ///     The single source of truth on whether a provider is authorized (#671).
+    ///     The view-model does not inspect key stores itself.
+    /// </param>
     public SettingsViewModel(
         IThemeReader themeReader,
         IThemeApplier themeApplier,

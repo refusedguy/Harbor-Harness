@@ -489,6 +489,11 @@ public static class LineDiff
     ///     — every step that matched, which is the whole of the script's
     ///     alignment.
     /// </summary>
+    /// <param name="trace">The recorded forward search, one row per edit step.</param>
+    /// <param name="oldLo">Old-text start of the region being matched.</param>
+    /// <param name="newLo">New-text start of the region being matched.</param>
+    /// <param name="d">The edit distance the forward search reached.</param>
+    /// <param name="offset">Value subtracted from a trace row to recover its absolute index.</param>
     /// <param name="x">Old-text position the forward search finished on.</param>
     /// <param name="y">New-text position the forward search finished on.</param>
     private static List<(int Old, int New)> Backtrack(

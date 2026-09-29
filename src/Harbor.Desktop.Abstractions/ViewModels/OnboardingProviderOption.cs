@@ -14,6 +14,11 @@ public sealed partial class OnboardingProviderOption : ObservableObject
     private bool _isSelected;
 
     /// <summary>Construct a provider option.</summary>
+    /// <param name="id">Provider id, as declared in its <c>providers/&lt;id&gt;.json</c>.</param>
+    /// <param name="displayName">Name shown in the picker.</param>
+    /// <param name="authEnvVar">Environment variable holding the key, or null when the provider needs none.</param>
+    /// <param name="requiresKey">Whether the provider refuses to run without a key.</param>
+    /// <param name="defaultModel">Model the provider falls back to when the user picks none.</param>
     /// <param name="icon">
     ///     Glyph read from the provider's own <c>providers/&lt;id&gt;.json</c> by
     ///     <c>ProviderPresetCatalog</c> (#560) — it used to come from an id→glyph

@@ -185,7 +185,7 @@ public class TerminalPaneLaunchGatingTests
 
         await Assert.That(result.IsFailure).IsTrue()
             .Because("that binary does not exist, so the spawn must fail");
-        await Assert.That(result.Error).Contains("terminal-denied", StringComparison.Ordinal).IsFalse()
+        await Assert.That(result.Error).DoesNotContain("terminal-denied", StringComparison.Ordinal)
             .Because(
                 "the failure must come from the SPAWN (posix_spawnp), not from the permission gate — "
                 + "this is the assertion that proves the gate permits rather than blanket-denying");

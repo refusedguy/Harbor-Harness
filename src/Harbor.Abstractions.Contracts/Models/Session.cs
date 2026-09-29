@@ -115,6 +115,12 @@ public sealed partial record Session(
 /// <param name="TokensCacheWrite">Total cache-write tokens (when supported).</param>
 /// <param name="MessageCount">Total number of messages appended to the session.</param>
 /// <param name="TimeCompacting">Total time spent compacting the session.</param>
+/// <param name="IsCostKnown">
+///     Whether <see cref="Cost" /> is a measured figure. <see langword="false" />
+///     means the session's model published no rates, so the number is a floor and
+///     not a bill — a renderer must show that as unknown rather than as zero,
+///     because zero is also what a genuinely free model reports.
+/// </param>
 /// <remarks>
 ///     <para>
 ///         <b>#653 — the cost is a CORE number.</b> It is computed on the headless

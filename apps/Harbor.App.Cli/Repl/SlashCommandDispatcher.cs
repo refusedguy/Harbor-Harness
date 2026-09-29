@@ -264,6 +264,9 @@ internal sealed class SlashCommandDispatcher
         }
     }
 
+    /// <summary>
+    ///     Runs a registered slash command and reports the outcome to the REPL.
+    /// </summary>
     /// <remarks>
     ///     <para>
     ///         #603 — the handler contract. Returning <see cref="Result" /> does

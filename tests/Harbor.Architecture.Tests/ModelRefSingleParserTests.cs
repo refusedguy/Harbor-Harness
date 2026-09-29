@@ -132,8 +132,6 @@ public sealed class ModelRefSingleParserTests
             "NOT A REFERENCE. A skill NAME may be slash-namespaced.",
         ["src/Harbor.DesignSystem/DesignSystem/TerminalBackgroundProbe.cs"] =
             "NOT A REFERENCE. An OSC terminal payload is slash-separated by the protocol.",
-        ["src/Harbor.Desktop.Abstractions/ViewModels/DiffViewModelBase.cs"] =
-            "NOT A REFERENCE. Unified-diff '+++ b/path' / '--- a/path' headers.",
         ["src/Harbor.Hosting/Modules/ToolsCatalog.cs"] =
             "REAL DEBT, out of #678's scope. The composition root resolves (provider, model) "
             + "for the agent registry with the same hand-rolled prefix strip SessionFactory had — "

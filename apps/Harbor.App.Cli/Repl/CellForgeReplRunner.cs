@@ -116,8 +116,7 @@ internal sealed class CellForgeReplRunner(
     ///     Null when the host registered no aggregator — the panel then reads an
     ///     empty snapshot, which is honest rather than stale.
     /// </summary>
-    internal readonly DiagnosticsSync? _diagnosticsSync =
-        diagnosticsAggregator is null ? null : new DiagnosticsSync(_replStore, diagnosticsAggregator, logger);
+    internal DiagnosticsSync? _diagnosticsSync;
 
     internal readonly StatusViewModel _status = screen.Status.Vm;
     internal readonly ComposerController _composer = screen.Composer.Composer;
@@ -347,7 +346,19 @@ internal sealed class CellForgeReplRunner(
     ///     Runs the REPL until quit. Returns the exit code
     ///     (slash <c>/exit</c> wins over the loop's own, mirroring legacy).
     /// </summary>
-    public Task<int> RunAsync(CancellationToken ct = default) => Lifecycle.RunAsync(ct);
+    public Task<int> RunAsync(CancellationToken ct = default)
+    {
+        // Seeded here rather than in a field initializer: a field initializer may
+        // not read another instance field, and DiagnosticsSync needs the store
+        // that this class owns. RunAsync is the first point where the object is
+        // fully constructed, and it runs before the first frame, so the panel
+        // never shows a gap it will not immediately fill.
+        _diagnosticsSync ??= diagnosticsAggregator is null
+            ? null
+            : new DiagnosticsSync(_replStore, diagnosticsAggregator, logger);
+
+        return Lifecycle.RunAsync(ct);
+    }
 
     /// <summary>
     /// Heartbeat condition (#170): the Running/Compacting spinner plus any
