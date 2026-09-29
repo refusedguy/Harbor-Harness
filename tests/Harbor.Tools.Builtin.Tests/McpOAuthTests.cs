@@ -193,20 +193,29 @@ public class McpOAuthTests : IDisposable
             new McpOAuthConfig(), cache,
             () => { called = true; return new HttpClient(new StubHandler(_ => Json(new { }))); });
 
-        string token = await handler.GetAccessTokenAsync();
+        Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
 
-        await Assert.That(token).IsEqualTo("cached");
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.HasValue).IsTrue();
+        await Assert.That(result.Value.GetValueOrDefault()).IsEqualTo("cached");
         await Assert.That(called).IsFalse();
     }
 
+    /// <summary>
+    ///     #566: an absent token is absence, not failure. It used to throw, and
+    ///     then to be a null, and then to be a Failure whose text the handler
+    ///     itself had to re-parse to tell apart from a rejected grant.
+    /// </summary>
     [Test]
-    public async Task Handler_NoToken_ThrowsLoginRequired()
+    public async Task Handler_NoToken_IsAbsenceNotFailure()
     {
         var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig(), new McpOAuthTokenCache(_root));
 
-        await Assert.That(async () => await handler.GetAccessTokenAsync())
-            .Throws<McpOAuthLoginRequiredException>();
+        Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.HasNoValue).IsTrue();
     }
 
     [Test]
@@ -219,10 +228,70 @@ public class McpOAuthTests : IDisposable
             new McpOAuthConfig { TokenEndpoint = "https://x/token", ClientId = "cid" },
             cache, () => http);
 
-        string token = await handler.GetAccessTokenAsync();
+        Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
 
-        await Assert.That(token).IsEqualTo("fresh");
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.GetValueOrDefault()).IsEqualTo("fresh");
         await Assert.That(cache.Load("srv")!.AccessToken).IsEqualTo("fresh");
+    }
+
+    /// <summary>
+    ///     The other half of the boundary #566 draws: a token DID exist and the
+    ///     authorization server rejected the refresh grant. That is an error, it
+    ///     stays a <c>Failure</c>, and it must NOT be confused with "no token" —
+    ///     which is why the outcome can no longer ride on the failure channel's
+    ///     text.
+    /// </summary>
+    [Test]
+    public async Task Handler_ExpiredWithRefresh_RejectedGrant_IsAFailure()
+    {
+        var cache = new McpOAuthTokenCache(_root);
+        cache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
+        using var http = StubClient(_ => Json(new { error = "invalid_grant" }, HttpStatusCode.BadRequest));
+        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig { TokenEndpoint = "https://x/token", ClientId = "cid" },
+            cache, () => http);
+
+        Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("refresh failed");
+    }
+
+    /// <summary>
+    ///     A refresh token we cannot spend because the server never advertised a
+    ///     token endpoint is absence, not a rejected grant — the two used to be
+    ///     distinguished only by the <c>"LoginRequired:"</c> / <c>"RefreshFailed:"</c>
+    ///     prefix this file no longer emits.
+    /// </summary>
+    [Test]
+    public async Task Handler_ExpiredWithRefresh_NoTokenEndpoint_IsAbsence()
+    {
+        var cache = new McpOAuthTokenCache(_root);
+        cache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
+        using var http = StubClient(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig(), cache, () => http);
+
+        Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.HasNoValue).IsTrue();
+    }
+
+    /// <summary>
+    ///     The actionable half of absence. Exposed as its own member because the
+    ///     lookup reports "no token" as <c>Maybe.None</c> and the caller decides
+    ///     whether that is fatal for the server it is talking to (#566).
+    /// </summary>
+    [Test]
+    public async Task Handler_LoginHint_NamesTheServerAndTheCommand()
+    {
+        var handler = new McpOAuthHandler("cloud", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig(), new McpOAuthTokenCache(_root));
+
+        await Assert.That(handler.LoginHint).Contains("cloud");
+        await Assert.That(handler.LoginHint).Contains("harbor mcp login cloud");
     }
 
     [Test]
@@ -270,16 +339,22 @@ public class McpOAuthTests : IDisposable
         await Assert.That(corrupt.Error).Contains("CacheCorrupt");
     }
 
+    /// <summary>
+    ///     #566 regression pin: the failure channel no longer carries "you have
+    ///     not logged in". Absence is <c>Maybe.None</c>, so a caller branching on
+    ///     <c>IsFailure</c> can no longer mistake a routine un-logged-in state for
+    ///     a broken grant.
+    /// </summary>
     [Test]
-    public async Task Handler_TryGetAccessTokenResult_NoToken_ReturnsLoginRequired()
+    public async Task Handler_NoToken_FailureChannelCarriesNoLoginMarker()
     {
         var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig(), new McpOAuthTokenCache(_root));
 
         var result = await handler.TryGetAccessTokenResultAsync();
 
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("LoginRequired");
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.HasNoValue).IsTrue();
     }
 
     [Test]

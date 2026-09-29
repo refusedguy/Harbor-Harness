@@ -27,7 +27,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
 
     private readonly Uri _endpoint;
     private readonly IReadOnlyDictionary<string, string>? _headers;
-    private readonly Func<CancellationToken, Task<string?>>? _oauthTokenProvider;
+    private readonly Func<CancellationToken, Task<Result<Maybe<string>>>>? _oauthTokenProvider;
     private readonly ILogger? _logger;
     private readonly TimeSpan _requestTimeout;
     private HttpClient? _client;
@@ -36,7 +36,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     public McpSseTransport(
         Uri endpoint,
         IReadOnlyDictionary<string, string>? headers = null,
-        Func<CancellationToken, Task<string?>>? oauthTokenProvider = null,
+        Func<CancellationToken, Task<Result<Maybe<string>>>>? oauthTokenProvider = null,
         ILogger? logger = null,
         TimeSpan? requestTimeout = null)
     {
@@ -148,8 +148,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         Result<Maybe<string>> oauth = await TryGetOAuthTokenAsync(cancellationToken).ConfigureAwait(false);
         if (oauth.IsFailure)
             return oauth.ConvertFailure<Maybe<JsonDocument>>();
-        Maybe<string> oauthTokenMaybe = oauth.Value;
-        string? oauthToken = oauthTokenMaybe.HasValue ? oauthTokenMaybe.Value : null;
+        Maybe<string> oauthToken = oauth.Value;
         using HttpRequestMessage sseRequest = new(HttpMethod.Get, _endpoint);
         sseRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
         ApplyHeaders(sseRequest, oauthToken);
@@ -213,7 +212,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         }
     }
 
-    private void ApplyHeaders(HttpRequestMessage request, string? oauthToken)
+    private void ApplyHeaders(HttpRequestMessage request, Maybe<string> oauthToken)
     {
         bool hasAuthorization = false;
         if (_headers is { Count: > 0 })
@@ -227,9 +226,9 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             }
         }
 
-        if (!hasAuthorization && oauthToken is { Length: > 0 })
+        if (!hasAuthorization && oauthToken.HasValue && oauthToken.Value.Length > 0)
         {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken.Value);
         }
     }
 
@@ -243,17 +242,20 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         return Result.Failure($"{what} returned {(int)response.StatusCode}");
     }
 
+    /// <summary>
+    ///     The provider's outcome, verbatim — see
+    ///     <see cref="McpHttpTransport" /> for the contract. The nullable overload
+    ///     this replaced forced the transport to manufacture the same
+    ///     <c>Maybe</c> from a <c>null</c>, and the exception arm beside it could
+    ///     never fire (#566).
+    /// </summary>
     private async Task<Result<Maybe<string>>> TryGetOAuthTokenAsync(CancellationToken cancellationToken)
     {
         if (_oauthTokenProvider is null)
             return Result.Success(Maybe<string>.None);
         try
         {
-            return Result.Success(Maybe<string>.From(await _oauthTokenProvider(cancellationToken).ConfigureAwait(false)));
-        }
-        catch (McpOAuthLoginRequiredException ex)
-        {
-            return Result.Failure<Maybe<string>>(ex.Message);
+            return await _oauthTokenProvider(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

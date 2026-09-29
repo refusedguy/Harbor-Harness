@@ -557,9 +557,15 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 }
 
                 Uri endpoint = new(remote.Url, UriKind.Absolute);
-                Func<CancellationToken, Task<string?>> oauthTokenProvider = remote.OAuth is not null
-                    ? (ct => OAuthFor(remote, logger).TryGetAccessTokenAsync(ct))
-                    : (_ => Task.FromResult(Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN")));
+                // #566: the provider speaks the same Result<Maybe<string>> as the
+                // handler, so absence ("no token yet") and a rejected grant stay two
+                // distinct states all the way to the transport instead of being
+                // flattened to a null by a compat overload. The env-var fallback keeps
+                // null-means-absent, wrapped as Maybe.None.
+                Func<CancellationToken, Task<Result<Maybe<string>>>> oauthTokenProvider = remote.OAuth is not null
+                    ? (ct => OAuthFor(remote, logger).TryGetAccessTokenResultAsync(ct))
+                    : (_ => Task.FromResult(Result.Success(
+                        Maybe<string>.From(Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN")))));
 
                 Result<IMcpRemoteTransport> created = _transports.Create(
                     remote.Transport,

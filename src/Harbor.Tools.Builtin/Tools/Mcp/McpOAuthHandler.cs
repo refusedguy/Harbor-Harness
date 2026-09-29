@@ -48,69 +48,63 @@ public sealed class McpOAuthHandler
     }
 
     /// <summary>
-    ///     Valid access token for transports: cache hit, else refresh-token
-    ///     flow. Throws <see cref="McpOAuthLoginRequiredException" /> when
-    ///     interactive login is needed (transports surface the message; the
-    ///     user runs <c>harbor mcp login &lt;server&gt;</c>).
+    ///     The actionable half of "no token exists": which server needs a login,
+    ///     and the command that performs it. The lookup itself reports absence
+    ///     as <c>Maybe.None</c>, because only the caller knows whether a missing
+    ///     token is fatal for the server it is talking to.
     /// </summary>
-    public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var cached = _cache.Load(_server);
-            if (cached is not null && !cached.IsExpired(DateTimeOffset.UtcNow))
-                return cached.AccessToken;
-
-            if (cached?.RefreshToken is { Length: > 0 } refresh)
-            {
-                var refreshed = await TryRefreshAsync(refresh, cancellationToken).ConfigureAwait(false);
-                if (refreshed is not null)
-                    return refreshed;
-            }
-
-            throw new McpOAuthLoginRequiredException(_server);
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    /// <summary>Null-tolerant variant for transports: null when login is required.</summary>
-    public async Task<string?> TryGetAccessTokenAsync(CancellationToken cancellationToken = default)
-    {
-        Result<string> result = await TryGetAccessTokenResultAsync(cancellationToken).ConfigureAwait(false);
-        return result.IsSuccess ? result.Value : null;
-    }
+    public string LoginHint => $"MCP server '{_server}' needs OAuth login. Run: harbor mcp login {_server}";
 
     /// <summary>
-    ///     Result railway for transports (#201 A6): a missing token is
-    ///     <c>Failure("LoginRequired: ...")</c>, a rejected refresh is
-    ///     <c>Failure("RefreshFailed: ...")</c> — transports log/surface the
-    ///     distinction instead of collapsing both into null.
+    ///     The one access-token lookup (#566). Three outcomes, and the type says
+    ///     which is which:
+    ///     <list type="bullet">
+    ///         <item>
+    ///             <c>Success(Some(token))</c> — cache hit, or a refresh that
+    ///             succeeded.
+    ///         </item>
+    ///         <item>
+    ///             <c>Success(None)</c> — no usable token exists. The user has not
+    ///             run <c>harbor mcp login</c>, logged out, or the authorization
+    ///             server never advertised a token endpoint. This is <b>absence,
+    ///             not failure</b>: there is no error to report and nothing went
+    ///             wrong, so the caller decides whether it is fatal.
+    ///         </item>
+    ///         <item>
+    ///             <c>Failure(...)</c> — a token <i>did</i> exist and the
+    ///             authorization server rejected the refresh grant. That is an
+    ///             error, the reason is preserved, and it is deliberately a
+    ///             different rail from absence.
+    ///         </item>
+    ///     </list>
+    ///     This replaced three public methods for the same operation — one that
+    ///     threw, one that returned <c>null</c>, and one that reported absence as
+    ///     a failure and then re-parsed its own error string for the
+    ///     <c>RefreshFailed</c> marker to recover the distinction the type now
+    ///     carries. A failed grant and an un-logged-in user are not the same
+    ///     event, and neither of them is an exception.
     /// </summary>
-    public async Task<Result<string>> TryGetAccessTokenResultAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<Maybe<string>>> TryGetAccessTokenResultAsync(CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var cached = _cache.Load(_server);
             if (cached is not null && !cached.IsExpired(DateTimeOffset.UtcNow))
-                return Result.Success(cached.AccessToken);
+                return Result.Success(Maybe<string>.From(cached.AccessToken));
 
             if (cached?.RefreshToken is { Length: > 0 } refresh)
             {
-                Result<string> refreshed = await TryRefreshResultAsync(refresh, cancellationToken).ConfigureAwait(false);
-                if (refreshed.IsSuccess)
+                Result<Maybe<string>> refreshed = await TryRefreshResultAsync(refresh, cancellationToken).ConfigureAwait(false);
+
+                // A rejected grant is a real error and is reported as one. A
+                // missing token endpoint is absence, and joins the single
+                // absence answer below.
+                if (refreshed.IsFailure || refreshed.Value.HasValue)
                     return refreshed;
-                if (refreshed.Error.StartsWith("RefreshFailed:", StringComparison.Ordinal))
-                    return refreshed;
-                // LoginRequired from the refresh path (no token endpoint) falls
-                // through to the login hint below.
             }
 
-            return Result.Failure<string>($"LoginRequired: MCP server '{_server}' needs OAuth login. Run: harbor mcp login {_server}");
+            return Result.Success(Maybe<string>.None);
         }
         finally
         {
@@ -118,28 +112,27 @@ public sealed class McpOAuthHandler
         }
     }
 
-    private async Task<string?> TryRefreshAsync(string refreshToken, CancellationToken ct)
-    {
-        Result<string> refreshed = await TryRefreshResultAsync(refreshToken, ct).ConfigureAwait(false);
-        return refreshed.IsSuccess ? refreshed.Value : null;
-    }
-
-    private async Task<Result<string>> TryRefreshResultAsync(string refreshToken, CancellationToken ct)
+    private async Task<Result<Maybe<string>>> TryRefreshResultAsync(string refreshToken, CancellationToken ct)
     {
         var endpoints = await McpOAuthFlow.DiscoverAsync(_httpFactory(), _serverUrl, _config, ct).ConfigureAwait(false);
         if (endpoints.TokenEndpoint is null)
-            return Result.Failure<string>($"LoginRequired: MCP server '{_server}' needs OAuth login. Run: harbor mcp login {_server}");
+        {
+            _logger?.LogDebug(
+                "MCP OAuth refresh for '{Server}' skipped: no token endpoint discovered", _server);
+            return Result.Success(Maybe<string>.None);
+        }
+
         string clientId = _config.ClientId ?? "harbor-mcp";
         var result = await McpOAuthFlow.RefreshAsync(
             _httpFactory(), endpoints.TokenEndpoint, clientId, _config.ClientSecret, refreshToken, ct).ConfigureAwait(false);
         if (result.IsFailure)
         {
             _logger?.LogWarning("MCP OAuth refresh failed for '{Server}': {Error}", _server, result.Error);
-            return Result.Failure<string>($"RefreshFailed: MCP OAuth refresh failed for '{_server}': {result.Error}");
+            return Result.Failure<Maybe<string>>($"MCP OAuth refresh failed for '{_server}': {result.Error}");
         }
 
         _cache.Save(_server, result.Value);
-        return Result.Success(result.Value.AccessToken);
+        return Result.Success(Maybe<string>.From(result.Value.AccessToken));
     }
 
     /// <summary>
@@ -187,9 +180,17 @@ public sealed class McpOAuthHandler
         try
         {
             if (openBrowser is not null)
+            {
                 await openBrowser(url).ConfigureAwait(false);
+            }
             else
-                OpenBrowser(url);
+            {
+                Result launched = OpenBrowser(url);
+                if (launched.IsFailure)
+                {
+                    return Result.Failure<string>(launched.Error);
+                }
+            }
 
             string? code = waitForCodeAsync is not null
                 ? await waitForCodeAsync(redirectUri, state).ConfigureAwait(false)
@@ -221,46 +222,27 @@ public sealed class McpOAuthHandler
 
     private static string LoopbackRedirectUri(int port) => $"http://127.0.0.1:{port}/callback";
 
-    private void OpenBrowser(string url)
+    /// <summary>
+    ///     Hands the authorize URL to the desktop's default browser. A headless
+    ///     box is an expected environment, not a fault, so the manual-visit
+    ///     instruction travels back as a <see cref="Result" /> rather than as an
+    ///     exception thrown from a helper and caught by the caller's blanket
+    ///     handler — which is how the actionable URL used to arrive wrapped in an
+    ///     unrelated "OAuth login failed" prefix.
+    /// </summary>
+    private Result OpenBrowser(string url)
     {
         try
         {
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            return Result.Success();
         }
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "Could not open browser for MCP OAuth login; visit {Url} manually", url);
-            throw new InvalidOperationException(
-                $"Could not open a browser automatically. Visit this URL manually: {url}");
+            return Result.Failure($"could not open a browser automatically; visit this URL manually: {url}");
         }
     }
-}
-
-/// <summary>Thrown when a transport needs a token but no usable one exists.</summary>
-public sealed class McpOAuthLoginRequiredException : InvalidOperationException
-{
-    /// <summary>Initialize with a default message.</summary>
-    public McpOAuthLoginRequiredException()
-        : this(string.Empty)
-    {
-    }
-
-    /// <summary>Initialize with the registered server name.</summary>
-    public McpOAuthLoginRequiredException(string server)
-        : base($"MCP server '{server}' needs OAuth login. Run: harbor mcp login {server}")
-    {
-        Server = server;
-    }
-
-    /// <summary>Initialize with the registered server name and inner exception.</summary>
-    public McpOAuthLoginRequiredException(string server, Exception innerException)
-        : base($"MCP server '{server}' needs OAuth login. Run: harbor mcp login {server}", innerException)
-    {
-        Server = server;
-    }
-
-    /// <summary>Registered server name.</summary>
-    public string Server { get; }
 }
 
 /// <summary>

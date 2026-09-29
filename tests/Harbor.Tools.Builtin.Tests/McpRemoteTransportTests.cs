@@ -129,11 +129,82 @@ public class McpRemoteTransportTests
         using FakeServer server = FakeServer.Start();
         server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
 
-        await using var transport = new McpHttpTransport(server.Url, oauthTokenProvider: _ => Task.FromResult<string?>("tok-123"));
+        await using var transport = new McpHttpTransport(server.Url,
+            oauthTokenProvider: _ => Task.FromResult(Result.Success(Maybe<string>.From("tok-123"))));
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
         await RoundTripAndAssertAsync(transport, request.RootElement.Clone(), 1);
 
         await Assert.That(server.AuthHeaders).Contains("Bearer tok-123");
+    }
+
+    /// <summary>
+    ///     #566: a rejected grant is a failure and the transport's diagnostic
+    ///     reaches the caller. Before the change the seam was
+    ///     <c>Func&lt;…, Task&lt;string?&gt;&gt;</c>, so the only way a provider could
+    ///     report an error was to throw and be swallowed by a catch-all into a
+    ///     differently-worded string.
+    /// </summary>
+    [Test]
+    public async Task HttpTransport_OAuthProviderFailure_SurfacesTheCause()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
+
+        await using var transport = new McpHttpTransport(server.Url,
+            oauthTokenProvider: _ => Task.FromResult(
+                Result.Failure<Maybe<string>>("grant rejected: invalid_grant")));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
+
+        Result<Maybe<JsonDocument>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("invalid_grant");
+        await Assert.That(server.HandledRequests).IsEmpty();
+    }
+
+    /// <summary>
+    ///     #566: absence is not failure. A provider that has no token yet must not
+    ///     abort the round-trip — the request goes out unauthenticated, exactly
+    ///     as it did when the seam spoke <c>Task&lt;string?&gt;</c> and the transport
+    ///     turned the null into <c>Maybe.None</c> itself.
+    /// </summary>
+    [Test]
+    public async Task HttpTransport_OAuthProviderNone_ProceedsUnauthenticated()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
+
+        await using var transport = new McpHttpTransport(server.Url,
+            oauthTokenProvider: _ => Task.FromResult(Result.Success(Maybe<string>.None)));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
+        await RoundTripAndAssertAsync(transport, request.RootElement.Clone(), 1);
+
+        await Assert.That(server.HandledRequests.Count).IsGreaterThanOrEqualTo(1);
+        foreach (string? header in server.AuthHeaders)
+        {
+            await Assert.That(header).IsNull();
+        }
+    }
+
+    /// <summary>
+    ///     A hand-written provider that throws is still contained rather than
+    ///     escaping the transport — the catch-all is a floor, not a shape the
+    ///     transport produces itself.
+    /// </summary>
+    [Test]
+    public async Task HttpTransport_ThrowingOAuthProvider_BecomesAFailure()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
+
+        await using var transport = new McpHttpTransport(server.Url,
+            oauthTokenProvider: _ => throw new InvalidOperationException("provider exploded"));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
+
+        Result<Maybe<JsonDocument>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("provider exploded");
     }
 
     [Test]
