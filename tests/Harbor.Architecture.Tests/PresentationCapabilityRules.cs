@@ -80,6 +80,9 @@
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+// `System.Reflection` is a global using in this project (needed for Assembly), so
+// Cecil's MethodBody would be an ambiguous reference without this alias.
+using MethodBody = Mono.Cecil.Cil.MethodBody;
 
 namespace Harbor.Architecture.Tests;
 
@@ -248,7 +251,7 @@ internal static class IlCapabilityProbe
         Inspect(type.BaseType, type, "<base type>", rules, members);
         foreach (InterfaceImplementation itf in type.Interfaces)
         {
-            Inspect(itf.Interface, type, "<interface>", rules, members);
+            Inspect(itf.InterfaceType, type, "<interface>", rules, members);
         }
         foreach (FieldDefinition field in type.Fields)
         {
