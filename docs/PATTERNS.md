@@ -418,7 +418,7 @@ then the default arm invents an answer. Every instance in #578 is the default ar
 
 | instance | how it drifts |
 |---|---|
-| #495 | two `AgentEvent → HarborEvent` switches whose `_ => null` **silently dropped** a new event type on one host |
+| #495 | two `AgentEvent → HarborEvent` switches whose `_ => null` **silently dropped** a new event type on one host — *fixed on `dev`; kept here because it is the worked example of the rule, and because the guard's ratchet had four rows deleted when the fix landed* |
 | #556 | `ChatRole → (label, markdown?)` written 4×, all four `_ =>` arms **silently relabelling** a new role |
 | #567 | tool-call lifecycle as three enums, all `_ =>` render a new state as `running` — a cancelled call spins forever |
 | #553 | `Rect.Width < 2` guard lost in 2 of 7 copies; corners drawn **outside** the requested rect |
@@ -447,16 +447,30 @@ copy.
 ### The known trap, and the sequencing
 
 #578 is explicit: *"Do NOT try to land one giant enforcement PR. Add the guard in
-the same PR as the refactor of each union."* There are 21 sites in the tree today
+the same PR as the refactor of each union."* There are 17 sites in the tree today
 that carry a wildcard arm over one of these unions, and every one is a real
 finding. Landing the rule bare would be a permanently red build; landing it as a
 ratchet means **the set may shrink but never grow**, and each existing row names
 the issue that owns removing it.
 
+The ratchet is not decorative. It already fired once: the two IPC projections
+were four rows, #495 was fixed on `dev` while this document was being written,
+and `WildcardBaseline_IsLive` failed the moment the rows outlived their
+violations. Deleting a fixed row is the whole workflow, and a row that has
+quietly stopped matching is a build failure rather than a stale amnesty.
+
+**One thing this guard does NOT catch**, and you should know before relying on
+it: a *missing* arm with no default. `ChatScreenBridge.HandleEvent` has no
+wildcard arm and still misses `CompactionFailedEvent` — the event falls through
+the switch and nothing happens, silently. A wildcard arm invents an answer; a
+missing arm simply does not. The exhaustiveness half (#578 rule 1 done properly)
+is the per-union reflection test, and per #578 it lands with each union's
+refactor.
+
 **Guard:** `tests/Harbor.Architecture.Tests/ExhaustiveUnionSwitchRule.cs` — the
 union census comes from reflection, the wildcard-arm scan runs over
 `src/`, `apps/`, `contrib/tui/`, `contrib/apps/`, and the current set must be a
-subset of a 21-row baseline. The scan is deliberately conservative: a switch must
+subset of a 17-row baseline. The scan is deliberately conservative: a switch must
 name at least 2 distinct members of a registered union before it counts as "a
 switch over that union", so unrelated switches are never graded for
 exhaustiveness they were not claiming.
@@ -543,7 +557,8 @@ the transition and the lifecycle are the same code path rather than two.*
 | Policy bolted onto an adapter | `SandboxedPluginTool` on tools only, `:145` | Policy at the extension point (§5) |
 | Permissive DIM | `IThemeWatcher.cs:31`, `ITool.cs:74`, `ITuiView.cs:32` | Fail towards loudly-wrong (§6) |
 | Dead hook on a live interface | `ITuiView.cs:29,32` — zero callers | Zero callers ⇒ delete it (§6) |
-| Wildcard arm over a Harbor union | 21 sites, baselined in the guard | Name every arm; or log **and** count (§7) |
+| Wildcard arm over a Harbor union | 17 sites, baselined in the guard | Name every arm; or log **and** count (§7) |
+| **Missing** arm, no default | `ChatScreenBridge.HandleEvent` misses `CompactionFailedEvent` and falls through silently | The default arm invents an answer; a missing arm just doesn't. Covered by the per-union reflection test, not by the wildcard guard (§7) |
 | Hand-maintained name list as a union | `IArgSafetyPolicy.cs:107-110`, `[JsonDerivedType]` tables | It IS a union — test it by reflection (§7) |
 | Unknown id → silent default | fixed in `SessionStoreRegistry`/`HarborModeRegistry` | `TryResolve` returns false; caller fails loudly (§2) |
 | A fake metric | see `TelemetryModule.cs:25-33` for the right shape | Absent surface beats plausible zero (§3) |

@@ -372,14 +372,20 @@ public sealed class DefaultInterfaceMemberRule
     }
 
     /// <summary>
-    ///     The reviewed list. Eight of the nine rows are #579's inventory; the
-    ///     ninth (<c>ITokenTracker.RecordAppendedMessage</c>, a documented
-    ///     no-op added so existing implementors keep compiling) is the same
-    ///     class of member and is classified conservative by the probe.
-    ///     <c>ITuiRenderer.RunInteractiveAsync</c> is a tenth: a static-ish
-    ///     line-buffered stub that returns 0 — the "worked, nothing to do"
-    ///     answer, which is conservative precisely because the value is
-    ///     truthful.
+    ///     The reviewed list. Nine rows are #579's inventory verbatim; the rest
+    ///     are the same class of member found while writing the list, each
+    ///     classified by the probe rather than by hand:
+    ///     <list type="bullet">
+    ///         <item><c>ITokenTracker.RecordAppendedMessage</c> — a documented no-op
+    ///         added so existing implementors keep compiling.</item>
+    ///         <item><c>ITuiRenderer.RunInteractiveAsync</c> — a line-buffered stub
+    ///         that returns exit code 0.</item>
+    ///         <item>The six <c>ICollapsibleChatBlock</c> members — statics and two
+    ///         exact derivations. <c>CountLogicalLines</c> is the one default in the
+    ///         whole governed set with a block body instead of an expression body,
+    ///         and it is listed here because a text-based DIM search misses exactly
+    ///         that shape. Reflection does not.</item>
+    ///     </list>
     /// </summary>
     private static readonly ReviewedDefault[] Reviewed =
     [
@@ -477,6 +483,14 @@ public sealed class DefaultInterfaceMemberRule
             "OverflowTail",
             DimDirection.Conservative,
             "A static string derivation. No input is skipped and no error is swallowed.",
+            ""),
+        new(
+            "Harbor.Ui.Framework.Rendering.Widgets.ICollapsibleChatBlock",
+            "CountLogicalLines",
+            DimDirection.Conservative,
+            "A static pure derivation over a ReadOnlySpan<char>. The one default on this interface "
+            + "with a full block body rather than an expression body — which is exactly why a "
+            + "source-text DIM search misses it and reflection does not.",
             ""),
         new(
             "Harbor.Ui.Framework.Services.IThemeWatcher",
