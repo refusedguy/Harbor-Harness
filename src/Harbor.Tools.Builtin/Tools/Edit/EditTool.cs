@@ -182,12 +182,13 @@ public sealed class EditTool : ITool
                     string newStr = edit.GetProperty("newString").GetString() ?? string.Empty;
                     bool replaceAll = GetBool(edit, "replaceAll");
 
-                    var applied = ApplyEdit(content, oldStr, newStr, replaceAll);
-                    if (!applied.Ok)
+                    Result<(string Text, int Count)> applied = ApplyEdit(content, oldStr, newStr, replaceAll);
+                    if (applied.IsFailure)
                         return ToolResult.Error($"Edit #{step} failed: {applied.Error}");
 
-                    content = applied.Text;
-                    totalReplacements += applied.Count;
+                    (string newContent, int count) = applied.Value;
+                    content = newContent;
+                    totalReplacements += count;
                     editSteps++;
                 }
             }
@@ -197,12 +198,13 @@ public sealed class EditTool : ITool
                 string newStr = args.GetProperty("newString").GetString() ?? string.Empty;
                 bool replaceAll = GetBool(args, "replaceAll");
 
-                var applied = ApplyEdit(content, oldStr, newStr, replaceAll);
-                if (!applied.Ok)
-                    return ToolResult.Error(applied.Error!);
+                Result<(string Text, int Count)> applied = ApplyEdit(content, oldStr, newStr, replaceAll);
+                if (applied.IsFailure)
+                    return ToolResult.Error(applied.Error);
 
-                content = applied.Text;
-                totalReplacements = applied.Count;
+                (string newContent, int replacements) = applied.Value;
+                content = newContent;
+                totalReplacements = replacements;
                 editSteps = 1;
             }
         }
@@ -285,32 +287,42 @@ public sealed class EditTool : ITool
         }
     }
 
-    private static EditResult ApplyEdit(string content, string oldStr, string newStr, bool replaceAll)
+    /// <summary>
+    ///     #721: the outcome rides the Result railway instead of a hand-rolled
+    ///     <c>(bool Ok, string? Error)</c> pair. A failed edit used to also carry
+    ///     <c>Text = string.Empty</c> and <c>Count = 0</c>, so a caller that read the
+    ///     text before checking the flag got a plausible empty file back rather than
+    ///     a complaint. Here a failure has no text and no count at all, and
+    ///     <c>.Error</c> is read only under an <c>IsFailure</c> guard — the one shape
+    ///     CFE0001 models.
+    /// </summary>
+    private static Result<(string Text, int Count)> ApplyEdit(
+        string content, string oldStr, string newStr, bool replaceAll)
     {
         if (string.IsNullOrEmpty(oldStr))
-            return EditResult.Fail("oldString must not be empty.");
+            return Result.Failure<(string Text, int Count)>("oldString must not be empty.");
 
         if (oldStr == newStr)
-            return EditResult.Fail("oldString and newString are identical.");
+            return Result.Failure<(string Text, int Count)>("oldString and newString are identical.");
 
         if (replaceAll)
         {
             int count = CountOccurrences(content, oldStr);
             if (count == 0)
-                return EditResult.Fail($"oldString not found: {Snippet(oldStr)}");
+                return Result.Failure<(string Text, int Count)>($"oldString not found: {Snippet(oldStr)}");
 
-            return EditResult.Success(content.Replace(oldStr, newStr, StringComparison.Ordinal), count);
+            return Result.Success((content.Replace(oldStr, newStr, StringComparison.Ordinal), count));
         }
 
         int first = content.IndexOf(oldStr, StringComparison.Ordinal);
         if (first < 0)
-            return EditResult.Fail($"oldString not found: {Snippet(oldStr)}");
+            return Result.Failure<(string Text, int Count)>($"oldString not found: {Snippet(oldStr)}");
 
         int second = content.IndexOf(oldStr, first + oldStr.Length, StringComparison.Ordinal);
         if (second >= 0)
         {
             int total = CountOccurrences(content, oldStr);
-            return EditResult.Fail(
+            return Result.Failure<(string Text, int Count)>(
                 $"oldString found {total} times; make it unique or set replaceAll=true. " +
                 $"Snippet: {Snippet(oldStr)}");
         }
@@ -320,7 +332,7 @@ public sealed class EditTool : ITool
             newStr.AsSpan(),
             content.AsSpan(first + oldStr.Length));
 
-        return EditResult.Success(replaced, 1);
+        return Result.Success((replaced, 1));
     }
 
     private static int CountOccurrences(string haystack, string needle)
@@ -413,10 +425,4 @@ public sealed class EditTool : ITool
 
     private static bool GetBool(JsonElement args, string name)
         => JsonArgs.GetBool(args, name);
-
-    private readonly record struct EditResult(bool Ok, string Text, int Count, string? Error)
-    {
-        public static EditResult Success(string text, int count) => new(true, text, count, null);
-        public static EditResult Fail(string error) => new(false, string.Empty, 0, error);
-    }
 }

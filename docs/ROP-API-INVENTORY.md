@@ -725,11 +725,14 @@ do. Production is not covered by that condition: `src`/`apps`/`contrib` keep CFE
   now comes from the fan-out's index, which is why `ProviderRegistry.GetAllModelsAsync` reads a
   `.Value` only after an early return. `ThemeParseResult` (`src/Harbor.DesignSystem`) is the one
   allow-listed type; it is the same wart and remains deferred, as
-  `ResultFailureConversionTests` already documented. Rule 3 has one exemption of its own:
-  `EditTool.EditResult` (`bool Ok` next to a `string? Error`) is a fourth instance of the same
-  shape, found by Rule 3 while #588 was being fixed and deferred to #721 — it is a builtin tool,
-  not the providers perimeter #588 covers. `Rule3Exemptions_AreStillNeeded` fails the build if
-  that entry outlives the type, so the deferral cannot rot into a silent allow-list.
+  `ResultFailureConversionTests` already documented. Rule 3 has no exemptions left: its single
+  entry, `EditTool.EditResult` (`bool Ok` next to a `string? Error`), was a fourth instance of the
+  same shape — found by Rule 3 while #588 was being fixed, and deferred to #721 because it is a
+  builtin tool rather than the providers perimeter #588 covers. #721 made `EditTool.ApplyEdit`
+  return a real `Result<(string Text, int Count)>` and deleted the type, so the entry went with
+  it: a failed edit no longer also carries an empty text and a zero count that read like a
+  success. `Rule3Exemptions_AreStillNeeded` fails the build if an entry outlives its type, so a
+  deferral cannot rot into a silent allow-list.
 - It only inspects `MethodDeclarationSyntax` bodies: a `.Value` in a constructor, a local function or
   an expression-bodied member is not modelled.
 - It ignores `?.Value`.
