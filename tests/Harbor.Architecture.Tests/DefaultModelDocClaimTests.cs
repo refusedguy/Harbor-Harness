@@ -80,7 +80,7 @@
 //      one firing once. Together with (1) the assertion proved much less than it
 //      appeared to. FIXED: the count is per shape and bounded above as well as
 //      below, and the message reports the breakdown so the numbers are visible.
-//   3. The draft branched with `if (shape == FreeModelProse)`, comparing Regex
+//   3. The draft branched on `shape == FreeModelProse`, comparing Regex
 //      INSTANCES BY REFERENCE. It worked only because both sides were the same
 //      static field; reorder the array or add a shape and the branch silently
 //      misroutes a claim to the wrong comparison. FIXED: the branch reads a
@@ -417,7 +417,7 @@ public sealed class DefaultModelDocClaimTests
                     string id = match.Groups["id"].Value;
                     string model = match.Groups["model"].Value;
 
-                    if (!defaults.TryGetValue(id, out string? declared))
+                    if (!TryResolveDeclared(defaults, id, out string canonicalId, out string declared))
                     {
                         // No providers/<id>.json, so nothing is being contradicted.
                         // Deliberately NOT counted as judged: the per-shape
@@ -436,7 +436,7 @@ public sealed class DefaultModelDocClaimTests
 
                     if (!agrees)
                     {
-                        violations.Add(new ClaimSite(shape.Name, doc, id, model, declared));
+                        violations.Add(new ClaimSite(shape.Name, doc, canonicalId, model, declared));
                     }
                 }
             }
@@ -462,10 +462,48 @@ public sealed class DefaultModelDocClaimTests
                 $"{v.Doc} [{v.Shape}] claims '{v.ProviderId}/{v.Model}' but providers/{v.ProviderId}.json "
                 + $"declares defaultModel '{v.Declared}'"));
 
+    /// <summary>
+    ///     Resolves a provider id as the document spelled it against the ids
+    ///     actually declared in <c>providers/*.json</c>.
+    /// </summary>
+    /// <remarks>
+    ///     A document may capitalise the id — the prose shape writes
+    ///     <c>**Kilocode**</c> — so the comparison is case-insensitive. But the
+    ///     failure message has to name a file the reader can actually open, so
+    ///     the CANONICAL id is returned alongside the declared model. Echoing
+    ///     the document's own spelling prints <c>providers/Kilocode.json</c>,
+    ///     which is not a file; the first red CI run of this guard did exactly
+    ///     that.
+    /// </remarks>
+    private static bool TryResolveDeclared(
+        Dictionary<string, string> defaults,
+        string id,
+        out string canonicalId,
+        out string declaredModel)
+    {
+        foreach (KeyValuePair<string, string> entry in defaults)
+        {
+            if (string.Equals(entry.Key, id, StringComparison.OrdinalIgnoreCase))
+            {
+                canonicalId = entry.Key;
+                declaredModel = entry.Value;
+                return true;
+            }
+        }
+
+        canonicalId = id;
+        declaredModel = string.Empty;
+        return false;
+    }
+
     /// <summary>provider id → <c>defaultModel</c>, straight from the shipped JSON.</summary>
     private static Dictionary<string, string> DeclaredDefaults(string root)
     {
-        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Ordinal, NOT OrdinalIgnoreCase: the key must stay exactly as the file
+        // spells it, so TryResolveDeclared can hand back the real file name. The
+        // case-insensitive part of the lookup belongs in the resolver, where it
+        // is visible, rather than baked invisibly into the dictionary.
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
         string dir = Path.Combine(root, "providers");
         if (!Directory.Exists(dir))
         {
