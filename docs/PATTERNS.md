@@ -279,7 +279,7 @@ it is a test.** No production code constructs a `CompositeToolRegistry`, so the
 abstraction exists to satisfy code nobody composes in anger:
 
 ```
-tests/Harbor.Registries.Tests/ToolRegistrySnapshotTests.cs:233-234
+tests/Harbor.Registries.Tests/ToolRegistrySnapshotTests.cs:237-238
 ```
 
 The two sibling registries have **no Composite at all**:
@@ -291,7 +291,7 @@ same self-description ("Implements Registry pattern (GOF)") without the composit
 step the tools registry took.
 
 So the real extension path is **Adapter + direct mutation**, three parallel
-copies, in `src/Harbor.Plugins.Registration/PluginRegistrar.cs:70-88`:
+copies, in `src/Harbor.Plugins.Registration/PluginRegistrar.cs:75-87`:
 
 | plugin role | adapter | reaches |
 |---|---|---|
@@ -355,7 +355,7 @@ parse/IO failures.
 
 Two more live instances of the banned direction:
 
-- `src/Harbor.Abstractions/Tools/ITool.cs:74` — `ValidateArguments(args) =>
+- `src/Harbor.Abstractions/Tools/ITool.cs:98` — `ValidateArguments(args) =>
   Result.Success()` accepts any argument shape. Currently harmless **only**
   because all 26 in-tree `ITool` implementations override it — which is exactly
   why it is safe to delete rather than reason about.
@@ -446,8 +446,8 @@ copy.
 
 ### The known trap, and the sequencing
 
-#578 is explicit: *"Do NOT try to land one giant enforcement PR. Add the guard in
-the same PR as the refactor of each union."* There are 17 sites in the tree today
+Issue #578 is explicit: *"Do NOT try to land one giant enforcement PR. Add the
+guard in the same PR as the refactor of each union."* There are 17 sites in the tree today
 that carry a wildcard arm over one of these unions, and every one is a real
 finding. Landing the rule bare would be a permanently red build; landing it as a
 ratchet means **the set may shrink but never grow**, and each existing row names
@@ -527,7 +527,7 @@ The concrete cost, all visible in the current tree:
    `_runHadError`, `_errorCardSeq`, `_toolRetryShown`, `_displayedMessageIds` and
    everything inside `_cards` / `_streams` / `_gates` survive the switch.
 2. The cleanup that does exist lives in a **caller**:
-   `apps/Harbor.App.Cli/Repl/SessionSwitchManager.cs:239-241`
+   `apps/Harbor.App.Cli/Repl/SessionSwitchManager.cs:244`
    (`host.Bridge.ResetMessageTracking(); host.Timeline.Clear(); host.Selection.Clear();`)
    — the contract is "whoever switches sessions must remember to poke three
    internals", enforced by nothing and documented nowhere in the interface. The
@@ -553,7 +553,7 @@ the transition and the lifecycle are the same code path rather than two.*
 | Third mechanism for one event stream | handler registry + switch + store, all at once | Pick one of the two seams (§1) |
 | Lifecycle promised ≠ lifecycle provided | `CellForgeModule.cs:32` vs `:101` | Doc comment promising an unprovided lifetime is a defect (§8) |
 | Cleanup as a caller convention | `SessionSwitchManager.cs:239-241` | The state object resets itself (§8) |
-| Extension by mutating a concrete registry | `PluginRegistrar.cs:70-88` | Interface + a list of them (§5) |
+| Extension by mutating a concrete registry | `PluginRegistrar.cs:75-87` | Interface + a list of them (§5) |
 | Policy bolted onto an adapter | `SandboxedPluginTool` on tools only, `:145` | Policy at the extension point (§5) |
 | Permissive DIM | `IThemeWatcher.cs:31`, `ITool.cs:74`, `ITuiView.cs:32` | Fail towards loudly-wrong (§6) |
 | Dead hook on a live interface | `ITuiView.cs:29,32` — zero callers | Zero callers ⇒ delete it (§6) |
