@@ -57,7 +57,11 @@ public sealed partial class BoardViewModel : ObservableObject
             _dispatcher.Post(() =>
             {
                 Cards.Clear();
+                #pragma warning disable CFE0001
+                // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
+                // if (result.IsFailure) { log; return; } early-return guard
                 foreach (var s in result.Value)
+                #pragma warning restore CFE0001
                 {
                     var status = _sessionManager.GetStatus(s.Id);
                     var preview = $"{s.Agent} · {s.Model}";

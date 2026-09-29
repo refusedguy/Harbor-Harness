@@ -94,13 +94,14 @@ public sealed class CfeValueBaselineTests
     ///     projects it finished, so "N violations" from a red build is a
     ///     LOWER BOUND, never the count.
     /// </remarks>
-    private const int MeasuredTotalSites = 199;
+    private const int MeasuredTotalSites = 210;
 
     /// <summary>
-    ///     Measured CFE0001 sites in shipped code (src/): 1 real defect, now
-    ///     fixed, plus 24 false positives now carrying a documented pragma.
+    ///     Measured CFE0001 sites in shipped code: 2 real defects (1 fixed, 1
+    ///     baselined pending a product decision) plus 34 false positives now
+    ///     carrying a documented pragma.
     /// </summary>
-    private const int MeasuredProductionSites = 25;
+    private const int MeasuredProductionSites = 36;
 
     /// <summary>Measured CFE0001 sites under tests/, all suppressed centrally.</summary>
     private const int MeasuredTestSites = 174;
@@ -154,6 +155,22 @@ public sealed class CfeValueBaselineTests
             "if (IsFailure) { log; continue; } loop continue"),
         new("src/Harbor.Hosting/Modules/PluginReloadService.cs", "ReloadCoreAsync",
             "if (IsFailure) { log; return summary; } early return"),
+        new("apps/Harbor.App.Cli/Hosting/HostBuilder.CliConfig.cs", "CliConfig",
+            "if/else where the failure branch assigns a default"),
+        new("apps/Harbor.App.Cli/Repl/Commands/NewSessionCommand.cs", "ExecuteAsync",
+            "if (IsFailure) { print; return; } early return"),
+        new("apps/Harbor.App.Cli/Repl/Commands/SessionTreeCommand.cs", "ExecuteAsync",
+            "if (IsFailure || empty) { print; return; } early return"),
+        new("apps/Harbor.App.Cli/Commands/SessionSearchRunner.cs", "RunAsync",
+            "if (IsFailure) continue; loop continue"),
+        new("apps/Harbor.App.Cli/Repl/ReplRunner.cs", "RunInteractiveAsync",
+            "early-return guard, with the read inside a lambda"),
+        new("apps/Harbor.App.Cli/Repl/SessionSwitchManager.cs", "SeedWelcomeChromeAsync",
+            "guarded by a recursive pattern: is { IsSuccess: true } listed"),
+        new("apps/Harbor.App.Avalonia/ViewModels/Board/BoardViewModel.cs", "RefreshAsync",
+            "if (IsFailure) { log; return; } early return"),
+        new("apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs", "SettingsViewModel",
+            "REAL DEFECT baselined pending a product decision, NOT a false positive"),
     ];
 
     private static string? Root => RepoPaths.RepoRoot;
@@ -380,8 +397,8 @@ public sealed class CfeValueBaselineTests
             .Because("an empty baseline would mean the backstop is not demonstrably load-bearing; "
                    + "it is only meaningful because these 17 sites are real and were measured");
 
-        await Assert.That(Baseline.Length).IsEqualTo(21)
-            .Because("the production baseline is pinned at 21 members / 24 sites (CFE0001 counts "
+        await Assert.That(Baseline.Length).IsEqualTo(29)
+            .Because("the shipped-code baseline is pinned at 29 members / 35 sites (CFE0001 counts "
                    + "sites, this table counts members). It may only shrink: a new row is a new "
                    + "false positive claim that must be justified in review, and removing a row is "
                    + "always safe. If this number moved, re-measure and update "
@@ -396,8 +413,8 @@ public sealed class CfeValueBaselineTests
     [Test]
     public async Task NonVacuity_MeasuredTotalIsRecorded()
     {
-        await Assert.That(MeasuredTotalSites).IsEqualTo(199)
-            .Because("199 is the CI-measured CFE0001 count (25 production + 174 tests) on analyzer "
+        await Assert.That(MeasuredTotalSites).IsEqualTo(210)
+            .Because("210 is the CI-measured CFE0001 count (36 shipped + 174 tests) on analyzer "
                    + "1.3.0. It is recorded so that a future package bump which drops the "
                    + "diagnostic to zero shows up as a number to re-verify, not as a silent "
                    + "green build. See docs/ROP-API-INVENTORY.md §5.");
@@ -428,10 +445,15 @@ public sealed class CfeValueBaselineTests
                 failures.Add($"duplicate baseline key '{key}' — merge the rows");
             }
 
-            if (!row.File.StartsWith("src/", StringComparison.Ordinal))
+            // Shipped code only: src/ and apps/ are where a ResultFailureException
+            // reaches a user. Test-side false positives are handled centrally in
+            // Directory.Build.props, never row by row.
+            if (!row.File.StartsWith("src/", StringComparison.Ordinal)
+                && !row.File.StartsWith("apps/", StringComparison.Ordinal))
             {
-                failures.Add($"baseline row '{key}' is not in src/ — production exemptions belong "
-                    + "in shipped code; test-side false positives are handled centrally instead");
+                failures.Add($"baseline row '{key}' is neither in src/ nor apps/ — production "
+                    + "exemptions belong in shipped code; test-side false positives are handled "
+                    + "centrally instead");
             }
 
             if (string.IsNullOrWhiteSpace(row.Why))

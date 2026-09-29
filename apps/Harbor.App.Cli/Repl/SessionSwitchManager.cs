@@ -152,7 +152,12 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
         if (host.SessionStore is { } store
             && await store.ListAsync(ct: ct).ConfigureAwait(false) is { IsSuccess: true } listed)
         {
+            #pragma warning disable CFE0001
+            // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
+            // Guarded by a RECURSIVE PATTERN: 'is { IsSuccess: true } listed' -- the guard is a
+            // property pattern on the result, which the analyzer does not model.
             var recent = listed.Value;
+            #pragma warning restore CFE0001
             for (int i = 0; i < recent.Count && i < QuickSwitchSlots.Count; i++)
             {
                 _quickSwitch.Assign(i + 1, recent[i].Id);

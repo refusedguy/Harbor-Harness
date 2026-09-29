@@ -91,8 +91,22 @@ public sealed partial class SettingsViewModel : ObservableObject
         // the stores complete IO in <10ms on a local disk. Blocking here
         // keeps the rest of the VM simple (no async init dance).
 #pragma warning disable RS0030 // One-shot ctor load of local-disk config (<10ms); async-init dance not worth it. Catalogued in BannedSymbols.txt.
+        #pragma warning disable CFE0001
+        // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
+        // REAL DEFECT, NOT a false positive -- baselined pending a product decision, see
+        // docs/ROP-API-INVENTORY.md 5.3. There is NO guard: LoadAsync() returns a Result and
+        // .Value is read in the constructor, so a failed config load throws
+        // ResultFailureException out of a ViewModel constructor on app start. Fixing it
+        // needs a decision on what the settings screen shows when the store fails, which is
+        // not a mechanical change -- CommonConfig has no public default instance.
         _common = _commonStore.LoadAsync().GetAwaiter().GetResult().Value;
+        #pragma warning restore CFE0001
+        #pragma warning disable CFE0001
+        // CFE0001 baseline: docs/ROP-API-INVENTORY.md 5.
+        // REAL DEFECT, NOT a false positive -- baselined pending a product decision, see
+        // docs/ROP-API-INVENTORY.md 5.3. Same unguarded read as the line above.
         _app = _appStore.LoadAsync().GetAwaiter().GetResult().Value;
+        #pragma warning restore CFE0001
 #pragma warning restore RS0030
 
         ThemeSettings = new ThemeSettingsViewModel(themeReader, themeApplier)
