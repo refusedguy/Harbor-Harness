@@ -95,7 +95,8 @@ internal static class ConfigRegistration
         // SessionFactory (in Ui.Framework) can't read the persisted
         // provider/model because Ui.Framework can't reference Desktop.Abstractions
         // (circular dependency via Terminal.Abstractions).
-        services.AddSingleton<ICommonConfigReader>(sp => new CommonConfigReaderAdapter(sp));
+        services.AddSingleton<ICommonConfigReader>(sp =>
+            new CommonConfigReaderAdapter(sp.GetRequiredService<ICommonConfigStore>()));
 
         // ── Auth resolver + model catalog for OpenAI-compatible providers ──
         // The wizard persists API keys to CommonConfig.ApiKeys. This resolver

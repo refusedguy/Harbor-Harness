@@ -1,6 +1,5 @@
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Ui.Framework.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Avalonia.Services;
 /// <summary>
 ///     Adapter that bridges the Desktop.Abstractions
@@ -13,32 +12,36 @@ namespace Harbor.App.Avalonia.Services;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Registered as a singleton in <c>ServiceRegistration</c>. At
-///         construction time it pulls the <see cref="ICommonConfigStore" />
-///         from the DI container (which is itself registered by
-///         <c>ConfigRegistration</c>) and forwards each
+///         Registered as a singleton in <c>ConfigRegistration</c>, which hands
+///         it the <see cref="ICommonConfigStore" /> it forwards to (that store
+///         is registered a few lines above). It forwards each
 ///         <see cref="TryReadProviderModelAsync" /> call to
 ///         <see cref="ICommonConfigStore.LoadAsync" />.
+///     </para>
+///     <para>
+///         <b>No service locator (#470):</b> the adapter used to hold the whole
+///         <c>IServiceProvider</c> and call <c>GetService</c> on every read,
+///         which is how <c>SessionFactory</c> ended up doing a container lookup
+///         per session creation. The bridge now depends on the one interface it
+///         forwards to.
 ///     </para>
 /// </remarks>
 public sealed class CommonConfigReaderAdapter : ICommonConfigReader
 {
-    private readonly IServiceProvider _services;
+    private readonly ICommonConfigStore _store;
 
     /// <summary>Construct the adapter.</summary>
-    public CommonConfigReaderAdapter(IServiceProvider services)
+    /// <param name="store">The shared-config store this reader forwards to.</param>
+    public CommonConfigReaderAdapter(ICommonConfigStore store)
     {
-        _services = services;
+        _store = store;
     }
 
     /// <inheritdoc />
     public async Task<(string? ProviderId, string? ModelId)?> TryReadProviderModelAsync(
         CancellationToken cancellationToken = default)
     {
-        var store = _services.GetService<ICommonConfigStore>();
-        if (store is null) return null;
-
-        var result = await store.LoadAsync().ConfigureAwait(false);
+        var result = await _store.LoadAsync().ConfigureAwait(false);
         if (!result.IsSuccess) return null;
 
         var cfg = result.Value;

@@ -4,7 +4,6 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Configuration;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Sessions;
 /// <summary>
@@ -22,6 +21,13 @@ namespace Harbor.Ui.Framework.Sessions;
 ///         creates the session record (and, for branches, copies messages).
 ///     </para>
 ///     <para>
+///         <b>No service locator (#470):</b> the optional
+///         <see cref="ICommonConfigReader" /> is a declared constructor
+///         parameter resolved once by the composition root — not an
+///         <c>IServiceProvider</c> field re-queried on every session
+///         creation. See <see cref="ResolveProviderModelFromConfigAsync" />.
+///     </para>
+///     <para>
 ///         Registered as a singleton in <c>AppHost</c> so tests can mock
 ///         session creation (e.g. assert the wizard's provider selection
 ///         takes effect) without constructing the full SessionManager +
@@ -32,23 +38,34 @@ public sealed class SessionFactory
 {
     private readonly IAgent _agent;
     private readonly IAgentRegistry _agents;
+    private readonly ICommonConfigReader? _configReader;
     private readonly ILogger<SessionFactory> _logger;
-    private readonly IServiceProvider _services;
     private readonly ISessionStore _sessionStore;
 
     /// <summary>Construct a <see cref="SessionFactory" />.</summary>
+    /// <param name="agents">Registry the agent definition is resolved from.</param>
+    /// <param name="agent">The agent instance new sessions are created around.</param>
+    /// <param name="sessionStore">Persistence each created session is written to.</param>
+    /// <param name="logger">Diagnostics sink for the create/branch paths.</param>
+    /// <param name="configReader">
+    ///     Reads the persisted provider/model. Declared rather than looked up, so
+    ///     the dependency is visible in the signature and resolved once instead of
+    ///     per call. <see langword="null" /> means "this host registered no config
+    ///     reader" — sessions then fall back to the agent definition's own
+    ///     provider/model.
+    /// </param>
     public SessionFactory(
-        IServiceProvider services,
         IAgentRegistry agents,
         IAgent agent,
         ISessionStore sessionStore,
-        ILogger<SessionFactory> logger)
+        ILogger<SessionFactory> logger,
+        ICommonConfigReader? configReader = null)
     {
-        _services = services;
         _agents = agents;
         _agent = agent;
         _sessionStore = sessionStore;
         _logger = logger;
+        _configReader = configReader;
     }
 
     /// <summary>
@@ -60,7 +77,8 @@ public sealed class SessionFactory
     {
         // #63 legitimate: optional dependency — hosts without a common-config
         // reader (tests, minimal embeds) get (null, null) instead of a throw.
-        var configReader = _services.GetService<ICommonConfigReader>();
+        // #470: resolved once by the composition root, not looked up per call.
+        var configReader = _configReader;
         if (configReader is null) return (null, null);
 
         var pair = await configReader.TryReadProviderModelAsync().ConfigureAwait(false);

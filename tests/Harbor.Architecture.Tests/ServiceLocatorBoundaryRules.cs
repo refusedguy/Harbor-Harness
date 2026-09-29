@@ -50,11 +50,44 @@
 // ---------------------------------------------
 // The predicate inspects stored state (fields) and construction surface
 // (constructors) plus the hot contracts' properties. It deliberately does NOT
-// inspect ordinary METHOD parameters: `PanelServices.FromContainer` takes the
-// container as an argument on purpose, and a rule that flagged it would have to
-// allowlist the very abstraction #573 introduced. A future per-frame method
-// taking a live `IServiceProvider` would not be caught here — that shape belongs
-// in a dedicated rule with a per-site baseline, not smuggled in as an exception.
+// inspect ordinary METHOD parameters, because of one member in the very
+// assembly this file sweeps:
+//
+//     src/Harbor.Ui.Framework.State/Panels/PanelServices.cs
+//         public static PanelServices FromContainer(IServiceProvider container)
+//
+// That takes a container, on purpose, and `PerFrameStateLayer_StoresNoServiceLocator`
+// walks straight past it. It is NOT a hole, and the two wrong responses to it are
+// both worse than the rule as written:
+//
+//   * Widening this rule to cover method parameters would redden the one member
+//     #573 introduced to FIX #470 — and would redden every composition-root
+//     factory besides. The fix would then be "allowlist FromContainer", i.e. an
+//     exception for the abstraction the issue was about.
+//   * Assuming the rule is therefore leaky, and re-checking the same thing by
+//     hand in review, which is what let SessionFactory survive in the first place.
+//
+// The distinction the rule actually draws is WHO HOLDS THE CONTAINER, not what
+// shape the container arrives in:
+//
+//   * A container kept as a FIELD lives longer than composition, so its
+//     dependencies are absent from the signature and it can resolve anything
+//     from anywhere, at any time. That is the defect — `ToolContext.Services`,
+//     `PanelContext.Services`, and `SessionFactory._services` were all exactly
+//     this. The rule matches it.
+//   * A container passed to a STATIC FACTORY that a composition root calls once
+//     to produce an immutable record of named, typed fields is the legitimate
+//     use. `FromContainer` is that. The rule does not match it, and should not.
+//
+// So: if you are tempted to extend the sweep to method parameters, the thing to
+// add is NOT a broader rule — it is a positive control asserting
+// `PanelServices.FromContainer` still takes a container, so that anyone who
+// quietly deletes it (the direction that WOULD be a real regression) gets a red
+// build. That is `FromContainer_StillTakesTheContainerAtCompositionTime` below.
+//
+// A future per-frame method accepting a live container would still slip past this
+// file. That shape deserves its own rule with a per-site baseline, like
+// `PresentationCapabilityRules` — not an exception bolted onto this one.
 //
 // NON-VACUITY — the part that makes the guard worth having
 // ------------------------------------------------------
@@ -138,6 +171,29 @@ public class ServiceLocatorBoundaryRules
         }
 
         await Assert.That(hits.ToArray()).IsEmpty();
+    }
+
+    /// <summary>
+    ///     The positive control for the one deliberate hole in this file's scope.
+    ///     <c>PanelServices.FromContainer(IServiceProvider)</c> is a static factory
+    ///     called once by a composition root — the rule's field/constructor sweep
+    ///     walks past it, and the header argues at length that this is correct.
+    ///     That argument is only worth anything if the member is actually pinned:
+    ///     quietly deleting the container parameter and re-resolving per frame
+    ///     would restore the exact #470 defect with no rule complaining. So the
+    ///     permitted shape is asserted, not merely excused.
+    /// </summary>
+    [Test]
+    public async Task FromContainer_StillTakesTheContainerAtCompositionTime()
+    {
+        MethodInfo factory = typeof(PanelServices)
+            .GetMethods(BindingFlags.Static | BindingFlags.Public)
+            .Single(m => m.Name == nameof(PanelServices.FromContainer));
+
+        ParameterInfo[] parameters = factory.GetParameters();
+
+        await Assert.That(parameters.Length).IsEqualTo(1);
+        await Assert.That(parameters[0].ParameterType).IsEqualTo(typeof(IServiceProvider));
     }
 
     /// <summary>

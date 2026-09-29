@@ -364,8 +364,9 @@ public sealed class MapErrorFailureShapeTests
     /// <summary>
     ///     A <see cref="SessionFactory" /> wired to a store that always fails, and to nothing
     ///     else. <c>IAgent</c> is <c>null</c> because the three create paths never read it, and
-    ///     the service provider is empty because <c>ICommonConfigReader</c> is an optional
-    ///     dependency (#63).
+    ///     <c>ICommonConfigReader</c> is <c>null</c> because it is an optional
+    ///     dependency (#63) — passed as a declared constructor argument since #470,
+    ///     where it used to be dug out of a service provider on every call.
     /// </summary>
     private static SessionFactory NewFactory(ISessionStore store)
     {
@@ -373,11 +374,11 @@ public sealed class MapErrorFailureShapeTests
         _ = agents.Register(AgentDefinition.CodeDefault("test-model", "test-provider"));
 
         return new SessionFactory(
-            new EmptyServiceProvider(),
             agents,
             null!,
             store,
-            NullLogger<SessionFactory>.Instance);
+            NullLogger<SessionFactory>.Instance,
+            configReader: null);
     }
 
     /// <summary>One hand-built failure message, located for a human-readable report.</summary>
@@ -459,12 +460,6 @@ public sealed class MapErrorFailureShapeTests
             }
         }
     }
-}
-
-/// <summary>Resolves nothing — enough for <c>SessionFactory</c>'s optional config reader.</summary>
-internal sealed class EmptyServiceProvider : IServiceProvider
-{
-    public object? GetService(Type serviceType) => null;
 }
 
 /// <summary>A session store whose every call fails with one fixed reason.</summary>
