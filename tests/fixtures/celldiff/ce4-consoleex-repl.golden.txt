@@ -1,11 +1,11 @@
 Harbor — modular AI coding agent [consoleex]                                    
-model: kilocode/hy3:free | ввод — текст, /help — команды, Ctrl+C×2 — выход      
+model: kilocode/tencent/hy3:free | ввод — текст, /help — команды, Ctrl+C×2 —    
+выход                                                                           
  YOU                                                                            
 │ скажи привет                                                                  
                                                                                 
-● kilocode/hy3:free                                                             
+● kilocode/tencent/hy3:free                                                     
 Готово: mock-ответ                                                              
-                                                                                
                                                                                 
                                                                                 
                                                                                 

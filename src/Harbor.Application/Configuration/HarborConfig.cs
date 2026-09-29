@@ -226,7 +226,7 @@ public sealed class HarborConfig
     [JsonIgnore]
     public string EffectiveModel =>
         Identity.EffectiveModel()
-                .GetValueOrDefault(IdentityConfig.Default.Model!)
+                .GetValueOrDefault(IdentityConfig.FallbackModelRef)
                 .ToString();
 
     /// <summary>
