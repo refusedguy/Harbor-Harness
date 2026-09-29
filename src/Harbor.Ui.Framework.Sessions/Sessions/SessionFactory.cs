@@ -128,7 +128,7 @@ public sealed class SessionFactory
         if (createResult.IsFailure)
         {
             _logger.LogError("Failed to create default session: {Error}", createResult.Error);
-            return Result.Failure<Session>($"Failed to create default session: {createResult.Error}");
+            return createResult.MapError(static e => $"Failed to create default session: {e}");
         }
 
         var session = createResult.Value;
@@ -162,7 +162,7 @@ public sealed class SessionFactory
         if (result.IsFailure)
         {
             _logger.LogError("Create session failed: {Error}", result.Error);
-            return Result.Failure<Session>($"Failed to create session: {result.Error}");
+            return result.MapError(static e => $"Failed to create session: {e}");
         }
 
         var session = result.Value;
@@ -184,7 +184,7 @@ public sealed class SessionFactory
         if (branchResult.IsFailure)
         {
             _logger.LogError("Branch session {Id} failed: {Error}", source.Id, branchResult.Error);
-            return Result.Failure<Session>($"Failed to branch session '{source.Id}': {branchResult.Error}");
+            return branchResult.MapError(e => $"Failed to branch session '{source.Id}': {e}");
         }
 
         var branch = branchResult.Value with { Title = source.Title + " (branch)" };
