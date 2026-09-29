@@ -44,6 +44,13 @@ public class EventBusScrollbackBenchmark
     public void Setup()
     {
         _bus = new InMemoryEventBus(maxScrollback: 1000);
+
+        // #518: arm retention BEFORE filling, otherwise the ring stays
+        // disarmed, the 1000 setup publishes take the zero-subscriber fast path
+        // and write no slots, and every row below would quietly measure an empty
+        // ring instead of a saturated one.
+        _ = _bus.GetScrollback(1000);
+
         for (int i = 0; i < 1000; i++)
         {
             _bus.PublishAsync(new TurnStartEvent(i)).GetAwaiter().GetResult();
@@ -165,6 +172,13 @@ public class EventBusScrollbackDeliveryBenchmark
     private static InMemoryEventBus CreateSaturatedBus(bool withConsumers)
     {
         var bus = new InMemoryEventBus(maxScrollback: MaxScrollback);
+
+        // #518: arm retention before filling. Without this the "saturated ring"
+        // these three rows depend on never forms — the 1000 setup publishes
+        // would take the fast path on the no-consumer bus and skip the ring
+        // append entirely, and the consumer buses would skip it too.
+        _ = bus.GetScrollback(MaxScrollback);
+
         if (withConsumers)
         {
             for (int i = 0; i < SubscriberCount; i++)
@@ -219,6 +233,11 @@ public class EventBusContentionBenchmark
     public void Setup()
     {
         _bus = new InMemoryEventBus(maxScrollback: 1000);
+
+        // #518: arm retention. This row exists to measure scrollback LOCK
+        // contention, which only exists once the ring is maintained; unarmed,
+        // all 1000 publishes would take the fast path and contend on nothing.
+        _ = _bus.GetScrollback(1000);
     }
 
     [Benchmark(Description = "Publish_Parallel_4x250")]
