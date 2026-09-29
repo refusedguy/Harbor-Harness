@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using System.Globalization;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.Desktop.Abstractions.Models;
 using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
@@ -60,14 +61,13 @@ public partial class SessionCardViewModel : ObservableObject
     public string StatusText => StatusMappers.SessionStatusToText(Status);
     public string StatusBrushKey => StatusMappers.SessionStatusToBrushKey(Status);
 
-    public Harbor.Desktop.Abstractions.Models.SessionDotState DotState => Status switch
-    {
-        SessionStatus.Working => Harbor.Desktop.Abstractions.Models.SessionDotState.Running,
-        SessionStatus.Done => Harbor.Desktop.Abstractions.Models.SessionDotState.Done,
-        SessionStatus.Error => Harbor.Desktop.Abstractions.Models.SessionDotState.Error,
-        SessionStatus.Aborted => Harbor.Desktop.Abstractions.Models.SessionDotState.Error,
-        _ => Harbor.Desktop.Abstractions.Models.SessionDotState.Idle
-    };
+    /// <summary>
+    ///     The card's dot state, derived by the one owner of that translation
+    ///     rather than by a switch on this view model (#663) — see
+    ///     <see cref="SessionDotStates.FromStatus" /> for why it lives beside
+    ///     the enum and what it deliberately does not claim.
+    /// </summary>
+    public SessionDotState DotState => SessionDotStates.FromStatus(Status);
 
 
     private string ComputeDuration()

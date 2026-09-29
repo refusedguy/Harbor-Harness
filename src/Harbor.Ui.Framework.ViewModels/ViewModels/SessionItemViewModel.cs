@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.Converters;
+
 namespace Harbor.Ui.Framework.ViewModels;
 /// <summary>
 ///     One row in the session sidebar list. Shows title, model, relative time,
@@ -90,39 +92,41 @@ public sealed partial class SessionItemViewModel : ObservableObject
         }
     }
 
-    /// <summary>Status display text.</summary>
-    public string StatusText => Status switch
-    {
-        SessionStatus.Working => "working",
-        SessionStatus.Done => "done",
-        SessionStatus.Error => "error",
-        SessionStatus.Aborted => "aborted",
-        _ => "idle"
-    };
+    /// <summary>
+    ///     Status display text ("working" / "done" / "error" / "aborted" /
+    ///     "idle"). The vocabulary is the framework's single table, not this
+    ///     row's — see <see cref="StatusMappers.SessionStatusToText" /> (#663).
+    /// </summary>
+    public string StatusText => StatusMappers.SessionStatusToText(Status);
 
-    /// <summary>Status dot color key.</summary>
+    /// <summary>
+    ///     Brush resource key for the status dot. The colour is the THEME's
+    ///     answer, not this view model's, so the mapping lives in
+    ///     <see cref="StatusMappers.SessionStatusToBrushKey" /> (#663).
+    /// </summary>
     /// <remarks>
-    ///     <b>Task D2 / Problem 1</b>: returns the brush resource key for the
-    ///     status dot. Working → amber (<c>AccentPrimaryBrush</c>), Done →
-    ///     green (<c>StateSuccessBrush</c>), Error → red
-    ///     (<c>StateErrorBrush</c>), Idle → grey (<c>TextTertiaryBrush</c>).
-    ///     The dot's <c>Fill</c> binds to this property via
-    ///     <see cref="Views.BrushKeyConverter" /> — and because <see cref="Status" />
-    ///     is an <c>[ObservableProperty]</c>, the binding only re-evaluates if
-    ///     we explicitly raise <see cref="INotifyPropertyChanged.PropertyChanged" />
-    ///     for <c>StatusColor</c> (and <c>StatusText</c>) in
-    ///     <see cref="OnStatusChanged" />. Without that, the dot colour was
-    ///     frozen at the initial value (Idle → grey, or Done → green) and
-    ///     never reflected live agent state — the "always green" symptom.
+    ///     <para>
+    ///         This property used to carry its own <c>switch</c> and its own
+    ///         resource keys, and a remark here asserted that Working was
+    ///         <em>meant</em> to be <c>AccentPrimaryBrush</c> while
+    ///         <see cref="StatusMappers" /> painted the same status
+    ///         <c>MochaYellow</c>. Two UI layers, two answers, each documented
+    ///         as correct — the divergence was recorded as a norm instead of as
+    ///         a bug. There is one answer now, and it is the theme's: the key
+    ///         travels, and the framework's <c>BrushKeyConverter</c>-equivalent
+    ///         resolves it against the merged theme resources, so the palette
+    ///         follows the theme instead of being frozen into a view model.
+    ///     </para>
+    ///     <para>
+    ///         Because <see cref="Status" /> is an <c>[ObservableProperty]</c>,
+    ///         the dot's <c>Fill</c> binding only re-evaluates when
+    ///         <see cref="OnStatusChanged" /> explicitly raises
+    ///         <see cref="INotifyPropertyChanged.PropertyChanged" /> for this
+    ///         property (and <see cref="StatusText" />). That method documents
+    ///         the "always green" symptom the raising prevents.
+    ///     </para>
     /// </remarks>
-    public string StatusColor => Status switch
-    {
-        SessionStatus.Working => "AccentPrimaryBrush",
-        SessionStatus.Done => "StateSuccessBrush",
-        SessionStatus.Error => "StateErrorBrush",
-        SessionStatus.Aborted => "StateWarningBrush",
-        _ => "TextTertiaryBrush"
-    };
+    public string StatusColor => StatusMappers.SessionStatusToBrushKey(Status);
 
     /// <summary>
     ///     Source-generated partial invoked by <c>[ObservableProperty]</c>

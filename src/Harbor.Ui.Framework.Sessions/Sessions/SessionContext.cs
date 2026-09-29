@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.State;
 
 namespace Harbor.Ui.Framework.Sessions;
@@ -53,13 +54,11 @@ public sealed class SessionContext
         }
     }
 
-    /// <summary>Status as a display string.</summary>
-    public string StatusText => Status switch
-    {
-        SessionStatus.Working => "working",
-        SessionStatus.Done => "done",
-        SessionStatus.Error => "error",
-        SessionStatus.Aborted => "aborted",
-        _ => "idle"
-    };
+    /// <summary>
+    ///     Status as a display string. Spelled by the framework's single
+    ///     table — <see cref="StatusMappers.SessionStatusToText" /> — rather
+    ///     than by a second <c>switch</c> here, which is how a session row and
+    ///     a session card came to disagree about what a status reads (#663).
+    /// </summary>
+    public string StatusText => StatusMappers.SessionStatusToText(Status);
 }
