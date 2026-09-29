@@ -318,7 +318,7 @@ internal static class RendererSeamProbe
 
         if (register || store)
         {
-            seams[type.FullName] = (register, store);
+            seams[ReflectionName(type)] = (register, store);
         }
 
         foreach (TypeDefinition nested in type.NestedTypes)
@@ -326,6 +326,17 @@ internal static class RendererSeamProbe
             CollectSeams(nested, seams);
         }
     }
+
+    /// <summary>
+    ///     Cecil spells a nested type <c>Namespace.Outer/Inner</c>; reflection
+    ///     spells the same type <c>Namespace.Outer+Inner</c>. The seam table is
+    ///     keyed by reflection names (pass 2 looks up with
+    ///     <c>Type.FullName</c>), so Cecil names are translated here. Without
+    ///     this, every top-level type matches — which is all of the production
+    ///     renderers — and every nested one silently misses.
+    /// </summary>
+    private static string ReflectionName(TypeDefinition type) =>
+        type.FullName.Replace('/', '+');
 
     private static IEnumerable<Type> SafeGetTypes(Assembly asm)
     {
@@ -518,19 +529,26 @@ public sealed class RendererEventSeamRule
         // the type NAMES.
         var reported = Evaluate(inventory)
             .Select(static v => v.TypeName)
-            .ToHashSet(StringComparer.Ordinal);
+            .ToList();
 
-        string seamless = "Harbor.Architecture.Tests.RendererEventSeamRule+SeamlessRenderer";
-        string registered = "Harbor.Architecture.Tests.RendererEventSeamRule+HandlerRegisteredRenderer";
+        // Matched by suffix, not by a spelled-out full name: the probes are
+        // nested two deep (RendererEventSeamRule+ProbeRendererBase+X), and
+        // hard-coding the separator is exactly the kind of detail that turns
+        // this test into a false negative when it changes.
+        bool reportsSeamless = reported.Exists(
+            static n => n.EndsWith("+SeamlessRenderer", StringComparison.Ordinal));
+        bool reportsRegistered = reported.Exists(
+            static n => n.EndsWith("+HandlerRegisteredRenderer", StringComparison.Ordinal));
 
-        await Assert.That(reported.Contains(seamless)).IsTrue()
+        await Assert.That(reportsSeamless).IsTrue()
             .Because("SeamlessRenderer in this very file derives from BaseTuiRenderer and reaches "
                    + "neither seam — the exact shape the rule exists to catch. If the rule does not "
-                   + "report it, the rule is not running.");
+                   + "report it, the rule is not running. Reported: " + string.Join(", ", reported));
 
-        await Assert.That(reported.Contains(registered)).IsFalse()
+        await Assert.That(reportsRegistered).IsFalse()
             .Because("HandlerRegisteredRenderer calls RegisterHandler, so it takes the declared "
-                   + "handler seam; reporting it would mean the rule flags conforming renderers too");
+                   + "handler seam; reporting it would mean the rule flags conforming renderers too. "
+                   + "Reported: " + string.Join(", ", reported));
     }
 
     /// <summary>
