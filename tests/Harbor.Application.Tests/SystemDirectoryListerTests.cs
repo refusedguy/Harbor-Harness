@@ -223,31 +223,36 @@ public sealed class SystemDirectoryListerTests
     [Test]
     public async Task ListAsync_ReportsTheFilesystemsOwnHiddenAttribute()
     {
-        // A dot-prefix is NOT the hidden marker, and this is the test that says
-        // so. An earlier version of the port treated a leading dot as hidden; on
-        // Windows the attribute is not set for such a directory, so the same tree
-        // rendered differently per platform and the only assertion that could
-        // have covered it was an OS branch. The attribute is the one answer that
-        // means the same thing everywhere.
+        // The lister must ECHO what the filesystem says, never decide for itself.
+        //
+        // The first version of this test asserted a per-OS truth table
+        // ("hidden iff Windows"), and CI proved the table wrong in two
+        // directions at once: Windows does not set Hidden for a dot-prefixed
+        // directory, and macOS DOES set it for one, so the same `.git` rendered
+        // three different ways. What is true everywhere is only the echo, and
+        // that is the contract worth pinning — the expectation is read from the
+        // OS rather than written here, so this test has no per-platform arm to
+        // keep in step with reality.
         string dir = Sandbox();
         try
         {
-            Directory.CreateDirectory(Path.Combine(dir, ".git"));
-            if (OperatingSystem.IsWindows())
-            {
-                File.SetAttributes(Path.Combine(dir, ".git"), FileAttributes.Hidden);
-            }
-            else
-            {
-                // POSIX dotfile: the attribute bit is the only hidden marker there is.
-            }
+            string dot = Path.Combine(dir, ".git");
+            Directory.CreateDirectory(dot);
+            string plain = Path.Combine(dir, "src");
+            Directory.CreateDirectory(plain);
+
+            bool expected = (File.GetAttributes(dot) & FileAttributes.Hidden) != 0;
 
             Result<DirectoryListing> result = await Lister().ListAsync(dir);
 
             DirectoryEntry git = result.Value.Entries.First(static e => e.Name == ".git");
-            await Assert.That(git.IsHidden).IsEqualTo(OperatingSystem.IsWindows())
+            DirectoryEntry src = result.Value.Entries.First(static e => e.Name == "src");
+            await Assert.That(git.IsHidden).IsEqualTo(expected)
                 .Because("hidden means FileAttributes.Hidden and nothing else; a dot-prefix "
-                       + "is a naming convention the filesystem did not necessarily adopt");
+                       + "is a naming convention the filesystem may or may not have adopted");
+            await Assert.That(src.IsHidden).IsEqualTo((File.GetAttributes(plain) & FileAttributes.Hidden) != 0)
+                .Because("the same rule applies to a name with no dot in it — this is not a "
+                       + "dot-prefix special case that happens to be right");
         }
         finally
         {
