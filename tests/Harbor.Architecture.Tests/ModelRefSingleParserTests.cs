@@ -9,20 +9,20 @@
 // a hand-rolled cut does not:
 //
 //   * it splits with COUNT 2, so a multi-segment model id
-//     ("tencent/hy3:free", "kilo-auto/free") keeps every segment — the bare
-//     `Split('/')[1]` that #599 removed returned "hy3:free";
+//     ("tencent/hy3:free", "kilo-auto/free") keeps every segment — the
+//     unlimited slash split that #599 removed returned only "hy3:free";
 //   * it normalizes the provider half to lower case and VALIDATES it, so
 //     "KiloCode/x" and "bad provider/x" cannot reach a Session unnormalized.
 //
 // The UI layer re-implemented the same read twice, and not even consistently:
 //
-//   * SessionFactory.ResolveProviderModelFromConfigAsync built
-//     `prefix = provider + "/"` and stripped it with `StartsWith` — then handed
-//     the RAW provider string on, unnormalized, straight into the Session the
-//     app runs on.
-//   * OnboardingFlow.TryCommitModel decided the same question with
-//     `input.Contains('/')` — "is this text already a reference?" answered by
-//     counting separators, which is the read, not a validation.
+//   * SessionFactory.ResolveProviderModelFromConfigAsync concatenated the
+//     provider with a slash into a local prefix and stripped it with
+//     StartsWith — then handed the RAW provider string on, unnormalized, straight
+//     into the Session the app runs on.
+//   * OnboardingFlow.TryCommitModel decided the same question by asking whether
+//     the typed text contained a slash — "is this text already a reference?"
+//     answered by counting separators, which is the read, not a validation.
 //
 // Neither is duplication for its own sake: both are UI code re-deriving an
 // identity rule that belongs to the value object. That is the same defect
