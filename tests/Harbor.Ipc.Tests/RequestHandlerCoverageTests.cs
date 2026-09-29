@@ -54,7 +54,7 @@ public class RequestHandlerCoverageTests
     ///     stops the server from starting, and says which type is missing.
     /// </summary>
     [Test]
-    public void Dispatcher_RegistryMissingAUnionMember_ThrowsAtConstruction()
+    public async Task Dispatcher_RegistryMissingAUnionMember_ThrowsAtConstruction()
     {
         var sp = TestHost.Build();
         RequestHandlerRegistry incomplete = Registry(sp).Without(typeof(ListToolsRequest));
@@ -62,7 +62,7 @@ public class RequestHandlerCoverageTests
         InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
             () => NewDispatcher(sp, incomplete));
 
-        Assert.That(thrown.Message).Contains("ListToolsRequest").Because(
+        await Assert.That(thrown.Message).Contains("ListToolsRequest").Because(
             "the message must name the missing request type — an operator who cannot see which "
             + "one is missing cannot fix the composition");
     }
