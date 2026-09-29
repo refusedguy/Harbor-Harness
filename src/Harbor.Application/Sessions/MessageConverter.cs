@@ -31,40 +31,53 @@ public sealed class MessageConverter
 
         var result = new List<LlmMessage>(capacity);
 
-        for (int i = 0; i < messages.Count; i++)
-        {
-            var msg = messages[i];
-            switch (msg)
-            {
-                case UserMessage u:
-                    result.Add(ConvertUser(u));
-                    break;
-
-                case AssistantMessage a:
-                    result.Add(new LlmAssistantMessage(
-                        ConvertParts(a.Parts),
-                        StopReasonToLower(a.StopReason)));
-                    break;
-
-                case ToolResultMessage tr:
-                    var results = tr.Results;
-                    for (int j = 0; j < results.Count; j++)
-                    {
-                        var r = results[j];
-                        // #235: cap giant payloads before they enter model context.
-                        // Stores, events and TUI keep the full Output — only the
-                        // provider-bound copy is trimmed (head kept, tail cut).
-                        result.Add(new LlmToolResultMessage(
-                            r.ToolCallId,
-                            r.ToolName,
-                            ToolResultContextTrim.Trim(r.Output),
-                            r.IsError));
-                    }
-                    break;
-            }
-        }
+        // #461: the per-kind dispatch lives in the visitor, not in a switch that
+        // every consumer had to re-type. An unhandled message kind now throws
+        // instead of silently vanishing from the model context.
+        new ToLlmMessagesVisitor(result).Walk(messages);
 
         return result;
+    }
+
+    /// <summary>
+    ///     Message-level arm of the conversion: the three roles, nothing else.
+    ///     Part-level behaviour lives in <see cref="PartsToLlmBlocks" />.
+    /// </summary>
+    private sealed class ToLlmMessagesVisitor(List<LlmMessage> sink)
+        : AgentMessageVisitor<ToLlmMessagesVisitor>
+    {
+        public override ToLlmMessagesVisitor Visit(UserMessage message)
+        {
+            sink.Add(ConvertUser(message));
+            return this;
+        }
+
+        public override ToLlmMessagesVisitor Visit(AssistantMessage message)
+        {
+            sink.Add(new LlmAssistantMessage(
+                ConvertParts(message.Parts),
+                StopReasonToLower(message.StopReason)));
+            return this;
+        }
+
+        public override ToLlmMessagesVisitor Visit(ToolResultMessage message)
+        {
+            var results = message.Results;
+            for (int j = 0; j < results.Count; j++)
+            {
+                var r = results[j];
+                // #235: cap giant payloads before they enter model context.
+                // Stores, events and TUI keep the full Output — only the
+                // provider-bound copy is trimmed (head kept, tail cut).
+                sink.Add(new LlmToolResultMessage(
+                    r.ToolCallId,
+                    r.ToolName,
+                    ToolResultContextTrim.Trim(r.Output),
+                    r.IsError));
+            }
+
+            return this;
+        }
     }
 
     /// <summary>
@@ -91,25 +104,46 @@ public sealed class MessageConverter
 
     private static IReadOnlyList<LlmContentBlock> ConvertParts(IReadOnlyList<ContentPart> parts)
     {
-        var blocks = new List<LlmContentBlock>(parts.Count);
-        for (int i = 0; i < parts.Count; i++)
+        var visitor = new PartsToLlmBlocks(parts.Count);
+        visitor.Walk(parts);
+        return visitor.Blocks;
+    }
+
+    /// <summary>
+    ///     Part-level arm of the conversion (#461). Each kind is an explicit,
+    ///     compiler-enforced decision — adding a <see cref="ContentPart" />
+    ///     subtype turns every missing arm here into a build break.
+    /// </summary>
+    private sealed class PartsToLlmBlocks(int capacity) : ContentPartVisitor<PartsToLlmBlocks>
+    {
+        internal List<LlmContentBlock> Blocks { get; } = new(capacity);
+
+        public override PartsToLlmBlocks Visit(TextPart part)
         {
-            var part = parts[i];
-            switch (part)
-            {
-                case TextPart t:
-                    blocks.Add(new LlmTextBlock(t.Text));
-                    break;
-                case ThinkingPart th:
-                    blocks.Add(new LlmThinkingBlock(th.Text));
-                    break;
-                case ToolCallPart tc:
-                    blocks.Add(new LlmToolCallBlock(tc.Id, tc.ToolName, tc.Args));
-                    break;
-            }
+            Blocks.Add(new LlmTextBlock(part.Text));
+            return this;
         }
 
-        return blocks;
+        public override PartsToLlmBlocks Visit(ThinkingPart part)
+        {
+            Blocks.Add(new LlmThinkingBlock(part.Text));
+            return this;
+        }
+
+        public override PartsToLlmBlocks Visit(ToolCallPart part)
+        {
+            Blocks.Add(new LlmToolCallBlock(part.Id, part.ToolName, part.Args));
+            return this;
+        }
+
+        /// <summary>
+        ///     File parts never reach the provider: the wire format carries images
+        ///     as <c>LlmImageBlock</c>s hung off a <see cref="UserMessage" />'s
+        ///     <c>Attachments</c> (#386), and an assistant-side file has no LLM
+        ///     block equivalent. Explicitly a no-op so a future subtype can never
+        ///     be mistaken for this one.
+        /// </summary>
+        public override PartsToLlmBlocks Visit(FilePart part) => this;
     }
 
     /// <summary>

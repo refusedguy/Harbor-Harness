@@ -122,33 +122,70 @@ internal static class SessionSupervision
                 $"[peer message from {supervisorSessionId}]: {instruction} {SteerMarkerPrefix}{supervisorSessionId}]"
         };
 
-    private static string RenderOne(AgentMessage message) => message switch
-    {
-        UserMessage user => "[user] " + Truncate(user.Content),
-        AssistantMessage assistant => "[assistant] " + Truncate(AssistantText(assistant)),
-        ToolResultMessage results => "[tool_result " + ToolResultSummary(results) + "]",
-        _ => "[" + message.Role + "]"
-    };
+    /// <summary>
+    ///     Renders one transcript entry. #461: the per-kind dispatch lives in
+    ///     <see cref="RenderOneVisitor" />; an unknown role now throws instead of
+    ///     being printed as a bare <c>[role]</c> by a <c>default:</c> arm.
+    /// </summary>
+    private static string RenderOne(AgentMessage message) => new RenderOneVisitor().Accept(message);
 
+    private sealed class RenderOneVisitor : AgentMessageVisitor<string>
+    {
+        public override string Visit(UserMessage message) => "[user] " + Truncate(message.Content);
+
+        public override string Visit(AssistantMessage message) => "[assistant] " + Truncate(AssistantText(message));
+
+        public override string Visit(ToolResultMessage message) => "[tool_result " + ToolResultSummary(message) + "]";
+    }
+
+    /// <summary>
+    ///     Flattens an assistant turn into one line: its text plus a
+    ///     <c>[tool:name]</c> marker per tool call, lazily built so a turn with
+    ///     nothing renderable still returns <see cref="string.Empty" />.
+    /// </summary>
     private static string AssistantText(AssistantMessage assistant)
     {
-        StringBuilder? sb = null;
-        for (int i = 0; i < assistant.Parts.Count; i++)
+        var visitor = new AssistantTextVisitor();
+        visitor.Walk(assistant.Parts);
+        return visitor.Text;
+    }
+
+    /// <summary>
+    ///     Part-level arm of the transcript renderer (#461). The empty-text guard
+    ///     and the lazy builder are preserved exactly: an assistant turn made only
+    ///     of blank text parts still renders as <see cref="string.Empty" />.
+    /// </summary>
+    private sealed class AssistantTextVisitor : ContentPartVisitor<AssistantTextVisitor>
+    {
+        private StringBuilder? _sb;
+
+        internal string Text => _sb?.ToString() ?? string.Empty;
+
+        public override AssistantTextVisitor Visit(TextPart part)
         {
-            switch (assistant.Parts[i])
+            if (!string.IsNullOrEmpty(part.Text))
             {
-                case TextPart text when !string.IsNullOrEmpty(text.Text):
-                    sb ??= new StringBuilder();
-                    sb.Append(text.Text);
-                    break;
-                case ToolCallPart call:
-                    sb ??= new StringBuilder();
-                    sb.Append("[tool:").Append(call.ToolName).Append(']');
-                    break;
+                (_sb ??= new StringBuilder()).Append(part.Text);
             }
+
+            return this;
         }
 
-        return sb?.ToString() ?? string.Empty;
+        public override AssistantTextVisitor Visit(ToolCallPart part)
+        {
+            (_sb ??= new StringBuilder()).Append("[tool:").Append(part.ToolName).Append(']');
+            return this;
+        }
+
+        /// <summary>
+        ///     Reasoning is not part of the supervisor's one-line picture of the
+        ///     turn, and a file part has no place in a 1-line summary — both were
+        ///     silent gaps in the old switch, now explicit.
+        /// </summary>
+        public override AssistantTextVisitor Visit(ThinkingPart part) => this;
+
+        /// <inheritdoc cref="Visit(ThinkingPart)" />
+        public override AssistantTextVisitor Visit(FilePart part) => this;
     }
 
     private static string ToolResultSummary(ToolResultMessage results)

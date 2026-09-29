@@ -199,43 +199,86 @@ public static class ChatAppReducer
         return next;
     }
 
-    private static UiState ReplayMessage(UiState state, AgentMessage m) => m switch
-    {
-        UserMessage u => state.AddLine(ChatRole.User, u.Content),
-        AssistantMessage a => ReplayAssistant(state, a),
-        ToolResultMessage tr => ReplayResults(state, tr),
-        _ => state
-    };
+    /// <summary>
+    ///     Folds one history message into the transcript. #461: the per-role
+    ///     dispatch lives in <see cref="ReplayMessageVisitor" />, so a new
+    ///     <see cref="AgentMessage" /> subtype can no longer be skipped in silence
+    ///     by a <c>_ =&gt; state</c> arm.
+    /// </summary>
+    private static UiState ReplayMessage(UiState state, AgentMessage m) =>
+        new ReplayMessageVisitor(state).Accept(m);
 
-    private static UiState ReplayAssistant(UiState state, AssistantMessage a)
+    private sealed class ReplayMessageVisitor : AgentMessageVisitor<UiState>
     {
-        foreach (var part in a.Parts)
+        private readonly ReplayPartsVisitor _parts;
+        private UiState _state;
+
+        internal ReplayMessageVisitor(UiState state)
         {
-            switch (part)
-            {
-                case TextPart t when !string.IsNullOrWhiteSpace(t.Text):
-                    state = state.AddLine(ChatRole.Assistant, t.Text);
-                    break;
-                case ThinkingPart th when !string.IsNullOrWhiteSpace(th.Text):
-                    state = state.AddLine(ChatRole.Thinking, th.Text);
-                    break;
-                case ToolCallPart tc:
-                    state = state.AddLine(ChatRole.Tool, $"→ {tc.ToolName}", tc.Id);
-                    break;
-            }
+            _state = state;
+            _parts = new ReplayPartsVisitor(state);
         }
 
-        return state;
+        public override UiState Visit(UserMessage message) => _state.AddLine(ChatRole.User, message.Content);
+
+        public override UiState Visit(AssistantMessage message)
+        {
+            _parts.Seed(_state);
+            _state = _parts.Walk(message.Parts);
+            return _state;
+        }
+
+        public override UiState Visit(ToolResultMessage message)
+        {
+            var results = message.Results;
+            for (int i = 0; i < results.Count; i++)
+            {
+                _state = _state.AddLine(ChatRole.ToolResult, results[i].Output, results[i].ToolCallId);
+            }
+
+            return _state;
+        }
     }
 
-    private static UiState ReplayResults(UiState state, ToolResultMessage tr)
+    /// <summary>
+    ///     Part-level arm of the history replay (#461). The whitespace guards and
+    ///     the per-role line mapping are byte-identical to the switch this
+    ///     replaced — only the dispatch moved.
+    /// </summary>
+    private sealed class ReplayPartsVisitor : ContentPartVisitor<UiState>
     {
-        foreach (var r in tr.Results)
+        private UiState _state;
+
+        internal ReplayPartsVisitor(UiState state) => _state = state;
+
+        internal void Seed(UiState state) => _state = state;
+
+        public override UiState Visit(TextPart part)
         {
-            state = state.AddLine(ChatRole.ToolResult, r.Output, r.ToolCallId);
+            if (!string.IsNullOrWhiteSpace(part.Text))
+                _state = _state.AddLine(ChatRole.Assistant, part.Text);
+            return _state;
         }
 
-        return state;
+        public override UiState Visit(ThinkingPart part)
+        {
+            if (!string.IsNullOrWhiteSpace(part.Text))
+                _state = _state.AddLine(ChatRole.Thinking, part.Text);
+            return _state;
+        }
+
+        public override UiState Visit(ToolCallPart part)
+        {
+            _state = _state.AddLine(ChatRole.Tool, $"→ {part.ToolName}", part.Id);
+            return _state;
+        }
+
+        /// <summary>
+        ///     Binary attachments are rendered by the renderer that owns the card
+        ///     (CellForge's image card); the chat line list stays text-only. The
+        ///     old switch had no file arm at all — it is now an explicit decision.
+        /// </summary>
+        public override UiState Visit(FilePart part) => _state;
     }
 
     private static UiState OnMessageStart(UiState state) =>
