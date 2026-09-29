@@ -102,14 +102,20 @@ public class TransientFailurePolicyTests
     }
 
     /// <summary>
-    ///     The budget is the one the transports used to hard-code, and the reason
-    ///     three is the floor: the legacy SSE transport has no idempotency
-    ///     guarantee, so a retried request may reach the server twice.
+    ///     The first-retry delay is the one the transports used to hard-code.
+    ///     Only this half is asserted, and deliberately: it is a
+    ///     <c>static readonly</c> field, so the value is read at run time and the
+    ///     assertion can fail. <c>DefaultMaxAttempts</c> is a <c>const</c>, so
+    ///     asserting it here would be vacuous — a change to the constant would
+    ///     recompile this assertion to match (TUnitAssertions0005 says so out
+    ///     loud). The attempt cap of three is pinned where it is actually
+    ///     observable instead: the transport tests in
+    ///     <c>McpRemoteTransportTests</c>, which assert three handled requests
+    ///     against the shared budget.
     /// </summary>
     [Test]
-    public async Task DefaultBudget_IsThreeAttemptsAtTwoHundredMilliseconds()
+    public async Task FirstRetryDelay_IsTwoHundredMilliseconds()
     {
-        await Assert.That(TransientFailurePolicy.DefaultMaxAttempts).IsEqualTo(3);
         await Assert.That(TransientFailurePolicy.DefaultFirstRetryDelay.TotalMilliseconds).IsEqualTo(200d);
     }
 }
