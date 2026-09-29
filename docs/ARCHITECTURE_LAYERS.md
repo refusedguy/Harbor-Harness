@@ -573,9 +573,20 @@ shape as `DocumentedExceptions` in §5.4. A rule holds only if its hits are a su
 baseline, so new I/O in any Presentation type is red on the spot. The baseline is
 type-granular, not method-granular; see §6 for the inventory and the per-site issues.
 
+**Permanent capabilities, in a second table.** A baseline row is a promise *to fix*: it
+names the issue that will delete it, and §6 counts rows deleted. Some capabilities are
+real, legitimate and unfixable — the console device a renderer reads stdin from is the
+canonical one. Filing those as violations misfiles a permission as debt: it reads as
+precedent ("renderers may touch the filesystem"), and it makes the owning issue's
+checkbox unreachable, since the row can be neither deleted nor kept in the right place.
+Such capabilities go in `PermanentCapabilities`, keyed identically but valued by their
+**reason** rather than a tracking issue. The reason is mandatory and the table gets the
+baseline's anti-rot liveness test, so it is a decision on the record, not a hole
+(#669).
+
 **Non-vacuity.** A rule nobody can fail is a comment, and NetArchTest's
 `NotHaveDependencyOn` has a failure mode here: an unmatched name is a satisfied
-constraint, so a typo'd or deleted assembly passes forever. Four tests close that door:
+constraint, so a typo'd or deleted assembly passes forever. Five tests close that door:
 
 1. `NonVacuity_Probe_ReadsRealIlFromThisTestAssembly` — probes this test assembly, whose
    source is in the repo and is known to call `Directory.GetFiles` and `File.Exists`; both
@@ -590,10 +601,13 @@ constraint, so a typo'd or deleted assembly passes forever. Four tests close tha
 3. `NonVacuity_GrandfatheredViolations_AreStillReal` — every baseline row must still match
    a real hit, so the list cannot rot into a blanket permission (the
    `DocumentedExceptions_AllCurrentlyRealized` pattern).
-4. `RuleTable_And_Baseline_Are_WellFormed` — rule ids unique and non-blank, every rule
+4. `PermanentCapabilities_AreAllCurrentlyRealized` — the same guarantee for the
+   permanent-capability table, so the second table gets no weaker a deal than the first.
+5. `RuleTable_And_Baseline_Are_WellFormed` — rule ids unique and non-blank, every rule
    states what it forbids and why, every baseline row names an existing rule, points at a
    tracking issue, and names an assembly the matrix really classifies as Presentation (a
-   typo there would grandf nothing).
+   typo there would grandf nothing). For the permanent table: same, minus the issue URL,
+   plus a mandatory reason and no row may appear in both tables at once.
 
 `PRESENTATION-MUST-NOT-USE-THE-NETWORK` and
 `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` have **empty** baselines: Presentation
@@ -645,19 +659,26 @@ while enforcing nothing — which is the failure mode these rules exist to preve
 `FullLayerMatrixTests` + `CellForgeGraphRules` are all green. The previously cited counts
 (46 tests = 21 reflection + 25 NetArchTest, 54 executed cases) are historical.
 
-**The CAPABILITY rules added in #455 have 21 known violations, in 14 types across 7 of
-the 17 Presentation assemblies.** They are not skipped: each is a row in
+**The CAPABILITY rules added in #455 have 18 known violations, in 12 types across 5 of the
+18 Presentation assemblies.** They are not skipped: each is a row in
 `PresentationCapabilityRules.KnownViolations` that a rule holds only while it is still
-exactly reproduced, and each carries a tracking issue. Ten Presentation assemblies are
-clean and fully enforced.
+exactly reproduced, and each carries a tracking issue. Thirteen Presentation assemblies
+are clean and fully enforced.
+
+A further capability is recorded in `PermanentCapabilities` — not a violation, so not
+counted above. See "Permanent capabilities" in §5.6.
 
 | Rule | Violating types | Assemblies | Tracking issues |
 |---|---:|---:|---|
-| `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 5 | 3 | [#537](https://github.com/refusedguy/Harbor-Harness/issues/537) (GitService), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (3 notification backends, jump palette) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 9 | 5 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (theme loader/watcher, file tree, terminal stdin) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 7 | 6 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536), [#537](https://github.com/refusedguy/Harbor-Harness/issues/537), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (file tree) |
+| `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 4 | 2 | [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (3 notification backends, jump palette) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 8 | 4 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (theme loader/watcher, file tree) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 6 | 4 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (file tree) |
 | `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | 0 | 0 | — clean, unbaselined |
 | `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | 0 | 0 | — clean, unbaselined |
+
+| Permanent capability | Assembly | Reason |
+|---|---|---|
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` / `TerminalInputStream` | `Harbor.Tui.CellForge.Engine` | Console device, not storage: fd 0 is the renderer's input medium (#669) |
 
 ### ARCH-5 template — new capability violations
 
