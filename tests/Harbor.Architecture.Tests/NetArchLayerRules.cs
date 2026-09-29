@@ -63,12 +63,11 @@ public sealed class NetArchLayerRules
     // Harbor.Application and Harbor.Registries are Application-layer and must
     // not be referenced by Domain. (#451: the empty Harbor.Core facade that used
     // to sit in this list was deleted — see NetArchLayerRules file header.)
-    private static readonly string[] NonDomainHarborAssemblies =
+    internal static readonly string[] NonDomainHarborAssemblies =
     [
         "Harbor.Application",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
-        "Harbor.Scripting",
         "Harbor.Providers.OpenAiCompatible",
         "Harbor.Providers.Anthropic",
         "Harbor.Providers.OpenAI",
@@ -83,12 +82,11 @@ public sealed class NetArchLayerRules
     // The full list of Harbor assemblies that are NOT in the Infrastructure
     // layer (i.e. Application + Presentation + sibling Infrastructure).
     // Used by every Infrastructure-layer test (Providers.*, Storage.*, Tools.Builtin).
-    private static readonly string[] ForbiddenForInfrastructure =
+    internal static readonly string[] ForbiddenForInfrastructure =
     [
         "Harbor.Application",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
-        "Harbor.Scripting",
         "Harbor.Terminal.Abstractions",
         "Harbor.App.Cli",
         // Sibling Infrastructure assemblies (no cross-Infrastructure edges):
@@ -106,12 +104,11 @@ public sealed class NetArchLayerRules
     // concrete renderers) must NOT reference (Application + Infrastructure +
     // Cli). Harbor.Application and Harbor.Registries are Application-layer
     // assemblies that Presentation must also not reach into.
-    private static readonly string[] ForbiddenForPresentation =
+    internal static readonly string[] ForbiddenForPresentation =
     [
         "Harbor.Application",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
-        "Harbor.Scripting",
         "Harbor.Providers.OpenAiCompatible",
         "Harbor.Providers.Anthropic",
         "Harbor.Providers.OpenAI",
@@ -142,7 +139,6 @@ public sealed class NetArchLayerRules
             .And().NotHaveDependencyOn("Harbor.Tools.Builtin")
             .And().NotHaveDependencyOn("Harbor.Terminal.Abstractions")
             .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
-            .And().NotHaveDependencyOn("Harbor.Scripting")
             .And().NotHaveDependencyOn("Harbor.App.Cli")
             .GetResult();
         await Assert.That(result.IsSuccessful).IsTrue();
@@ -163,7 +159,6 @@ public sealed class NetArchLayerRules
         var result = types
             .Should()
             .NotHaveDependencyOn("Harbor.Plugins.Runtime")
-            .And().NotHaveDependencyOn("Harbor.Scripting")
             .And().NotHaveDependencyOn("Harbor.Providers.OpenAiCompatible")
             .And().NotHaveDependencyOn("Harbor.Providers.Anthropic")
             .And().NotHaveDependencyOn("Harbor.Providers.OpenAI")
@@ -188,7 +183,6 @@ public sealed class NetArchLayerRules
         var result = types
             .Should()
             .NotHaveDependencyOn("Harbor.Plugins.Runtime")
-            .And().NotHaveDependencyOn("Harbor.Scripting")
             .And().NotHaveDependencyOn("Harbor.Providers.OpenAiCompatible")
             .And().NotHaveDependencyOn("Harbor.Providers.Anthropic")
             .And().NotHaveDependencyOn("Harbor.Providers.OpenAI")
@@ -240,7 +234,6 @@ public sealed class NetArchLayerRules
             .NotHaveDependencyOn("Harbor.Terminal.Abstractions")
             .And().NotHaveDependencyOn("Harbor.Registries")
             .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
-            .And().NotHaveDependencyOn("Harbor.Scripting")
             .GetResult();
         await Assert.That(result.IsSuccessful).IsTrue();
     }
@@ -260,7 +253,6 @@ public sealed class NetArchLayerRules
             .NotHaveDependencyOn("Harbor.Application")
             .And().NotHaveDependencyOn("Harbor.Terminal.Abstractions")
             .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
-            .And().NotHaveDependencyOn("Harbor.Scripting")
             .And().NotHaveDependencyOn("Harbor.Providers.OpenAiCompatible")
             .And().NotHaveDependencyOn("Harbor.Providers.Anthropic")
             .And().NotHaveDependencyOn("Harbor.Providers.OpenAI")

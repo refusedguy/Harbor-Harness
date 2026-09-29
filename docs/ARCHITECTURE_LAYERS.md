@@ -385,8 +385,8 @@ load each assembly via reflection and assert on `GetReferencedAssemblies()`.
 
 The tests come in **six files** (`LayerDependencyTests`, `NetArchLayerRules`,
 `AbstractionsSplitLayerRules`, `FullLayerMatrixTests`, `CellForgeGraphRules`,
-`PresentationCapabilityRules`; counts as of 2026-08-27 predate the last two — the
-executed total may exceed the method count due to parameterised cases):
+`PresentationCapabilityRules`, `EnforcerIntegrityTests`) — the executed total
+exceeds the method count because of parameterised cases:
 
 ### 5.1 Reflection-based — `LayerDependencyTests.cs`
 
@@ -394,20 +394,29 @@ Uses plain `System.Reflection` (`Assembly.GetReferencedAssemblies()`) — zero e
 dependencies, fast, trivially readable. This is the zero-dependency fallback so the
 layering rules still run even if NetArchTest ever fails to restore.
 
-The 12 rules cover:
+The 11 rules cover:
 
 1. `Abstractions_HasNoHarborProjectReferences`
 2. `TuiAbstractions_ReferencesOnlyAbstractions`
 3. `UiFrameworkState_ReferencesOnlyAbstractionsFamily`
 4. `Application_ReferencesOnlyAbstractions`
 5. `Registries_ReferencesOnlyAbstractions`
-6. `Core_ReferencesOnlyApplicationAndRegistriesAndAbstractions`
-7. `PluginsRuntime_ReferencesOnlyAbstractions` (Runtime also allows Tui.Abstractions)
-8. `Providers_ReferencesOnlyAbstractions`
-9. `Storage_ReferencesOnlyAbstractions`
-10. `ToolsBuiltin_ReferencesOnlyAbstractions`
-11. `TuiRenderers_ReferencesOnlyAbstractionsAndTuiAbstractions`
-12. `AllExpectedHarborAssembliesAreLoaded` (coverage guard — a new src project without a rule fails loudly)
+6. `PluginsRuntime_ReferencesOnlyAbstractions` (Runtime also allows Tui.Abstractions)
+7. `Providers_ReferencesOnlyAbstractions`
+8. `Storage_ReferencesOnlyAbstractions`
+9. `ToolsBuiltin_ReferencesOnlyAbstractions`
+10. `TuiRenderers_ReferencesOnlyAbstractionsAndTuiAbstractions`
+11. `AllExpectedHarborAssembliesAreLoaded` (coverage guard — a new src project without a rule fails loudly)
+
+> #451 removed the `Harbor.Core` facade and with it
+> `Core_ReferencesOnlyApplicationAndRegistriesAndAbstractions`; the invariant it
+> stood for is now enforced against both real owners (`Harbor.Application`,
+> `Harbor.Registries`) above and, table-wide, by `FullLayerMatrixTests`.
+>
+> #450 removed the `Harbor.Scripting` entries from the shared forbidden lists:
+> that name is a `contrib/` project *family*, never an assembly, so every
+> constraint naming it could never fail. The whole-layer rules above already
+> cover those assemblies.
 
 ### 5.2 NetArchTest-based — `NetArchLayerRules.cs`
 
@@ -462,20 +471,61 @@ table covering **every main-solution src assembly** (45 rows at the time; grown 
 1. *Reference check* — actual `Assembly.GetReferencedAssemblies()` ⊆ the row's
    Allowed set (+ documented exceptions). IL-level: transitive ProjectReferences
    that leak types into a consumer's AssemblyRef are caught too.
-2. *Table guard* — Allowed sets themselves must respect the layer classes
+2. *Allowed-set liveness* — every entry a row permits must be a reference the
+   assembly really has. Without this the Allowed side rots silently: a permitted
+   edge nobody uses is a hole waiting for the next contributor.
+3. *Table guard* — Allowed sets themselves must respect the layer classes
    (Presentation ↛ Infrastructure/Application, Infrastructure ↛ Presentation,
    Domain ↛ Domain-only), so a violation cannot be pre-declared as "allowed";
    real exceptions live in `DocumentedExceptions`, each with a reason.
-3. *Exception liveness* — every documented exception must correspond to a real
+4. *Exception liveness* — every documented exception must correspond to a real
    current reference (no rotting into blanket permissions).
-4. *Coverage* — adding a src project without a matrix row (and a ProjectReference
+5. *Exception scope* — a documented exception names the **individual source
+   files** allowed to bind the target assembly, not the whole project. A new
+   file reaching into the offending assembly fails, so an exception cannot
+   absorb unrelated future violations.
+6. *Coverage* — adding a src project without a matrix row (and a ProjectReference
    in the test csproj) fails loudly instead of silently skipping.
 
-Out of scope by design: `Harbor.CodeGen` (build tool, outside Harbor.slnx),
-`Harbor.Plugins.Host` (OutputType=Exe out-of-process MCP server — an app), and
-`apps/*` composition roots.
+Out of scope by design: `Harbor.CodeGen` (source-generator project, consumed via
+`OutputItemType=Analyzer`), `Harbor.Plugins.Host` (OutputType=Exe out-of-process
+MCP server — an app), `Harbor.Providers.Shared` (a shared-source folder with no
+csproj: its files are `<Compile Include>`-linked into the four provider
+assemblies), and `apps/*` composition roots. Every one of these lives in
+`OutOfScopeAssemblies` / `SharedSourceFolders` with a reason, and
+`EnforcerIntegrityTests.SrcProjects_AreAllClassified` fails when a new `src/`
+project is in neither list.
 
-### 5.5 Skipping a test for a known violation
+### 5.5 Rules about the rules — `EnforcerIntegrityTests.cs` (#450)
+
+The checks above have a failure mode they cannot see themselves: a rule naming
+something that does not exist, permitting more than intended, or covering nothing
+is green forever. `EnforcerIntegrityTests.cs` closes that class:
+
+| Rule | Guards against |
+|---|---|
+| `RepositoryInventory_IsDiscoverable` | csproj-walking rules silently passing when the repo root is not found |
+| `RuleTargetAssemblyNames_AllExist` | **vacuous targets** — a typo, rename or deleted project left in a forbidden/allowed list |
+| `SrcProjects_AreAllClassified` | an assembly in `src/` that is on no list at all (unbounded reach) |
+| `Matrix_AllowedEntries_AreLive` | **allowed-set rot** — permitted edges nobody uses |
+| `DeclaredProjectReferences_AreJustifiedByTheMatrix` | **csproj-level drift** — a `<ProjectReference>` that binds no type emits no IL, so every AssemblyRef-based rule is blind to it |
+| `DeclaredButUnboundProjectReferences_AreReallyUnbound` | a "vestigial" exemption that is actually a live dependency in disguise |
+| `DocumentedExceptions_AreScopedToNamedFiles` | **project-granular exceptions** hiding new violations |
+| `DocumentedExceptions_AllHaveReasons` | reasonless, accidental exceptions |
+
+The vacuity trap in particular: NetArchTest's `NotHaveDependencyOn("X")` and the
+reflection `FindForbiddenReferences(asm, "X")` both treat a **non-existent
+assembly name as a satisfied constraint**. `Harbor.Scripting` (a `contrib/`
+project *family*, never an assembly) and `Harbor.Domain` (deleted in the F1
+split) were named by 15 rule positions and enforced nothing.
+`RuleTargetAssemblyNames_AllExist` resolves every name against the real project
+tree, so that class of rot now fails.
+
+Adding a `<ProjectReference>` that binds no type therefore needs an explicit
+entry in `DeclaredButUnboundProjectReferences` with a reason — a deliberate act
+a reviewer can see, instead of an invisible edge.
+
+### 5.6 Skipping a test for a known violation
 
 When a real violation is found and cannot be fixed in the current sprint, mark the
 test with a `// TODO(arch): violation, see ARCHITECTURE_LAYERS.md §known-violations`

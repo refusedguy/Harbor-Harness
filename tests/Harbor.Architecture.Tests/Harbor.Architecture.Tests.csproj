@@ -96,6 +96,15 @@
     <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Shared\Harbor.Desktop.Shared.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Animations\Harbor.Desktop.Animations.csproj"/>
+    <!--
+      #450: two inventory entries previously relied on a TRANSITIVE copy landing
+      in the test bin directory rather than an explicit reference — which is what
+      let Harbor.Tui.NickConsoleEx sit on the matrix without a test reference.
+      Both are now referenced explicitly so AllExpectedHarborAssembliesAreLoaded
+      does not depend on another project's reference graph.
+    -->
+    <ProjectReference Include="..\..\src\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.NickConsoleEx\Harbor.Tui.NickConsoleEx.csproj"/>
   </ItemGroup>
 
 </Project>
