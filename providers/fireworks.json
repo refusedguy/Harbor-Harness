@@ -2,6 +2,8 @@
   "id": "fireworks",
   "displayName": "Fireworks AI",
   "description": "Fireworks AI's fast inference for open-source models.",
+  "defaultModel": "accounts/fireworks/models/llama-v3p1-70b-instruct",
+  "setupHint": "Get a key at https://fireworks.ai",
   "baseUrl": "https://api.fireworks.ai/inference/v1",
   "apiType": "openai-compatible",
   "authType": "bearer",
@@ -17,5 +19,6 @@
   "capabilities": {
     "streaming": "true",
     "toolUse": "true"
-  }
+  },
+  "priority": 100
 }

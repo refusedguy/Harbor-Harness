@@ -2,6 +2,8 @@
   "id": "ollama",
   "displayName": "Ollama (local)",
   "description": "Local LLM inference via Ollama. No API key required.",
+  "defaultModel": "llama3.2",
+  "setupHint": "Install from https://ollama.ai and run `ollama serve`",
   "baseUrl": "http://localhost:11434/v1",
   "apiType": "openai-compatible",
   "authType": "none",
@@ -17,5 +19,6 @@
   "capabilities": {
     "streaming": "true",
     "toolUse": "auto"
-  }
+  },
+  "priority": 120
 }

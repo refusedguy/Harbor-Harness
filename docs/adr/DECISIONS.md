@@ -133,7 +133,8 @@ Model Context Protocol servers are consumed out-of-process over stdio JSON-RPC: 
 # ADR-007: Single ProviderPresets catalog for both wizards (PROD-UI-0)
 
 ## Status
-Accepted (closed)
+Accepted (closed) — superseded in part by #580 (2026-09-29): the catalog is now
+*derived* from `providers/*.json` rather than kept aligned with it by a test.
 
 ## Date
 2026-08-26 (`e47def0`..`bada559`)
@@ -147,6 +148,17 @@ Both wizards read one catalog — `ProviderPresets` — aligned field-by-field w
 ## Consequences
 - Adding/changing a provider means editing one preset table plus `providers/<name>.json`; the consistency test fails on drift.
 - Users get connection feedback during setup instead of first-prompt failures.
+
+### Amendment (#580)
+The duplication this ADR merged was re-introduced by its own guard: the preset↔json
+consistency test turned the documented "add a provider = drop a `.json`" path
+(docs/EXAMPLES.md §9) into a red build, which is the loudest possible contradiction
+of the axis' main promise. `ProviderPresets.All` is now computed by
+`ProviderPresetCatalog` from the same configs, over the same directory walk the
+registration path uses; the table and its three policing assertions are gone, and
+`providers/<name>.json` — now also carrying `defaultModel` / `setupHint` / `priority`
+— is again the whole change. The "one catalog for both wizards" intent is unchanged,
+and now holds by construction rather than by test.
 
 # ADR-008: Reverse the Domain split — Harbor.Abstractions.Contracts (F1 decoupling)
 

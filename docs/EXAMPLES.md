@@ -192,13 +192,17 @@ public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
 {
   "id": "myllm",
   "displayName": "MyLLM",
+  "description": "Fictional provider — one line, shown in the picker.",
   "baseUrl": "https://api.myllm.com/v1",
   "apiType": "openai-compatible",
   "authType": "bearer",
   "authEnvVar": "MYLLM_API_KEY",
   "modelsUrl": "https://api.myllm.com/v1/models",
   "modelsPath": "data",
-  "modelMapping": { "id": "id", "displayName": "name", "contextWindow": "context_length" }
+  "modelMapping": { "id": "id", "displayName": "name", "contextWindow": "context_length" },
+  "defaultModel": "llama-4-70b",
+  "setupHint": "Get a key at https://myllm.com/keys",
+  "priority": 200
 }
 ```
 
@@ -207,6 +211,31 @@ export MYLLM_API_KEY=...
 export HARBOR_MODEL=myllm/llama-4-70b
 dotnet run --project apps/Harbor.App.Cli -- providers   # verify it's loaded
 ```
+
+**That file is the whole change — it is the single source, not just for the client
+but for the UI.** `ProviderPresets` no longer holds a hand-written table: every
+preset in the onboarding wizard, `/providers`, `/auth set` and the desktop pickers
+is projected from these same JSON files (`ProviderPresetCatalog`, #580), so a
+provider that is registered is by construction a provider the user can see, pick
+and authenticate. There is nothing to register anywhere.
+
+Fields the picker reads on top of the client config:
+
+| field | used for | required? |
+|---|---|---|
+| `id` | registry key, env-var convention, model ref | yes |
+| `displayName` / `description` | picker + `/providers` rows | no (falls back to `id`) |
+| `defaultModel` | the model the wizard pre-selects | strongly recommended |
+| `authType` | `"none"` ⇒ no API key is asked for | no (defaults to `bearer`) |
+| `authEnvVar` | where the key is read from — this is how `kilocode` uses `KILO_API_KEY` | for key-bearing providers |
+| `setupHint` | "get a key at …" line under the prompt | no |
+| `priority` | position in the onboarding picker (lower = earlier; unset = last) | no |
+
+`priority` exists so the bundled recommendation order (free models first, local
+providers last) stays a property of the *data* rather than of a C# array.
+
+> Precedence: `~/.harbor/providers/<name>.json` overrides the bundled file with the
+> same `id`, so you can retune a shipped provider without touching the repo.
 
 ### 10. Add a native LLM provider (Anthropic-style)
 

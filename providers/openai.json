@@ -1,8 +1,10 @@
 {
   "$schema": "../schema/provider.schema.json",
   "id": "openai",
-  "displayName": "OpenAI",
+  "displayName": "OpenAI (GPT)",
   "description": "GPT models — GPT-4o, GPT-4.1, o1, o3, o4-mini. Native provider.",
+  "defaultModel": "gpt-4o",
+  "setupHint": "Get a key at https://platform.openai.com",
   "baseUrl": "https://api.openai.com/v1",
   "apiType": "openai-compatible",
   "authType": "bearer",
@@ -114,5 +116,6 @@
     "reasoning": "true",
     "cacheControl": "false",
     "maxTokensField": "max_completion_tokens"
-  }
+  },
+  "priority": 30
 }

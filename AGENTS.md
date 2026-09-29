@@ -321,6 +321,7 @@ Create `providers/<name>.json`:
 {
   "id": "myprovider",
   "displayName": "My Provider",
+  "description": "One line — shown in the provider picker.",
   "baseUrl": "https://api.myprovider.com/v1",
   "apiType": "openai-compatible",
   "authType": "bearer",
@@ -330,11 +331,19 @@ Create `providers/<name>.json`:
   "modelMapping": {
     "id": "id",
     "displayName": "name"
-  }
+  },
+  "defaultModel": "some-model-id",
+  "setupHint": "Get a key at https://myprovider.com/keys",
+  "priority": 200
 }
 ```
 
-Set `MYPROVIDER_API_KEY` env var. Done.
+Set `MYPROVIDER_API_KEY` env var. Done — **that file is the whole job**, and it
+stays the whole job: there is no provider table in C# to keep in sync
+(`ProviderPresets` is projected from these same files since #580), and no csproj
+edit (the `providers/*.json` embed is a glob). The last three fields feed the
+onboarding picker; see [docs/EXAMPLES.md §9](./docs/EXAMPLES.md) for what each one
+does.
 
 ### Add a test
 

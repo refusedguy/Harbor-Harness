@@ -2,6 +2,8 @@
   "id": "cerebras",
   "displayName": "Cerebras",
   "description": "Cerebras ultra-fast inference.",
+  "defaultModel": "llama3.1-70b",
+  "setupHint": "Get a key at https://cloud.cerebras.ai",
   "baseUrl": "https://api.cerebras.ai/v1",
   "apiType": "openai-compatible",
   "authType": "bearer",
@@ -17,5 +19,6 @@
   "capabilities": {
     "streaming": "true",
     "toolUse": "true"
-  }
+  },
+  "priority": 110
 }

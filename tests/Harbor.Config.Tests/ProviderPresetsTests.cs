@@ -2,13 +2,12 @@ using System.Text.Json;
 using Harbor.Application.Configuration;
 namespace Harbor.Config.Tests;
 /// <summary>
-///     Tests for ProviderPresets — the built-in catalog of provider templates.
+///     Tests for ProviderPresets — the provider picker catalogue, projected from
+///     <c>providers/*.json</c> since #580 (there is no hand-maintained table left to
+///     police, so the tests pin the projection and the JSON's own invariants instead).
 /// </summary>
 public class ProviderPresetsTests
 {
-    [Test]
-    public async Task All_ContainsThirteenPresets() => await Assert.That(ProviderPresets.All.Count).IsEqualTo(13);
-
     [Test]
     public async Task All_ContainsExpectedIds()
     {
@@ -105,12 +104,12 @@ public class ProviderPresetsTests
         }
     }
 
-    // ---- PROD-UI-0 З.1: catalog consistency (presets ↔ providers/*.json) ----
+    // ---- PROD-UI-0 З.1: catalogue consistency (providers/*.json ↔ the picker) ----
 
     /// <summary>
     ///     Locate the bundled <c>providers/</c> directory by walking up from
     ///     the test binary towards the repo root (mirrors
-    ///     JsonProviderDiscovery.FindProvidersDirectories precedence).
+    ///     ProviderPresetCatalog.FindProvidersDirectories precedence).
     /// </summary>
     private static string? FindProvidersDirectory()
     {
@@ -126,33 +125,6 @@ public class ProviderPresetsTests
     }
 
     [Test]
-    public async Task EveryPreset_HasBundledJsonConfig()
-    {
-        string? dir = FindProvidersDirectory();
-        await Assert.That(dir).IsNotNull();
-
-        foreach (var preset in ProviderPresets.All)
-        {
-            string path = Path.Combine(dir!, $"{preset.Id}.json");
-            await Assert.That(File.Exists(path)).IsTrue();
-        }
-    }
-
-    [Test]
-    public async Task BundledJsonConfigs_HaveNoOrphansOutsidePresets()
-    {
-        string? dir = FindProvidersDirectory();
-        await Assert.That(dir).IsNotNull();
-
-        HashSet<string> presetIds = ProviderPresets.All.Select(p => p.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (string file in Directory.EnumerateFiles(dir!, "*.json"))
-        {
-            string id = Path.GetFileNameWithoutExtension(file);
-            await Assert.That(presetIds.Contains(id)).IsTrue();
-        }
-    }
-
-    [Test]
     public async Task All_DefaultModels_AreNonEmpty()
     {
         foreach (var p in ProviderPresets.All)
@@ -162,49 +134,159 @@ public class ProviderPresetsTests
     }
 
     [Test]
-    public async Task BundledJsonConfigs_IdMatchesPresetId()
+    public async Task BundledJsonConfigs_FileNameMatchesDeclaredId()
     {
         string? dir = FindProvidersDirectory();
         await Assert.That(dir).IsNotNull();
 
-        foreach (var preset in ProviderPresets.All)
+        // Direct JSON invariant, no preset indirection: the id a config declares is
+        // the id everything else keys off (env var convention, model ref, registry).
+        // A copy-pasted config whose "id" disagrees with its file name is a silent
+        // footgun — the preset list, the auth store and the client registry would all
+        // speak different names for the same provider.
+        foreach (string file in Directory.EnumerateFiles(dir!, "*.json"))
         {
-            string path = Path.Combine(dir!, $"{preset.Id}.json");
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            using var doc = JsonDocument.Parse(File.ReadAllText(file));
             string? id = doc.RootElement.GetProperty("id").GetString();
-            await Assert.That(id).IsEqualTo(preset.Id);
+            await Assert.That(id).IsEqualTo(Path.GetFileNameWithoutExtension(file));
+        }
+    }
+
+    // ---- #580: the preset catalogue is DERIVED from providers/*.json ----
+
+    [Test]
+    public async Task BundledJsonConfigs_ProjectIntoPresets_WithNoRegistrationStep()
+    {
+        string? dir = FindProvidersDirectory();
+        await Assert.That(dir).IsNotNull();
+
+        // The whole promise of docs/EXAMPLES.md §9 in one assertion: read the bundled
+        // configs straight off disk — no preset table, no DI, no registration call —
+        // and every one of them shows up as a fully-populated preset.
+        string[] files = Directory.GetFiles(dir!, "*.json");
+        await Assert.That(files.Length).IsGreaterThan(0);
+
+        var projected = ProviderPresetCatalog.FromJson(files.Select(f => File.ReadAllText(f)));
+        await Assert.That(projected.Count).IsEqualTo(files.Length);
+
+        // Fields come from the JSON, not from a second hand-maintained list.
+        var kilocode = projected.First(p => p.Id == "kilocode");
+        using var kilocodeJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir!, "kilocode.json")));
+        await Assert.That(kilocode.DisplayName)
+            .IsEqualTo(kilocodeJson.RootElement.GetProperty("displayName").GetString());
+        await Assert.That(kilocode.DefaultModel)
+            .IsEqualTo(kilocodeJson.RootElement.GetProperty("defaultModel").GetString());
+        await Assert.That(kilocode.EnvVarName)
+            .IsEqualTo(kilocodeJson.RootElement.GetProperty("authEnvVar").GetString());
+
+        // And the catalogue the app actually ships — ProviderPresetCatalog.Load(),
+        // the real directory walk plus the embedded resources — offers every bundled
+        // config. "Registered but invisible in the picker" is exactly the #580 bug.
+        foreach (string file in files)
+        {
+            string fileId = Path.GetFileNameWithoutExtension(file);
+            await Assert.That(ProviderPresets.All.Any(p => p.Id == fileId)).IsTrue();
         }
     }
 
     [Test]
-    public async Task BundledJsonConfigs_AuthAlignsWithPreset()
+    public async Task FromJson_UnregisteredProvider_StillBecomesAPreset()
     {
-        string? dir = FindProvidersDirectory();
-        await Assert.That(dir).IsNotNull();
+        // A provider nobody has ever heard of: a bare config, exactly what a user
+        // drops into ~/.harbor/providers/. Pre-#580 this needed a row in a C# table
+        // plus a matching entry in three assertions; now the JSON is the whole job.
+        const string myllm = """
+            {
+              "id": "myllm",
+              "displayName": "My LLM",
+              "description": "Fictional provider used by the #580 test.",
+              "baseUrl": "https://api.myllm.example/v1",
+              "apiType": "openai-compatible",
+              "authType": "bearer",
+              "authEnvVar": "MYLLM_API_KEY",
+              "modelsUrl": "https://api.myllm.example/v1/models",
+              "defaultModel": "myllm-medium",
+              "setupHint": "Get a key at https://myllm.example/keys",
+              "priority": 5
+            }
+            """;
 
-        foreach (var preset in ProviderPresets.All)
+        var presets = ProviderPresetCatalog.FromJson(new[] { myllm });
+
+        await Assert.That(presets.Count).IsEqualTo(1);
+        var preset = presets[0];
+        await Assert.That(preset.Id).IsEqualTo("myllm");
+        await Assert.That(preset.DisplayName).IsEqualTo("My LLM");
+        await Assert.That(preset.Description).IsEqualTo("Fictional provider used by the #580 test.");
+        await Assert.That(preset.DefaultModel).IsEqualTo("myllm-medium");
+        await Assert.That(preset.RequiresApiKey).IsTrue();
+        await Assert.That(preset.EnvVarName).IsEqualTo("MYLLM_API_KEY");
+        await Assert.That(preset.SetupHint).IsEqualTo("Get a key at https://myllm.example/keys");
+    }
+
+    [Test]
+    public async Task FromJson_AuthTypeNone_MeansNoApiKey()
+    {
+        const string local = """
+            {
+              "id": "mylocal",
+              "displayName": "My Local",
+              "baseUrl": "http://localhost:1234/v1",
+              "authType": "none",
+              "authEnvVar": null,
+              "defaultModel": "local-1"
+            }
+            """;
+
+        var presets = ProviderPresetCatalog.FromJson(new[] { local });
+
+        await Assert.That(presets.Count).IsEqualTo(1);
+        await Assert.That(presets[0].RequiresApiKey).IsFalse();
+        await Assert.That(presets[0].EnvVarName).IsNull();
+        // Unset description falls back to the display name so a panel row is never blank.
+        await Assert.That(presets[0].Description).IsEqualTo("My Local");
+    }
+
+    [Test]
+    public async Task FromJson_PriorityOrdersOnboarding_ThenId()
+    {
+        const string a = """{ "id": "zzz", "priority": 90, "baseUrl": "http://x/v1" }""";
+        const string b = """{ "id": "aaa", "baseUrl": "http://x/v1" }""";
+        const string c = """{ "id": "mmm", "priority": 10, "baseUrl": "http://x/v1" }""";
+
+        var presets = ProviderPresetCatalog.FromJson(new[] { a, b, c });
+
+        // Declared priority first (lower = earlier in the picker); a config with no
+        // priority sorts after every one that declares it, by id among its peers.
+        await Assert.That(string.Join(",", presets.Select(p => p.Id))).IsEqualTo("mmm,zzz,aaa");
+    }
+
+    [Test]
+    public async Task FromJson_IgnoresMalformedAndIdlessConfigs()
+    {
+        var presets = ProviderPresetCatalog.FromJson(new[]
         {
-            string path = Path.Combine(dir!, $"{preset.Id}.json");
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            var root = doc.RootElement;
+            "not json at all",
+            "[]",
+            """{ "displayName": "No id here" }""",
+            """{ "id": "good", "baseUrl": "http://x/v1", "defaultModel": "m" }""",
+        });
 
-            if (!root.TryGetProperty("authType", out var authTypeEl))
-                continue;
-            string authType = authTypeEl.GetString() ?? "";
+        await Assert.That(presets.Count).IsEqualTo(1);
+        await Assert.That(presets[0].Id).IsEqualTo("good");
+    }
 
-            if (preset.RequiresApiKey)
-            {
-                // Key-requiring presets must not be 'none' and must carry the
-                // same env var name the onboarding wizard tells the user about.
-                await Assert.That(authType).IsNotEqualTo("none");
-                string? envVar = root.TryGetProperty("authEnvVar", out var envEl) ? envEl.GetString() : null;
-                await Assert.That(envVar).IsEqualTo(preset.EnvVarName);
-            }
-            else
-            {
-                // Local presets (ollama, vllm) must work without any key.
-                await Assert.That(authType).IsEqualTo("none");
-            }
-        }
+    [Test]
+    public async Task FromJson_FirstConfigForAnIdWins()
+    {
+        // User config outranks the bundled copy for the same id (same precedence the
+        // registration path applies), so the picker and the registry agree.
+        const string bundled = """{ "id": "kilocode", "displayName": "Bundled", "baseUrl": "http://a/v1" }""";
+        const string user = """{ "id": "kilocode", "displayName": "Mine", "baseUrl": "http://b/v1" }""";
+
+        var presets = ProviderPresetCatalog.FromJson(new[] { user, bundled });
+
+        await Assert.That(presets.Count).IsEqualTo(1);
+        await Assert.That(presets[0].DisplayName).IsEqualTo("Mine");
     }
 }

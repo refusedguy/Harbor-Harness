@@ -1,8 +1,10 @@
 {
   "$schema": "../schema/provider.schema.json",
   "id": "anthropic",
-  "displayName": "Anthropic",
+  "displayName": "Anthropic (Claude)",
   "description": "Claude models — Opus, Sonnet, Haiku. Native provider.",
+  "defaultModel": "claude-sonnet-4-20250514",
+  "setupHint": "Get a key at https://console.anthropic.com",
   "baseUrl": "https://api.anthropic.com/v1",
   "apiType": "anthropic",
   "apiVersion": "2023-06-01",
@@ -91,5 +93,6 @@
     "reasoning": "true",
     "cacheControl": "true",
     "systemPrompt": "system"
-  }
+  },
+  "priority": 20
 }

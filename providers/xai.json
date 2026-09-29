@@ -1,7 +1,9 @@
 {
   "id": "xai",
-  "displayName": "xAI",
+  "displayName": "xAI (Grok)",
   "description": "Grok models from xAI.",
+  "defaultModel": "grok-2-latest",
+  "setupHint": "Get a key at https://x.ai",
   "baseUrl": "https://api.x.ai/v1",
   "apiType": "openai-compatible",
   "authType": "bearer",
@@ -17,5 +19,6 @@
   "capabilities": {
     "streaming": "true",
     "toolUse": "true"
-  }
+  },
+  "priority": 80
 }
