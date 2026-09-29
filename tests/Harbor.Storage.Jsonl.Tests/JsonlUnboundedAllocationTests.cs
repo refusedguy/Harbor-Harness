@@ -43,6 +43,22 @@ namespace Harbor.Storage.Jsonl.Tests;
 // process allocates inside the measurement window. TUnit runs test classes in
 // parallel by default, so without this the numbers are whatever the neighbours
 // happened to do.
+//
+// Deliberately the KEYLESS form. Per TUnit's parallelism rules a keyless
+// [NotInParallel] is the most restrictive there is — the test runs completely
+// alone, no other test in the assembly executes alongside it. A named key such
+// as [NotInParallel("alloc-tripwire")] would serialise only against classes
+// carrying that same key, and this assembly has 12 other classes that carry no
+// attribute at all: the process counter would still be billed for their garbage.
+// For a process-wide measurement the keyless form is the only one that actually
+// delivers "nothing else allocates in this window".
+//
+// The two measuring tests additionally return early off Linux. A process-wide
+// delta bills every allocation the runtime makes on its own threads, and those
+// differ per platform; the budgets below were tuned on Linux, and this project
+// is in the ci.yml `test-os` matrix (windows-latest, macos-latest), so without
+// the gate a Linux number is asserted on two other runtimes. Same shape as
+// AgentLoopAllocationTests and the other alloc tripwires.
 [NotInParallel]
 public class JsonlUnboundedAllocationTests
 {
@@ -329,13 +345,17 @@ public class JsonlUnboundedAllocationTests
 
     [Test]
     // Known flake, observed failing on two unrelated branches (#629, #639) with
-    // the same ~73.8 MB reading against this test's ~73.9 MB ceiling. The
-    // measurement itself is now thread-pinned (MeasureOnDedicatedThread), which
-    // is the actual fix; the retry is the rerun-once policy for a residual
-    // scheduling wobble, not the thing making it correct.
+    // the same ~73.8 MB reading against this test's ~73.9 MB ceiling. The fix is
+    // the process-wide counter plus the class-level [NotInParallel] (see the
+    // window below for why the per-thread counter produced that number); the
+    // retry is the rerun-once policy for a residual scheduling wobble, not the
+    // thing making it correct.
     [Retry(3)]
     public async Task Read_ThousandRecordSession_ReadsEveryRecordWithoutAddingTheFile()
     {
+        if (!OperatingSystem.IsLinux())
+            return; // Tripwire is linux-only: GC accounting varies several-fold across OS runtimes.
+
         // A long session is thousands of tool results and assistant turns, and
         // that is the shape the file-sized rent was guarding. The file here is
         // >20 MiB; the read must return all of it and must not allocate another
@@ -586,6 +606,9 @@ public class JsonlUnboundedAllocationTests
     [Test]
     public async Task Update_HeaderEditOnABigSession_CopiesBytesWithoutMaterializingThem()
     {
+        if (!OperatingSystem.IsLinux())
+            return; // Tripwire is linux-only: GC accounting varies several-fold across OS runtimes.
+
         // The rewrite half of the issue: every title/status/git-branch change
         // did File.ReadAllLines(...).ToList() plus a full rewrite under the
         // per-session semaphore, to change line 1. Here the session holds a
