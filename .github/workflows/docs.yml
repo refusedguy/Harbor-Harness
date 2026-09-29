@@ -21,11 +21,13 @@
 #
 # WHAT RUNS HERE
 #
-#   selftest  both gates against fixtures that are known-broken. A checker
+#   selftest  all three gates against fixtures that are known-broken. A checker
 #             that has quietly stopped finding anything is still green on every
 #             PR, so the failure path is tested on every docs change (33 + 10
 #             assertions, ~2s).
 #   links     internal link + GitHub anchor resolution, with a file/ref floor.
+#   cites     `file:line` in a normative document resolves, and a type it names
+#             is constructed by something (#664).
 #   lint      markdown structural invariants, with a file/line floor.
 #
 # THE FLOORS ARE THE POINT
@@ -52,6 +54,7 @@ on:
       - '**.md'
       - 'tools/check-md-links.py'
       - 'tools/md-lint.py'
+      - 'tools/check-doc-cites.py'
       - 'tools/md_gate.py'
       - '.github/workflows/docs.yml'
   pull_request:
@@ -59,6 +62,7 @@ on:
       - '**.md'
       - 'tools/check-md-links.py'
       - 'tools/md-lint.py'
+      - 'tools/check-doc-cites.py'
       - 'tools/md_gate.py'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
@@ -86,6 +90,13 @@ jobs:
         run: python3 tools/check-md-links.py --self-test
       - name: Markdown lint fails on a malformed document
         run: python3 tools/md-lint.py --self-test
+      # #664. The third gate is the only one that asks whether a `file:line`
+      # in a normative document still points at a line, and whether a backticked
+      # type is constructed by anything. Its failure path is tested here for
+      # the same reason the other two are: a rule edited until it matches
+      # nothing is indistinguishable from a rule that found nothing.
+      - name: Citation checker fails on a stale file:line and an unwired type
+        run: python3 tools/check-doc-cites.py --self-test
 
   links:
     name: internal links
@@ -97,6 +108,28 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check every internal link and anchor
         run: python3 tools/check-md-links.py --min-files 250 --min-refs 600
+
+  # #664. Same reasoning as the two jobs above, third question: not "does the
+  # link resolve" and not "is the file shaped right" but "does the `file:line`
+  # this document asserts still exist, and is the type it names still built".
+  #
+  # The floors are ~25% below today's numbers (2 normative documents, 143 line
+  # citations, 68 backticked type names) and are a ratchet, like the ones above.
+  # Scope is the `Status: normative` marker rather than every .md: measured over
+  # the whole tree the same rules find 141 pre-existing violations in 23 files,
+  # most of them archived sprint notes, and a gate that is red on 141 unrelated
+  # findings on day one is a gate that gets switched off. Deleting the marker
+  # from a document shrinks the scanned set, which the floors then catch.
+  cites:
+    name: normative citations
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check every normative file:line and named type
+        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50
 
   lint:
     name: markdown lint
