@@ -105,8 +105,15 @@ public sealed class EnforcerIntegrityTests
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
         new("Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions",
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
-        new("Harbor.Ui.Framework.Sessions", "Harbor.Ui.Framework.ViewModels",
-            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        // #663: the (Sessions → ViewModels) exemption is GONE. It was a #450
+        // dead edge until SessionContext.StatusText began calling
+        // StatusMappers.SessionStatusToText rather than carrying its own
+        // SessionStatus→label switch, which made the edge bind a real type in
+        // IL. DeclaredButUnboundProjectReferences_AreReallyUnbound fails the
+        // moment an exempt edge turns out to be live, so the exemption was
+        // removed and the edge justified in the matrix instead (the Sessions
+        // row in FullLayerMatrixTests.Matrix). Same shape as the #567 entry for
+        // (ViewModels → Abstractions) a few lines below.
         new("Harbor.Ui.Framework.ViewModels", "Harbor.Abstractions",
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
         // #567: the (ViewModels → Abstractions) exemption that sat here is GONE —
