@@ -493,6 +493,20 @@ public sealed class DefaultInterfaceMemberRule
             + "source-text DIM search misses it and reflection does not.",
             ""),
         new(
+            "Harbor.Ui.Framework.Rendering.Widgets.ICollapsibleChatBlock",
+            "ClampedBodyLineCount",
+            DimDirection.Conservative,
+            "A static pure derivation: visible row count under a budget, plus the overflow row. "
+            + "Extracted from ToolCallBlock by #286.",
+            ""),
+        new(
+            "Harbor.Ui.Framework.Rendering.Widgets.ICollapsibleChatBlock",
+            "PaintBodyLines",
+            DimDirection.Conservative,
+            "A static body-paint helper. A default here is a real algorithm, not a stub — which is "
+            + "the benign case a blanket \"no static defaults\" rule would get wrong.",
+            ""),
+        new(
             "Harbor.Ui.Framework.Services.IThemeWatcher",
             "Watch",
             DimDirection.Permissive,
@@ -767,6 +781,7 @@ public sealed class DefaultInterfaceMemberRule
         {
             var matched = loaded.Keys
                 .Where(name => name.StartsWith(prefix, StringComparison.Ordinal))
+                .OrderBy(name => name, StringComparer.Ordinal)
                 .ToList();
 
             if (matched.Count == 0)
@@ -778,15 +793,20 @@ public sealed class DefaultInterfaceMemberRule
                 continue;
             }
 
-            foreach (string name in matched)
+            // Judged per PREFIX, not per assembly. Not every assembly in a
+            // governed group has to declare an interface — Harbor.Ui.Framework.
+            // Reducers, for instance, is a namespace of static reducer helpers
+            // with no interface at all, and demanding one would make this test
+            // red for a project that is simply not part of this convention.
+            // What must not happen is the whole prefix going silent.
+            int interfacesUnderPrefix = matched.Sum(name => CountInterfaces(loaded[name]));
+            if (interfacesUnderPrefix == 0)
             {
-                int interfaces = CountInterfaces(loaded[name]);
-                if (interfaces == 0)
-                {
-                    failures.Add(
-                        $"{name} matches the governed prefix '{prefix}' but declares no interfaces, "
-                        + "so it contributes nothing to the scan and the prefix is over-broad");
-                }
+                failures.Add(
+                    $"the governed prefix '{prefix}' matches {matched.Count} loaded assembl"
+                    + $"{(matched.Count == 1 ? "y" : "ies")} ({string.Join(", ", matched)}) but "
+                    + "none of them declares an interface, so the prefix contributes nothing to the "
+                    + "scan and every rule here is satisfied by an empty set.");
             }
         }
 

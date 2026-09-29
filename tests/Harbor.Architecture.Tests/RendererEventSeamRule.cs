@@ -84,25 +84,26 @@ using Harbor.Terminal.Abstractions.Renderers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
-// `System.Reflection` is a global using in this project (needed for Assembly),
-// so Cecil's MethodBody would be an ambiguous reference without this alias.
-using MethodBody = Mono.Cecil.Cil.MethodBody;
 
 namespace Harbor.Architecture.Tests;
-
-/// <summary>Everything the rule needs to know about one renderer type.</summary>
-/// <param name="TypeName">Full CLR name, compiler-generated names collapsed.</param>
+/// <summary>Everything the rule needs to know about one type.</summary>
+/// <param name="TypeName">Full CLR name.</param>
 /// <param name="Assembly">Simple assembly name.</param>
 /// <param name="BaseTypeName">Full CLR name of the base type, or null for <c>System.Object</c>.</param>
 /// <param name="IsAbstract">Abstract types are the template, not a family member.</param>
+/// <param name="IsRenderer">
+///     Whether the type is, or derives from, the abstract base renderer. Read by
+///     reflection, which is exact — Cecil's type resolution is not consulted for
+///     the hierarchy at all; see the probe's remarks for why.
+/// </param>
 /// <param name="CallsRegisterHandler">
 ///     The type (or one of its nested types) contains a call to
 ///     <c>BaseTuiRenderer.RegisterHandler</c>.
 /// </param>
 /// <param name="NewStoresChatAppMsgAgent">The type news up a <c>ChatAppMsg.Agent</c>.</param>
 /// <param name="BridgeFieldTypes">
-///     Full CLR names of field types declared in the same module. A renderer
-///     that pushes events through a sibling bridge (<c>TerminalGuiRenderer</c> →
+///     Full CLR names of the type's own field types. A renderer that pushes
+///     events through a sibling bridge (<c>TerminalGuiRenderer</c> →
 ///     <c>TerminalGuiTeaBridge</c>) takes the store seam one hop away, and the
 ///     hop is real: the bridge dispatches into the same <c>UiStore</c>.
 /// </param>
@@ -111,6 +112,7 @@ internal sealed record RendererFacts(
     string Assembly,
     string? BaseTypeName,
     bool IsAbstract,
+    bool IsRenderer,
     bool CallsRegisterHandler,
     bool NewStoresChatAppMsgAgent,
     IReadOnlyList<string> BridgeFieldTypes);
@@ -119,10 +121,28 @@ internal sealed record RendererFacts(
 internal sealed record RendererSeamViolation(string TypeName, string Assembly, string Why);
 
 /// <summary>
-///     IL-level probe for the renderer event seam. Reads an assembly's metadata
-///     with Mono.Cecil and reports, per type, whether it reaches either of the
-///     two declared ways an <c>AgentEvent</c> enters the UI.
+///     Probe for the renderer event seam: the type table and the hierarchy come
+///     from <b>reflection</b>, the call sites from <b>IL</b> (Mono.Cecil).
 /// </summary>
+/// <remarks>
+/// <para>
+///     <b>Why the split.</b> The first version walked the base chain with
+///     Cecil's <c>TypeReference.Resolve()</c>, which silently yielded null at
+///     the first hop across an assembly boundary. On this very test assembly it
+///     therefore found 1 of the 3 renderers the file declares, and the
+///     positive control went quietly green — which is exactly the failure the
+///     non-vacuity tests exist to prevent, caught by them. Reflection answers
+///     "is this a renderer, what is its base, what are its fields" exactly, and
+///     Cecil answers only "does this method body call X", which needs no
+///     resolver because a call operand's declaring type is a name away.
+/// </para>
+/// <para>
+///     <b>Package provenance:</b> Mono.Cecil arrives transitively with
+///     <c>NetArchTest.Rules</c> (<c>exclude="Build,Analyzers"</c> in its nuspec)
+///     — the same provenance <c>PresentationCapabilityRules.cs</c> relies on. No
+///     new <c>PackageReference</c>, no new restore entry.
+/// </para>
+/// </remarks>
 internal static class RendererSeamProbe
 {
     /// <summary>Full name of the abstract base every renderer family derives from.</summary>
@@ -135,8 +155,10 @@ internal static class RendererSeamProbe
     internal const string RegisterHandlerMethodName = "RegisterHandler";
 
     /// <summary>
-    ///     Returns every type in <paramref name="asm" /> that reaches, directly
-    ///     or through a base type, <see cref="BaseRendererTypeName" />.
+    ///     Every renderer in <paramref name="asm" />, plus every bridge type one
+    ///     of them holds — the bridge is not a renderer, but its seam is the
+    ///     renderer's seam one hop away, so it has to be in the table for
+    ///     <c>Evaluate</c> to look it up.
     /// </summary>
     /// <param name="asm">Assembly to read; must have a resolvable file on disk.</param>
     /// <param name="topLevelTypeCount">Receives the module's top-level type count.</param>
@@ -160,55 +182,140 @@ internal static class RendererSeamProbe
                 + "vacuous if the probe reported 'no violations' here.");
         }
 
+        // Pass 1 — IL. Keyed by full CLR name, covering EVERY type in the module
+        // (not just renderers), because a bridge's seam has to be findable.
         using AssemblyDefinition definition = AssemblyDefinition.ReadAssembly(path);
-
-        var found = new List<RendererFacts>();
+        var seams = new Dictionary<string, (bool Register, bool Store)>(StringComparer.Ordinal);
         int topLevel = 0;
         foreach (TypeDefinition type in definition.MainModule.Types)
         {
             topLevel++;
-            Collect(type, simpleName, found);
+            CollectSeams(type, seams);
         }
 
         topLevelTypeCount = topLevel;
-        return found;
+
+        // Pass 2 — reflection, for the type table and the hierarchy.
+        var found = new Dictionary<string, RendererFacts>(StringComparer.Ordinal);
+        foreach (Type type in SafeGetTypes(asm))
+        {
+            if (!typeof(BaseTuiRenderer).IsAssignableFrom(type))
+            {
+                continue;
+            }
+
+            string typeName = type.FullName ?? type.Name;
+            seams.TryGetValue(typeName, out (bool Register, bool Store) seam);
+            found[typeName] = new RendererFacts(
+                typeName,
+                simpleName,
+                type.BaseType?.FullName,
+                type.IsAbstract,
+                IsRenderer: true,
+                seam.Register,
+                seam.Store,
+                BridgeFieldTypes(type));
+        }
+
+        // Pass 3 — the bridges. Not renderers, so pass 2 skipped them, but a
+        // renderer that delegates to one takes the store seam through it.
+        foreach (RendererFacts renderer in found.Values.ToList())
+        {
+            foreach (string bridge in renderer.BridgeFieldTypes)
+            {
+                if (found.ContainsKey(bridge))
+                {
+                    continue;
+                }
+
+                Type? bridgeType = asm.GetType(bridge);
+                if (bridgeType is null)
+                {
+                    continue;
+                }
+
+                seams.TryGetValue(bridge, out (bool Register, bool Store) bridgeSeam);
+                found[bridge] = new RendererFacts(
+                    bridge,
+                    simpleName,
+                    bridgeType.BaseType?.FullName,
+                    bridgeType.IsAbstract,
+                    IsRenderer: false,
+                    bridgeSeam.Register,
+                    bridgeSeam.Store,
+                    []);
+            }
+        }
+
+        return found.Values.ToList();
     }
 
-    private static void Collect(TypeDefinition type, string assemblyName, List<RendererFacts> found)
+    private static IReadOnlyList<string> BridgeFieldTypes(Type type)
     {
-        if (DerivesFromBaseRenderer(type))
+        var bridges = new List<string>();
+        foreach (FieldInfo field in type.GetFields(
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+            | BindingFlags.Static | BindingFlags.DeclaredOnly))
         {
-            bool register = false;
-            bool store = false;
-            var bridges = new List<string>();
-
-            foreach (TypeDefinition scope in SelfAndNested(type))
+            string? fieldType = field.FieldType.FullName;
+            if (!string.IsNullOrEmpty(fieldType))
             {
-                register |= CallsRegisterHandler(scope);
-                store |= NewsUpChatAppMsgAgent(scope);
-                foreach (FieldDefinition field in scope.Fields)
+                bridges.Add(fieldType);
+            }
+        }
+
+        return bridges;
+    }
+
+    /// <summary>Records, per type, whether any of its method bodies takes a seam.</summary>
+    private static void CollectSeams(
+        TypeDefinition type,
+        Dictionary<string, (bool Register, bool Store)> seams)
+    {
+        bool register = false;
+        bool store = false;
+
+        foreach (TypeDefinition scope in SelfAndNested(type))
+        {
+            foreach (MethodDefinition method in scope.Methods)
+            {
+                if (!method.HasBody)
                 {
-                    string? fieldType = field.FieldType?.FullName;
-                    if (!string.IsNullOrEmpty(fieldType))
+                    continue;
+                }
+
+                foreach (Instruction instruction in method.Body.Instructions)
+                {
+                    if (instruction.Operand is not MethodReference callee)
                     {
-                        bridges.Add(fieldType);
+                        continue;
+                    }
+
+                    // A call operand's declaring type is a plain reference: its
+                    // FullName is readable without resolving an assembly.
+                    string? declaring = callee.DeclaringType?.FullName;
+                    if (callee.Name == RegisterHandlerMethodName
+                        && declaring == BaseRendererTypeName)
+                    {
+                        register = true;
+                    }
+
+                    if (callee.Name == ".ctor" && declaring == ChatAppMsgAgentTypeName)
+                    {
+                        store = true;
                     }
                 }
             }
+        }
 
-            found.Add(new RendererFacts(
-                IlCapabilityProbe.AttributedTypeName(type),
-                assemblyName,
-                type.BaseType?.FullName,
-                type.IsAbstract,
-                register,
-                store,
-                bridges));
+        if (register || store)
+        {
+            seams[type.FullName] = (register, store);
         }
 
         foreach (TypeDefinition nested in type.NestedTypes)
         {
-            Collect(nested, assemblyName, found);
+            CollectSeams(nested, seams);
         }
     }
 
@@ -224,118 +331,48 @@ internal static class RendererSeamProbe
         }
     }
 
-    /// <summary>True when <paramref name="type" />'s base chain reaches the abstract base.</summary>
-    internal static bool DerivesFromBaseRenderer(TypeDefinition type)
-    {
-        TypeReference? current = type.BaseType;
-        int guard = 0;
-        while (current is not null && guard++ < 32)
-        {
-            if (current.FullName == BaseRendererTypeName)
-            {
-                return true;
-            }
-
-            current = SafeResolve(current);
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    ///     Whether <paramref name="type" /> calls <c>RegisterHandler</c> anywhere.
-    ///     The match is on the METHOD NAME plus the declaring type's
-    ///     assignability to the base renderer, so an unrelated method that
-    ///     happens to be called <c>RegisterHandler</c> on some other type cannot
-    ///     make a renderer look conformant.
-    /// </summary>
-    private static bool CallsRegisterHandler(TypeDefinition type)
-    {
-        foreach (MethodDefinition method in type.Methods)
-        {
-            if (!method.HasBody)
-            {
-                continue;
-            }
-
-            foreach (Instruction instruction in method.Body.Instructions)
-            {
-                if (instruction.Operand is MethodReference callee
-                    && callee.Name == RegisterHandlerMethodName
-                    && IsRendererType(callee.DeclaringType))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private static bool NewsUpChatAppMsgAgent(TypeDefinition type)
-    {
-        foreach (MethodDefinition method in type.Methods)
-        {
-            if (!method.HasBody)
-            {
-                continue;
-            }
-
-            foreach (Instruction instruction in method.Body.Instructions)
-            {
-                if (instruction.Operand is MethodReference callee
-                    && callee.Name == ".ctor"
-                    && callee.DeclaringType?.FullName == ChatAppMsgAgentTypeName)
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>Whether a type reference is, or derives from, the abstract base renderer.</summary>
-    private static bool IsRendererType(TypeReference? typeRef)
-    {
-        if (typeRef is null)
-        {
-            return false;
-        }
-
-        if (typeRef.FullName == BaseRendererTypeName)
-        {
-            return true;
-        }
-
-        TypeDefinition? resolved = SafeResolve(typeRef);
-        return resolved is not null && DerivesFromBaseRenderer(resolved);
-    }
-
-    private static TypeDefinition? SafeResolve(TypeReference reference)
+    private static IEnumerable<Type> SafeGetTypes(Assembly asm)
     {
         try
         {
-            return reference.Resolve();
+            return asm.GetTypes();
         }
-        catch (AssemblyResolutionException)
+        catch (ReflectionTypeLoadException ex)
         {
-            // RegisterHandler is declared on Harbor.Terminal.Abstractions, which
-            // every renderer project references, so this is a broken input
-            // rather than a routine condition — but it must not crash the gate.
-            return null;
+            return ex.Types.Where(static t => t is not null).Select(static t => t!);
         }
     }
 
     /// <summary>
-    ///     Reads the IL of one method body and returns its instruction count.
-    ///     Exposed so a non-vacuity test can assert the walk is looking at real
-    ///     instructions rather than at a method table.
+    ///     Total instruction count across every method body in
+    ///     <paramref name="asm" />. Exposed so a non-vacuity test can assert the
+    ///     IL walk is reading real instructions rather than a method table — a
+    ///     probe that walked zero bodies would still "find" every type.
     /// </summary>
-    internal static int InstructionCount(MethodDefinition method)
+    internal static int TotalInstructionCount(Assembly asm)
     {
-        MethodBody body = method.Body;
-        return body.Instructions.Count;
+        string? simpleName = asm.GetName().Name;
+        if (string.IsNullOrEmpty(simpleName))
+        {
+            throw new InvalidOperationException("[renderer-seam] assembly has no simple name.");
+        }
+
+        using AssemblyDefinition definition = AssemblyDefinition.ReadAssembly(
+            Path.Combine(AppContext.BaseDirectory, simpleName + ".dll"));
+
+        int total = 0;
+        foreach (TypeDefinition type in definition.MainModule.Types)
+        {
+            foreach (MethodDefinition method in type.Methods)
+            {
+                if (method.HasBody)
+                {
+                    total += method.Body.Instructions.Count;
+                }
+            }
+        }
+
+        return total;
     }
 }
 
@@ -432,8 +469,14 @@ public sealed class RendererEventSeamRule
         var facts = RendererSeamProbe.Scan(self, out int topLevelTypeCount);
 
         await Assert.That(topLevelTypeCount).IsGreaterThan(0);
-        await Assert.That(facts.Count).IsGreaterThanOrEqualTo(2)
-            .Because("this file declares the two probe renderers below; if the probe cannot see "
+        await Assert.That(RendererSeamProbe.TotalInstructionCount(self)).IsGreaterThan(0)
+            .Because("the IL walk must be reading real method bodies. A probe that walked the type "
+                   + "table but no instructions would still 'find' every type and report no seam, "
+                   + "which is the vacuous shape this file is built to rule out");
+
+        await Assert.That(facts.Count).IsGreaterThanOrEqualTo(3)
+            .Because("this file declares three types below that reach BaseTuiRenderer: the abstract "
+                   + "ProbeRendererBase and the two concrete probes. If the probe cannot see all of "
                    + "them it cannot see anything, and the rule is a comment");
 
         // The walk must be looking at real INSTRUCTIONS, not a method table.
@@ -595,7 +638,8 @@ public sealed class RendererEventSeamRule
         int TopLevelTypesScanned)
     {
         /// <summary>Number of non-abstract renderers — the family list the rule is about.</summary>
-        public int ConcreteRendererCount => Renderers.Values.Count(facts => !facts.IsAbstract);
+        public int ConcreteRendererCount =>
+            Renderers.Values.Count(facts => facts.IsRenderer && !facts.IsAbstract);
     }
 
     private static RenderersInventory Build()
@@ -626,8 +670,9 @@ public sealed class RendererEventSeamRule
 
     /// <summary>
     ///     Whether any loaded type in <paramref name="asm" /> derives from
-    ///     <see cref="BaseTuiRenderer" />. Reflection is used only as a cheap
-    ///     pre-filter; every claim the rule makes comes from IL.
+    ///     <see cref="BaseTuiRenderer" />. Reflection only — it is the exact
+    ///     answer, and it is the same call the probe makes, so the pre-filter
+    ///     cannot disagree with the scan it guards.
     /// </summary>
     private static bool MentionsBaseRenderer(Assembly asm)
     {
@@ -682,52 +727,72 @@ public sealed class RendererEventSeamRule
                 return cached;
             }
 
-            if (!byTypeName.TryGetValue(typeName, out RendererFacts? facts) || !visiting.Add(typeName))
+            if (!visiting.Add(typeName))
             {
-                // Not ours to judge, or already on this chain — treat as
-                // conformant so the judgement belongs to the type that owns the
-                // decision rather than to a cycle in a base chain.
-                conformant[typeName] = true;
-                return true;
+                // A cycle in a base chain. The type that closes it is the one
+                // that gets judged, not this one.
+                return false;
             }
 
-            bool ok = facts.CallsRegisterHandler || facts.NewStoresChatAppMsgAgent;
+            bool result;
 
-            if (!ok && facts.BaseTypeName is { } baseName)
+            if (!byTypeName.TryGetValue(typeName, out RendererFacts? facts))
             {
-                ok = IsConformant(baseName, visiting);
+                // NOT in the table, so NOT a seam we measured. Concluding
+                // "conformant" here is the bug that made the first version of
+                // this rule pass vacuously: an abstract base nobody had scanned
+                // granted conformity to everything under it. A type the probe
+                // cannot judge contributes nothing.
+                result = false;
             }
-
-            if (!ok)
+            else
             {
-                foreach (string bridgeType in facts.BridgeFieldTypes)
+                result = facts.CallsRegisterHandler || facts.NewStoresChatAppMsgAgent;
+
+                // Inherit along the BASE chain only while the base is itself a
+                // renderer. `BaseTuiRenderer` is abstract and takes no seam, so
+                // walking into it must end the walk, not grant conformity.
+                if (!result && facts.IsRenderer && facts.BaseTypeName is { } baseName
+                    && byTypeName.TryGetValue(baseName, out RendererFacts? baseFacts)
+                    && baseFacts.IsRenderer)
                 {
-                    if (IsConformant(bridgeType, visiting))
+                    result = IsConformant(baseName, visiting);
+                }
+
+                // The one legitimate hop for a non-renderer: a bridge field.
+                if (!result)
+                {
+                    foreach (string bridgeType in facts.BridgeFieldTypes)
                     {
-                        ok = true;
-                        break;
+                        if (byTypeName.ContainsKey(bridgeType)
+                            && IsConformant(bridgeType, visiting))
+                        {
+                            result = true;
+                            break;
+                        }
                     }
                 }
             }
 
             visiting.Remove(typeName);
-            conformant[typeName] = ok;
-            return ok;
+            conformant[typeName] = result;
+            return result;
         }
 
         var violations = new List<RendererSeamViolation>();
         foreach (RendererFacts facts in inventory.Renderers.Values)
         {
-            if (facts.IsAbstract || IsConformant(facts.TypeName, new HashSet<string>(StringComparer.Ordinal)))
+            if (!facts.IsRenderer
+                || facts.IsAbstract
+                || IsConformant(facts.TypeName, new HashSet<string>(StringComparer.Ordinal)))
             {
                 continue;
             }
 
-            string why = facts.CallsRegisterHandler || facts.NewStoresChatAppMsgAgent
-                ? "unreachable"
-                : $"no call to RegisterHandler, no `new ChatAppMsg.Agent(`, "
-                  + $"no bridge field ({string.Join(", ", facts.BridgeFieldTypes)}), "
-                  + $"and base '{facts.BaseTypeName ?? "<none>"}' takes no seam either";
+            string why =
+                $"no call to RegisterHandler, no `new ChatAppMsg.Agent(`, "
+                + $"no bridge field that takes one ({string.Join(", ", facts.BridgeFieldTypes)}), "
+                + $"and base '{facts.BaseTypeName ?? "<none>"}' takes no seam either";
 
             violations.Add(new RendererSeamViolation(facts.TypeName, facts.Assembly, why));
         }
