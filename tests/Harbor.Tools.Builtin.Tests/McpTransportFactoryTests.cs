@@ -362,11 +362,17 @@ public class McpTransportFactoryTests
 
     private sealed class StubTransport(string? response) : IMcpRemoteTransport
     {
-        public Task<System.Text.Json.JsonDocument?> RoundTripAsync(
+        // #587: the seam is Result<Maybe<JsonDocument>>. A null `response` models a
+        // server that answers with no document (Maybe.None) — NOT a transport
+        // failure, which is what the registry's "returned no response" branch is for.
+        public Task<Result<Maybe<System.Text.Json.JsonDocument>>> TryRoundTripAsync(
             System.Text.Json.JsonElement request,
             int? expectedId = null,
             CancellationToken cancellationToken = default)
-            => Task.FromResult(response is null ? null : System.Text.Json.JsonDocument.Parse(response));
+            => Task.FromResult(response is null
+                ? Result.Success(Maybe<System.Text.Json.JsonDocument>.None)
+                : Result.Success(Maybe<System.Text.Json.JsonDocument>.From(
+                    System.Text.Json.JsonDocument.Parse(response))));
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

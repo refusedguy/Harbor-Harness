@@ -13,10 +13,30 @@ namespace Harbor.Tools.Mcp;
 ///     in through <see cref="IMcpTransportFactory" /> — it was internal, which
 ///     made the existing seam unusable from outside this assembly.
 /// </summary>
+/// <remarks>
+///     The seam carries <c>Result&lt;Maybe&lt;JsonDocument&gt;&gt;</c> and nothing
+///     else (#587). Three outcomes have to stay tellable apart, and a nullable
+///     return collapses the first two into one <c>null</c>:
+///     <list type="bullet">
+///     <item><c>Failure</c> — the transport failed, and the error names the endpoint,
+///     the HTTP status, the attempt count and the latency.</item>
+///     <item><c>Success(Maybe.None)</c> — the server answered, and the answer
+///     legitimately carries no document (<c>202 Accepted</c>, empty body).</item>
+///     <item><c>Success(Maybe.From(doc))</c> — the response (caller disposes).</item>
+///     </list>
+///     A nullable-returning member is banned here by
+///     <c>tests/Harbor.Architecture.Tests/RemoteTransportResultRules.cs</c>, which
+///     reflects over this interface and fails if one reappears.
+/// </remarks>
 public interface IMcpRemoteTransport : IAsyncDisposable
 {
-    /// <summary>Send one JSON-RPC request and return the matching response (caller disposes), or null when none arrived.</summary>
-    Task<JsonDocument?> RoundTripAsync(
+    /// <summary>
+    ///     Send one JSON-RPC request and return the matching response (caller
+    ///     disposes). <c>Maybe.None</c> is a successful round-trip whose answer
+    ///     carries no document — not a failure. User cancellation and disposal
+    ///     still throw; every other wire failure is a <c>Failure</c>.
+    /// </summary>
+    Task<Result<Maybe<JsonDocument>>> TryRoundTripAsync(
         JsonElement request,
         int? expectedId = null,
         CancellationToken cancellationToken = default);
@@ -64,30 +84,12 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     }
 
     /// <summary>
-    ///     POST one JSON-RPC request and return the response document (caller disposes),
-    ///     or null when the server answered <c>202 Accepted</c> (notification-style).
-    ///     When the response is an SSE stream, the first <c>message</c> frame matching
-    ///     <paramref name="expectedId" /> is returned.
-    ///     Compat wrapper over <see cref="TryRoundTripAsync" />: terminal transport
-    ///     failures map to null (callers treat that as a transport failure), so this
-    ///     method only throws on user cancellation or disposal.
-    /// </summary>
-    public async Task<JsonDocument?> RoundTripAsync(
-        JsonElement request,
-        int? expectedId = null,
-        CancellationToken cancellationToken = default)
-    {
-        Result<Maybe<JsonDocument>> roundTrip =
-            await TryRoundTripAsync(request, expectedId, cancellationToken).ConfigureAwait(false);
-        return roundTrip.Match(static doc => doc.HasValue ? doc.Value : null, _ => null);
-    }
-
-    /// <summary>
-    ///     Result railway for the round-trip (#201 C4): expected network failures
-    ///     (5xx/408, client-side timeout, no-frame SSE body, unreachable endpoint)
-    ///     surface as <c>Failure(endpoint + attempts + latency + cause)</c> instead of
-    ///     throwing. Retry/timeout policy stays inside; user cancellation and
-    ///     disposal still throw.
+    ///     Result railway for the round-trip (#201 C4, sealed to the interface in
+    ///     #587): expected network failures (5xx/408, client-side timeout, no-frame
+    ///     SSE body, unreachable endpoint) surface as
+    ///     <c>Failure(endpoint + attempts + latency + cause)</c> instead of throwing.
+    ///     Retry/timeout policy stays inside; user cancellation and disposal still
+    ///     throw.
     ///     <c>Maybe.None</c> means "succeeded, and the answer legitimately carries no
     ///     document" (202 Accepted, empty body) — a different state from a failure,
     ///     which is why the value is a <see cref="Maybe{T}" /> and not a null.
@@ -126,7 +128,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
 
                 if ((int)httpResponse.StatusCode >= 500 || httpResponse.StatusCode == HttpStatusCode.RequestTimeout)
                 {
-                    string cause = $"MCP endpoint returned {(int)httpResponse.StatusCode}.";
+                    string cause = $"server returned {(int)httpResponse.StatusCode}";
                     if (attempt >= MaxAttempts)
                         return Fail<Maybe<JsonDocument>>(sw, attempt, cause);
                     _logger?.LogWarning("MCP HTTP request to {Endpoint} failed (attempt {Attempt}/{Max}): {Cause}; retrying",
@@ -150,7 +152,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 // Client-side per-attempt timeout — retryable, unlike user cancellation.
-                string cause = $"MCP endpoint did not respond within {_requestTimeout.TotalSeconds:F0}s.";
+                string cause = $"server did not respond within {_requestTimeout.TotalSeconds:F0}s";
                 if (attempt >= MaxAttempts)
                     return Fail<Maybe<JsonDocument>>(sw, attempt, cause);
 
@@ -268,7 +270,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             }
             catch (JsonException ex)
             {
-                return Result.Failure<Maybe<JsonDocument>>($"MCP response was not valid JSON: {ex.Message}");
+                return Result.Failure<Maybe<JsonDocument>>($"response was not valid JSON: {ex.Message}");
             }
         }
 
@@ -284,7 +286,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             }
         }
 
-        return Result.Failure<Maybe<JsonDocument>>("MCP SSE response carried no matching JSON-RPC frame.");
+        return Result.Failure<Maybe<JsonDocument>>("SSE response carried no matching JSON-RPC frame.");
     }
 
     /// <summary>
@@ -321,9 +323,16 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         }
     }
 
+    /// <summary>
+    ///     The one place a transport failure is spelled out (#587). One line, in the
+    ///     order an operator reads it — which link, how many tries, how long, and
+    ///     then the server's own words. The leading <c>MCP</c> is dropped because
+    ///     every caller reaches this through a message that already names MCP
+    ///     (<c>MCP server 'x': …</c>), and repeating it only made the line longer.
+    /// </summary>
     private Result<T> Fail<T>(Stopwatch sw, int attempts, string cause)
     {
-        string error = $"MCP HTTP round-trip to {_endpoint} failed after {attempts} attempt(s) in {sw.Elapsed.TotalMilliseconds:0}ms: {cause}";
+        string error = $"HTTP {_endpoint} failed after {attempts} attempt(s) in {sw.Elapsed.TotalMilliseconds:0}ms: {cause}";
         _logger?.LogError("MCP HTTP transport failure: {Error}", error);
         return Result.Failure<T>(error);
     }
