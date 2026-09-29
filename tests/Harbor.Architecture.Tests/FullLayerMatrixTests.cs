@@ -230,12 +230,7 @@ public class FullLayerMatrixTests
         // AssemblyRef — the edge was unenforceable permission. Removed; the leaf
         // Ui.Framework.* modules are the real dependencies.
         ["Harbor.Terminal.Abstractions"] = new(Layer.Presentation, ["Harbor.Abstractions"]),
-        ["Harbor.Ui.Framework"] = new(Layer.Presentation,
-        [
-            "Harbor.Ui.Framework.Abstractions", "Harbor.Ui.Framework.State",
-            "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.ViewModels",
-            "Harbor.Ui.Framework.Projection", "Harbor.Ui.Framework.Sessions",
-        ]),
+        ["Harbor.Ui.Framework"] = new(Layer.Presentation, []),
         ["Harbor.Ui.Framework.State"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.Abstractions",
                 // #33 T1: KeyEventAdapter consumes the BCL-only UiKeyDto key
@@ -243,13 +238,13 @@ public class FullLayerMatrixTests
                 // old Rendering→State one; Presentation→Presentation conforms.
                 "Harbor.Ui.Framework.Rendering"]),
         ["Harbor.Ui.Framework.Reducers"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State"]),
+            [ "Harbor.Ui.Framework.State"]),
         ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Reducers", "Harbor.Ui.Framework.Abstractions"]),
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Reducers"]),
         ["Harbor.Ui.Framework.ViewModels"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions"]),
+            [ "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services"]),
         ["Harbor.Ui.Framework.Projection"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
+            [ "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
              // RgbColor is defined in the standalone DesignSystem package but
              // keeps its historical Projection namespace for compatibility.
              "Harbor.DesignSystem"]),
@@ -265,8 +260,7 @@ public class FullLayerMatrixTests
         // (and no Projection edge: unrealized, and State→Rendering plus
         // Rendering→Projection→State would be an MSBuild cycle).
         ["Harbor.Ui.Framework.Rendering"] = new(Layer.Presentation,
-            ["Harbor.DesignSystem", "Harbor.Desktop.Animations",
-                // #75: canonical ctx% helper (ContextUsage) — Presentation → Domain is rule-conforming.
+            ["Harbor.DesignSystem", // #75: canonical ctx% helper (ContextUsage) — Presentation → Domain is rule-conforming.
                 "Harbor.Abstractions.Contracts"]),
         // HDS v1 token catalog — standalone leaf: ZERO Harbor references. The
         // design-system package ships RgbColor (under the historical Projection
@@ -274,7 +268,7 @@ public class FullLayerMatrixTests
         // Projection/Rendering/CellForge/apps all resolve them from here.
         ["Harbor.DesignSystem"] = new(Layer.Presentation, []),
         ["Harbor.Ui.Framework.Sessions"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.ViewModels", "Harbor.Ui.Framework.Abstractions"]),
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions"]),
         // #450: "Harbor.Terminal.Abstractions" and "Harbor.Ui.Framework" were both
         // permitted but never referenced. Terminal.Abstractions is dead permission
         // (no file names the ITuiRenderer/ITuiView vocabulary); Ui.Framework is an
@@ -297,7 +291,7 @@ public class FullLayerMatrixTests
         ["Harbor.Desktop.Animations"] = new(Layer.Presentation,
             ["Harbor.DesignSystem"]),
         ["Harbor.Tui.Notifications"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
+            [ "Harbor.Terminal.Abstractions"]),
         // renderer-unification Phase 4: Ansi + Plain merged into one assembly;
         // styling flows through IEscapeCodeStrategy (Ansi / Null impls).
         // Issue #77: chat writes land in the DI-shared UiStore (Presentation→
@@ -309,9 +303,7 @@ public class FullLayerMatrixTests
         // the State KeyEventAdapter over the shared UiKeyDto vocabulary, cell
         // styles via DesignSystem tokens, shared blocks via Ui.Framework.Rendering.
         ["Harbor.Tui.CellForge.Engine"] = new(Layer.Presentation,
-            [
-                "Harbor.Abstractions",
-                "Harbor.Ui.Framework.State",
+            [ "Harbor.Ui.Framework.State",
                 "Harbor.Ui.Framework.Rendering",
                 "Harbor.DesignSystem",
             ]),
@@ -338,8 +330,7 @@ public class FullLayerMatrixTests
                 "Harbor.Ui.Framework.ViewModels",
                 "Harbor.Ui.Framework.Sessions",
                 "Harbor.Ui.Framework.Abstractions",
-                "Harbor.DesignSystem", "Harbor.Desktop.Animations",
-            ]),
+                "Harbor.DesignSystem", ]),
         // #450: SharpConsoleUI-based renderer (HARBOR_TUI=nickconsoleex), wired
         // behind HarborWithNickConsoleEx. It lives in src/ and Harbor.Hosting
         // references it, so it belongs on the matrix like any other Presentation
@@ -347,7 +338,7 @@ public class FullLayerMatrixTests
         // (Terminal.Abstractions) and nothing else. The third-party
         // SharpConsoleUI project it wraps is not a Harbor assembly.
         ["Harbor.Tui.NickConsoleEx"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
+            [ "Harbor.Terminal.Abstractions"]),
 
         // ---- Application ----------------------------------------------------
         ["Harbor.Application"] = new(Layer.Application,
@@ -423,12 +414,9 @@ public class FullLayerMatrixTests
             // that no file named the namespace, but the IL reference is real (the
             // IL gate caught the regression), so it is permitted again.
             "Harbor.Ui.Framework.Sessions",
-            "Harbor.Storage.Jsonl", "Harbor.Storage.Memory", "Harbor.Storage.Sqlite",
-            "Harbor.Tui.AnsiPlain",
+            "Harbor.Storage.Jsonl", "Harbor.Storage.Memory", "Harbor.Tui.AnsiPlain",
             "Harbor.Tui.CellForge",
-            "Harbor.Providers.Ollama", "Harbor.Providers.OpenAiCompatible",
-            "Harbor.Providers.Anthropic", "Harbor.Providers.OpenAI",
-            "Harbor.Tools.Builtin", "Harbor.Lsp", "Harbor.Ipc.Abstractions",
+            "Harbor.Providers.Ollama", "Harbor.Providers.OpenAiCompatible", "Harbor.Tools.Builtin", "Harbor.Lsp", "Harbor.Ipc.Abstractions",
             "Harbor.Ipc.InProcess", "Harbor.Ipc.Server", "Harbor.Ipc.Client",
             // #450: "Harbor.Plugins.Runtime" and "Harbor.Ui.Framework.Sessions"
             // were permitted but never bound — the composition root composes the
@@ -439,11 +427,7 @@ public class FullLayerMatrixTests
             "Harbor.Plugins.Registration", "Harbor.Plugins.Hosting",
             // Trust gate (IPluginSource/PluginScript contract) composed in RegistriesModule:
             "Harbor.Plugins.Abstractions",
-            // contrib/tui renderer references live outside src/:
-            "Harbor.Tui.Spectre", "Harbor.Tui.Spectre.Fullscreen",
-            "Harbor.Tui.SpectreTui", "Harbor.Tui.TerminalGui",
-            "Harbor.Tui.Termina", "Harbor.Tui.RazorConsole",
-            // renderer-unification Phase 3: nickprotop/ConsoleEx wrapper,
+            // contrib/tui renderer references live outside src/: // renderer-unification Phase 3: nickprotop/ConsoleEx wrapper,
             // wired behind HarborWithNickConsoleEx (mutually exclusive with
             // HarborWithSpectreTui — see Harbor.Hosting.csproj).
             "Harbor.Tui.NickConsoleEx",

@@ -55,6 +55,56 @@ public sealed class EnforcerIntegrityTests
     /// </summary>
     internal static readonly UnboundReference[] DeclaredButUnboundProjectReferences =
     [
+        new("Harbor.Hosting", "Harbor.Providers.Anthropic",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Hosting", "Harbor.Providers.OpenAI",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Hosting", "Harbor.Storage.Sqlite",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Hosting", "Harbor.Tui.RazorConsole",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Hosting", "Harbor.Tui.Spectre",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Hosting", "Harbor.Tui.Spectre.Fullscreen",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Hosting", "Harbor.Tui.SpectreTui",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Hosting", "Harbor.Tui.Termina",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Hosting", "Harbor.Tui.TerminalGui",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Tui.CellForge", "Harbor.Desktop.Animations",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Tui.CellForge.Engine", "Harbor.Abstractions",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Tui.NickConsoleEx", "Harbor.Abstractions",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Tui.Notifications", "Harbor.Abstractions",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework", "Harbor.Ui.Framework.Projection",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework", "Harbor.Ui.Framework.Services",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework", "Harbor.Ui.Framework.Sessions",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework", "Harbor.Ui.Framework.State",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework", "Harbor.Ui.Framework.ViewModels",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework.Projection", "Harbor.Abstractions",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework.Reducers", "Harbor.Abstractions",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework.Rendering", "Harbor.Desktop.Animations",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework.Sessions", "Harbor.Ui.Framework.ViewModels",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework.ViewModels", "Harbor.Abstractions",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        new("Harbor.Ui.Framework.ViewModels", "Harbor.Ui.Framework.Abstractions",
+            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
         new("Harbor.Ui.Framework.Abstractions", "Harbor.Abstractions",
             "#450: declared but binds no type — the assembly's contracts are BCL-only, so the edge produces no IL."),
         new("Harbor.Terminal.Abstractions", "Harbor.Ui.Framework",
@@ -217,16 +267,26 @@ public sealed class EnforcerIntegrityTests
             }
 
             var actual = ArchitectureTestHelpers.GetReferencedAssemblyNames(asm);
-            foreach (string permitted in FullLayerMatrixTests.ExpandAllowed(name, row)
-                         .OrderBy(n => n, StringComparer.Ordinal))
+            var permitted = FullLayerMatrixTests.ExpandAllowed(name, row);
+
+            // The facade→Contracts edge is implicit, not a declared permission:
+            // see FacadeAssembly. Judging it here would flag every consumer that
+            // binds contract types without binding the facade assembly itself.
+            bool permitsFacade = permitted.Contains(FacadeAssembly);
+            if (permitsFacade)
             {
-                if (actual.Contains(permitted))
+                permitted.Remove(ContractAssembly);
+            }
+
+            foreach (string edge in permitted.OrderBy(n => n, StringComparer.Ordinal))
+            {
+                if (actual.Contains(edge))
                 {
                     continue;
                 }
 
                 failures.Add(
-                    $"{name} -> {permitted}: permitted by the matrix but the assembly does not reference it — " +
+                    $"{name} -> {edge}: permitted by the matrix but the assembly does not reference it — " +
                     "stale allowed-set entry, remove it (or add a DocumentedException if the edge is real)");
             }
         }
@@ -625,6 +685,20 @@ public sealed class EnforcerIntegrityTests
     // Regex sources use verbatim strings (@"") throughout: several patterns end
     // with a '"' or contain '"""' sequences, which a raw string literal cannot
     // express without a 4-quote delimiter.
+    /// <summary>
+    ///     The implicit facade edge: permitting <c>Harbor.Abstractions</c> also
+    ///     permits <c>Harbor.Abstractions.Contracts</c>, because the facade
+    ///     re-exports contract types and consumer IL legitimately emits the
+    ///     Contracts AssemblyRef. Excluded from
+    ///     <see cref="Matrix_AllowedEntries_AreLive" />: the derived edge is not a
+    ///     hand-written permission, and a consumer may bind contract types without
+    ///     binding the facade assembly itself.
+    /// </summary>
+    internal const string FacadeAssembly = "Harbor.Abstractions";
+
+    /// <summary>The contract assembly the facade re-exports.</summary>
+    internal const string ContractAssembly = "Harbor.Abstractions.Contracts";
+
     private static readonly Regex NamespacePattern = new(
         @"^\s*namespace\s+([A-Za-z0-9_.]+)\s*[;{]",
         RegexOptions.Multiline | RegexOptions.CultureInvariant,
