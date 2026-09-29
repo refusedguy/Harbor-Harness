@@ -19,7 +19,7 @@
            Expand="true">
         <ViewHeightScrollable LinesToRender="20">
             <Rows>
-                @if (_lines.Count == 0 && !State.IsStreaming)
+                @if (_lines.Count == 0 && !State.Chat.IsStreaming)
                 {
                     <Markup Content="No messages yet - type below to start chatting."
                             Foreground="@Color.Grey"
@@ -31,21 +31,21 @@
                     <Markup Content="@line" Foreground="@Color.Grey85"/>
                 }
 
-                @if (State.IsStreaming)
+                @if (State.Chat.IsStreaming)
                 {
-                    @if (!string.IsNullOrWhiteSpace(State.Active.ThinkBuffer))
+                    @if (!string.IsNullOrWhiteSpace(State.Chat.Active.ThinkBuffer))
                     {
-                        <Markup Content="@State.Active.ThinkBuffer.Trim()"
+                        <Markup Content="@State.Chat.Active.ThinkBuffer.Trim()"
                                 Foreground="@Color.Grey54"
                                 Decoration="Decoration.Italic"/>
                     }
 
-                    @if (!string.IsNullOrWhiteSpace(State.Active.TextBuffer))
+                    @if (!string.IsNullOrWhiteSpace(State.Chat.Active.TextBuffer))
                     {
-                        <Markup Content="@State.Active.TextBuffer.Trim()"
+                        <Markup Content="@State.Chat.Active.TextBuffer.Trim()"
                                 Foreground="@Color.Grey85"/>
                     }
-                    else if (string.IsNullOrWhiteSpace(State.Active.ThinkBuffer))
+                    else if (string.IsNullOrWhiteSpace(State.Chat.Active.ThinkBuffer))
                     {
                         <Newline/>
                         <Markup Content="Harbor is thinking..."
@@ -76,12 +76,15 @@ private string _statusBar = string.Empty;
 private IReadOnlyList<string> _lines = [];
     private readonly DefaultUiProjector _projector = new();
 
+// #364 removed the flat forwarding surface (State.IsStreaming -> State.Chat.
+// IsStreaming); this page was never recompiled after that, so the reads
+// below go through the two typed parts the state layer actually has.
 private UiState State => Harbor.Store.State;
 
 private string PanelTitle =>
-    $"Harbor · {State.AgentName} · {State.Provider}/{State.Model} · {State.Status}";
+    $"Harbor · {State.Chat.AgentName} · {State.Chat.Provider}/{State.Chat.Model} · {State.Chat.Status}";
 
-private Color StatusColor => State.Status switch
+private Color StatusColor => State.Chat.Status switch
 {
     "running" => Color.Cyan1,
     "compacting" => Color.Yellow,
@@ -113,7 +116,7 @@ private void ProjectState()
         _lines = builder.ToImmutable();
         _statusBar = screen.Header.FooterText;
 
-        if (State.ShouldQuit)
+        if (State.Ui.ShouldQuit)
             Lifetime.StopApplication();
     }
 

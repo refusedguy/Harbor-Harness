@@ -214,6 +214,10 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
         public bool CanHandle(AgentEvent @event) =>
             @event is MessageStartEvent or MessageUpdateEvent or MessageEndEvent;
 
+        /// <summary>Blended per-million-token price; only this handler charges it.</summary>
+        private static decimal EstimateCost(int inTok, int outTok)
+            => inTok / 1_000_000m * 3m + outTok / 1_000_000m * 15m;
+
         public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             switch (@event)
@@ -320,9 +324,6 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             return Task.CompletedTask;
         }
     }
-
-    private static decimal EstimateCost(int inTok, int outTok)
-        => inTok / 1_000_000m * 3m + outTok / 1_000_000m * 15m;
 
     private async Task RunInputLoopAsync(IAgent agent, CancellationToken ct)
     {
