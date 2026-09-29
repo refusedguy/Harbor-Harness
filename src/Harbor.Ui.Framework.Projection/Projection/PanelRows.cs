@@ -434,6 +434,23 @@ public static class PanelText
     }
 
     /// <summary>Collapse a multi-line log message onto one display row.</summary>
+    /// <remarks>
+    ///     This <b>substitutes</b> CR and LF with a space; it does not delete
+    ///     whitespace. Length is preserved, tabs and space runs survive, and the
+    ///     result can still be budgeted by column count.
+    ///     <para>
+    ///         The E2E tear-tolerant matcher
+    ///         (<c>TuiDriver.StripWhitespace</c> in tests/Harbor.E2E.Framework)
+    ///         used to be called <c>CollapseWhitespace</c> and does the opposite:
+    ///         it <b>deletes</b> every whitespace character so a pattern still
+    ///         matches after a renderer tore a row across grid lines. It was
+    ///         renamed when #574's duplicate census surfaced the name collision,
+    ///         and the two behaviours are pinned apart by
+    ///         <c>WhitespaceCollapseDivergenceTests</c>. Do not fold one into
+    ///         the other — they are separate requirements, not one helper
+    ///         written twice.
+    ///     </para>
+    /// </remarks>
     public static string SingleLine(string text)
     {
         if (string.IsNullOrEmpty(text))
