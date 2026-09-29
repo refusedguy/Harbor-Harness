@@ -70,20 +70,54 @@ public sealed class SessionFactory
     }
 
     /// <summary>
-    ///     Load the fresh common-config from disk and split the
-    ///     DefaultProvider/DefaultModel into a (providerId, modelId) pair.
-    ///     Returns (null, null) if the config can't be loaded.
+    ///     Load the fresh common-config from disk and read the provider/model
+    ///     choice as ONE reference.
     /// </summary>
-    public async Task<(string? ProviderId, string? ModelId)> ResolveProviderModelFromConfigAsync()
+    /// <returns>
+    ///     The reference the config names, or <c>Maybe.None</c> when it names no
+    ///     usable pair — no reader registered, no config written yet, a config
+    ///     that could not be read, or a half-written one.
+    /// </returns>
+    /// <remarks>
+    ///     <para>
+    ///         #598: this used to return <c>(string? ProviderId, string? ModelId)</c>.
+    ///         A two-element tuple of nullable strings makes THREE states spellable
+    ///         — both present, both absent, and exactly one present — and the type
+    ///         could tell none of them apart. The three callers then answered the
+    ///         half case differently:
+    ///         <see cref="ResolveAgentDefinitionAsync" /> coalesced per element
+    ///         (<c>providerId ?? configProvider ?? agentDef.ProviderId</c>), while
+    ///         <see cref="CreateDefaultAsync" /> and
+    ///         <c>SessionLifecycleService.RebindFromCommonConfigAsync</c> both
+    ///         discarded the whole pair — once with <c>&amp;&amp;</c>, once with
+    ///         <c>||</c>. Only a hand-written normalisation in this body kept them
+    ///         agreeing, and nothing stopped a second producer from forgetting it.
+    ///     </para>
+    ///     <para>
+    ///         There is no half to represent. <c>CommonConfigReaderAdapter</c>
+    ///         already answers <c>null</c> when either field is blank, and
+    ///         <see cref="ModelRef.Qualify" /> rejects a blank model — so the
+    ///         domain's single void is "no usable pair", and the signature now says
+    ///         so instead of leaving the caller to re-derive it.
+    ///     </para>
+    ///     <para>
+    ///         Not a <c>Result</c>. "Nothing is configured yet" is the normal state
+    ///         of every install before onboarding, with no error message to report.
+    ///         The pre-fix body is the proof: it built a <c>Result</c> from
+    ///         <see cref="ModelRef.Qualify" /> and threw it away on the next line
+    ///         via <c>GetValueOrDefault((null, null))</c>.
+    ///     </para>
+    /// </remarks>
+    public async Task<Maybe<ModelRef>> ResolveProviderModelFromConfigAsync()
     {
         // #63 legitimate: optional dependency — hosts without a common-config
-        // reader (tests, minimal embeds) get (null, null) instead of a throw.
+        // reader (tests, minimal embeds) get None instead of a throw.
         // #470: resolved once by the composition root, not looked up per call.
         var configReader = _configReader;
-        if (configReader is null) return (null, null);
+        if (configReader is null) return Maybe<ModelRef>.None;
 
         var pair = await configReader.TryReadProviderModelAsync().ConfigureAwait(false);
-        if (pair is null) return (null, null);
+        if (pair is null) return Maybe<ModelRef>.None;
 
         (string? provider, string? model) = pair.Value;
 
@@ -96,11 +130,10 @@ public sealed class SessionFactory
         // and a redundant prefix for the same provider ("kilocode/tencent/hy3:free"
         // — what HARBOR_MODEL and the settings screen write). A provider id that
         // is not a valid id now falls back to the agent definition instead of
-        // reaching the session verbatim.
-        var resolved = ModelRef.Qualify(provider, model);
-        return resolved
-            .Map(static reference => (ProviderId: (string?)reference.ProviderId.Value, ModelId: (string?)reference.ModelId))
-            .GetValueOrDefault((null, null));
+        // reaching the session verbatim — which is also why an unusable config
+        // arrives here as None rather than as a half-filled pair.
+        Result<ModelRef> qualified = ModelRef.Qualify(provider, model);
+        return qualified.IsSuccess ? Maybe<ModelRef>.From(qualified.Value) : Maybe<ModelRef>.None;
     }
 
     /// <summary>
@@ -118,10 +151,18 @@ public sealed class SessionFactory
         // #596: this was the same lookup as ResolveAgentForSession, inlined a third time.
         var agentDef = ResolveAgentForSession(agentName);
 
-        (string? configProvider, string? configModel) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
-        string provider = providerId ?? configProvider ?? agentDef.ProviderId;
-        string model = modelId ?? configModel ?? agentDef.Model;
-        return agentDef.WithModel(model, provider);
+        // #598: the config contributes BOTH halves or NEITHER, so the override
+        // parameters are the only genuinely per-field input here. They used to be
+        // coalesced against two independently-nullable config halves, which read
+        // as "a half pair is a valid thing to mix with the agent default".
+        Maybe<ModelRef> configured = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
+        if (configured.HasValue)
+        {
+            providerId ??= configured.Value.ProviderId.Value;
+            modelId ??= configured.Value.ModelId;
+        }
+
+        return agentDef.WithModel(modelId ?? agentDef.Model, providerId ?? agentDef.ProviderId);
     }
 
     /// <summary>
@@ -213,10 +254,12 @@ public sealed class SessionFactory
         var agentDef = ResolveDefaultAgentDefinition();
 
         // Override the agent definition with the fresh CommonConfig values.
-        (string? providerId, string? modelId) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
-        if (!string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId))
+        // #598: the `&& IsNullOrEmpty` guard was the caller re-deriving what the
+        // value now states — a reference is whole, so there is no half to test.
+        Maybe<ModelRef> configured = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
+        if (configured.HasValue)
         {
-            agentDef = agentDef.WithModel(modelId, providerId);
+            agentDef = agentDef.WithModel(configured.Value.ModelId, configured.Value.ProviderId.Value);
         }
 
         string directory = Environment.CurrentDirectory;
