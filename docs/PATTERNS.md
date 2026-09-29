@@ -424,7 +424,7 @@ then the default arm invents an answer. Every instance in #578 is the default ar
 | #553 | `Rect.Width < 2` guard lost in 2 of 7 copies; corners drawn **outside** the requested rect |
 | #557 | `PathGuardSafetyPolicy.DefaultTools` (`IArgSafetyPolicy.cs:107-110`) is a hand-rolled tool-name list; omitting a path-taking write-tool means `new("mytool","src/*",Allow)` authorises `src/../../../etc/passwd` |
 
-### The two wire unions, which are the hand-maintained lists
+### The wire unions, which are the hand-maintained lists
 
 - `src/Harbor.Abstractions.Contracts/Events/AgentEvent.cs:9-25` — 17
   `[JsonDerivedType]` entries for the `AgentEvent` record union; the nested
@@ -439,6 +439,15 @@ then the default arm invents an answer. Every instance in #578 is the default ar
   the `HarborEventKind` enum values exactly". Here the namespace **does** match
   the project (`Harbor.Ipc.Protocol`), which is exactly why the previous bullet
   is worth writing down.
+- `src/Harbor.Ipc.Abstractions/Protocol/HarborRequest.cs:35-49` — 15 MessagePack
+  `[Union(n, typeof(T))]` tags, the request union the guard grades as
+  `HarborRequest` since #485. Unlike the three above, the guard does **not** read
+  its members off the tags: `MessagePack.UnionAttribute` exposes only `Key` as a
+  public member in 3.1.x, so a tag census yields integers and no names. It reads
+  the type system instead — which is the stronger source anyway, because it also
+  names a subtype added *without* a tag, and tag coverage is already owned by
+  MessagePack's analyzer plus `ProtocolSerializationTests` (which round-trips
+  every subtype through the abstract base, so an untagged member fails there).
 
 These are exactly the lists rule 3 is about, and rule 4 is what keeps them honest:
 the guard reads the member set **by reflection** rather than from a typed-out
@@ -466,6 +475,23 @@ the switch and nothing happens, silently. A wildcard arm invents an answer; a
 missing arm simply does not. The exhaustiveness half (#578 rule 1 done properly)
 is the per-union reflection test, and per #578 it lands with each union's
 refactor.
+
+**The first one to land it is `HarborRequest` (#485).** That union's refactor did
+not produce a switch with every arm named — it produced no switch at all:
+
+| piece | where | what it guarantees |
+|---|---|---|
+| the census | `src/Harbor.Ipc.Server/Protocol/HarborRequestTypes.cs` | the union's member set, by reflection over `typeof(HarborRequest).Assembly` |
+| the composition boundary | `RequestDispatcher`'s constructor | **throws**, naming the missing types, if a member has no handler — a new request type without one is a startup failure |
+| the upstream exception | `HarborRequestTypes.HandledBeforeDispatch` | `PskAuthRequest` is consumed by `MessagePackRpcServer.ApplyPskGateAsync` before dispatch, and is **named** rather than special-cased, so a second such seam must be declared too |
+| the wire boundary | `RequestDispatcher.Unhandled` | a request outside the tagged union is logged, counted on `UnhandledRequestCount`, and refused with `NO_HANDLER:<Type>: …` echoing the request id — rule 2, not silence |
+| the table test | `tests/Harbor.Ipc.Tests/RequestHandlerCoverageTests.cs` | 15 members = 14 handlers + 1 upstream, asserted rather than assumed, plus both boundaries exercised |
+
+The lesson generalises past IPC. For a union that crosses a **process**
+boundary, a wildcard arm is the smaller half of the problem: the check that
+actually matters is at composition time, because a member with no handler is
+otherwise indistinguishable from a member with the wrong handler. Enumerate the
+union by reflection and **refuse to start** when coverage is incomplete.
 
 **Guard:** `tests/Harbor.Architecture.Tests/ExhaustiveUnionSwitchRule.cs` — the
 union census comes from reflection, the wildcard-arm scan runs over
