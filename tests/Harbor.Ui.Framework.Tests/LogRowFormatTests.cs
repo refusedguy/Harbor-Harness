@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.Logging;
@@ -182,10 +181,13 @@ public sealed class LogRowFormatTests
     }
 
     /// <summary>
-    ///     <see cref="LogLevelTag.For" /> has no wildcard arm, so a value outside
-    ///     the enum fails loudly instead of rendering a token that means nothing.
-    ///     That silent fallback is what let the four #563 producers disagree about
-    ///     the same level.
+    ///     The mnemonic's discard arm THROWS rather than answering. A discard is
+    ///     mandatory — C# rejects a discard-less switch expression over an enum
+    ///     with <c>CS8524</c>, because <c>(LogLevel)7</c> stays constructible even
+    ///     when every declared member is named — so the rule is about what it
+    ///     computes. An answering discard is the silent fallback that let the
+    ///     panel return a 4-question-mark sentinel and the file loggers return
+    ///     <c>level.ToString().ToUpperInvariant()</c> for the same value.
     /// </summary>
     [Test]
     public async Task LevelTag_ForAValueOutsideTheEnum_Throws()
@@ -193,7 +195,12 @@ public sealed class LogRowFormatTests
         // Statement-bodied so the lambda binds to the Action overload of Throws
         // unambiguously — `For` returns a string, and a discarded result is the
         // shape the repo's other Throws call sites use.
-        Assert.Throws<SwitchExpressionException>(() => { _ = LogLevelTag.For((LogLevel)999); });
+        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
+            () => { _ = LogLevelTag.For((LogLevel)999); });
+
+        await Assert.That(thrown.Message).Contains("999")
+            .Because("a bare throw loses which value broke it; the message has to name the "
+                   + "offending level or a report from the field is unactionable");
     }
 
     // =====================================================================

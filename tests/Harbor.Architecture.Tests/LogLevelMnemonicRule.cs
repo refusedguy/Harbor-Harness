@@ -8,10 +8,10 @@
 //
 //   1. SIX sites spelled the table. `PanelRows.LogRows` and the two
 //      `FileLogger.Write` copies in `apps/` each carried their own switch, and
-//      the three copies disagreed: the panel sent an unknown level to the
-//      sentinel "????", the file loggers sent it to
-//      `level.ToString().ToUpperInvariant()` (so the same event rendered as
-//      "????" in the panel and "VERBOSE" in the file).
+//      the three copies disagreed: the panel sent an unknown level to a
+//      4-question-mark sentinel, the file loggers sent it to
+//      `level.ToString().ToUpperInvariant()` (so one event rendered as the
+//      sentinel in the panel and as "VERBOSE" in the file).
 //   2. A consumer re-read the mnemonic out of an ALREADY-RENDERED row by
 //      slicing `[13..17]`, which only holds for the panel's own layout. The
 //      file-logger layout is `{ts} [TAG] [{thread,3}] {cat}: {msg}`, so the
@@ -23,17 +23,23 @@
 //   A. There is exactly ONE table that maps `LogLevel` to a rendered string:
 //      src/Harbor.Ui.Framework.Abstractions/Diagnostics/LogLevelTag.cs. Every
 //      other site calls `LogLevelTag.For(level)`.
-//   B. That table has NO wildcard arm. A `default` arm is what let the four
-//      copies answer differently for the same input, and it is also what would
-//      silently swallow the next `LogLevel` member that someone adds.
-//   C. The retired "????" sentinel appears nowhere under `src/` or `apps/`.
+//   B. That table's discard arm THROWS rather than answering. A discard that
+//      produces a value is what let the four copies answer differently for the
+//      same input. The arm itself is mandatory — C# rejects a discard-less
+//      switch expression over an enum with CS8524, because `(LogLevel)7` stays
+//      constructible even when every declared member is named (the same shape
+//      ToolCallStateExtensions uses, #567) — so the rule is about what it
+//      computes, not whether it exists.
+//   C. The retired 4-question-mark sentinel appears nowhere under `src/` or
+//      `apps/`.
 //
 // WHY A TEXT SCAN AND NOT A COMPILED CHECK
 // ----------------------------------------
-// (B) is genuinely compile-checkable in the canonical file and nowhere else —
-// but (A) and (C) are about a table NOT existing in a second file, which no
-// type system can see. The scan is deliberately narrow: it only grades a
-// `switch` that names at least MIN_MEMBERS distinct `LogLevel` members, so a
+// (A) and (C) are about a table NOT existing in a second file, which no type
+// system can see, and (B) is about what an arm computes rather than which arms
+// exist — so all three need the text scan. The scan is deliberately narrow: it
+// only grades a `switch` that names at least MIN_MEMBERS distinct `LogLevel`
+// members, so a
 // `switch` over some other enum is never touched. Comments are stripped before
 // matching, so the prose in this very file (and the XML docs that quote the
 // mnemonics) cannot be mistaken for a second table.
@@ -75,13 +81,22 @@ namespace Harbor.Architecture.Tests;
 ///     Whether any arm's value is a string literal or a <c>ToString()</c> call —
 ///     i.e. whether the switch is a rendered-mnemonic table at all.
 /// </param>
-/// <param name="HasWildcardArm">Whether the arm block contains <c>_ =&gt;</c> or <c>default:</c>.</param>
+/// <param name="HasAnsweringDiscard">
+///     Whether the arm block contains a <c>_ =&gt;</c> / <c>default:</c> arm that
+///     PRODUCES A VALUE rather than throwing. C# cannot express "exhaustive over
+///     the named members" of an enum — a discard-less switch expression is
+///     rejected with CS8524, an unconditional error, because <c>(LogLevel)7</c>
+///     stays constructible even when every declared member is listed. So the
+///     canonical table must carry a discard (#567's shape, the same one
+///     <c>ToolCallStateExtensions</c> uses); what this rule forbids is a discard
+///     that ANSWERS, which is what let the #563 producers disagree.
+/// </param>
 internal sealed record LevelTableSite(
     string File,
     int Line,
     IReadOnlyList<string> Members,
     bool MapsToRenderedText,
-    bool HasWildcardArm);
+    bool HasAnsweringDiscard);
 
 /// <summary>Everything the rule needs from one repository scan.</summary>
 /// <param name="Tables">Every <c>LogLevel</c> switch found, in scan order.</param>
@@ -215,11 +230,11 @@ internal static partial class LogLevelMnemonicProbe
 
             var members = new SortedSet<string>(StringComparer.Ordinal);
             bool mapsToText = false;
-            bool wildcard = false;
+            bool answeringDiscard = false;
             for (int k = start; k < end; k++)
             {
                 string line = clean[k].Trim();
-                foreach (Match match in LogLevelArm().Matches(line))
+                foreach (Match match in LogLevelSwitchArm().Matches(line))
                 {
                     members.Add(match.Groups["member"].Value);
                     string tail = line[(match.Index + match.Length)..];
@@ -229,9 +244,22 @@ internal static partial class LogLevelMnemonicProbe
                     }
                 }
 
-                if (IsWildcardArm(line))
+                // A statement-form `case LogLevel.X:` puts the mapped expression on
+                // the NEXT line, so the tail is read from there instead.
+                foreach (Match match in LogLevelCaseArm().Matches(line))
                 {
-                    wildcard = true;
+                    members.Add(match.Groups["member"].Value);
+                    string tail = (match.Index + match.Length < line.Length ? line[(match.Index + match.Length)..] : string.Empty)
+                                  + (k + 1 < end ? " " + clean[k + 1].Trim() : string.Empty);
+                    if (FirstLiteral(tail) is not null || tail.Contains("ToString(", StringComparison.Ordinal))
+                    {
+                        mapsToText = true;
+                    }
+                }
+
+                if (IsAnsweringDiscard(line))
+                {
+                    answeringDiscard = true;
                 }
             }
 
@@ -240,7 +268,7 @@ internal static partial class LogLevelMnemonicProbe
                 continue;
             }
 
-            tables.Add(new LevelTableSite(relativeFile, i + 1, [.. members], true, wildcard));
+            tables.Add(new LevelTableSite(relativeFile, i + 1, [.. members], true, answeringDiscard));
         }
     }
 
@@ -291,20 +319,48 @@ internal static partial class LogLevelMnemonicProbe
         return -1;
     }
 
-    private static bool IsWildcardArm(string line) =>
-        line.StartsWith("_ =>", StringComparison.Ordinal)
-        || line.StartsWith("default =>", StringComparison.Ordinal)
-        || line.StartsWith("default:", StringComparison.Ordinal);
+    /// <summary>
+    ///     A discard arm that ANSWERS, as opposed to one that throws. The
+    ///     canonical table is required to carry a discard — C# rejects a
+    ///     discard-less switch expression over an enum with CS8524 — so the rule
+    ///     is not "no discard" but "the discard must not invent an answer".
+    /// </summary>
+    private static bool IsAnsweringDiscard(string line)
+    {
+        foreach (string prefix in (string[])["_ =>", "default =>", "default:"])
+        {
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string tail = line[prefix.Length..].TrimStart();
+            return !(tail.StartsWith("throw", StringComparison.Ordinal)
+                     || tail.StartsWith("//", StringComparison.Ordinal));
+        }
+
+        return false;
+    }
 
     /// <summary>
-    ///     A <c>LogLevel</c> arm in either C# switch form. The <c>case</c> form
-    ///     requires the keyword, so a ternary such as
-    ///     <c>attached ? LogLevel.Debug : LogLevel.Information</c> cannot be
-    ///     mistaken for one, and the <c>=&gt;</c> form cannot match a call site
-    ///     such as <c>Log(LogLevel.Error, "…", msg)</c>.
+    ///     A <c>LogLevel</c> arm in expression form: <c>LogLevel.Warning =&gt; "…"</c>.
+    ///     It cannot match a call site such as <c>Log(LogLevel.Error, "…", m)</c>,
+    ///     because that has a <c>,</c> where the <c>=&gt;</c> must be.
     /// </summary>
-    [GeneratedRegex(@"\bLogLevel\s*\.\s*(?<member>\w+)\s*=>|\bcase\s+LogLevel\s*\.\s*(?<member>\w+)\s*:")]
-    private static partial Regex LogLevelArm();
+    [GeneratedRegex(@"\bLogLevel\s*\.\s*(?<member>\w+)\s*=>")]
+    private static partial Regex LogLevelSwitchArm();
+
+    /// <summary>
+    ///     A <c>LogLevel</c> arm in statement form: <c>case LogLevel.Warning:</c>.
+    ///     The <c>case</c> keyword is REQUIRED, and that is the whole point — a
+    ///     ternary such as <c>attached ? LogLevel.Debug : LogLevel.Information</c>
+    ///     has the same <c>LogLevel.X :</c> shape and is not a switch at all. One
+    ///     regex per form, rather than one alternation reusing the group name,
+    ///     because relying on .NET's duplicate-named-group rule buys nothing and a
+    ///     [GeneratedRegex] source-generator failure is a hard build error.
+    /// </summary>
+    [GeneratedRegex(@"\bcase\s+LogLevel\s*\.\s*(?<member>\w+)\s*:")]
+    private static partial Regex LogLevelCaseArm();
 
     [GeneratedRegex(@"""(?<literal>[^""\\]*)""")]
     private static partial Regex StringLiteral();
@@ -519,25 +575,29 @@ public sealed class LogLevelMnemonicRule
     }
 
     /// <summary>
-    ///     The one table names every <see cref="LogLevel" /> member. A wildcard
-    ///     arm is what let four copies answer differently for the same input,
-    ///     and it is also what would silently swallow the next member someone
-    ///     adds to the enum.
+    ///     The one table's discard arm THROWS rather than answering. A discard
+    ///     that produced a value is what let the four #563 producers disagree
+    ///     about the same level — the panel answered with a sentinel, the file
+    ///     loggers with the uppercased enum name. A discard is mandatory here
+    ///     (CS8524 rejects a discard-less switch expression over an enum), so
+    ///     the rule is about what it does, not whether it exists.
     /// </summary>
     [Test]
-    public async Task LevelMnemonicTable_HasNoWildcardArm()
+    public async Task LevelMnemonicTable_HasNoAnsweringDiscard()
     {
         var offenders = Report.Value.Tables
-            .Where(t => t.File == LogLevelMnemonicProbe.CanonicalFile && t.HasWildcardArm)
+            .Where(t => t.File == LogLevelMnemonicProbe.CanonicalFile && t.HasAnsweringDiscard)
             .Select(t => $"{t.File}:{t.Line}")
             .ToList();
 
         await Assert.That(offenders).IsEmpty()
             .Because(
-                "a `_ =>` / `default:` arm in the canonical table invents an answer for a level it "
-                + "does not name, which is how the six #563 producers came to disagree about the "
-                + "same value. The C# compiler enforces exhaustiveness here for free — drop the arm. "
-                + string.Join(", ", offenders));
+                "a discard arm in the canonical table that PRODUCES A VALUE invents an answer for a "
+                + "level it does not name, which is how the six #563 producers came to disagree about "
+                + "the same value. The arm has to exist — C# rejects a discard-less switch expression "
+                + "over an enum with CS8524 — so it must throw, the way "
+                + "ToolCallStateExtensions.IsTerminal does (#567). Offending sites: "
+                + (offenders.Count == 0 ? "(none)" : string.Join(", ", offenders)));
     }
 
     /// <summary>
@@ -621,11 +681,16 @@ public sealed class LogLevelMnemonicRule
             };
             """;
 
+        // The shape the canonical table is REQUIRED to have: every member named,
+        // and a discard that throws rather than answering. C# rejects a
+        // discard-less switch expression over an enum with CS8524, so the probe
+        // must recognise this as clean, or rule 2 would demand the impossible.
         string canonical = """
             private static string Tag(LogLevel level) => level switch
             {
                 LogLevel.Trace => "TRAC",
                 LogLevel.Warning => "WARN",
+                _ => throw new ArgumentOutOfRangeException(nameof(level), level, "no mnemonic"),
             };
             """;
 
@@ -682,9 +747,9 @@ public sealed class LogLevelMnemonicRule
                    + "which is precisely what rule 1 must reject. A miss means the arm matchers or "
                    + "the block-depth walk stopped working and the rule enforces nothing.");
 
-        await Assert.That(duplicateTables[0].HasWildcardArm).IsTrue()
-            .Because("the first snippet's `_ => \"????\"` arm is the divergent fallback rule 2 "
-                   + "rejects");
+        await Assert.That(duplicateTables[0].HasAnsweringDiscard).IsTrue()
+            .Because("the first snippet's sentinel arm is the divergent, ANSWERING fallback that "
+                   + "rule 2 rejects");
 
         await Assert.That(string.Join(" | ", duplicateTables[0].Members))
             .IsEqualTo("Trace | Warning")
@@ -703,8 +768,9 @@ public sealed class LogLevelMnemonicRule
                    + "probe must still see it — otherwise rule 1 is passing because the probe finds "
                    + "nothing rather than because there is one table");
 
-        await Assert.That(canonicalTables[0].HasWildcardArm).IsFalse()
-            .Because("the second snippet has no wildcard arm, so rule 2 must not fire on it");
+        await Assert.That(canonicalTables[0].HasAnsweringDiscard).IsFalse()
+            .Because("the second snippet's discard THROWS, which is the shape the canonical table is "
+                   + "required to have — rule 2 must not fire on it");
 
         await Assert.That(unrelatedTables.Count).IsEqualTo(0)
             .Because("the third snippet switches over `int`, not LogLevel; a probe that graded it "

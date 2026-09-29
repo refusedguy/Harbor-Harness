@@ -166,7 +166,11 @@ public static class LogRowFormat
         // the token IS — is what lets a third layout be read or rejected rather
         // than mis-sliced.
         bool bracketed = cursor < line.Length && line[cursor] == '[';
-        string tag;
+
+        // Nullable because TryReadBracketedField's out is `string?` — it reports
+        // failure with null. Nothing dereferences it before LogLevelTag.TryParse
+        // has rejected null, and that method takes `string?` on purpose.
+        string? tag;
         if (bracketed)
         {
             if (!TryReadBracketedField(line, ref cursor, out tag))

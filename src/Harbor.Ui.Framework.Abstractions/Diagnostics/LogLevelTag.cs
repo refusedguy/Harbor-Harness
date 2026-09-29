@@ -20,13 +20,16 @@ namespace Harbor.Ui.Framework.Diagnostics;
 ///         <c>VERBOSE</c> in the log file.
 ///     </para>
 ///     <para>
-///         <b>No wildcard arm, on purpose.</b> <see cref="For" /> names every
-///         <see cref="LogLevel" /> member and has no <c>_ =&gt;</c> fallback, so
-///         adding a member to the enum is a compile error here (CS8509, escalated by
-///         <c>TreatWarningsAsErrors</c>) rather than a seventh spelling that
-///         appears in one producer and not the others. A value outside the enum —
-///         a bad cast — throws <see cref="System.Runtime.CompilerServices.SwitchExpressionException" />
-///         instead of rendering a token that means nothing.
+///         <b>The discard arm throws, and that is the whole point.</b>
+///         <see cref="For" /> names every <see cref="LogLevel" /> member. C# cannot
+///         express "exhaustive over the named members" for an enum — a switch
+///         expression with no discard arm is rejected with <c>CS8524</c>, an
+///         unconditional error, because <c>(LogLevel)7</c> stays constructible even
+///         when every declared member is listed. So the discard has to be written
+///         (<c>#567</c>'s shape, the same one <c>ToolCallStateExtensions</c> uses), and
+///         what matters is that it <b>throws</b> rather than answering: a wildcard
+///         that answers is exactly what let the producers below disagree. A value
+///         outside the enum is a programming error, not a token to render.
 ///     </para>
 ///     <para>
 ///         <b>It is a parsed field, not decoration.</b> <see cref="TryParse" /> is
@@ -39,7 +42,8 @@ namespace Harbor.Ui.Framework.Diagnostics;
 ///     <para>
 ///         Enforced by <c>tests/Harbor.Architecture.Tests/LogLevelMnemonicRule.cs</c>:
 ///         a second <c>LogLevel</c>-to-text table anywhere under <c>src/</c> or
-///         <c>apps/</c> fails the build, as does the return of the
+///         <c>apps/</c> fails the build, as does a discard arm in this table that
+///         answers instead of throwing, and as does the return of the
 ///         4-question-mark sentinel.
 ///     </para>
 /// </remarks>
@@ -68,10 +72,10 @@ public static class LogLevelTag
     /// </summary>
     /// <param name="level">The level to render. Must be a declared <see cref="LogLevel" />.</param>
     /// <returns>A mnemonic of exactly <see cref="Width" /> characters.</returns>
-    /// <exception cref="System.Runtime.CompilerServices.SwitchExpressionException">
-    ///     <paramref name="level" /> is not a declared <see cref="LogLevel" /> value.
-    ///     There is no sentinel: an unknown level is a programming error here, not
-    ///     a token to render.
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     <paramref name="level" /> is not a declared <see cref="LogLevel" /> value. There
+    ///     is no sentinel: an unknown level is a programming error here, not a token to
+    ///     render.
     /// </exception>
     public static string For(LogLevel level) => level switch
     {
@@ -82,6 +86,23 @@ public static class LogLevelTag
         LogLevel.Error => "ERRO",
         LogLevel.Critical => "CRIT",
         LogLevel.None => "NONE",
+
+        // #567's shape, and the reason it is spelled out here rather than left to
+        // the compiler: C# cannot express "exhaustive over the NAMED members" of an
+        // enum. A switch expression with no discard arm is rejected with CS8524 (an
+        // unconditional error), because `(LogLevel)7` stays constructible even when
+        // every declared member is listed. So the discard has to be here — and what
+        // matters is that it THROWS rather than answering, since a wildcard that
+        // answers is exactly what let four #563 producers render the same unknown
+        // level as a sentinel in one place and as
+        // `level.ToString().ToUpperInvariant()` in another.
+        //
+        // That moves the gate for a NEW member from the compiler to the reflection
+        // census: LogLevelMnemonicRule.Scan_IsLive, and LevelTag_IsTotal_… in
+        // LogRowFormatTests, both walk Enum.GetValues<LogLevel>() so a member added
+        // later fails a test that names the file to edit.
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(level), level, "No LogLevel mnemonic is declared for this value."),
     };
 
     /// <summary>
