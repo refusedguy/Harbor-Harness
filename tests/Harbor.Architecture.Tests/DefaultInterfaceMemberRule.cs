@@ -559,7 +559,12 @@ public sealed class DefaultInterfaceMemberRule
     [Test]
     public async Task EveryReviewedDefault_FailsInTheStatedDirection()
     {
-        var byKey = Defaults.ToDictionary(static m => (m.TypeName, m.MemberName), static m => m);
+        // Distinct() first: a default property with both a get_ and a set_ body
+        // would otherwise surface twice under one (type, name) and throw from
+        // ToDictionary instead of reporting a real finding.
+        var byKey = Defaults
+            .Distinct()
+            .ToDictionary(static m => (m.TypeName, m.MemberName), static m => m);
 
         var failures = new List<string>();
         foreach (ReviewedDefault row in Reviewed)

@@ -467,9 +467,13 @@ public sealed class RendererEventSeamRule
     public async Task NonVacuity_Rule_FailsOnARendererWithNoSeam()
     {
         var self = typeof(RendererEventSeamRule).Assembly;
-        var facts = RendererSeamProbe.Scan(self, out _);
+        IReadOnlyList<RendererFacts> facts = RendererSeamProbe.Scan(self, out int scanned);
 
-        var reported = Evaluate(new RenderersInventory(facts, 1)).ToHashSet(StringComparer.Ordinal);
+        var inventory = new RenderersInventory(
+            facts.ToDictionary(static f => f.TypeName, StringComparer.Ordinal),
+            scanned);
+
+        var reported = Evaluate(inventory).ToHashSet(StringComparer.Ordinal);
 
         string seamless = "Harbor.Architecture.Tests.RendererEventSeamRule+SeamlessRenderer";
         string registered = "Harbor.Architecture.Tests.RendererEventSeamRule+HandlerRegisteredRenderer";
@@ -575,6 +579,12 @@ public sealed class RendererEventSeamRule
     // =====================================================================
 
     /// <summary>What the probe found, plus enough context to fail loudly on a zero.</summary>
+    /// <param name="Renderers">
+    ///     Every renderer the probe found, keyed by full CLR name. Keyed because
+    ///     conformity is resolved through the base chain and through bridge field
+    ///     types, both of which are looked up by name.
+    /// </param>
+    /// <param name="TopLevelTypesScanned">How many types the probe walked.</param>
     private sealed record RenderersInventory(
         Dictionary<string, RendererFacts> Renderers,
         int TopLevelTypesScanned)

@@ -87,6 +87,17 @@ namespace Harbor.Architecture.Tests;
 /// <param name="Source">How the members are derived, for the failure message.</param>
 internal sealed record RegisteredUnion(string Name, IReadOnlySet<string> Members, string Source);
 
+/// <summary>
+///     Identifies one (file, union) pair. A <c>readonly record struct</c> rather
+///     than a <c>ValueTuple</c> for two reasons: it gets structural equality for
+///     free (so the baseline needs no <c>IEqualityComparer</c>, which a value
+///     tuple key cannot take from <c>StringComparer</c>), and its element names
+///     survive into the failure messages.
+/// </summary>
+/// <param name="File">Repo-relative path, forward slashes.</param>
+/// <param name="UnionName">Name of the registered union.</param>
+internal readonly record struct SiteKey(string File, string UnionName);
+
 /// <summary>One switch found over a registered union.</summary>
 /// <param name="File">Repo-relative path.</param>
 /// <param name="Line">1-based line of the <c>switch</c> keyword.</param>
@@ -379,7 +390,9 @@ internal static partial class UnionExhaustivenessProbe
         Match exprMatch = ExpressionArm().Match(line);
         if (exprMatch.Success)
         {
-            string qualified = exprMatch.Groups[1].Value.Replace(" ", string.Empty, StringFormat.InvariantCulture);
+            // The arm pattern may be written `Namespace.Type =>` or
+            // `Namespace . Type =>`; both reduce to the leaf member name.
+            string qualified = exprMatch.Groups[1].Value.Replace(" ", string.Empty);
             member = qualified[(qualified.LastIndexOf('.') + 1)..];
             return true;
         }
@@ -547,64 +560,63 @@ public sealed class ExhaustiveUnionSwitchRule
     ///     that the drift is real; <see cref="WildcardBaseline_IsLive" />
     ///     verifies it.
     /// </summary>
-    private static readonly Dictionary<(string File, string Union), string> WildcardBaseline =
-        new(StringComparer.Ordinal)
-        {
+    private static readonly Dictionary<SiteKey, string> WildcardBaseline = new()
+    {
             // #495 — two AgentEvent -> HarborEvent projections whose `_ => null`
             // silently dropped a new event type on one host. The wire union is
             // intentionally narrower than AgentEvent, so the arm is *justified*
             // here; what is missing is the log + counter #578 rule 2 demands.
-            [("src/Harbor.Ipc.InProcess/InProcessHarborClient.cs", "AgentEvent")] =
+            [new("src/Harbor.Ipc.InProcess/InProcessHarborClient.cs", "AgentEvent")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/495",
-            [("src/Harbor.Ipc.InProcess/InProcessHarborClient.cs", "LlmEvent")] =
+            [new("src/Harbor.Ipc.InProcess/InProcessHarborClient.cs", "LlmEvent")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/495",
-            [("src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs", "AgentEvent")] =
+            [new("src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs", "AgentEvent")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/495",
-            [("src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs", "LlmEvent")] =
+            [new("src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs", "LlmEvent")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/495",
 
             // #578 rule 1, the reducers. The Store + reducer half of the
             // convention: every arm named, no default inventing an answer.
-            [("src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs", "AgentEvent")] =
+            [new("src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs", "AgentEvent")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/578",
-            [("src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs", "LlmEvent")] =
+            [new("src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs", "LlmEvent")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/578",
-            [("src/Harbor.Ui.Framework.Reducers/AppReducer.cs", "AgentEvent")] =
+            [new("src/Harbor.Ui.Framework.Reducers/AppReducer.cs", "AgentEvent")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/578",
-            [("src/Harbor.Ui.Framework.Reducers/AppReducer.cs", "LlmEvent")] =
+            [new("src/Harbor.Ui.Framework.Reducers/AppReducer.cs", "LlmEvent")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/578",
-            [("src/Harbor.Ui.Framework.Reducers/ChatViewReducer.cs", "AgentEvent")] =
+            [new("src/Harbor.Ui.Framework.Reducers/ChatViewReducer.cs", "AgentEvent")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/578",
-            [("src/Harbor.Ui.Framework.Reducers/SessionsReducer.cs", "AgentEvent")] =
+            [new("src/Harbor.Ui.Framework.Reducers/SessionsReducer.cs", "AgentEvent")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/578",
 
             // #556 — `ChatRole -> (label, markdown?)` written four times, all
             // four `_ =>` arms silently relabelling a new role.
-            [("src/Harbor.Ui.Framework.ViewModels/ViewModels/ChatLineViewModel.cs", "ChatRole")] =
+            [new("src/Harbor.Ui.Framework.ViewModels/ViewModels/ChatLineViewModel.cs", "ChatRole")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [("src/Harbor.Ui.Framework.State/ToolCallKey.cs", "ChatRole")] =
+            [new("src/Harbor.Ui.Framework.State/ToolCallKey.cs", "ChatRole")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [("src/Harbor.Ui.Framework.Projection/Projection/DefaultUiProjector.cs", "ChatRole")] =
+            [new("src/Harbor.Ui.Framework.Projection/Projection/DefaultUiProjector.cs", "ChatRole")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [("src/Harbor.Desktop.Abstractions/ViewModels/ChatViewModelBase.cs", "ChatRole")] =
+            [new("src/Harbor.Desktop.Abstractions/ViewModels/ChatViewModelBase.cs", "ChatRole")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [("src/Harbor.Storage.Jsonl/JsonlLineParser.cs", "ChatRole")] =
+            [new("src/Harbor.Storage.Jsonl/JsonlLineParser.cs", "ChatRole")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [("contrib/tui/Harbor.Tui.SpectreTui/View/ChatMessageFormatter.cs", "ChatRole")] =
+            [new("contrib/tui/Harbor.Tui.SpectreTui/View/ChatMessageFormatter.cs", "ChatRole")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [("contrib/tui/Harbor.Tui.SpectreTui/View/ChatMarkup.cs", "ChatRole")] =
+            [new("contrib/tui/Harbor.Tui.SpectreTui/View/ChatMarkup.cs", "ChatRole")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [("contrib/tui/Harbor.Tui.TerminalGui/Rendering/TerminalGuiColorMapper.cs", "ChatRole")] =
+            [new("contrib/tui/Harbor.Tui.TerminalGui/Rendering/TerminalGuiColorMapper.cs", "ChatRole")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [("contrib/tui/Harbor.Tui.Termina/Rendering/TerminaColorMapper.cs", "ChatRole")] =
+            [new("contrib/tui/Harbor.Tui.Termina/Rendering/TerminaColorMapper.cs", "ChatRole")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/556",
-            [("contrib/tui/Harbor.Tui.RazorConsole/Rendering/RazorColorMapper.cs", "ChatRole")] =
+            [new("contrib/tui/Harbor.Tui.RazorConsole/Rendering/RazorColorMapper.cs", "ChatRole")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/556",
 
             // #575 — the canonical renderer. ChatScreenBridge's 18-arm switch
             // has no wildcard, which is why the drift there was INVISIBLE:
             // CompactionFailedEvent simply fell through and did nothing.
-            [("apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs", "AgentEvent")] =
+            [new("apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs", "AgentEvent")] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/575",
         };
 
@@ -625,7 +637,7 @@ public sealed class ExhaustiveUnionSwitchRule
 
         foreach (SwitchSite site in Sites.Value.Where(s => s.HasWildcardArm))
         {
-            if (WildcardBaseline.ContainsKey((site.File, site.UnionName)))
+            if (WildcardBaseline.ContainsKey(new SiteKey(site.File, site.UnionName)))
             {
                 continue;
             }
@@ -674,6 +686,19 @@ public sealed class ExhaustiveUnionSwitchRule
             ["ChatRole"] = ["User", "Assistant", "Tool", "ToolResult", "System", "Error"],
         };
 
+        // Checked BEFORE the per-union loop: a registered union whose name is not
+        // in `expected` would otherwise reach `expected[union.Name]` and throw
+        // KeyNotFoundException instead of reporting the drift.
+        foreach (RegisteredUnion union in unions)
+        {
+            if (!expected.ContainsKey(union.Name))
+            {
+                failures.Add(
+                    $"union '{union.Name}' is registered but the census check does not name it, so "
+                    + "it would never be verified. Add it to `expected`.");
+            }
+        }
+
         foreach (RegisteredUnion union in unions)
         {
             if (union.Members.Count == 0)
@@ -685,7 +710,12 @@ public sealed class ExhaustiveUnionSwitchRule
                 continue;
             }
 
-            var missing = expected[union.Name]
+            if (!expected.TryGetValue(union.Name, out string[]? named))
+            {
+                continue; // already reported above
+            }
+
+            var missing = named
                 .Where(member => !union.Members.Contains(member))
                 .ToList();
 
@@ -803,7 +833,7 @@ public sealed class ExhaustiveUnionSwitchRule
     {
         var real = Sites.Value
             .Where(s => s.HasWildcardArm)
-            .Select(s => (s.File, s.UnionName))
+            .Select(s => new SiteKey(s.File, s.UnionName))
             .ToHashSet();
 
         var unionNames = Registry.Value.Select(u => u.Name).ToHashSet(StringComparer.Ordinal);
