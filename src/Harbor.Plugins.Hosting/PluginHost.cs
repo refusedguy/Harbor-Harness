@@ -80,15 +80,17 @@ public sealed class PluginHost
             if (compiled.IsFailure)
             {
                 _logger.LogError("Plugin compilation failed for {Path}: {Error}", script.Path, compiled.Error);
-                // compiled is a CompilationResult (a hand-rolled record struct, not a
-                // Result<T>), so there is no ConvertFailure to call — see the
-                // allow-list entry in ResultFailureConversionTests.
                 if (FailOrContinue(compiled.Error))
-                    return Result.Failure<IReadOnlyList<LoadedPlugin>>(compiled.Error);
+                    return compiled.ConvertFailure<IReadOnlyList<LoadedPlugin>>();
                 continue;
             }
 
+#pragma warning disable CFE0001
+            // CFE0001: false positive — the IsFailure guard above is a nested
+            // `if (FailOrContinue(...)) return; continue;`, a control-flow shape the
+            // analyzer does not model. The .Value is safe. Baseline: #561.
             var instantiated = _instantiator.Instantiate(compiled.Value);
+#pragma warning restore CFE0001
             if (instantiated.IsFailure)
             {
                 _logger.LogError("Plugin instantiation failed for {Path}: {Error}", script.Path, instantiated.Error);

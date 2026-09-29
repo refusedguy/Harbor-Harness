@@ -4,7 +4,6 @@ using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Instantiation;
 using Harbor.Plugins.Registration;
 using Harbor.Plugins.Storage;
-using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Runtime;
 /// <summary>
@@ -116,7 +115,7 @@ public sealed class CsPluginLoader
     /// <summary>
     ///     Compile (or load from cache) and register a single CS-source plugin.
     /// </summary>
-    public async Task<PluginCompilationResult> CompileAndLoadAsync(PluginScript script, CancellationToken ct = default)
+    public async Task<Result<CompiledPlugin>> CompileAndLoadAsync(PluginScript script, CancellationToken ct = default)
     {
         if (script is null)
             throw new ArgumentNullException(nameof(script));
@@ -146,15 +145,14 @@ public sealed class CsPluginLoader
 
         var result = await host.LoadAllAsync(_host, ct).ConfigureAwait(false);
         if (result.IsFailure)
-            return PluginCompilationResult.Failure(result.Error, Array.Empty<Diagnostic>());
+            return result.ConvertFailure<CompiledPlugin>();
 
         if (result.Value.Count == 0)
-            return PluginCompilationResult.Failure(
-                $"No plugins loaded from '{script.Path}'.", Array.Empty<Diagnostic>());
+            return Result.Failure<CompiledPlugin>($"No plugins loaded from '{script.Path}'.");
 
         // For backwards-compat with single-plugin files, return the first one.
         var lp = result.Value[0];
-        return PluginCompilationResult.Success(new CompiledPlugin(
+        return Result.Success(new CompiledPlugin(
             lp.Instance,
             lp.Name,
             lp.Version,

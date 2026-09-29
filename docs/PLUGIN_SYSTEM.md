@@ -130,11 +130,11 @@ var host = new PluginHostBuilder()
 ```csharp
 public sealed class PreBuiltDllCompiler : IPluginCompiler
 {
-    public Task<CompilationResult> CompileAsync(PluginScript script, CancellationToken ct = default)
+    public Task<Result<CompiledPluginAssembly>> CompileAsync(PluginScript script, CancellationToken ct = default)
     {
         // script.Path is a .dll path; load via Assembly.LoadFrom
         var asm = Assembly.LoadFrom(script.Path);
-        return Task.FromResult(CompilationResult.Fresh(
+        return Task.FromResult(Result.Success(
             new CompiledPluginAssembly(asm, script.Hash, script.Path)));
     }
 }

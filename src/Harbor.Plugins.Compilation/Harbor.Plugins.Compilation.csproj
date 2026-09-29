@@ -9,7 +9,7 @@
       - PluginAssemblyReferences (collects MetadataReference snapshot for Roslyn)
 
     Depends on Harbor.Plugins.Abstractions (for IPluginCompiler,
-    PluginScript, CompiledPluginAssembly, CompilationResult).
+    PluginScript, CompiledPluginAssembly).
     Pulls in Microsoft.CodeAnalysis.CSharp for the Roslyn implementation.
   -->
   <PropertyGroup>

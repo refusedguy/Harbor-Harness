@@ -61,7 +61,7 @@ public class ResultFailureConversionTests
     ///     <c>Result.Failure&lt;Maybe&lt;JsonDocument&gt;&gt;(x.Error)</c> are both real
     ///     sites in this repo — a <c>[^&gt;]+</c> pattern cannot see them.</item>
     ///     <item>The leading <c>\b</c> is load-bearing:
-    ///     <c>PluginCompilationResult.Failure(result.Error, …)</c> contains the
+    ///     <c>ThemeParseResult.Failure(result.Error, …)</c> contains the
     ///     substring <c>Result.Failure</c> but has no word boundary before it, and
     ///     is a different type with a different factory.</item>
     ///     <item>Requiring the literal <c>.Error</c> after the receiver's dot is
@@ -87,15 +87,14 @@ public class ResultFailureConversionTests
             + "ConvertFailure is an instance member of the Result family and does not exist on it, so "
             + "there is nothing to call. Making ThemeParseResult a Result<HarborTheme> would remove the "
             + "duplication at the source; that is a type change to a design-system contract, not this wave.",
-        ["src/Harbor.Plugins.Hosting/PluginHost.cs"] =
-            "One of the three sites here reads a CompilationResult, not a Result: "
-            + "`IPluginCompiler.CompileAsync` returns `Task<CompilationResult>`, a hand-rolled "
-            + "`readonly record struct` (src/Harbor.Plugins.Abstractions/IPluginCompiler.cs:42) with its own "
-            + "IsSuccess/Error, so ConvertFailure does not exist on it and CS1061 rejects the call. "
-            + "The other two sites in this file DO convert (Instantiate returns "
-            + "Result<IReadOnlyList<LoadedPlugin>>, Register returns Result) — the allow-list is per "
-            + "file, so this entry exempts the file's single non-Result site and nothing else."
     };
+
+    // #561 REMOVED the `src/Harbor.Plugins.Hosting/PluginHost.cs` entry that used to
+    // sit here. Its one non-Result site was `IPluginCompiler.CompileAsync`, which
+    // returned a hand-rolled `CompilationResult` with no `ConvertFailure` to call;
+    // the compiler contract now returns a real `Result<CompiledPluginAssembly>`, so
+    // that site converts and the exemption is obsolete. `Exemptions_AreStillUsed`
+    // would have failed on it, which is the guard working.
 
     [Test]
     public async Task GuardedTrees_DoNotHandRollFailureConversion()

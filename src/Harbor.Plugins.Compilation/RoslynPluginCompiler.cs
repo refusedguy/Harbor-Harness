@@ -49,7 +49,7 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
     }
 
     /// <inheritdoc />
-    public Task<CompilationResult> CompileAsync(PluginScript script, CancellationToken ct = default)
+    public Task<Result<CompiledPluginAssembly>> CompileAsync(PluginScript script, CancellationToken ct = default)
     {
         if (script is null)
             throw new ArgumentNullException(nameof(script));
@@ -71,12 +71,14 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
         var emitResult = compilation.Emit(ms);
         if (!emitResult.Success)
         {
+            // The diagnostics are rendered into the error message and nowhere else: this
+            // string is what PluginHost logs and what CsPluginLoader hands back, so a
+            // separate structured channel would have had no production reader. #561.
             var errors = emitResult.Diagnostics
                 .Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
                 .ToList();
-            return Task.FromResult(CompilationResult.Failure(
-                $"Roslyn compilation failed for '{script.Path}':\n{string.Join("\n", FormatAll(errors))}",
-                errors));
+            return Task.FromResult(Result.Failure<CompiledPluginAssembly>(
+                $"Roslyn compilation failed for '{script.Path}':\n{string.Join("\n", FormatAll(errors))}"));
         }
 
         byte[] assemblyBytes = ms.ToArray();
@@ -92,7 +94,7 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
             assemblyBytes,
             FromCache: false,
             script.DeclaredCapabilities);
-        return Task.FromResult(CompilationResult.Fresh(compiled));
+        return Task.FromResult(Result.Success(compiled));
     }
 
     /// <summary>

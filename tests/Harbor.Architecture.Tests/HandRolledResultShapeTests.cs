@@ -351,7 +351,7 @@ public sealed class HandRolledResultShapeTests
                 .Where(t => DeclaresResultFlag.IsMatch(t.Body) && !DelegatesToCfeResult.IsMatch(t.Body))
         ];
 
-        await Assert.That(flagged).IsEmpty()
+        await Assert.That(flagged.Count).IsEqualTo(0)
             .Because(
                 "Three legal shapes must survive: a wrapper that DELEGATES to a Result<CompiledPlugin> "
                 + "(Rule 1's escape hatch), a plain record with an unrelated IsReady, and a service with "
