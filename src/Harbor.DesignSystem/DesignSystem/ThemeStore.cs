@@ -36,7 +36,18 @@ public sealed record ThemeEntry(
 /// All file I/O is defensive — unreadable or malformed entries surface as
 /// error entries instead of exceptions.
 /// </summary>
-public sealed class ThemeStore
+/// <remarks>
+///     The one production implementation of <see cref="IThemeStore" /> (#668).
+///     The single-implementer count is enforced by ThemeStoreSeamRules rather
+///     than left to review: a second implementer would be a second
+///     read-and-parse, which is the duplication the issue exists to remove, and
+///     it would look perfectly correct on its own. Note that the count is over
+///     implementations of the PORT, not over every read of a theme file —
+///     <see cref="ThemeDirectoryWatcher" /> still reads beside its owner, and
+///     <c>IThemeStore</c>'s own remarks say so rather than leaving the next
+///     reader to believe the port has no remaining callers to convert.
+/// </remarks>
+public sealed class ThemeStore : IThemeStore
 {
     private readonly string _directory;
 
@@ -170,17 +181,10 @@ public sealed class ThemeStore
 
     private ThemeEntry LoadEntry(string path)
     {
-        string json;
-        try
-        {
-            json = File.ReadAllText(path);
-        }
-        catch (Exception ex)
-        {
-            return BrokenEntry(Path.GetFileName(path), [ex.Message]);
-        }
-
-        var result = ThemeJson.Parse(json, TerminalColorPalette.Current);
+        // Read-and-parse goes through the port member, not a second copy of it:
+        // this was a third answer to one question, and the store is the one that
+        // is supposed to be the answer.
+        ThemeParseResult result = LoadFile(path);
         return new ThemeEntry(
             FileName: Path.GetFileName(path),
             Name: result.IsSuccess ? result.Theme.Name : Path.GetFileNameWithoutExtension(path),
@@ -189,6 +193,48 @@ public sealed class ThemeStore
             Theme: result.IsSuccess ? result.Theme : null,
             Errors: result.Errors,
             Warnings: result.Warnings);
+    }
+
+    /// <inheritdoc />
+    public ThemeParseResult LoadFile(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return ThemeParseResult.Fail([$"theme file not found: {path}"], []);
+            }
+
+            return ThemeJson.Parse(File.ReadAllText(path), TerminalColorPalette.Current);
+        }
+        catch (Exception ex)
+        {
+            return ThemeParseResult.Fail([$"theme load failed: {ex.Message}"], []);
+        }
+    }
+
+    /// <inheritdoc />
+    public bool TryGetLastWriteUtc(string path, out DateTime lastWriteUtc)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                lastWriteUtc = default;
+                return false;
+            }
+
+            lastWriteUtc = File.GetLastWriteTimeUtc(path);
+            return true;
+        }
+        catch (Exception)
+        {
+            // A file that cannot be stat'ed is a file a poller has nothing to do
+            // about. Reporting it as a change would hand the caller a timestamp
+            // it could not read, and re-reading it would fail the same way.
+            lastWriteUtc = default;
+            return false;
+        }
     }
 
     private static ThemeEntry BrokenEntry(string fileName, IReadOnlyList<string> errors) => new(

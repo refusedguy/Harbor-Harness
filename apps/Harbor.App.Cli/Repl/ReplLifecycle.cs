@@ -793,8 +793,9 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     ///     poll timer (parse failures keep the last applied theme). Path:
     ///     <c>HARBOR_THEME_FILE</c>, else <c>~/.harbor/theme.json</c> when present.
     /// </summary>
-    // TODO(principles)[DIP]: route through IThemeService once it is registered
-    // in DI and Watch surfaces errors/names — today Watch swallows errors and
+    // TODO(principles)[DIP]: the READ half now goes through IThemeStore (#668),
+    // so the apply/watch roles are the only ones still wired directly. Routing
+    // those needs IThemeService in DI, and Watch still swallows errors and
     // ThemeJsonApplied carries string.Empty, so direct wiring keeps behavior.
     private void ArmThemeWatcher()
     {
@@ -809,15 +810,17 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
 
         host._themeFileApplied = true;
 
-        var initial = JsonThemeLoader.LoadFile(path);
+        IThemeStore store = new ThemeStore();
+        ThemeParseResult initial = store.LoadFile(path);
         if (initial.IsSuccess)
         {
-            TerminalColorPalette.Apply(initial.Value);
-            host.Bridge.AppendSystemLine($"theme: {initial.Value.Name} ({path})");
+            TerminalColorPalette.Apply(initial.Theme);
+            host.Bridge.AppendSystemLine($"theme: {initial.Theme.Name} ({path})");
         }
 
         host._themeWatcher = new ThemeFileWatcher(
             path,
+            store,
             onApplied: theme =>
             {
                 host._themeReloadLine = $"theme: live-reload → {theme.Name}";

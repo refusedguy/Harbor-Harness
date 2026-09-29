@@ -535,11 +535,14 @@ public sealed class PresentationCapabilityRules
             // / Process.Start to run the jump-to-definition search.
             [NoSubprocess + " Harbor.Tui.CellForge.Panels.CellForgeJumpPalettePanel"] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/538",
-            // Chat/Widgets/JsonThemeLoader.cs:57,:62 and ThemeFileWatcher.cs:35,:42,:47.
-            [NoFiles + " Harbor.Tui.CellForge.Widgets.JsonThemeLoader"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/538",
-            [NoFiles + " Harbor.Tui.CellForge.Widgets.ThemeFileWatcher"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/538",
+            // #668 RESOLVED: the two JsonThemeLoader / ThemeFileWatcher rows are
+            // GONE — not re-baselined. Those two were a second implementation of
+            // theme loading sitting next to Harbor.DesignSystem's ThemeStore, and
+            // a baseline row is a permission rather than a fix: it would have
+            // said "this Presentation type may touch the filesystem" forever,
+            // after the duplicate was gone. They read through IThemeStore now,
+            // and ThemeStoreSeamRules is the port's own guard — it fails if a
+            // second implementer of that port appears.
             // Chat/Panels/CellForgeFileTreePanel.cs:153,:230,:232,:240 for
             // Directory, and :237,:242,:247 for FileInfo/FileAttributes — the
             // NoFiles prefix matches those too, so this panel needs BOTH rows.

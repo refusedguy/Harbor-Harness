@@ -151,7 +151,9 @@ public sealed class ThemeService : IThemeService
     {
         // Avalonia HDS themes are XAML-based; JSON themes are handled by the terminal renderer.
         // For the desktop app we just raise the event so watchers can react and report success
-        // if the JSON is non-empty. Real JSON theme parsing lives in Harbor.Tui.CellForge.JsonThemeLoader.
+        // if the JSON is non-empty. The real JSON theme parser is Harbor.DesignSystem.ThemeJson
+        // (reached from the terminal through JsonThemeLoader.Parse, which takes a string, not a
+        // path — since #668 reading a theme FILE is IThemeStore, which this app does not use yet).
         if (string.IsNullOrWhiteSpace(json))
             return Result.Failure("theme json is empty");
         ThemeJsonApplied?.Invoke(this, json);
@@ -163,8 +165,10 @@ public sealed class ThemeService : IThemeService
 
     public IDisposable Watch(string path, Action<string>? onError)
     {
-        // Minimal file watcher that re-applies JSON on change. Mirrors the terminal JsonThemeLoader.Watch
-        // but delegates HDS handling to ApplyJson. Errors are non-fatal; watch resumes on next write.
+        // Minimal file watcher that re-applies JSON on change. Mirrors the terminal
+        // Harbor.Tui.CellForge.Widgets.ThemeFileWatcher (which polls rather than using
+        // FileSystemWatcher) but delegates HDS handling to ApplyJson. Errors are
+        // non-fatal; watch resumes on next write.
         try
         {
             var dir = Path.GetDirectoryName(Path.GetFullPath(path));
