@@ -19,8 +19,9 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 ///     <para>
 ///         <b>Lazy model fetch.</b> The registry's <c>GetAllModelsAsync</c>
 ///         fans out to every registered provider; the platform VM bounds the
-///         whole call to <see cref="ModelFetchTimeout" /> so a missing local
-///         provider (typical Ollama-not-running case) doesn't hang the picker.
+///         whole call to <see cref="ProviderModelPickerViewModel.UiFeedbackBudget" />
+///         so a missing local provider (typical Ollama-not-running case) doesn't
+///         hang the picker.
 ///     </para>
 ///     <para>
 ///         <b>Search.</b> The filter is case-insensitive and matches across
@@ -30,13 +31,10 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// </remarks>
 public abstract partial class ProviderModelPickerViewModelBase : StoreSubscriberViewModel
 {
-    /// <summary>
-    ///     Hard cap on how long the aggregated model-list fetch may take. Five
-    ///     seconds is long enough for a healthy provider to respond, short
-    ///     enough that the user doesn't think the picker hung when a local
-    ///     provider (Ollama, vLLM) isn't running.
-    /// </summary>
-    public static readonly TimeSpan ModelFetchTimeout = TimeSpan.FromSeconds(5);
+    // The aggregated-fetch cap is declared once, on ProviderModelPickerViewModel.
+    // This base used to carry a second copy of it under a probe-flavoured name,
+    // which is how two views of the same catalogue came to wait different times
+    // (#685). Platform subclasses spend ProviderModelPickerViewModel.UiFeedbackBudget.
 
     /// <summary>Label for the currently-selected model (shown in the picker's header).</summary>
     [ObservableProperty]
