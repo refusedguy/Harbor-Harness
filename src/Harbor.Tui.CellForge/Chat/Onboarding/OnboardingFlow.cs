@@ -464,7 +464,7 @@ public sealed class OnboardingFlow
             _selected?.Id ?? string.Empty,
             _model,
             _apiKey,
-            _keyAlreadyConfigured);
+            _keyAlreadyConfigured));
         Step = OnboardingStep.Finished;
         Dialog.Dismiss();
     }
