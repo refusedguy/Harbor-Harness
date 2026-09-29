@@ -93,7 +93,8 @@ public sealed class JsonlSessionPorter : ISessionPorter
         var headerLineResult = await TryReadNonEmptyLineAsync(input).ConfigureAwait(false);
         if (headerLineResult.IsFailure)
             return Result.Failure<string>($"Import failed while reading header: {headerLineResult.Error}");
-        string? headerLine = headerLineResult.Value; // guarded: returned above on failure.
+        Maybe<string> headerLineMaybe = headerLineResult.Value; // guarded: returned above on failure.
+        string? headerLine = headerLineMaybe.HasValue ? headerLineMaybe.Value : null;
         if (headerLine is null)
             return Result.Failure<string>("Import failed: payload is empty.");
 
@@ -206,11 +207,12 @@ public sealed class JsonlSessionPorter : ISessionPorter
 
     /// <summary>
     ///     Next non-blank line of an import payload. EOF is a successful
-    ///     <c>null</c> (normal end of the message section); only a genuine
-    ///     I/O error is a failure (#199: null-on-EOF stays, but it now rides
-    ///     the <see cref="Result" /> rail instead of a bare nullable).
+    ///     <c>Maybe.None</c> (normal end of the message section) — absence, not
+    ///     a value and not a failure, which is why it is a
+    ///     <see cref="Maybe{T}" /> rather than a null riding the
+    ///     <see cref="Result" /> rail (#199).
     /// </summary>
-    private static async Task<Result<string?>> TryReadNonEmptyLineAsync(TextReader reader)
+    private static async Task<Result<Maybe<string>>> TryReadNonEmptyLineAsync(TextReader reader)
     {
         try
         {
@@ -218,14 +220,14 @@ public sealed class JsonlSessionPorter : ISessionPorter
             {
                 string? line = await reader.ReadLineAsync().ConfigureAwait(false);
                 if (line is null)
-                    return Result.Success<string?>(null);
+                    return Result.Success(Maybe<string>.None);
                 if (line.Trim().Length > 0)
-                    return Result.Success<string?>(line);
+                    return Result.Success(Maybe<string>.From(line));
             }
         }
         catch (Exception ex)
         {
-            return Result.Failure<string?>(ex.Message);
+            return Result.Failure<Maybe<string>>(ex.Message);
         }
     }
 
@@ -239,7 +241,8 @@ public sealed class JsonlSessionPorter : ISessionPorter
         var result = await TryReadNonEmptyLineAsync(reader).ConfigureAwait(false);
         if (result.IsFailure)
             _logger.LogWarning("Import stopped early: message section unreadable: {Error}", result.Error);
-        return result.IsSuccess ? result.Value : null; // .Value guarded by the IsSuccess check.
+        Maybe<string> line = result.IsSuccess ? result.Value : Maybe<string>.None;
+        return line.HasValue ? line.Value : null; // .Value guarded by HasNoValue above.
     }
 }
 

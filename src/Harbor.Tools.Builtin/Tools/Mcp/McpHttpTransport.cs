@@ -77,9 +77,9 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         int? expectedId = null,
         CancellationToken cancellationToken = default)
     {
-        Result<JsonDocument?> roundTrip =
+        Result<Maybe<JsonDocument>> roundTrip =
             await TryRoundTripAsync(request, expectedId, cancellationToken).ConfigureAwait(false);
-        return roundTrip.Match(static doc => doc, _ => null);
+        return roundTrip.Match(static doc => doc.HasValue ? doc.Value : null, _ => null);
     }
 
     /// <summary>
@@ -88,8 +88,11 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     ///     surface as <c>Failure(endpoint + attempts + latency + cause)</c> instead of
     ///     throwing. Retry/timeout policy stays inside; user cancellation and
     ///     disposal still throw.
+    ///     <c>Maybe.None</c> means "succeeded, and the answer legitimately carries no
+    ///     document" (202 Accepted, empty body) — a different state from a failure,
+    ///     which is why the value is a <see cref="Maybe{T}" /> and not a null.
     /// </summary>
-    public async Task<Result<JsonDocument?>> TryRoundTripAsync(
+    public async Task<Result<Maybe<JsonDocument>>> TryRoundTripAsync(
         JsonElement request,
         int? expectedId = null,
         CancellationToken cancellationToken = default)
@@ -98,10 +101,11 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         var sw = Stopwatch.StartNew();
         HttpClient client = GetClient();
         string body = request.GetRawText();
-        Result<string?> oauth = await TryGetOAuthTokenAsync(cancellationToken).ConfigureAwait(false);
+        Result<Maybe<string>> oauth = await TryGetOAuthTokenAsync(cancellationToken).ConfigureAwait(false);
         if (oauth.IsFailure)
-            return Fail<JsonDocument?>(sw, 0, oauth.Error);
-        string? oauthToken = oauth.Value;
+            return Fail<Maybe<JsonDocument>>(sw, 0, oauth.Error);
+        Maybe<string> oauthTokenMaybe = oauth.Value;
+        string? oauthToken = oauthTokenMaybe.HasValue ? oauthTokenMaybe.Value : null;
         int attempt = 1;
 
         while (true)
@@ -117,14 +121,14 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
 
                 if (httpResponse.StatusCode == HttpStatusCode.Accepted)
                 {
-                    return Result.Success<JsonDocument?>(null);
+                    return Result.Success(Maybe<JsonDocument>.None);
                 }
 
                 if ((int)httpResponse.StatusCode >= 500 || httpResponse.StatusCode == HttpStatusCode.RequestTimeout)
                 {
                     string cause = $"MCP endpoint returned {(int)httpResponse.StatusCode}.";
                     if (attempt >= MaxAttempts)
-                        return Fail<JsonDocument?>(sw, attempt, cause);
+                        return Fail<Maybe<JsonDocument>>(sw, attempt, cause);
                     _logger?.LogWarning("MCP HTTP request to {Endpoint} failed (attempt {Attempt}/{Max}): {Cause}; retrying",
                         _endpoint, attempt, MaxAttempts, cause);
                     await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
@@ -133,12 +137,12 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
                 }
 
                 CaptureSession(httpResponse);
-                Result<JsonDocument?> read =
+                Result<Maybe<JsonDocument>> read =
                     await TryReadResponseAsync(httpResponse, expectedId, attemptCts.Token).ConfigureAwait(false);
                 if (read.IsFailure)
                 {
                     // The response was consumed: a no-frame SSE body is terminal.
-                    return Fail<JsonDocument?>(sw, attempt, read.Error);
+                    return Fail<Maybe<JsonDocument>>(sw, attempt, read.Error);
                 }
 
                 return read;
@@ -148,7 +152,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
                 // Client-side per-attempt timeout — retryable, unlike user cancellation.
                 string cause = $"MCP endpoint did not respond within {_requestTimeout.TotalSeconds:F0}s.";
                 if (attempt >= MaxAttempts)
-                    return Fail<JsonDocument?>(sw, attempt, cause);
+                    return Fail<Maybe<JsonDocument>>(sw, attempt, cause);
 
                 await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                 attempt++;
@@ -162,7 +166,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             }
             catch (Exception ex) when (IsTransient(ex))
             {
-                return Fail<JsonDocument?>(sw, attempt, ex.Message);
+                return Fail<Maybe<JsonDocument>>(sw, attempt, ex.Message);
             }
             catch (Exception ex) when (ex is not OperationCanceledException
                 && ex is not ObjectDisposedException
@@ -170,7 +174,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             {
                 // Expected wire failure outside the transient set (e.g. malformed
                 // JSON body): terminal, observable, never a throw.
-                return Fail<JsonDocument?>(sw, attempt, ex.Message);
+                return Fail<Maybe<JsonDocument>>(sw, attempt, ex.Message);
             }
         }
     }
@@ -238,11 +242,11 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
 
     /// <summary>
     ///     Read one response body on the Result railway (#201 A7): an empty payload
-    ///     is a valid notification-style <c>Success(null)</c>; an SSE body without a
-    ///     matching frame is a terminal <c>Failure</c> (was: throw in the same method
+    ///     is a valid notification-style <c>Success(Maybe.None)</c>; an SSE body without
+    ///     a matching frame is a terminal <c>Failure</c> (was: throw in the same method
     ///     that returned null — nulls and throws no longer share one signature).
     /// </summary>
-    private async Task<Result<JsonDocument?>> TryReadResponseAsync(
+    private async Task<Result<Maybe<JsonDocument>>> TryReadResponseAsync(
         HttpResponseMessage response,
         int? expectedId,
         CancellationToken cancellationToken)
@@ -252,7 +256,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         byte[] payload = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
         if (IsBlank(payload))
         {
-            return Result.Success<JsonDocument?>(null);
+            return Result.Success(Maybe<JsonDocument>.None);
         }
 
         string mediaType = response.Content.Headers.ContentType?.MediaType ?? "application/json";
@@ -260,11 +264,11 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         {
             try
             {
-                return Result.Success<JsonDocument?>(JsonDocument.Parse(payload));
+                return Result.Success(Maybe<JsonDocument>.From(JsonDocument.Parse(payload)));
             }
             catch (JsonException ex)
             {
-                return Result.Failure<JsonDocument?>($"MCP response was not valid JSON: {ex.Message}");
+                return Result.Failure<Maybe<JsonDocument>>($"MCP response was not valid JSON: {ex.Message}");
             }
         }
 
@@ -276,11 +280,11 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             if (reader.Feed(line) is { Event: "message" } ev
                 && McpSse.TryParseResponse(ev.Data, expectedId) is { } doc)
             {
-                return Result.Success<JsonDocument?>(doc);
+                return Result.Success(Maybe<JsonDocument>.From(doc));
             }
         }
 
-        return Result.Failure<JsonDocument?>("MCP SSE response carried no matching JSON-RPC frame.");
+        return Result.Failure<Maybe<JsonDocument>>("MCP SSE response carried no matching JSON-RPC frame.");
     }
 
     /// <summary>
@@ -299,21 +303,21 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         return true;
     }
 
-    private async Task<Result<string?>> TryGetOAuthTokenAsync(CancellationToken cancellationToken)
+    private async Task<Result<Maybe<string>>> TryGetOAuthTokenAsync(CancellationToken cancellationToken)
     {
         if (_oauthTokenProvider is null)
-            return Result.Success<string?>(null);
+            return Result.Success(Maybe<string>.None);
         try
         {
-            return Result.Success(await _oauthTokenProvider(cancellationToken).ConfigureAwait(false));
+            return Result.Success(Maybe<string>.From(await _oauthTokenProvider(cancellationToken).ConfigureAwait(false)));
         }
         catch (McpOAuthLoginRequiredException ex)
         {
-            return Result.Failure<string?>(ex.Message);
+            return Result.Failure<Maybe<string>>(ex.Message);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return Result.Failure<string?>($"MCP OAuth token failed: {ex.Message}");
+            return Result.Failure<Maybe<string>>($"MCP OAuth token failed: {ex.Message}");
         }
     }
 
