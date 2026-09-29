@@ -105,23 +105,51 @@ public sealed class SessionFactory
 
     /// <summary>
     ///     Resolve an <see cref="AgentDefinition" /> from the registry with
-    ///     optional name/provider/model overrides. Falls back to the first
-    ///     registered agent when the named agent doesn't exist.
+    ///     optional name/provider/model overrides. Falls back to
+    ///     <see cref="ResolveDefaultAgentDefinition" /> when the named agent doesn't
+    ///     exist, and to the same definition when no name was given at all.
     /// </summary>
-    /// <param name="agentName">Optional agent name override (defaults to "code").</param>
+    /// <param name="agentName">Optional agent name override; <c>null</c> means the fallback agent.</param>
     /// <param name="providerId">Optional provider id override.</param>
     /// <param name="modelId">Optional model id override.</param>
     /// <returns>The resolved <see cref="AgentDefinition" />.</returns>
     public async Task<AgentDefinition> ResolveAgentDefinitionAsync(string? agentName, string? providerId, string? modelId)
     {
-        var agentDef = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == (agentName ?? "code"))
-                       ?? _agents.GetAllAgents().First();
+        var agentDef = agentName is null
+            ? ResolveDefaultAgentDefinition()
+            : _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == agentName)
+              ?? ResolveDefaultAgentDefinition();
 
         (string? configProvider, string? configModel) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
         string provider = providerId ?? configProvider ?? agentDef.ProviderId;
         string model = modelId ?? configModel ?? agentDef.Model;
         return agentDef.WithModel(model, provider);
     }
+
+    /// <summary>
+    ///     The one place that answers "which agent is the default?" — the agent named by
+    ///     <see cref="AgentName.Fallback" />, or the first registered one if the host
+    ///     registers no such agent.
+    /// </summary>
+    /// <remarks>
+    ///     #683: this question was answered in three places, and one of them did not
+    ///     answer it — <c>CreateDefaultAsync</c> took <c>GetAllAgents().FirstOrDefault()</c>
+    ///     and named nothing. That agreed with the other two only by coincidence, and not
+    ///     even a stable one: <c>AgentRegistry</c> is backed by a
+    ///     <c>ConcurrentDictionary</c>, so "first" is the bucket layout, not the
+    ///     registration order. <c>SessionLifecycleService.RebindFromCommonConfigAsync</c>
+    ///     now calls this instead of running its own lookup, so the default session, the
+    ///     named-override path, and the config rebind cannot drift apart again.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    ///     No agents are registered at all. That is a composition-root bug — a host wired
+    ///     without an agent registry — not a runtime condition a caller could handle, so
+    ///     it is not dressed up as a <c>Result</c> failure.
+    /// </exception>
+    public AgentDefinition ResolveDefaultAgentDefinition()
+        => _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == AgentName.Fallback)
+           ?? _agents.GetAllAgents().FirstOrDefault()
+           ?? throw new InvalidOperationException("No agents registered.");
 
     /// <summary>
     ///     Create the default session if none exists yet. Reads the fresh
@@ -135,8 +163,12 @@ public sealed class SessionFactory
     /// <returns>The created session, or a failure carrying the store error.</returns>
     public async Task<Result<Session>> CreateDefaultAsync()
     {
-        var agentDef = _agents.GetAllAgents().FirstOrDefault()
-                       ?? throw new InvalidOperationException("No agents registered.");
+        // #683: this is the site that made the drift visible. It used to take
+        // `GetAllAgents().FirstOrDefault()` — no agent named at all — so the default
+        // session was built around whichever entry a ConcurrentDictionary yielded,
+        // not the agent the policy names. Now it asks the same question everyone else
+        // asks, in the one place the question is answered.
+        var agentDef = ResolveDefaultAgentDefinition();
 
         // Override the agent definition with the fresh CommonConfig values.
         (string? providerId, string? modelId) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
@@ -216,8 +248,17 @@ public sealed class SessionFactory
         {
             _logger.LogError("Branch session {Id} failed: could not read message history: {Error}",
                 source.Id, messagesResult.Error);
-            return Result.Failure<Session>(
-                $"Failed to branch session '{source.Id}': could not read message history: {messagesResult.Error}");
+
+            // #600: the store returns Result<IReadOnlyList<AgentMessage>> and this path
+            // owes the caller a Result<Session> — a re-type, which MapError cannot
+            // express (it is Result<T> → Result<T>). ConvertFailure<K>() CAN, and it is
+            // the member the repo already uses for exactly this shape (HunkParser.cs:123,
+            // PatchTool.cs:373). The IsFailure branch in front is what keeps it from
+            // throwing on a success. MapError then does what it is for: the context
+            // becomes a function of `e`, so it cannot be edited to drop the cause.
+            return messagesResult
+                .ConvertFailure<Session>()
+                .MapError(e => $"Failed to branch session '{source.Id}': could not read message history: {e}");
         }
 
         int copied = 0;
@@ -232,8 +273,17 @@ public sealed class SessionFactory
                 _logger.LogError(
                     "Branch session {Id} failed: could not copy message history ({Copied} of {Total} copied): {Error}",
                     source.Id, copied, total, appendResult.Error);
-                return Result.Failure<Session>(
-                    $"Failed to branch session '{source.Id}': could not copy message history ({copied} of {total} copied): {appendResult.Error}");
+
+                // Same re-type as above, and the progress number is the reason the
+                // context cannot be a bare string: the branch already exists in the
+                // store with a truncated transcript, and "{copied} of {total} copied"
+                // is the only record of how far the copy got. As a MapError closure that
+                // is state the failure carries; as an interpolated literal it was
+                // something a later edit could silently drop.
+                return appendResult
+                    .ConvertFailure<Session>()
+                    .MapError(e =>
+                        $"Failed to branch session '{source.Id}': could not copy message history ({copied} of {total} copied): {e}");
             }
             copied++;
         }

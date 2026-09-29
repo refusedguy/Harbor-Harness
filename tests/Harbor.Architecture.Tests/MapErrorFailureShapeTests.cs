@@ -154,13 +154,12 @@ public sealed class MapErrorFailureShapeTests
             + "sub-run rail has its own payload type; the three trailer sites also wrap the text in "
             + "SubAgentFailureFormat.WithResumeTrailer, which is still a function of `e` and would "
             + "compose with MapError the moment the types line up.",
-        ["src/Harbor.Ui.Framework.Sessions/Sessions/SessionFactory.cs"] =
-            "TWO of this file's five sites are exempt — this wave converted the other three to "
-            + "MapError. What is left re-types: `GetMessagesAsync` is "
-            + "Result<IReadOnlyList<AgentMessage>> → Result<Session> (196) and `AppendMessageAsync` "
-            + "is Result → Result<Session> (212). The branch path returns a Session on success, so "
-            + "its failure has to arrive as a Result<Session> too; MapError cannot mint that from a "
-            + "Result or from a Result<IReadOnlyList<…>>.",
+        // src/Harbor.Ui.Framework.Sessions/Sessions/SessionFactory.cs is deliberately
+        // NOT here any more (#600). Its two re-type sites are now
+        // `ConvertFailure<Session>().MapError(…)` — a re-type the library CAN express,
+        // so the exemption had nothing left to exempt. See
+        // SessionsSlice_HasNoHandBuiltFailureMessage and
+        // SessionsSlice_ExemptionIsGoneOnceItsLastSiteWasConverted.
     };
 
     // ── Rule: no hand-built failure message ──────────────────────────────────

@@ -542,6 +542,28 @@ public sealed class ToolName : ValueObject
 /// </remarks>
 public sealed class AgentName : ValueObject
 {
+    /// <summary>
+    ///     The agent a session gets when nobody named one — the one place in the
+    ///     repository where that answer is spelled.
+    /// </summary>
+    /// <remarks>
+    ///     #683: this answer was written in three places inside
+    ///     <c>Harbor.Ui.Framework.Sessions</c>, and one of the three
+    ///     (<c>SessionFactory.CreateDefaultAsync</c>) did not apply it at all — it took
+    ///     <c>GetAllAgents().FirstOrDefault()</c>, so the default agent was whichever
+    ///     entry a <c>ConcurrentDictionary</c> happened to yield. The two others spelled
+    ///     the literal <c>"code"</c> next to their lookup, and agreed with the first only
+    ///     by coincidence.
+    ///     <para>
+    ///         The constant lives HERE, in the innermost layer, rather than in
+    ///         <c>IdentityConfig</c> (<c>Harbor.Application</c>) where the other copy
+    ///         sits: <c>Harbor.Ui.Framework.Sessions</c> is an outer layer and may not
+    ///         reference <c>Harbor.Application</c> (docs/ARCHITECTURE_LAYERS.md), so a
+    ///         constant declared there is unreachable from the code that has to read it.
+    ///         <see cref="IdentityConfig.FallbackAgent" /> is now derived from this.
+    ///     </para>
+    /// </remarks>
+    public const string Fallback = "code";
 
     private AgentName(string value)
     {
