@@ -32,6 +32,7 @@
 
 using System.Text;
 using Harbor.Abstractions.Models;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -39,10 +40,12 @@ namespace Harbor.Storage.Jsonl.Tests;
 
 /// <summary>#460 — every JSONL path bounds the size it is willing to materialize.</summary>
 // Serialised, and load-bearing: the allocation gates below measure with
-// GC.GetTotalAllocatedBytes, which is correct only while nothing else in the
-// process allocates inside the measurement window. TUnit runs test classes in
-// parallel by default, so without this the numbers are whatever the neighbours
-// happened to do.
+// AllocationProbe.MeasureProcessAsync (#741 — the process-wide counter, shared
+// with AgentLoopAllocationTests so the repository has ONE methodology rather
+// than the two it had), which is correct only while nothing else in the process
+// allocates inside the measurement window. TUnit runs test classes in parallel
+// by default, so without this the numbers are whatever the neighbours happened
+// to do.
 //
 // Deliberately the KEYLESS form. Per TUnit's parallelism rules a keyless
 // [NotInParallel] is the most restrictive there is — the test runs completely
@@ -405,14 +408,22 @@ public class JsonlUnboundedAllocationTests
             //     captured context, so the continuation leaves the pinned
             //     thread anyway and the measurement collapses to ~0.)
             //
+            // One shared seam (#741): MeasureProcessAsync IS the process-wide
+            // counter, and the class is [NotInParallel] so nothing else
+            // allocates while this window is open. This file reached that
+            // conclusion independently via #661; the seam is what stops the two
+            // methodologies from drifting apart again.
+            //
             //   • GetTotalAllocatedBytes without serialisation bills this window
             //     for every other test class's garbage, since TUnit runs classes
             //     in parallel. [NotInParallel] is what removes that — not a
             //     different counter.
-            long before = GC.GetTotalAllocatedBytes(precise: true);
-            var read = await SessionFileReader.ParseMessagesFromDiskAsync(
-                path, sessionId, NullLogger.Instance, CancellationToken.None);
-            long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+            // The generic overload, because MessageReadSnapshot is internal to
+            // Harbor.Storage.Jsonl: naming it to hoist it out of a lambda would
+            // not compile, so the seam returns the result alongside the count.
+            var (read, allocated) = await AllocationProbe.MeasureProcessAsync(
+                () => SessionFileReader.ParseMessagesFromDiskAsync(
+                    path, sessionId, NullLogger.Instance, CancellationToken.None));
 
             Console.WriteLine($"jsonl-460: read of a {fileBytes / MiB} MiB session allocated {allocated / MiB} MiB");
 
@@ -420,13 +431,25 @@ public class JsonlUnboundedAllocationTests
             await Assert.That(read.Value.IsStable).IsTrue();
             await Assert.That(read.Value.Messages.Count).IsEqualTo(records);
 
+            // LOWER BOUND first (#741). This gate was already process-wide, so it
+            // was never the -815859 B case; but a ceiling on its own is satisfied
+            // by every negative number, and that is precisely how the AgentLoop
+            // gate sat green for a measurement that meant nothing. Asserting the
+            // floor here is what keeps a broken measurement from ever reading as
+            // a cheap read.
+            await Assert.That(allocated).IsGreaterThanOrEqualTo(0)
+                .Because(
+                    "a negative allocation measurement describes nothing — it is not a cheap read, and a " +
+                    "ceiling-only check would have accepted it (#741)");
+
             // Each record decodes to a payloadBytes-long UTF-16 string, and that
             // message graph is the irreducible result. The question is only what
             // the READ adds on top: the old shape added a second file-sized
             // array, this one adds a 256 KiB block. The gate sits just under the
             // old shape, so the new one clears it with a whole file of slack.
             long graphFloor = (long)records * 2 * payloadBytes;
-            await Assert.That(allocated).IsLessThan(graphFloor + fileBytes);
+            await Assert.That(allocated).IsLessThan(graphFloor + fileBytes)
+                .Because("ceiling only; the floor above is what makes it a gate rather than a formality");
         }
         finally
         {
@@ -644,6 +667,15 @@ public class JsonlUnboundedAllocationTests
             // a second copy of the 24 MiB file on top of that overhead; this one
             // puts at most a couple of MiB on top, and the gate says exactly
             // that: growing the file 3 000x must not grow the cost with it.
+            //
+            // The DIFFERENCE also gets a floor (#741): both operands come from the
+            // same process-wide counter, so a negative here cannot mean "cheaper
+            // than an empty rename" — it would mean a measurement went backwards,
+            // which must fail rather than read as a win.
+            await Assert.That(allocated - smallBaseline).IsGreaterThanOrEqualTo(0)
+                .Because(
+                    "a negative difference between two measurements of the same counter is not a saving, " +
+                    "it is a broken measurement (#741)");
             await Assert.That(allocated - smallBaseline).IsLessThan(2 * MiB);
 
             // And every record survived the rewrite — the count first, because a
@@ -681,12 +713,11 @@ public class JsonlUnboundedAllocationTests
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        // Process-wide delta, valid because the class is [NotInParallel] and
-        // UpdateAsync is async — see the read window for why neither cheaper
-        // counter can measure an async operation here.
-        long before = GC.GetTotalAllocatedBytes(precise: true);
-        var updated = await store.UpdateAsync(renamed);
-        long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+        // Process-wide delta via the shared seam (#741), valid because the class
+        // is [NotInParallel] and UpdateAsync is async — see the read window for
+        // why neither cheaper counter can measure an async operation here.
+        var (updated, allocated) = await AllocationProbe.MeasureProcessAsync(
+            () => store.UpdateAsync(renamed));
 
         if (!updated.IsSuccess)
         {

@@ -1,4 +1,4 @@
-// AllocationMeasurementGuardTests.cs — the #741 guard, RED STATE.
+// AllocationMeasurementGuardTests.cs — the #741 guard.
 //
 // THE BUG
 // -------
@@ -11,33 +11,47 @@
 //
 // It did not fail, because the tripwire compared from ABOVE only:
 // `Assert.That(best).IsLessThanOrEqualTo(ceiling)`. Every negative number
-// satisfies every ceiling, so the gate was not imprecise — it was OFF, while
-// rendering green. An absent guard is more honest than a gate that always passes.
+// satisfies every ceiling, so the gate was not merely imprecise — it was OFF,
+// while rendering green. An absent guard is more honest than a gate that always
+// passes.
 //
-// THIS IS THE RED STATE
-// ---------------------
-// The test below asserts the invariant the tripwire needed and never had: a
-// measurement is never negative. It measures the way the repository measures
-// today, so on this commit it FAILS — deterministically, not by luck. The
-// ballast below is what makes it deterministic: this thread allocates 4 MiB
-// before the first sample, the second sample is taken on a thread whose counter
-// started at zero, so the difference is negative by arithmetic and cannot depend
-// on where a scheduler happened to resume a continuation.
+// WHAT IS ASSERTED HERE, AND WHY IT IS NOT ONLY ABOUT TODAY
+// --------------------------------------------------------
+// The tripwires themselves now carry a lower bound, but a bound inside the test
+// that would have caught it cannot be relied on to catch the NEXT one: each
+// tripwire is written, reviewed and deleted on its own schedule, and the failure
+// mode is silent by nature — a budget that quietly stops budgeting.
 //
-// The fix (the next commit) introduces one shared measurement seam and moves
-// every allocation tripwire onto it. This file then asserts the same invariant
-// against that seam, so a return to the old methodology turns it red again.
+// So the invariant is asserted here, against the shared seam, once:
+//
+//   * a measurement across a thread hop is never negative (the #741 shape);
+//   * a measurement of real work is never a silent ~0, because 0 is also what a
+//     genuinely allocation-free path legitimately reports and the two are
+//     indistinguishable at a call site;
+//   * the synchronous path, which stays per-thread because it is exact there,
+//     still reports real bytes and still survives a body that BLOCKS on another
+//     thread (blocking is not a hop: this thread never stopped being this thread).
 //
 // NOT VACUOUS
 // -----------
-// `PerThreadWindow_AcrossAThreadHop_DoesGoNegative_IsTheWholeDefect` asserts the
-// opposite statement — that the OLD methodology really does produce a negative —
-// so the guard above cannot be passing because its own arithmetic is wrong. If a
-// future runtime changed how per-thread allocation is accounted for, this test
-// would fail and say so, instead of leaving the guard above inert.
+// `PerThreadWindow_AcrossAThreadHop_DoesGoNegative_IsTheWholeDefect` keeps the
+// OLD methodology in the file, verbatim, and asserts that it does go negative.
+// Without it the tests above could be passing because their own arithmetic is
+// wrong. If a future runtime changed how per-thread allocation is accounted for,
+// this control fails and says so, instead of leaving the others inert.
 //
-// [NotInParallel] keyless: a measurement of a thread hop is only meaningful with
-// nothing else on the process, and TUnit runs classes in parallel by default.
+// DETERMINISM
+// -----------
+// The negative case is built, not hoped for: this thread allocates 4 MiB of
+// ballast before the first sample and the second sample is taken on a thread
+// whose counter started at zero, so the difference is negative by arithmetic and
+// does not depend on where a scheduler resumed a continuation.
+//
+// [NotInParallel] keyless: the process-wide measurement bills every allocation in
+// the process for the duration of its window, and TUnit runs classes in parallel
+// by default.
+
+using Harbor.TestKit;
 
 namespace Harbor.Application.Tests;
 
@@ -60,29 +74,103 @@ public class AllocationMeasurementGuardTests
             TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach,
             TaskScheduler.Default);
 
-    [Test]
-    public async Task Measurement_AcrossAThreadHop_IsNeverNegative()
-    {
-        // The invariant #741 needed and did not have. Measured the way this
-        // repository measures today, so it fails on this commit — by arithmetic,
-        // not by timing.
-        _ = new byte[BallastBytes];
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        long after = await SampleCounterOnAFreshThreadAsync();
-        long measured = after - before;
+    /// <summary>
+    ///     Runs <paramref name="body" /> on a dedicated thread and completes only
+    ///     once that thread is finished, so the awaiting continuation genuinely
+    ///     resumes somewhere other than where it started.
+    /// </summary>
+    private static Task HopToADedicatedThreadAsync(Action body) =>
+        Task.Factory.StartNew(
+            body,
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach,
+            TaskScheduler.Default);
 
-        await Assert.That(measured).IsGreaterThanOrEqualTo(0)
+    [Test]
+    public async Task ProcessMeasurement_AcrossAThreadHop_IsNeverNegative()
+    {
+        // The invariant #741 needed and did not have, asserted against the seam
+        // every tripwire now shares. A process-wide delta is a difference of one
+        // monotonic counter, so the thread the work lands on cannot make it go
+        // backwards.
+        long allocated = await AllocationProbe.MeasureProcessAsync(
+            async () => await HopToADedicatedThreadAsync(() => { }));
+
+        await Assert.That(allocated).IsGreaterThanOrEqualTo(0)
             .Because(
-                "an allocation measurement is a difference of two readings of the SAME counter. Across a " +
-                "thread hop the readings come from different counters and the difference is meaningless — " +
-                "here it is negative, and a ceiling-only tripwire accepts every negative, so the gate is " +
-                "off while green");
+                "a measurement across a thread hop must never be negative. On the per-thread counter it " +
+                "was -815859 B, and a ceiling-only tripwire accepts every negative, so the gate was off " +
+                "while green (#741). If this fails, the seam has gone back to a per-thread counter");
+    }
+
+    [Test]
+    public async Task ProcessMeasurement_OfRealWork_ReportsTheBytesItSaw()
+    {
+        // The other direction. A probe that always answered 0 would satisfy the
+        // non-negativity claim above while measuring nothing, and 0 is exactly
+        // what a real zero-allocation path also reports.
+        long allocated = await AllocationProbe.MeasureProcessAsync(() =>
+        {
+            _ = new byte[256 * 1024];
+            return Task.CompletedTask;
+        });
+
+        await Assert.That(allocated).IsGreaterThanOrEqualTo(256L * 1024L)
+            .Because(
+                "a window that allocated 256 KiB must report at least that; a ~0 report is the " +
+                "silent-zero failure that a monotonic-counter guard alone cannot see");
+    }
+
+    [Test]
+    public async Task ThreadMeasurement_OfRealWork_ReportsTheBytesItSaw()
+    {
+        // The cheap exact path — still per-thread, because a body with no await
+        // cannot move threads — pinned to real work for the same reason.
+        long allocated = AllocationProbe.MeasureThread(() =>
+        {
+            _ = new byte[128 * 1024];
+        });
+
+        await Assert.That(allocated).IsGreaterThanOrEqualTo(128L * 1024L)
+            .Because("a synchronous body that allocated 128 KiB must report at least that");
+    }
+
+    [Test]
+    public async Task ThreadMeasurement_OfABodyThatBlocks_IsStillExact()
+    {
+        // A blocking body is the nearest a synchronous Action comes to #741's
+        // shape, and it is the case a reviewer will ask about: the work happens
+        // on another thread, but THIS thread is what gets measured, and it never
+        // stopped being this thread. Exact is the right answer — the foreign
+        // thread's bytes were never in this counter and are not silently added.
+        using var gate = new ManualResetEventSlim(false);
+        Task<long> foreign = Task.Factory.StartNew(
+            () =>
+            {
+                gate.Wait();
+                return GC.GetAllocatedBytesForCurrentThread();
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach,
+            TaskScheduler.Default);
+
+        long allocated = AllocationProbe.MeasureThread(() =>
+        {
+            _ = new byte[64 * 1024];
+            gate.Set();
+            foreign.GetAwaiter().GetResult();
+        });
+
+        await Assert.That(allocated).IsGreaterThanOrEqualTo(64L * 1024L)
+            .Because(
+                "blocking on another thread does not move THIS thread's counter, so the synchronous " +
+                "measurement stays exact rather than becoming the #741 garbage");
     }
 
     [Test]
     public async Task PerThreadWindow_AcrossAThreadHop_DoesGoNegative_IsTheWholeDefect()
     {
-        // The control, and the reason the guard above is worth having: the old
+        // The control, and the reason the tests above are worth having: the OLD
         // methodology really does go negative, deterministically. This thread
         // allocated 4 MiB of ballast; the other thread started at zero.
         _ = new byte[BallastBytes];
@@ -94,7 +182,7 @@ public class AllocationMeasurementGuardTests
             .Because(
                 "this is the #741 number, kept as a positive control. The 'before' thread allocated 4 MiB " +
                 "and the 'after' thread started at zero, so a per-thread delta across that hop is " +
-                "negative by arithmetic. Without this, the guard above could be passing because its own " +
-                "arithmetic is wrong");
+                "negative by arithmetic. Without this, the guards above could be passing because their " +
+                "own arithmetic is wrong");
     }
 }
