@@ -20,7 +20,7 @@ Renderer-agnostic projection of `UiState` into `UiScreenModel`. The bridge betwe
 - **`DefaultUiProjector`**: full projection implementation; also exposes `State`, `Screen`, `Transcript`, `Lines`, `BaseRendered`, `BaseBlocks`, `IsStreaming`, `ThinkBuf` for renderer binding.
 - **`StatusProjector`**: `ProjectStatusBar(UiState)` and `ProjectFooter(UiState)` — partial projections for chrome regions. It only *packs* cells; it never formats one.
 - **`StatusBarFacts.Of(UiState)`**: the single derivation of the status-bar cells every renderer reads (#488) — including token and cost text, whose rules live in `Harbor.Ui.Framework.State.StatusBarText`.
-- **`UiScreenModel` records**: `UiMessageBlock`, `UiSpanStyle`, `MessageRenderPhase`, `ToolCallStatus`, etc.
+- **`UiScreenModel` records**: `UiMessageBlock`, `UiSpanStyle`, `MessageRenderPhase`, etc. The tool-call lifecycle vocabulary is the shared `ToolCallState` enum from `Harbor.Ui.Framework.Abstractions` (#567) — this project used to declare a fourth, consumer-less `ToolCallStatus`.
 - **`ChatStreamingPresenter`**: `DeriveStatus(UiState)` helper.
 
 ## Dependencies

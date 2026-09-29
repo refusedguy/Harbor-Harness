@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Tui.CellForge.Rendering;
+using Harbor.Ui.Framework;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -19,9 +20,6 @@ namespace Harbor.Tui.CellForge.Widgets;
 public sealed class ReadGroupBlock : ICollapsibleChatBlock
 {
     private const char GroupGlyph = '◇';
-    private const char RunningGlyph = '⚙';
-    private const char OkGlyph = '✔';
-    private const char ErrorGlyph = '✖';
 
     /// <summary>Expanded per-member row budget (mirrors ToolCallBlock.ExpandedBodyLines).</summary>
     public const int MaxExpandedMembers = 20;
@@ -292,14 +290,10 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
             return;
         }
 
-        Maybe<ToolResultBody> body = member.Body;
-        bool done = body.HasValue;
-        char glyph = !done ? RunningGlyph : (body.Value.IsError ? ErrorGlyph : OkGlyph);
-        var glyphStyle = !done
-            ? ChatPalette.ToolRunning
-            : (body.Value.IsError ? ChatPalette.ToolError : ChatPalette.ToolOk);
-
-        buffer.SetText(x, y, [glyph], glyphStyle);
+        // Read the member's ToolCallState, not its body (#567): a cancelled/timed-out
+        // member HAS a body (so the former `IsError ? ✖ : ✔` logic called it OK)
+        // yet is terminal and must not read as success or as still-running.
+        buffer.SetText(x, y, [member.StatusGlyph], member.StatusGlyphStyle);
         int cursor = x + 1;
         if (cursor >= x + width)
         {
@@ -317,14 +311,19 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
         // OutcomeText — no per-frame StringBuilder. Identical cells to the
         // former ' ' + args + " → " + ("ok "/"error ") + FormatDuration run.
         int end = x + width;
-        var detailStyle = done && body.Value.IsError ? ChatPalette.ToolError : ChatPalette.ToolArgs;
+        // Same colouring as before the #567 collapse for the three states that
+        // existed then: running and success stay in ToolArgs, error goes red.
+        // Cancelled is a deliberate stop, so it stays neutral like success;
+        // TimedOut is a failure to complete, so it goes red like error.
+        bool faulted = member.Status is ToolCallState.Error or ToolCallState.TimedOut;
+        var detailStyle = faulted ? ChatPalette.ToolError : ChatPalette.ToolArgs;
         if (!string.IsNullOrEmpty(member.Info.ArgsSummary))
         {
             PaintRun(buffer, ref cursor, end, y, " ", detailStyle);
             PaintRun(buffer, ref cursor, end, y, member.Info.ArgsSummary.AsSpan(), detailStyle);
         }
 
-        if (done && member.OutcomeText is { Length: > 0 } outcome)
+        if (member.Status.IsTerminal() && member.OutcomeText is { Length: > 0 } outcome)
         {
             PaintRun(buffer, ref cursor, end, y, " → ", detailStyle);
             PaintRun(buffer, ref cursor, end, y, outcome.AsSpan(), detailStyle);

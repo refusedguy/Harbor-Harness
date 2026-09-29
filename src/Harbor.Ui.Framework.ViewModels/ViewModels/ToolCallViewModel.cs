@@ -1,5 +1,7 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Harbor.Ui.Framework.Converters;
+
 namespace Harbor.Ui.Framework.ViewModels;
 /// <summary>
 ///     One tool call projected for the chat UI. Combines start + result
@@ -54,7 +56,7 @@ public sealed partial class ToolCallViewModel : ObservableObject
     private string _resultPreview = string.Empty;
 
     [ObservableProperty]
-    private ToolCallStatus _status = ToolCallStatus.Running;
+    private ToolCallState _status = ToolCallState.Running;
 
     [ObservableProperty]
     private string _toolName = string.Empty;
@@ -75,15 +77,11 @@ public sealed partial class ToolCallViewModel : ObservableObject
     public string Id { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Human-readable status pill label.
+    ///     Human-readable status pill label. Delegates to
+    ///     <see cref="StatusMappers.ToolCallStateToPill" /> — this view-model
+    ///     used to carry a third copy of the same label table (#567).
     /// </summary>
-    public string StatusPill => Status switch
-    {
-        ToolCallStatus.Running => "running",
-        ToolCallStatus.Success => "ok",
-        ToolCallStatus.Error => "err",
-        _ => "?"
-    };
+    public string StatusPill => StatusMappers.ToolCallStateToPill(Status);
 
     /// <summary>
     ///     Duration formatted for compact display (ms / s).
@@ -99,22 +97,18 @@ public sealed partial class ToolCallViewModel : ObservableObject
     ///     Platform apps resolve this to an <c>IBrush</c> /
     ///     <c>Brush</c> via a <c>BrushKeyConverter</c>-style lookup so
     ///     theme changes are tracked automatically without this VM
-    ///     depending on any UI framework.
+    ///     depending on any UI framework. Delegates to
+    ///     <see cref="StatusMappers.ToolCallStateToBrushKey" /> — the fourth
+    ///     copy of the same brush table before #567.
     /// </summary>
-    public string StatusBrushKey => Status switch
-    {
-        ToolCallStatus.Running => "MochaYellow",
-        ToolCallStatus.Success => "MochaGreen",
-        ToolCallStatus.Error => "MochaRed",
-        _ => "MochaOverlay2"
-    };
+    public string StatusBrushKey => StatusMappers.ToolCallStateToBrushKey(Status);
 
     /// <summary>
     ///     Mark this tool call as completed with the given status.
     ///     Updates <see cref="Status" /> and notifies dependents
     ///     (<see cref="StatusPill" /> / <see cref="StatusBrushKey" />).
     /// </summary>
-    public void Complete(ToolCallStatus status, string resultPreview, TimeSpan duration)
+    public void Complete(ToolCallState status, string resultPreview, TimeSpan duration)
     {
         Status = status;
         ResultPreview = resultPreview;

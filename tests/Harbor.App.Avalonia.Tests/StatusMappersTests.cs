@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.ViewModels;
 namespace Harbor.App.Avalonia.Tests;
@@ -59,50 +60,130 @@ public class StatusMappersTests
             .IsEqualTo("StatusIdleBrush");
     }
 
-    // ── ToolCallStatusToBrushKey ───────────────────────────────────
+    // ── ToolCallStateToBrushKey ────────────────────────────────────
 
     [Test]
-    public async Task ToolCallStatusToBrushKey_Running_ReturnsYellow()
+    public async Task ToolCallStateToBrushKey_Running_ReturnsYellow()
     {
-        await Assert.That(StatusMappers.ToolCallStatusToBrushKey(ToolCallStatus.Running))
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Running))
             .IsEqualTo("MochaYellow");
     }
 
     [Test]
-    public async Task ToolCallStatusToBrushKey_Success_ReturnsGreen()
+    public async Task ToolCallStateToBrushKey_Success_ReturnsGreen()
     {
-        await Assert.That(StatusMappers.ToolCallStatusToBrushKey(ToolCallStatus.Success))
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Success))
             .IsEqualTo("MochaGreen");
     }
 
     [Test]
-    public async Task ToolCallStatusToBrushKey_Error_ReturnsRed()
+    public async Task ToolCallStateToBrushKey_Error_ReturnsRed()
     {
-        await Assert.That(StatusMappers.ToolCallStatusToBrushKey(ToolCallStatus.Error))
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Error))
             .IsEqualTo("MochaRed");
     }
 
-    // ── ToolCallStatusToPill ───────────────────────────────────────
+    // ── ToolCallStateToPill ────────────────────────────────────────
 
     [Test]
-    public async Task ToolCallStatusToPill_Running_ReturnsRunningLabel()
+    public async Task ToolCallStateToPill_Running_ReturnsRunningLabel()
     {
-        await Assert.That(StatusMappers.ToolCallStatusToPill(ToolCallStatus.Running))
+        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Running))
             .IsEqualTo("running");
     }
 
     [Test]
-    public async Task ToolCallStatusToPill_Success_ReturnsOkLabel()
+    public async Task ToolCallStateToPill_Success_ReturnsOkLabel()
     {
-        await Assert.That(StatusMappers.ToolCallStatusToPill(ToolCallStatus.Success))
+        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Success))
             .IsEqualTo("ok");
     }
 
     [Test]
-    public async Task ToolCallStatusToPill_Error_ReturnsErrLabel()
+    public async Task ToolCallStateToPill_Error_ReturnsErrLabel()
     {
-        await Assert.That(StatusMappers.ToolCallStatusToPill(ToolCallStatus.Error))
+        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Error))
             .IsEqualTo("err");
+    }
+
+    // #567: the two terminal states the old `_ =>` arms could not express. Both
+    // used to fall into the unknown-state arm, which read "?" for the pill and
+    // "MochaOverlay2" for the brush — and, worse, painted as still-running in
+    // CellForge. A stopped call must never borrow the live presentation.
+    [Test]
+    public async Task ToolCallStateToPill_Cancelled_And_TimedOut_Are_Not_Running()
+    {
+        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Cancelled))
+            .IsEqualTo("cancelled");
+        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.TimedOut))
+            .IsEqualTo("timeout");
+
+        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Cancelled))
+            .IsNotEqualTo(StatusMappers.ToolCallStateToPill(ToolCallState.Running));
+        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.TimedOut))
+            .IsNotEqualTo(StatusMappers.ToolCallStateToPill(ToolCallState.Running));
+    }
+
+    [Test]
+    public async Task ToolCallStateToBrushKey_Cancelled_Is_Neutral_TimedOut_Is_Red()
+    {
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Cancelled))
+            .IsEqualTo("MochaOverlay1");
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.TimedOut))
+            .IsEqualTo("MochaRed");
+
+        // Cancelled is deliberate, not a fault — it must not wear the error brush.
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Cancelled))
+            .IsNotEqualTo(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Error));
+    }
+
+    /// <summary>
+    /// The brush half of the #567 guard. "Neutral, not a fault" is a claim about
+    /// fault-ness, not about lifecycle: folding Cancelled onto Pending's key made
+    /// a deliberately stopped card paint identically to one that never started,
+    /// and the two were distinguishable only by pill text.
+    /// </summary>
+    [Test]
+    public async Task ToolCallStateToBrushKey_Cancelled_Does_Not_Borrow_Pending()
+    {
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Cancelled))
+            .IsNotEqualTo(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Pending))
+            .Because("a stopped call must not look like one that has not started");
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Cancelled))
+            .IsNotEqualTo(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Running))
+            .Because("a stopped call must not look like a live one");
+    }
+
+    /// <summary>
+    /// Every declared state must have a non-empty pill and brush, and no state may
+    /// resolve to the old unknown-state placeholder. Walks
+    /// <c>Enum.GetValues</c> so adding a member without a presentation is a test
+    /// failure (#567).
+    /// </summary>
+    [Test]
+    public async Task Every_ToolCallState_Has_Pill_And_Brush()
+    {
+        foreach (ToolCallState state in Enum.GetValues<ToolCallState>())
+        {
+            await Assert.That(StatusMappers.ToolCallStateToPill(state)).IsNotEmpty()
+                .Because($"{state} needs a pill label");
+            await Assert.That(StatusMappers.ToolCallStateToPill(state)).IsNotEqualTo("?")
+                .Because($"{state} hit the unknown-state placeholder");
+            await Assert.That(StatusMappers.ToolCallStateToBrushKey(state)).IsNotEmpty()
+                .Because($"{state} needs a brush key");
+        }
+    }
+
+    [Test]
+    public async Task IsTerminal_Classifies_Each_State_Once()
+    {
+        foreach (ToolCallState state in Enum.GetValues<ToolCallState>())
+        {
+            bool expected = state is ToolCallState.Success or ToolCallState.Error
+                or ToolCallState.Cancelled or ToolCallState.TimedOut;
+            await Assert.That(state.IsTerminal()).IsEqualTo(expected)
+                .Because($"{state} terminal classification drifted");
+        }
     }
 
     // ── SessionStatusToText ────────────────────────────────────────

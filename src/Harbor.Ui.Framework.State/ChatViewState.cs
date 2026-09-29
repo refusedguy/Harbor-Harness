@@ -78,7 +78,7 @@ public sealed record ChatLineViewModel(ChatRole Role, string Text)
 /// <param name="Id">Stable identifier used to coalesce start/end events.</param>
 /// <param name="ToolName">Human-readable tool name.</param>
 /// <param name="ArgsPreview">Truncated arguments preview.</param>
-/// <param name="Status">Current status: "running", "success", or "error".</param>
+/// <param name="Status">Lifecycle phase, in the shared <c>ToolCallState</c> vocabulary (#567).</param>
 /// <param name="ResultPreview">Truncated result preview.</param>
 /// <param name="Duration">Elapsed execution time.</param>
 /// <param name="IsExpanded">Whether the tool-call card is expanded.</param>
@@ -90,7 +90,7 @@ public sealed record ToolCallViewModel(
     string Id,
     string ToolName,
     string ArgsPreview,
-    string Status,
+    ToolCallState Status,
     string ResultPreview,
     TimeSpan Duration,
     bool IsExpanded,

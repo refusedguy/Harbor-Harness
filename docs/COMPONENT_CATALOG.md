@@ -823,8 +823,8 @@ Static class with pure functions (no UI framework dependency):
 | Method | Input | Output | Description |
 |---|---|---|---|
 | `StatusToBrushKey` | `string?` status | `string` resource key | `"running"` → `"StatusRunningBrush"` etc. |
-| `ToolCallStatusToBrushKey` | `ToolCallStatus` | `string` | `Running` → `"MochaYellow"` etc. |
-| `ToolCallStatusToPill` | `ToolCallStatus` | `string` | `Running` → `"running"`, `Success` → `"ok"`, `Error` → `"err"` |
+| `ToolCallStateToBrushKey` | `ToolCallState` | `string` | `Running` → `"MochaYellow"` etc. |
+| `ToolCallStateToPill` | `ToolCallState` | `string` | `Running` → `"running"`, `Success` → `"ok"`, `Error` → `"err"`, `Cancelled` → `"cancelled"`, `TimedOut` → `"timeout"` |
 | `SessionStatusToText` | `SessionStatus` | `string` | `Working` → `"working"` etc. |
 | `SessionStatusToBrushKey` | `SessionStatus` | `string` | `Working` → `"MochaYellow"` etc. |
 | `DurationToText` | `TimeSpan` | `string` | `234ms` / `1.5s` / `""` |
@@ -842,7 +842,7 @@ Static class with pure functions (no UI framework dependency):
 - `FinishLabelConverter` — wizard "Finish" / "Next" label
 - `StepToStepperBrushConverter` — wizard progress dots
 - `StatusTextToBrushConverter` — `StatusMappers.StatusToBrushKey` → `IBrush`
-- `ToolCallStatusToBrushConverter` — `StatusMappers.ToolCallStatusToBrushKey` → `IBrush`
+- `ToolCallStateToBrushConverter` — `StatusMappers.ToolCallStateToBrushKey` → `IBrush`
 - `SessionStatusToTextConverter` — `StatusMappers.SessionStatusToText`
 - `SessionStatusToBrushConverter` — `StatusMappers.SessionStatusToBrushKey` → `IBrush`
 - `TimeAgoConverter` — `StatusMappers.TimeAgo`

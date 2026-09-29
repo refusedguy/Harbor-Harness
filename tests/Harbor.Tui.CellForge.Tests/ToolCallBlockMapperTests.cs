@@ -1,7 +1,7 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.Converters;
-using VmToolCallStatus = Harbor.Ui.Framework.ViewModels.ToolCallStatus;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -23,19 +23,19 @@ public class ToolCallBlockMapperTests
     }
 
     [Test]
-    public async Task Pill_Maps_All_Phases()
+    public async Task Pill_Maps_All_States()
     {
-        await Assert.That(StatusMappers.ToolCallStatusToPill(VmToolCallStatus.Running)).IsEqualTo("running");
-        await Assert.That(StatusMappers.ToolCallStatusToPill(VmToolCallStatus.Success)).IsEqualTo("ok");
-        await Assert.That(StatusMappers.ToolCallStatusToPill(VmToolCallStatus.Error)).IsEqualTo("err");
+        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Running)).IsEqualTo("running");
+        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Success)).IsEqualTo("ok");
+        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Error)).IsEqualTo("err");
     }
 
     [Test]
-    public async Task BrushKey_Maps_All_Phases()
+    public async Task BrushKey_Maps_All_States()
     {
-        await Assert.That(StatusMappers.ToolCallStatusToBrushKey(VmToolCallStatus.Running)).IsEqualTo("MochaYellow");
-        await Assert.That(StatusMappers.ToolCallStatusToBrushKey(VmToolCallStatus.Success)).IsEqualTo("MochaGreen");
-        await Assert.That(StatusMappers.ToolCallStatusToBrushKey(VmToolCallStatus.Error)).IsEqualTo("MochaRed");
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Running)).IsEqualTo("MochaYellow");
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Success)).IsEqualTo("MochaGreen");
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Error)).IsEqualTo("MochaRed");
     }
 
     [Test]
@@ -62,7 +62,7 @@ public class ToolCallBlockMapperTests
     public async Task Running_Block_Pill_And_Brush()
     {
         var block = new ToolCallBlock(new ToolCallInfo("t1", "bash", "ls -la"));
-        await Assert.That(block.Status).IsEqualTo(ToolCallStatus.Running);
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.Running);
         await Assert.That(block.StatusPill).IsEqualTo("running");
         await Assert.That(block.StatusBrushKey).IsEqualTo("MochaYellow");
     }
@@ -72,7 +72,7 @@ public class ToolCallBlockMapperTests
     {
         var block = new ToolCallBlock(new ToolCallInfo("t1", "read", "src/a.cs"));
         block.Complete(new ToolResultBody("body", isError: false, TimeSpan.FromMilliseconds(850)));
-        await Assert.That(block.Status).IsEqualTo(ToolCallStatus.Ok);
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.Success);
         await Assert.That(block.StatusPill).IsEqualTo("ok");
         await Assert.That(block.StatusBrushKey).IsEqualTo("MochaGreen");
     }
@@ -82,7 +82,7 @@ public class ToolCallBlockMapperTests
     {
         var block = new ToolCallBlock(new ToolCallInfo("t2", "edit", ""));
         block.Complete(new ToolResultBody("boom", isError: true, TimeSpan.FromMilliseconds(5)));
-        await Assert.That(block.Status).IsEqualTo(ToolCallStatus.Error);
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.Error);
         await Assert.That(block.StatusPill).IsEqualTo("err");
         await Assert.That(block.StatusBrushKey).IsEqualTo("MochaRed");
     }
@@ -143,7 +143,7 @@ public class ToolCallBlockMapperTests
         var block = new ToolCallBlock(new ToolCallInfo("t2", "edit", ""));
         block.Complete(new ToolResultBody("boom", isError: true, TimeSpan.FromMilliseconds(5)));
         block.Complete(new ToolResultBody("second", isError: false, TimeSpan.FromMilliseconds(9)));
-        await Assert.That(block.Status).IsEqualTo(ToolCallStatus.Error);
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.Error);
         await Assert.That(block.Body.Value.Output).IsEqualTo("boom");
         await Assert.That(block.StatusPill).IsEqualTo("err");
     }
@@ -157,6 +157,124 @@ public class ToolCallBlockMapperTests
         block.Complete(new ToolResultBody("ok", isError: false, TimeSpan.FromMilliseconds(12)));
         await Assert.That(block.StatusPill).IsEqualTo("ok");
         await Assert.That(block.StatusBrushKey).IsEqualTo("MochaGreen");
+    }
+
+    // ── #567: the states the old `_ =>` arms invented as "running" ──────────
+
+    [Test]
+    public async Task Cancelled_Block_Does_Not_Render_As_Running()
+    {
+        // Before #567 a cancelled/timed-out call had no state to hold, so it fell
+        // into `_ => Running` and the card spun forever. These are the assertions
+        // that make that unrepresentable rather than merely unlikely.
+        var block = new ToolCallBlock(new ToolCallInfo("t9", "bash", "sleep 999"));
+        block.Stop(ToolCallState.Cancelled, "cancelled by user");
+
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.Cancelled);
+        await Assert.That(block.Status.IsTerminal()).IsTrue();
+        await Assert.That(block.StatusPill).IsEqualTo("cancelled");
+        await Assert.That(block.StatusPill).IsNotEqualTo("running");
+        await Assert.That(block.StatusBrushKey).IsNotEqualTo("MochaYellow");
+        await Assert.That(block.StatusBrushKey).IsNotEqualTo(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Running));
+        await Assert.That(block.ViewModel.Status).IsEqualTo(ToolCallState.Cancelled);
+
+        string art = PaintHeader(block);
+        await Assert.That(art).DoesNotContain("⚙");
+        await Assert.That(art).Contains("[cancelled]");
+    }
+
+    [Test]
+    public async Task TimedOut_Block_Does_Not_Render_As_Running()
+    {
+        var block = new ToolCallBlock(new ToolCallInfo("t10", "webfetch", "https://example.test"));
+        block.Stop(ToolCallState.TimedOut);
+
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.TimedOut);
+        await Assert.That(block.Status.IsTerminal()).IsTrue();
+        await Assert.That(block.StatusPill).IsEqualTo("timeout");
+        await Assert.That(block.StatusPill).IsNotEqualTo("running");
+        await Assert.That(PaintHeader(block)).DoesNotContain("⚙");
+    }
+
+    [Test]
+    public async Task Stop_NonTerminal_State_Throws()
+    {
+        // The one place a value arrives from outside the class, so it cannot be
+        // routed through the throw-on-unnamed-domain switch the paint path
+        // uses: guard it explicitly.
+        var block = new ToolCallBlock(new ToolCallInfo("t11", "bash", "ls"));
+        await Assert.That(() => block.Stop(ToolCallState.Running))
+            .Throws<ArgumentOutOfRangeException>();
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.Running);
+    }
+
+    [Test]
+    public async Task Stop_After_Complete_Is_A_NoOp()
+    {
+        var block = new ToolCallBlock(new ToolCallInfo("t12", "read", "a.cs"));
+        block.Complete(new ToolResultBody("ok", isError: false, TimeSpan.FromMilliseconds(3)));
+        block.Stop(ToolCallState.Cancelled, "late abort");
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.Success);
+        await Assert.That(block.StatusPill).IsEqualTo("ok");
+    }
+
+    [Test]
+    public async Task Complete_After_Stop_Does_Not_Resurrect()
+    {
+        var block = new ToolCallBlock(new ToolCallInfo("t13", "bash", "sleep 999"));
+        block.Stop(ToolCallState.Cancelled, "cancelled by user");
+        block.Complete(new ToolResultBody("late", isError: false, TimeSpan.FromMilliseconds(9)));
+        await Assert.That(block.Status).IsEqualTo(ToolCallState.Cancelled);
+        await Assert.That(block.StatusPill).IsEqualTo("cancelled");
+    }
+
+    /// <summary>
+    /// The paint half of the #567 guard. Every declared state must resolve to a
+    /// glyph the card can actually paint, and a terminal one must never look
+    /// live. The class-wide gate over the enum's full membership lives in
+    /// <c>Harbor.Ui.Framework.Tests/ToolCallStateGuardTests</c>; this asserts the
+    /// thing only a rendered card can prove — that the glyph reaches the cell
+    /// grid.
+    /// </summary>
+    [Test]
+    public async Task Every_State_Has_Pill_And_Brush_And_A_Painted_Glyph()
+    {
+        foreach (ToolCallState state in Enum.GetValues<ToolCallState>())
+        {
+            string pill = StatusMappers.ToolCallStateToPill(state);
+            string brush = StatusMappers.ToolCallStateToBrushKey(state);
+
+            await Assert.That(pill).IsNotEmpty().Because($"{state} needs a pill label");
+            await Assert.That(pill).IsNotEqualTo("?").Because($"{state} fell into the old unknown-state arm");
+            await Assert.That(brush).IsNotEmpty().Because($"{state} needs a brush key");
+
+            var block = new ToolCallBlock(new ToolCallInfo($"g{(int)state}", "bash", "ls"));
+            if (state.IsTerminal())
+            {
+                block.Stop(state, "terminal");
+                await Assert.That(block.StatusPill).IsEqualTo(pill);
+            }
+            else
+            {
+                // Pending / Running are the only states that may present as live.
+                await Assert.That(pill).IsNotEqualTo("cancelled");
+                await Assert.That(pill).IsNotEqualTo("timeout");
+            }
+
+            string art = PaintHeader(block);
+            await Assert.That(art).IsNotEmpty();
+        }
+    }
+
+    [Test]
+    public async Task Terminal_States_Are_Classified_Once()
+    {
+        foreach (ToolCallState state in Enum.GetValues<ToolCallState>())
+        {
+            bool expected = state is ToolCallState.Success or ToolCallState.Error
+                or ToolCallState.Cancelled or ToolCallState.TimedOut;
+            await Assert.That(state.IsTerminal()).IsEqualTo(expected).Because($"{state} classification drifted");
+        }
     }
 
     [Test]

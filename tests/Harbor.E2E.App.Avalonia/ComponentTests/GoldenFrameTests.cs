@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Harbor.App.Avalonia.Views;
 using Harbor.App.Avalonia.Views.Controls;
+using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.ViewModels;
 using TUnit.Assertions;
@@ -48,7 +49,7 @@ public sealed class GoldenFrameTests : ComponentTestBase
             IconText = "✎",
             ArgsPreview = "{\"path\": \"src/App.cs\"}",
             ResultPreview = "Applied 1 hunk — +12 −3",
-            Status = ToolCallStatus.Success,
+            Status = ToolCallState.Success,
             Duration = TimeSpan.FromMilliseconds(340),
         };
 

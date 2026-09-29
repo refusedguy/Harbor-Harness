@@ -3,6 +3,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework;
 
 namespace Harbor.Tui.CellForge.Streaming;
 
@@ -179,6 +180,48 @@ internal sealed class ToolCardTracker
         errorCard.SetExpanded(false);
         _cards.Remove(id);
         _panel.Timeline.MarkLastDirty();
+    }
+
+    /// <summary>
+    /// Ends every still-open card in <paramref name="terminal"/>. Used when a
+    /// run is cancelled: the agent publishes no
+    /// <see cref="ToolExecutionEndEvent" /> for the call it aborts, so without
+    /// this sweep the card keeps its running glyph and never stops (#567).
+    /// Completed cards are untouched (their result already won), and each
+    /// stopped card keeps the idempotence contract — a late end event is a
+    /// no-op. Returns the number of cards stopped.
+    /// </summary>
+    public int StopRunningCalls(ToolCallState terminal, string reason)
+    {
+        int stopped = 0;
+        foreach (var (id, card) in _cards)
+        {
+            if (card.Block.Status.IsTerminal())
+            {
+                continue;
+            }
+
+            card.Block.Stop(terminal, reason);
+            stopped++;
+
+            // [UX5] #265: a task card carries its transcript + tally in the
+            // suffix; clearing it stops the header from claiming live progress
+            // for a run that no longer exists.
+            if (_tasks.Remove(id))
+            {
+                card.Block.LiveSuffix = null;
+                card.Block.LiveSuffixIsError = false;
+                ICollapsibleChatBlock taskCard = card.Block;
+                taskCard.SetExpanded(false);
+            }
+        }
+
+        if (stopped > 0)
+        {
+            _panel.Timeline.MarkLastDirty();
+        }
+
+        return stopped;
     }
 
     public void CompleteCard(ToolExecutionEndEvent e)

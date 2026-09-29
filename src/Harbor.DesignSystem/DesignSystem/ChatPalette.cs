@@ -172,21 +172,21 @@ public static class ChatPalette
 
     /// <summary>Tool status pill — running (<c>"running"</c>) — warning
     /// yellow. Cell-side projection of
-    /// <c>StatusMappers.ToolCallStatusToBrushKey(Running)</c>
+    /// <c>StatusMappers.ToolCallStateToBrushKey(Running)</c>
     /// (<c>MochaYellow</c>); same color as <see cref="ToolRunning"/>
     /// (glyph style), separate member so the pill can diverge.</summary>
     public static CellStyle ToolPillRunning => C.ToolPillRunningStyle;
 
     /// <summary>Tool status pill — success (<c>"ok"</c>) — success green.
     /// Cell-side projection of
-    /// <c>StatusMappers.ToolCallStatusToBrushKey(Success)</c>
+    /// <c>StatusMappers.ToolCallStateToBrushKey(Success)</c>
     /// (<c>MochaGreen</c>); same color as <see cref="ToolOk"/>
     /// (glyph style), separate member so the pill can diverge.</summary>
     public static CellStyle ToolPillOk => C.ToolPillOkStyle;
 
     /// <summary>Tool status pill — error (<c>"err"</c>) — error red.
     /// Cell-side projection of
-    /// <c>StatusMappers.ToolCallStatusToBrushKey(Error)</c>
+    /// <c>StatusMappers.ToolCallStateToBrushKey(Error)</c>
     /// (<c>MochaRed</c>); same color as <see cref="ToolError"/>
     /// (glyph style), separate member so the pill can diverge.</summary>
     public static CellStyle ToolPillError => C.ToolPillErrorStyle;

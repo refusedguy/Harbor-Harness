@@ -1,19 +1,17 @@
 using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Tui.CellForge.Rendering;
+using Harbor.Ui.Framework;
 using FrameworkStatusMappers = Harbor.Ui.Framework.Converters.StatusMappers;
-using VmToolCallStatus = Harbor.Ui.Framework.ViewModels.ToolCallStatus;
 using VmToolCall = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
-/// <summary>Execution phase of a tool card.</summary>
-public enum ToolCallStatus : byte
-{
-    Running = 0,
-    Ok = 1,
-    Error = 2,
-}
+// #567: this file used to declare `enum ToolCallStatus : byte
+// { Running, Ok, Error }` and convert it to the framework enum through the
+// SAME switch written twice (:119-121 and :137-141), both ending in
+// `_ => Running`. The shared `ToolCallState` replaces the enum, so there is no
+// conversion left to duplicate — and no wildcard arm left to invent a state.
 
 /// <summary>
 /// Identity of the call: stable id + display name + truncated args.
@@ -69,16 +67,21 @@ public sealed class ToolResultBody
 
 /// <summary>
 /// Mutable tool-call card (widgets §3.1): created Running on ToolCallStart,
-/// completed Ok/Error with duration on ToolExecutionEnd. The timeline marks
-/// its slot dirty after each mutation — paint itself is pure over fields.
+/// completed Success/Error with duration on ToolExecutionEnd, and stopped in a
+/// terminal no-result state via <see cref="Stop"/> when the run is cancelled
+/// (#567). The timeline marks its slot dirty after each mutation — paint itself
+/// is pure over fields.
 /// </summary>
 public sealed class ToolCallBlock : ICollapsibleChatBlock
 {
+    private const char PendingGlyph = '◌';
     private const char RunningGlyph = '⚙';
     private const char OkGlyph = '✔';
     private const char ErrorGlyph = '✖';
+    private const char CancelledGlyph = '⊘';
+    private const char TimedOutGlyph = '⧗';
 
-    private ToolCallStatus _status;
+    private ToolCallState _status;
     // The block has no body until Complete() — a state, not a missing value. It was
     // a bare `ToolResultBody?` with four `!` suppressions in the paint/measure path
     // (each one a place where the `is null` guard lived in a DIFFERENT method than the
@@ -96,14 +99,18 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     public ToolCallBlock(in ToolCallInfo info)
     {
         Info = info;
-        _status = ToolCallStatus.Running;
+        _status = ToolCallState.Running;
         MaxBodyLines = ICollapsibleChatBlock.DefaultCollapsedBodyLines;
         _argsRowText = "  args: " + ArgsFullText;
     }
 
     public ToolCallInfo Info { get; }
 
-    public ToolCallStatus Status => _status;
+    /// <summary>
+    /// Lifecycle phase of the call, in the single shared
+    /// <see cref="ToolCallState" /> vocabulary (#567).
+    /// </summary>
+    public ToolCallState Status => _status;
 
     /// <summary>
     ///     The tool result, or <see cref="Maybe{T}.None" /> while the call is still
@@ -117,19 +124,16 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     /// Bridges the pure-paint widget into the shared
     /// <c>Harbor.Ui.Framework.ViewModels</c> vocabulary so renderers can
     /// bind against the same status / duration / diff surface used by
-    /// Avalonia / WPF / Blazor.
+    /// Avalonia / WPF / Blazor. <see cref="Status"/> passes straight through —
+    /// both sides speak <see cref="ToolCallState"/>, so there is nothing left
+    /// to convert.
     /// </summary>
     public VmToolCall ViewModel => new()
     {
         Id = Info.Id,
         ToolName = Info.ToolName,
         ArgsPreview = Info.ArgsSummary,
-        Status = _status switch
-        {
-            ToolCallStatus.Ok => VmToolCallStatus.Success,
-            ToolCallStatus.Error => VmToolCallStatus.Error,
-            _ => VmToolCallStatus.Running,
-        },
+        Status = _status,
         ResultPreview = _body.HasValue ? _body.Value.Output : string.Empty,
         Duration = _body.HasValue ? _body.Value.Duration : TimeSpan.Zero,
         IsDiffTool = Info.DiffFull is not null,
@@ -139,31 +143,19 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     };
 
     /// <summary>
-    /// Status in the shared <c>Harbor.Ui.Framework.ViewModels</c> vocabulary —
-    /// the single bridge that lets the framework-free <c>StatusMappers</c>
-    /// converters operate on this block. Local <c>Ok</c> maps to
-    /// <c>Success</c> (naming only; same meaning).
+    /// Short status pill label via <c>StatusMappers.ToolCallStateToPill</c>
+    /// (<c>"running"</c> / <c>"ok"</c> / <c>"err"</c> / <c>"cancelled"</c> /
+    /// <c>"timeout"</c>).
     /// </summary>
-    private VmToolCallStatus ViewModelStatus => _status switch
-    {
-        ToolCallStatus.Ok => VmToolCallStatus.Success,
-        ToolCallStatus.Error => VmToolCallStatus.Error,
-        _ => VmToolCallStatus.Running,
-    };
-
-    /// <summary>
-    /// Short status pill label via <c>StatusMappers.ToolCallStatusToPill</c>
-    /// (<c>"running"</c> / <c>"ok"</c> / <c>"err"</c>).
-    /// </summary>
-    public string StatusPill => FrameworkStatusMappers.ToolCallStatusToPill(ViewModelStatus);
+    public string StatusPill => FrameworkStatusMappers.ToolCallStateToPill(_status);
 
     /// <summary>
     /// Resource key for the status brush via
-    /// <c>StatusMappers.ToolCallStatusToBrushKey</c> (e.g. <c>"MochaGreen"</c>).
+    /// <c>StatusMappers.ToolCallStateToBrushKey</c> (e.g. <c>"MochaGreen"</c>).
     /// Consumed by projector-level style mapping (CF-D-005); cell paint keeps
     /// using <c>ChatPalette</c> styles (the single cell source of truth).
     /// </summary>
-    public string StatusBrushKey => FrameworkStatusMappers.ToolCallStatusToBrushKey(ViewModelStatus);
+    public string StatusBrushKey => FrameworkStatusMappers.ToolCallStateToBrushKey(_status);
 
     /// <summary>
     /// Collapsed-body line budget (continuation marker when exceeded).
@@ -235,15 +227,75 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
         }
 
         _body = Maybe.From(body);
-        _status = body.IsError ? ToolCallStatus.Error : ToolCallStatus.Ok;
+        _status = body.IsError ? ToolCallState.Error : ToolCallState.Success;
+        CacheTransitionPaintFragments();
+    }
 
-        // ENG10 #282: transition-computed paint fragments — Paint slices
-        // spans over these instead of interpolating per frame. Cells identical
-        // to the former $" ({DurationToText})" / $" [{StatusPill}]" runs.
+    /// <summary>
+    /// Ends the card in a terminal state that produced no result —
+    /// <see cref="ToolCallState.Cancelled"/> or
+    /// <see cref="ToolCallState.TimedOut"/>. Idempotent — first terminal wins,
+    /// so a late <c>ToolExecutionEnd</c> cannot resurrect a stopped card.
+    /// </summary>
+    /// <remarks>
+    ///     Before #567 a stopped call had no way out of
+    ///     <see cref="ToolCallState.Running"/>: <see cref="Complete"/> was the
+    ///     only exit and it needs a result, so the card kept the running glyph
+    ///     and spun forever.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     <paramref name="terminal"/> is not a terminal state — stopping a
+    ///     card in a non-terminal phase is a bug, not a no-op. This is the one
+    ///     entry point where the value arrives from outside the class, so it
+    ///     cannot be routed through the throw-on-undeclared-member switch the
+    ///     paint path uses.
+    /// </exception>
+    public void Stop(ToolCallState terminal, string? reason = null)
+    {
+        if (!terminal.IsTerminal())
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(terminal),
+                terminal,
+                $"Stop() needs a terminal ToolCallState; '{terminal}' is non-terminal.");
+        }
+
+        if (_body.HasValue)
+        {
+            return;
+        }
+
+        _body = Maybe.From(new ToolResultBody(reason ?? string.Empty, isError: false, TimeSpan.Zero));
+        _status = terminal;
+        CacheTransitionPaintFragments();
+    }
+
+    // ENG10 #282: transition-computed paint fragments — Paint slices
+    // spans over these instead of interpolating per frame. Cells identical
+    // to the former $" ({DurationToText})" / $" [{StatusPill}]" runs.
+    private void CacheTransitionPaintFragments()
+    {
+        var body = _body.Value;
         _durationText = FrameworkStatusMappers.DurationToText(body.Duration);
         _pillText = " [" + StatusPill + "]";
-        _outcomeText = (body.IsError ? "error " : "ok ") + ToolResultBody.FormatDuration(body.Duration);
+        _outcomeText = OutcomeWord(_status) + " " + ToolResultBody.FormatDuration(body.Duration);
     }
+
+    /// <summary>
+    /// Group-row outcome fragment for a terminal state. Every member named
+    /// explicitly; an undeclared value throws rather than being silently worded
+    /// "running" (#567). The Success/Error words are pinned by
+    /// <c>ToolCallBlockMapperTests</c> and stay byte-identical.
+    /// </summary>
+    private static string OutcomeWord(ToolCallState state) => state switch
+    {
+        ToolCallState.Success => "ok",
+        ToolCallState.Error => "error",
+        ToolCallState.Cancelled => "cancelled",
+        ToolCallState.TimedOut => "timeout",
+        ToolCallState.Pending or ToolCallState.Running => "running",
+        _ => throw ToolCallStateExtensions.Undeclared(state)
+    };
 
     public BlockMeasure Measure(int width)
     {
@@ -358,18 +410,12 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             return;
         }
 
-        char glyph = _status switch
-        {
-            ToolCallStatus.Ok => OkGlyph,
-            ToolCallStatus.Error => ErrorGlyph,
-            _ => RunningGlyph,
-        };
-        var glyphStyle = _status switch
-        {
-            ToolCallStatus.Ok => ChatPalette.ToolOk,
-            ToolCallStatus.Error => ChatPalette.ToolError,
-            _ => ChatPalette.ToolRunning,
-        };
+        // Exhaustive switch behind StatusGlyph / StatusGlyphStyle (#567): an unmapped
+        // state throws there instead of falling through to the running glyph and
+        // spinning forever. Cancelled/TimedOut are terminal — they must not
+        // paint as running.
+        char glyph = StatusGlyph;
+        var glyphStyle = StatusGlyphStyle;
 
         // ENG10 #282: one-shot paint — no per-frame heap objects (stack span, not char[]).
         Span<char> glyphRun = stackalloc char[1];
@@ -526,16 +572,46 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     public string RawText()
     {
         var sb = new StringBuilder();
-        sb.Append(RunningGlyph).Append(' ').Append(Info.ToolName);
+        sb.Append(StatusGlyph).Append(' ').Append(Info.ToolName);
         if (_body.HasValue)
         {
-            ToolResultBody body = _body.Value;
-            sb.Append(" → ").Append(body.IsError ? "error" : "ok")
-              .Append(' ').Append(ToolResultBody.FormatDuration(body.Duration));
+            sb.Append(" → ").Append(OutcomeWord(_status))
+              .Append(' ').Append(ToolResultBody.FormatDuration(_body.Value.Duration));
         }
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Single glyph per <see cref="ToolCallState"/>, shared by
+    /// <see cref="Paint"/> and <see cref="RawText"/> so the painted cell grid
+    /// and the plain-text pipe can never disagree about a call's state.
+    /// Every member named explicitly (#567).
+    /// </summary>
+    internal char StatusGlyph => _status switch
+    {
+        ToolCallState.Pending => PendingGlyph,
+        ToolCallState.Running => RunningGlyph,
+        ToolCallState.Success => OkGlyph,
+        ToolCallState.Error => ErrorGlyph,
+        ToolCallState.Cancelled => CancelledGlyph,
+        ToolCallState.TimedOut => TimedOutGlyph,
+        _ => throw ToolCallStateExtensions.Undeclared(_status)
+    };
+
+    /// <summary>
+    /// Cell style paired with <see cref="StatusGlyph"/>, so the read-group member
+    /// rows and the card header cannot disagree about a member's state.
+    /// Every member named explicitly (#567).
+    /// </summary>
+    internal CellStyle StatusGlyphStyle => _status switch
+    {
+        ToolCallState.Pending or ToolCallState.Running => ChatPalette.ToolRunning,
+        ToolCallState.Success => ChatPalette.ToolOk,
+        ToolCallState.Error or ToolCallState.TimedOut => ChatPalette.ToolError,
+        ToolCallState.Cancelled => ChatPalette.Dim,
+        _ => throw ToolCallStateExtensions.Undeclared(_status)
+    };
 
     public bool HasDiffText => _body.HasValue && _body.Value.DiffText is not null;
 }

@@ -5,6 +5,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -49,7 +50,7 @@ public class ChatScreenBridgeTests
         await Assert.That(kinds[3]).IsEqualTo("tool-call");
 
         var card = (ToolCallBlock)tl.BlockAt(3);
-        await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Ok);
+        await Assert.That(card.Status).IsEqualTo(ToolCallState.Success);
         await Assert.That(card.Body.Value.Output).IsEqualTo("file body");
         await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Idle);
     }
@@ -130,8 +131,62 @@ public class ChatScreenBridgeTests
 
         var tl = panel.Timeline;
         var card = (ToolCallBlock)tl.BlockAt(tl.Count - 1);
-        await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Error);
+        await Assert.That(card.Status).IsEqualTo(ToolCallState.Error);
         await Assert.That(card.Body.Value.Duration).IsEqualTo(TimeSpan.FromMilliseconds(50));
+    }
+
+    // #567: a cancelled run publishes AgentEndEvent(Cancelled: true) and never a
+    // ToolExecutionEndEvent for the call it aborts. Before the collapsed
+    // ToolCallState enum there was no state that meant "stopped", so the
+    // in-flight card stayed Running and its ⚙ glyph spun forever. This pins the
+    // bridge half; ToolCallBlockMapperTests pins the paint half.
+    [Test]
+    public async Task CancelledRun_StopsInFlightToolCard_InsteadOfSpinning()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel();
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        await bus.PublishAsync(new ToolExecutionStartEvent("tcX", "bash", System.Text.Json.JsonDocument.Parse("{\"cmd\":\"sleep 999\"}").RootElement.Clone()));
+        bridge.Tick(40);
+
+        var tl = panel.Timeline;
+        var card = (ToolCallBlock)tl.BlockAt(tl.Count - 1);
+        await Assert.That(card.Status).IsEqualTo(ToolCallState.Running);
+        await Assert.That(card.Status.IsTerminal()).IsFalse();
+
+        await bus.PublishAsync(new AgentEndEvent([], Cancelled: true));
+
+        await Assert.That(card.Status).IsEqualTo(ToolCallState.Cancelled);
+        await Assert.That(card.Status.IsTerminal()).IsTrue();
+        await Assert.That(card.StatusPill).IsEqualTo("cancelled");
+        await Assert.That(card.StatusPill).IsNotEqualTo("running");
+        await Assert.That(card.StatusBrushKey).IsNotEqualTo("MochaYellow");
+        await Assert.That(card.RawText()).DoesNotContain("⚙");
+    }
+
+    [Test]
+    public async Task CancelledRun_DoesNotDisturbAlreadyCompletedCards()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        await bus.PublishAsync(new ToolExecutionStartEvent("tcDone", "read", System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone()));
+        bridge.Tick(10);
+        await bus.PublishAsync(new ToolExecutionEndEvent("tcDone", ToolResult.Success("file body"), IsError: false));
+
+        await bus.PublishAsync(new ToolExecutionStartEvent("tcLive", "bash", System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone()));
+        await bus.PublishAsync(new AgentEndEvent([], Cancelled: true));
+
+        var tl = panel.Timeline;
+        var done = (ToolCallBlock)tl.BlockAt(tl.Count - 2);
+        var live = (ToolCallBlock)tl.BlockAt(tl.Count - 1);
+
+        await Assert.That(done.Status).IsEqualTo(ToolCallState.Success);
+        await Assert.That(done.StatusPill).IsEqualTo("ok");
+        await Assert.That(live.Status).IsEqualTo(ToolCallState.Cancelled);
     }
 
     [Test]
@@ -147,7 +202,7 @@ public class ChatScreenBridgeTests
 
         var tl = panel.Timeline;
         var card = (ToolCallBlock)tl.BlockAt(tl.Count - 1);
-        await Assert.That(card.Status).IsEqualTo(ToolCallStatus.Error);
+        await Assert.That(card.Status).IsEqualTo(ToolCallState.Error);
         await Assert.That(card.IsExpanded).IsFalse();
         await Assert.That(card.Body.Value.Output).IsEqualTo(blob);
 

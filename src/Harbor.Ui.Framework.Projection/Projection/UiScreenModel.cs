@@ -34,13 +34,10 @@ public enum MessageRenderPhase
     Thinking
 }
 
-public enum ToolCallStatus
-{
-    Pending,
-    Running,
-    Done,
-    Error
-}
+// #567: the projection used to declare its own `ToolCallStatus`
+// { Pending, Running, Done, Error } with zero consumers in the repo. The
+// shared `ToolCallState` (Harbor.Ui.Framework.Abstractions) owns the tool-call
+// lifecycle now; re-declaring it here only widened the gap.
 
 public enum UiSpanStyle
 {

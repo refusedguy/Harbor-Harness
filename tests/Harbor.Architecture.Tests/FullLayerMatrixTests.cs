@@ -237,12 +237,27 @@ public class FullLayerMatrixTests
                 // vocabulary (Rendering.Input) — the reversed edge replacing the
                 // old Rendering→State one; Presentation→Presentation conforms.
                 "Harbor.Ui.Framework.Rendering"]),
+        // #567: ChatViewReducer writes ToolCallState directly into
+        // ChatViewState.ToolCalls, so the reducer now names a type from the
+        // Abstractions package rather than only re-exporting State's. Same
+        // Presentation → Domain edge ViewModels/Services/Projection already
+        // declare; it was previously unrealised here, not forbidden.
+        // (Spelled .Contracts, not the Harbor.Abstractions facade: that facade
+        // type-forwards, so a consumer that binds contract types emits a ref to
+        // .Contracts — and Matrix_AllowedEntries_AreLive would reject the facade
+        // spelling here as a stale entry.)
         ["Harbor.Ui.Framework.Reducers"] = new(Layer.Presentation,
-            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State"]),
+            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State",
+              "Harbor.Ui.Framework.Abstractions"]),
         ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Reducers"]),
+        // #567: ToolCallViewModel.Status is a ToolCallState, so the view-models
+        // now bind the Abstractions package in IL rather than carrying an
+        // unbound reference to it. Same Presentation → Domain edge the other
+        // Ui.Framework.* rows already declare.
         ["Harbor.Ui.Framework.ViewModels"] = new(Layer.Presentation,
-            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services"]),
+            [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services",
+              "Harbor.Ui.Framework.Abstractions"]),
         ["Harbor.Ui.Framework.Projection"] = new(Layer.Presentation,
             [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
              // RgbColor is defined in the standalone DesignSystem package but
@@ -279,7 +294,7 @@ public class FullLayerMatrixTests
             "Harbor.Abstractions",
             "Harbor.Ui.Framework.ViewModels",
             "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services",
-            "Harbor.Ui.Framework.Sessions",
+            "Harbor.Ui.Framework.Sessions", "Harbor.Ui.Framework.Abstractions",
         ]),
         ["Harbor.Desktop.Shared"] = new(Layer.Presentation,
             // #462: Commands/SlashCommands projects the shared SlashCommandCatalog

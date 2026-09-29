@@ -3,6 +3,7 @@ using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.Views.Controls;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.ViewModels;
 using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -77,7 +78,7 @@ public class KillerFeatureTests
             ToolName = "read",
             IconText = "📖"
         };
-        await Assert.That(vm.Status).IsEqualTo(ToolCallStatus.Running);
+        await Assert.That(vm.Status).IsEqualTo(ToolCallState.Running);
         await Assert.That(vm.StatusPill).IsEqualTo("running");
         await Assert.That(vm.IsExpanded).IsFalse();
         await Assert.That(vm.DurationText).IsEqualTo(string.Empty);
@@ -92,10 +93,10 @@ public class KillerFeatureTests
             IconText = "🖥️"
         };
         vm.Complete(
-            ToolCallStatus.Success,
+            ToolCallState.Success,
             "exit code 0",
             TimeSpan.FromMilliseconds(234));
-        await Assert.That(vm.Status).IsEqualTo(ToolCallStatus.Success);
+        await Assert.That(vm.Status).IsEqualTo(ToolCallState.Success);
         await Assert.That(vm.StatusPill).IsEqualTo("ok");
         await Assert.That(vm.DurationText).IsEqualTo("234ms");
         await Assert.That(vm.ResultPreview).IsEqualTo("exit code 0");
@@ -106,10 +107,10 @@ public class KillerFeatureTests
     {
         var vm = new ToolCallVm { ToolName = "edit" };
         vm.Complete(
-            ToolCallStatus.Error,
+            ToolCallState.Error,
             "permission denied",
             TimeSpan.FromSeconds(1.5));
-        await Assert.That(vm.Status).IsEqualTo(ToolCallStatus.Error);
+        await Assert.That(vm.Status).IsEqualTo(ToolCallState.Error);
         await Assert.That(vm.StatusPill).IsEqualTo("err");
         await Assert.That(vm.DurationText).IsEqualTo("1.5s");
     }
