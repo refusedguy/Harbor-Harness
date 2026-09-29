@@ -148,13 +148,29 @@ public sealed class ToolNameListRule
     private const int TableWindowLines = 3;
 
     /// <summary>
-    ///     How many known tool names a run must contain before it is judged a TOOL
-    ///     table. Three, not two: a run holding one real tool name and a couple of
-    ///     unrelated words is a schema or a command list, and a rule that flags it
-    ///     is noise that gets worked around. Three real tool names in three lines
-    ///     is a table by any reading.
+    ///     How many tool-SHAPED names a run must contain before it is judged a tool
+    ///     table at all — real tools or not. This is the gate that separates a table
+    ///     from a JSON schema or a CLI verb list, neither of which quotes words
+    ///     shaped like tools in bulk.
     /// </summary>
-    private const int TableMinimumToolNames = 3;
+    private const int TableMinimumNames = 3;
+
+    /// <summary>
+    ///     How many of those names must be REAL tools before the run is treated as
+    ///     being about tools. Two, not three: a dead row is by definition a name that
+    ///     is not a tool, so requiring three real ones makes the rule blind to a
+    ///     table that has exactly one phantom in it — which is precisely the case it
+    ///     exists for. Two real names beside a phantom is already unmistakably a tool
+    ///     table, and a schema never reaches it because its words are not tool names.
+    /// </summary>
+    /// <remarks>
+    ///     This threshold was three when the rule was written, and the non-vacuity
+    ///     control caught it in CI: a planted <c>"read", "write", "web_fetch"</c> held
+    ///     two real names and was therefore never seen, so the rule that exists to
+    ///     find a phantom row could not find a phantom row. A positive control that
+    ///     fails the rule it is testing is the control working.
+    /// </remarks>
+    private const int TableMinimumRealTools = 2;
 
     /// <summary>A tool name spelled as a C# string literal, with the line it was on.</summary>
     private sealed record Mention(string File, int Line, string Name)
@@ -480,12 +496,12 @@ public sealed class ToolNameListRule
 
     /// <summary>
     ///     Every run of quoted words in the supplied sources that qualifies as a
-    ///     TOOL table: at least <see cref="TableMinimumToolNames" /> distinct names
-    ///     that really are tools, all within <see cref="TableWindowLines" /> lines
-    ///     of each other in one file.
+    ///     TOOL table: at least <see cref="TableMinimumNames" /> tool-shaped names of
+    ///     which <see cref="TableMinimumRealTools" /> are real tools, all within
+    ///     <see cref="TableWindowLines" /> lines of each other in one file.
     /// </summary>
     /// <remarks>
-    ///     Requiring several REAL tool names is what makes this precise. Matching
+    ///     Requiring tool-shaped names in bulk is what makes this precise. Matching
     ///     on "two adjacent quoted words" instead flags every JSON schema and every
     ///     CLI verb list in the repository — noise a rule gets disabled rather than
     ///     obeyed. A schema names no tools, so it can never reach the threshold.
@@ -540,9 +556,8 @@ public sealed class ToolNameListRule
     }
 
     /// <summary>
-    ///     Closes a candidate run: keeps it as a table when it holds at least
-    ///     <see cref="TableMinimumToolNames" /> real tool names, then clears the
-    ///     buffer for the next run.
+    ///     Closes a candidate run: keeps it when it is tool-shaped enough and about
+    ///     tools, then clears the buffer for the next run.
     /// </summary>
     /// <remarks>
     ///     A run is built per file (see <see cref="CollectTables" />), so every
@@ -554,11 +569,15 @@ public sealed class ToolNameListRule
         FrozenSet<string> known,
         List<IReadOnlyList<Mention>> tables)
     {
-        if (run.Count > 0
-            && run.Select(m => m.Name).Where(known.Contains).Distinct(StringComparer.Ordinal).Count()
-               >= TableMinimumToolNames)
+        if (run.Count > 0)
         {
-            tables.Add([.. run]);
+            string[] names = [.. run.Select(m => m.Name).Distinct(StringComparer.Ordinal)];
+            int realTools = names.Count(known.Contains);
+
+            if (names.Length >= TableMinimumNames && realTools >= TableMinimumRealTools)
+            {
+                tables.Add([.. run]);
+            }
         }
 
         run.Clear();
