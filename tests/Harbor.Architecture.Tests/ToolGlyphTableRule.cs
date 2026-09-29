@@ -34,12 +34,13 @@
 //
 // THE RULE IS VALUE-AGNOSTIC
 // --------------------------
-// The names to hunt for are read out of `BuiltinToolSafetyProfiles.All` (#557's
-// inventory, one row per builtin tool) unioned with every `ToolName.Create("…")`
-// literal in the tool implementations, so a new tool re-points the guard instead
-// of silently disarming it. A guard pinned to a hard-coded name list stops
-// guarding the day a tool is added — which is precisely the bug this file exists
-// to prevent.
+// The names to hunt for come from `ToolNameInventory.Names`, which reads
+// `BuiltinToolSafetyProfiles.All` (#557's inventory, one row per builtin tool)
+// unioned with every `ToolName.Create("…")` literal in the tool implementations,
+// so a new tool re-points the guard instead of silently disarming it. A guard
+// pinned to a hard-coded name list stops guarding the day a tool is added —
+// which is precisely the bug this file exists to prevent, and the reason the
+// reader lives in a shared type rather than in this file (see #595).
 //
 // NON-VACUITY
 // -----------
@@ -56,10 +57,16 @@
 // written across lines (`"read"\n    => "▸"`) is missed. The limitation is bounded
 // by construction: the only way to bring a table back is to make the arm DO work,
 // and arms are string literals on code lines.
+//
+// SHARED INFRASTRUCTURE (#595)
+// ---------------------------
+// The tool-name vocabulary and the product-file walk this gate used to carry
+// privately now live in `ToolNameInventory` and `SourceScan`, so #595's guard
+// hunts the same names from the same derivation instead of growing a second,
+// independently-drifting copy of both.
 
 using System.Collections.Frozen;
 using System.Text.RegularExpressions;
-using Harbor.Abstractions.Permissions;
 
 namespace Harbor.Architecture.Tests;
 
@@ -71,9 +78,6 @@ namespace Harbor.Architecture.Tests;
 /// </summary>
 public sealed class ToolGlyphTableRule
 {
-    /// <summary>Product trees scanned for tool-name-keyed glyph arms.</summary>
-    private static readonly string[] ProductTrees = ["src", "apps"];
-
     /// <summary>
     ///     Files allowed to carry a tool-name-keyed glyph arm, each with the
     ///     reason it cannot be data instead. An exemption is a decision, not an
@@ -108,11 +112,6 @@ public sealed class ToolGlyphTableRule
         @"""(?<name>[a-z][a-z0-9_]*)""\s*=>\s*""(?<glyph>[^""]{1,2})""",
         RegexOptions.Compiled);
 
-    /// <summary>Every <c>ToolName.Create("…")</c> literal, so plugin tools are covered too.</summary>
-    private static readonly Regex ToolNameLiteral = new(
-        @"ToolName\.Create\(\s*""(?<name>[a-z][a-z0-9_]*)""",
-        RegexOptions.Compiled);
-
     /// <summary>One violation, ready to be printed in a failure message.</summary>
     private sealed record GlyphArm(string File, int Line, string ToolName, string Glyph)
     {
@@ -121,13 +120,6 @@ public sealed class ToolGlyphTableRule
         public override string ToString() =>
             $"{RelativePath}:{Line}  \"{ToolName}\" => \"{Glyph}\"";
     }
-
-    /// <summary>
-    ///     Every builtin tool name the guard hunts for, read out of #557's
-    ///     safety inventory unioned with the names the tool implementations
-    ///     actually declare. Value-agnostic by construction — see the file header.
-    /// </summary>
-    private static readonly Lazy<FrozenSet<string>> ToolNames = new(CollectToolNames);
 
     // =====================================================================
     // 1. The rule.
@@ -141,7 +133,7 @@ public sealed class ToolGlyphTableRule
     public async Task NoProductFile_MapsAToolNameToAGlyph()
     {
         IReadOnlyList<GlyphArm> found = Scan(ReadProductFiles(ProductFiles()));
-        FrozenSet<string> names = ToolNames.Value;
+        FrozenSet<string> names = ToolNameInventory.Names;
 
         var offenders = found
             .Where(arm => names.Contains(arm.ToolName))
@@ -184,7 +176,7 @@ public sealed class ToolGlyphTableRule
             .Because("this file is the one that used to hold the catalogue; if discovery cannot see "
                    + "it, the scan is broken rather than clean");
 
-        await Assert.That(ToolNames.Value.Count).IsGreaterThan(10)
+        await Assert.That(ToolNameInventory.Names.Count).IsGreaterThan(10)
             .Because("the tool-name inventory is empty or nearly so, so the rule would accept any "
                    + "arm; it is read out of BuiltinToolSafetyProfiles plus the ToolName.Create "
                    + "literals, both of which are non-trivial in this repository");
@@ -228,7 +220,7 @@ public sealed class ToolGlyphTableRule
             // "read" => "▸" is what the old catalogue looked like.
             """;
 
-        FrozenSet<string> names = ToolNames.Value;
+        FrozenSet<string> names = ToolNameInventory.Names;
 
         IReadOnlyList<GlyphArm> planted = Scan([("probe.cs", plantedSource)]);
         IReadOnlyList<GlyphArm> clean = Scan([("clean.cs", cleanSource)]);
@@ -265,105 +257,14 @@ public sealed class ToolGlyphTableRule
     ///     every name a tool implementation actually declares — which is how a
     ///     plugin tool, absent from the builtin list, still gets hunted.
     /// </summary>
-    private static FrozenSet<string> CollectToolNames()
-    {
-        var names = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (ToolSafetyDeclaration declaration in BuiltinToolSafetyProfiles.All)
-        {
-            if (!string.IsNullOrWhiteSpace(declaration.ToolName))
-            {
-                names.Add(declaration.ToolName);
-            }
-        }
-
-        foreach (string file in ToolImplementationFiles())
-        {
-            foreach (Match match in ToolNameLiteral.Matches(File.ReadAllText(file)))
-            {
-                string name = match.Groups["name"].Value;
-                if (name.Length > 0)
-                {
-                    names.Add(name);
-                }
-            }
-        }
-
-        return names.ToFrozenSet(StringComparer.Ordinal);
-    }
-
-    /// <summary>Every <c>*.cs</c> under the tool implementations, sample plugins included.</summary>
-    private static IReadOnlyList<string> ToolImplementationFiles()
-    {
-        if (RepoPaths.RepoRoot is not { } root)
-        {
-            return [];
-        }
-
-        var files = new List<string>();
-        foreach (string relative in new[]
-                 {
-                     "src/Harbor.Tools.Builtin",
-                     "samples/plugins",
-                     "samples/plugins-cs",
-                 })
-        {
-            string dir = Path.Combine(root, relative);
-            if (!Directory.Exists(dir))
-            {
-                continue;
-            }
-
-            files.AddRange(Directory
-                .EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
-                .Where(p => !IsBuildOutput(p)));
-        }
-
-        files.Sort(StringComparer.Ordinal);
-        return files;
-    }
-
-    /// <summary>Every product <c>*.cs</c> under <c>src/</c> and <c>apps/</c>.</summary>
-    private static IReadOnlyList<string> ProductFiles()
-    {
-        if (RepoPaths.RepoRoot is not { } root)
-        {
-            return [];
-        }
-
-        var files = new List<string>();
-        foreach (string tree in ProductTrees)
-        {
-            string dir = Path.Combine(root, tree);
-            if (!Directory.Exists(dir))
-            {
-                continue;
-            }
-
-            files.AddRange(Directory
-                .EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
-                .Where(p => !IsBuildOutput(p)));
-        }
-
-        files.Sort(StringComparer.Ordinal);
-        return files;
-    }
-
     /// <summary>
-    ///     <c>contrib/</c> is out of support and out of CI, <c>tests/</c> holds the
-    ///     rules themselves, and <c>obj/</c>/<c>bin/</c> hold stale copies. A
-    ///     worktree checkout of this repo would otherwise be scanned as if it were
-    ///     product code.
+    ///     Every product <c>*.cs</c> under <c>src/</c> and <c>apps/</c>.
+    ///     Delegates to <see cref="SourceScan" /> so this gate and every other one
+    ///     agree on what counts as product code — the seven private copies of this
+    ///     filter had already drifted, one of them forgetting to exclude a sibling
+    ///     worktree and so reporting findings against code nobody was editing.
     /// </summary>
-    private static bool IsBuildOutput(string path)
-    {
-        string normalised = path.Replace('\\', '/');
-        return normalised.Contains("/obj/", StringComparison.Ordinal)
-            || normalised.Contains("/bin/", StringComparison.Ordinal)
-            || normalised.Contains("/tests/", StringComparison.Ordinal)
-            || normalised.Contains("/contrib/", StringComparison.Ordinal)
-            || normalised.Contains("/.worktrees/", StringComparison.Ordinal);
-    }
+    private static IReadOnlyList<string> ProductFiles() => SourceScan.EnumerateProductCsFiles();
 
     /// <summary>
     ///     Every glyph-table-shaped arm in the supplied sources, keyed by file
@@ -404,20 +305,19 @@ public sealed class ToolGlyphTableRule
         return arms;
     }
 
-    /// <summary>Reads the product files, in the shape <see cref="Scan" /> consumes.</summary>
+    /// <summary>
+    ///     Reads the product files, in the shape <see cref="Scan" /> consumes.
+    ///     A file that vanished between enumeration and read is not a rule
+    ///     failure; the discovery test is what keeps the set honest.
+    /// </summary>
     private static List<(string, string)> ReadProductFiles(IReadOnlyList<string> files)
     {
         var sources = new List<(string, string)>(files.Count);
         foreach (string file in files)
         {
-            try
+            if (SourceScan.TryReadAllText(file) is { } source)
             {
-                sources.Add((file, File.ReadAllText(file)));
-            }
-            catch (IOException)
-            {
-                // A file that vanished between enumeration and read is not a rule
-                // failure; the discovery test is what keeps the set honest.
+                sources.Add((file, source));
             }
         }
 

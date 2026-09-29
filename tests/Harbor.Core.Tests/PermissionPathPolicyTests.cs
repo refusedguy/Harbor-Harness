@@ -135,4 +135,95 @@ public class PermissionPathPolicyTests
         public PathExtraction Extract(string name, JsonElement args, string workspaceRoot) =>
             new(argPath, false);
     }
+
+    // =====================================================================
+    // #595 — the drift, pinned.
+    // =====================================================================
+
+    /// <summary>
+    ///     <c>PathArgExtractionPolicy</c> used to carry a hand-written name set that
+    ///     had fallen behind the declarations beside it: <c>glob</c>, <c>grep</c> and
+    ///     <c>lsp</c> all declare <see cref="ToolArgKind.Path" /> and all three were
+    ///     missing, so they fell through to the legacy policy, whose extraction
+    ///     reports <c>IsOutsideWorkspace == false</c>. The A1/A2 downgrade that turns
+    ///     an Allow into an Ask for a path outside the workspace therefore never ran
+    ///     for them.
+    /// </summary>
+    [Test]
+    public async Task Every_Path_Declaring_Tool_Is_Normalized_Not_Left_To_The_Legacy_Fallback()
+    {
+        var missing = BuiltinToolSafetyProfiles.All
+            .Where(d => d.Profile.ArgKind == ToolArgKind.Path)
+            .Select(d => d.ToolName)
+            .Where(name => !PathArgExtractionPolicy.Instance.Handles(name))
+            .ToArray();
+
+        await Assert.That(missing).IsEmpty()
+            .Because("a tool that declares a path argument and is not claimed by "
+                   + "PathArgExtractionPolicy is matched RAW by the legacy fallback, which "
+                   + "reports IsOutsideWorkspace == false — so the workspace-confinement "
+                   + "downgrade in PermissionService silently does not apply to it (#595).");
+    }
+
+    /// <summary>
+    ///     The behavioural half of the same defect: an <c>Allow</c>-everything rule
+    ///     must still be downgraded to <c>Ask</c> for a path that escapes the
+    ///     workspace, for the three tools the drift used to exempt. With no asker
+    ///     configured, <c>Ask</c> falls back to <c>Deny</c>.
+    /// </summary>
+    [Test]
+    [Arguments("glob")]
+    [Arguments("grep")]
+    [Arguments("lsp")]
+    public async Task Allow_Everything_Rule_Is_Downgraded_For_A_Path_Outside_The_Workspace(string tool)
+    {
+        var agent = AgentWithRuleset(new PermissionRule(tool, "*", PermissionAction.Allow));
+        var svc = CreateService(agent);
+
+        var outside = await svc.CheckAsync(
+            "code", tool, Args(("path", "/definitely-outside-workspace-595/probe.txt")));
+
+        await Assert.That(outside.IsSuccess).IsTrue();
+        await Assert.That(outside.Value.Action).IsEqualTo(PermissionAction.Deny)
+            .Because($"'{tool}' declares a path argument, so an Allow verdict for a path "
+                   + "outside the workspace must be downgraded to Ask (and to Deny with no "
+                   + "asker). Before #595 these three tools were matched raw and the "
+                   + "downgrade never ran.");
+
+        // A path INSIDE the workspace still matches the rule: the guard must not
+        // turn every path call into a denial.
+        var inside = await svc.CheckAsync("code", tool, Args(("path", "src/inside.txt")));
+        await Assert.That(inside.Value.Action).IsEqualTo(PermissionAction.Allow);
+    }
+
+    /// <summary>
+    ///     The legacy fallback's mapping is now derived from
+    ///     <see cref="ToolSafetyProfile.ArgumentName" /> rather than switched by hand.
+    ///     It previously read <c>glob</c>/<c>grep</c> arguments as <c>pattern</c>,
+    ///     while both declare a <c>path</c>. Reached through the public
+    ///     <see cref="IPathExtractionPolicy.Extract" />, which is how the composition
+    ///     root reaches it.
+    /// </summary>
+    [Test]
+    public async Task Legacy_Extraction_Uses_The_Declared_Argument_Name()
+    {
+        IPathExtractionPolicy legacy = LegacyArgExtractionPolicy.Instance;
+
+        foreach (ToolSafetyDeclaration declaration in BuiltinToolSafetyProfiles.All)
+        {
+            if (declaration.Profile.ArgKind != ToolArgKind.Path)
+            {
+                continue;
+            }
+
+            string argumentName = declaration.Profile.ArgumentName!;
+            var args = Args((argumentName, "sentinel"));
+
+            await Assert.That(legacy.Extract(declaration.ToolName, args, "/workspace").ArgPath)
+                .IsEqualTo("sentinel")
+                .Because($"'{declaration.ToolName}' declares its rule-matched argument as "
+                       + $"'{argumentName}', so that is the property the extraction must read "
+                       + "(#595)");
+        }
+    }
 }

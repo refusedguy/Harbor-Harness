@@ -32,30 +32,49 @@ public static class BuiltinToolSafetyProfiles
     [
         // Path-taking: a glob Allow rule (e.g. new("write", "src/*", Allow)) must not
         // authorise a traversal escape or an absolute path for any of these.
-        new("read", ToolSafetyProfile.Path()),
-        new("write", ToolSafetyProfile.Path()),
-        new("edit", ToolSafetyProfile.Path()),
-        new("patch", ToolSafetyProfile.Path()),
-        new("ls", ToolSafetyProfile.Path()),
-        new("tree", ToolSafetyProfile.Path()),
-        new("lsp", ToolSafetyProfile.Path()),
-        new("glob", ToolSafetyProfile.Path()),
-        new("grep", ToolSafetyProfile.Path()),
-        new("ripgrep", ToolSafetyProfile.Path()),
-        new("notebook", ToolSafetyProfile.Path()),
-        new("mcp", ToolSafetyProfile.Path()),
+        new("read", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new("write", ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
+        new("edit", ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
+        new("patch", ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
+        new("ls", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new("tree", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new("lsp", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new("glob", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new("grep", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new("ripgrep", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new("notebook", ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
+        new("mcp", ToolSafetyProfile.Path()) { Category = ToolCategory.Mcp },
 
         // Shell: destructive-command deny + token-wise allow prefix, no path guard.
-        new("bash", ToolSafetyProfile.Command()),
+        new("bash", ToolSafetyProfile.Command()) { Category = ToolCategory.Exec },
 
         // Explicit opt-outs — a name, a URL or a free-form blob, never a path.
-        new("webfetch", ToolSafetyProfile.Opaque),
-        new("task", ToolSafetyProfile.Opaque),
-        new("skill", ToolSafetyProfile.Opaque),
-        new("mcp_prompt", ToolSafetyProfile.Opaque),
-        new("read_mcp_resource", ToolSafetyProfile.Opaque),
-        new("session_read", ToolSafetyProfile.Opaque),
-        new("session_steer", ToolSafetyProfile.Opaque),
+        // The category is stated here (#595) even though the ARGUMENT is not a path:
+        // the two are independent questions. `webfetch` is Opaque because its
+        // argument is a URL, and Network because reaching the network is what its
+        // approval class is about.
+        new("webfetch", ToolSafetyProfile.Opaque) { Category = ToolCategory.Network },
+        new("task", ToolSafetyProfile.Opaque) { Category = ToolCategory.Exec },
+        new("skill", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
+        new("mcp_prompt", ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
+        new("read_mcp_resource", ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
+        new("session_read", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
+        new("session_steer", ToolSafetyProfile.Opaque) { Category = ToolCategory.Write },
+
+        // Plugin vocabulary: declared so a plugin that loads later still finds its
+        // row, never registered by the builtin host. See
+        // `BuiltinToolSafetyDeclarationsTests`, which is what keeps that honest.
+        //
+        // Both carry NO category, and that is a decision rather than an omission.
+        // Classifying them would silently change a verdict: `PermissionRuleset`
+        // evaluates rules in order, and a category match makes a rule about the
+        // CLASS fire against these tools. `session_broadcast` was briefly classified
+        // Mcp here and CI caught the consequence — the earlier
+        // `new("mcp_prompt", "*", Ask)` rule then matched it ahead of its own
+        // explicit Allow, and `SessionBroadcastPluginTests` went red. These are
+        // session IPC tools, not the MCP bridge, so no category describes them
+        // honestly; leaving them unclassified keeps the explicit rules in charge,
+        // which is also the fail-closed reading of "belongs to no class".
         new("session_broadcast", ToolSafetyProfile.Opaque),
         new("session_inbox", ToolSafetyProfile.Opaque),
     ];

@@ -92,7 +92,33 @@ public sealed record ToolSafetyProfile(ToolArgKind ArgKind, string? ArgumentName
 /// </summary>
 /// <param name="ToolName">The tool's stable name (case-insensitive at lookup).</param>
 /// <param name="Profile">The safety profile the tool declares.</param>
-public sealed record ToolSafetyDeclaration(string ToolName, ToolSafetyProfile Profile);
+public sealed record ToolSafetyDeclaration(string ToolName, ToolSafetyProfile Profile)
+{
+    /// <summary>
+    ///     The approval class this tool belongs to, or <see langword="null" /> when it
+    ///     belongs to none — a tool no category rule should ever match.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This rides along on the declaration rather than introducing a second
+    ///         one. A sibling <c>ToolAttribute</c> record would be the same names
+    ///         written down twice, and issue #595 is precisely that failure mode: a
+    ///         second table, kept in step by hand, that a new tool joins one table of
+    ///         and not the other.
+    ///     </para>
+    ///     <para>
+    ///         It is OPTIONAL on purpose. <see cref="ToolSafetyProfile" /> is a
+    ///         required member of <c>ITool</c> because a tool cannot exist without
+    ///         saying what its arguments are — there is no safe default for that. A
+    ///         category has one: "belongs to no class", which is fail-closed, because
+    ///         an unclassified tool simply does not match a category rule. Making it
+    ///         required would add a second mandatory member for a fact that is
+    ///         genuinely optional, and would have forced a decision on tools that
+    ///         have no business in a category at all.
+    ///     </para>
+    /// </remarks>
+    public ToolCategory? Category { get; init; }
+}
 
 /// <summary>
 ///     Builds the <see cref="IArgSafetyPolicy" /> set a ruleset consults from what
