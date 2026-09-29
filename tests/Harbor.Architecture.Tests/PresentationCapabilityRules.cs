@@ -535,21 +535,26 @@ public sealed class PresentationCapabilityRules
             // / Process.Start to run the jump-to-definition search.
             [NoSubprocess + " Harbor.Tui.CellForge.Panels.CellForgeJumpPalettePanel"] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/538",
-            // #668 RESOLVED: the two JsonThemeLoader / ThemeFileWatcher rows are
-            // GONE — not re-baselined. Those two were a second implementation of
-            // theme loading sitting next to Harbor.DesignSystem's ThemeStore, and
-            // a baseline row is a permission rather than a fix: it would have
-            // said "this Presentation type may touch the filesystem" forever,
-            // after the duplicate was gone. They read through IThemeStore now,
-            // and ThemeStoreSeamRules is the port's own guard — it fails if a
-            // second implementer of that port appears.
-            // Chat/Panels/CellForgeFileTreePanel.cs:153,:230,:232,:240 for
-            // Directory, and :237,:242,:247 for FileInfo/FileAttributes — the
-            // NoFiles prefix matches those too, so this panel needs BOTH rows.
-            [NoFiles + " Harbor.Tui.CellForge.Panels.CellForgeFileTreePanel"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/538",
-            [NoDirectories + " Harbor.Tui.CellForge.Panels.CellForgeFileTreePanel"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/538",
+            // #668 RESOLVED: the JsonThemeLoader / ThemeFileWatcher rows are GONE
+            // — not re-baselined. Those two were a second implementation of theme
+            // loading sitting next to Harbor.DesignSystem's ThemeStore, and a
+            // baseline row is a permission rather than a fix: it would have said
+            // "this Presentation type may touch the filesystem" forever, after
+            // the duplicate was gone. They read through IThemeStore now, and
+            // ThemeStoreSeamRules is the port's own guard — it fails if a second
+            // implementer of that port appears.
+            //
+            // #667 RESOLVED: the two CellForgeFileTreePanel rows are GONE too, not
+            // re-baselined and not narrowed. The panel walked the working directory
+            // from `Build`; it now reads `UiState.Ui.FileTrees` and asks the
+            // `IFileTreeLoader` seam for a listing, with the walk itself behind the
+            // Domain `IDirectoryLister` port and implemented in
+            // `SystemDirectoryLister` (Harbor.Application). Both deletions were
+            // FORCED: `NonVacuity_GrandfatheredViolations_AreStillReal` fails the
+            // build on a stale row, and `ResolvedViolations_HaveNoHits` fails it if
+            // the file-tree capability ever comes back.
+            //
+            // The jump palette row above is untouched — a different defect, open.
         },
         ["Harbor.DesignSystem"] = new(StringComparer.Ordinal)
         {
