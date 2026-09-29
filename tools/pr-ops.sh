@@ -18,7 +18,13 @@
 set -euo pipefail
 
 REPO="refusedguy/Harbor-Harness"
-CHECKS_RE='^(test|build|bench|coverage|test-os|demo-gifs)'
+# Every check the PR reports, whatever it is called. This must NOT be a
+# name-prefix allowlist: `docs.yml` (added by #509) contributes checks named
+# `internal links` and `markdown lint`, and a prefix filter silently dropped
+# them, so a red docs gate reported as 0/0/0 and the PR looked READY. A gate
+# that the triage tool cannot see is the same failure as a gate that does not
+# run, and this file had just been written to argue against exactly that.
+CHECKS_RE='.'
 
 cmd_sweep() {
   local prs=("$@")
@@ -78,6 +84,15 @@ cmd_mergeable() {
     fails=$(printf '%s\n' "$checks" | awk -F'\t' '$2=="fail"{n++} END{print n+0}')
     pends=$(printf '%s\n' "$checks" | awk -F'\t' '$2=="pending"{n++} END{print n+0}')
     passes=$(printf '%s\n' "$checks" | awk -F'\t' '$2=="pass"{n++} END{print n+0}')
+
+    # A PR with NO reported checks is not READY. It is UNVERIFIED, and calling
+    # that READY is the exact lie this file is meant to stop: `gh pr checks`
+    # prints "no checks reported on the 'branch' branch" for such a PR, which
+    # matched nothing, which counted as 0 failures.
+    if [ -z "$checks" ] || printf '%s\n' "$checks" | grep -q "no checks reported"; then
+      printf '%s: NOCHECKS mergeable=%s — nothing verified, do not merge\n' "$p" "$raw"
+      continue
+    fi
 
     # GitHub returns UNKNOWN while it is still COMPUTING the merge state. That
     # is not a verdict and must never be reported as one -- it is the reason
