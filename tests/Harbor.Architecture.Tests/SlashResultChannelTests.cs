@@ -51,6 +51,19 @@
 //      block is NOT a failure arm: it hands the value on without looking at it,
 //      which is the swallow this rule exists to catch.
 //
+//   C. An `ExecuteAsync` call may not be handed a hard-coded EMPTY argument
+//      list (issue #650). This is the sibling of A and B and closes the same
+//      loop from the other side: A and B are about a value produced by a
+//      handler being dropped, C is about an input a handler was given never
+//      arriving. The five slash registrations in SlashCommandDispatcher.cs bound
+//      their arguments parameter as `_` and then called
+//      `ExecuteAsync(Array.Empty<string>(), …)`, so `/config set model gpt-4`
+//      took the no-args branch and dumped the configuration with the OLD value
+//      still in it. The rule is one regular expression because the shape is
+//      textual and unambiguous: a delegating registration is the only thing in
+//      this tree that calls `ExecuteAsync`, and every one of those calls passes
+//      the arguments it was given on the second line of the lambda.
+//
 // A source scan cannot see a callee's return type, so a write-only local bound
 // from `await SomeIntMethod()` matches rule A too. That is a real (harmless)
 // dead assignment rather than a false positive, and the alternative — teaching
@@ -59,12 +72,16 @@
 //
 // NON-VACUITY
 // -----------
-// A guard that cannot fire is worse than none, because it is believed. Three
+// A guard that cannot fire is worse than none, because it is believed. Four
 // tests close that: `Scanner_FlagsTheDiscardedResult` is the positive control
-// (the exact `:192` shape must be flagged) alongside two negative controls (the
-// fixed spelling, and a read that lives inside an interpolation hole — the case
-// a naive "blank out string literals first" scan gets wrong, because blanking
-// the hole also deletes the only read). `AllowList_EveryEntryStillMatches`
+// for rules A and B (the exact `:192` shape must be flagged) alongside three
+// negative controls (the fixed spelling, and a read that lives inside an
+// interpolation hole — the case a naive "blank out string literals first" scan
+// gets wrong, because blanking the hole also deletes the only read), and
+// `Scanner_FlagsTheDiscardedArguments` is the positive control for rule C
+// (issue #650's `ExecuteAsync(Array.Empty<string>(), …)`) paired with the fixed
+// spelling that forwards the arguments it was given.
+// `AllowList_EveryEntryStillMatches`
 // then fails when an exemption stops matching, so a stale entry cannot sit there
 // letting the shape back in.
 
@@ -110,6 +127,17 @@ public sealed class SlashResultChannelTests
     /// <summary>An <c>if (x.IsSuccess)</c> whose success arm is exclusive.</summary>
     private static readonly Regex IsSuccessGuard = new(
         @"^\s*if\s*\(\s*(?<name>[A-Za-z_]\w*)\.IsSuccess\s*\)",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    ///     Rule C. An <c>ExecuteAsync</c> call whose FIRST argument is a
+    ///     hard-coded empty list. Matched on the literal-and-comment-stripped
+    ///     text so a PROSE mention of the shape (this file's own header, a
+    ///     commented-out registration) is not a hit. The three spellings
+    ///     contain no string literal, so they survive stripping intact.
+    /// </summary>
+    private static readonly Regex HardCodedEmptyExecuteCall = new(
+        @"ExecuteAsync\s*\(\s*(?:Array\.Empty\s*<\s*string\s*>\s*\(\s*\)|System\.Array\.Empty\s*<\s*string\s*>\s*\(\s*\)|new\s+string\s*\[\s*0\s*\])",
         RegexOptions.Compiled);
 
     /// <summary>
@@ -358,6 +386,108 @@ public sealed class SlashResultChannelTests
                 + "needs an allow-list entry rather than passing.");
     }
 
+    // ── Rule C: a delegating registration forwards its arguments ───────────
+
+    [Test]
+    public async Task ExecuteAsyncCall_IsNotHandedAHardCodedEmptyArgumentList()
+    {
+        var violations = new List<string>();
+        int scanned = 0;
+
+        foreach ((string relative, string text) in ScanGuardedTree())
+        {
+            scanned++;
+
+            foreach (int line in FindHardCodedEmptyExecuteCalls(text))
+            {
+                violations.Add(
+                    $"{relative}:{line}: `ExecuteAsync` is called with a hard-coded EMPTY argument list — the "
+                    + "command cannot see what the user typed. Forward the arguments the registration was "
+                    + "given (the delegate's own parameter), or the argument-taking branch is unreachable.");
+            }
+        }
+
+        await Assert.That(scanned).IsGreaterThan(50)
+            .Because(
+                "Non-vacuity, same reason as rule A: the walk must still be covering the guarded tree, or all "
+                + "three rules are decorative. RepoPaths.RepoRoot was "
+                + (RepoPaths.RepoRoot is null ? "null" : "found") + ".");
+
+        await Assert.That(violations).IsEmpty()
+            .Because(
+                "Five registrations in SlashCommandDispatcher.cs bound their arguments parameter as `_` and "
+                + "called `ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx))`, so `/config set model gpt-4` "
+                + "took the no-args branch and printed the config dump with `Model:` still showing the OLD "
+                + "value. `/auth set …`, `/model <p> <m>`, `/agent <name>` and "
+                + "`/permissions <tool> <pattern> <action>` were quieter no-ops: they printed their usage and "
+                + "changed nothing. Offenders:" + Environment.NewLine + string.Join(Environment.NewLine, violations));
+    }
+
+    // ── Self-check 3: rule C's matcher must not run vacuously ──────────────
+
+    [Test]
+    public async Task Scanner_FlagsTheDiscardedArguments()
+    {
+        // Positive control: issue #650 verbatim, two of the five registrations.
+        // The argument parameter is bound as `_` in one and `args` in the other —
+        // the discard happens at the call site, so the parameter's name is not
+        // what the rule keys on, and neither spelling may hide it.
+        const string Dropped = """
+            Register(dict, "auth", (ctx, _) =>
+            {
+                return new AuthCommand(ctx.AuthStore, ctx.Writer)
+                    .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
+            });
+
+            Register(dict, "permissions", (ctx, args) =>
+            {
+                return new PermissionsCommand(
+                        ctx.Permissions, ctx.AgentRegistry, ctx.ConfigStore, ctx.Writer, ctx.Agent, ctx.Session)
+                    .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
+            });
+            """;
+
+        // Negative control: the fixed spelling. The same call, the arguments
+        // forwarded. Rule A does not fire on it either — the lambda has no
+        // awaited local — so this is a genuinely clean file under all three.
+        const string Forwarded = """
+            Register(dict, "config", (ctx, args) =>
+            {
+                return new ConfigCommand(ctx.ConfigStore, ctx.Writer)
+                    .ExecuteAsync(args, MakeCtx(ctx));
+            });
+            """;
+
+        // Negative control: a command that genuinely takes no arguments. The
+        // `CatalogSlashCommand` DECLARATION is the live example — it has no
+        // arguments to forward, and a declaration is not a call at all, so
+        // flagging it would be crying wolf on correct code, which is how a gate
+        // gets switched off.
+        const string NoArgsOverload = """
+            private sealed record CatalogSlashCommand(SlashCommandDefinition Definition) : ISlashCommand
+            {
+                public Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
+                    => Task.FromResult(Result.Failure("Delegate command — use SlashCommandDispatcher to execute."));
+            }
+            """;
+
+        await Assert.That(FindHardCodedEmptyExecuteCalls(Dropped).Count).IsEqualTo(2)
+            .Because(
+                "The positive control for rule C, verbatim from issue #650. A miss means the matcher no longer "
+                + "recognises the shape and every one of the five commands can silently go back to it.");
+
+        await Assert.That(FindHardCodedEmptyExecuteCalls(Forwarded)).IsEmpty()
+            .Because(
+                "The fixed spelling must stay clean — the arguments are the delegate's own parameter. Flagging "
+                + "it would make the gate fire on the very fix it asked for.");
+
+        await Assert.That(FindHardCodedEmptyExecuteCalls(NoArgsOverload)).IsEmpty()
+            .Because(
+                "An `ExecuteAsync` declaration is not a call, and a command with no arguments has nothing to "
+                + "forward. The matcher must key on the invocation `ExecuteAsync(` immediately followed by an "
+                + "empty-list first argument, not on the word.");
+    }
+
     // ── Self-check 2: no allow-list entry may go stale ───────────────────────
 
     [Test]
@@ -598,6 +728,30 @@ public sealed class SlashResultChannelTests
         }
 
         return start;
+    }
+
+    /// <summary>
+    ///     Rule C. 1-based line numbers of every <c>ExecuteAsync</c> call whose
+    ///     first argument is a hard-coded empty list. Comments and string bodies
+    ///     are blanked first, so this file's own header — which quotes the
+    ///     defective shape at length to explain it — is not a hit. A quoted
+    ///     <c>Array.Empty&lt;string&gt;()</c> inside a message string is likewise
+    ///     prose, not a call.
+    /// </summary>
+    private static IReadOnlyList<int> FindHardCodedEmptyExecuteCalls(string raw)
+    {
+        string[] code = SplitLines(StripLiteralsAndComments(raw));
+        var hits = new List<int>();
+
+        for (int i = 0; i < code.Length; i++)
+        {
+            if (HardCodedEmptyExecuteCall.IsMatch(code[i]))
+            {
+                hits.Add(i + 1);
+            }
+        }
+
+        return hits;
     }
 
     /// <summary>

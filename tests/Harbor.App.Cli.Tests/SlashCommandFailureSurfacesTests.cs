@@ -51,9 +51,6 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tui;
-using Harbor.App.Cli.Commands;
-using Harbor.App.Cli.Hosting;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
@@ -147,38 +144,42 @@ public class SlashCommandFailureSurfacesTests
 
     // ── the delegated commands ───────────────────────────────────────────────
     //
-    // These three are tested through the command classes directly rather than
-    // through the dispatcher, because that is the level the fix lives at: the
-    // arm that was added is inside AuthCommand/ConfigCommand/PermissionsCommand.
+    // These five are now driven through the REAL dispatcher (#650), not through
+    // the command classes directly.
     //
-    // A dispatch-level test would also be misleading today, and the reason is
-    // worth recording: the five delegated registrations in SlashCommandDispatcher
-    // bind `(ctx, _)` and then call `ExecuteAsync(Array.Empty<string>(), ...)`,
-    // so `/auth list`, `/config set …` and `/permissions clear` never receive
-    // their arguments and always take the no-args branch. That is a separate,
-    // pre-existing defect (it makes every argument-taking slash command a no-op)
-    // and fixing it is out of scope here — but it is why the tests below call
-    // the commands directly.
+    // They used to construct the arguments themselves — `["list"]`,
+    // `["set","model","gpt-4"]`, `["clear"]` — and hand them to
+    // AuthCommand/ConfigCommand/PermissionsCommand. That level cannot observe
+    // the argument NOT arriving: the classes were always right about their
+    // arguments, so these tests were green while all five delegated
+    // registrations in SlashCommandDispatcher bound `(ctx, _)` and called
+    // `ExecuteAsync(Array.Empty<string>(), …)`. The user-facing defect
+    // (`/config set model gpt-4` printing `Model:` with the OLD value) lived
+    // one level above where these tests were looking. A slash command's
+    // arguments are a property of the DISPATCH, so the dispatch is the only
+    // level at which a test can mean anything — the same reason every other
+    // test in this file goes through `HandleCoreAsync`.
+    //
+    // `SlashCommandArgumentPassingTests` covers the argument-delivery half for
+    // all five commands. What these cover is the #603 half — the failure arms —
+    // now reaching the user along the same path a user's keystrokes take. The
+    // `result.IsFailure` assertions the old versions made are gone on purpose:
+    // the dispatcher's contract is that the REPL keeps running and the WRITER
+    // carries the report (see the Register remarks), so the observable half
+    // through `HandleCoreAsync` is the output, not the discarded value.
 
     [Test]
     public async Task AuthList_ConfigFailure_ReportsTheReasonToTheUser()
     {
-        var lines = new List<string>();
-        var auth = new AuthCommand(new AuthStore(new FailingConfigStore()), lines.Add);
-
-        var result = await auth.ExecuteAsync(["list"], MakeContext(lines));
+        var lines = await DispatchAsync("/auth list", new EmptyStore(), config: new FailingConfigStore());
 
         await Assert.That(lines.Any(l => l.Contains(ConfigError))).IsTrue()
             .Because(
                 "`/auth list` branched on `IsSuccess` with no failure arm and returned Success(), so an "
                 + "unreadable config printed nothing — identical to \"you have no API keys set\". The same "
                 + "method backs `harbor auth list`, which maps the Result to an exit code, so this was a "
-                + "wrong-answer-to-a-successful-exit-code too.");
-
-        await Assert.That(result.IsFailure).IsTrue()
-            .Because(
-                "The verb path consumes this Result, so it must stay a failure — reporting it to the user "
-                + "must not turn the exit code into a success.");
+                + "wrong-answer-to-a-successful-exit-code too. The `list` verb is reachable in the REPL only "
+                + "when the dispatcher forwards its arguments (#650); before that this branch was dead there.");
     }
 
     [Test]
@@ -188,28 +189,23 @@ public class SlashCommandFailureSurfacesTests
         // config first and returns early on a load failure, so a store that
         // failed to load would pass this test through a different branch and
         // prove nothing about the arm that was added.
-        var lines = new List<string>();
-        var config = new ConfigCommand(new UnwritableConfigStore(), lines.Add);
-
-        var result = await config.ExecuteAsync(["set", "model", "gpt-4"], MakeContext(lines));
+        var lines = await DispatchAsync(
+            "/config set model openai/gpt-4", new EmptyStore(), config: new UnwritableConfigStore());
 
         await Assert.That(lines.Any(l => l.Contains(ConfigError))).IsTrue()
             .Because(
                 "The success arm was the only one, so `/config set` against an unwritable config file "
                 + "produced no output and a bare `return updateResult`. The REPL dropped that Result and "
-                + "`ConfigVerb` sees only the exit code — the user was never told why the value did not change.");
-
-        await Assert.That(result.IsFailure).IsTrue()
-            .Because("ConfigVerb turns this Result into `harbor config set`'s exit code; it must stay a failure.");
+                + "`ConfigVerb` sees only the exit code — the user was never told why the value did not "
+                + "change. A well-formed `provider/model` is used so the test reaches the SAVE arm: "
+                + "`HarborConfig.Model`'s setter discards what `ModelRef.TryParse` rejects, and a bare id "
+                + "is rejected before the write is ever attempted.");
     }
 
     [Test]
     public async Task ConfigSet_SaveSucceeds_StillReportsTheValue()
     {
-        var lines = new List<string>();
-        var config = new ConfigCommand(new WorkingConfigStore(), lines.Add);
-
-        _ = await config.ExecuteAsync(["set", "model", "gpt-4"], MakeContext(lines));
+        var lines = await DispatchAsync("/config set model gpt-4", new EmptyStore(), config: new WorkingConfigStore());
 
         await Assert.That(lines.Any(l => l.Contains("gpt-4"))).IsTrue()
             .Because("The new failure arm must not change the success path — the old code printed this line too.");
@@ -218,30 +214,23 @@ public class SlashCommandFailureSurfacesTests
     [Test]
     public async Task PermissionsClear_SaveFailure_ReportsTheReasonToTheUser()
     {
-        var lines = new List<string>();
-        var permissions = new PermissionsCommand(
-            new FailingPermissionService(), new FakeAgentRegistry(), new JsonConfigStore(), lines.Add);
-
-        var result = await permissions.ExecuteAsync(["clear"], MakeContext(lines));
+        var lines = await DispatchAsync(
+            "/permissions clear", new EmptyStore(), permissions: new FailingPermissionService());
 
         await Assert.That(lines.Any(l => l.Contains(PermissionsError))).IsTrue()
             .Because(
                 "`ClearRules` treated `return saveResult` as its failure handling, but the slash dispatcher "
                 + "has no use for a Result. So `/permissions clear` against an unsaveable store printed "
-                + "nothing and the user kept their rules with no indication. `SetRule` already had this arm.");
-
-        await Assert.That(result.IsFailure).IsTrue()
-            .Because("The user must see it AND the caller must still be able to tell it failed.");
+                + "nothing and the user kept their rules with no indication. `SetRule` already had this arm. "
+                + "The `clear` verb is reachable in the REPL only when the dispatcher forwards its "
+                + "arguments (#650); before that this branch was dead there.");
     }
 
     [Test]
     public async Task PermissionsClear_SaveSucceeds_StillReportsTheClear()
     {
-        var lines = new List<string>();
-        var permissions = new PermissionsCommand(
-            new WorkingPermissionService(), new FakeAgentRegistry(), new JsonConfigStore(), lines.Add);
-
-        _ = await permissions.ExecuteAsync(["clear"], MakeContext(lines));
+        var lines = await DispatchAsync(
+            "/permissions clear", new EmptyStore(), permissions: new WorkingPermissionService());
 
         await Assert.That(lines.Any(l => l.Contains("Cleared all persisted permission rules"))).IsTrue()
             .Because(
@@ -315,28 +304,22 @@ public class SlashCommandFailureSurfacesTests
     // ── harness ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    ///     The context the delegated slash commands receive. Built the same way
-    ///     <c>SlashCommandDispatcher.MakeCtx</c> builds it, so a command that
-    ///     starts reading <c>context.Session.Session.Agent</c> behaves as it
-    ///     would in the REPL.
+    ///     Runs one line through the real dispatcher. <paramref name="config" />
+    ///     and <paramref name="permissions" /> are injectable so a test can
+    ///     stage a store that fails in one specific way (#650 moved the
+    ///     delegated-command tests onto this path, and they need the same
+    ///     staged stores their command-class versions used).
     /// </summary>
-    private static ICommandContext MakeContext(List<string> lines) =>
-        new SimpleCommandContext(
-            Session.Create("/harbor-603", "code", "t", "m"),
-            null!,
-            null!,
-            new FakeToolRegistry(),
-            lines.Add,
-            _ => Task.FromResult(string.Empty));
-
     private static async Task<List<string>> DispatchAsync(
         string input,
         ISessionStore store,
         CapturingLogger<SlashCommandDispatcher>? logger = null,
-        Func<IReadOnlyList<string>, Task<SkillUpdateReport>>? skillUpdate = null)
+        Func<IReadOnlyList<string>, Task<SkillUpdateReport>>? skillUpdate = null,
+        IConfigStore? config = null,
+        IPermissionService? permissions = null)
     {
         var lines = new List<string>();
-        var config = new JsonConfigStore();
+        IConfigStore configStore = config ?? new JsonConfigStore();
 
         // The cast is required: `??` needs a common type, and CapturingLogger<T>
         // and NullLogger<T> are siblings, not a base/derived pair.
@@ -347,14 +330,15 @@ public class SlashCommandFailureSurfacesTests
             log,
             new FakeToolRegistry(),
             store,
-            new OnboardingWizard(config, new AuthStore(config)),
-            new PermissionService(new FakeAgentRegistry(), NullLogger<PermissionService>.Instance),
+            new OnboardingWizard(configStore, new AuthStore(configStore)),
+            permissions ?? new PermissionService(new FakeAgentRegistry(), NullLogger<PermissionService>.Instance),
             skillUpdate: skillUpdate);
 
         var outcome = await dispatcher.HandleCoreAsync(input,
             writer: lines.Add,
             reader: _ => Task.FromResult(string.Empty),
-            agent: null!, agentRegistry: null!, configStore: config, authStore: new AuthStore(config),
+            agent: null!, agentRegistry: new FakeAgentRegistry(), configStore: configStore,
+            authStore: new AuthStore(configStore),
             providers: null!, session: Session.Create("/harbor-603", "code", "t", "m"));
 
         await Assert.That(outcome.ShouldQuit).IsFalse();

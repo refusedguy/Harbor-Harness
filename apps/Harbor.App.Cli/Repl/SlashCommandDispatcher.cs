@@ -350,37 +350,49 @@ internal sealed class SlashCommandDispatcher
             return result;
         });
 
-        Register(dict, "auth", (ctx, _) =>
+        // #650: the five delegating registrations below used to bind `(ctx, _)`
+        // and call `ExecuteAsync(Array.Empty<string>(), …)`, throwing the
+        // arguments away at the call site. `HandleCoreAsync` had parsed them
+        // correctly all along — the loss was here, one frame from the parse.
+        // Every argument-taking slash command was therefore a no-op: `/config
+        // set model gpt-4` took the no-args branch and printed the config dump
+        // with `Model:` still showing the OLD value, which reads as "the switch
+        // you asked for did not happen" right after a command that clearly ran.
+        // Forwarding the delegate's own parameter is the whole fix; the guard
+        // that keeps it fixed is rule C in
+        // tests/Harbor.Architecture.Tests/SlashResultChannelTests.cs.
+
+        Register(dict, "auth", (ctx, args) =>
         {
             return new AuthCommand(ctx.AuthStore, ctx.Writer)
-                .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
+                .ExecuteAsync(args, MakeCtx(ctx));
         });
 
-        Register(dict, "model", (ctx, _) =>
+        Register(dict, "model", (ctx, args) =>
         {
             return new ModelCommand(ctx.ConfigStore, ctx.Providers, ctx.Writer, ctx.Agent, ctx.Session)
-                .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
+                .ExecuteAsync(args, MakeCtx(ctx));
         });
 
-        Register(dict, "agent", (ctx, _) =>
+        Register(dict, "agent", (ctx, args) =>
         {
             return new AgentCommand(ctx.ConfigStore, ctx.AgentRegistry, ctx.Writer)
-                .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
+                .ExecuteAsync(args, MakeCtx(ctx));
         });
 
-        Register(dict, "config", (ctx, _) =>
+        Register(dict, "config", (ctx, args) =>
         {
             return new ConfigCommand(ctx.ConfigStore, ctx.Writer)
-                .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
+                .ExecuteAsync(args, MakeCtx(ctx));
         });
 
-        Register(dict, "permissions", (ctx, _) =>
+        Register(dict, "permissions", (ctx, args) =>
         {
             return new PermissionsCommand(
                     ctx.Permissions,
                     ctx.AgentRegistry,
                     ctx.ConfigStore, ctx.Writer, ctx.Agent, ctx.Session)
-                .ExecuteAsync(Array.Empty<string>(), MakeCtx(ctx));
+                .ExecuteAsync(args, MakeCtx(ctx));
         });
     }
 
