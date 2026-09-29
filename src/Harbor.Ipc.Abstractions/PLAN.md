@@ -6,6 +6,10 @@
 - ✅ `IHarborServer` interface — `StartAsync` / `StopAsync` / `IsRunning` / `Endpoint`
 - ✅ `IPipeTransport` interface — transport abstraction
 - ✅ `HarborEvent` — 11-case discriminated union (simplified projection of `AgentEvent`)
+- ✅ `AgentEventProjector` — the single `AgentEvent → HarborEvent` projection shared by
+      every host, with an explicit per-type decision for each of the 17 `AgentEvent`
+      subtypes (10 emitted, 7 documented no-wire-case) and a loud `Unmapped` outcome for
+      anything left over (#495)
 - ✅ `HarborEventMapping` — bidirectional `HarborEvent ↔ HarborEventData` mapping
 - ✅ `HarborRequest` — MessagePack `[Union]` of 15 request types
 - ✅ `HarborResponse` — MessagePack `[Union]` of 3 response shapes (Ok, Error, EventEnvelope)

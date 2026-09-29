@@ -50,7 +50,7 @@ Hosts the AgentLoop + registries and exposes them via MessagePack RPC over Named
 | `HarborIpcServerExtensions.cs`     | `UseHarborIpcServer()` DI helper.                                                 |
 | `Protocol/RequestDispatcher.cs`    | Dispatches `HarborRequest` → `HarborResponse` via the host's DI services.         |
 | `Protocol/MessagePackRpcServer.cs` | Per-client request loop; concurrent multi-client.                                 |
-| `Protocol/EventBroadcaster.cs`     | Subscribes to `IEventBus`, pushes `HarborEvent`s to all connected client streams. |
+| `Protocol/EventBroadcaster.cs`     | Subscribes to `IEventBus`, pushes `HarborEvent`s to all connected client streams. Projection via `AgentEventProjector` (shared with the in-process client, #495); lease routing reads the projector's state, it never writes it. |
 | `Protocol/ResilientFrameReader.cs` | Fault-tolerant frame reading across flaky connections.                            |
 | `Protocol/SessionLeaseRegistry.cs` | Session ownership tracking for multi-client access.                               |
 | `Transport/ServerPipeTransport.cs` | Named Pipe (Windows) / Unix Domain Socket (Linux/Mac) accept loop.                |
@@ -75,6 +75,7 @@ await server.StopAsync();
 - Writes to each client stream are serialized through a per-stream `SemaphoreSlim`.
 - The `EventBroadcaster` snapshots the client list under a `Lock` before each broadcast.
 - One dead client (broken pipe) never blocks the others — failures are isolated and the dead client is removed.
+- `EventBroadcaster.UnmappedEventCount` stays 0: a bus event type the shared projector does not know is logged at Error and counted, never dropped silently (#495).
 
 ## See also
 

@@ -24,7 +24,7 @@ The host must also register the application-layer services (`IAgent`, `IAgentReg
 
 ## Event bridging
 
-`SubscribeToEventsAsync` subscribes to `IEventBus` and projects the rich `AgentEvent` hierarchy down to the wire-stable `HarborEvent` union via a bounded channel (1024 events, drop-oldest on overflow). This is the same projection the IPC server uses, so in-process and IPC clients see identical event streams.
+`SubscribeToEventsAsync` subscribes to `IEventBus` and projects the rich `AgentEvent` hierarchy down to the wire-stable `HarborEvent` union via a bounded channel (1024 events, drop-oldest on overflow). The projection itself is `AgentEventProjector` in `Harbor.Ipc.Abstractions` — the same table the IPC server's `EventBroadcaster` uses, so in-process and IPC clients see identical event streams and there is no second copy to forget (#495). An event type the table does not know is logged at Error and counted in `UnmappedEventCount`; it is never dropped silently.
 
 ## Files
 
