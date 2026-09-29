@@ -555,14 +555,72 @@ jobs:
             assets/demo/baseline.json
           if-no-files-found: warn
 
+      # Commit regenerated GIFs — explicit rather than git-auto-commit-action.
+      #
+      # That action commits and pushes in one shot, so when dev moves while the
+      # recording is running (it takes minutes) the push is rejected and the job
+      # goes red on a pure race. That is what happened on dev at 09:41.
+      #
+      # The obvious fix — `continue-on-error`, or a `skip` — is the wrong one,
+      # and it is worth being explicit about why. If the GIFs DID change, a
+      # swallowed push means the regeneration is silently dropped: the job
+      # reports success, the README GIFs are stale, and nothing records that
+      # anyone noticed. That is a gate that looks present and does nothing,
+      # which is the failure mode this repo keeps paying for. A red that means
+      # "I could not save the regenerated output" is honest; a green that means
+      # "I threw the regenerated output away" is not.
+      #
+      # So: commit, then rebase onto the current remote and push, with retries.
+      # A race resolves. A genuine problem — an unresolvable conflict, a
+      # rejected permission — still fails, which is correct.
       - name: Commit regenerated GIFs (push to dev/master only)
         if: github.event_name == 'push'
-        uses: stefanzweifel/git-auto-commit-action@v7
-        with:
-          commit_message: "chore(demo): regenerate README GIFs [skip ci]"
-          file_pattern: |
-            assets/demo/*-compressed.gif
-            assets/demo/baseline.json
+        env:
+          DEMO_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          git config user.name  "refusedguy"
+          git config user.email "refusedguy@users.noreply.github.com"
+
+          # Nothing to do is the common case: most pushes do not touch a tape,
+          # so the recording is byte-identical. Say so and leave.
+          if git diff --quiet -- assets/demo/ && git diff --cached --quiet -- assets/demo/; then
+            echo "no GIF drift — nothing to commit"
+            exit 0
+          fi
+
+          git add assets/demo/*-compressed.gif assets/demo/baseline.json
+          if git diff --cached --quiet; then
+            echo "no GIF drift after staging — nothing to commit"
+            exit 0
+          fi
+
+          git commit -m "chore(demo): regenerate README GIFs [skip ci]"
+
+          # Race-tolerant push. Each attempt re-fetches and rebases onto
+          # whatever dev is now, so a commit that landed while the tape was
+          # recording does not block the regenerated output from landing too.
+          for attempt in 1 2 3 4 5; do
+            git fetch origin "$DEMO_BRANCH" --quiet
+            if git rebase "origin/$DEMO_BRANCH" 2>/dev/null; then
+              if git push origin "HEAD:$DEMO_BRANCH"; then
+                echo "pushed regenerated GIFs on attempt $attempt"
+                exit 0
+              fi
+            else
+              # A real conflict in the demo assets: abort the rebase and let the
+              # job fail loudly rather than force-push over someone's work.
+              git rebase --abort || true
+              echo "::error::rebase onto origin/$DEMO_BRANCH conflicts; regenerated GIFs NOT committed" >&2
+              exit 1
+            fi
+            echo "push attempt $attempt lost a race with origin/$DEMO_BRANCH; retrying"
+            sleep $((attempt * 5))
+          done
+
+          echo "::error::could not push regenerated GIFs after 5 attempts; the drift gate above passed, so the recording is newer than assets/demo/ on $DEMO_BRANCH" >&2
+          exit 1
 
   # Record-twice reproducibility check (issue #426). Records every tape twice in
   # the same job — same runner, same toolchain, same build — and fails unless the
