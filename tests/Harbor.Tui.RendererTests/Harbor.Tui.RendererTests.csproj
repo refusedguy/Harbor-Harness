@@ -15,6 +15,14 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>
+    <!--
+      #665: NotificationProcessSeamTests implements INotificationProcessRunner,
+      which lives in the Abstractions facade. Reachable transitively through
+      Harbor.Tui.Notifications, but declared directly rather than relying on that
+      chain — a guard that breaks when an unrelated project reference is
+      retargeted is not a guard.
+    -->
+    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Engine\Harbor.Tui.CellForge.Engine.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>

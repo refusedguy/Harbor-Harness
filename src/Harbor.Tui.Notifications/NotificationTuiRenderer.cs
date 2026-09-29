@@ -1,7 +1,7 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Notifications;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
@@ -32,11 +32,19 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
 
     /// <summary>Construct a <see cref="NotificationTuiRenderer" /> using the platform-default backend.</summary>
     /// <param name="logger">Logger.</param>
-    public NotificationTuiRenderer(ILogger<NotificationTuiRenderer> logger) : base(logger)
+    /// <param name="processRunner">
+    ///     Who starts the OS notifier. Injected, and deliberately not defaulted:
+    ///     a Presentation assembly that owns its own <c>Process</c> is the #665
+    ///     defect, and a default would quietly put it back. The production
+    ///     implementation is <c>Harbor.Application.Notifications.ProcessNotificationRunner</c>.
+    /// </param>
+    public NotificationTuiRenderer(
+        ILogger<NotificationTuiRenderer> logger,
+        INotificationProcessRunner processRunner) : base(logger)
     {
         _logger = logger;
         Context = new NotificationRenderContext();
-        _backend = DetectBackend();
+        _backend = DetectBackend(processRunner);
         RegisterHandler(new AgentErrorNotificationHandler(_backend));
         RegisterHandler(new AgentEndNotificationHandler(_backend));
         RegisterHandler(new CompactionNotificationHandler(_backend));
@@ -78,7 +86,7 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
         public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
             var err = (AgentErrorEvent)@event;
-            backend.Notify("Harbor — error", err.Message, true);
+            backend.Notify("Harbor — error", err.Message, true, ct);
             return Task.CompletedTask;
         }
     }
@@ -95,7 +103,7 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
 
         public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
-            backend.Notify("Harbor — done", "Agent finished.", false);
+            backend.Notify("Harbor — done", "Agent finished.", false, ct);
             return Task.CompletedTask;
         }
     }
@@ -110,7 +118,7 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
             var cc = (CompactionCompletedEvent)@event;
             backend.Notify("Harbor — compacted",
                 $"Pruned {cc.PrunedMessageCount} messages, saved ~{cc.TokensSaved} tokens.",
-                false);
+                false, ct);
             return Task.CompletedTask;
         }
     }
@@ -130,7 +138,7 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
             var tee = (ToolExecutionEndEvent)@event;
             string preview = tee.Result.Output ?? string.Empty;
             if (preview.Length > 200) preview = preview[..200] + "…";
-            backend.Notify($"Harbor — tool {tee.ToolCallId} failed", preview, true);
+            backend.Notify($"Harbor — tool {tee.ToolCallId} failed", preview, true, ct);
             return Task.CompletedTask;
         }
     }
@@ -160,131 +168,91 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
     protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event)
         => false;
 
-    private INotificationBackend DetectBackend()
+    /// <summary>
+    ///     Picks the notifier for the current OS. The choice is the only thing
+    ///     left that varies per platform: what actually gets started is the
+    ///     injected <paramref name="processRunner" />, in every branch (#665).
+    /// </summary>
+    private static INotificationBackend DetectBackend(INotificationProcessRunner processRunner)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            return new LinuxNotifySendBackend(_logger);
+            return new LinuxNotifySendBackend(processRunner);
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            return new MacOsascriptBackend(_logger);
+            return new MacOsascriptBackend(processRunner);
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return new WindowsToastBackend(_logger);
+            return new WindowsToastBackend(processRunner);
         return new NullNotificationBackend();
     }
 }
 
 /// <summary>Abstraction over the OS's notification mechanism.</summary>
+/// <remarks>
+///     This interface abstracts the SHAPE of a notification — title, body,
+///     severity — and, since #665, its EXECUTION goes through
+///     <see cref="INotificationProcessRunner" /> instead of a per-backend
+///     <c>Process</c>. An interface over shape with no seam underneath it is
+///     what let three Presentation types fork a process each; the seam is what
+///     makes these backends injectable, cancellable and testable.
+/// </remarks>
 public interface INotificationBackend
 {
     /// <summary>Backend display name (for logging).</summary>
     public string Name { get; }
 
     /// <summary>Fire a desktop notification.</summary>
+    /// <remarks>
+    ///     Best effort. A missing notifier, a timeout or a non-zero exit is
+    ///     logged by the runner and does not throw: a toast announces a finished
+    ///     run, and failing the run because the toast did not appear is never
+    ///     the right trade.
+    /// </remarks>
     /// <param name="title">Notification title.</param>
     /// <param name="body">Notification body text.</param>
     /// <param name="isError">Hint to style the notification as an error.</param>
-    public void Notify(string title, string body, bool isError);
+    /// <param name="cancellationToken">Cancels the launch.</param>
+    public void Notify(string title, string body, bool isError, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Linux: shells out to <c>notify-send</c> (libnotify).</summary>
-internal sealed class LinuxNotifySendBackend : INotificationBackend
+/// <summary>Linux: <c>notify-send</c> (libnotify), via the injected runner.</summary>
+internal sealed class LinuxNotifySendBackend(INotificationProcessRunner runner) : INotificationBackend
 {
-    private readonly ILogger _logger;
-    public LinuxNotifySendBackend(ILogger logger)
-    {
-        _logger = logger;
-    }
     public string Name => "notify-send (libnotify)";
 
-    public void Notify(string title, string body, bool isError)
+    public void Notify(string title, string body, bool isError, CancellationToken cancellationToken = default)
     {
         var args = new List<string> { title, body };
         if (isError) { args.Insert(0, "--urgency=critical"); }
-        Run("notify-send", args.ToArray());
-    }
-
-    private void Run(string file, string[] args)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo(file)
-            {
-                RedirectStandardError = true,
-                UseShellExecute = false
-            };
-            foreach (string a in args) psi.ArgumentList.Add(a);
-            var p = Process.Start(psi);
-            p?.WaitForExit(TimeSpan.FromSeconds(3));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "notify-send failed; is libnotify installed?");
-        }
+        runner.Run("notify-send", args, cancellationToken);
     }
 }
 
-/// <summary>macOS: shells out to <c>osascript</c> to display a notification.</summary>
-internal sealed class MacOsascriptBackend : INotificationBackend
+/// <summary>macOS: <c>osascript</c> against Notification Center, via the injected runner.</summary>
+internal sealed class MacOsascriptBackend(INotificationProcessRunner runner) : INotificationBackend
 {
-    private readonly ILogger _logger;
-    public MacOsascriptBackend(ILogger logger)
-    {
-        _logger = logger;
-    }
     public string Name => "osascript (macOS Notification Center)";
 
-    public void Notify(string title, string body, bool isError)
+    public void Notify(string title, string body, bool isError, CancellationToken cancellationToken = default)
     {
         // Escape double quotes in body to keep the AppleScript valid.
         string safeTitle = title.Replace("\"", "\\\"");
         string safeBody = body.Replace("\"", "\\\"");
         string script = $"display notification \"{safeBody}\" with title \"{safeTitle}\"";
-        try
-        {
-            var psi = new ProcessStartInfo("osascript", new[] { "-e", script })
-            {
-                RedirectStandardError = true,
-                UseShellExecute = false
-            };
-            var p = Process.Start(psi);
-            p?.WaitForExit(TimeSpan.FromSeconds(3));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "osascript failed");
-        }
+        runner.Run("osascript", ["-e", script], cancellationToken);
     }
 }
 
 /// <summary>
-///     Windows: shells out to <c>msg</c> (built-in) or the user can swap in
+///     Windows: <c>msg</c> (built-in) or the user can swap in
 ///     <c>snoretoast</c> / <c>burnttoast</c> for proper Action Center toasts.
 /// </summary>
-internal sealed class WindowsToastBackend : INotificationBackend
+internal sealed class WindowsToastBackend(INotificationProcessRunner runner) : INotificationBackend
 {
-    private readonly ILogger _logger;
-    public WindowsToastBackend(ILogger logger)
-    {
-        _logger = logger;
-    }
     public string Name => "msg.exe (Windows)";
 
-    public void Notify(string title, string body, bool isError)
+    public void Notify(string title, string body, bool isError, CancellationToken cancellationToken = default)
     {
         // msg.exe shows a modal dialog; for proper toasts, swap in snoretoast.exe.
-        try
-        {
-            var psi = new ProcessStartInfo("msg", new[] { "*", "/TIME:10", $"{title}\n{body}" })
-            {
-                RedirectStandardError = true,
-                UseShellExecute = false
-            };
-            var p = Process.Start(psi);
-            p?.WaitForExit(TimeSpan.FromSeconds(3));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "msg.exe failed");
-        }
+        runner.Run("msg", ["*", "/TIME:10", $"{title}\n{body}"], cancellationToken);
     }
 }
 
@@ -292,7 +260,7 @@ internal sealed class WindowsToastBackend : INotificationBackend
 internal sealed class NullNotificationBackend : INotificationBackend
 {
     public string Name => "null (no notifications)";
-    public void Notify(string title, string body, bool isError) { }
+    public void Notify(string title, string body, bool isError, CancellationToken cancellationToken = default) { }
 }
 
 /// <summary>Render context shim — the notification renderer doesn't paint.</summary>

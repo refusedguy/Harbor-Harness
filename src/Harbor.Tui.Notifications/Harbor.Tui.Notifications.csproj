@@ -17,4 +17,15 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 
+  <!--
+    #665: the three OS backends are internal and are now constructed with an
+    injected INotificationProcessRunner. NotificationProcessSeamTests asserts
+    each one's exact argv and its cancellation behaviour, which is only
+    reachable from inside the assembly — the same shape as
+    Harbor.Tools.Builtin -> Harbor.Tools.Builtin.Tests.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Tui.RendererTests"/>
+  </ItemGroup>
+
 </Project>

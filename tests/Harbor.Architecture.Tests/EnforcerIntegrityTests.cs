@@ -85,8 +85,14 @@ public sealed class EnforcerIntegrityTests
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
         new("Harbor.Tui.NickConsoleEx", "Harbor.Abstractions",
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
-        new("Harbor.Tui.Notifications", "Harbor.Abstractions",
-            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        // #665: the (Notifications -> Harbor.Abstractions) exemption is GONE.
+        // It was a #450 dead edge until NotificationTuiRenderer took an
+        // INotificationProcessRunner from the facade, which bound a real type
+        // in IL. DeclaredButUnboundProjectReferences_AreReallyUnbound fails the
+        // moment an exempt edge turns out to be live, so the exemption was
+        // removed and the edge justified in the matrix instead (the
+        // Harbor.Tui.Notifications row in FullLayerMatrixTests.Matrix) — same
+        // shape as #567 for ViewModels and #663 for Sessions.
         new("Harbor.Ui.Framework", "Harbor.Ui.Framework.Projection",
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
         new("Harbor.Ui.Framework", "Harbor.Ui.Framework.Services",
