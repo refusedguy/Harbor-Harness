@@ -1,6 +1,6 @@
 // PresentationCapabilityRules.cs — the CAPABILITY half of the layer contract
-// (#455, issue "[ARCH-5] Presentation layer performs I/O and spawns processes;
-// no capability rules").
+// for issue 455, "ARCH-5: Presentation layer performs I/O and spawns
+// processes; no capability rules".
 //
 // WHY THIS FILE EXISTS
 // --------------------
@@ -226,15 +226,18 @@ internal static class IlCapabilityProbe
         };
     }
 
+    /// <remarks>
+    ///     Deliberately does NOT use <c>Assembly.Location</c>. Under
+    ///     <c>Microsoft.Testing.Platform</c> the entry assembly is testhost, and
+    ///     under a single-file publish <c>Location</c> is an empty string for
+    ///     every embedded assembly (analyzer IL3000). Every reference this probe
+    ///     needs is copied next to the test host, so
+    ///     <see cref="AppContext.BaseDirectory" /> is both correct and warning-free.
+    ///     If the file is not there, <see cref="Scan" /> throws rather than
+    ///     reporting a clean result.
+    /// </remarks>
     private static string ResolvePath(Assembly asm)
     {
-        if (!string.IsNullOrEmpty(asm.Location))
-        {
-            return asm.Location;
-        }
-
-        // No Location (single-file publish): every copied reference sits next to
-        // the test host under the test runner.
         string name = asm.GetName().Name
             ?? throw new InvalidOperationException("[capability-probe] assembly has no simple name.");
         return Path.Combine(AppContext.BaseDirectory, name + ".dll");
@@ -358,8 +361,17 @@ internal static class IlCapabilityProbe
         return current.FullName;
     }
 
+    /// <remarks>
+    ///     Leading <c>&lt;</c> is the whole test, and it must be the whole test.
+    ///     The shapes differ in their tail: async state machines end
+    ///     <c>d__7</c>, closures end <c>DisplayClass0_0</c>, local functions end
+    ///     <c>g__Local|3_0</c> — only some end <c>&gt;</c>. Testing
+    ///     <c>EndsWith('&gt;')</c> as well silently lets every <c>async</c> method
+    ///     through, which is the common case. C# forbids a user-declared type name
+    ///     starting with <c>&lt;</c>, so the prefix cannot false-positive.
+    /// </remarks>
     private static bool IsCompilerGenerated(string typeName)
-        => typeName.StartsWith('<') && typeName.EndsWith('>');
+        => typeName.StartsWith('<');
 }
 
 /// <summary>
@@ -635,9 +647,9 @@ public sealed class PresentationCapabilityRules
     public async Task NonVacuity_Probe_ReadsRealIlFromThisTestAssembly()
     {
         var self = typeof(PresentationCapabilityRules).Assembly;
-        string path = string.IsNullOrEmpty(self.Location)
-            ? Path.Combine(AppContext.BaseDirectory, (self.GetName().Name ?? "") + ".dll")
-            : self.Location;
+        string path = Path.Combine(
+            AppContext.BaseDirectory,
+            (self.GetName().Name ?? throw new InvalidOperationException("unnamed assembly")) + ".dll");
 
         await Assert.That(File.Exists(path)).IsTrue()
             .Because("the probe must open a real assembly file; reporting 'no violations' "
