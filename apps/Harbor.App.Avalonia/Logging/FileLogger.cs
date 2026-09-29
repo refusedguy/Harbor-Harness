@@ -1,3 +1,4 @@
+using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.Logging;
 /// <summary>
@@ -141,21 +142,15 @@ public sealed class FileLoggerProvider : ILoggerProvider
     {
         if (level < FileLevel)
             return;
-        // 4-char level mnemonic: TRAC, DBUG, INFO, WARN, ERRO, CRIT, NONE
-        string levelTag = level switch
-        {
-            LogLevel.Trace => "TRAC",
-            LogLevel.Debug => "DBUG",
-            LogLevel.Information => "INFO",
-            LogLevel.Warning => "WARN",
-            LogLevel.Error => "ERRO",
-            LogLevel.Critical => "CRIT",
-            LogLevel.None => "NONE",
-            _ => level.ToString().ToUpperInvariant()
-        };
-        string timestamp = DateTimeOffset.UtcNow.ToString("HH:mm:ss.fff");
-        int thread = Environment.CurrentManagedThreadId;
-        string line = $"{timestamp} [{levelTag}] [{thread,3}] {category}: {message}";
+        // #563: the 4-char level mnemonic and the row layout both come from the
+        // one table in Harbor.Ui.Framework.Abstractions. This copy is byte-for-
+        // byte the CLI's (dead — #558 owns removing it), and while it carried its
+        // own switch it also carried its own answer for an unrecognised level:
+        // `level.ToString().ToUpperInvariant()`, where PanelRows.LogRows used a
+        // 4-question-mark sentinel and the Serilog template in Harbor.Logging
+        // says "VERB".
+        string line = new LogRow(DateTimeOffset.UtcNow, level, category, message)
+            .FormatForFile(Environment.CurrentManagedThreadId);
 
         lock (_writeLock)
         {

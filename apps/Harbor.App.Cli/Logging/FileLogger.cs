@@ -1,3 +1,4 @@
+using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Cli.Logging;
 /// <summary>
@@ -141,21 +142,17 @@ public sealed class FileLoggerProvider : ILoggerProvider
     {
         if (level < FileLevel)
             return;
-        // 4-char level mnemonic: TRAC, DBUG, INFO, WARN, ERRO, CRIT, NONE
-        string levelTag = level switch
-        {
-            LogLevel.Trace => "TRAC",
-            LogLevel.Debug => "DBUG",
-            LogLevel.Information => "INFO",
-            LogLevel.Warning => "WARN",
-            LogLevel.Error => "ERRO",
-            LogLevel.Critical => "CRIT",
-            LogLevel.None => "NONE",
-            _ => level.ToString().ToUpperInvariant()
-        };
-        string timestamp = DateTimeOffset.UtcNow.ToString("HH:mm:ss.fff");
-        int thread = Environment.CurrentManagedThreadId;
-        string line = $"{timestamp} [{levelTag}] [{thread,3}] {category}: {message}";
+        // #563: the 4-char level mnemonic comes from the one table that spells
+        // it. This used to be a local switch whose `_ =>` arm answered
+        // `level.ToString().ToUpperInvariant()` while PanelRows.LogRows answered
+        // a 4-question-mark sentinel for the same value — so one event read as
+        // that sentinel in the logs panel and as "VERBOSE" here. The row layout
+        // below likewise used to be a bare interpolation; a consumer re-read the
+        // level out of the finished string at a fixed [13..17], which only ever
+        // described the panel's unbracketed layout and lands on "[INF" for this
+        // one.
+        string line = new LogRow(DateTimeOffset.UtcNow, level, category, message)
+            .FormatForFile(Environment.CurrentManagedThreadId);
 
         lock (_writeLock)
         {
