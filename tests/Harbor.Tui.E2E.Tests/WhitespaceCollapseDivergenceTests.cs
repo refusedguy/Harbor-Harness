@@ -29,7 +29,7 @@ namespace Harbor.Tui.E2E.Tests;
 ///         </item>
 ///     </list>
 ///     <para>
-///         Same name, opposite intent, and the divergence is invisible at the
+///         Same name, opposite intent, and the divergence was invisible at the
 ///         call site because both take a string and return a string. This is
 ///         therefore not a duplication to merge but two separate requirements
 ///         wearing one name, and the fix is to keep both and tell them apart.
@@ -71,22 +71,15 @@ public class WhitespaceCollapseDivergenceTests
     [Test]
     public async Task TearTolerantMatcher_StripsEveryWhitespaceCharacter_InsteadOfReplacingIt()
     {
-        var method = typeof(TuiDriver).GetMethod(StripWhitespace, AllStatic);
-        await Assert.That(method).IsNotNull();
-
-        var stripped = (string)method!.Invoke(null, ["alpha\r\n  beta\tgamma"])!;
-
-        // Every whitespace character is gone — this is the opposite of SingleLine,
-        // which would have returned "alpha    beta\tgamma".
-        await Assert.That(stripped).IsEqualTo("alphabetagamma");
+        await Assert.That(InvokeStrip("alpha\r\n  beta\tgamma")).IsEqualTo("alphabetagamma");
     }
 
     /// <summary>
-    ///     The name itself is the defect: <c>CollapseWhitespace</c> already means
+    ///     The name itself was the defect: <c>CollapseWhitespace</c> already means
     ///     <see cref="PanelText.SingleLine" />, so the E2E helper had to give it
-    ///     up. Asserted in both directions — a name that is present fails, a
-    ///     name that is missing fails — so neither a half-applied rename nor a
-    ///     rename that never happened can pass.
+    ///     up. Asserted in both directions — a name that is present fails, a name
+    ///     that is missing fails — so neither a half-applied rename nor a rename
+    ///     that never happened can pass.
     /// </summary>
     [Test]
     public async Task TuiDriver_NamesTheTearTolerantStrip_StripWhitespace_NotCollapseWhitespace()
@@ -108,13 +101,15 @@ public class WhitespaceCollapseDivergenceTests
     public async Task TearTolerantStrip_AndPanelTextSingleLine_DisagreeOnTheSameInput()
     {
         const string Torn = "alpha\r\n\tbeta   gamma";
-        var method = typeof(TuiDriver).GetMethod(StripWhitespace, AllStatic);
-        await Assert.That(method).IsNotNull();
 
-        var stripped = (string)method!.Invoke(null, [Torn])!;
+        var stripped = InvokeStrip(Torn);
         var singleLine = PanelText.SingleLine(Torn);
 
+        await Assert.That(stripped).IsNotNull();
         await Assert.That(stripped).IsNotEqualTo(singleLine);
-        await Assert.That(stripped.Length).IsLessThan(singleLine.Length);
+        await Assert.That(stripped!.Length).IsLessThan(singleLine.Length);
     }
+
+    private static string? InvokeStrip(string input) =>
+        typeof(TuiDriver).GetMethod(StripWhitespace, AllStatic)?.Invoke(null, [input]) as string;
 }

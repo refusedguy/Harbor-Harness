@@ -754,29 +754,54 @@ public sealed class TuiDriver : IE2eDriver
 
             // Wrap/tear-tolerant fallback (last): renderers whose panels word-wrap
             // or repaint mid-line split the pattern across grid rows / leave
-            // interleaved repaint artifacts in the flat log. Collapsing ALL
+            // interleaved repaint artifacts in the flat log. Dropping ALL
             // whitespace on both sides matches when every character is present
             // in order, regardless of layout. Only consulted after exact matching
             // fails, so strict tests are unaffected.
-            string needle = CollapseWhitespace(pattern);
+            string needle = StripWhitespace(pattern);
             if (needle.Length == 0)
                 continue;
 
             lock (_terminalBuffer)
             {
                 string visible = _terminalBuffer.GetVisibleText();
-                if (CollapseWhitespace(visible).Contains(needle, StringComparison.Ordinal))
+                if (StripWhitespace(visible).Contains(needle, StringComparison.Ordinal))
                     return true;
             }
 
-            if (CollapseWhitespace(screen).Contains(needle, StringComparison.Ordinal))
+            if (StripWhitespace(screen).Contains(needle, StringComparison.Ordinal))
                 return true;
         }
         return false;
     }
 
-    /// <summary>Removes every whitespace character, used by the tear-tolerant matcher.</summary>
-    private static string CollapseWhitespace(string input)
+    /// <summary>
+    ///     Removes every whitespace character, used by the tear-tolerant matcher.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Named <c>StripWhitespace</c>, not <c>CollapseWhitespace</c>, and the
+    ///         distinction is load-bearing rather than cosmetic. The other
+    ///         whitespace helper in this repo is
+    ///         <c>PanelText.SingleLine</c> (src/Harbor.Ui.Framework.Projection),
+    ///         which <b>substitutes</b> CR/LF with a space so a multi-line log
+    ///         message fits one display row — it preserves length and every other
+    ///         character. This one <b>deletes</b> every whitespace character so a
+    ///         pattern still matches after a renderer tore the row across grid
+    ///         lines — its result is shorter than its input.
+    ///     </para>
+    ///     <para>
+    ///         Issue #574's duplicate census saw only the three dead
+    ///         <c>contrib/</c> copies, all of which really are equivalent to
+    ///         <c>PanelText.SingleLine</c>, and so reported a byte-identical triad
+    ///         without ever comparing this live one. Same name, opposite intent;
+    ///         the call site could not have told them apart, because both take a
+    ///         string and return a string. Pinned by
+    ///         <c>WhitespaceCollapseDivergenceTests</c> so neither side is
+    ///         "simplified" into the other.
+    ///     </para>
+    /// </remarks>
+    private static string StripWhitespace(string input)
     {
         if (input.IndexOf(' ') < 0 && input.IndexOf('\n') < 0 && input.IndexOf('\r') < 0 && input.IndexOf('\t') < 0)
             return input;
