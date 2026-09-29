@@ -368,9 +368,9 @@ public sealed class ModelRefSingleParserTests
     [Test]
     public async Task DelegationMatcher_SeesACall_AndNotAMention()
     {
-        await Assert.That(CountDelegationsIn(["var r = ModelRef.Qualify(p, m);"])).IsEqualTo(1)
+        await Assert.That(CountDelegationsIn(["var r = ModelRef.Qualify(p, m);"]).Count).IsEqualTo(1)
             .Because("a real call must be recognised");
-        await Assert.That(CountDelegationsIn(["var r = ModelRef.TryParse(value);"])).IsEqualTo(1)
+        await Assert.That(CountDelegationsIn(["var r = ModelRef.TryParse(value);"]).Count).IsEqualTo(1)
             .Because("a real call must be recognised");
         await Assert.That(CountDelegationsIn(["/// ModelRef.TryParse is the only function that reads one."]).Count)
             .IsEqualTo(0)
@@ -469,7 +469,7 @@ public sealed class ModelRefSingleParserTests
     {
         try
         {
-            return CountDelegationsIn(File.ReadAllLines(Path.Combine(root, relativePath)));
+            return CountDelegationsIn(File.ReadAllLines(Path.Combine(root, relativePath))).Count;
         }
         catch (IOException)
         {
