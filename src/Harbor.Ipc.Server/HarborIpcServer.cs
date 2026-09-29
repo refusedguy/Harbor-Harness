@@ -72,7 +72,7 @@ public sealed class HarborIpcServer : IHarborServer
             serviceProvider.GetRequiredService<IEventBus>(),
             _loggerFactory.CreateLogger<EventBroadcaster>(),
             _leases);
-        var dispatcher = new RequestDispatcher(
+        var handlers = RequestHandlerRegistry.CreateDefault(
             serviceProvider.GetRequiredService<IAgent>(),
             serviceProvider.GetRequiredService<IAgentRegistry>(),
             serviceProvider.GetRequiredService<ISessionStore>(),
@@ -81,8 +81,19 @@ public sealed class HarborIpcServer : IHarborServer
             _broadcaster,
             _leases,
             // Nullable: minimal/test hosts may not register the coordinator —
-            // the dispatcher falls back to direct cancel there.
+            // AbortAgentRequest falls back to direct cancel there.
             serviceProvider.GetService<IApprovalCoordinator>());
+
+        // #485: RequestDispatcher's constructor checks this table against the
+        // reflection census of the HarborRequest union and refuses to start if
+        // a member has no handler — so a request type added without one fails
+        // HERE, at startup, instead of answering clients with the string
+        // "Unknown request type: X" at runtime.
+        var dispatcher = new RequestDispatcher(
+            handlers,
+            _leases,
+            _loggerFactory.CreateLogger<RequestDispatcher>());
+
         _rpc = new MessagePackRpcServer(
             _transport, dispatcher, _broadcaster,
             _loggerFactory.CreateLogger<MessagePackRpcServer>(), psk);
