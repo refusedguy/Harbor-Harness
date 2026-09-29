@@ -303,6 +303,46 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Task: run the contrib TUI test suite. `contrib/tests/*` belongs to
+  # Contrib.slnx, not Harbor.slnx, and the shard runner above resolves
+  # `tests/<project>/bin/...` from the solution-binaries artifact — so the whole
+  # contrib suite (including ContribBackendParityTests, the cross-backend gate
+  # for the RazorConsole/Termina/TerminalGui shells) had no way to run in CI.
+  # A shard of its own, deliberately NOT `needs: build`: the parity gate must
+  # not be hostage to an unrelated gate, and this job builds what it runs.
+  # Manual list, not the whole solution: the Blazor / WPF / Maui / PTY E2E
+  # contrib projects stay out of scope here.
+  contrib:
+    needs: [changes]
+    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      - name: Build contrib TUI tests
+        run: dotnet build contrib/tests/Harbor.Tui.Contrib.Tests -c Release -p:ContinuousIntegrationBuild=true
+
+      # MinimumExpectedTests guard: a silent zero-test regression must fail
+      # loudly (MTP exit code 8), never pass as "green".
+      - name: Run contrib TUI tests
+        run: >
+          dotnet exec
+          contrib/tests/Harbor.Tui.Contrib.Tests/bin/Release/net10.0/Harbor.Tui.Contrib.Tests.dll
+          --minimum-expected-tests 1
+
   # Task: coverage collection — REPORT-ONLY (issue #99). Runs the fast unit
   # suites (core + platform shard lists) under the MTP CodeCoverage extension
   # (Microsoft.Testing.Extensions.CodeCoverage ships transitively with
