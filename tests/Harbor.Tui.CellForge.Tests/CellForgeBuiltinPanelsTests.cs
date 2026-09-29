@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.IO;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
@@ -12,7 +13,9 @@ namespace Harbor.Tui.CellForge.Tests;
 ///     CF-E-002 contract tests for the 9 cell-native builtin panels: identity
 ///     (Id/Title/Placement/Size), <c>Build</c> on empty + populated + clipped +
 ///     dependency-free states, and <c>OnKey</c> consumption. No Spectre, no
-///     filesystem fixtures (file-tree reads the real CWD read-only).
+///     filesystem fixtures — since #667 the file-tree panel reads its listing
+///     from state and never touches the disk, so it has a fixture to assert
+///     against for the first time.
 /// </summary>
 public class CellForgeBuiltinPanelsTests
 {
@@ -663,7 +666,7 @@ public class CellForgeBuiltinPanelsTests
 
         await Assert.That(panel.OnKey(UiKey.ForChar('r'), ctx)).IsTrue();
 
-        await Assert.That(store.State.Ui.FileTrees["file-tree"].Status).IsEqualTo(AsyncStatus.Idle)
+        await Assert.That(store.State.Ui.FileTreeFor("file-tree", dir).Status).IsEqualTo(AsyncStatus.Idle)
             .Because("`r` must drop the listing so the next demand re-loads; a refresh "
                    + "that left the old rows in state would be a no-op with a keypress attached");
     }

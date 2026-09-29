@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Filesystem;
 using Harbor.Application.Filesystem;
 using Microsoft.Extensions.Logging.Abstractions;
+using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
 
@@ -99,7 +100,7 @@ public sealed class SystemDirectoryListerTests
             Result<DirectoryListing> result = await Lister().ListAsync(dir);
 
             await Assert.That(result.IsSuccess).IsTrue();
-            await Assert.That(result.Value.Entries).IsEmpty();
+            await Assert.That(result.Value.Entries.Count).IsEqualTo(0);
             await Assert.That(result.Value.Truncated).IsFalse();
         }
         finally

@@ -2,6 +2,8 @@ using System.Collections.Immutable;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Filesystem;
 using Harbor.Abstractions.Tools;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Ui.Framework.Services;
