@@ -236,7 +236,7 @@ public sealed class CostPricedInCoreRules
         await Assert.That(FindIn(["              \"pricing\": { \"inputPerMillion\": 0, \"outputPerMillion\": 0 },"]).Count)
             .IsEqualTo(0)
             .Because("a JSON config sample inside a string literal is a payload, not a price computation");
-        await Assert.That(FindIn(["    // 61.6k tokens cost 1_000_000m per million under Pricing"])).Count)
+        await Assert.That(FindIn(["    // 61.6k tokens cost 1_000_000m per million under Pricing"]).Count)
             .IsEqualTo(0)
             .Because("comment prose is not a second implementation");
         await Assert.That(FindIn(["    /// <see cref=\"Pricing\"/> is a core concept."]).Count)
@@ -396,7 +396,7 @@ public sealed class CostPricedInCoreRules
     }
 
     /// <summary>
-    ///     0-based list of every non-comment line that trips at least one rule.
+    ///     The text of every non-comment line that trips at least one rule.
     ///     Shared by the real scan and the planted controls, so the control proves
     ///     the SAME matcher the rule runs.
     /// </summary>

@@ -562,8 +562,8 @@ public class SideBarProjectionCacheTests
     {
         // The audit suggested keying the cache on (Sessions, ActiveSessionId).
         // That key is WRONG: the sidebar also carries the token/cost line,
-        // which moves on StepFinishEvent while both session inputs stand
-        // still. Pinned here so the narrower key can never come back.
+        // which moves on the core's SessionStatsEvent while both session inputs
+        // stand still. Pinned here so the narrower key can never come back.
         var cache = new SideBarProjectionCache();
         var sessions = Many(200);
         var active = SessionId.Create("s7");

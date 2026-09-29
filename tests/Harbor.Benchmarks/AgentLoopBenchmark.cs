@@ -422,5 +422,5 @@ internal sealed class BenchSessionContext : ISessionContext
         return Task.CompletedTask;
     }
 
-    public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default) => Task.CompletedTask;
+    public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default) => Task.CompletedTask;
 }
