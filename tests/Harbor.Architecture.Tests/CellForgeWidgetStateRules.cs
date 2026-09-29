@@ -203,7 +203,7 @@ public sealed class CellForgeWidgetStateRules
         // the invariant, which is the thing that rots.
         IReadOnlyList<string> hits = FindSuppressedStateDereferences();
 
-        await Assert.That(hits).IsEmpty
+        await Assert.That(hits).IsEmpty()
             .Because(
                 "A `!` on a widget's own nullable state inside Paint/Measure/CheapEstimate/HasX means " +
                 "the absence guard lives somewhere else. That is how four suppressions survived in " +
@@ -366,7 +366,7 @@ public sealed class CellForgeWidgetStateRules
                 {
                     lineNumber++;
 
-                    Match declaration = TypeDeclaration().Match(line);
+                    Match declaration = TypeDeclaration.Match(line);
                     if (declaration.Success)
                     {
                         currentType = declaration.Groups["name"].Value;
@@ -377,7 +377,7 @@ public sealed class CellForgeWidgetStateRules
                         continue;
                     }
 
-                    Match property = PropertyName().Match(line);
+                    Match property = PropertyName.Match(line);
                     if (!property.Success)
                     {
                         continue;
@@ -389,7 +389,7 @@ public sealed class CellForgeWidgetStateRules
             }
         }
 
-        return [.. found.Select(kv => (kv.Key, kv.Location))];
+        return [.. found.Select(kv => (kv.Key, kv.Value))];
     }
 
     /// <summary>Matches a type declaration and captures its name, so properties get attributed to a type.</summary>
