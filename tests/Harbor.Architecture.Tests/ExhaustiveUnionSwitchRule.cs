@@ -393,6 +393,25 @@ internal static partial class UnionExhaustivenessProbe
         return relative.Replace(Path.DirectorySeparatorChar, '/');
     }
 
+    /// <summary>Lexical states for <see cref="StripNonCode" />.</summary>
+    private enum StripState
+    {
+        /// <summary>Ordinary code.</summary>
+        Code,
+
+        /// <summary>Inside a "…".</summary>
+        String,
+
+        /// <summary>Inside a @"…", where "" escapes a quote.</summary>
+        VerbatimString,
+
+        /// <summary>Inside a '…'.</summary>
+        Char,
+
+        /// <summary>Inside a /* … */ block.</summary>
+        BlockComment,
+    }
+
     /// <summary>
     ///     Blanks out comments, string and char literals so brace counting and
     ///     arm matching cannot be fooled by a <c>switch</c> inside a doc
@@ -401,7 +420,7 @@ internal static partial class UnionExhaustivenessProbe
     private static string StripNonCode(string line)
     {
         var output = new StringBuilder(line.Length);
-        State state = State.Code;
+        StripState state = StripState.Code;
 
         for (int i = 0; i < line.Length; i++)
         {
@@ -410,7 +429,7 @@ internal static partial class UnionExhaustivenessProbe
 
             switch (state)
             {
-                case State.Code:
+                case StripState.Code:
                     if (c == '/' && next == '/')
                     {
                         return output.ToString();
@@ -418,46 +437,48 @@ internal static partial class UnionExhaustivenessProbe
 
                     if (c == '/' && next == '*')
                     {
-                        state = State.BlockComment;
+                        state = StripState.BlockComment;
                         i++;
                         continue;
                     }
 
                     if (c == '"')
                     {
-                        state = next == '"' ? State.VerbatimString : State.String;
+                        // "" is an empty verbatim string that opens and closes
+                        // on this line; " is its opening quote.
+                        state = next == '"' ? StripState.VerbatimString : StripState.String;
                         continue;
                     }
 
                     if (c == '@' && next == '"')
                     {
-                        state = State.VerbatimString;
+                        state = StripState.VerbatimString;
                         i++;
                         continue;
                     }
 
                     if (c == '\'')
                     {
-                        state = State.Char;
+                        state = StripState.Char;
                         continue;
                     }
 
                     output.Append(c);
                     continue;
 
-                case State.String:
+                case StripState.String:
                     if (c == '\\')
                     {
                         i++;
                     }
                     else if (c == '"')
                     {
-                        state = State.Code;
+                        state = StripState.Code;
                     }
 
                     continue;
 
-                case State.VerbatimString:
+                case StripState.VerbatimString:
                     if (c == '"')
                     {
                         if (next == '"')
@@ -466,46 +487,39 @@ internal static partial class UnionExhaustivenessProbe
                         }
                         else
                         {
-                            state = State.Code;
+                            state = StripState.Code;
                         }
                     }
 
                     continue;
 
-                case State.Char:
+                case StripState.Char:
                     if (c == '\\')
                     {
                         i++;
                     }
                     else if (c == '\'')
                     {
-                        state = State.Code;
+                        state = StripState.Code;
                     }
 
                     continue;
 
-                case State.BlockComment:
+                case StripState.BlockComment:
                     if (c == '*' && next == '/')
                     {
-                        state = State.Code;
+                        state = StripState.Code;
                         i++;
                     }
 
                     continue;
+
+                default:
+                    throw new InvalidOperationException($"[union-probe] unknown strip state {state}.");
             }
         }
 
         return output.ToString();
-
-        // Nested enum-like state; declared as a local enum for readability.
-        enum State
-        {
-            Code,
-            String,
-            VerbatimString,
-            Char,
-            BlockComment,
-        }
     }
 }
 
