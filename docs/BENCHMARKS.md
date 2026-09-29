@@ -628,7 +628,30 @@ pin. Zero-alloc cells assert `GC.GetAllocatedBytesForCurrentThread() == 0`
 after warmup (thread-scoped, parallel-safe); bounded cells are generous
 tripwires in the `SpanParserTests` tradition — per-op averages are printed
 to stdout for the next BENCHMARKS refresh, hard failures only on
-pathological growth. Run per project, e.g.:
+pathological growth.
+
+**How a window is measured (#741).** Every cell measures through
+`Harbor.TestKit.AllocationProbe`, and which entry point it uses is forced
+by the code under test, not by taste:
+
+| Window | Entry point | Why |
+|---|---|---|
+| may contain an `await` | `MeasureProcessAsync` (process-wide) | a per-thread counter is not a smaller number across a hop, it is a *different* number |
+| provably cannot suspend | `MeasureThread` (per-thread) | exact, and needs no serialisation |
+
+A process-wide window additionally requires the class to be keyless
+`[NotInParallel]`: the counter bills every allocation in the process for
+the duration of the window, and TUnit runs classes in parallel by default.
+
+**Every bounded cell asserts a floor as well as a ceiling.** This is not
+decoration. `GetAllocatedBytesForCurrentThread()` sampled on both sides of
+an `await` returns the gap between two *unrelated* thread counters, and on
+the `AgentLoop` turn path that gap was **negative** — `text-only turn avg =
+-815859 B`. A ceiling-only check is satisfied by every negative number, so
+that gate was not imprecise, it was **off while rendering green**. A ceiling
+is only a gate once something can fail underneath it.
+
+Run per project, e.g.:
 
 ```bash
 dotnet run -c Release --project tests/Harbor.Registries.Tests -- --treenode-filter "*/*/*Allocation*"
@@ -646,8 +669,8 @@ dotnet run -c Release --project tests/Harbor.Registries.Tests -- --treenode-filt
 | `PublishAsync_TenSubscribers_StaysBounded` | `InMemoryEventBus` 10-sub fan-out | ≤ 2 KB/publish |
 | `ResolveTools_FrozenUnfiltered_IsAllocationFree` | frozen `ToolRegistry.ResolveTools` (no permission, cached array) | 0 B |
 | `ResolveTools_FrozenWithPermission_IsAllocationFree` | frozen `ToolRegistry.ResolveTools` (same ruleset, memoized) | 0 B |
-| `TextOnly_Turn_StaysBounded` (`Harbor.Application.Tests`) | `AgentLoop` text-only turn | ≤ 64 KB/turn |
-| `ToolCall_Turn_StaysBounded` | `AgentLoop` tool turn incl. `StreamingCoalescer` materialize/`TryParseArgs` | ≤ 256 KB/turn |
+| `TextOnly_Turn_StaysBounded` (`Harbor.Application.Tests`) | `AgentLoop` text-only turn | ≤ 512 KB/turn, **and ≥ 0** (#741) |
+| `ToolCall_Turn_StaysBounded` | `AgentLoop` tool turn incl. `StreamingCoalescer` materialize/`TryParseArgs` | ≤ 2560 KB/turn, **and ≥ 0** (#741) |
 | `Parse_UserLine_StaysBounded` (`Harbor.Storage.Jsonl.Tests`) | `JsonlLineParser.Parse` per line | ≤ 8 KB/line |
 | `GetMessages_SeededStore_StaysBounded` | `JsonlSessionStore.GetMessagesAsync` (100 msgs) | ≤ 512 KB/read |
 | `TryParseChatChunkLine_TextDelta_StaysBounded` (`Harbor.Providers.Tests`) | `OpenAiWire.TryParseChatChunkLine` text chunk | ≤ 4 KB/chunk |
