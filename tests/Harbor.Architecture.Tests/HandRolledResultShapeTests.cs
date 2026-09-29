@@ -17,8 +17,8 @@
 //     method whose two siblings on the same class already returned a CFE
 //     `Result`.
 //
-// The two rules below are what closes the class, rather than three separate
-// pragma catalogues (one per type, per issue).
+// The rules below are what closes the class, rather than a pragma catalogue
+// per type, per issue.
 //
 // RULE 1 — no type may DECLARE `IsSuccess`/`IsFailure` without delegating to a
 //          CFE `Result`. Delegating (holding a `Result` member and forwarding)
@@ -27,6 +27,9 @@
 //          expression is the defect itself: it manufactures a well-typed,
 //          empty, *readable* error for a value that has no error, which is what
 //          makes the wrong branch log something plausible instead of nothing.
+// RULE 3 — no VALUE-SHAPED type (`struct` / `record struct`) may carry a
+//          nullable-string `Error` member unless it delegates to a CFE
+//          `Result`. Added by #588, for the shape #561's two rules cannot see.
 //
 // WHY A TEXT SCAN AND NOT A REFLECTIVE TEST
 // -----------------------------------------
@@ -58,6 +61,51 @@
 // legal delegating facade and require it to be left alone. That is sensitivity
 // AND specificity — a rule that flagged everything would pass a
 // sensitivity-only control while being useless.
+//
+// RULE 3 — added by #588. #561's pair each DECLARED `IsSuccess`/`IsFailure`
+// (Rule 1) or coalesced their error to `string.Empty` (Rule 2), so both rules
+// could see them. `ModelBatch` did neither: it had no flags at all, so the
+// success/failure test was re-hand-written at every read site as
+// `batch.Error is not null` — the inverse polarity of the library's — and a
+// failure carrying a null or empty error was representable and would be read
+// back as "success with zero models".
+//
+// A nullable-string `Error` member on a value-shaped type IS that shape: a
+// value channel and an error channel, with the error's *nullness* carrying the
+// verdict. `Result<T>` makes the same state unrepresentable — `Error` is
+// `string`, and `Result.Failure<T>("")` throws rather than producing a value
+// whose error says nothing.
+//
+// Deliberately narrow: the rule asks for BOTH value-shapedness and a
+// `string?` named `Error`, so a JSON DTO (`ThemeDto`), an event
+// (`CompactionFailedEvent`) and an `Exception`-carrying read outcome
+// (`FrameReadResult`) are untouched. A CLASS-based facade that declares neither
+// a flag nor a coalesced error is still outside all three rules — that limit is
+// stated rather than hidden, and Rule 1 covers the class case that matters in
+// practice.
+//
+// NON-VACUITY NOTE FOR RULE 3
+// ---------------------------
+// #588's `ModelBatch` was invisible to the scanner as it stood, for a reason
+// worth recording because it applies to any nested or parameterised type:
+//
+//   * a `record struct X(A, B, C);` with no braces never opened a body, so the
+//     parameter list was never part of the scanned text, and
+//   * a type nested inside another type's body was skipped entirely, because
+//     the walk resumes *after* the enclosing type.
+//
+// Both are fixed below (see `ScanExtent`). Neither changes what Rules 1 and 2
+// report: measured over the pre-#588 tree the fixes move the type count from
+// 1368 to 1761 and leave Rule 1 at 1 hit and Rule 2 at 0.
+//
+// WHY THIS AND NOT A BannedSymbols.txt ENTRY
+// ------------------------------------------
+// #588 proposed banning `T:Harbor.Registries.ModelBatch` in `BannedSymbols.txt`.
+// `ModelBatch` is `private`, so after #588 deletes it the ban could never fire
+// again — a guard that is green because its subject does not exist, which is the
+// vacuity this file exists to prevent. Rule 3 is red against a live type today,
+// names the shape rather than the type, and generalises to the next copy
+// anywhere in `src/` or `apps/`.
 //
 // SCOPE
 // -----
@@ -147,6 +195,43 @@ public sealed class HandRolledResultShapeTests
             + "contract, not a plugin-seam fix. Tracked, not forgotten."
     };
 
+    /// <summary>
+    ///     A value-shaped type declaration: <c>struct</c> or <c>record struct</c>.
+    ///     Matched against the DECLARATION LINE only — a class body that happens
+    ///     to contain a nested <c>record struct</c> must not be reported as one.
+    /// </summary>
+    private static readonly Regex ValueShapedDeclaration = new(
+        @"\b(?:readonly\s+)?(?:record\s+struct|struct)\s+[A-Za-z_]",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    ///     The #588 shape: a nullable <c>string</c> member named <c>Error</c>.
+    ///     The <c>?</c> is the whole defect — it is what lets "no failure" and
+    ///     "failure with nothing to say" be the same value, and it is why a
+    ///     non-nullable <c>string Error</c> facade is left to Rules 1 and 2.
+    /// </summary>
+    private static readonly Regex NullableStringErrorMember = new(
+        @"\bstring\?\s+Error\b",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    ///     Types allowed to carry a nullable-string <c>Error</c> while being
+    ///     value-shaped, without delegating to a CFE <c>Result</c>. Each entry is
+    ///     a decision with a reason, checked by
+    ///     <see cref="Rule3Exemptions_AreStillNeeded" />.
+    /// </summary>
+    private static readonly Dictionary<string, string> Rule3Exemptions = new(StringComparer.Ordinal)
+    {
+        ["src/Harbor.Tools.Builtin/Tools/Edit/EditTool.cs::EditResult"] =
+            "A FOURTH instance of the #588 shape, found by Rule 3 while #588 was being fixed — "
+            + "and deliberately NOT fixed there. `private readonly record struct EditResult(bool Ok, "
+            + "string Text, int Count, string? Error)` is a `Result<T>` spelled by hand: a boolean "
+            + "flag next to a nullable error, with the same null-means-failure channel. It lives in "
+            + "a builtin tool, not the providers perimeter that #588 covers, so fixing it is its own "
+            + "change. Deferred, not forgotten: #721. When it is fixed, delete this entry — "
+            + "Rule3Exemptions_AreStillNeeded fails if the entry outlives the type."
+    };
+
     [Test]
     public async Task Rule1_NoTypeReimplementsTheResultSurface()
     {
@@ -215,6 +300,184 @@ public sealed class HandRolledResultShapeTests
                 + "ResultSuccessException when read on a success. If a value has no error to give, "
                 + "it is a success, and the type should say so."
                 + Environment.NewLine + string.Join(Environment.NewLine, violations));
+    }
+
+    // =====================================================================
+    // Rule 3 — #588. Added after Rules 1 and 2, for the shape they cannot see.
+    // =====================================================================
+
+    /// <summary>
+    ///     The declaration line, i.e. the first line of a scanned body.
+    ///     <see cref="ValueShapedDeclaration" /> is matched against this and
+    ///     nothing else: a class whose body happens to contain a nested
+    ///     <c>record struct</c> is not itself value-shaped.
+    /// </summary>
+    private static string DeclarationLineOf(string body)
+    {
+        int newline = body.IndexOf('\n');
+        return newline < 0 ? body : body[..newline];
+    }
+
+    /// <summary>True when a scanned type is the #588 shape.</summary>
+    private static bool IsRule3Violation((string File, int Line, string TypeName, string Body) type) =>
+        ValueShapedDeclaration.IsMatch(DeclarationLineOf(type.Body))
+        && NullableStringErrorMember.IsMatch(type.Body)
+        && !DelegatesToCfeResult.IsMatch(type.Body);
+
+    [Test]
+    public async Task Rule3_NoValueShapedTypeCarriesANullableStringErrorChannel()
+    {
+        var violations = new List<string>();
+
+        foreach (var type in ScanTypes())
+        {
+            string key = type.File + "::" + type.TypeName;
+            if (IsRule3Violation(type) && !Rule3Exemptions.ContainsKey(key))
+            {
+                violations.Add($"{type.File}:{type.Line} — {type.TypeName}");
+            }
+        }
+
+        await Assert.That(violations).IsEmpty()
+            .Because(
+                "A value-shaped type that carries a nullable string `Error` is a hand-rolled "
+                + "Result<T> with the polarity inverted: the verdict is read off the error's "
+                + "nullness at each call site, so a failure with a null or empty error is "
+                + "representable and comes back as 'success'. `ModelBatch` "
+                + "(src/Harbor.Registries/Providers/ProviderRegistry.cs) was exactly that, and it is "
+                + "the shape Rules 1 and 2 above are blind to: it declared no IsSuccess/IsFailure at "
+                + "all, and never coalesced an error, so both rules reported nothing. CSharpFunctional"
+                + "Extensions makes the same state unrepresentable — `Error` is `string`, and "
+                + "`Result.Failure<T>(\"\")` throws instead of yielding a value whose error says "
+                + "nothing. Use a real `Result<T>` per task and read it with `IsFailure`."
+                + Environment.NewLine + string.Join(Environment.NewLine, violations));
+    }
+
+    [Test]
+    public async Task Rule3Exemptions_AreStillNeeded()
+    {
+        // The same rot `Rule1Exemptions_AreStillNeeded` exists to stop, for Rule 3:
+        // an exemption whose type no longer violates the rule would let the shape
+        // come back with nobody watching.
+        string? root = RepoPaths.RepoRoot;
+        await Assert.That(root).IsNotNull()
+            .Because("this check walks the working tree; without a repository root it proves nothing");
+
+        if (root is null)
+        {
+            return;
+        }
+
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var type in ScanTypes())
+        {
+            if (IsRule3Violation(type))
+            {
+                _ = found.Add(type.File + "::" + type.TypeName);
+            }
+        }
+
+        var stale = Rule3Exemptions.Keys.Where(key => !found.Contains(key)).ToList();
+
+        await Assert.That(stale).IsEmpty()
+            .Because(
+                "A Rule 3 exemption that no longer matches a violating type is dead weight, and it "
+                + "is the one way this rule could rot: the type was fixed and the entry stayed, so "
+                + "the shape is allow-listed with a stale reason. If you fixed the type, delete the "
+                + "entry. Stale: " + string.Join(", ", stale));
+    }
+
+    [Test]
+    public async Task PositiveControl_CatchesThePreIssueModelBatchShape()
+    {
+        // #588's target in its real surroundings: a `private` record struct with
+        // no body braces (so the parameter list IS the whole declaration)
+        // carrying a nullable `string? Error` next to a value member, NESTED in
+        // the class that owns it. The trailing sibling is the witness: if the
+        // extent ever swallows the rest of the file again, the sibling is never
+        // yielded and this control fails.
+        const string preIssue = """
+            public sealed class ProviderRegistry
+            {
+                private readonly record struct ModelBatch(
+                    ProviderId ProviderId,
+                    IReadOnlyList<ModelInfo> Models,
+                    string? Error);
+            }
+
+            public sealed class UnrelatedSibling { }
+            """;
+
+        IReadOnlyList<(string TypeName, int Line, string Body)> found = [.. ScanText(preIssue)];
+
+        await Assert.That(found.Select(t => t.TypeName).ToList())
+            .IsEquivalentTo(new[] { "ProviderRegistry", "ModelBatch", "UnrelatedSibling" })
+            .Because(
+                "The scanner must see three types: the outer class, the NESTED record, and the "
+                + "sibling after it. Two ways this fails, and both were real in the pre-#588 scanner: "
+                + "a `record struct X(A, B, C);` with no braces never opens a brace, so a walk that "
+                + "stops only on brace balance ran to the end of the file and the parameter list "
+                + "carrying the banned `string? Error` was never looked at; and a nested type was "
+                + "skipped, because the walk resumed AFTER the enclosing type.");
+
+        IReadOnlyList<(string TypeName, int Line, string Body)> flagged =
+        [
+            .. found.Where(t => DeclaresResultFlag.IsMatch(t.Body)
+                               || NullableStringErrorMember.IsMatch(t.Body)
+                               || CoalescedEmptyError.IsMatch(t.Body))
+        ];
+
+        await Assert.That(flagged.Select(t => t.TypeName).ToList()).IsEquivalentTo(new[] { "ModelBatch" })
+            .Because(
+                "Of the three, only ModelBatch carries a result-shaped error channel. If the outer "
+                + "class or the sibling is reported, the match has widened beyond the banned shape.");
+    }
+
+    [Test]
+    public async Task PositiveControl_LeavesTheNonResultStringErrorShapesAlone()
+    {
+        // Specificity for Rule 3. Every one of these carries a string-typed member
+        // called `Error` and must survive: a JSON DTO, an event, an outcome
+        // record that carries an Exception, a delegating facade, and a
+        // value-shaped type whose error is NOT a nullable string. If Rule 3
+        // flagged any of them it would be matching on the word "Error" rather
+        // than on the result shape.
+        const string legal = """
+            internal sealed record ThemeDto(
+                string? Name,
+                string? Accent,
+                string? Error,
+                string? Tool);
+
+            public sealed record CompactionFailedEvent(string SessionId, string Error) : AgentEvent;
+
+            internal readonly record struct FrameReadResult(
+                FrameReadOutcome Outcome,
+                HarborRequest? Request,
+                Exception? Error);
+
+            public readonly record struct DelegatingFacade(string? Error)
+            {
+                private readonly Result<CompiledPlugin> _inner;
+            }
+
+            public readonly record struct CountedRows(int Count, string Error);
+            """;
+
+        IReadOnlyList<(string TypeName, int Line, string Body)> flagged =
+        [
+            .. ScanText(legal)
+                .Where(t => ValueShapedDeclaration.IsMatch(DeclarationLineOf(t.Body))
+                            && NullableStringErrorMember.IsMatch(t.Body)
+                            && !DelegatesToCfeResult.IsMatch(t.Body))
+        ];
+
+        await Assert.That(flagged.Count).IsEqualTo(0)
+            .Because(
+                "Rule 3 asks for value-shapedness AND a nullable-string Error, so a DTO record, an "
+                + "event record, an Exception-carrying outcome and a delegating facade must all pass. "
+                + "If any is reported, the rule has widened to 'a member called Error' and will fire "
+                + "on the next protocol DTO added to the tree.");
     }
 
     [Test]
@@ -515,6 +778,27 @@ public sealed class HandRolledResultShapeTests
     /// </summary>
     private static IEnumerable<(string TypeName, int Line, string Body)> ScanText(string source)
     {
+        return ScanExtent(source, 0, 0);
+    }
+
+    /// <summary>
+    ///     How deep the scan descends into a type's own body looking for types
+    ///     NESTED inside it. #588's <c>ModelBatch</c> was a private nested record,
+    ///     so a scan that stopped at the enclosing type could never see it.
+    /// </summary>
+    private const int MaxNestingDepth = 3;
+
+    /// <summary>
+    ///     <see cref="ScanText" /> plus the two offsets the nesting walk needs:
+    ///     <paramref name="lineOffset" /> is the 1-based source line that
+    ///     <c>source</c>'s line 1 corresponds to, and <paramref name="depth" />
+    ///     caps the descent.
+    /// </summary>
+    private static IEnumerable<(string TypeName, int Line, string Body)> ScanExtent(
+        string source,
+        int lineOffset,
+        int depth)
+    {
         string[] raw = source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         string[] code = new string[raw.Length];
         for (int i = 0; i < raw.Length; i++)
@@ -532,12 +816,21 @@ public sealed class HandRolledResultShapeTests
 
             string name = declaration.Groups[1].Value;
 
-            // Walk forward to the end of the body by brace depth. A type whose
+            // Walk forward to the end of the type by brace depth. A type whose
             // opening brace is on a later line (a base list, an attribute) is
             // handled by the same loop — the first line that opens without
             // closing is where the body starts.
-            int depth = 0;
+            //
+            // `parenDepth` exists for the one shape brace depth cannot end: a
+            // `record struct X(A, B, C);` with NO body braces, where the
+            // parameter list is the whole type. Without it the walk never sees
+            // the primary constructor at all, and #588's `ModelBatch` — whose
+            // banned `string? Error` is a constructor parameter — was invisible.
+            int depthBraces = 0;
             bool opened = false;
+            int parenDepth = 0;
+            bool seenParen = false;
+            int closedParenLine = -1;
             var body = new StringBuilder();
             int consumed = 0;
 
@@ -548,29 +841,90 @@ public sealed class HandRolledResultShapeTests
 
                 foreach (char c in line)
                 {
-                    if (c == '{')
+                    switch (c)
                     {
-                        depth++;
-                        opened = true;
-                    }
-                    else if (c == '}')
-                    {
-                        depth--;
+                        case '{':
+                            depthBraces++;
+                            opened = true;
+                            break;
+                        case '}':
+                            depthBraces--;
+                            break;
+                        case '(':
+                            parenDepth++;
+                            seenParen = true;
+                            break;
+                        case ')':
+                            parenDepth--;
+                            if (seenParen && parenDepth <= 0)
+                            {
+                                closedParenLine = j;
+                            }
+
+                            break;
                     }
                 }
 
                 consumed = j;
-                if (opened && depth <= 0)
+                if (opened && depthBraces <= 0)
+                {
+                    break;
+                }
+
+                // The parameter list has closed and no body brace has opened, so
+                // this declaration ends here — unless a `{` (or a `:` base list)
+                // follows, in which case the body is still ahead. Only consulted
+                // while `opened` is false, so a `new(...)` call inside an
+                // already-open body can never end the type early.
+                if (!opened && closedParenLine == j && !OpensBodyAfter(code[j], code, j))
                 {
                     break;
                 }
             }
 
-            yield return (name, i + 1, body.ToString());
+            string bodyText = body.ToString();
+            yield return (name, lineOffset + i + 1, bodyText);
 
-            // Resume after the type so a nested type is still found on its own.
+            // Descend, so a type NESTED in this one is found on its own. The
+            // first line of `body` IS this declaration, so rescanning it would
+            // find this same type again; skip it and shift by one line. The
+            // `TypeDeclaration` pre-test is what keeps this affordable: most
+            // bodies contain no nested type at all, and rescanning those is
+            // pure cost on a walk that runs once per rule.
+            if (depth < MaxNestingDepth)
+            {
+                int firstNewline = bodyText.IndexOf('\n');
+                string inner = firstNewline < 0 ? string.Empty : bodyText[(firstNewline + 1)..];
+
+                if (TypeDeclaration.IsMatch(inner))
+                {
+                    foreach ((string NestedName, int NestedLine, string NestedBody)
+                             in ScanExtent(inner, lineOffset + i + 1, depth + 1))
+                    {
+                        if (!string.Equals(NestedName, name, StringComparison.Ordinal))
+                        {
+                            yield return (NestedName, NestedLine, NestedBody);
+                        }
+                    }
+                }
+            }
+
+            // Resume after the type so a sibling is still found on its own.
             i = consumed;
         }
+    }
+
+    /// <summary>
+    ///     True when a body or a base list follows the closing paren of a
+    ///     primary-constructor list, so the type is not over.
+    /// </summary>
+    private static bool OpensBodyAfter(string line, string[] code, int at)
+    {
+        string rest = line[(line.LastIndexOf(')') + 1)..].Trim();
+        string next = at + 1 < code.Length ? code[at + 1].Trim() : string.Empty;
+
+        return rest.StartsWith('{') || next.StartsWith('{')
+               || rest.StartsWith(':') || next.StartsWith(':');
     }
 
     /// <summary>
