@@ -9,6 +9,9 @@
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
     <ProjectReference Include="../../src/Harbor.Storage.Jsonl/Harbor.Storage.Jsonl.csproj"/>
     <ProjectReference Include="../../src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj"/>
+    <!-- #741: AllocationProbe, the one sanctioned reader of a GC allocation
+         counter. The allocation gates below measure through it. -->
+    <ProjectReference Include="../Harbor.TestKit/Harbor.TestKit.csproj"/>
   </ItemGroup>
 
 </Project>
