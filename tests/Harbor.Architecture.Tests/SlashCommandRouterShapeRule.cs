@@ -59,10 +59,10 @@
 // A ban that matches nothing is indistinguishable from a ban that is satisfied.
 // Three things close that:
 //
-//   1. NonVacuity_TheAssemblyThatHeldTheRouter_IsStillBeingRead — names THREE
-//      types from the very file the interface was deleted from. A renamed
-//      namespace, a failed assembly load, or a typo'd prefix is red here rather
-//      than vacuously green.
+//   1. NonVacuity_TheAssemblyThatHeldTheRouter_IsStillBeingRead — names the
+//      types declared in the very file the interface was deleted from. A
+//      renamed namespace, a failed assembly load, or a typo'd prefix is red
+//      here rather than vacuously green.
 //   2. NonVacuity_TheShapeRule_FiresOnARealInterface — the positive control: a
 //      private interface declared in THIS file with the exact banned signature.
 //      It trips the SHAPE rule while carrying a different name, so the two rules
@@ -329,7 +329,7 @@ public sealed class SlashCommandRouterShapeRule
     ///     the governed set really excludes the only assembly that is allowed to
     ///     contain a banned shape. This is the direct answer to the NetArchTest
     ///     trap: a scan that cannot see <c>Harbor.Abstractions</c> finds no
-    ///     banned type and reports success. Three types are named, all from
+    ///     banned type and reports success. The types named are all from
     ///     <c>ITuiRenderer.cs</c> — the exact file the interface was removed
     ///     from — so a namespace move, a failed load or a typo is red here.
     /// </summary>
@@ -346,10 +346,18 @@ public sealed class SlashCommandRouterShapeRule
             .Select(static t => t.FullName ?? t.Name)
             .ToHashSet(StringComparer.Ordinal);
 
-        // All three live in ITuiRenderer.cs, next to where the router was.
+        // All four are declared in src/Harbor.Abstractions/Tui/ITuiRenderer.cs —
+        // the exact file the router was removed from, and the only place in the
+        // assembly that still matches the file name. ITuiRenderer ITSELF is not
+        // one of them: it moved to Harbor.Terminal.Abstractions when the TUI
+        // contracts were split out, so the file kept the name and lost the type.
+        // Probing by file name would be probing a type that has not been in this
+        // assembly for a long time, which fails the liveness test for a reason
+        // that has nothing to do with whether the scan works.
         string[] expected =
         [
-            "Harbor.Abstractions.Tui.ITuiRenderer",
+            "Harbor.Abstractions.Tui.IInputHandler",
+            "Harbor.Abstractions.Tui.KeyPressEventArgs",
             "Harbor.Abstractions.Tui.ISlashCommand",
             "Harbor.Abstractions.Tui.ICommandContext",
         ];
