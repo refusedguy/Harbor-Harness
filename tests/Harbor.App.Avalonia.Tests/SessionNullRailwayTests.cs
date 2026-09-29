@@ -75,13 +75,6 @@ public class SessionNullRailwayTests
         }
     }
 
-    private sealed class FakeServiceProvider : IServiceProvider
-    {
-        private readonly Dictionary<Type, object?> _services = new();
-        public void Add<T>(T instance) where T : class => _services[typeof(T)] = instance;
-        public object? GetService(Type serviceType) => _services.TryGetValue(serviceType, out var s) ? s : null;
-    }
-
     private sealed class FakeChatViewBinder : IChatViewBinder
     {
         public void Rebind(UiStore store) { }
@@ -142,10 +135,8 @@ public class SessionNullRailwayTests
     {
         var sessionStore = store ?? new ControllableStore();
         var agent = new FakeAgent();
-        var services = new FakeServiceProvider();
         var agents = new FakeAgentRegistry();
-        services.Add<IAgentRegistry>(agents);
-        var factory = new SessionFactory(services, agents, agent, sessionStore, new FakeLogger<SessionFactory>());
+        var factory = new SessionFactory(agents, agent, sessionStore, new FakeLogger<SessionFactory>());
         var switcher = new SessionSwitcher(agent, sessionStore, agents, new FakeLogger<SessionSwitcher>());
         var router = new SessionEventRouter();
         var status = new SessionStatusService(new SessionStatusTracker());

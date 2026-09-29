@@ -59,6 +59,37 @@ public sealed record PanelServices
     ///     decided at startup instead of on every painted frame.
     /// </summary>
     /// <param name="container">The composition root's service provider.</param>
+    /// <remarks>
+    ///     <para>
+    ///         <b>This method takes a container on purpose, and the #470 guard
+    ///         deliberately does not flag it</b>
+    ///         (<c>ServiceLocatorBoundaryRules</c>, which sweeps this assembly).
+    ///         Worth stating plainly, because the guard's scope looks like an
+    ///         oversight otherwise and invites one of two wrong "fixes": widening
+    ///         the rule until it reddens here, or assuming the rule is full of
+    ///         holes.
+    ///     </para>
+    ///     <para>
+    ///         The difference is <em>who holds the container</em>. A service
+    ///         locator is a container kept as a field of an object that lives
+    ///         longer than the composition, so its dependencies are invisible in
+    ///         the signature and it can resolve anything, at any time, from
+    ///         anywhere. Here the container is an argument to a static factory,
+    ///         called exactly once by a composition root
+    ///         (<c>TuiBackendRegistry</c> / <c>TuiModule</c>), and its only
+    ///         product is this immutable record of named, typed fields. The
+    ///         per-frame contract carries values; the graph is consulted at
+    ///         startup, once, where knowing the whole graph is the job.
+    ///     </para>
+    ///     <para>
+    ///         The rule matches fields and constructor parameters — shapes that
+    ///         persist a container for the lifetime of an instance — and not
+    ///         ordinary method parameters. A per-frame method that accepted a
+    ///         live container would be a genuine violation and is the case that
+    ///         deserves its own rule with a per-site baseline, not an
+    ///         exception smuggled in here.
+    ///     </para>
+    /// </remarks>
     public static PanelServices FromContainer(IServiceProvider container)
     {
         ArgumentNullException.ThrowIfNull(container);

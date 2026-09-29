@@ -19,14 +19,6 @@ namespace Harbor.App.Avalonia.Tests;
 /// </summary>
 public class SessionManagerAtomicityTests
 {
-    private sealed class TestServiceProvider(AgentDefinition agentDef) : IServiceProvider
-    {
-        private readonly FakeAgentRegistry _agents = new(agentDef);
-
-        public object? GetService(Type serviceType) =>
-            serviceType == typeof(IAgentRegistry) ? _agents : null;
-    }
-
     private sealed class TestSessionStore : ISessionStore
     {
         private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
@@ -109,10 +101,9 @@ public class SessionManagerAtomicityTests
 
     private static SessionManager CreateManager(TestSessionStore store, AgentDefinition agentDef)
     {
-        var services = new TestServiceProvider(agentDef);
         var agents = new FakeAgentRegistry(agentDef);
         var agent = new FakeAgent(AgentState.Idle("none", agentDef));
-        var factory = new SessionFactory(services, agents, agent, store, new NopLogger<SessionFactory>());
+        var factory = new SessionFactory(agents, agent, store, new NopLogger<SessionFactory>());
         var switcher = new SessionSwitcher(agent, store, agents, new NopLogger<SessionSwitcher>());
         var router = new SessionEventRouter();
         var status = new SessionStatusService(new SessionStatusTracker());
