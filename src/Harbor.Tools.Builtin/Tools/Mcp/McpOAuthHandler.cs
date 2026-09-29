@@ -188,7 +188,7 @@ public sealed class McpOAuthHandler
                 Result launched = OpenBrowser(url);
                 if (launched.IsFailure)
                 {
-                    return Result.Failure<string>(launched.Error);
+                    return launched.ConvertFailure();
                 }
             }
 
