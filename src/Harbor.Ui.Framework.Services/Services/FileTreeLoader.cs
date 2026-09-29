@@ -263,12 +263,15 @@ public sealed class FileTreeLoader : IFileTreeLoader, IDisposable
 
             store.Dispatch(new AppMsg.SetFileTreeFailed(panelId, directory, result.Error));
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
             // Superseded, timed out, or the host is shutting down. NOT an error:
             // the newer walk owns the state, and painting a failure for a result
-            // nobody is waiting for is a lie the user would have to read.
-            _logger.LogDebug("File-tree load for {Dir} cancelled", directory);
+            // nobody is waiting for is a lie the user would have to read. The
+            // exception is still passed to the logger (S6667) because a
+            // cancellation that is NOT the expected one — a token this loader
+            // never owned, say — is worth being able to see in a trace.
+            _logger.LogDebug(ex, "File-tree load for {Dir} cancelled", directory);
         }
         catch (Exception ex)
         {
