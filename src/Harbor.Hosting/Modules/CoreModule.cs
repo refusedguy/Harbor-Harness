@@ -1,4 +1,5 @@
 using Harbor.Application.Agents;
+using Harbor.Application.Diagnostics;
 using Harbor.Application.Onboarding;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
@@ -66,6 +67,20 @@ internal static class CoreModule
         // the eager registries/plugins AND to the final container (the old CLI
         // built a second bus inside its temp provider — unified here).
         services.AddSingleton(ctx.EventBus);
+
+        // #674: the headless owner of every diagnostic, from both producers —
+        // language servers (structured, via ILspService) and tool output
+        // (pattern-detected, because no core API reports it). Registered as a
+        // singleton so it is constructed ONCE per process: its snapshot is the
+        // single answer every renderer draws from, and a second instance would
+        // be a second, silent truth. ILspService is resolved optionally — a
+        // minimal host without one still gets the tool-output half, which is
+        // exactly why the rows carry their producer.
+        services.AddSingleton(sp => new DiagnosticsAggregator(
+            sp.GetRequiredService<IEventBus>(),
+            sp.GetService<Harbor.Abstractions.Lsp.ILspService>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
+                .CreateLogger<DiagnosticsAggregator>()));
 
         return services;
     }

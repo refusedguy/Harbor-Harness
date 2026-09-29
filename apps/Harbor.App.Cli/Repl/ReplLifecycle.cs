@@ -124,6 +124,10 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             host.Screen.Status.AnimationClock = null;
             host.DisposePipeline();
             host._themeWatcher?.Dispose();
+            // #674: stop pushing core diagnostics into a store the REPL is
+            // leaving. The aggregator outlives the REPL (it is a process
+            // singleton), so the handler has to come off explicitly.
+            host._diagnosticsSync?.Dispose();
             try
             {
                 await host.Backend.WriteAsync(Utf8(CellForgeReplRunner.SeqLeaveAltScreen), CancellationToken.None).ConfigureAwait(false);

@@ -164,6 +164,9 @@ public sealed record UiState
                 Sessions = chat.Sessions,
                 ActiveSessionId = chat.ActiveSessionId,
                 IsLoading = chat.IsLoading,
+                // Diagnostics are workspace chrome, not transcript: a
+                // clear-screen drops what was said, not what is broken (#674).
+                Diagnostics = chat.Diagnostics,
                 // The open tabs are workspace chrome, not transcript: a
                 // clear-screen must not close them (#388).
                 TabStrip = chat.TabStrip

@@ -247,17 +247,60 @@ public class CellForgeBuiltinPanelsTests
         }
     }
 
+    /// <summary>
+    ///     Issues arrive already classified from the headless core (#674), so the
+    ///     panel's fixtures seed <see cref="ChatDomainState.Diagnostics" /> rather
+    ///     than pasting build-log text into the transcript. A transcript that
+    ///     merely LOOKS like errors no longer produces any.
+    /// </summary>
+    private static UiState StateWithDiagnostics(params DiagnosticIssue[] issues) =>
+        new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Diagnostics = ImmutableArray.Create(issues),
+            },
+        };
+
+    private static DiagnosticIssue Issue(
+        DiagnosticIssueSource source,
+        DiagnosticIssueSeverity severity,
+        string producer,
+        string? filePath,
+        int line,
+        string message) => new(source, severity, producer, filePath, line, message);
+
     [Test]
     public async Task Diagnostics_Empty_RendersPlaceholder()
     {
         string text = Joined(new CellForgeDiagnosticsPanel().Build(Ctx(new UiState())));
-        await Assert.That(text).Contains("No diagnostics detected.");
+        await Assert.That(text).Contains("No diagnostics reported.");
+    }
+
+    [Test]
+    public async Task Diagnostics_TranscriptTextAloneProducesNothing()
+    {
+        // The #674 shape: a build log that every old detector regex would have
+        // matched, sitting in the transcript and NOT in the core's snapshot.
+        var state = StateWithLines(
+            new ChatLine(ChatRole.ToolResult, "✗ error CS0001: something broke"),
+            new ChatLine(ChatRole.ToolResult, "✗ warning: deprecated API used"),
+            new ChatLine(ChatRole.Error, "error MSB3021: could not copy"));
+
+        string text = Joined(new CellForgeDiagnosticsPanel().Build(Ctx(state)));
+
+        await Assert.That(text).Contains("No diagnostics reported.")
+            .Because("the panel draws what the core classified. Re-deriving it from transcript text "
+                   + "is the leak #674 closed, and a panel that still does it is indistinguishable "
+                   + "from one that never worked.");
     }
 
     [Test]
     public async Task Diagnostics_WithError_RendersCrossIconAndMessage()
     {
-        var state = StateWithLines(new ChatLine(ChatRole.Error, "error CS0001: something broke"));
+        var state = StateWithDiagnostics(
+            Issue(DiagnosticIssueSource.LanguageServer, DiagnosticIssueSeverity.Error,
+                "csharp", "src/a.cs", 3, "CS0001: something broke"));
         string text = Joined(new CellForgeDiagnosticsPanel().Build(Ctx(state)));
         await Assert.That(text).Contains("✗");
         await Assert.That(text).Contains("CS0001");
@@ -266,7 +309,9 @@ public class CellForgeBuiltinPanelsTests
     [Test]
     public async Task Diagnostics_WithWarning_RendersTriangleIcon()
     {
-        var state = StateWithLines(new ChatLine(ChatRole.ToolResult, "✓ warning: deprecated API used"));
+        var state = StateWithDiagnostics(
+            Issue(DiagnosticIssueSource.ToolOutput, DiagnosticIssueSeverity.Warning,
+                "node", null, 0, "deprecated API used"));
         string text = Joined(new CellForgeDiagnosticsPanel().Build(Ctx(state)));
         await Assert.That(text).Contains("▲");
     }
@@ -274,10 +319,10 @@ public class CellForgeBuiltinPanelsTests
     [Test]
     public async Task Diagnostics_OnKey_JK_MovesCursor()
     {
-        var state = StateWithLines(
-            new ChatLine(ChatRole.Error, "error CS0001: first broke"),
-            new ChatLine(ChatRole.Error, "error CS0002: second broke"),
-            new ChatLine(ChatRole.Error, "error CS0003: third broke"));
+        var state = StateWithDiagnostics(
+            Issue(DiagnosticIssueSource.LanguageServer, DiagnosticIssueSeverity.Error, "csharp", null, 0, "first broke"),
+            Issue(DiagnosticIssueSource.LanguageServer, DiagnosticIssueSeverity.Error, "csharp", null, 0, "second broke"),
+            Issue(DiagnosticIssueSource.LanguageServer, DiagnosticIssueSeverity.Error, "csharp", null, 0, "third broke"));
         var panel = new CellForgeDiagnosticsPanel();
         var ctx = Ctx(state);
 
@@ -288,7 +333,7 @@ public class CellForgeBuiltinPanelsTests
         IReadOnlyList<string> moved = Rows(panel.Build(ctx));
         await Assert.That(moved[2]).StartsWith(" ");
         await Assert.That(moved[3]).StartsWith(">");
-        await Assert.That(moved[3]).Contains("CS0002");
+        await Assert.That(moved[3]).Contains("second broke");
 
         await Assert.That(panel.OnKey(UiKey.ForChar('k'), ctx)).IsTrue();
         IReadOnlyList<string> back = Rows(panel.Build(ctx));
@@ -298,7 +343,8 @@ public class CellForgeBuiltinPanelsTests
     [Test]
     public async Task Diagnostics_OnKey_CursorClampsAtEnds()
     {
-        var state = StateWithLines(new ChatLine(ChatRole.Error, "error CS0001: only"));
+        var state = StateWithDiagnostics(
+            Issue(DiagnosticIssueSource.LanguageServer, DiagnosticIssueSeverity.Error, "csharp", null, 0, "only"));
         var panel = new CellForgeDiagnosticsPanel();
         var ctx = Ctx(state);
 
@@ -308,7 +354,7 @@ public class CellForgeBuiltinPanelsTests
         await Assert.That(panel.OnKey(UiKey.ForChar('J'), ctx)).IsTrue();
         IReadOnlyList<string> rows = Rows(panel.Build(ctx));
         await Assert.That(rows[2]).StartsWith(">");
-        await Assert.That(rows[2]).Contains("CS0001");
+        await Assert.That(rows[2]).Contains("only");
     }
 
     [Test]

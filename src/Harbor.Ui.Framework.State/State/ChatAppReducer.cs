@@ -64,6 +64,11 @@ public static class ChatAppReducer
         {
             Chat = state.Chat with { Sessions = ss.Sessions, ActiveSessionId = ss.ActiveSessionId }
         }),
+        // Replaces the snapshot outright — see ChatAppMsg.SyncDiagnostics.
+        ChatAppMsg.SyncDiagnostics sd => ReduceResult.NoOp(state with
+        {
+            Chat = state.Chat with { Diagnostics = sd.Diagnostics }
+        }),
         ChatAppMsg.OpenTab ot => OpenTab(state, ot.Tab),
         ChatAppMsg.ActivateTab at => ActivateTab(state, at.SessionId),
         ChatAppMsg.CloseTab ct => CloseTab(state, ct.SessionId),

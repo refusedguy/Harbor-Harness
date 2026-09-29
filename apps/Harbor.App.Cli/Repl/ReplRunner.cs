@@ -347,7 +347,11 @@ internal sealed class ReplRunner
             screens.Coordinator,
             _pluginReload,
             _healthCheck,
-            _rendererHost.GetService<Harbor.Ui.Framework.Panels.IPanelRegistry>());
+            _rendererHost.GetService<Harbor.Ui.Framework.Panels.IPanelRegistry>(),
+            // #674: the headless core owns diagnostic classification; the REPL is
+            // only the pipe that carries its snapshot to the store. Null in a host
+            // that registers no aggregator, which leaves the panel honestly empty.
+            _rendererHost.GetService<Harbor.Application.Diagnostics.DiagnosticsAggregator>());
         int exitCode = await runner.RunAsync(ct).ConfigureAwait(false);
         return Result.Success(exitCode);
     }
