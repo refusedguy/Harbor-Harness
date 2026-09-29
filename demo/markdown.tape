@@ -30,6 +30,12 @@ Env HARBOR_LOGLEVEL "Warning"
 Hide
 Type "demo/run-scene.sh markdown cellforge"
 Enter
+# Let the CLI's banner land before the screen is revealed. Without this the
+# first captured frame races the banner: one pass shows the bare command line,
+# the next already shows the banner under it, and the two passes disagree on
+# how many screens the recording holds. The banner is written in a few hundred
+# milliseconds, so a 2 s pause makes the revealed screen a fixed state.
+Sleep 2s
 Show
 
 # The Sleep has to cover the whole run — the CLI boots for ~7 s and the cell-diff
