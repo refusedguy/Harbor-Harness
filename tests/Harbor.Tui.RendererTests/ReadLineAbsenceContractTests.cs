@@ -72,7 +72,7 @@ public class ReadLineAbsenceContractTests
         // explicitly instead of having it forced on them by the return type.
         await Assert.That(line.GetValueOrDefault(string.Empty)).IsEqualTo(string.Empty)
             .Because(
-                "Behaviour preservation: the onboarding wizard reader signature is "
+                "Behaviour preservation: the onboarding wizard reader signature is " +
                 "Func<string, Task<string>> and cannot express absence, so the fallback must still " +
                 "produce an empty string. Only the REPL loop, which CAN branch, now distinguishes.");
     }

@@ -73,12 +73,33 @@ public sealed class TuiReadLineContractRules
     ///     A read whose result is absent must not be turned into an empty value. Each
     ///     alternative is a spelling of the same fabrication.
     /// </summary>
+    // Raw string literals, deliberately. A verbatim @"…" cannot contain the regex's own
+    // double quote without doubling every one of them, so the empty-string alternative in
+    // pattern 1 below would need four quote characters in a row — legal, unreadable, and
+    // one keystroke away from CS1056/CS1003, which is exactly how this file shipped red
+    // the first time. Raw literals take the regex verbatim, which is the point: the
+    // pattern IS the specification.
     private static readonly string[] FabricationPatterns =
     [
-        @"\?\?\s*(string\.Empty|\"\")",              // line ?? string.Empty
-        @"Maybe\.From\(\s*Console\.ReadLine\(\)\s*\?\?", // Maybe.From(Console.ReadLine() ?? "")
-        @"(Result\.Success|Success)\(\s*string\.Empty\s*\)", // Success(string.Empty)
-        @"(Result\.Success|Success)\(\s*line\s*\?\?",      // Success(line ?? "")
+        // line ?? string.Empty
+        """
+        \?\?\s*(string\.Empty|"")
+        """,
+
+        // Maybe.From(Console.ReadLine() ?? "")
+        """
+        Maybe\.From\(\s*Console\.ReadLine\(\)\s*\?\?
+        """,
+
+        // Success(string.Empty)
+        """
+        (Result\.Success|Success)\(\s*string\.Empty\s*\)
+        """,
+
+        // Success(line ?? "")
+        """
+        (Result\.Success|Success)\(\s*line\s*\?\?
+        """,
     ];
 
     /// <summary>Declaration form that identifies a renderer implementing the interface.</summary>
