@@ -256,7 +256,7 @@ internal sealed class ReplRunner
             parts.Length > 1 ? parts[1] : config.EffectiveModel).ConfigureAwait(false);
         if (sessionResult.IsFailure)
         {
-            return Result.Failure<int>(sessionResult.Error);
+            return sessionResult.ConvertFailure<int>();
         }
 
         _agent.Initialize(sessionResult.Value, defaultAgent);

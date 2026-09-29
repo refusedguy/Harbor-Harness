@@ -26,7 +26,7 @@ public static class SessionTreeRunner
     {
         var listed = await store.ListAsync(ct: ct).ConfigureAwait(false);
         if (listed.IsFailure)
-            return Result.Failure<IReadOnlyList<string>>(listed.Error);
+            return listed.ConvertFailure<IReadOnlyList<string>>();
 
         return Result.Success(RenderForest(listed.Value, currentSessionId));
     }

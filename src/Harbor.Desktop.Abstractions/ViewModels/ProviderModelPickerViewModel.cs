@@ -158,7 +158,7 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
 
         var modelsResult = await _providers.GetAllModelsAsync(ct).ConfigureAwait(true);
         if (modelsResult.IsFailure)
-            return Result.Failure<IReadOnlyList<ProviderGroupViewModel>>(modelsResult.Error);
+            return modelsResult.ConvertFailure<IReadOnlyList<ProviderGroupViewModel>>();
 
         foreach (var group in groups)
         {

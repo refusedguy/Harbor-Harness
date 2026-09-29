@@ -275,7 +275,7 @@ public sealed class PatchTool : ITool
             Result<int> resolvedStart = TryResolveHunkStart(originalLines, h, targetStart);
             if (resolvedStart.IsFailure)
             {
-                return Result.Failure<PatchApplyState>(resolvedStart.Error);
+                return resolvedStart.ConvertFailure<PatchApplyState>();
             }
 
             // Copy unchanged lines up to hunk start.
@@ -366,25 +366,25 @@ public sealed class PatchTool : ITool
                 .Ensure(static p => !Directory.Exists(p), p => $"Path is a directory: {p}")
                 .Ensure(static p => File.Exists(p), p => $"File not found: {p}");
         if (exists.IsFailure)
-            return Result.Failure<PatchInput>(exists.Error);
+            return exists.ConvertFailure<PatchInput>();
 
         Result<string> read = await Result.Try(
                 () => File.ReadAllTextAsync(path, Encoding.UTF8, ct),
                 ex => $"Failed to read: {ex.Message}")
             .ConfigureAwait(false);
         if (read.IsFailure)
-            return Result.Failure<PatchInput>(read.Error);
+            return read.ConvertFailure<PatchInput>();
 
         Result<string> sized =
             read.Ensure(s => s.Length <= MaxFileChars,
                 s => $"File too large ({s.Length} chars; max {MaxFileChars}).");
         if (sized.IsFailure)
-            return Result.Failure<PatchInput>(sized.Error);
+            return sized.ConvertFailure<PatchInput>();
 
         Result<List<Hunk>> parsed = HunkParser.TryParse(patch)
             .MapError(static e => $"Failed to parse patch: {e}");
         if (parsed.IsFailure)
-            return Result.Failure<PatchInput>(parsed.Error);
+            return parsed.ConvertFailure<PatchInput>();
 
         return Result.Success(new PatchInput(sized.Value, SplitLines(sized.Value), parsed.Value))
             .Ensure(pi => pi.Hunks.Count > 0,

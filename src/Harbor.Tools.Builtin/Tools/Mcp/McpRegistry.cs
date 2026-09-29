@@ -130,7 +130,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         // registered here can never reach the transport call site.
         Result<string> canonical = _transports.Canonicalize(transport);
         if (canonical.IsFailure)
-            return Result.Failure(canonical.Error);
+            return canonical.ConvertFailure();
 
         return RegisterInternal(name, null, new McpRemoteEndpoint(url, canonical.Value, headers, oauth));
     }

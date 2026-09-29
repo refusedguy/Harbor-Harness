@@ -80,6 +80,9 @@ public sealed class PluginHost
             if (compiled.IsFailure)
             {
                 _logger.LogError("Plugin compilation failed for {Path}: {Error}", script.Path, compiled.Error);
+                // compiled is a CompilationResult (a hand-rolled record struct, not a
+                // Result<T>), so there is no ConvertFailure to call — see the
+                // allow-list entry in ResultFailureConversionTests.
                 if (FailOrContinue(compiled.Error))
                     return Result.Failure<IReadOnlyList<LoadedPlugin>>(compiled.Error);
                 continue;
@@ -90,7 +93,7 @@ public sealed class PluginHost
             {
                 _logger.LogError("Plugin instantiation failed for {Path}: {Error}", script.Path, instantiated.Error);
                 if (FailOrContinue(instantiated.Error))
-                    return Result.Failure<IReadOnlyList<LoadedPlugin>>(instantiated.Error);
+                    return instantiated.ConvertFailure<IReadOnlyList<LoadedPlugin>>();
                 continue;
             }
 
@@ -106,7 +109,7 @@ public sealed class PluginHost
                 {
                     _logger.LogError("Plugin registration failed for {DisplayName}: {Error}", plugin.DisplayName, registerResult.Error);
                     if (FailOrContinue(registerResult.Error))
-                        return Result.Failure<IReadOnlyList<LoadedPlugin>>(registerResult.Error);
+                        return registerResult.ConvertFailure<IReadOnlyList<LoadedPlugin>>();
                     continue;
                 }
 

@@ -145,7 +145,7 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject, IAsyncD
 
         var result = await _providers.GetAllModelsAsync(ct).ConfigureAwait(true);
         if (result.IsFailure)
-            return Result.Failure<IReadOnlyList<ModelRowViewModel>>(result.Error);
+            return result.ConvertFailure<IReadOnlyList<ModelRowViewModel>>();
 
         var models = result.Value
             .Where(m => m.ProviderId == _currentProviderId)

@@ -167,7 +167,7 @@ public sealed class AgentLoop : IAgentLoop
             // ([G4]: resolution owned by TurnRunner; the loop keeps the single failure exit.)
             var resolved = await _turnRunner.ResolveModelAsync(agent, ct).ConfigureAwait(false);
             if (resolved.IsFailure) // §4.6-ok: единственный выход Bind-рельсы setup'а (rop-final-mile L1).
-                return Result.Failure(resolved.Error);
+                return resolved.ConvertFailure();
 
             var (client, model) = resolved.Value;
 

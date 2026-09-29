@@ -158,7 +158,7 @@ public sealed class JsonConfigStore : IConfigStore
     public async Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default)
     {
         var loadResult = await LoadAsync(ct).ConfigureAwait(false);
-        if (loadResult.IsFailure) return Result.Failure<string>(loadResult.Error); // §4.6-ok: одиночный passthrough (смена типа ошибки).
+        if (loadResult.IsFailure) return loadResult.ConvertFailure<string>(); // §4.6-ok: одиночный passthrough, re-type через ConvertFailure.
 
         if (loadResult.Value.ApiKeys.TryGetValue(providerId, out string? key) && !string.IsNullOrEmpty(key))
             return Result.Success(key);

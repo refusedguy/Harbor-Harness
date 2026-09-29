@@ -165,7 +165,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         // 1. GET the SSE channel and wait for the endpoint announcement.
         Result<Maybe<string>> oauth = await TryGetOAuthTokenAsync(cancellationToken).ConfigureAwait(false);
         if (oauth.IsFailure)
-            return Result.Failure<Maybe<JsonDocument>>(oauth.Error);
+            return oauth.ConvertFailure<Maybe<JsonDocument>>();
         Maybe<string> oauthTokenMaybe = oauth.Value;
         string? oauthToken = oauthTokenMaybe.HasValue ? oauthTokenMaybe.Value : null;
         using HttpRequestMessage sseRequest = new(HttpMethod.Get, _endpoint);
@@ -176,7 +176,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             .ConfigureAwait(false);
         Result getOk = EnsureSuccessResult(sseResponse, "SSE channel");
         if (getOk.IsFailure)
-            return Result.Failure<Maybe<JsonDocument>>(getOk.Error);
+            return getOk.ConvertFailure<Maybe<JsonDocument>>();
 
         var reader = new SseEventReader();
         Uri? postEndpoint = null;
@@ -212,7 +212,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             .ConfigureAwait(false);
         Result postOk = EnsureSuccessResult(postResponse, "message endpoint");
         if (postOk.IsFailure)
-            return Result.Failure<Maybe<JsonDocument>>(postOk.Error);
+            return postOk.ConvertFailure<Maybe<JsonDocument>>();
 
         // 3. Keep reading the SSE channel for the response frame.
         while (true)

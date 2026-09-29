@@ -48,7 +48,7 @@ public static class WorkspaceInspector
 
         Result<GitOutput> headRes = await RunGitAsync(root, "rev-parse HEAD", ct).ConfigureAwait(false);
         if (headRes.IsFailure)
-            return Result.Failure<WorkspaceContract>(headRes.Error);
+            return headRes.ConvertFailure<WorkspaceContract>();
         if (headRes.Value.ExitCode != 0)
             return Result.Failure<WorkspaceContract>(
                 $"Not a git repository at '{root}': git rev-parse HEAD failed: {Clip(headRes.Value.Stderr)}");
@@ -59,7 +59,7 @@ public static class WorkspaceInspector
 
         Result<GitOutput> branchRes = await RunGitAsync(root, "branch --show-current", ct).ConfigureAwait(false);
         if (branchRes.IsFailure)
-            return Result.Failure<WorkspaceContract>(branchRes.Error);
+            return branchRes.ConvertFailure<WorkspaceContract>();
         if (branchRes.Value.ExitCode != 0)
             return Result.Failure<WorkspaceContract>(
                 $"git branch --show-current failed in '{root}': {Clip(branchRes.Value.Stderr)}");
@@ -68,7 +68,7 @@ public static class WorkspaceInspector
 
         Result<GitOutput> statusRes = await RunGitAsync(root, "status --porcelain=v1", ct).ConfigureAwait(false);
         if (statusRes.IsFailure)
-            return Result.Failure<WorkspaceContract>(statusRes.Error);
+            return statusRes.ConvertFailure<WorkspaceContract>();
         if (statusRes.Value.ExitCode != 0)
             return Result.Failure<WorkspaceContract>(
                 $"git status failed in '{root}': {Clip(statusRes.Value.Stderr)}");

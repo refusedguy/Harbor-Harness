@@ -82,19 +82,19 @@ public sealed class ModelCommand : ISlashCommand
                 if (pidResult.IsFailure)
                 {
                     _writer(pidResult.Error);
-                    return Result.Failure(pidResult.Error);
+                    return pidResult.ConvertFailure();
                 }
                 var clientResult = _providers.GetClient(pidResult.Value);
                 if (clientResult.IsFailure)
                 {
                     _writer(clientResult.Error);
-                    return Result.Failure(clientResult.Error);
+                    return clientResult.ConvertFailure();
                 }
                 var modelsResult = await clientResult.Value.GetModelsAsync(ct).ConfigureAwait(false);
                 if (modelsResult.IsFailure)
                 {
                     _writer(modelsResult.Error);
-                    return Result.Failure(modelsResult.Error);
+                    return modelsResult.ConvertFailure();
                 }
                 _writer($"Models for {providerId}:");
                 foreach (var m in modelsResult.Value)

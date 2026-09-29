@@ -122,13 +122,13 @@ public sealed class PtyProcess : IAsyncDisposable
             Result<string> slave = NativeMethods.TryGetSlaveName(master);
             if (slave.IsFailure)
             {
-                return Result.Failure<PtyProcess>(slave.Error);
+                return slave.ConvertFailure<PtyProcess>();
             }
 
             Result resize = TryResize(master, spec.Cols, spec.Rows);
             if (resize.IsFailure)
             {
-                return Result.Failure<PtyProcess>(resize.Error);
+                return resize.ConvertFailure<PtyProcess>();
             }
 
             var env = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -148,7 +148,7 @@ public sealed class PtyProcess : IAsyncDisposable
             Result<int> spawn = NativeMethods.TrySpawnInPty(
                 spec.FileName, spec.Args ?? [], env, slave.Value, spec.WorkingDirectory, spec.SearchPath);
             return spawn.IsFailure
-                ? Result.Failure<PtyProcess>(spawn.Error)
+                ? spawn.ConvertFailure<PtyProcess>()
                 : Result.Success(new PtyProcess(master, spawn.Value));
         }
     }

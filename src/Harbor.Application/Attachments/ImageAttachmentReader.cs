@@ -140,7 +140,7 @@ public sealed class ImageAttachmentReader
 
         var visionCheck = await CheckVisionAsync(providerId, modelId, ct).ConfigureAwait(false);
         if (visionCheck.IsFailure)
-            return Result.Failure<ImageAttachment>(visionCheck.Error);
+            return visionCheck.ConvertFailure<ImageAttachment>();
 
         _logger.LogDebug(
             "Attached {Path} as {MimeType} ({Width}×{Height}, {Bytes} bytes)",

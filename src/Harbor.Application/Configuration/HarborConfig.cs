@@ -77,7 +77,7 @@ public sealed class HarborConfig
         Identity = r.IsSuccess
             ? Identity with { Provider = r.Value }
             : Identity with { Provider = null };
-        return r.IsSuccess ? Result.Success() : Result.Failure(r.Error);
+        return r.IsSuccess ? Result.Success() : r.ConvertFailure();
     }
 
     /// <summary>Effective model ID (provider/model form).</summary>
@@ -102,7 +102,7 @@ public sealed class HarborConfig
         Identity = r.IsSuccess
             ? Identity with { Model = r.Value }
             : Identity with { Model = null };
-        return r.IsSuccess ? Result.Success() : Result.Failure(r.Error);
+        return r.IsSuccess ? Result.Success() : r.ConvertFailure();
     }
 
     /// <summary>Effective agent (mode): code, plan, explore.</summary>
@@ -127,7 +127,7 @@ public sealed class HarborConfig
         Identity = r.IsSuccess
             ? Identity with { Agent = r.Value }
             : Identity with { Agent = null };
-        return r.IsSuccess ? Result.Success() : Result.Failure(r.Error);
+        return r.IsSuccess ? Result.Success() : r.ConvertFailure();
     }
 
     /// <summary>TUI renderer: ansi, plain, spectre.</summary>
