@@ -88,7 +88,7 @@ public class ProcessNotificationRunnerTests
 }
 
 /// <summary>Minimal <see cref="ILogger{T}" /> that keeps what was written, for assertions.</summary>
-internal sealed class CapturingNotificationLogger<T> : ILogger<T>
+internal sealed class CapturingNotificationLogger : ILogger<ProcessNotificationRunner>
 {
     private readonly List<(LogLevel Level, string Message)> _entries = [];
 
