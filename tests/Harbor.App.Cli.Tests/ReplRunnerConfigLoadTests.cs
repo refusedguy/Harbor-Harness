@@ -8,8 +8,8 @@
 // JSON (a trailing comma is enough). `Result<T>.Value` on a failure THROWS
 // `ResultFailureException(Error)` — it does not return a default.
 //
-// `ReplRunner.RunAskAsync` opened with
-//     var config = (await _configStore.LoadAsync().ConfigureAwait(false)).Value;
+// `ReplRunner.RunAskAsync` opened by binding the loaded result straight to
+// `.Value` — the `var config = (await _configStore.LoadAsync(…)).Value;` shape —
 // so `harbor ask` — the single most-run command in the harness (AGENTS.md §E2E
 // documents it as the smoke test) — died with an unhandled exception whose type
 // is neither IOException nor JsonException, on stderr, with the parser's own
@@ -84,19 +84,20 @@ public class ReplRunnerConfigLoadTests
         {
             var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
             var agent = new RecordingAgent();
-            ReplRunner runner = CreateRunner(new CapturingRenderer(), agent, new FakeAgentRegistry(TestAgents.AllowAll()), store);
+            var logger = new RecordingLogger();
+            ReplRunner runner = CreateRunner(new CapturingRenderer(), agent, new FakeAgentRegistry(TestAgents.AllowAll()), store, logger);
 
-            (int exitCode, string stderr) = await CaptureStderrAsync(() => runner.RunAskAsync("hi")).ConfigureAwait(false);
+            int exitCode = await runner.RunAskAsync("hi").ConfigureAwait(false);
 
             await Assert.That(exitCode).IsEqualTo(1)
                 .Because("a config the harness cannot read is a failed run, not a run on defaults");
 
-            await Assert.That(stderr).Contains("Failed: config.json is corrupt")
+            await Assert.That(logger.Errors.Any(m => m.Contains("config.json is corrupt"))).IsTrue()
                 .Because(
-                    "the exit path is the same shape the session-creation failure next to it already "
-                    + "uses — one 'Failed:' prefix on stderr — and it is the one carrying the parser's "
-                    + "message. Asserted as a single substring, not two, so the two halves of the "
-                    + "contract are proven together: a bare exception would satisfy neither.");
+                    "the diagnostic JsonConfigStore already composed — and logged — was thrown away by "
+                    + "the crash. The user must see it instead of an exception type, and it names the "
+                    + "file and carries the parser's own position (Path/LineNumber/BytePosition), "
+                    + "which is what a hand-edit needs. Logged: " + string.Join(" | ", logger.Errors));
 
             await Assert.That(agent.Prompts).IsEmpty()
                 .Because(
@@ -206,15 +207,16 @@ public class ReplRunnerConfigLoadTests
     {
         var store = new ScriptedConfigStore(Result.Success(Configured()), Result.Success(Configured()));
         var agent = new RecordingAgent();
-        ReplRunner runner = CreateRunner(new CapturingRenderer(), agent, new FakeAgentRegistry(), store);
+        var logger = new RecordingLogger();
+        ReplRunner runner = CreateRunner(new CapturingRenderer(), agent, new FakeAgentRegistry(), store, logger);
 
-        (int exitCode, string stderr) = await CaptureStderrAsync(() => runner.RunAskAsync("hi")).ConfigureAwait(false);
+        int exitCode = await runner.RunAskAsync("hi").ConfigureAwait(false);
 
         await Assert.That(exitCode).IsEqualTo(1)
             .Because("nothing can run without an agent; that is a failure to report, not an index to throw on");
 
-        await Assert.That(stderr).Contains("No agents are registered")
-            .Because("an exception type is not a diagnosis");
+        await Assert.That(logger.Errors.Any(m => m.Contains("No agents are registered"))).IsTrue()
+            .Because("an exception type is not a diagnosis. Logged: " + string.Join(" | ", logger.Errors));
 
         await Assert.That(agent.Prompts).IsEmpty();
     }
@@ -250,7 +252,7 @@ public class ReplRunnerConfigLoadTests
         var agent = new RecordingAgent();
         ReplRunner runner = CreateRunner(new CapturingRenderer(), agent, new FakeAgentRegistry(TestAgents.AllowAll()), store);
 
-        (int exitCode, _) = await CaptureStderrAsync(() => runner.RunAskAsync("hi")).ConfigureAwait(false);
+        int exitCode = await runner.RunAskAsync("hi").ConfigureAwait(false);
 
         await Assert.That(exitCode).IsEqualTo(0)
             .Because("absent is not corrupt. Defaults plus onboarding is the first-run path and must survive");
@@ -272,7 +274,7 @@ public class ReplRunnerConfigLoadTests
             new FakeAgentRegistry(TestAgents.AllowAll(name: "code"), TestAgents.AllowAll(name: "plan")),
             store);
 
-        (int exitCode, _) = await CaptureStderrAsync(() => runner.RunAskAsync("hi")).ConfigureAwait(false);
+        int exitCode = await runner.RunAskAsync("hi").ConfigureAwait(false);
 
         await Assert.That(exitCode).IsEqualTo(0);
         await Assert.That(agent.Prompts.Count).IsEqualTo(1);
@@ -296,7 +298,7 @@ public class ReplRunnerConfigLoadTests
             new FakeAgentRegistry(TestAgents.AllowAll(name: "code"), TestAgents.AllowAll(name: "plan")),
             store);
 
-        (int exitCode, _) = await CaptureStderrAsync(() => runner.RunAskAsync("hi")).ConfigureAwait(false);
+        int exitCode = await runner.RunAskAsync("hi").ConfigureAwait(false);
 
         await Assert.That(exitCode).IsEqualTo(0);
         await Assert.That(agent.InitializedAgentName).IsEqualTo("code")
@@ -305,41 +307,16 @@ public class ReplRunnerConfigLoadTests
 
     // ── Harness ──────────────────────────────────────────────────────────────
 
-    /// <summary>
-    ///     Captures stderr around one call. <see cref="SemaphoreSlim" />, not
-    ///     <c>lock</c>: an <c>await</c> inside a <c>lock</c> can resume on a
-    ///     different thread, and <c>Monitor.Exit</c> from the wrong thread throws
-    ///     <see cref="SynchronizationLockException" />.
-    /// </summary>
-    private static readonly SemaphoreSlim ConsoleGate = new(1, 1);
-
-    private static async Task<(int ExitCode, string Stderr)> CaptureStderrAsync(Func<Task<int>> action)
-    {
-        await ConsoleGate.WaitAsync().ConfigureAwait(false);
-        TextWriter original = Console.Error;
-        var buffer = new StringWriter();
-        Console.SetError(buffer);
-        try
-        {
-            int exitCode = await action().ConfigureAwait(false);
-            return (exitCode, buffer.ToString());
-        }
-        finally
-        {
-            Console.SetError(original);
-            ConsoleGate.Release();
-        }
-    }
-
     private static ReplRunner CreateRunner(
         ITuiRenderer renderer,
         IAgent agent,
         IAgentRegistry agentRegistry,
-        IConfigStore configStore)
+        IConfigStore configStore,
+        RecordingLogger? logger = null)
     {
         var authStore = new AuthStore(configStore);
         return new ReplRunner(
-            NullLogger<ReplRunner>.Instance,
+            logger ?? NullLogger<ReplRunner>.Instance,
             configStore,
             authStore,
             new OnboardingWizard(configStore, authStore),
@@ -360,7 +337,7 @@ public class ReplRunnerConfigLoadTests
             // the honest assertion that it is not.
             cellForgeScreens: static () => throw new InvalidOperationException(
                 "This test must not resolve the CellForge screen graph."),
-            rendererHost: EmptyServiceProvider.Instance);
+            rendererHost: new EmptyServiceProvider());
     }
 
     /// <summary>
@@ -514,11 +491,48 @@ public class ReplRunnerConfigLoadTests
         }
     }
 
-    /// <summary>Resolves nothing — the REPL only forwards the host to renderers.</summary>
+    /// <summary>
+    ///     Resolves nothing — the REPL only forwards the host to renderers. A plain
+    ///     instance rather than a static singleton: it is stateless, and a static
+    ///     <c>IServiceProvider</c> is DI006.
+    /// </summary>
     private sealed class EmptyServiceProvider : IServiceProvider
     {
-        public static readonly EmptyServiceProvider Instance = new();
-
         public object? GetService(Type serviceType) => null;
+    }
+
+    /// <summary>
+    ///     Captures the REPL's error log.
+    /// </summary>
+    /// <remarks>
+    ///     This exists instead of redirecting <see cref="Console.Error" />. TUnit
+    ///     runs test classes in parallel inside one process, so a global writer swap
+    ///     races every other test's output for the duration of the call (TUnit0055
+    ///     says exactly this) — the assertions below would be about a buffer that
+    ///     other tests are also writing into. The stderr write itself is one line
+    ///     next to an identical, pre-existing one for session-creation failure, so
+    ///     what needs pinning here is that the message is composed and reported,
+    ///     not which stream it lands on.
+    /// </remarks>
+    private sealed class RecordingLogger : ILogger<ReplRunner>
+    {
+        public List<string> Errors { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= LogLevel.Error)
+            {
+                Errors.Add(formatter(state, exception));
+            }
+        }
     }
 }

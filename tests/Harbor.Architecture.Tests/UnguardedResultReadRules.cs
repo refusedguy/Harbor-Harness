@@ -96,8 +96,9 @@ public sealed class UnguardedResultReadRules
     // Greedy `[^\n]*` then backtrack: the match ends at the LAST `)` on the line
     // that is followed by `.Value`, which is the closing paren of the awaited
     // call in every spelling that matters —
-    //   var config = (await store.LoadAsync().ConfigureAwait(false)).Value;
-    //   var created = (await store.CreateAsync("/tmp", "code", "p", "m")).Value;
+    //   `(await store.LoadAsync().ConfigureAwait(false)).Value` on the RHS of an
+    //   assignment, and `(await store.CreateAsync("/tmp", "code", "p", "m")).Value`
+    //   in a `var` initialiser.
     private static readonly Regex ValueOffAwait = new(
         """
         \(\s*await\b[^\n]*\)\s*\.\s*Value\b
@@ -533,7 +534,13 @@ public sealed class UnguardedResultReadRules
         bool inChar = false;
         bool escaped = false;
 
-        for (int i = 0; i < source.Length; i++)
+        // An explicit `while` rather than a `for`: the `//` arm has to consume
+        // the rest of the line itself, and doing that by nudging a `for` loop's
+        // induction variable (i--; then i++ on the next turn) is the shape
+        // S127 warns about, for good reason — it is unreadable and it is exactly
+        // where an off-by-one hides.
+        int i = 0;
+        while (i < source.Length)
         {
             char c = source[i];
             char next = i + 1 < source.Length ? source[i + 1] : '\0';
@@ -546,8 +553,12 @@ public sealed class UnguardedResultReadRules
                 if (c == '*' && next == '/')
                 {
                     blanked.Append(' ');
-                    i++;
+                    i += 2;
                     inBlockComment = false;
+                }
+                else
+                {
+                    i += 1;
                 }
 
                 continue;
@@ -573,6 +584,7 @@ public sealed class UnguardedResultReadRules
                     inString = false;
                 }
 
+                i += 1;
                 continue;
             }
 
@@ -596,6 +608,7 @@ public sealed class UnguardedResultReadRules
                     inChar = false;
                 }
 
+                i += 1;
                 continue;
             }
 
@@ -605,23 +618,21 @@ public sealed class UnguardedResultReadRules
                 while (i < source.Length && source[i] != '\n')
                 {
                     blanked.Append(' ');
-                    i++;
+                    i += 1;
                 }
 
-                i--; // the loop's own ++ re-reads the newline
                 continue;
             }
 
             if (c == '/' && next == '*')
             {
                 blanked.Append("  ");
-                i++;
+                i += 2;
                 inBlockComment = true;
                 continue;
             }
 
             blanked.Append(c);
-
             if (c == '"')
             {
                 inString = true;
@@ -630,6 +641,8 @@ public sealed class UnguardedResultReadRules
             {
                 inChar = true;
             }
+
+            i += 1;
         }
 
         return blanked.ToString();
