@@ -90,11 +90,16 @@ public class EventBusFastPathBenchmark
             new IEventBusMiddleware[] { new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, rate: 1.0) });
 
         // Disqualified: a MANDATORY sink must see every event, so the full path
-        // runs even with no subscribers and nothing to retain.
+        // runs even with no subscribers and nothing to retain. The allowlist is
+        // real (#478) — a typeless filter would admit everything while still
+        // charging the mandatory cost, which is the no-op this row must not model.
         _mandatorySink = new InMemoryEventBus(
             NullLogger<InMemoryEventBus>.Instance,
             0,
-            new IEventBusMiddleware[] { new TypeFilterMiddleware(NullLogger<TypeFilterMiddleware>.Instance) });
+            new IEventBusMiddleware[]
+            {
+                new TypeFilterMiddleware(NullLogger<TypeFilterMiddleware>.Instance, typeof(TurnStartEvent))
+            });
 
         // Disqualified: one live subscriber, zero middleware, zero scrollback.
         _oneSubscriber = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 0);

@@ -202,13 +202,21 @@ public class EventBusMiddlewareTests
         await Assert.That(result).IsFalse();
     }
 
+    /// <summary>
+    ///     #478: the typeless construction used to mean "allow everything" — a
+    ///     filter that filters nothing while still declaring
+    ///     <c>EventBusSinkKind.Mandatory</c>, the verdict that keeps the bus off
+    ///     its fast path. The CLI shipped exactly that for its whole life. It is a
+    ///     construction error now, not a documented mode.
+    /// </summary>
     [Test]
-    public async Task TypeFilterMiddleware_NoAllowedTypes_AllowAll()
+    public async Task TypeFilterMiddleware_NoAllowedTypes_Throws()
     {
-        var mw = new TypeFilterMiddleware(NullLogger<TypeFilterMiddleware>.Instance);
-        AgentEvent evt = new TurnStartEvent(1);
-        bool result = await mw.ProcessAsync(ref evt, CancellationToken.None);
-        await Assert.That(result).IsTrue();
+        ArgumentException ex = Assert.Throws<ArgumentException>(
+            () => new TypeFilterMiddleware(NullLogger<TypeFilterMiddleware>.Instance));
+
+        await Assert.That(ex.ParamName).IsEqualTo("allowedTypes");
+        await Assert.That(ex.Message).Contains("at least one allowed event type");
     }
 
     [Test]

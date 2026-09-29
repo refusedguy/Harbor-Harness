@@ -68,8 +68,13 @@ public sealed class HarborComposeOptions
     public bool RuntimeSwappable { get; init; } = true;
 
     /// <summary>
-    ///     Extra event-bus middlewares (CLI adds TypeFilterMiddleware, Avalonia
-    ///     passes none). Factory receives the bootstrap logger factory.
+    ///     Extra event-bus middlewares. Since #478 no shipped preset registers any:
+    ///     the CLI used to add a <c>TypeFilterMiddleware</c> built with no allowed
+    ///     types, which filtered nothing while declaring
+    ///     <c>EventBusSinkKind.Mandatory</c>, and the desktop app passed none. A
+    ///     host that wants one must say which event types it admits.
+    ///     Factory receives the bootstrap logger factory; <c>null</c> means "no
+    ///     sinks".
     /// </summary>
     public Func<ILoggerFactory, IReadOnlyList<IEventBusMiddleware>>? EventBusMiddlewares { get; init; }
 
