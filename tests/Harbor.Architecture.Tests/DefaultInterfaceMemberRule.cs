@@ -61,8 +61,10 @@
 //      degrades to "everything is conservative", this test is red before the
 //      rule can pass it.
 
+// System.Reflection is a global using in this project (GlobalUsings.cs), so
+// Assembly / MethodInfo / BindingFlags / ReflectionTypeLoadException need no
+// using here — and adding one would only duplicate the global.
 using System.Collections.Concurrent;
-using System.Reflection;
 using CSharpFunctionalExtensions;
 
 namespace Harbor.Architecture.Tests;

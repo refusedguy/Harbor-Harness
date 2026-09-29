@@ -428,10 +428,17 @@ then the default arm invents an answer. Every instance in #578 is the default ar
 
 - `src/Harbor.Abstractions.Contracts/Events/AgentEvent.cs:9-25` — 17
   `[JsonDerivedType]` entries for the `AgentEvent` record union; the nested
-  `LlmEvent` union has 13 at `:191-203`.
+  `LlmEvent` union has 13 at `:191-203`. Declared in **`Harbor.Abstractions.Events`**,
+  not `Harbor.Abstractions.Contracts.Events` — the *project* is
+  `Harbor.Abstractions.Contracts`, the *namespace* is not under it. Read the
+  `namespace` line; do not infer it from the folder.
+- `src/Harbor.Abstractions.Contracts/Models/ChatLine.cs` — `ChatRole`, 7 members,
+  in **`Harbor.Abstractions.Models`** (same folder-vs-namespace gap).
 - `src/Harbor.Ipc.Abstractions/Protocol/HarborEventData.cs:15-25` — 11 MessagePack
   `[Union(n, typeof(T))]` tags whose doc comment (`:11`) says they "MUST match
-  the `HarborEventKind` enum values exactly".
+  the `HarborEventKind` enum values exactly". Here the namespace **does** match
+  the project (`Harbor.Ipc.Protocol`), which is exactly why the previous bullet
+  is worth writing down.
 
 These are exactly the lists rule 3 is about, and rule 4 is what keeps them honest:
 the guard reads the member set **by reflection** rather than from a typed-out

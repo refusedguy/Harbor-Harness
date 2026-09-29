@@ -69,8 +69,11 @@ using System.Collections.Frozen;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using Harbor.Abstractions.Contracts.Events;
-using Harbor.Abstractions.Contracts.Models;
+// Namespace, not folder: both types are declared in `Harbor.Abstractions.*`
+// even though the FILES live under src/Harbor.Abstractions.Contracts/{Events,Models}/.
+// Read off the `namespace` line of each file, not inferred from the path.
+using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Architecture.Tests;
 
@@ -137,11 +140,14 @@ internal static partial class UnionExhaustivenessProbe
 
         return
         [
-            new("AgentEvent", agentEvent, "Harbor.Abstractions.Contracts.Events.AgentEvent, "
+            new("AgentEvent", agentEvent, "Harbor.Abstractions.Events.AgentEvent "
+                + "(src/Harbor.Abstractions.Contracts/Events/AgentEvent.cs), "
                 + "[JsonDerivedType] attributes read by reflection"),
-            new("LlmEvent", llmEvent, "Harbor.Abstractions.Contracts.Events.LlmEvent, "
+            new("LlmEvent", llmEvent, "Harbor.Abstractions.Events.LlmEvent "
+                + "(src/Harbor.Abstractions.Contracts/Events/AgentEvent.cs), "
                 + "[JsonDerivedType] attributes read by reflection"),
-            new("ChatRole", chatRole, "Harbor.Abstractions.Contracts.Models.ChatRole, "
+            new("ChatRole", chatRole, "Harbor.Abstractions.Models.ChatRole "
+                + "(src/Harbor.Abstractions.Contracts/Models/ChatLine.cs), "
                 + "Enum.GetNames read by reflection"),
         ];
     }
