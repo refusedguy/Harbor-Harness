@@ -155,7 +155,11 @@ public sealed class CostPricedInCoreRules
     private static readonly string[] OffenderFiles =
     [
         "src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs",
-        "src/Harbor.Ui.Framework.Reducers/AppReducer.cs",
+        // #594 deleted the second offender outright: src/Harbor.Ui.Framework.
+        // Reducers/AppReducer.cs was a legacy flat-AppState reducer that no
+        // composition root ever fed. The rule polices the LIVE ChatAppReducer
+        // still, so the scan is not vacuous — the row went with the file rather
+        // than lingering as an amnesty for a path that no longer exists.
     ];
 
     /// <summary>

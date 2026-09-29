@@ -33,7 +33,9 @@
 
 ## Benchmarks (23 класса, Release, 2026-08-22)
 
-Топ bottlenecks: AppReducer streaming O(N²) (19.4 MB/1000 дельт), MessageConverter large-msg
+Топ bottlenecks: ~~AppReducer streaming O(N²) (19.4 MB/1000 дельт)~~ **снято в #594** — измерено на
+удалённой мёртвой ветке `Harbor.Ui.Framework.Reducers`; дефект O(N²) на живом пути закрыт через
+`ChunkedBuffer`/`StreamingCoalescer`, MessageConverter large-msg
 (1.2 MB/msg), Compaction full-scan per turn (598 µs @1000), EventBroadcaster (8 MB/1000 событий),
 EventBus fixed alloc (8.1 KB/publish). Полная таблица и план P0–P3 — docs/BENCHMARKS.md.
 

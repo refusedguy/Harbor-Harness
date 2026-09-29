@@ -114,23 +114,15 @@ public class TokenCounterSplitTests
         await Assert.That(Footer(store.State)).Contains("61.6K↑ 198↓");
     }
 
-    /// <summary>
-    ///     The generic half (<c>AppReducer</c> over the flat <see cref="AppState" />)
-    ///     has no projection of its own, so this is a source pin rather than a
-    ///     rendered one: the step-finish arm must be the one that records the
-    ///     occupancy, and the stats arm must not drop it. A second reducer that
-    ///     keeps summing the paid total is what #651 was filed against, and it is
-    ///     invisible in every golden frame.
-    /// </summary>
-    [Test]
-    public async Task TheGenericReducer_RecordsTheSameOccupiedFigure()
-    {
-        string source = File.ReadAllText(Path.Combine(
-            new[] { RepoRoot(), "src", "Harbor.Ui.Framework.Reducers", "AppReducer.cs" }));
-
-        await Assert.That(source).Contains("ContextTokens");
-        await Assert.That(source).Contains("StepFinishEvent");
-    }
+    // #594 deleted the sibling test this one was written beside. It read
+    // src/Harbor.Ui.Framework.Reducers/AppReducer.cs and pinned the same
+    // ContextTokens/StepFinishEvent pairing in the LEGACY generic reducer, on
+    // the reasoning that "a second reducer that keeps summing the paid total is
+    // invisible in every golden frame". That reducer was never on a read path:
+    // no composition root fed its AppStore. The pin is not restated against
+    // State/ChatAppReducer.cs because the test above already drives that reducer
+    // through a real UiStore and asserts the rendered footer, which is the
+    // stronger form of the same claim.
 
     /// <summary>
     ///     The totals the core publishes after <paramref name="turns" /> turns —
@@ -160,17 +152,4 @@ public class TokenCounterSplitTests
 
     /// <summary>The status line, as a person reads it.</summary>
     private static string Footer(UiState state) => StatusProjector.ProjectFooter(state);
-
-    /// <summary>Walks up from the test binaries to the repo root (<c>Harbor.slnx</c>).</summary>
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName
-               ?? throw new InvalidOperationException("repo root (Harbor.slnx) not found from " + AppContext.BaseDirectory);
-    }
 }

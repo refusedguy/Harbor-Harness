@@ -39,7 +39,7 @@
 
 | # | Target | Evidence | Fix direction |
 |---|---|---|---|
-| P0 | `AppReducer` streaming concat | 1.72 ms / **19.4 MB** per 1000 TextDelta (O(N²) string +) | pooled StringBuilder / chunk list, materialize on MessageEnd |
+| ~~P0~~ | ~~`AppReducer` streaming concat~~ **withdrawn #594** | 1.72 ms / **19.4 MB** per 1000 TextDelta (O(N²) string +) | *measured on `Harbor.Ui.Framework.Reducers.AppReducer`, deleted in #594 as dead — no composition root ever fed its store. The O(N²) defect it exhibited was fixed for real in the live path by `ChunkedBuffer` / `StreamingCoalescer`; see the `StreamingCoalescer` row and the `UiStore dispatch` rows below. The benchmark row is gone with the code, the defect is not back.* |
 | P0 | `MessageConverter` large msgs | serialize 2.35 ms / 1.2 MB per msg; 100×large round-trip **545 ms** | Utf8Json source-gen (audit §PERF-002) |
 | P1 | `CompactionService.ShouldCompact` | 598 µs @1000 msgs **каждый turn** | incremental token counter |
 | P1 | `EventBroadcaster` | 9–11 ms / **8 MB** per 1000 events, не зависит от числа клиентов ⚠️ undated pre-#408 run | serialize once, reuse buffers |
@@ -63,7 +63,7 @@
 | OpenAiSse.ParseChunk 32B→4KB | 10.2–10.6 µs | 3.9–6.8 KB |
 | JsonlSessionStore.Append ×100 | 1.74 ms | 187 KB |
 | Sqlite WAL Append ×10 | 2.2–2.6 ms | 155 KB |
-| AppStore.Dispatch TextDelta ×1000 | 1.72 ms | 19.4 MB |
+| ~~AppStore.Dispatch TextDelta ×1000~~ **withdrawn #594** — measured on deleted `Harbor.Ui.Framework.Reducers.AppStore`, see the Bottlenecks table | ~~1.72 ms~~ | ~~19.4 MB~~ |
 | UiStore dispatch + DefaultUiProjector per delta ×1000 (24B deltas, 2026-09-10) | 475 µs | 1.03 MB |
 | UiStore dispatch + DefaultUiProjector per delta ×2000 (24B deltas, 2026-09-10) | 1.09 ms | 2.46 MB |
 | DefaultUiProjector 5000 lines | 20.8 ms | ~MB |

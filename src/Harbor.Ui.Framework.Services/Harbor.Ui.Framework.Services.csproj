@@ -11,7 +11,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
-    <ProjectReference Include="..\Harbor.Ui.Framework.Reducers\Harbor.Ui.Framework.Reducers.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
   </ItemGroup>
 

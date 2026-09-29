@@ -229,7 +229,6 @@ Harbor ships a **mature BenchmarkDotNet suite** (`tests/Harbor.Benchmarks`):
 
 | Benchmark | What it measures |
 |-----------|-----------------|
-| `AppStoreDispatchBenchmark` | Redux-style dispatch + record cloning at 10/100/1000 events |
 | `StateDiffingBenchmark` | `Record.Equals` vs manual field comparison at 0/100/1000 lines |
 | `DiffEngineBenchmark` | Idle frame, token frame (~300 cells), full repaint 200×50/400×120, layout cold solve |
 | `TerminalScreenBufferBlitBenchmark` | ANSI vs plain text throughput for 120×40 |
@@ -366,14 +365,13 @@ All use `[MemoryDiagnoser]` and `[SimpleJob(warmupCount: 3, iterationCount: 5)]`
 | `src/Harbor.Tui.CellForge.Engine/Rendering/LayoutTree.cs` | Binary split tree, water-filling solver, cached rect resolution |
 | `src/Harbor.Ui.Framework.State/State/UiState.cs` | Immutable UI snapshot, `record struct`, `ImmutableArray<ChatLine>` |
 | `src/Harbor.Ui.Framework.State/ChunkedBuffer.cs` | O(1) append buffer, avoids O(N²) streaming concatenation |
-| `src/Harbor.Ui.Framework.Reducers/ChatViewReducer.cs` | Pure reducer, pattern-matched event → state transitions |
+| `src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs` | Pure reducer, pattern-matched event → state transitions |
 | `src/Harbor.Extensions/ArrayPoolExtensions.cs` | `RentedArray<T>`, `StringBuilderPool` |
 | `src/Harbor.Desktop.Animations/Transitions.cs` | Fade/slide/scale/color transitions |
 | `apps/Harbor.App.Avalonia/Views/ChatView.axaml` | `VirtualizingStackPanel`, `ListBox.ItemTemplate` |
 | `apps/Harbor.App.Avalonia/App.axaml.cs` | Startup sequence, theme/onboarding logic |
 | `tests/Harbor.Benchmarks/DiffEngineBenchmark.cs` | Frame-latency benchmarks |
 | `tests/Harbor.Benchmarks/StateDiffingBenchmark.cs` | State-equality benchmarks |
-| `tests/Harbor.Benchmarks/AppStoreDispatchBenchmark.cs` | Redux dispatch overhead |
 
 ---
 

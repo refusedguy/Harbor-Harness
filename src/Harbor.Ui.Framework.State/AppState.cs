@@ -9,8 +9,20 @@ namespace Harbor.Ui.Framework.State;
 // actually project is UiState{Ui: TerminalUiState, Chat: ChatDomainState} —
 // typed composition only, no ImmutableDictionary<string,object?> extension
 // bag (boxing + IL2xxx under AOT). The legacy flat AppState below is the
-// pre-split shape kept for the non-TEA projection consumers; it is NOT on the
-// TUI read path (UiStore/AppReducer never touch it).
+// pre-split shape; it is NOT on the TUI read path (UiStore/AppReducer never
+// touch it).
+//
+// #594 deleted its last producer. The reason it existed is gone: the note
+// above used to say it was "kept for the non-TEA projection consumers", and
+// those consumers were `AppStore` + `Harbor.Ui.Framework.Reducers.AppReducer`
+// — a branch no composition root ever fed, with its own dispatching
+// `EventBusAppStoreDispatcher` and nothing else wired. What remains is a
+// record with benchmarks reading it (StateDiffingBenchmark,
+// SelectorMemoizationBenchmark) and no writer. It is NOT deleted here because
+// this is a different blast radius from #594 — it lives in a live project and
+// `ChromeViewState` is still `<see cref>`'d from Harbor.Desktop.Abstractions.
+// docs/ROADMAP.md records the follow-up so it is inherited rather than
+// rediscovered.
 
 /// <summary>
 ///     Unified immutable UI state for the hybrid MVU+MVVM architecture.
@@ -19,9 +31,8 @@ namespace Harbor.Ui.Framework.State;
 ///     <para>
 ///         Legacy flat shape superseded by the typed
 ///         <c>UiState { Ui: TerminalUiState, Chat: ChatDomainState }</c>
-///         composition used by the TEA path. Kept for the shell-chrome
-///         consumers (<c>AppStore</c> / <c>ChromeReducer</c>) that have not been
-///         migrated yet.
+///         composition used by the TEA path. Producer-less since #594 — see
+///         the note above the declaration. Not on the TUI read path.
 ///     </para>
 ///     <para>
 ///         Designed for NativeAOT and zero-reflection: all members are value types

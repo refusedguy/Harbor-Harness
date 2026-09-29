@@ -8,9 +8,13 @@ namespace Harbor.Ui.Framework.State;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Produced only by <see cref="ChromeReducer" /> — never mutated inside a
-///         renderer. Renderers project this into their framework-specific chrome
-///         widgets (Avalonia, WPF, Blazor, SpectreTui).
+///         Producer-less since #594: the legacy
+///         <c>Harbor.Ui.Framework.Reducers.ChromeReducer</c> that folded
+///         <c>AgentEvent</c> into this shape was deleted as dead, and nothing
+///         replaced it — this record is not on the live read path
+///         (<c>UiState</c> is). Never mutated inside a renderer. Renderers
+///         project this into their framework-specific chrome widgets (Avalonia,
+///         WPF, Blazor, SpectreTui).
 ///     </para>
 ///     <para>
 ///         Designed for NativeAOT and zero-reflection: all members are value types

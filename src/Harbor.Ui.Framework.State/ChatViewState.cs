@@ -4,8 +4,13 @@ using Harbor.Abstractions.Models;
 namespace Harbor.Ui.Framework.State;
 
 /// <summary>
-///     Immutable chat-view state slice. Produced only by <see cref="ChatViewReducer" />
-///     — never mutated inside a renderer.
+///     Immutable chat-view state slice, never mutated inside a renderer.
+///     <para>
+///         Producer-less since #594: the legacy
+///         <c>Harbor.Ui.Framework.Reducers.ChatViewReducer</c> that folded
+///         <c>AgentEvent</c> into this shape was deleted as dead. It is not on
+///         the live read path — <c>UiState</c>'s <c>Chat</c> slice is.
+///     </para>
 /// </summary>
 /// <remarks>
 ///     <para>

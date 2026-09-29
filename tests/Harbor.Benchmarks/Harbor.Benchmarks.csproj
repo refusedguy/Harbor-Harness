@@ -42,7 +42,6 @@
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Sqlite\Harbor.Storage.Sqlite.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Reducers\Harbor.Ui.Framework.Reducers.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>

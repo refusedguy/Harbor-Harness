@@ -68,12 +68,14 @@ publish path re-derives it, and no sink type is special-cased by name.
 | 20 | `tests/Harbor.Benchmarks/EventBusBenchmark.cs:23`, `EventBusScrollbackBenchmark.cs:27,33,83`, `EventBroadcasterThroughputBenchmark.cs:33`, `EventBusFastPathBenchmark.cs` | benchmark buses | **n/a (measurement)** | the fast-path file is the only one that constructs a 0-scrollback bus on purpose, because it is the row that must report 0 B/op |
 | 21 | `tests/Harbor.Benchmarks/AgentLoopBenchmark.cs:354` | `BenchEventBus` (drops everything) | **n/a (measurement)** | isolates AgentLoop cost from bus cost |
 
-<!-- check-doc-cites: allow-unwired EventBusAppStoreDispatcher — named here only to record that it is NOT a subscriber, which is the whole point of the note under §3; no composition root constructs it and #664 tracks its deletion -->
+<!-- #594 deleted the allow-unwired EventBusAppStoreDispatcher escape hatch
+     above, because the type it protected no longer exists. An allowance for a
+     deleted type is a hole with no reader. -->
 <!-- check-doc-cites: allow-unwired TypeFilterMiddleware — #478 removed the CLI registration; the type survives as the reference implementation its own tests and the architecture guard exercise, and row 7 documents that verdict rather than a shipped composition -->
 <!-- check-doc-cites: allow-unwired SamplingMiddleware — no shipped preset registers a sampler; it is the reference optional sink that the composition tests and benchmarks construct to measure the drained-optional-sink path -->
 
-Both allowances above are deliberate and are stated here because the type rule
-(`tools/check-doc-cites.py` `DOC-TYPE-UNWIRED`) flags any type that no file
+Both remaining allowances are deliberate and are stated here because the type
+rule (`tools/check-doc-cites.py` `DOC-TYPE-UNWIRED`) flags any type that no file
 under `src/` or `apps/` references. Neither of these two is wired by a product
 preset any more, and §5 below is the honest description of that: the only
 composition that still exercises a filter is a **test** composition.
@@ -101,12 +103,13 @@ recorded, because they answer #44's topology question.
 | `src/Harbor.Telemetry.Core/TracingAgentProxy.cs:30` | n/a | subscribes to an *agent*, not to the bus |
 
 `EventBusAppStoreDispatcher` used to sit in this table as "the UI state
-projection — the state the user reads". It does not: no composition root
-constructs it, `AppStore` is not on the TUI read path (`AppState.cs:8-13` says so
-itself), and the live UI projection goes renderer → `UiStore`. The dead branch is
-documented where it belongs in
-[`docs/EVENT_TOPOLOGY.md`](./EVENT_TOPOLOGY.md) §2, and the type is tracked for
-deletion in #664 rather than listed as a subscriber.
+projection — the state the user reads". It was not: no composition root
+constructed it, `AppStore` was not on the TUI read path, and the live UI
+projection goes renderer → `UiStore` → `ChatAppReducer`. #664 corrected the row
+here and in
+[`docs/EVENT_TOPOLOGY.md`](./EVENT_TOPOLOGY.md) §2 while leaving the code.
+Then #594 deleted the branch, so the row is now absent because the subscriber
+is, not because the table quietly stopped claiming it.
 
 ## 4. The guard, term by term
 

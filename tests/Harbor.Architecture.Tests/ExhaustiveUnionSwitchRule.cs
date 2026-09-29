@@ -655,14 +655,6 @@ public sealed class ExhaustiveUnionSwitchRule
             "https://github.com/refusedguy/Harbor-Harness/issues/578",
         [new("src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs", "LlmEvent")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/578",
-        [new("src/Harbor.Ui.Framework.Reducers/AppReducer.cs", "AgentEvent")] =
-            "https://github.com/refusedguy/Harbor-Harness/issues/578",
-        [new("src/Harbor.Ui.Framework.Reducers/AppReducer.cs", "LlmEvent")] =
-            "https://github.com/refusedguy/Harbor-Harness/issues/578",
-        [new("src/Harbor.Ui.Framework.Reducers/ChatViewReducer.cs", "AgentEvent")] =
-            "https://github.com/refusedguy/Harbor-Harness/issues/578",
-        [new("src/Harbor.Ui.Framework.Reducers/SessionsReducer.cs", "AgentEvent")] =
-            "https://github.com/refusedguy/Harbor-Harness/issues/578",
 
         // #556 — `ChatRole -> (label, markdown?)` written four times, all four
         // `_ =>` arms silently relabelling a new role. That half is FIXED: the
