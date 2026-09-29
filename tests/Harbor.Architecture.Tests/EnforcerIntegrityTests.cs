@@ -55,6 +55,8 @@ public sealed class EnforcerIntegrityTests
     /// </summary>
     internal static readonly UnboundReference[] DeclaredButUnboundProjectReferences =
     [
+        new("Harbor.Telemetry.Otlp", "Harbor.Telemetry.Core",
+            "#450: the IL gate proved Harbor.Telemetry.Otlp emits no AssemblyRef for Telemetry.Core, so the declared reference is dead — remove it."),
         new("Harbor.Transport.Remote", "Harbor.Abstractions",
             "#450: the assembly binds Harbor.Abstractions.Contracts (the contract types it actually uses), not the facade, so the declared facade reference produces no IL."),
         new("Harbor.Ui.Framework", "Harbor.Ui.Framework.Abstractions",
