@@ -507,17 +507,28 @@ public sealed class PresentationCapabilityRules
         // read-only, a directory the user opened), while the AGENT's git access IS
         // gated, through the `bash` tool. See IGitQuery's remarks and
         // GitServicePermissionGatingTests.
-        ["Harbor.Tui.Notifications"] = new(StringComparer.Ordinal)
-        {
-            // NotificationTuiRenderer.cs — three OS notification backends, each
-            // shelling out to the platform notifier.
-            [NoSubprocess + " Harbor.Tui.Notifications.LinuxNotifySendBackend"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/538",
-            [NoSubprocess + " Harbor.Tui.Notifications.MacOsascriptBackend"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/538",
-            [NoSubprocess + " Harbor.Tui.Notifications.WindowsToastBackend"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/538",
-        },
+        // #665 IN FLIGHT: the three Harbor.Tui.Notifications rows are GONE — not
+        // re-baselined, not re-pointed at issue 538. The defect was never a
+        // mispositioned grandf: the seam was ABSENT. `INotificationBackend` was
+        // already in that file and already abstracted the three platforms by API
+        // SHAPE, while each implementation still owned its own child process —
+        // an abstraction over shape with none over execution. So the fix is not
+        // "move these three types", it is "give them something to call": a
+        // Domain `INotificationProcessRunner`, implemented by `ProcessNotificationRunner`
+        // in Harbor.Application, beside `ProcessGitQuery` / `WorkspaceInspector`
+        // (#537's shape, applied to this file).
+        //
+        // Deleting the rows is what ARMS the rule here, and it is why this
+        // commit is red on its own: `Presentation_MustNot_SpawnSubprocesses`
+        // now fails, naming the three backends, with "NO TRACKING ISSUE — this
+        // is NEW I/O in the Presentation layer". That failure is the proof the
+        // violation was real; the next commit makes it green.
+        //
+        // Do not re-add these rows when that happens. docs/ARCHITECTURE_LAYERS.md
+        // §6's ARCH-5 template is explicit: the move out of Presentation is the
+        // only exit from a baseline row, and the liveness test
+        // (NonVacuity_GrandfatheredViolations_AreStillReal) exists so a row that
+        // outlives its violation is a build failure rather than a habit.
         ["Harbor.Tui.CellForge"] = new(StringComparer.Ordinal)
         {
             // Chat/Panels/CellForgeJumpPalettePanel.cs:330,:343 — ProcessStartInfo
