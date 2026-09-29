@@ -96,11 +96,11 @@ by `tests/Harbor.Core.Tests/EventBusSinkVerdictTests.cs:309-330`.
 1. **Store seam (the convention).** An `AgentEvent` enters UI state through
    `ChatAppMsg.Agent` → `ChatAppReducer` → `UiStore`, and a renderer reads the
    result **as data**. Canonical:
-   `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:295`
+   `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:314`
    (`_ = ActiveStore.Dispatch(new ChatAppMsg.Agent(@event));`).
 2. **Handler seam (for imperative side effects).** A renderer that must act on an
    event outside the state fold registers an `IAgentEventHandler` via
-   `RegisterHandler` (`src/Harbor.Terminal.Abstractions/BaseTuiRenderer.cs:230`;
+   `RegisterHandler` (`src/Harbor.Terminal.Abstractions/BaseTuiRenderer.cs:238`;
    the contract is `Renderers/AgentEventHandler.cs:12-21`, whose doc comment
    states the intent outright: "instead of duplicating a per-renderer
    `switch (AgentEvent)`"). Canonical:
@@ -131,10 +131,10 @@ The consequence is the whole point of #575: **a new `AgentEvent` subclass was
 invisible to `BaseTuiRenderer`, and the next person added a `case` to a
 621-line bridge.** That is exactly what happened for `CompactionFailedEvent` —
 present in the conformance sweep at
-`tests/Harbor.Tui.RendererTests/RendererVisitorRegressionTests.cs:39`, therefore
+`tests/Harbor.Tui.RendererTests/RendererVisitorRegressionTests.cs:46`, therefore
 *required* of the 5 conforming renderers, and **absent** from `ChatScreenBridge`'s
 18 arms. A third classification of the same taxonomy also lives in the base class:
-`ShouldRenderPlacement` (`BaseTuiRenderer.cs:281-306`) re-derives "which event
+`ShouldRenderPlacement` (`BaseTuiRenderer.cs:289-309`) re-derives "which event
 repaints which placement" as `placement switch { … @event is … }`, so adding one
 event type needed three edits in three shapes — or zero, if you only knew about
 the mechanism your own renderer used.
@@ -362,9 +362,9 @@ Two more live instances of the banned direction:
 - `src/Harbor.Terminal.Abstractions/Views/ITuiView.cs:32` —
   `OnEventAsync(...) => Task.CompletedTask`, and the hook has **zero callers**.
   `BaseTuiRenderer` only calls `view.RenderAsync`
-  (`BaseTuiRenderer.cs:311-320`). Key and event handling moved to the reducer
+  (`BaseTuiRenderer.cs:318-330`). Key and event handling moved to the reducer
   (`AppMsg.KeyInput` via `Ui.Framework.State/State/KeyEventAdapter.cs:23`,
-  `ChatAppMsg.Agent` via `CellForgeTuiRenderer.cs:295`), but the old hooks stayed
+  `ChatAppMsg.Agent` via `CellForgeTuiRenderer.cs:314`), but the old hooks stayed
   on the interface with a no-op default, so the compiler will not tell anyone
   they are dead. A plugin author reading `ITuiPlugin`
   (`Terminal.Abstractions/Plugins/ITuiPlugin.cs:14-20` is the documented
@@ -491,7 +491,7 @@ consistent throughout:
 | messages | `State/AppMsg.cs`, `State/ChatAppMsg.cs` |
 | transitions | `State/AppReducer.cs`, `State/ChatAppReducer.cs` |
 | store / lifecycle | `State/UiStore.cs:175` `Dispatch` → `:211` `Notify`, with a revision ledger and a stale-drop guard |
-| consumption | `CellForgeTuiRenderer.cs:295` dispatch, `:299` `PumpProjection()` — the renderer reads the fold **as data** |
+| consumption | `CellForgeTuiRenderer.cs:314` dispatch, `:299` `PumpProjection()` — the renderer reads the fold **as data** |
 
 The split is deliberate: `AppReducer` is domain-free (panels, scroll, input,
 focus, quit) and the chat half plugs in through `IAppReducerPlugin`, so a
@@ -511,8 +511,8 @@ is on screen for the current session") with two owners:
 - the lifetime: `apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:101` registers it
   `AddSingleton`, over a per-process `ChatScreen` (`:76-79`, also a singleton).
 
-Meanwhile the reducer side *is* per session: `CellForgeTuiRenderer.cs:207`
-(`ActiveStore => _sessions?.ActiveContext?.Store ?? _store`) and `:217-236`
+Meanwhile the reducer side *is* per session: `CellForgeTuiRenderer.cs:226`
+(`ActiveStore => _sessions?.ActiveContext?.Store ?? _store`) and `:236-255`
 (`EnsureSubscribedToActiveStore`) re-bind on switch.
 
 **The module's own doc comment claims the opposite** — `CellForgeModule.cs:32`
