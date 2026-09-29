@@ -27,8 +27,8 @@ using Harbor.Tui.Termina;
 using Harbor.Tui.TerminalGui;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using RazorChatView = Harbor.Tui.RazorConsole.Views.ChatView;
 using RazorMarkdown = Harbor.Tui.RazorConsole.Rendering.RazorMarkdownRenderer;
 using RazorPaletteView = Harbor.Tui.RazorConsole.Views.CommandPaletteView;
@@ -321,10 +321,7 @@ public class ContribBackendParityTests
     {
         var definition = AgentDefinition.CodeDefault("test-model", "anthropic");
         var state = AgentState.Idle("s1", definition);
-        var mock = new Mock<IAgent>();
-        mock.SetupGet(a => a.State).Returns(state);
-        mock.SetupGet(a => a.AbortToken).Returns(new CancellationTokenSource().Token);
-        return mock.Object;
+        return new FakeAgent(state);
     }
 
     /// <summary>
