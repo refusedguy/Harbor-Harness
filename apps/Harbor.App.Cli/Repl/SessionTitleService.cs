@@ -1,4 +1,5 @@
 using System.Text;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
@@ -48,27 +49,24 @@ internal sealed class SessionTitleService(IReplHost host, ILogger logger)
             return;
         }
 
-        string? first = null;
-        foreach (var m in messages.Value)
-        {
-            if (m is UserMessage u && !string.IsNullOrWhiteSpace(u.Content))
-            {
-                first = u.Content;
-                break;
-            }
-        }
+        // First non-blank user message. "No such message" is absence, not a
+        // failure and not an empty string, so it travels as Maybe<string>.
+        Maybe<string> first = messages.Value
+            .TryFirst(m => m is UserMessage u && !string.IsNullOrWhiteSpace(u.Content))
+            .Map(m => ((UserMessage)m).Content);
 
-        if (string.IsNullOrEmpty(first))
+        if (first.HasNoValue)
         {
             _autoTitledSessions.Remove(host.SessionModel.Id);
             return;
         }
 
-        await ApplySessionTitleAsync(store, host.SessionModel, HeuristicTitle(first), ct).ConfigureAwait(false);
+        string firstPrompt = first.Value;
+        await ApplySessionTitleAsync(store, host.SessionModel, HeuristicTitle(firstPrompt), ct).ConfigureAwait(false);
 
         // AI upgrade on the pool: full observation inside, the frame loop never waits.
         Session captured = host.SessionModel;
-        string prompt = first;
+        string prompt = firstPrompt;
         _ = Task.Run(() => UpgradeTitleWithAiAsync(captured, prompt));
     }
 

@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Text.RegularExpressions;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Hosting.Rendering;
 using Harbor.Storage.Memory;
@@ -123,8 +124,9 @@ public class BackendRegistrySingleSourceTests
         foreach (string id in reported)
         {
             // Direction 1: every id the message names must actually resolve.
-            await Assert.That(SessionStoreRegistry.TryResolve(registry, id, out ISessionStoreFactory? factory)).IsTrue();
-            await Assert.That(factory!.BackendId).IsEqualTo(id);
+            Maybe<ISessionStoreFactory> factory = SessionStoreRegistry.Resolve(registry, id);
+            await Assert.That(factory.HasValue).IsTrue();
+            await Assert.That(factory.Value.BackendId).IsEqualTo(id);
         }
 
         foreach (string id in registry.Keys)
@@ -149,10 +151,10 @@ public class BackendRegistrySingleSourceTests
         FrozenDictionary<string, ISessionStoreFactory> registry = SessionStoreRegistry.Build(pluginStores);
 
         await Assert.That(registry.ContainsKey("redis")).IsTrue();
-        await Assert.That(SessionStoreRegistry.TryResolve(registry, "REDIS", out ISessionStoreFactory? factory))
-            .IsTrue();
-        await Assert.That(factory!.BackendId).IsEqualTo("redis");
-        await Assert.That(factory).IsTypeOf<PluginSessionStoreFactory>();
+        Maybe<ISessionStoreFactory> factory = SessionStoreRegistry.Resolve(registry, "REDIS");
+        await Assert.That(factory.HasValue).IsTrue();
+        await Assert.That(factory.Value.BackendId).IsEqualTo("redis");
+        await Assert.That(factory.Value).IsTypeOf<PluginSessionStoreFactory>();
 
         // …and the compiled-in backends are still there: the merge is additive.
         await Assert.That(registry.ContainsKey("memory")).IsTrue();
@@ -178,8 +180,9 @@ public class BackendRegistrySingleSourceTests
         foreach (string id in reported)
         {
             // Direction 1: every id the message names must actually resolve.
-            await Assert.That(HarborModeRegistry.TryResolve(registry, id, out IHarborModeStrategy? strategy)).IsTrue();
-            await Assert.That(strategy!.ModeId).IsEqualTo(id);
+            Maybe<IHarborModeStrategy> strategy = HarborModeRegistry.Resolve(registry, id);
+            await Assert.That(strategy.HasValue).IsTrue();
+            await Assert.That(strategy.Value.ModeId).IsEqualTo(id);
         }
 
         foreach (string id in registry.Keys)

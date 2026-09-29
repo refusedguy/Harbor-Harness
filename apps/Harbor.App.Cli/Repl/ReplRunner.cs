@@ -167,8 +167,13 @@ internal sealed class ReplRunner
             await _renderer.WriteLineAsync(string.Empty).ConfigureAwait(false);
         }
 
-        var defaultAgent = _agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
-                           ?? _agentRegistry.GetAllAgents()[0];
+        // Absent ⇒ the registry's first agent. Same shape as the `?? [0]` it
+        // replaces: a null element falls into the fallback arm exactly as it
+        // did when FirstOrDefault returned null, and `[0]` is only evaluated on
+        // the None branch (Match/Or run their fallback lazily).
+        var defaultAgent = _agentRegistry.GetAllAgents()
+            .TryFirst(a => a.Name.Value == config.Agent)
+            .Match<AgentDefinition, AgentDefinition>(matched => matched, () => _agentRegistry.GetAllAgents()[0]);
         string[] parts = config.EffectiveModel.Split('/', 2);
         _logger.LogInformation("Creating session: agent={Agent}, provider={Provider}, model={Model}",
             defaultAgent.Name.Value, parts[0], parts.Length > 1 ? parts[1] : config.EffectiveModel);
@@ -246,8 +251,13 @@ internal sealed class ReplRunner
             return Result.Failure<int>($"raw mode unavailable: {ex.Message}");
         }
 
-        var defaultAgent = _agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
-                           ?? _agentRegistry.GetAllAgents()[0];
+        // Absent ⇒ the registry's first agent. Same shape as the `?? [0]` it
+        // replaces: a null element falls into the fallback arm exactly as it
+        // did when FirstOrDefault returned null, and `[0]` is only evaluated on
+        // the None branch (Match/Or run their fallback lazily).
+        var defaultAgent = _agentRegistry.GetAllAgents()
+            .TryFirst(a => a.Name.Value == config.Agent)
+            .Match<AgentDefinition, AgentDefinition>(matched => matched, () => _agentRegistry.GetAllAgents()[0]);
         string[] parts = config.EffectiveModel.Split('/', 2);
         _logger.LogInformation("CellForge: creating session agent={Agent}, provider={Provider}, model={Model}",
             defaultAgent.Name.Value, parts[0], parts.Length > 1 ? parts[1] : config.EffectiveModel);
@@ -306,8 +316,13 @@ internal sealed class ReplRunner
         _eventBus.Subscribe(async (evt, c) => await _renderer.RenderAsync(evt, c).ConfigureAwait(false));
 
         var config = (await _configStore.LoadAsync().ConfigureAwait(false)).Value;
-        var defaultAgent = _agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
-                           ?? _agentRegistry.GetAllAgents()[0];
+        // Absent ⇒ the registry's first agent. Same shape as the `?? [0]` it
+        // replaces: a null element falls into the fallback arm exactly as it
+        // did when FirstOrDefault returned null, and `[0]` is only evaluated on
+        // the None branch (Match/Or run their fallback lazily).
+        var defaultAgent = _agentRegistry.GetAllAgents()
+            .TryFirst(a => a.Name.Value == config.Agent)
+            .Match<AgentDefinition, AgentDefinition>(matched => matched, () => _agentRegistry.GetAllAgents()[0]);
         string[] parts = config.EffectiveModel.Split('/', 2);
         var sessionResult = await _sessionStore.CreateAsync(
             Environment.CurrentDirectory, defaultAgent.Name.Value, parts[0],

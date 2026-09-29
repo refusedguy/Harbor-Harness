@@ -159,8 +159,13 @@ public sealed class DemoCommand : ICommand
         eventBus.Subscribe(async (evt, c) => await renderer.RenderAsync(evt, c).ConfigureAwait(false));
 
         HarborConfig config = (await configStore.LoadAsync().ConfigureAwait(false)).Value;
-        var defaultAgent = agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
-                           ?? agentRegistry.GetAllAgents()[0];
+        // Absent ⇒ the registry's first agent. Same shape as the `?? [0]` it
+        // replaces: a null element falls into the fallback arm exactly as it
+        // did when FirstOrDefault returned null, and `[0]` is only evaluated on
+        // the None branch (Match runs its fallback lazily).
+        var defaultAgent = agentRegistry.GetAllAgents()
+            .TryFirst(a => a.Name.Value == config.Agent)
+            .Match<AgentDefinition, AgentDefinition>(matched => matched, () => agentRegistry.GetAllAgents()[0]);
         string[] modelParts = config.EffectiveModel.Split('/', 2);
         var sessionResult = await sessionStore.CreateAsync(
             Environment.CurrentDirectory, defaultAgent.Name.Value, modelParts[0],

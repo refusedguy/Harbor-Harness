@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
+using CSharpFunctionalExtensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -149,14 +150,15 @@ public static class SessionStoreRegistry
 
     /// <summary>
     ///     Resolve a raw <c>HARBOR_STORAGE</c>/default value to its factory
-    ///     (trim + case-insensitive). Returns <c>false</c> for unknown ids —
-    ///     the caller fails fast instead of silently defaulting.
+    ///     (trim + case-insensitive). Unknown ids come back as
+    ///     <see cref="Maybe{T}.None" /> — the caller fails fast instead of
+    ///     silently defaulting. Absence is a value, so it travels in the
+    ///     signature instead of in a nullable out-parameter.
     /// </summary>
-    public static bool TryResolve(
+    public static Maybe<ISessionStoreFactory> Resolve(
         FrozenDictionary<string, ISessionStoreFactory> registry,
-        string rawId,
-        out ISessionStoreFactory? factory)
+        string rawId)
     {
-        return registry.TryGetValue(rawId.Trim(), out factory);
+        return registry.TryFind(rawId.Trim());
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using CSharpFunctionalExtensions;
 using Harbor.Ipc;
 using Harbor.Ipc.Client;
 using Harbor.Ipc.InProcess;
@@ -27,7 +28,8 @@ internal static class IpcModule
         string pipeName = Environment.GetEnvironmentVariable("HARBOR_IPC_PIPE") ?? "harbor-ipc";
 
         FrozenDictionary<string, IHarborModeStrategy> registry = HarborModeRegistry.Build();
-        if (!HarborModeRegistry.TryResolve(registry, mode, out IHarborModeStrategy? strategy) || strategy is null)
+        Maybe<IHarborModeStrategy> strategy = HarborModeRegistry.Resolve(registry, mode);
+        if (strategy.HasNoValue)
         {
             // #581: derived from the registry the resolution actually used — this used to be
             // a hand-written `HarborModeRegistry.KnownIds` string that no test compared to
@@ -36,7 +38,7 @@ internal static class IpcModule
                 $"Unknown HARBOR_MODE: '{mode}'. Expected one of: {string.Join(", ", registry.Keys.Order(StringComparer.Ordinal))}.");
         }
 
-        strategy.Apply(new HarborModeContext(services, ctx, pipeName));
+        strategy.Value.Apply(new HarborModeContext(services, ctx, pipeName));
         return services;
     }
 

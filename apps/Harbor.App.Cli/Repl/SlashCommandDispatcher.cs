@@ -560,12 +560,12 @@ internal static class SlashCommandDispatcherStatic
 {
     public static async Task<int?> TryHandleAsync(string commandName, string[] args, ICommand[] commands, CancellationToken ct = default)
     {
-        var command = commands.FirstOrDefault(c => c.Name.Equals(commandName, StringComparison.OrdinalIgnoreCase));
-        if (command is null)
+        Maybe<ICommand> command = commands.TryFirst(c => c.Name.Equals(commandName, StringComparison.OrdinalIgnoreCase));
+        if (command.HasNoValue)
         {
             return null;
         }
 
-        return await command.ExecuteAsync(args, ct).ConfigureAwait(false);
+        return await command.Value.ExecuteAsync(args, ct).ConfigureAwait(false);
     }
 }
