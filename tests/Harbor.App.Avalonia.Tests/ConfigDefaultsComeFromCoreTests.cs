@@ -181,8 +181,8 @@ public class ConfigDefaultsComeFromCoreTests
         // value back" are distinguishable — a self-restoring write would pass a
         // compare-against-current check.
         (string Name, string Value)[] sentinels =
-            [.. ProcessEnvNames.Select((name, i) => (name, value: $"harbor-677-sentinel-{i}"))];
-        Dictionary<string, string> before = sentinels.ToDictionary(s => s.name, s => s.value, StringComparer.Ordinal);
+            [.. ProcessEnvNames.Select((name, i) => (Name: name, Value: $"harbor-677-sentinel-{i}"))];
+        Dictionary<string, string> before = sentinels.ToDictionary(s => s.Name, s => s.Value, StringComparer.Ordinal);
 
         foreach ((string name, string value) in sentinels)
         {
