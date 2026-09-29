@@ -1,4 +1,6 @@
+using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Projection;
+using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Ui.Framework.State;
 using TUnit.Core;
 
