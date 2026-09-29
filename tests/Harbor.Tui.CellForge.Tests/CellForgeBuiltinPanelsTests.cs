@@ -604,8 +604,9 @@ public class CellForgeBuiltinPanelsTests
         string text = Joined(new CellForgeFileTreePanel().Build(
             Ctx(state, services: new PanelServices { Store = store, FileTrees = loader })));
 
-        await Assert.That(loader.Requests).HasCount(1);
-        await Assert.That(loader.Requests[0]).IsEqualTo(("file-tree", dir));
+        await Assert.That(loader.Requests.Count).IsEqualTo(1);
+        await Assert.That(loader.Requests[0].PanelId).IsEqualTo("file-tree");
+        await Assert.That(loader.Requests[0].Directory).IsEqualTo(dir);
         await Assert.That(text).Contains("File Tree")
             .Because("the panel must still draw its frame; an unloaded tree is a state, not a blank");
     }

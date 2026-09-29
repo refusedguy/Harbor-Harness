@@ -331,7 +331,7 @@ public static class AppReducer
         if (!string.Equals(ui.ResolvePanelDirectory(id), snapshot.Directory, StringComparison.Ordinal))
             return state;
 
-        if (ui.FileTrees.TryGetValue(id, out FileTreeSnapshot current) && current == snapshot)
+        if (ui.FileTrees.TryGetValue(id, out FileTreeSnapshot? current) && current == snapshot)
             return state;
 
         return state with { Ui = ui with { FileTrees = ui.FileTrees.SetItem(id, snapshot) } };

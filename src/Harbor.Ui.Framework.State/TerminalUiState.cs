@@ -137,7 +137,7 @@ public sealed record TerminalUiState
     /// <param name="directory">The directory the view is currently pointed at.</param>
     /// <returns>The matching snapshot, or the "nothing loaded" sentinel.</returns>
     public FileTreeSnapshot FileTreeFor(string id, string directory)
-        => FileTrees.TryGetValue(id, out FileTreeSnapshot snapshot) && snapshot.Covers(directory)
+        => FileTrees.TryGetValue(id, out FileTreeSnapshot? snapshot) && snapshot.Covers(directory)
             ? snapshot
             : FileTreeSnapshot.None;
 

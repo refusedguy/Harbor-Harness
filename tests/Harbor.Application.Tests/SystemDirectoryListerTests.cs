@@ -119,7 +119,8 @@ public sealed class SystemDirectoryListerTests
         Result<DirectoryListing> result = await Lister().ListAsync(missing);
 
         await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).IsNotNullOrWhiteSpace();
+        await Assert.That(string.IsNullOrWhiteSpace(result.Error)).IsFalse()
+            .Because("a failure the panel cannot render is the one thing worse than a throw");
     }
 
     [Test]

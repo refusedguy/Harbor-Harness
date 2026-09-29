@@ -85,21 +85,23 @@ public sealed class FileTreeLoaderTests
     {
         // A per-panel source, not a global one: navigating one panel's directory
         // must not cancel another panel's load.
-        var slow = new CountingLister { Hangs = true };
+        var slow = new PerDirectoryLister { Hangs = true };
         using var loader = new FileTreeLoader(slow, NullLogger<FileTreeLoader>.Instance);
         var store = new UiStore();
         store.Dispatch(new AppMsg.SetPanelDirectory("tree-a", DirA));
         store.Dispatch(new AppMsg.SetPanelDirectory("tree-b", DirB));
 
-        // Panel A's walk hangs on the shared lister; panel B's request must not
-        // cancel it, which is only true because the CTS is per panel id.
+        // Panel A's walk hangs; panel B's request must not cancel it, which is
+        // only true because the CTS is per panel id. A single global CTS would
+        // make two panels fight over one token, and whichever started second
+        // would silently kill the first.
         loader.Request("tree-a", DirA, store);
-        await slow.Started.Task;
+        await slow.StartedFor(DirA);
         loader.Request("tree-b", DirB, store);
+        await slow.StartedFor(DirB);
 
-        await Assert.That(slow.Token.IsCancellationRequested).IsFalse()
-            .Because("panel-b's walk must not have cancelled panel-a's in-flight one; a "
-                   + "single global CTS would make two panels fight over one token");
+        await Assert.That(slow.TokenFor(DirA).IsCancellationRequested).IsFalse()
+            .Because("panel-b's walk must not have cancelled panel-a's in-flight one");
 
         slow.Release();
         await Settled(loader);
@@ -280,9 +282,13 @@ public sealed class FileTreeLoaderTests
     [Test]
     public async Task Dispose_IsIdempotent()
     {
-        using var loader = new FileTreeLoader(new CountingLister(), NullLogger<FileTreeLoader>.Instance);
+        // A renderer that is torn down twice must not throw on the second pass:
+        // no assertion wrapper, the return IS the assertion.
+        var loader = new FileTreeLoader(new CountingLister(), NullLogger<FileTreeLoader>.Instance);
         loader.Dispose();
-        await Assert.That(async () => loader.Dispose()).ThrowsNothing();
+        loader.Dispose();
+
+        await Assert.That(loader.InFlightCount).IsEqualTo(0);
     }
 
     [Test]
@@ -382,6 +388,69 @@ public sealed class FileTreeLoaderTests
             return Failure is null
                 ? Result.Success(new DirectoryListing(directory, [Entry("one")]))
                 : Result.Failure<DirectoryListing>(Failure);
+        }
+    }
+
+    /// <summary>
+    ///     A lister that keeps the token of each directory separately, so a test
+    ///     can assert on panel A's walk after panel B has started its own. A
+    ///     single shared <c>Token</c> field would answer for whichever ran last,
+    ///     which is exactly the question at issue.
+    /// </summary>
+    private sealed class PerDirectoryLister : IDirectoryLister
+    {
+        private readonly Dictionary<string, CancellationToken> _tokens = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, TaskCompletionSource<bool>> _started = new(StringComparer.Ordinal);
+        private readonly TaskCompletionSource<bool> _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool Hangs { get; init; }
+
+        public async Task StartedFor(string directory)
+        {
+            TaskCompletionSource<bool> signal;
+            lock (_started)
+            {
+                if (!_started.TryGetValue(directory, out signal!))
+                {
+                    signal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _started[directory] = signal;
+                }
+            }
+
+            await signal.Task;
+        }
+
+        public CancellationToken TokenFor(string directory)
+        {
+            lock (_started)
+            {
+                return _tokens[directory];
+            }
+        }
+
+        public void Release() => _release.TrySetResult(true);
+
+        public async Task<Result<DirectoryListing>> ListAsync(string directory, CancellationToken cancellationToken = default)
+        {
+            TaskCompletionSource<bool> signal;
+            lock (_started)
+            {
+                _tokens[directory] = cancellationToken;
+                if (!_started.TryGetValue(directory, out signal!))
+                {
+                    signal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _started[directory] = signal;
+                }
+            }
+
+            signal.TrySetResult(true);
+
+            if (Hangs)
+            {
+                await _release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return Result.Success(new DirectoryListing(directory, [Entry("one")]));
         }
     }
 
