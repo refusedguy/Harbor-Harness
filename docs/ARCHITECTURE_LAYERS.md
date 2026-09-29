@@ -328,9 +328,35 @@ Concrete implementations of:
 - **Composition Root:** `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` is the only place that
   knows about concrete Infrastructure types. It wires them into the DI container by
   interface.
-- **Forbidden:** Presentation projects must NOT reference each other (e.g.
+- **Forbidden (references):** Presentation projects must NOT reference each other (e.g.
   `Harbor.Tui.AnsiPlain` must not reference `Harbor.Tui.CellForge`). They may share the
   `Harbor.Terminal.Abstractions` contract surface.
+- **Forbidden (capabilities):** a Presentation assembly must not exercise an I/O
+  capability directly. The reference matrix cannot catch this — `System.IO.File`,
+  `System.Diagnostics.Process` and `System.Net.Http` are BCL types, visible in no
+  `<ProjectReference>`. Enforced mechanically by
+  `tests/Harbor.Architecture.Tests/PresentationCapabilityRules.cs` (see §5.6); the
+  capability-to-layer assignment comes from the Infrastructure clause at the top of this
+  section ("subprocess, filesystem, native interop"):
+
+  | Rule id | Forbids | Layer that owns it |
+  |---|---|---|
+  | `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | `System.Diagnostics.Process*` | Infrastructure (`BashTool` / `McpProcessClient` in `Harbor.Tools.Builtin`) |
+  | `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | `System.IO.File*` | Infrastructure (`Harbor.Storage.*`, config stores) |
+  | `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | `System.IO.Directory*` | Infrastructure (file-tree / theme scanning) |
+  | `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | `System.Net.Http*`, `Sockets`, `WebRequest`, … | Infrastructure (`Harbor.Providers.*`, `Harbor.Transport.Remote`) |
+  | `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | `System.Reflection.Emit`, `AssemblyLoadContext` | nowhere — banned outright (NativeAOT-readiness) |
+
+  A shell-out from the UI is the sharp edge: because the class is not an `ITool`, the
+  call never reaches `PermissionRuleset.Evaluate`, never appears in the tool-call
+  transcript, and cannot be cancelled by the agent loop. Route it through an `ITool`.
+
+  **Deliberately not capabilities:** `System.IO.Path` (pure string manipulation —
+  Presentation formats paths for display), `Console.*` (the renderer's job), and P/Invoke
+  to `kernel32`/`libc` for VT-mode handling (also renderer work, in
+  `Harbor.Tui.CellForge.Engine`). `System.Environment.GetEnvironmentVariable` /
+  `CurrentDirectory` / `GetFolderPath` are genuine configuration leaks but are used
+  pervasively by renderers; they are tracked in #518 rather than baselined here.
 
 ---
 
@@ -342,6 +368,7 @@ Concrete implementations of:
 | Application projects (Application/Core/Registries/Plugins.*) reference Domain only — never Infrastructure, never Presentation. | Architecture tests       |
 | Infrastructure projects (Storage.*, Providers.*, Tools.Builtin) reference Domain only — never Application, never each other, never Presentation. | Architecture tests       |
 | Presentation projects (Tui.* renderers) reference Domain only — never Application, never Infrastructure, never each other. | Architecture tests       |
+| Presentation projects exercise no I/O capability of their own: no subprocess, no `System.IO.File`/`Directory`, no network, no reflection emit (§3 table, §5.6). | Architecture tests (`PresentationCapabilityRules`) |
 | `apps/Harbor.App.Cli` references everything — it is the Composition Root.                         | (by convention)          |
 | Concrete impl types (`AnthropicLlmClient`, `JsonlSessionStore`, …) are `new`'d only inside `HostBuilder.cs`. | Code review              |
 | `Program.cs` resolves services by interface from DI; it does not `new` Infrastructure types.       | Code review              |
@@ -356,10 +383,10 @@ Concrete implementations of:
 mechanically-enforced rules. The test project references every Harbor project so it can
 load each assembly via reflection and assert on `GetReferencedAssemblies()`.
 
-The tests come in **five files** (`LayerDependencyTests`, `NetArchLayerRules`,
-`AbstractionsSplitLayerRules`, `FullLayerMatrixTests`, `CellForgeGraphRules`;
-counts as of 2026-08-27 predate `CellForgeGraphRules` — the executed total may exceed
-the method count due to parameterised cases — latest full run: 54/54 passed):
+The tests come in **six files** (`LayerDependencyTests`, `NetArchLayerRules`,
+`AbstractionsSplitLayerRules`, `FullLayerMatrixTests`, `CellForgeGraphRules`,
+`PresentationCapabilityRules`; counts as of 2026-08-27 predate the last two — the
+executed total may exceed the method count due to parameterised cases):
 
 ### 5.1 Reflection-based — `LayerDependencyTests.cs`
 
@@ -465,6 +492,62 @@ public async Task NetArch_SomeRule()
 }
 ```
 
+### 5.6 Capability rules — `PresentationCapabilityRules.cs` (#455)
+
+The four files above enforce the **reference** half of the contract: which
+`<ProjectReference>` edges may exist. That is not sufficient. `System.IO.File`,
+`System.Diagnostics.Process` and `System.Net.Http` are BCL types — they appear in no
+ProjectReference, so a perfectly layered assembly can still fork a shell or overwrite
+the user's config. `PresentationCapabilityRules.cs` enforces the missing half.
+
+**Mechanism.** Mono.Cecil (the copy `NetArchTest.Rules 1.3.2` already restores — no new
+`PackageReference`) reads each Presentation assembly's metadata, walks every method body,
+and collects every BCL type referenced from an IL operand or a type/field/method
+signature. A rule is a list of type-name prefixes matched with `StartsWith`, so one entry
+covers a family (`System.IO.File` also covers `FileStream`, `FileInfo`, `FileAccess`).
+Because this is IL-level it catches a `File.ReadAllText` that no assembly-reference check
+can see.
+
+**Scope.** The Presentation set is not a second hand-maintained list — it is read from
+`FullLayerMatrixTests.Matrix` via `PresentationLayerAssemblies()`, so a new Presentation
+src project becomes capability-enforced the moment it gets a matrix row.
+
+**Attribution.** `async` methods and lambdas live in compiler-generated nested types
+(`<Foo>d__7`, `<>c__DisplayClass0_0`). The probe collapses those to the nearest type a
+human wrote, so baseline keys survive edits and CI failures name a findable type.
+
+**Baseline, not a skip.** Presentation performs I/O today, so the rules land *enforced*
+against a `KnownViolations` table keyed by (assembly, rule id, declaring type) — the same
+shape as `DocumentedExceptions` in §5.4. A rule holds only if its hits are a subset of the
+baseline, so new I/O in any Presentation type is red on the spot. The baseline is
+type-granular, not method-granular; see §6 for the inventory and the per-site issues.
+
+**Non-vacuity.** A rule nobody can fail is a comment, and NetArchTest's
+`NotHaveDependencyOn` has a failure mode here: an unmatched name is a satisfied
+constraint, so a typo'd or deleted assembly passes forever. Four tests close that door:
+
+1. `NonVacuity_Probe_ReadsRealIlFromThisTestAssembly` — probes this test assembly, whose
+   source is in the repo and is known to call `Directory.GetFiles` and `File.Exists`; both
+   rules must fire, and the assembly file must exist. "No violations" can never mean "no
+   input".
+2. `NonVacuity_Probe_CanStillDetectForbiddenCapabilities` — the sensitivity control: the
+   same probe, rules and matchers run against a *real* positive control,
+   `Harbor.Tools.Builtin` (ReadTool/EditTool/GlobTool touch the filesystem,
+   BashTool/McpProcessClient fork processes), and MUST report hits. If the probe ever
+   degrades to "nothing anywhere", the Presentation rules go red instead of vacuously
+   green.
+3. `NonVacuity_GrandfatheredViolations_AreStillReal` — every baseline row must still match
+   a real hit, so the list cannot rot into a blanket permission (the
+   `DocumentedExceptions_AllCurrentlyRealized` pattern).
+4. `RuleTable_And_Baseline_Are_WellFormed` — rule ids unique and non-blank, every rule
+   states what it forbids and why, every baseline row names an existing rule, points at a
+   tracking issue, and names an assembly the matrix really classifies as Presentation (a
+   typo there would grandf nothing).
+
+`PRESENTATION-MUST-NOT-USE-THE-NETWORK` and
+`PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` have **empty** baselines: Presentation
+is clean on both today, so they run fully armed rather than being deferred with the rest.
+
 ---
 
 ## 6. Known violations
@@ -474,13 +557,34 @@ public async Task NetArch_SomeRule()
 > and a planned fix sprint. **Do not add a new violation without adding an entry
 > here.**
 
-**As of the Task ID: A audit (see `worklog.md`), there are zero known violations.**
-The architecture suite passes cleanly; the previously cited counts (46 tests =
-21 reflection + 25 NetArchTest) are historical — today it is
-`LayerDependencyTests` (12) + `NetArchLayerRules` (21) + `AbstractionsSplitLayerRules` (3)
-+ `FullLayerMatrixTests` (4, data-table rows) + `CellForgeGraphRules` (1) —
-54 executed cases in the 2026-08-22 run (predates `CellForgeGraphRules`),
-all green.
+**As of 2026-09-29 (issue #455) the REFERENCE matrix has zero known violations** —
+`LayerDependencyTests` + `NetArchLayerRules` + `AbstractionsSplitLayerRules` +
+`FullLayerMatrixTests` + `CellForgeGraphRules` are all green. The previously cited counts
+(46 tests = 21 reflection + 25 NetArchTest, 54 executed cases) are historical.
+
+**The CAPABILITY rules added in #455 have 20 known violations, in 14 types across 7 of
+the 17 Presentation assemblies.** They are not skipped: each is a row in
+`PresentationCapabilityRules.KnownViolations` that a rule holds only while it is still
+exactly reproduced, and each carries a tracking issue. Ten Presentation assemblies are
+clean and fully enforced.
+
+| Rule | Violating types | Assemblies | Tracking issues |
+|---|---:|---:|---|
+| `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 5 | 3 | [#537](https://github.com/refusedguy/Harbor-Harness/issues/537) (GitService), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (3 notification backends, jump palette) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 8 | 6 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536) (theme store/watcher), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (theme loader/watcher, terminal stdin) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 7 | 6 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535), [#536](https://github.com/refusedguy/Harbor-Harness/issues/536), [#537](https://github.com/refusedguy/Harbor-Harness/issues/537), [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (file tree) |
+| `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | 0 | 0 | — clean, unbaselined |
+| `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | 0 | 0 | — clean, unbaselined |
+
+### ARCH-5 template — new capability violations
+
+The reference-layer template below applies to the capability rules too, keyed by
+(assembly, rule id, declaring type). **Do not delete a baseline row when a rule goes
+red** — that is the one move that turns an enforced rule back into a comment. Either fix
+the I/O (move it behind a Domain contract + an Infrastructure implementation) or, if it
+genuinely must stay, add a row with a real issue URL.
+
+### Previously suspected (not a violation)
 
 The previously suspected violation — *"Harbor.Tui.Abstractions references the
 agent-harness assembly via `IAgent`"* — does **not** exist: `IAgent` lives in

@@ -348,6 +348,19 @@ public class FullLayerMatrixTests
     };
 
     /// <summary>
+    ///     Every src assembly the matrix classifies as <see cref="Layer.Presentation" />,
+    ///     in declaration order of <see cref="Matrix" />.
+    /// </summary>
+    /// <remarks>
+    ///     Consumed by <c>PresentationCapabilityRules.cs</c> (#455) so the
+    ///     Presentation capability rules and the reference matrix can never drift
+    ///     apart: a new Presentation src project becomes capability-enforced the
+    ///     moment it gets a matrix row — no second list to forget to update.
+    /// </remarks>
+    public static string[] PresentationLayerAssemblies()
+        => Matrix.Where(kv => kv.Value.Layer == Layer.Presentation).Select(kv => kv.Key).ToArray();
+
+    /// <summary>
     ///     Allowed set plus implicit edges:
     ///     - referencing <c>Harbor.Abstractions</c> implies
     ///       <c>Harbor.Abstractions.Contracts</c> (the facade re-exports contract
