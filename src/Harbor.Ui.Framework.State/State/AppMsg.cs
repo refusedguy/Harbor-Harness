@@ -136,7 +136,76 @@ public abstract record AppMsg
     ///     selection behind. Empty <paramref name="Directory" /> clears back to
     ///     the process working directory.
     /// </summary>
+    /// <remarks>
+    ///     The file-tree LISTING is state too, but it is not written here: the
+    ///     reducer never does I/O, so a directory change can only make what no
+    ///     longer applies inert. A listing for a different directory already reads
+    ///     as "nothing loaded" through
+    ///     <c>TerminalUiState.FileTreeFor</c>, which is why this message does not
+    ///     clear it — see <see cref="AppReducer.SetPanelDirectory" /> for why a
+    ///     clear here would be a regression rather than a tidy-up.
+    /// </remarks>
     /// <param name="Id">The panel id (e.g. <c>"file-tree"</c>).</param>
     /// <param name="Directory">The new directory (full path, or empty for CWD).</param>
     public sealed record SetPanelDirectory(string Id, string Directory) : AppMsg;
+
+    // ── file tree (#667) ────────────────────────────────────────────────────
+    //
+    // Four messages, and the split is the point: the reducer OWNS the listing
+    // (it is state) while the loader OWNS the walk (it is I/O). A message that
+    // asked the reducer to fetch would put the fetch back on the render path; a
+    // message that only ever carried "please fetch" would leave the reducer out
+    // of the loop entirely. What crosses the boundary is a RESULT, addressed to
+    // the directory it was produced for — which is also what makes a late
+    // result detectable rather than merely unlikely.
+
+    /// <summary>
+    ///     A file-tree load for <paramref name="Directory" /> has been started
+    ///     (#667). Marks the snapshot as in-flight so the view can say so and so
+    ///     the loader does not start a second walk for the same directory.
+    /// </summary>
+    /// <remarks>
+    ///     Pure bookkeeping: the reducer records the intent, the
+    ///     <c>FileTreeLoader</c> that just accepted the request does the work.
+    ///     A result for a directory the panel is no longer pointed at is dropped
+    ///     by every handler here.
+    /// </remarks>
+    /// <param name="Id">The panel id owning the listing.</param>
+    /// <param name="Directory">The directory being loaded. Must be a RESOLVED path, not the empty "CWD" marker.</param>
+    public sealed record SetFileTreePending(string Id, string Directory) : AppMsg;
+
+    /// <summary>
+    ///     A file-tree load finished (#667). Stores the entries for
+    ///     <paramref name="Directory" />.
+    /// </summary>
+    /// <param name="Id">The panel id owning the listing.</param>
+    /// <param name="Directory">The directory the entries were read from.</param>
+    /// <param name="Entries">The entries in display order (directories first).</param>
+    /// <param name="Truncated">The walk hit its entry cap.</param>
+    /// <param name="TotalCount">Entries before the cap, or -1 when the walk stopped early.</param>
+    public sealed record SetFileTreeLoaded(
+        string Id,
+        string Directory,
+        ImmutableArray<FileTreeEntry> Entries,
+        bool Truncated = false,
+        int TotalCount = 0) : AppMsg;
+
+    /// <summary>
+    ///     A file-tree load failed (#667) — a missing directory, a permission
+    ///     denial, a capped walk that could not finish.
+    /// </summary>
+    /// <param name="Id">The panel id owning the listing.</param>
+    /// <param name="Directory">The directory that could not be listed.</param>
+    /// <param name="Error">The reason, phrased for display.</param>
+    public sealed record SetFileTreeFailed(string Id, string Directory, string Error) : AppMsg;
+
+    /// <summary>
+    ///     Drop the file-tree listing for <paramref name="Id" /> so the next
+    ///     demand re-loads it (#667). This is the <c>r</c> key: previously it
+    ///     cleared a provider-local cache field, which only the panel could see.
+    ///     Clearing state instead means the reload is a normal, observable load
+    ///     like any other - the view really does show "loading" again.
+    /// </summary>
+    /// <param name="Id">The panel id owning the listing.</param>
+    public sealed record InvalidateFileTree(string Id) : AppMsg;
 }

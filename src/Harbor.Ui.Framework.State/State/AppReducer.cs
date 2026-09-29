@@ -155,6 +155,14 @@ public static class AppReducer
         }),
         AppMsg.SetPanelCursor pc => ReduceResult.NoOp(SetPanelCursor(state, pc.Id, pc.Cursor)),
         AppMsg.SetPanelDirectory pd => ReduceResult.NoOp(SetPanelDirectory(state, pd.Id, pd.Directory)),
+        AppMsg.SetFileTreePending ft => ReduceResult.NoOp(SetFileTree(state, ft.Id, FileTreeSnapshot.Pending(ft.Directory))),
+        AppMsg.SetFileTreeLoaded fl => ReduceResult.NoOp(SetFileTree(state, fl.Id, FileTreeSnapshot.Completed(
+            fl.Directory,
+            fl.Entries,
+            fl.Truncated,
+            fl.TotalCount))),
+        AppMsg.SetFileTreeFailed ff => ReduceResult.NoOp(SetFileTree(state, ff.Id, FileTreeSnapshot.Failed(ff.Directory, ff.Error))),
+        AppMsg.InvalidateFileTree inv => ReduceResult.NoOp(InvalidateFileTree(state, inv.Id)),
         _ => ReduceResult.NoOp(state)
     };
 
@@ -255,8 +263,15 @@ public static class AppReducer
 
     /// <summary>
     ///     Store a panel-local directory keyed by panel id and reset its cursor
-    ///     to 0 atomically (#360). The filesystem listing itself stays a
-    ///     provider-local cache — the reducer never touches the disk.
+    ///     to 0 atomically (#360). The filesystem listing itself lives in
+    ///     <see cref="TerminalUiState.FileTrees" />, so this handler is still
+    ///     pure — but note what it does NOT do: it does not clear the old
+    ///     listing. A listing for a different directory is already inert, because
+    ///     <see cref="TerminalUiState.FileTreeFor" /> only answers for the
+    ///     directory the view is pointed at. Clearing here instead would make
+    ///     the panel flash "(loading)" on every navigation step, including
+    ///     steps where a perfectly good listing is one keypress away in the
+    ///     reducer's own history.
     /// </summary>
     public static UiState SetPanelDirectory(UiState state, string id, string directory)
     {
@@ -275,6 +290,75 @@ public static class AppReducer
                 PanelDirs = ui.PanelDirs.SetItem(id, dir),
                 PanelCursors = ui.PanelCursors.SetItem(id, 0)
             }
+        };
+    }
+
+    // ── file-tree transitions (#667) ───────────────────────────────────────
+    //
+    // Pure on purpose. The walk happens in `FileTreeLoader` behind the Domain
+    // `IDirectoryLister` port; what lands here is a RESULT, addressed to the
+    // directory it was produced for. The staleness guard below is the reducer's
+    // contribution to the design: a load that finishes after the user has
+    // already navigated must not repaint the tree, and "has the user navigated"
+    // is exactly the kind of question only the state can answer.
+
+    /// <summary>
+    ///     Store a file-tree snapshot (#667), dropping any result whose directory
+    ///     the panel is no longer pointed at.
+    /// </summary>
+    /// <param name="state">Current snapshot.</param>
+    /// <param name="id">The panel id owning the listing.</param>
+    /// <param name="snapshot">The snapshot to store.</param>
+    /// <remarks>
+    ///     The guard is not a micro-optimisation, it is the last line of defence
+    ///     against a torn frame. The loader also checks, on its side, that it is
+    ///     still the owner of the in-flight walk — but the loader is a
+    ///     Presentation service outside the state machine and could be replaced,
+    ///     re-implemented or bypassed. This check lives where the truth does.
+    /// </remarks>
+    public static UiState SetFileTree(UiState state, string id, FileTreeSnapshot snapshot)
+    {
+        if (string.IsNullOrEmpty(id) || snapshot is null)
+            return state;
+
+        // A message carrying the empty "means CWD" marker has not been resolved
+        // by its sender, and resolving it here would make the reducer's answer
+        // depend on the process CWD — a fact the message itself does not carry.
+        if (string.IsNullOrEmpty(snapshot.Directory))
+            return state;
+
+        var ui = state.Ui;
+        if (!string.Equals(ui.ResolvePanelDirectory(id), snapshot.Directory, StringComparison.Ordinal))
+            return state;
+
+        if (ui.FileTrees.TryGetValue(id, out FileTreeSnapshot current) && current == snapshot)
+            return state;
+
+        return state with { Ui = ui with { FileTrees = ui.FileTrees.SetItem(id, snapshot) } };
+    }
+
+    /// <summary>
+    ///     Drop the file-tree listing for <paramref name="id" /> so the next
+    ///     demand re-loads it (#667) - the <c>r</c> key.
+    /// </summary>
+    /// <param name="state">Current snapshot.</param>
+    /// <param name="id">The panel id owning the listing.</param>
+    public static UiState InvalidateFileTree(UiState state, string id)
+    {
+        if (string.IsNullOrEmpty(id))
+            return state;
+        var ui = state.Ui;
+        if (!ui.FileTrees.ContainsKey(id))
+            return state;
+
+        // SetItem with FileTreeSnapshot.None rather than Remove: the panel's
+        // demand check asks "is there a snapshot for my directory", and a MISSING
+        // key and a present-but-empty snapshot are the same answer there. Keeping
+        // the key means the invalidation is observable as a state change
+        // (a revision bump, a repaint) instead of a no-op the store would drop.
+        return state with
+        {
+            Ui = ui with { FileTrees = ui.FileTrees.SetItem(id, FileTreeSnapshot.None) }
         };
     }
 
