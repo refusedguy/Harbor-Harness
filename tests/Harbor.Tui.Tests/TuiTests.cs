@@ -141,6 +141,7 @@ public class StatusBarViewModelTests
                 "s1", new SessionMetadata(0.01m * turn, RequestTokens * turn, 500, 0, 0, 0, turn, null)));
 
             // Occupancy is the request just sent, never the cumulative total.
+            await Assert.That(vm.RequestTokens).IsEqualTo(RequestTokens);
             await Assert.That(vm.ContextPct).IsEqualTo(ContextUsage.PercentUsed(RequestTokens, Window));
         }
 
