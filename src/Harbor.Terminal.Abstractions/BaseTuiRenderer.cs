@@ -103,7 +103,15 @@ public abstract class BaseTuiRenderer : ITuiRenderer
             setup();
             RegisterBuiltinViews();
             BindViewModelsToViews();
+
+            // #490: freeze BOTH registries here — RenderAsync fans out to every
+            // view model and every view for every AgentEvent, and the frozen
+            // snapshot turns each fan-out lookup into a lock-free field read
+            // instead of a lock + ToList(). Both registries accept late
+            // Register() calls and drop the snapshot when it happens, so a
+            // plugin that registers afterwards still works (just unfrozen).
             Views.Freeze();
+            ViewModels.Freeze();
             return Task.FromResult(Result.Success());
         }
         catch (Exception ex)
