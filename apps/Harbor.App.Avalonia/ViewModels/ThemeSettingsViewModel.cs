@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
-using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.App.Avalonia.Themes;
 using Harbor.Ui.Framework.Services;
 namespace Harbor.App.Avalonia.ViewModels;
 /// <summary>
@@ -21,9 +21,14 @@ namespace Harbor.App.Avalonia.ViewModels;
 ///         data binding (<c>{Binding ThemeSettings.Theme}</c>).
 ///     </para>
 ///     <para>
-///         <see cref="AvailableThemes"/> exposes the five built-in HDS palettes
-///         with hard-coded preview colors so the Settings UI can render
-///         live thumbnails without loading XAML dictionaries.
+///         <see cref="AvailableThemes"/> projects the HDS palettes that
+///         <see cref="HdsThemeCatalog" /> reads from
+///         <c>Themes/Hds/*.axaml</c>. This view-model holds no colour and no
+///         light/dark list: a preview's brushes and its
+///         <c>ThemeVariant</c> come from the palette dictionary, so a re-tuned
+///         palette cannot leave a stale copy behind here (#673 — the previous
+///         hand-copied <c>Color.Parse</c> table and "which palettes are dark"
+///         array were exactly that second source of truth).
 ///     </para>
 /// </remarks>
 public sealed partial class ThemeSettingsViewModel : ObservableObject
@@ -32,30 +37,10 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
     private readonly IThemeApplier _themeApplier;
 
     /// <summary>
-    ///     Mini preview model for one HDS palette. Exposes static brushes
-    ///     so the Settings thumbnail can bind Background / Foreground /
-    ///     Accent directly.
+    ///     The HDS palettes available for preview, one entry per palette
+    ///     dictionary — brushes and variant read from the dictionary itself.
     /// </summary>
-    public sealed class ThemePreviewModel
-    {
-        public string Name { get; }
-        public string DisplayName { get; }
-        public IBrush SurfaceBrush { get; }
-        public IBrush AccentBrush { get; }
-        public IBrush TextBrush { get; }
-
-        public ThemePreviewModel(string name, string displayName, IBrush surfaceBrush, IBrush accentBrush, IBrush textBrush)
-        {
-            Name = name;
-            DisplayName = displayName;
-            SurfaceBrush = surfaceBrush;
-            AccentBrush = accentBrush;
-            TextBrush = textBrush;
-        }
-    }
-
-    /// <summary>Five built-in HDS palettes available for preview.</summary>
-    public ObservableCollection<ThemePreviewModel> AvailableThemes { get; } = new();
+    public ObservableCollection<HdsThemePreview> AvailableThemes { get; }
 
     /// <summary>
     ///     True when the resolved (applied) theme is dark. Updated by
@@ -81,30 +66,10 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
         _themeReader = themeReader;
         _themeApplier = themeApplier;
 
-        AvailableThemes.Add(new ThemePreviewModel("CatppuccinMocha", "Catppuccin Mocha",
-            new SolidColorBrush(Color.Parse("#1E1E2E")),
-            new SolidColorBrush(Color.Parse("#89B4FA")),
-            new SolidColorBrush(Color.Parse("#CDD6F4"))));
-
-        AvailableThemes.Add(new ThemePreviewModel("Lumen", "Lumen",
-            new SolidColorBrush(Color.Parse("#FFFDF7")),
-            new SolidColorBrush(Color.Parse("#D4A373")),
-            new SolidColorBrush(Color.Parse("#2B2B2B"))));
-
-        AvailableThemes.Add(new ThemePreviewModel("Mono", "Mono",
-            new SolidColorBrush(Color.Parse("#0A0A0A")),
-            new SolidColorBrush(Color.Parse("#888888")),
-            new SolidColorBrush(Color.Parse("#E5E5E5"))));
-
-        AvailableThemes.Add(new ThemePreviewModel("Paper", "Paper",
-            new SolidColorBrush(Color.Parse("#FCFCFA")),
-            new SolidColorBrush(Color.Parse("#4A6CF7")),
-            new SolidColorBrush(Color.Parse("#2B2B2B"))));
-
-        AvailableThemes.Add(new ThemePreviewModel("Vapor", "Vapor",
-            new SolidColorBrush(Color.Parse("#0D002B")),
-            new SolidColorBrush(Color.Parse("#8B5CF7")),
-            new SolidColorBrush(Color.Parse("#E8E8FF"))));
+        // Snapshotted once per dialog opening: the catalog reads the palette
+        // dictionaries, so the collection is a snapshot of "what the themes
+        // declare right now", not a live view of them.
+        AvailableThemes = new ObservableCollection<HdsThemePreview>(HdsThemeCatalog.Previews);
     }
 
     /// <summary>
@@ -128,9 +93,19 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
     private void ApplyHdsTheme(string themeName)
     {
         _themeApplier.ApplyHds(themeName);
-        bool isDark = themeName is "CatppuccinMocha" or "Mono" or "Vapor";
-        _themeApplier.SetThemeVariant(isDark);
-        IsDarkTheme = isDark;
+
+        // The palette answers "am I dark?" — it declares the ThemeVariant it was
+        // designed for. An unknown name leaves the variant alone rather than
+        // guessing light, which is what the old hand-written array did for every
+        // palette it had not been updated for (#673).
+        HdsThemePreview? preview = HdsThemeCatalog.Find(themeName);
+        if (preview is null)
+        {
+            return;
+        }
+
+        _themeApplier.SetThemeVariant(preview.IsDark);
+        IsDarkTheme = preview.IsDark;
     }
 
     /// <summary>

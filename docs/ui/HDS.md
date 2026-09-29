@@ -53,6 +53,34 @@ Reason: dual ownership between C# and XAML causes sync drift, memory leaks on
 theme switch (C# brush is not subscribed to theme-change), and AOT breaks
 (XamlX IL vs reflection `GetValue` from `ResourceProvider`).
 
+Enforced by `ThemeTokenDuplicationGuardTests`: a hex value declared anywhere under
+`Themes/` must not be typed again in `apps/Harbor.App.Avalonia/**/*.cs`, and a
+stricter ratchet test rejects *any* colour literal in that C# tree. `HdsThemeCatalog`
+stays on the right side of this rule — it is an index that **reads** the dictionaries
+via `ResourceInclude`, not a second declaration of their values.
+
+## Palette index — `HdsThemeCatalog`
+
+`apps/Harbor.App.Avalonia/Themes/HdsThemeCatalog.cs` lists the palette names and
+resolves each one's preview (`AppBackgroundBrush` / `AccentBrush` / `TextBrush` plus
+its variant) out of the dictionary itself. Settings binds the result through
+`ThemeSettingsViewModel.AvailableThemes`; it holds no colour of its own.
+
+Each palette declares which `ThemeVariant` it is designed for:
+
+```xml
+<x:String x:Key="HdsThemeVariant">Dark</x:String>
+```
+
+so the light/dark answer belongs to the palette rather than to a hand-written array
+in the view-model. `HdsThemeCatalogParityTests` pins the name list to the folder
+(a palette file is a dictionary merging `BaseTokens.axaml` — the same derivation
+`ThemeParityTests` uses) and asserts every palette declares a real `ThemeVariant`.
+
+`HdsThemeCatalog.PaletteNames` is a list rather than a directory scan because a
+compiled Avalonia app embeds no XAML source and `avares://` cannot be enumerated —
+which is exactly why the parity test has to exist.
+
 ## AutomationId naming convention
 
 Every interactive element uses `Zone_Element` naming:

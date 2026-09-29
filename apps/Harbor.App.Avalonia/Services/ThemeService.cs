@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Styling;
 using Harbor.App.Avalonia.Configuration;
+using Harbor.App.Avalonia.Themes;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.Services;
@@ -14,7 +15,6 @@ namespace Harbor.App.Avalonia.Services;
 /// </summary>
 public sealed class ThemeService : IThemeService
 {
-    private const string HdsThemePrefix = "avares://Harbor.App.Avalonia/Themes/Hds/";
     private const string DefaultHdsTheme = "CatppuccinMocha.axaml";
 
     private readonly ILogger<ThemeService> _logger;
@@ -56,10 +56,11 @@ public sealed class ThemeService : IThemeService
             return;
         }
 
-        string source = $"{HdsThemePrefix}{normalized}.axaml";
-        merged[hdsSlot] = new ResourceInclude(new Uri("avares://Harbor.App.Avalonia/", UriKind.Absolute))
+        // URI shape is owned by the palette index, so the theme that gets applied
+        // and the preview that described it are built from one place (#673).
+        merged[hdsSlot] = new ResourceInclude(HdsThemeCatalog.BaseUri)
         {
-            Source = new Uri(source, UriKind.Absolute)
+            Source = HdsThemeCatalog.PaletteUri(normalized)
         };
         _logger.LogInformation("HDS theme switched to {Theme}", normalized);
     }
