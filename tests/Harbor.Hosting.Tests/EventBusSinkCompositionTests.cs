@@ -9,7 +9,10 @@
 // What this pins:
 //   * the shipped presets are measured, not estimated (printed per row);
 //   * a mandatory sink keeps the bus off the fast path, whatever the capacity;
-//   * scrollback capacity alone is enough to disqualify a bus;
+//   * scrollback capacity alone does NOT disqualify a bus — an unread ring is a
+//     potential, not an obligation (#518). Combined with #478, which left the
+//     shipped presets with no sinks at all, that is why BOTH the CLI and the
+//     desktop rows below now qualify in full;
 //   * FastPathCount + PublishedCount is the total publish count in every case,
 //     so the fast path never hides publishes from the queue-age envelope.
 
@@ -54,13 +57,23 @@ public class EventBusSinkCompositionTests
     /// <summary>
     ///     The CLI preset exactly as <c>HostBuilder.CliOptions</c> builds it:
     ///     1000-slot scrollback and <b>no middleware</b> (#478 removed the
-    ///     typeless <c>TypeFilterMiddleware</c> that used to sit here). Retention
-    ///     capacity alone keeps the fast path out of reach, and the mandatory-sink
-    ///     term is gone — which is the honest outcome: that sink was mandatory in
-    ///     name only, admitting every event it was supposed to police.
+    ///     typeless <c>TypeFilterMiddleware</c> that used to sit here).
     /// </summary>
+    /// <remarks>
+    ///     This row is where #478 and #518 meet. #478 took away the preset's
+    ///     mandatory-sink blocker — the filter was mandatory in name only,
+    ///     admitting every event it was supposed to police — which left the
+    ///     1000-slot scrollback as the <em>only</em> reason the CLI bus could not
+    ///     take the fast path. #518 then removed that reason too: capacity alone
+    ///     is a potential, not an obligation, and an unread ring is not
+    ///     maintained. So the CLI preset, which measured 0/200 under either
+    ///     change on its own, now measures 200/200 under both. It is structurally
+    ///     the desktop preset now — no sinks, unread retention — and the two rows
+    ///     below are asserted separately precisely so a future re-divergence is
+    ///     visible rather than averaged away.
+    /// </remarks>
     [Test]
-    public async Task CliPreset_ZeroSubscribers_DoesNotQualify()
+    public async Task CliPreset_ZeroSubscribers_Qualifies()
     {
         var (fast, slow, bus) = await MeasureAsync(new HarborComposeOptions
         {
@@ -75,21 +88,28 @@ public class EventBusSinkCompositionTests
             .Because(
                 "#478: the CLI registers no sink. The TypeFilterMiddleware it used to register was declared "
                 + "Mandatory while admitting every event, so it disqualified the fast path for nothing.");
-        await Assert.That(bus.FastPathEligible).IsFalse();
-        await Assert.That(fast).IsEqualTo(0)
-            .Because("1000 scrollback slots alone disqualify the fast path; a mandatory sink is no longer part of the reason");
-        await Assert.That(slow).IsEqualTo(Publishes);
+        await Assert.That(bus.FastPathEligible).IsTrue()
+            .Because("no mandatory sink (#478) and an unread ring (#518) — the two terms are both clear");
+        await Assert.That(fast).IsEqualTo(Publishes)
+            .Because(
+                "with no sink left, 1000 unread scrollback slots are the only cost this preset used to pay, "
+                + "and #518 removed it");
+        await Assert.That(slow).IsEqualTo(0);
     }
 
     /// <summary>
-    ///     The desktop preset (<c>DesktopDefault</c>): no sinks at all, but no
-    ///     scrollback override either, so the bus falls back to the library
-    ///     default capacity and the fast path stays out of reach. Measured, so a
-    ///     future capacity change shows up as a changed number rather than as a
-    ///     silent topology change nobody reviewed.
+    ///     The desktop preset (<c>DesktopDefault</c>), and the row #518 exists for:
+    ///     no sinks at all and the default scrollback capacity. Before #518 this
+    ///     measured 0/200 — the 1000-slot ring was written on every publish,
+    ///     read by no one, and its mere existence was the sole reason the fast
+    ///     path was unreachable in the shipped desktop composition. Capacity is
+    ///     now a potential rather than an obligation (retention is armed by the
+    ///     first <c>GetScrollback</c>), so this row is the regression: measured,
+    ///     so a future capacity or sink change shows up as a changed number
+    ///     rather than as a silent topology change nobody reviewed.
     /// </summary>
     [Test]
-    public async Task DesktopPreset_ZeroSubscribers_DoesNotQualify()
+    public async Task DesktopPreset_ZeroSubscribers_Qualifies()
     {
         var (fast, slow, bus) = await MeasureAsync(new HarborComposeOptions
         {
@@ -100,9 +120,11 @@ public class EventBusSinkCompositionTests
         Console.WriteLine($"eventbus-s3-fraction: desktop-preset fast={fast} slow={slow} → {fast / (double)Publishes:P2} qualify");
 
         await Assert.That(bus.HasMandatorySink).IsFalse();
-        await Assert.That(fast).IsEqualTo(0)
-            .Because("the desktop preset keeps the default scrollback capacity, which alone disqualifies the fast path");
-        await Assert.That(slow).IsEqualTo(Publishes);
+        await Assert.That(bus.FastPathEligible).IsTrue()
+            .Because("no mandatory sink, and the ring is unarmed until somebody reads it (#518)");
+        await Assert.That(fast).IsEqualTo(Publishes)
+            .Because("zero subscribers + no mandatory sink + no reader is the complete list of reasons a publish can be unobservable");
+        await Assert.That(slow).IsEqualTo(0);
     }
 
     /// <summary>
