@@ -27,15 +27,56 @@ public class ThemeParityTests
     private static readonly string HdsThemesDir = Path.Combine(
         FindRepoRoot(), "apps", "Harbor.App.Avalonia", "Themes", "Hds");
 
-    private static readonly string[] ThemeFiles =
+    /// <summary>Shared structural base every HDS theme layers its palette on top of.</summary>
+    private const string BaseDictionary = "BaseTokens.axaml";
+
+    /// <summary>
+    ///     Every HDS theme file, discovered from the directory (#581) — never a
+    ///     hand-listed set.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The list used to be a literal array of six names, and it had already
+    ///         drifted: it is a hand-maintained copy of "which files in
+    ///         <c>Themes/Hds/</c> are themes", and nothing tied the two together. A theme
+    ///         file added without an array edit would never be parity-checked.
+    ///     </para>
+    ///     <para>
+    ///         The predicate is the design system's own definition, stated in
+    ///         <c>BaseTokens.axaml</c>: structural tokens live there, and
+    ///         <em>"colors and brushes … live in the theme files that merge this
+    ///         base"</em>. So a theme is a dictionary that merges
+    ///         <see cref="BaseDictionary" />; the structural dictionaries
+    ///         (<c>BaseTokens</c> itself, <c>Elevation</c> which it merges,
+    ///         <c>Typography</c> which is a <c>&lt;Styles/&gt;</c> root, and
+    ///         <c>Icons</c> which is geometry) do not and are correctly excluded. The
+    ///         set is derived per file, so adding a theme is one declaration: drop the
+    ///         .axaml in the folder and it is covered.
+    ///     </para>
+    /// </remarks>
+    private static IReadOnlyList<string> ThemeFiles =>
+        Directory.EnumerateFiles(HdsThemesDir, "*.axaml")
+            .Where(IsPalette)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>
+    ///     Whether <paramref name="path" /> is a palette dictionary: a
+    ///     <c>&lt;ResourceDictionary&gt;</c> that merges the shared structural base.
+    /// </summary>
+    private static bool IsPalette(string path)
     {
-        "CatppuccinMocha.axaml",
-        "Vapor.axaml",
-        "Mono.axaml",
-        "Paper.axaml",
-        "Lumen.axaml",
-        "HarborDesignTokens.axaml"
-    };
+        var doc = XDocument.Load(path);
+        if (doc.Root?.Name.LocalName != "ResourceDictionary")
+        {
+            return false; // Typography.axaml is a <Styles/> root — classes, not tokens.
+        }
+
+        return doc.Descendants()
+            .Where(e => e.Name.LocalName == "ResourceInclude")
+            .Select(e => (string?)e.Attribute("Source") ?? string.Empty)
+            .Any(src => src.EndsWith(BaseDictionary, StringComparison.Ordinal));
+    }
 
     [Test]
     public async Task All_Hds_Themes_Have_Same_Key_Set_As_CatppuccinMocha()
@@ -43,14 +84,13 @@ public class ThemeParityTests
         var baseline = ExtractKeys(Path.Combine(HdsThemesDir, "CatppuccinMocha.axaml"));
         await Assert.That(baseline.Count > 0).IsTrue();
 
-        foreach (var theme in ThemeFiles)
-        {
-            var path = Path.Combine(HdsThemesDir, theme);
-            if (!File.Exists(path))
-            {
-                throw new FileNotFoundException($"Theme file not found: {path}");
-            }
+        // Non-trivial by construction: a single discovered file would make the
+        // comparison below vacuously true.
+        IReadOnlyList<string> themes = ThemeFiles;
+        await Assert.That(themes.Count).IsGreaterThan(1);
 
+        foreach (var path in themes)
+        {
             var keys = ExtractKeys(path);
             var missing = baseline.Except(keys).ToArray();
             var extra = keys.Except(baseline).ToArray();
@@ -58,6 +98,17 @@ public class ThemeParityTests
             await Assert.That(missing.Length).IsEqualTo(0);
             await Assert.That(extra.Length).IsEqualTo(0);
         }
+    }
+
+    /// <summary>
+    ///     The parity baseline itself is one of the discovered themes, so the suite
+    ///     cannot pass by classifying every file out.
+    /// </summary>
+    [Test]
+    public async Task Baseline_IsPartOfTheDiscoveredThemeSet()
+    {
+        await Assert.That(ThemeFiles.Any(t =>
+            string.Equals(Path.GetFileName(t), "CatppuccinMocha.axaml", StringComparison.Ordinal))).IsTrue();
     }
 
     [Test]

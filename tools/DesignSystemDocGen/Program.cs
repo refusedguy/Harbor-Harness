@@ -28,7 +28,12 @@ if (mode is "examples" or "all")
 {
     string outDir = Path.Combine(repoRoot, "docs", "themes");
     Directory.CreateDirectory(outDir);
-    foreach (var theme in new[] { HarborTheme.HarborDark, HarborTheme.HarborLight, HarborTheme.HarborWarm })
+    // #581: the example set is HarborTheme.BuiltIn — the same declaration the theme
+    // switcher and ThemeSettingsViewModel read. This used to be a copied
+    // `{HarborDark, HarborLight, HarborWarm}` literal that had already fallen behind:
+    // `harbor-cool` ships in BuiltIn but was never emitted here, so docs/themes/ was
+    // missing a theme the product offers. A new theme is now one declaration.
+    foreach (var theme in HarborTheme.BuiltIn)
     {
         string path = Path.Combine(outDir, theme.Name + ".json");
         File.WriteAllText(path, ThemeJson.Write(theme));

@@ -322,7 +322,31 @@ public sealed class RedisSessionStore : ISessionStore
 ```
 
 Register an `ISessionStoreFactory` in `SessionStoreRegistry` (`src/Harbor.Hosting/Modules/SessionStoreRegistry.cs`) —
-the `HARBOR_STORAGE` env var (`jsonl` / `memory` / `sqlite`) selects the backend (unknown ids fail fast).
+the `HARBOR_STORAGE` env var selects the backend (unknown ids fail fast, and the error names every
+registered id because that list is derived from the registry rather than a second literal).
+
+```csharp
+// src/Harbor.Hosting/Modules/SessionStoreRegistry.cs
+public sealed class RedisSessionStoreFactory : ISessionStoreFactory
+{
+    public string BackendId => "redis";
+
+    public ISessionStore Create(IServiceProvider sp, string sessionsDir, string sqlitePath) =>
+        new RedisSessionStore(sp.GetRequiredService<IConnectionMultiplexer>());
+}
+
+// …and one line in SessionStoreRegistry.Build()'s array. That array is the ONLY
+// declaration: the "Expected one of: …" error text and the /storage output both
+// derive from it (#581).
+```
+
+`ISessionStoreFactory` is `public` since #581, so a host that composes Harbor itself (rather than
+forking `Harbor.Hosting`) can implement and register a backend out-of-tree. The same door exists
+for renderers: `ITuiRendererFactory` is public, and a plugin/host may add a TUI backend through
+`IPluginLoadHost.RegisterTuiBackend` / `RegisterSessionStore` (`src/Harbor.Plugins.Abstractions/`) —
+the host folds the contribution into the same `SessionStoreRegistry` / `TuiBackendRegistry` the
+compiled-in backends live in, so a contributed backend is selectable via `HARBOR_STORAGE` /
+`HARBOR_TUI` and appears in `/renderer` without a second registration list.
 
 ---
 
@@ -339,6 +363,12 @@ export HARBOR_TUI=cellforge # second in-process interactive shell (raw mode, cel
 
 > `HARBOR_MINIMAL=true` / `-p:HarborWithSpectreTui=false` excludes the contrib
 > renderers from the CLI build; unsupported ids then fall back to `plain`.
+
+`/renderer` (no argument) lists exactly the backends this build compiled in, and
+`/renderer <id>` swaps to one of them. Both read the same `TuiBackendRegistry` —
+the swap table is derived from the startup registry, so the list can no longer
+under-report what is running in the process (#584). Adding a backend is one
+factory class plus one array entry; nothing else to keep in sync.
 
 ### 19. Add a TUI view model with MVVM
 

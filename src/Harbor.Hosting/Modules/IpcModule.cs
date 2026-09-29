@@ -29,8 +29,11 @@ internal static class IpcModule
         FrozenDictionary<string, IHarborModeStrategy> registry = HarborModeRegistry.Build();
         if (!HarborModeRegistry.TryResolve(registry, mode, out IHarborModeStrategy? strategy) || strategy is null)
         {
+            // #581: derived from the registry the resolution actually used — this used to be
+            // a hand-written `HarborModeRegistry.KnownIds` string that no test compared to
+            // the strategy array, so a new mode could ship while the error text denied it.
             throw new ArgumentException(
-                $"Unknown HARBOR_MODE: '{mode}'. Expected one of: {HarborModeRegistry.KnownIds}.");
+                $"Unknown HARBOR_MODE: '{mode}'. Expected one of: {string.Join(", ", registry.Keys.Order(StringComparer.Ordinal))}.");
         }
 
         strategy.Apply(new HarborModeContext(services, ctx, pipeName));

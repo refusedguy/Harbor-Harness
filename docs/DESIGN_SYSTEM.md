@@ -7,7 +7,7 @@ WPF/MAUI/Blazor clients. One design system, every renderer.
 - Package: `Harbor.DesignSystem` — zero dependencies, MIT, AOT-clean.
 - API reference: [DESIGN_SYSTEM_API.md](DESIGN_SYSTEM_API.md) (generated from XML doc comments — do not edit).
 - Theme JSON schema: [schemas/harbor-theme.schema.json](schemas/harbor-theme.schema.json).
-- Example themes: [themes/harbor-dark.json](themes/harbor-dark.json), [themes/harbor-light.json](themes/harbor-light.json), [themes/harbor-warm.json](themes/harbor-warm.json).
+- Example themes (one file per `HarborTheme.BuiltIn` entry, emitted by `DesignSystemDocGen`): [themes/harbor-dark.json](themes/harbor-dark.json), [themes/harbor-light.json](themes/harbor-light.json), [themes/harbor-warm.json](themes/harbor-warm.json), [themes/harbor-cool.json](themes/harbor-cool.json).
 
 > Compat note: the color/cell primitives (`RgbColor`, `PackedColor`, `CellStyle`,
 > `StyleAttr`, `ChatPalette`) keep their historical `Harbor.Ui.Framework.*`

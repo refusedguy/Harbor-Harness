@@ -4,8 +4,10 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
+using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Plugins;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Configuration;
@@ -222,12 +224,17 @@ public sealed class CsPluginLoaderTests
         private readonly ConcurrentDictionary<AgentName, AgentDefinition> _agents = new();
         private readonly List<IPanelProvider> _panelProviders = new();
         private readonly ConcurrentDictionary<ProviderId, Func<ILlmClient>> _providers = new();
+        private readonly ConcurrentDictionary<string, Func<ISessionStore>> _sessionStores = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, ITool> _tools = new();
+        private readonly ConcurrentDictionary<string, (IReadOnlyList<string>? Aliases, Func<ITuiRenderer> Factory)> _tuiBackends =
+            new(StringComparer.OrdinalIgnoreCase);
         private readonly List<ITuiPlugin> _tuiPlugins = new();
 
         public IReadOnlyList<ITool> RegisteredTools => _tools.Values.ToArray();
         public IReadOnlyList<ProviderId> RegisteredProviderIds => _providers.Keys.ToArray();
         public IReadOnlyList<AgentDefinition> RegisteredAgents => _agents.Values.ToArray();
+        public IReadOnlyList<string> RegisteredSessionStores => _sessionStores.Keys.ToArray();
+        public IReadOnlyList<string> RegisteredTuiBackends => _tuiBackends.Keys.ToArray();
         public IReadOnlyList<ITuiPlugin> RegisteredTuiPlugins
         {
             get
@@ -270,6 +277,16 @@ public sealed class CsPluginLoaderTests
                 ? Result.Success()
                 : Result.Failure($"Agent '{agent.Name}' already registered.");
         }
+
+        public Result RegisterSessionStore(string backendId, Func<ISessionStore> factory) =>
+            _sessionStores.TryAdd(backendId, factory)
+                ? Result.Success()
+                : Result.Failure($"Session store '{backendId}' already registered.");
+
+        public Result RegisterTuiBackend(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory) =>
+            _tuiBackends.TryAdd(backendId, (aliases, factory))
+                ? Result.Success()
+                : Result.Failure($"TUI backend '{backendId}' already registered.");
 
         public Result RegisterTuiPlugin(ITuiPlugin plugin)
         {

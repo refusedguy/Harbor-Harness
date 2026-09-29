@@ -30,15 +30,23 @@ internal static class TuiModule
         string envTui = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
         string requested = string.IsNullOrWhiteSpace(envTui) ? defaultTui : envTui.Trim();
 
-        FrozenDictionary<string, ITuiRendererFactory> registry = TuiBackendRegistry.Build();
+        // #581: `Build` merges the plugin-contributed backends (#581's new
+        // `IPluginLoadHost.RegisterTuiBackend` door) into the compiled-in set, so a
+        // plugin backend and a compiled-in backend are one namespace with one
+        // fallback rule — and the swap table below picks up both.
+        FrozenDictionary<string, ITuiRendererFactory> registry =
+            TuiBackendRegistry.Build(ctx.Registries.TuiBackends);
         ITuiRendererFactory backend = TuiBackendRegistry.Resolve(registry, requested);
         string tui = backend.BackendId; // canonical id, aliases normalized for logging
         if (!registry.ContainsKey(requested.Trim()))
         {
+            // #581: the "available" set is `registry.Keys` — the same source the
+            // swap table and the resolution above read. There is no second list.
             ctx.Logger.LogWarning(
-                "Unknown HARBOR_TUI '{Requested}'; falling back to '{Fallback}' (the single fallback rule)",
+                "Unknown HARBOR_TUI '{Requested}'; falling back to '{Fallback}' (the single fallback rule). Available: {Available}",
                 requested,
-                tui);
+                tui,
+                string.Join(", ", registry.Keys.Order(StringComparer.Ordinal)));
         }
 #if HARBOR_WITH_SPECTRE_TUI
         ctx.Logger.LogInformation("TUI renderer: {Tui}", tui);
@@ -70,20 +78,25 @@ internal static class TuiModule
                 sp.GetRequiredService<UiStore>(),
                 sp.GetRequiredService<ILogger<RendererPipeline>>());
 
-            pipeline.Register("cellforge", () => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
-                sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>(),
-                store: sp.GetRequiredService<UiStore>(),
-                // #470: typed panel dependencies, resolved once here.
-                panelServices: Harbor.Ui.Framework.Panels.PanelServices.FromContainer(sp)));
-            pipeline.Register("ansi", () => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(
-                sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>(),
-                store: sp.GetRequiredService<UiStore>()));
-            pipeline.Register("plain", () => new Harbor.Tui.AnsiPlain.PlainTuiRenderer(
-                store: sp.GetRequiredService<UiStore>()));
-#if HARBOR_WITH_NICK_CONSOLE_EX
-            pipeline.Register("nickconsoleex", () => new Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer(
-                sp.GetRequiredService<ILogger<Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer>>()));
-#endif
+            // #584: the swap table is derived from the same registry the startup
+            // backend was picked from — the `registry` built once above, captured here.
+            // This used to be a second hand-written list of `pipeline.Register(id, …)`
+            // calls that had fallen six backends behind, so `/renderer` reported three
+            // available backends while six more were running in the same process. It
+            // was also a second place to keep a backend's CONSTRUCTION details in sync:
+            // #470's `panelServices:` on the cellforge entry had to be duplicated there
+            // or the swap target silently lost its panel dependencies.
+            //
+            // The `#if` guards live on the array in TuiBackendRegistry, so they are
+            // inherited here for free; `Register` replaces by id, so the loop is
+            // idempotent, and every factory takes `sp` — the same provider this
+            // lambda already resolves the shared `UiStore` from.
+            foreach (KeyValuePair<string, ITuiRendererFactory> entry in registry)
+            {
+                ITuiRendererFactory factory = entry.Value;
+                pipeline.Register(entry.Key, () => factory.Create(sp));
+            }
+
             return pipeline;
         });
 

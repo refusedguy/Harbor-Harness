@@ -7,13 +7,20 @@ namespace Harbor.Hosting;
 // dispatch moved out of IpcModule into one strategy per mode, resolved
 // via a FrozenDictionary. Unknown modes keep failing fast with the same
 // ArgumentException as before.
+//
+// Issue #581 — `IHarborModeStrategy` was `internal` (less accessible than
+// the wiring it applies), and this registry carried a second hand-written copy
+// of its own key set (`internal const string KnownIds`) that nothing compared
+// to `Build().Keys`. The strategy, its context and the registry are public, and
+// the id list the error message prints is derived from the built dictionary at
+// the call site (`IpcModule`). The array below is the only declaration.
 
 /// <summary>
 ///     Wiring context for one <c>HARBOR_MODE</c> strategy: the service
 ///     collection under construction, the shared composition context,
 ///     and the pipe name from <c>HARBOR_IPC_PIPE</c>.
 /// </summary>
-internal sealed record HarborModeContext(
+public sealed record HarborModeContext(
     IServiceCollection Services,
     HarborCompositionContext Context,
     string PipeName);
@@ -21,7 +28,7 @@ internal sealed record HarborModeContext(
 /// <summary>
 ///     Wiring strategy for one <c>HARBOR_MODE</c> id.
 /// </summary>
-internal interface IHarborModeStrategy
+public interface IHarborModeStrategy
 {
     /// <summary>Canonical mode id (lowercase), as spelled in <c>HARBOR_MODE</c>.</summary>
     string ModeId { get; }
@@ -66,13 +73,10 @@ internal sealed class IpcClientHarborModeStrategy : IHarborModeStrategy
 ///     strategies. A new mode = a new strategy class + one list entry —
 ///     the unknown-id failure stays in one place.
 /// </summary>
-internal static class HarborModeRegistry
+public static class HarborModeRegistry
 {
-    /// <summary>Known mode ids, in registration order — kept next to the strategy set so error text cannot drift.</summary>
-    internal const string KnownIds = "inprocess, ipc-server, ipc-client";
-
     /// <summary>Build the id → strategy index.</summary>
-    internal static FrozenDictionary<string, IHarborModeStrategy> Build()
+    public static FrozenDictionary<string, IHarborModeStrategy> Build()
     {
         IHarborModeStrategy[] strategies =
         [
@@ -88,7 +92,7 @@ internal static class HarborModeRegistry
     ///     (trim + case-insensitive). Returns <c>false</c> for unknown
     ///     modes — the caller throws the documented ArgumentException.
     /// </summary>
-    internal static bool TryResolve(
+    public static bool TryResolve(
         FrozenDictionary<string, IHarborModeStrategy> registry,
         string rawMode,
         out IHarborModeStrategy? strategy)

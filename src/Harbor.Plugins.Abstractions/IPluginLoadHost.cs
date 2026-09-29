@@ -2,7 +2,9 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
+using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Plugins;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Configuration;
@@ -96,4 +98,40 @@ public interface IPluginLoadHost
     /// <param name="panel">The panel provider to register.</param>
     /// <returns>Success, or failure with an error message (e.g. empty id, name collision).</returns>
     public Result RegisterPanelProvider(IPanelProvider panel);
+
+    /// <summary>
+    ///     Register a session-store backend under <paramref name="backendId" />, so it
+    ///     becomes selectable via <c>HARBOR_STORAGE</c> (#581).
+    /// </summary>
+    /// <remarks>
+    ///     This is the storage half of the axis that was sealed: a plugin could add a
+    ///     tool, a provider, an agent, a TUI plugin and a panel, but not a store —
+    ///     because the extension interface was <c>internal</c> and this method did not
+    ///     exist. <paramref name="factory" /> is invoked lazily, when the store is first
+    ///     resolved; register it before the host's service provider is built. A
+    ///     <paramref name="backendId" /> that collides with a compiled-in backend wins —
+    ///     that is the point of the door.
+    /// </remarks>
+    /// <param name="backendId">Backend id, as spelled in <c>HARBOR_STORAGE</c>.</param>
+    /// <param name="factory">Constructs the store.</param>
+    /// <returns>Success, or failure with an error message (e.g. empty id).</returns>
+    public Result RegisterSessionStore(string backendId, Func<ISessionStore> factory);
+
+    /// <summary>
+    ///     Register a TUI renderer backend under <paramref name="backendId" />, so it
+    ///     becomes selectable via <c>HARBOR_TUI</c> and swappable via <c>/renderer</c>
+    ///     (#581/#584).
+    /// </summary>
+    /// <remarks>
+    ///     The mirror of <see cref="RegisterSessionStore" /> for the renderer axis. The
+    ///     host folds the backend into the same registry the compiled-in backends live
+    ///     in, so <c>/renderer</c> lists it and a runtime swap can target it — there is
+    ///     no second list a plugin backend could be forgotten from. A
+    ///     <paramref name="backendId" /> that collides with a compiled-in backend wins.
+    /// </remarks>
+    /// <param name="backendId">Backend id, as spelled in <c>HARBOR_TUI</c>.</param>
+    /// <param name="aliases">Optional legacy spellings resolved to <paramref name="backendId" />.</param>
+    /// <param name="factory">Constructs the renderer; invoked when the backend is selected or swapped to.</param>
+    /// <returns>Success, or failure with an error message (e.g. empty id).</returns>
+    public Result RegisterTuiBackend(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory);
 }

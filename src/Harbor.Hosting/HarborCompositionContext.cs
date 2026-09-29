@@ -55,6 +55,33 @@ public sealed class HarborRegistries
     public ProviderRegistry Providers { get; internal set; } = null!;
     public PanelRegistry Panels { get; internal set; } = null!;
 
+    /// <summary>
+    ///     Session-store backends a plugin registered through
+    ///     <c>IPluginLoadHost.RegisterSessionStore</c> during the startup plugin load in
+    ///     <c>AddHarborRegistries</c>, read by <c>StorageModule</c> when it builds the
+    ///     storage registry (#581). Empty when the plugin stack is compiled out.
+    /// </summary>
+    /// <remarks>
+    ///     Startup only, by the same contract that governs every other registration: a
+    ///     hot-reload pass composes its own load host over a throwaway service
+    ///     collection, so a backend it registers cannot reach the already-built storage
+    ///     singleton. Known limitation, not a silent gap — the same one
+    ///     <c>PluginRuntimeComposer</c> documents for late-loaded plugins.
+    /// </remarks>
+    public IReadOnlyDictionary<string, Func<ISessionStore>> SessionStores { get; internal set; } =
+        new Dictionary<string, Func<ISessionStore>>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    ///     TUI backends a plugin registered through
+    ///     <c>IPluginLoadHost.RegisterTuiBackend</c> during the startup plugin load, read
+    ///     by <c>TuiModule</c> when it builds the backend registry — the same registry
+    ///     the runtime-swap table is derived from, so a plugin backend is listed by
+    ///     <c>/renderer</c> and can be swapped to too (#581/#584). Startup-only, like
+    ///     <see cref="SessionStores" />.
+    /// </summary>
+    public IReadOnlyDictionary<string, PluginTuiBackend> TuiBackends { get; internal set; } =
+        new Dictionary<string, PluginTuiBackend>(StringComparer.OrdinalIgnoreCase);
+
     internal void Freeze()
     {
         Tools.Freeze();
