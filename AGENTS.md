@@ -7,6 +7,7 @@
 > - Tests must be run **per project as plain executables** (`dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`); `dotnet test` discovers ZERO tests under the Microsoft.Testing.Platform (MTP) bridge in this repo (host exits 5 with a silent discovery error) and whole-solution invocations are doubly broken — do not use either.
 > - Known/flaky tests historically cited (verify against `docs/ROADMAP.md` before counting on current numbers): Avalonia-12 headless `MarkdownRenderer`/`CodeBlock`/`TypewriterStreamingText` ("Stack empty" in `SetInheritanceParent`), the IPC named-pipe event-stream class on Linux (self-skips unless `HARBOR_IPC_EVENTSTREAM=1`), and an occasional `ChatView_Inflates` ListBoxItem `StaticResource` flake.
 > - CellForge (+ Engine — fullscreen cell-diff terminal renderer) is the canonical interactive backend (`HARBOR_TUI=cellforge`, `consoleex` kept as legacy alias); AnsiPlain covers ANSI-streaming + plain pipes/CI; MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
+> - **Markdown is gated.** `ci.yml` ignores `**.md` and `docs/**` on purpose, so a docs-only PR gets its own fast workflow: `.github/workflows/docs.yml` runs `tools/check-md-links.py` (links + anchors) and `tools/md-lint.py` (encoding/headings/fences), each with a scan-size floor, plus a self-test that proves both still fail on broken input (#509). Run both locally before pushing a doc change — see [docs/DEVELOPMENT.md §Documentation checks](./docs/DEVELOPMENT.md#documentation-checks). Do not "fix" this by deleting `paths-ignore` from `ci.yml`.
 >
 > **Связанные документы:**
 > - [docs/ROADMAP.md](./docs/ROADMAP.md) — full roadmap with priorities + tech-debt backlog
@@ -217,6 +218,11 @@ I want to...
 ├── ...understand what NOT to do
 │   └─→ docs/ANTIPATTERNS.md (38 antipatterns with before/after code)
 │      Then docs/CODE_PRINCIPLES_AUDIT.md (45 known violations to not repeat)
+│
+├── ...add / move / rename a document, or fix a broken doc link
+│   └─→ docs/DEVELOPMENT.md §Documentation checks
+│      Run ./tools/check-md-links.py and ./tools/md-lint.py — both are CI gates
+│      via .github/workflows/docs.yml; ci.yml never builds a docs-only PR
 │
 ├── ...debug a failing test
 │   └─→ docs/DEVELOPMENT.md §Workflow: debug a failing test
@@ -631,6 +637,7 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 9. **Don't create C# design-token classes** (`*Tokens.cs`, `*Theme.cs`, `*Palette.cs`) in the UI layer. The source of truth is the XAML `ResourceDictionary`. Dual ownership causes sync drift, memory leaks on theme switch, and AOT breaks.
 10. **Don't break the build** — `dotnet build` must succeed with 0 warnings (treat as errors).
 11. **Don't break tests** — run affected test projects individually before commit (`dotnet run --project tests/<Project> -c Release --no-build`).
+12. **Don't assume docs are unchecked** — a docs-only PR is gated by `.github/workflows/docs.yml`, not by `ci.yml`. `./tools/check-md-links.py` and `./tools/md-lint.py` both exit 1 on a bad edit; run them before pushing markdown (#509).
 
 ## Build & test commands
 

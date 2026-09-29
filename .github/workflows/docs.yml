@@ -1,0 +1,110 @@
+# Harbor docs gate — markdown only, no dotnet.
+#
+# WHY THIS FILE EXISTS (issue #509)
+#
+#   `tools/check-md-links.py` has been in the repo since #39 hygiene and has
+#   never run in CI. ci.yml lists `**.md` and `docs/**` in `paths-ignore` for
+#   both `push` and `pull_request`, so a docs-only PR never starts a build and
+#   therefore never reached the checker. A gate in a workflow that cannot
+#   trigger is worse than no gate: it looks like the links are checked.
+#
+#   That is the third instance of the same failure in this repo — the other
+#   two were three test projects missing from Harbor.slnx and the CI matrix
+#   (#519), and NetArchTest rules naming a deleted assembly, where a
+#   non-existent name reads as a *satisfied* constraint (#450).
+#
+#   So the fix is a second, cheap workflow rather than a change to ci.yml:
+#   docs-only PRs get a real signal in ~30s instead of a full .NET build, and
+#   ci.yml keeps its paths-ignore. Do not "fix" this by deleting those entries
+#   from ci.yml — that would rebuild the entire solution for a typo in a
+#   paragraph, and this file would still be the only thing that lints markdown.
+#
+# WHAT RUNS HERE
+#
+#   selftest  both gates against fixtures that are known-broken. A checker
+#             that has quietly stopped finding anything is still green on every
+#             PR, so the failure path is tested on every docs change (33 + 10
+#             assertions, ~2s).
+#   links     internal link + GitHub anchor resolution, with a file/ref floor.
+#   lint      markdown structural invariants, with a file/line floor.
+#
+# THE FLOORS ARE THE POINT
+#
+#   `--min-files` / `--min-refs` / `--min-lines` make a narrowed scan fail
+#   instead of passing quietly. They are set ~20% below today's numbers (310
+#   markdown files, 770 link refs, 73871 lines) and are a ratchet: a PR that
+#   legitimately removes documents lowers them in the same diff, where a
+#   reviewer can see it. A script that scans zero paths and exits 0 is the
+#   same failure mode this gate exists to end.
+#
+#   There is no allow-list of files to skip, and no `continue-on-error`: a
+#   broken link in a docs-only PR must be red, not a note in the log.
+#
+# NOT a dotnet job: nothing here needs the SDK, the solution, or a submodule
+# (no tracked markdown lives in external/ConsoleEx). If that changes, add
+# `submodules: recursive` to the checkout below.
+name: docs
+
+on:
+  push:
+    branches: [dev, master]
+    paths:
+      - '**.md'
+      - 'tools/check-md-links.py'
+      - 'tools/md-lint.py'
+      - 'tools/md_gate.py'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - '**.md'
+      - 'tools/check-md-links.py'
+      - 'tools/md-lint.py'
+      - 'tools/md_gate.py'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Anti-vacuity. Runs the gates against a throwaway git repo containing
+  # documents that are deliberately broken, and asserts the specific
+  # diagnostics. If someone edits a rule until it matches nothing, this is the
+  # job that goes red — not the "everything is fine" jobs below.
+  selftest:
+    name: checker self-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Link checker fails on a broken link
+        run: python3 tools/check-md-links.py --self-test
+      - name: Markdown lint fails on a malformed document
+        run: python3 tools/md-lint.py --self-test
+
+  links:
+    name: internal links
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check every internal link and anchor
+        run: python3 tools/check-md-links.py --min-files 250 --min-refs 600
+
+  lint:
+    name: markdown lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check markdown invariants
+        run: python3 tools/md-lint.py --min-files 250 --min-lines 60000

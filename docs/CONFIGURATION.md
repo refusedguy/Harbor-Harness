@@ -109,7 +109,7 @@ live on `CommonConfig` itself (`CommonConfig.cs`):
 | `CompactionTailTurns` | `int` | `2` | Minimum recent turns to keep verbatim. |
 | `ConfigDirectory` | `string` (init) | `~/.harbor` | Absolute dir. Init-only so tests can override. |
 
-#### `ui.consoleEx` (CellForge renderer tuning)
+### `ui.consoleEx` (CellForge renderer tuning)
 
 The CellForge path is selected by `tui: "cellforge"` or the
 `HARBOR_TUI=cellforge` env var (`consoleex` remains a legacy alias for both);
@@ -132,7 +132,7 @@ kill-switch and frame-wrapper knob
 A legacy root-level `"consoleEx": {...}` key is still **read** for backward
 compat but is no longer written — the nested `ui.consoleEx` form is canonical.
 
-#### Presentation fields on config.json
+### Presentation fields on config.json
 
 | Field | Default | Description |
 | --- | --- | --- |

@@ -326,7 +326,7 @@ separately-named rows:
 | | `SteadyState` | 4 warm burst+drain rounds | drained to completion |
 
 ⏳ **No numbers yet.** These rows are code-only as of #408: no local full run and no CI-short run.
-#391 added a `*EventBusBenchmark*` step to the CI `benchmark` job, but that glob deliberately does
+\#391 added a `*EventBusBenchmark*` step to the CI `benchmark` job, but that glob deliberately does
 **not** match the `*Delivery*` classes, so the job still does not run them. Fill them in with
 machine + date on the next local pass:
 
@@ -354,7 +354,7 @@ fast path in `InMemoryEventBus.PublishAsync`
 never reach it. The "8.1 KB @0 subscribers" figure is the pre-ring copy (1024 refs × 8 B ≈
 8 KB), not a live allocation.
 
-#391 replaced it with one row per (retention × drain) point, each carrying the 7-field contract
+\#391 replaced it with one row per (retention × drain) point, each carrying the 7-field contract
 `BenchmarkContractTests` requires. §5.3's `*Delivery*` rows are a different, still-unmeasured
 split and are not touched by this section.
 
@@ -439,7 +439,7 @@ _timer is null || (_timer is TimerQueueTimer t && t.Change(Infinite, Infinite) &
 in `TimerQueue.FireNextTimers` (`Timer.cs:217` in the same release) — i.e. only when the timer
 actually **reached the fire loop**, not when it was scheduled. A 250 ms budget that goes back to the
 pool microseconds after the fan-out is done never fires, so `TryReset()` returned `true` and the
-#249 pool was recycling before #507 touched it. "Armed ⇒ not reusable" is the wrong model; if you
+\#249 pool was recycling before #507 touched it. "Armed ⇒ not reusable" is the wrong model; if you
 see that shape of argument anywhere in this repo, this paragraph is the counter-example.
 
 The proof costs nothing to re-check, because the allocation column did not move when #507 made

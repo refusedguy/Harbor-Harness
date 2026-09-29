@@ -17,9 +17,16 @@ What it deliberately does not check:
 Fenced code blocks and inline `code` are stripped before parsing, so a
 `[text](url)` inside a code sample is not reported as a broken link.
 
+Wired by .github/workflows/docs.yml (issue #509) — that workflow exists
+because ci.yml lists `**.md` and `docs/**` in `paths-ignore`, so a docs-only
+PR never starts a build and therefore never reached this script. Until it was
+added the checker had never run in CI.
+
 Usage:
   ./tools/check-md-links.py                # whole repo
   ./tools/check-md-links.py --verbose      # per-file counts
+  ./tools/check-md-links.py --min-files 250 --min-refs 500   # CI floors
+  ./tools/check-md-links.py --self-test    # prove it still fails on a bad link
 
 Exit codes:  0 = clean, 1 = broken links found, 2 = bad invocation.
 """
@@ -29,9 +36,10 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import subprocess
 import sys
 from collections import defaultdict
+
+import md_gate  # noqa: E402  — sibling module; sys.path[0] is this directory
 
 # [text](target) — target is the first non-space, non-'>' run inside the parens.
 INLINE_LINK = re.compile(
@@ -120,15 +128,90 @@ def resolve(base_dir: str, target: str) -> tuple[bool, str, str]:
     return False, "missing", frag
 
 
+def self_test() -> int:
+    """Run this gate against documents that are known-broken.
+
+    The failure this guards against is a checker that has quietly stopped
+    finding anything: it would still be green on every PR, and the broken-link
+    report above would be a lie. Each case below asserts a specific exit code
+    and a specific diagnostic, so "returns 0" alone is not enough to pass.
+    """
+    st = md_gate.SelfTest("check-md-links")
+
+    ok_doc = (
+        "# Fixture\n\n"
+        "A real link to [target](target.md) and an external [one](https://example.com).\n\n"
+        "```\n"
+        "[not a link](gone.md)\n"
+        "```\n"
+    )
+    target_doc = "# Target\n\n## Real Anchor\n"
+
+    # 1. A clean fixture is clean — otherwise every other case is meaningless.
+    root = md_gate.make_fixture("check-md-links.py", {"docs/ok.md": ok_doc, "docs/target.md": target_doc})
+    rc, out = md_gate.run_gate(root, "check-md-links.py")
+    st.expect("clean fixture exits 0", rc == 0, f"rc={rc} out={out.strip()[:400]}")
+    st.expect("clean fixture reports its scan size", "across 2 markdown files" in out, out.strip()[:400])
+
+    # 2. A link to a file that is not there must fail, and must name the target.
+    broken = ok_doc + "\nBroken: [gone](nope/missing.md)\n"
+    root = md_gate.make_fixture("check-md-links.py", {"docs/ok.md": broken, "docs/target.md": target_doc})
+    rc, out = md_gate.run_gate(root, "check-md-links.py")
+    st.expect("missing target exits 1", rc == 1, f"rc={rc} out={out.strip()[:400]}")
+    st.expect("missing target is named", "nope/missing.md" in out, out.strip()[:400])
+    st.expect(
+        "fenced code sample is not a link", "not a link" not in out.split("MISSING TARGETS")[-1], out[-400:]
+    )
+
+    # 3. An existing file with a heading that does not exist must fail.
+    bad_anchor = ok_doc + "\nBad anchor: [target](target.md#no-such-anchor)\n"
+    root = md_gate.make_fixture("check-md-links.py", {"docs/ok.md": bad_anchor, "docs/target.md": target_doc})
+    rc, out = md_gate.run_gate(root, "check-md-links.py")
+    st.expect("missing anchor exits 1", rc == 1, f"rc={rc} out={out.strip()[:400]}")
+    st.expect("missing anchor is reported as an anchor", "MISSING ANCHORS (1)" in out, out.strip()[-400:])
+
+    # 4. The anti-vacuity floor: a real-but-tiny scan must NOT pass silently.
+    #    Without this the gate could be re-pointed at one file and stay green.
+    root = md_gate.make_fixture("check-md-links.py", {"docs/ok.md": ok_doc, "docs/target.md": target_doc})
+    rc, out = md_gate.run_gate(root, "check-md-links.py", "--min-files", "250", "--min-refs", "500")
+    st.expect("floor below the file count exits 1", rc == 1, f"rc={rc} out={out.strip()[:400]}")
+    st.expect("floor breach says the scan got narrower", "floor is 250" in out, out.strip()[-400:])
+
+    # 5. A repo with no tracked markdown at all is a blind gate, not a pass.
+    root = md_gate.make_fixture("check-md-links.py", {"src/only.cs": "// no markdown here\n"})
+    rc, out = md_gate.run_gate(root, "check-md-links.py", "--min-files", "250")
+    st.expect("zero markdown files exits 2", rc == 2, f"rc={rc} out={out.strip()[:400]}")
+
+    return st.finish()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--verbose", action="store_true", help="print per-file link counts")
+    ap.add_argument(
+        "--min-files",
+        type=int,
+        default=0,
+        help="fail unless at least this many markdown files were scanned (0 = off)",
+    )
+    ap.add_argument(
+        "--min-refs",
+        type=int,
+        default=0,
+        help="fail unless at least this many link references were examined (0 = off)",
+    )
+    ap.add_argument(
+        "--self-test",
+        action="store_true",
+        help="run the gate against known-broken fixtures instead of this repo",
+    )
     args = ap.parse_args()
 
+    if args.self_test:
+        return self_test()
+
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    listed = subprocess.run(
-        ["git", "ls-files", "*.md"], cwd=repo, capture_output=True, text=True, check=True
-    ).stdout.split()
+    listed = md_gate.tracked_md(repo)
     if not listed:
         print("no tracked markdown files found", file=sys.stderr)
         return 2
@@ -136,6 +219,7 @@ def main() -> int:
     missing: dict[str, set[tuple[int, str]]] = defaultdict(set)
     bad_anchor: dict[str, set[tuple[int, str]]] = defaultdict(set)
     total = 0
+    unreadable: list[str] = []
 
     for rel in listed:
         full = os.path.join(repo, rel)
@@ -143,6 +227,7 @@ def main() -> int:
             with open(full, encoding="utf-8", errors="replace") as fh:
                 raw = fh.read()
         except OSError:
+            unreadable.append(rel)
             continue
         text = strip_code(raw)
         base = os.path.dirname(rel)
@@ -178,8 +263,25 @@ def main() -> int:
             for line, target in sorted(data[rel])[:20]:
                 print(f"  L{line}: {target}")
 
-    if n_missing or n_anchor:
-        print(f"\nFAIL: {n_missing} missing target(s), {n_anchor} missing anchor(s).")
+    if unreadable:
+        # A file the gate could not open is a hole in the scan, never a pass.
+        print(f"\n=== UNREADABLE ({len(unreadable)}) ===")
+        for rel in sorted(unreadable):
+            print(f"  {rel}")
+
+    guard = md_gate.require_non_vacuous(
+        "check-md-links", len(listed), total, "link refs", args.min_files, args.min_refs
+    )
+    if guard:
+        print("\n=== VACUITY GUARD ===")
+        for problem in guard:
+            print(f"  {problem}")
+
+    if guard or unreadable or n_missing or n_anchor:
+        print(
+            f"\nFAIL: {n_missing} missing target(s), {n_anchor} missing anchor(s), "
+            f"{len(unreadable)} unreadable, {len(guard)} vacuity-guard problem(s)."
+        )
         return 1
     print("\nOK: no broken internal links.")
     return 0

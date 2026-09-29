@@ -1335,4 +1335,3 @@ Passed! - Failed: 0, Passed: 21, Skipped: 0, Total: 21, Duration: 280ms
   inside `Harbor.Providers.*` / `Harbor.Storage.*` source files (a stricter check than
   assembly-reference-only). The architecture tests catch the assembly-level violation;
   a Roslyn analyzer would catch it at the file level even before the assembly is built.
-
