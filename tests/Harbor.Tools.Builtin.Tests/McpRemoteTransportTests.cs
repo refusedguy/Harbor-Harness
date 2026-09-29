@@ -129,11 +129,83 @@ public class McpRemoteTransportTests
         using FakeServer server = FakeServer.Start();
         server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
 
-        await using var transport = new McpHttpTransport(server.Url, oauthTokenProvider: _ => Task.FromResult<string?>("tok-123"));
+        await using var transport = new McpHttpTransport(server.Url,
+            oauthTokenProvider: _ => Task.FromResult(Result.Success(Maybe<string>.From("tok-123"))));
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
         await RoundTripAndAssertAsync(transport, request.RootElement.Clone(), 1);
 
         await Assert.That(server.AuthHeaders).Contains("Bearer tok-123");
+    }
+
+    /// <summary>
+    ///     #566: a rejected grant is a failure and the transport's diagnostic
+    ///     reaches the caller. Before the change the seam was
+    ///     <c>Func&lt;…, Task&lt;string?&gt;&gt;</c>, so the only way a provider could
+    ///     report an error was to throw and be swallowed by a catch-all into a
+    ///     differently-worded string.
+    /// </summary>
+    [Test]
+    public async Task HttpTransport_OAuthProviderFailure_SurfacesTheCause()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
+
+        await using var transport = new McpHttpTransport(server.Url,
+            oauthTokenProvider: _ => Task.FromResult(
+                Result.Failure<Maybe<string>>("grant rejected: invalid_grant")));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
+
+        Result<Maybe<JsonDocument>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("invalid_grant");
+        // A rejected grant must not have spent a round-trip proving it.
+        await Assert.That(server.HandledRequests).IsEqualTo(0);
+    }
+
+    /// <summary>
+    ///     #566: absence is not failure. A provider that has no token yet must not
+    ///     abort the round-trip — the request goes out unauthenticated, exactly
+    ///     as it did when the seam spoke <c>Task&lt;string?&gt;</c> and the transport
+    ///     turned the null into <c>Maybe.None</c> itself.
+    /// </summary>
+    [Test]
+    public async Task HttpTransport_OAuthProviderNone_ProceedsUnauthenticated()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
+
+        await using var transport = new McpHttpTransport(server.Url,
+            oauthTokenProvider: _ => Task.FromResult(Result.Success(Maybe<string>.None)));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
+        await RoundTripAndAssertAsync(transport, request.RootElement.Clone(), 1);
+
+        await Assert.That(server.HandledRequests).IsGreaterThanOrEqualTo(1);
+        foreach (string? header in server.AuthHeaders)
+        {
+            await Assert.That(header).IsNull();
+        }
+    }
+
+    /// <summary>
+    ///     A hand-written provider that throws is still contained rather than
+    ///     escaping the transport — the catch-all is a floor, not a shape the
+    ///     transport produces itself.
+    /// </summary>
+    [Test]
+    public async Task HttpTransport_ThrowingOAuthProvider_BecomesAFailure()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
+
+        await using var transport = new McpHttpTransport(server.Url,
+            oauthTokenProvider: _ => throw new InvalidOperationException("provider exploded"));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
+
+        Result<Maybe<JsonDocument>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("provider exploded");
     }
 
     [Test]
@@ -223,6 +295,88 @@ public class McpRemoteTransportTests
         finally
         {
             File.Delete(tempFile);
+        }
+    }
+
+    // ---------- #566: absence vs. a rejected grant, end to end ----------
+
+    /// <summary>
+    ///     The registry wires the handler directly, so an un-logged-in server
+    ///     reaches the caller as a token <i>failure</i> carrying the actionable
+    ///     hint rather than as a bare 401 from a request that was never going to
+    ///     succeed. Before #566 the only copy of that hint lived inside a Failure
+    ///     string produced by a code path with no production consumer, so the
+    ///     user saw the endpoint's rejection and nothing else.
+    ///     <para>
+    ///     HARBOR_HOME is redirected to a scratch directory: the registry builds
+    ///     its <see cref="McpOAuthHandler" /> with the default cache, which
+    ///     resolves under the real harbor home. Without this the test asserts
+    ///     against whatever token the developer happens to have cached, and on CI
+    ///     it silently found one and the call succeeded.
+    ///     </para>
+    /// </summary>
+    [Test]
+    public async Task Registry_RemoteWithAuthAndNoToken_ReportsTheLoginHint()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
+
+        string scratch = Directory.CreateTempSubdirectory("harbor-mcp-oauth-hint").FullName;
+        string? previousHome = Environment.GetEnvironmentVariable("HARBOR_HOME");
+        try
+        {
+            Environment.SetEnvironmentVariable("HARBOR_HOME", scratch);
+
+            await using var registry = new McpRegistry(null);
+            // The auth block is what makes "no token" fatal rather than "go anonymous".
+            McpOAuthConfig auth = new() { ClientId = "cid", TokenEndpoint = $"{server.Url}/token" };
+            var registered = registry.Register("cloud", server.Url.ToString(), McpTransportNames.Http, null, auth);
+            await Assert.That(registered.IsSuccess).IsTrue();
+
+            using var args = JsonDocument.Parse("{}");
+            Result<string> result = await registry.InvokeAsync("cloud", "tools/list", args.RootElement);
+
+            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result.Error).Contains("harbor mcp login cloud");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HARBOR_HOME", previousHome);
+            try { Directory.Delete(scratch, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    /// <summary>
+    ///     A server with no <c>auth</c> block and no env token must still go out
+    ///     unauthenticated: <c>None</c> means "no token", not "refused". The env
+    ///     var is read for real here, so the assertion is on the request that was
+    ///     actually sent rather than on an internal branch.
+    /// </summary>
+    [Test]
+    public async Task Registry_RemoteWithoutAuthAndNoToken_StillCallsTheEndpoint()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":1,"result":{}}""";
+
+        string? previous = Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN");
+        try
+        {
+            Environment.SetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN", null);
+
+            await using var registry = new McpRegistry(null);
+            await Assert.That(registry.Register("anon", server.Url.ToString(), McpTransportNames.Http).IsSuccess).IsTrue();
+
+            using var args = JsonDocument.Parse("{}");
+            Result<string> result = await registry.InvokeAsync("anon", "tools/list", args.RootElement);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(server.HandledRequests).IsGreaterThanOrEqualTo(1);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN", previous);
         }
     }
 

@@ -62,7 +62,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
 
     private readonly Uri _endpoint;
     private readonly IReadOnlyDictionary<string, string>? _headers;
-    private readonly Func<CancellationToken, Task<string?>>? _oauthTokenProvider;
+    private readonly Func<CancellationToken, Task<Result<Maybe<string>>>>? _oauthTokenProvider;
     private readonly ILogger? _logger;
     private readonly TimeSpan _requestTimeout;
     private HttpClient? _client;
@@ -72,7 +72,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     public McpHttpTransport(
         Uri endpoint,
         IReadOnlyDictionary<string, string>? headers = null,
-        Func<CancellationToken, Task<string?>>? oauthTokenProvider = null,
+        Func<CancellationToken, Task<Result<Maybe<string>>>>? oauthTokenProvider = null,
         ILogger? logger = null,
         TimeSpan? requestTimeout = null)
     {
@@ -106,8 +106,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         Result<Maybe<string>> oauth = await TryGetOAuthTokenAsync(cancellationToken).ConfigureAwait(false);
         if (oauth.IsFailure)
             return Fail<Maybe<JsonDocument>>(sw, 0, oauth.Error);
-        Maybe<string> oauthTokenMaybe = oauth.Value;
-        string? oauthToken = oauthTokenMaybe.HasValue ? oauthTokenMaybe.Value : null;
+        Maybe<string> oauthToken = oauth.Value;
         int attempt = 1;
 
         while (true)
@@ -199,7 +198,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     private async Task BackoffAsync(int attempt, CancellationToken cancellationToken)
         => await Task.Delay(FirstRetryDelay * (1 << (attempt - 1)), cancellationToken).ConfigureAwait(false);
 
-    private HttpRequestMessage BuildRequest(string body, string? oauthToken)
+    private HttpRequestMessage BuildRequest(string body, Maybe<string> oauthToken)
     {
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, _endpoint)
         {
@@ -218,9 +217,9 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             }
         }
 
-        if (!hasAuthorization && oauthToken is { Length: > 0 })
+        if (!hasAuthorization && oauthToken.HasValue && oauthToken.Value.Length > 0)
         {
-            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken.Value);
         }
 
         if (_sessionId is not null)
@@ -305,17 +304,21 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         return true;
     }
 
+    /// <summary>
+    ///     The provider's outcome, verbatim. The seam speaks
+    ///     <c>Result&lt;Maybe&lt;string&gt;&gt;</c> end to end, so "no token yet"
+    ///     and "the grant was rejected" arrive as two distinct states instead of
+    ///     both arriving as the <c>null</c> this method used to manufacture out of
+    ///     either one (#566). The catch-all stays as a floor for a hand-written
+    ///     provider that throws; it is not a shape this transport produces.
+    /// </summary>
     private async Task<Result<Maybe<string>>> TryGetOAuthTokenAsync(CancellationToken cancellationToken)
     {
         if (_oauthTokenProvider is null)
             return Result.Success(Maybe<string>.None);
         try
         {
-            return Result.Success(Maybe<string>.From(await _oauthTokenProvider(cancellationToken).ConfigureAwait(false)));
-        }
-        catch (McpOAuthLoginRequiredException ex)
-        {
-            return Result.Failure<Maybe<string>>(ex.Message);
+            return await _oauthTokenProvider(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

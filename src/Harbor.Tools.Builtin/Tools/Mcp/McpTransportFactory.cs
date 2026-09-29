@@ -15,13 +15,17 @@ namespace Harbor.Tools.Mcp;
 ///     <paramref name="OAuthTokenProvider" />.
 /// </param>
 /// <param name="OAuthTokenProvider">
-///     Bearer-token supplier, or null for an unauthenticated endpoint.
+///     Bearer-token supplier, or null for an unauthenticated endpoint. The
+///     supplier speaks the same three-state shape the handler does (#566):
+///     <c>Success(Some(token))</c> to attach a bearer, <c>Success(None)</c> when
+///     no token exists and the endpoint may be anonymous, and
+///     <c>Failure(...)</c> when a token did exist and the server rejected it.
 /// </param>
 /// <param name="Logger">Optional logger the transport should report through.</param>
 public sealed record McpTransportRequest(
     Uri Endpoint,
     IReadOnlyDictionary<string, string>? Headers,
-    Func<CancellationToken, Task<string?>>? OAuthTokenProvider,
+    Func<CancellationToken, Task<Result<Maybe<string>>>>? OAuthTokenProvider,
     ILogger? Logger);
 
 /// <summary>
