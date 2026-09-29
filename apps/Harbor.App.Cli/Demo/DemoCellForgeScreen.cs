@@ -251,14 +251,6 @@ internal sealed class DemoCellForgeScreen
         await HoldAsync(holdFrames, ct).ConfigureAwait(false);
     }
 
-            await RenderAsync().ConfigureAwait(false);
-            await HoldAsync(HoldFrames, ct).ConfigureAwait(false);
-        }
-
-        await HoldAsync(SettleHoldFrames, ct).ConfigureAwait(false);
-        return true;
-    }
-
     /// <summary>Run one real turn with the screen untouched, capturing every event.</summary>
     private async Task<Result> RecordTurnAsync(string prompt, List<AgentEvent> recorded, CancellationToken ct)
     {
