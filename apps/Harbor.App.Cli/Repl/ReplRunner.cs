@@ -467,7 +467,16 @@ internal sealed class ReplRunner
                 continue;
             }
             string trimmed = input.Trim();
-            if (trimmed is "exit" or "quit" or ":q")
+
+            // The exit words come from ChatCommands — the one list the reducer and the
+            // desktop app read (#684). This used to be a literal pattern
+            // (`trimmed is "exit" or "quit" or ":q"`), which compares ordinally: `QUIT`
+            // quit the TUI and did not quit here, falling through to PromptAsync and
+            // billing the word to the model as a prompt. Case-insensitive is the correct
+            // reading, not the pattern's: SlashCommandCatalog resolves `/EXIT` with
+            // OrdinalIgnoreCase and autocomplete offers `/exit` for the prefix `EXI`, so
+            // rejecting the word the completion just offered was the inconsistency.
+            if (Harbor.Ui.Framework.State.ChatCommands.ExitWords.Contains(trimmed))
             {
                 _logger.LogInformation("User requested exit");
                 break;
