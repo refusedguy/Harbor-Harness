@@ -153,10 +153,11 @@ public class ResultTryAdoptionTests
         }
 
         await Assert.That(violations)
-            .IsEmpty(
-                "Hand-rolled `try/catch -> Result` found — use `Result.Try` from " +
+            .IsEmpty()
+            .Because(
+                "hand-rolled `catch(Exception) -> Result.Failure` found — use `Result.Try` from " +
                 "CSharpFunctionalExtensions 3.7.0 instead. Each site is a second implementation of a " +
-                "library member and will drift:\n  " + string.Join("\n  ", violations));
+                "library member and will drift: " + string.Join(" | ", violations));
     }
 
     [Test]
@@ -247,9 +248,10 @@ public class ResultTryAdoptionTests
         }
 
         await Assert.That(stale)
-            .IsEmpty(
+            .IsEmpty()
+            .Because(
                 "KnownExemptSites is a ratchet: an entry that no longer matches its recorded reason means " +
-                "the exemption is stale — convert the site and delete the entry:\n  " + string.Join("\n  ", stale));
+                "the exemption is stale — convert the site and delete the entry: " + string.Join(" | ", stale));
     }
 
     [Test]
@@ -264,7 +266,8 @@ public class ResultTryAdoptionTests
         List<string> missing = [.. ScopeMarkerFiles.Where(f => !File.Exists(Path.Combine(root, f)))];
 
         await Assert.That(missing)
-            .IsEmpty("ROP perimeter marker files moved — update ScopeMarkerFiles: " + string.Join(", ", missing));
+            .IsEmpty()
+            .Because("ROP perimeter marker files moved — update ScopeMarkerFiles: " + string.Join(", ", missing));
     }
 
     /// <summary>Every <c>.cs</c> file under <c>src/</c>, minus build output.</summary>
@@ -339,7 +342,7 @@ public class ResultTryAdoptionTests
                 continue;
             }
 
-            Match clause = Match.CatchClause.Match(lines[catchLine]);
+            Match clause = CatchClause.Match(lines[catchLine]);
             if (!clause.Success)
             {
                 continue;
