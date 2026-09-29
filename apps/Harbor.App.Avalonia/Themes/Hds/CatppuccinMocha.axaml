@@ -15,6 +15,17 @@
         <ResourceInclude Source="avares://Harbor.App.Avalonia/Themes/Hds/BaseTokens.axaml" />
     </ResourceDictionary.MergedDictionaries>
 
+    <!-- ════════════ Theme identity ════════════ -->
+    <!--
+        The ThemeVariant this palette is designed for (#673). The palette owns
+        its own light/dark answer: HdsThemeCatalog reads this key instead of
+        the C# side keeping a "which palettes are dark" array, which had
+        already drifted — the list named three dark palettes while the folder
+        holds a fourth (HarborDesignTokens). Value is a ThemeVariant key:
+        "Dark" or "Light".
+    -->
+    <x:String x:Key="HdsThemeVariant">Dark</x:String>
+
     <!-- ════════════ Catppuccin-Mocha palette ════════════ -->
     <Color x:Key="MochaBase">#1E1E2E</Color>
     <Color x:Key="MochaMantle">#181825</Color>

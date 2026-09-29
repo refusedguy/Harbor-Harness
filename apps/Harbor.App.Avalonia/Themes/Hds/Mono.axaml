@@ -10,6 +10,12 @@
         <ResourceInclude Source="avares://Harbor.App.Avalonia/Themes/Hds/BaseTokens.axaml" />
     </ResourceDictionary.MergedDictionaries>
 
+    <!-- ════════════ Theme identity ════════════ -->
+    <!-- The ThemeVariant this palette is designed for (#673) — see the
+         CatppuccinMocha.axaml comment: the palette declares its own
+         light/dark answer, read from this key by HdsThemeCatalog. -->
+    <x:String x:Key="HdsThemeVariant">Dark</x:String>
+
     <!-- ════════════ Monochrome palette ════════════ -->
     <Color x:Key="MochaBase">#0A0A0A</Color>
     <Color x:Key="MochaMantle">#111111</Color>

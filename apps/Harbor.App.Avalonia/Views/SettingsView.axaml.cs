@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using Harbor.App.Avalonia.Themes;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.Navigation;
 using Microsoft.Extensions.DependencyInjection;
@@ -54,7 +55,7 @@ public partial class SettingsView : UserControl
         var current = e.Source as Visual;
         while (current is not null)
         {
-            if (current is Border { DataContext: ThemeSettingsViewModel.ThemePreviewModel preview })
+            if (current is Border { DataContext: HdsThemePreview preview })
             {
                 if (DataContext is ThemeSettingsViewModel vm)
                     vm.ApplyHdsThemeCommand.Execute(preview.Name);
