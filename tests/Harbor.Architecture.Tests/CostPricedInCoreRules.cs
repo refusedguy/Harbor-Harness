@@ -26,7 +26,8 @@
 //
 //   * `Pricing`                      — the per-model rate table itself;
 //   * `CalculateCost`                — the one function that turns usage into money;
-//   * `…PerMillion` / `…EstimateCost`— the naming fingerprint of a hand-rolled rate table;
+//   * an identifier ending in `PerMillion` or `EstimateCost`
+//                                    — the naming fingerprint of a hand-rolled rate table;
 //   * `1_000_000m`                   — the per-million DECIMAL divisor, i.e. the
 //                                      formula `tokens / 1e6 * rate` written out.
 //
@@ -81,6 +82,17 @@
 // rather than with constants — and it is the pre-existing path this issue leaves
 // alone. It is called out here so the exclusion reads as a decision rather than
 // an oversight.
+//
+// ONE EXEMPTED LINE, IN THE SCANNED SET
+// -------------------------------------
+// `apps/Harbor.App.Cli/Hosting/Adapters.cs` implements `ISessionContext`, and
+// #653 gave that interface a `Pricing` parameter — so the composition root is
+// forced to NAME the type in a signature it cannot choose. Naming a parameter is
+// not pricing anything, so that one line is exempted below, with its reason
+// printed on failure. The exemption is line-precise (a file + an exact substring),
+// not file-precise: a second line in that file that actually computes a price is
+// still red, and `EveryLineExemption_StillMatchesALineThatStillNamesTheType`
+// keeps the entry from outliving its reason.
 
 using System.Text.RegularExpressions;
 using TUnit.Assertions;
@@ -154,6 +166,29 @@ public sealed class CostPricedInCoreRules
     private static readonly string[] PresentationProjectPrefixes =
         ["Harbor.Ui.Framework", "Harbor.Tui."];
 
+    /// <summary>
+    ///     One line the scan may not read as pricing, and why not. The exemption
+    ///     is line-precise (a file + an exact substring), not file-precise: a
+    ///     second line in that file that actually computes a price is still red.
+    /// </summary>
+    /// <param name="RelativePath">Repo-relative path of the exempted file.</param>
+    /// <param name="Marker">Exact substring identifying the exempted line.</param>
+    /// <param name="Reason">
+    ///     Why this line is not pricing anything. Printed on failure and required
+    ///     to be non-empty — a reason is a decision log, not a mute button.
+    /// </param>
+    private sealed record LineExemption(string RelativePath, string Marker, string Reason);
+
+    private static readonly LineExemption[] LineExemptions =
+    [
+        new LineExemption(
+            "apps/Harbor.App.Cli/Hosting/Adapters.cs",
+            "UpdateStatsAsync(Usage usage, Pricing pricing",
+            "DummySessionContext implements ISessionContext, and #653 gave that interface a "
+            + "Pricing parameter — the composition root has to NAME the type in a signature it "
+            + "does not choose, and names no rate. Naming a parameter is not pricing."),
+    ];
+
     /// <summary>A file, a 1-based line number, the rule it tripped and the line.</summary>
     private sealed record Site(string RelativePath, int Line, string RuleId, string Text);
 
@@ -169,6 +204,7 @@ public sealed class CostPricedInCoreRules
                 "the presentation layer is re-deriving the price of a session at "
                 + Describe(sites)
                 + ". " + string.Join(" | ", Rules.Select(r => r.Id + " → " + r.Instead))
+                + " Exemptions (a decision, not an oversight): " + DescribeExemptions()
                 + " See issue #653.");
 
         // The rule is about the presentation layer, so the core's own copy must
@@ -289,6 +325,42 @@ public sealed class CostPricedInCoreRules
                 + ". One formula, one home: Pricing.CalculateCost. See issue #653.");
     }
 
+    /// <summary>
+    ///     Non-vacuity, part 4 — the exemption list stays honest in both
+    ///     directions: an entry whose file is gone, or which no longer matches a
+    ///     line, is dead weight that would silently widen the rule the next time
+    ///     someone re-adds a priced line there. A reason is mandatory, not
+    ///     optional.
+    /// </summary>
+    [Test]
+    public async Task EveryLineExemption_StillMatchesExactlyOneLine()
+    {
+        string root = RequireRepoRoot();
+        IReadOnlyList<string> files = EnumeratePresentationFiles(root);
+
+        foreach (LineExemption exemption in LineExemptions)
+        {
+            await Assert.That(exemption.Reason.Length > 0).IsTrue()
+                .Because("exemption " + exemption.RelativePath + " must state why the line is not pricing");
+            await Assert.That(files.Contains(exemption.RelativePath)).IsTrue()
+                .Because("exemption " + exemption.RelativePath + " names a file the scan does not see — drop the entry");
+
+            int matches = 0;
+            foreach ((int _, string text) in ReadAllLines(Path.Combine(root, exemption.RelativePath)))
+            {
+                if (text.Contains(exemption.Marker, StringComparison.Ordinal))
+                {
+                    matches++;
+                }
+            }
+
+            await Assert.That(matches).IsEqualTo(1)
+                .Because("exemption " + exemption.RelativePath + " matched " + matches + " lines — it must "
+                         + "stay one line wide, or it is a file-wide mute button; and 0 means the reason "
+                         + "has expired, so the entry goes too");
+        }
+    }
+
     // ── scanning helpers ────────────────────────────────────────────────────
 
     private static string RequireRepoRoot()
@@ -377,7 +449,7 @@ public sealed class CostPricedInCoreRules
         var sites = new List<Site>();
         foreach ((int line, string text) in ReadAllLines(Path.Combine(root, relativePath)))
         {
-            if (IsCommentOnly(text))
+            if (IsCommentOnly(text) || IsExempt(relativePath, text))
             {
                 continue;
             }
@@ -393,6 +465,20 @@ public sealed class CostPricedInCoreRules
         }
 
         return sites;
+    }
+
+    private static bool IsExempt(string relativePath, string line)
+    {
+        foreach (LineExemption exemption in LineExemptions)
+        {
+            if (string.Equals(exemption.RelativePath, relativePath, StringComparison.Ordinal)
+                && line.Contains(exemption.Marker, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -431,6 +517,12 @@ public sealed class CostPricedInCoreRules
         => sites.Count == 0
             ? "(none)"
             : string.Join(", ", sites.Select(s => s.RelativePath + ":" + s.Line + " [" + s.RuleId + "]"));
+
+    /// <summary>The exemption list, path + reason, for the failure message.</summary>
+    private static string DescribeExemptions()
+        => LineExemptions.Length == 0
+            ? "(none)"
+            : string.Join("; ", LineExemptions.Select(e => e.RelativePath + " [" + e.Reason + "]"));
 
     /// <summary>1-based line number + text, or an empty list for an unreadable file.</summary>
     private static IReadOnlyList<(int Line, string Text)> ReadAllLines(string path)
