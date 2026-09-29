@@ -1,5 +1,8 @@
+using System.Collections.Immutable;
+using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -123,6 +126,123 @@ public class SideBarViewTests
         SideBarView.Paint(buffer, rect, state);
         string dump = Dump(buffer, rect);
         await Assert.That(dump).Contains("ctx 81%");
+    }
+
+    // ── #674: the DIAGNOSTICS counts are read, not invented ────────────────
+
+    private static DiagnosticIssue Lsp(DiagnosticIssueSeverity severity, string message) =>
+        new(DiagnosticIssueSource.LanguageServer, severity, "csharp", "src/a.cs", 1, message);
+
+    private static DiagnosticIssue Tool(DiagnosticIssueSeverity severity, string message) =>
+        new(DiagnosticIssueSource.ToolOutput, severity, "node", null, 0, message);
+
+    [Test]
+    public async Task Project_CountsTheLanguagesServerRowsInTheSnapshot()
+    {
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Diagnostics = ImmutableArray.Create(
+                    Lsp(DiagnosticIssueSeverity.Error, "first"),
+                    Lsp(DiagnosticIssueSeverity.Error, "second"),
+                    Lsp(DiagnosticIssueSeverity.Warning, "third")),
+            },
+        };
+
+        SideBarState projected = SideBarView.ProjectFromStore(state);
+
+        await Assert.That(projected.LspErrors).IsEqualTo(2)
+            .Because("#674 found these spelled as literal zeros, so the section could never light up "
+                   + "while a second, parallel text channel stood in for the real feature.");
+        await Assert.That(projected.LspWarnings).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Project_DoesNotCountToolOutputAsLanguageServerDiagnostics()
+    {
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Diagnostics = ImmutableArray.Create(
+                    Tool(DiagnosticIssueSeverity.Error, "npm ERR! exit 1"),
+                    Tool(DiagnosticIssueSeverity.Warning, "npm WARN deprecated")),
+            },
+        };
+
+        SideBarState projected = SideBarView.ProjectFromStore(state);
+
+        await Assert.That(projected.LspErrors).IsEqualTo(0);
+        await Assert.That(projected.LspWarnings).IsEqualTo(0)
+            .Because("a section labelled after the language server must not report a build log as one. "
+                   + "The two are separate rows in the snapshot precisely so they can be counted apart — "
+                   + "summing them under one heading is how the two got fused in the first place.");
+    }
+
+    [Test]
+    public async Task Project_AnEmptySnapshotCountsZero()
+    {
+        await Assert.That(SideBarView.ProjectFromStore(new UiState()).LspErrors).IsEqualTo(0)
+            .Because("zero is the right answer here and the wrong answer was, too. #674 could not tell "
+                   + "them apart, which is why the architecture guard forbids pinning the literal.");
+    }
+
+    [Test]
+    public async Task ProjectionCache_ReProjectsWhenTheSnapshotChanges()
+    {
+        var cache = new SideBarProjectionCache();
+        var before = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Diagnostics = ImmutableArray.Create(Lsp(DiagnosticIssueSeverity.Error, "one")),
+            },
+        };
+
+        _ = SideBarView.Project(before, cache);
+        int missesAfterFirst = cache.MissCount;
+
+        // Same session, same model, same cost — the fingerprint is unchanged on
+        // every input the cache had before #674.
+        var after = new UiState
+        {
+            Chat = before.Chat with
+            {
+                Diagnostics = ImmutableArray.Create(
+                    Lsp(DiagnosticIssueSeverity.Error, "one"),
+                    Lsp(DiagnosticIssueSeverity.Error, "two")),
+            },
+        };
+
+        SideBarState projected = SideBarView.Project(after, cache);
+
+        await Assert.That(cache.MissCount).IsGreaterThan(missesAfterFirst)
+            .Because("the counts are read from the snapshot, so a snapshot that changed has to "
+                   + "invalidate. A cache that missed this would report a stale count forever — the "
+                   + "same lie as the hardcoded zero, wearing a live-looking shape.");
+        await Assert.That(projected.LspErrors).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task ProjectionCache_StillServesTheSameStateWithoutRecomputing()
+    {
+        var cache = new SideBarProjectionCache();
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Diagnostics = ImmutableArray.Create(Lsp(DiagnosticIssueSeverity.Error, "one")),
+            },
+        };
+
+        _ = SideBarView.Project(state, cache);
+        int misses = cache.MissCount;
+        _ = SideBarView.Project(state, cache);
+
+        await Assert.That(cache.MissCount).IsEqualTo(misses)
+            .Because("the cache exists for a per-frame path; adding a fingerprint input must not turn "
+                   + "every frame into a miss.");
     }
 
     private static string Dump(ScreenBuffer buffer, Rect rect)

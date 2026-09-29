@@ -80,7 +80,8 @@ internal sealed class CellForgeReplRunner(
     IApprovalCoordinator coordinator,
     Harbor.Hosting.PluginReloadService? pluginReload = null,
     IProviderHealthCheck? healthCheck = null,
-    Harbor.Ui.Framework.Panels.IPanelRegistry? panelRegistry = null)
+    Harbor.Ui.Framework.Panels.IPanelRegistry? panelRegistry = null,
+    Harbor.Application.Diagnostics.DiagnosticsAggregator? diagnosticsAggregator = null)
     : IReplHost
 {
     /// <summary>
@@ -106,6 +107,17 @@ internal sealed class CellForgeReplRunner(
     /// alongside the bridge. Nothing paints from it yet (status does in step 3) —
     /// it only accumulates Lines/Cost/Status so projection has real state later.</summary>
     internal readonly UiStore _replStore = new();
+
+    /// <summary>
+    ///     Pushes the headless core's diagnostic snapshots into
+    ///     <see cref="_replStore" /> (#674). Held for its <see cref="IDisposable" />
+    ///     lifetime: the aggregator is a process singleton, so an un-unsubscribed
+    ///     handler here would keep dispatching into a store the REPL has left.
+    ///     Null when the host registered no aggregator — the panel then reads an
+    ///     empty snapshot, which is honest rather than stale.
+    /// </summary>
+    internal readonly DiagnosticsSync? _diagnosticsSync =
+        diagnosticsAggregator is null ? null : new DiagnosticsSync(_replStore, diagnosticsAggregator, logger);
 
     internal readonly StatusViewModel _status = screen.Status.Vm;
     internal readonly ComposerController _composer = screen.Composer.Composer;

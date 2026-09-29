@@ -82,7 +82,13 @@ public static class PanelRows
         return rows;
     }
 
-    /// <summary>Diagnostics rows: cursor window over issues, j/k navigation.</summary>
+    /// <summary>
+    ///     Diagnostics rows: cursor window over the core's classified issues,
+    ///     j/k navigation. Both producers are drawn — a language server's own
+    ///     report and issues detected in a tool's output — and
+    ///     <see cref="PanelDiagnostic.Origin" /> is what told them apart, not a
+    ///     pattern run here (#674).
+    /// </summary>
     public static List<string> DiagnosticsRows(IReadOnlyList<PanelDiagnostic> diagnostics, int cursor, int width, int height)
     {
         ArgumentNullException.ThrowIfNull(diagnostics);
@@ -91,8 +97,8 @@ public static class PanelRows
         rows.Add(PanelText.Separator);
         if (diagnostics.Count == 0)
         {
-            rows.Add("No diagnostics detected.");
-            rows.Add("Errors emitted by the `bash` tool will show up here.");
+            rows.Add("No diagnostics reported.");
+            rows.Add("Language-server reports and detected tool output land here.");
         }
         else
         {

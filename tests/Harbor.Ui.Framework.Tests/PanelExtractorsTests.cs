@@ -222,92 +222,154 @@ public class PanelExtractorsTests
         await Assert.That(after - before).IsLessThanOrEqualTo(50 * 64 * 1024);
     }
 
+    /// <summary>
+    ///     THE #674 REGRESSION. The diagnostics extractor used to read the
+    ///     transcript's <see cref="ChatRole.ToolResult" /> lines — the <c>bash</c>
+    ///     tool's output — and classify them with its own regexes. A transcript
+    ///     full of build-log text that would every one of those detectors match
+    ///     must now produce NOTHING: the extractor has no opinion about a line of
+    ///     text, and the only rows it can draw are the ones the headless core
+    ///     classified and the host pushed.
+    /// </summary>
     [Test]
-    public async Task CollectDiagnostics_DetectsCSharpError()
+    public async Task CollectDiagnostics_IgnoresTranscriptTextEntirely()
     {
-        var lines = new List<ChatLine>
+        var state = new UiState
         {
-            ToolResult("✓ error CS0246: The type or namespace name 'Foo' could not be found", "b1"),
+            Chat = ChatDomainState.Empty with
+            {
+                Lines =
+                [
+                    ToolResult("✗ error CS0246: The type or namespace name 'Foo' could not be found", "b1"),
+                    ToolResult("✗ error[E0308]: mismatched types", "b2"),
+                    ToolResult("✗ File \"app.py\", line 10, in <module>", "b3"),
+                    ToolResult("✗ TypeError: Cannot read properties of undefined", "b4"),
+                    ToolResult("✗ System.NullReferenceException: Object reference not set", "b5"),
+                    ToolResult("✗ warning: unused variable 'x'", "b6"),
+                    new ChatLine(ChatRole.Error, "error MSB3021: could not copy"),
+                ],
+            },
         };
 
-        var diags = PanelExtractors.CollectDiagnostics(lines);
+        await Assert.That(PanelExtractors.CollectDiagnostics(state)).IsEmpty()
+            .Because("every line above is text a tool printed. Turning it into «an error, of this "
+                   + "severity» is counting, and counting belongs to the headless core: the panel must "
+                   + "show what the core classified, not re-derive it. A non-empty result here means a "
+                   + "classifier crept back into the projection layer.");
+    }
 
-        await Assert.That(diags.Count).IsEqualTo(1);
+    /// <summary>
+    ///     The rows the core pushed are drawn as they arrived, in its order, with
+    ///     its severities — the extractor reorders and reclassifies nothing.
+    /// </summary>
+    [Test]
+    public async Task CollectDiagnostics_ProjectsTheCoreSnapshotVerbatim()
+    {
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Diagnostics =
+                [
+                    Issue(DiagnosticIssueSource.LanguageServer, DiagnosticIssueSeverity.Error,
+                        "csharp", "src/a.cs", 12, "CS0246: type not found"),
+                    Issue(DiagnosticIssueSource.ToolOutput, DiagnosticIssueSeverity.Warning,
+                        "node", null, 0, "npm WARN deprecated request"),
+                ],
+            },
+        };
+
+        IReadOnlyList<PanelDiagnostic> diags = PanelExtractors.CollectDiagnostics(state);
+
+        await Assert.That(diags.Count).IsEqualTo(2);
+
+        // The language-server row keeps its place, and its message gains the
+        // file:line the server reported — a projection decision, not a count.
         await Assert.That(diags[0].Severity).IsEqualTo(PanelDiagnosticSeverity.Error);
         await Assert.That(diags[0].Source).IsEqualTo("csharp");
-        await Assert.That(diags[0].Message.Contains("CS0246", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(diags[0].Origin).IsEqualTo(DiagnosticIssueSource.LanguageServer);
+        await Assert.That(diags[0].Message).IsEqualTo("src/a.cs:12 CS0246: type not found");
+
+        // The tool-output row is tagged as such, so a renderer can section the
+        // two instead of summing them under one heading.
+        await Assert.That(diags[1].Severity).IsEqualTo(PanelDiagnosticSeverity.Warning);
+        await Assert.That(diags[1].Origin).IsEqualTo(DiagnosticIssueSource.ToolOutput);
+        await Assert.That(diags[1].Message).IsEqualTo("npm WARN deprecated request");
     }
 
+    /// <summary>
+    ///     A file with no place in it must not render a bare <c>:0</c>, and a
+    ///     server that reported a file but no line must not render a fake one.
+    /// </summary>
     [Test]
-    public async Task CollectDiagnostics_DetectsRustAndPython()
+    public async Task CollectDiagnostics_FormatsLocationOnlyWhenThereIsOne()
     {
-        var lines = new List<ChatLine>
+        var state = new UiState
         {
-            ToolResult("✗ error[E0308]: mismatched types", "b1"),
-            ToolResult("✓ File \"app.py\", line 10, in <module>", "b2"),
+            Chat = ChatDomainState.Empty with
+            {
+                Diagnostics =
+                [
+                    Issue(DiagnosticIssueSource.ToolOutput, DiagnosticIssueSeverity.Error, "rust", null, 0, "error: boom"),
+                    Issue(DiagnosticIssueSource.LanguageServer, DiagnosticIssueSeverity.Warning, "pyright", "app.py", 0, "unused import"),
+                ],
+            },
         };
 
-        var diags = PanelExtractors.CollectDiagnostics(lines);
+        IReadOnlyList<PanelDiagnostic> diags = PanelExtractors.CollectDiagnostics(state);
+
+        await Assert.That(diags[0].Message).IsEqualTo("error: boom");
+        await Assert.That(diags[1].Message).IsEqualTo("app.py unused import");
+    }
+
+    /// <summary>
+    ///     Advisory severities have no glyph of their own in a two-icon panel.
+    ///     They are drawn quietly, and the distinction is not thrown away: it is
+    ///     still in the snapshot the next projection reads.
+    /// </summary>
+    [Test]
+    public async Task CollectDiagnostics_DrawsAdvisoriesAsWarnings()
+    {
+        var state = new UiState
+        {
+            Chat = ChatDomainState.Empty with
+            {
+                Diagnostics =
+                [
+                    Issue(DiagnosticIssueSource.LanguageServer, DiagnosticIssueSeverity.Information, "csharp", null, 0, "info"),
+                    Issue(DiagnosticIssueSource.LanguageServer, DiagnosticIssueSeverity.Hint, "csharp", null, 0, "hint"),
+                ],
+            },
+        };
+
+        IReadOnlyList<PanelDiagnostic> diags = PanelExtractors.CollectDiagnostics(state);
 
         await Assert.That(diags.Count).IsEqualTo(2);
-        await Assert.That(diags[0].Source).IsEqualTo("rust");
-        await Assert.That(diags[0].Severity).IsEqualTo(PanelDiagnosticSeverity.Error);
-        await Assert.That(diags[1].Source).IsEqualTo("python");
-        await Assert.That(diags[1].Severity).IsEqualTo(PanelDiagnosticSeverity.Error);
+        foreach (PanelDiagnostic diagnostic in diags)
+        {
+            await Assert.That(diagnostic.Severity).IsEqualTo(PanelDiagnosticSeverity.Warning);
+        }
     }
 
     [Test]
-    public async Task CollectDiagnostics_DetectsNodeAndGenericException()
+    public async Task CollectDiagnostics_EmptySnapshotAndEmptyStateYieldNoRows()
     {
-        var lines = new List<ChatLine>
+        await Assert.That(PanelExtractors.CollectDiagnostics(new UiState())).IsEmpty();
+
+        var emptyButPresent = new UiState
         {
-            ToolResult("✓ TypeError: Cannot read properties of undefined", "b1"),
-            ToolResult("✓ System.NullReferenceException: Object reference not set", "b2"),
+            Chat = ChatDomainState.Empty with { Diagnostics = [] },
         };
-
-        var diags = PanelExtractors.CollectDiagnostics(lines);
-
-        await Assert.That(diags.Count).IsEqualTo(2);
-        await Assert.That(diags[0].Source).IsEqualTo("node");
-        await Assert.That(diags[1].Source).IsEqualTo("exception");
+        await Assert.That(PanelExtractors.CollectDiagnostics(emptyButPresent)).IsEmpty();
     }
 
-    [Test]
-    public async Task CollectDiagnostics_MarksWarningSeverity()
-    {
-        var lines = new List<ChatLine>
-        {
-            ToolResult("✓ warning: unused variable 'x'", "b1"),
-        };
-
-        var diags = PanelExtractors.CollectDiagnostics(lines);
-
-        await Assert.That(diags.Count).IsEqualTo(1);
-        await Assert.That(diags[0].Severity).IsEqualTo(PanelDiagnosticSeverity.Warning);
-    }
-
-    [Test]
-    public async Task CollectDiagnostics_IncludesErrorRoleAndReturnsEmptyWhenClean()
-    {
-        var errors = new List<ChatLine>
-        {
-            new(ChatRole.Error, "agent exploded"),
-        };
-
-        var diags = PanelExtractors.CollectDiagnostics(errors);
-
-        await Assert.That(diags.Count).IsEqualTo(1);
-        await Assert.That(diags[0].Severity).IsEqualTo(PanelDiagnosticSeverity.Error);
-
-        var clean = new List<ChatLine>
-        {
-            new(ChatRole.Assistant, "all good"),
-            ToolResult("✓ ok", "t1"),
-        };
-
-        await Assert.That(PanelExtractors.CollectDiagnostics(clean).Count).IsEqualTo(0);
-        await Assert.That(PanelExtractors.CollectDiagnostics(new List<ChatLine>()).Count).IsEqualTo(0);
-    }
+    private static DiagnosticIssue Issue(
+        DiagnosticIssueSource source,
+        DiagnosticIssueSeverity severity,
+        string producer,
+        string? filePath,
+        int line,
+        string message) => new(source, severity, producer, filePath, line, message);
 
     [Test]
     public async Task Overloads_SupportListAndUiStateEqually()
@@ -334,9 +396,5 @@ public class PanelExtractorsTests
         var changesList = PanelExtractors.ExtractRecentChanges(list, 8);
         var changesState = PanelExtractors.ExtractRecentChanges(state, 8);
         await Assert.That(changesState.Count).IsEqualTo(changesList.Count);
-
-        var diagsList = PanelExtractors.CollectDiagnostics(list);
-        var diagsState = PanelExtractors.CollectDiagnostics(state);
-        await Assert.That(diagsState.Count).IsEqualTo(diagsList.Count);
     }
 }

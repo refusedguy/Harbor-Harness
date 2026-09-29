@@ -588,14 +588,47 @@ public static class SideBarView
             TokensOut: state.Chat.Cost.TokensOut,
             CostUsd: (double)state.Chat.Cost.CostUsd,
             ModifiedFiles: null,
-            LspErrors: 0,
-            LspWarnings: 0,
+            LspErrors: CountLanguageServer(state.Chat.Diagnostics, DiagnosticIssueSeverity.Error),
+            LspWarnings: CountLanguageServer(state.Chat.Diagnostics, DiagnosticIssueSeverity.Warning),
             McpServers: null,
             ActiveSessionId: state.Chat.ActiveSessionId,
             Sessions: sessions);
 
         cache?.Store(state, projected);
         return projected;
+    }
+
+    /// <summary>
+    ///     How many of the core's diagnostics a language server reported at
+    ///     <paramref name="severity" />.
+    /// </summary>
+    /// <remarks>
+    ///     Counted over <see cref="DiagnosticIssueSource.LanguageServer" /> rows
+    ///     ONLY, and that restriction is the point. The snapshot also carries
+    ///     <see cref="DiagnosticIssueSource.ToolOutput" /> rows — issues a
+    ///     detector pulled out of a build log — and those are not what a sidebar
+    ///     section labelled after the language server means. Counting them here
+    ///     would re-fuse the two concepts #674 separated, in the one place where
+    ///     the label makes the difference visible. #674 also found this pair
+    ///     hardcoded to <c>0</c>: an empty snapshot and a never-connected path
+    ///     then drew the same picture, so a wired-but-silent channel was
+    ///     indistinguishable from a working one.
+    /// </remarks>
+    internal static int CountLanguageServer(
+        ImmutableArray<DiagnosticIssue> issues,
+        DiagnosticIssueSeverity severity)
+    {
+        var count = 0;
+        for (int i = 0; i < issues.Length; i++)
+        {
+            DiagnosticIssue issue = issues[i];
+            if (issue.Source == DiagnosticIssueSource.LanguageServer && issue.Severity == severity)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     /// <summary>Compact token figure: 999 → «999», 12 345 → «12.3k», 1 234 567 → «1.2M».</summary>
@@ -631,7 +664,12 @@ public static class SideBarView
 ///         ActiveSessionId): the projected <see cref="SideBarState"/> also
 ///         carries model, token counts and cost, and those DO move on a
 ///         <c>StepFinishEvent</c>. Caching on the session pair alone would pin
-///         a stale cost line. The session list compares by reference — the
+///         a stale cost line. Since #674 the DIAGNOSTICS section counts the
+///         core's language-server rows, so the fingerprint carries the
+///         diagnostics snapshot too: without it the section would go on
+///         reporting whatever it first counted, and a count that cannot change
+///         is the same lie as a hardcoded zero wearing a live-looking shape.
+///         The session list compares by reference — the
 ///         immutable array is never mutated in place, so a fresh instance can
 ///         only mean a change and the same instance proves there was none — and
 ///         the scalars compare by value. Anything less specific re-projects,
@@ -649,6 +687,7 @@ public sealed class SideBarProjectionCache
     private SessionId? _activeSessionId;
     private string? _model;
     private CostSnapshot _cost;
+    private ImmutableArray<DiagnosticIssue> _diagnostics;
     private SideBarState? _state;
 
     /// <summary>Projections actually computed (cache misses) since construction.</summary>
@@ -683,7 +722,8 @@ public sealed class SideBarProjectionCache
             && _sessions.Equals(state.Chat.Sessions)
             && SameId(_activeSessionId, state.Chat.ActiveSessionId)
             && SameText(_model, state.Chat.Model)
-            && _cost == state.Chat.Cost)
+            && _cost == state.Chat.Cost
+            && _diagnostics.Equals(state.Chat.Diagnostics))
         {
             projected = _state!;
             return true;
@@ -701,6 +741,7 @@ public sealed class SideBarProjectionCache
         _activeSessionId = state.Chat.ActiveSessionId;
         _model = state.Chat.Model;
         _cost = state.Chat.Cost;
+        _diagnostics = state.Chat.Diagnostics;
         _state = projected;
         MissCount++;
     }
