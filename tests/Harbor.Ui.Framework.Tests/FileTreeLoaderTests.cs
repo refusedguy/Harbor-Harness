@@ -51,7 +51,14 @@ public sealed class FileTreeLoaderTests
     {
         var lister = new CountingLister();
         using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
-        var store = new UiStore();
+
+        // PointedAt matters, and it is not setup ceremony: the reducer only
+        // accepts a listing for the directory the panel is actually on, so a
+        // store that is not pointed at DirA rejects every result and the loader
+        // would — correctly — walk again on the next request. A bare UiStore
+        // would have made this test pass for the wrong reason had the guard gone
+        // the other way.
+        var store = PointedAt(DirA);
 
         loader.Request(PanelId, DirA, store);
         loader.Request(PanelId, DirA, store);
@@ -70,7 +77,7 @@ public sealed class FileTreeLoaderTests
         var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var lister = new GatedLister(gate.Task);
         using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
-        var store = new UiStore();
+        var store = PointedAt(DirA);
 
         loader.Request(PanelId, DirA, store); // must not block on `gate`
         await Assert.That(lister.Started.Task.IsCompleted).IsTrue()
@@ -147,7 +154,7 @@ public sealed class FileTreeLoaderTests
     {
         var lister = new CountingLister();
         using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
-        var store = new UiStore();
+        var store = PointedAt(DirA);
 
         loader.Request(PanelId, DirA, store);
         await Settled(loader);
@@ -162,51 +169,84 @@ public sealed class FileTreeLoaderTests
     [Test]
     public async Task NavigatingAway_CancelsTheWalkInFlight()
     {
-        var first = new TaskCompletionSource();
-        var lister = new SequencedLister(DirA, first.Task);
+        // PerDirectoryLister, not a single-token one: the second request starts
+        // its OWN walk, which overwrites any shared "current token" field. A
+        // single field would then answer with the NEW walk's — uncancelled —
+        // token and the assertion would be about the wrong thing entirely. That
+        // is not hypothetical; it is how this test read on the first CI run.
+        var lister = new PerDirectoryLister { Hangs = true };
         using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
         var store = PointedAt(DirA);
 
         loader.Request(PanelId, DirA, store);
-        await lister.Started.Task;
+        await lister.StartedFor(DirA);
 
+        store.Dispatch(new AppMsg.SetPanelDirectory(PanelId, DirB));
         loader.Request(PanelId, DirB, store);
+        await lister.StartedFor(DirB);
 
-        await Assert.That(lister.Token.IsCancellationRequested).IsTrue()
+        await Assert.That(lister.TokenFor(DirA).IsCancellationRequested).IsTrue()
             .Because("the whole reason the loader owns a CTS: a walk the user has "
                    + "navigated away from must be stoppable, not merely ignored later");
 
-        first.TrySetCanceled();
+        lister.Release();
         await Settled(loader);
     }
 
     [Test]
     public async Task ASlowWalkForAnOldDirectory_DoesNotPublishOverTheNewOne()
     {
-        // The race the reducer's guard exists for, driven end to end: walk A
-        // starts, the user navigates to B, A finally answers. The store must end
-        // up describing B.
-        var gateA = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var lister = new SequencedLister(DirA, gateA.Task);
+        // A StubbornLister on purpose. A well-behaved port observes the token, so
+        // walking away cancels walk A and A simply never answers — which would
+        // make this test pass without the guards doing anything. The lister here
+        // ignores cancellation and answers anyway, late, addressed to the
+        // directory the user already left. That is the only shape in which a
+        // stale result is actually possible, and the store must still end up
+        // describing B.
+        var lister = new StubbornLister();
         using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
         var store = PointedAt(DirA);
 
         loader.Request(PanelId, DirA, store);
-        await lister.Started.Task;
+        await lister.StartedFor(DirA);
 
         store.Dispatch(new AppMsg.SetPanelDirectory(PanelId, DirB));
         loader.Request(PanelId, DirB, store);
+        await lister.StartedFor(DirB);
 
-        // A now completes, late and stale. The lister answers with A's own
-        // directory, because that is the case that matters: a result must not be
-        // able to relabel itself as the directory the panel is now on.
-        gateA.SetResult(true);
+        lister.Release();
         await Settled(loader);
 
         FileTreeSnapshot shown = store.State.Ui.FileTreeFor(PanelId, DirB);
         await Assert.That(shown.Directory).IsEqualTo(DirB)
             .Because("a result addressed to a directory the panel left is not a result "
                    + "for anything the user is looking at");
+    }
+
+    [Test]
+    public async Task AStubbornWalkThatIgnoresCancellation_StillCannotOverwriteTheNewerOne()
+    {
+        // The same race, pinned at the store rather than at the loader: A answers
+        // late for a directory the panel has left, and B's own result must be the
+        // one that survives. Written against the messages so it does not depend
+        // on which half of the two defences happens to fire first.
+        var lister = new StubbornLister();
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = PointedAt(DirA);
+
+        loader.Request(PanelId, DirA, store);
+        await lister.StartedFor(DirA);
+
+        store.Dispatch(new AppMsg.SetPanelDirectory(PanelId, DirB));
+        loader.Request(PanelId, DirB, store);
+        await lister.StartedFor(DirB);
+
+        lister.Release();
+        await Settled(loader);
+
+        await Assert.That(store.State.Ui.FileTreeFor(PanelId, DirB).Entries.Count).IsEqualTo(1)
+            .Because("the surviving snapshot must be B's, not A's — a stale frame drawn over "
+                   + "a fresh one is the failure this design exists to prevent");
     }
 
     [Test]
@@ -491,23 +531,59 @@ public sealed class FileTreeLoaderTests
         }
     }
 
-    /// <summary>A lister that stalls one specific directory until told to answer.</summary>
-    private sealed class SequencedLister(string gatedDirectory, Task gate) : IDirectoryLister
+    /// <summary>
+    ///     A lister that ignores cancellation entirely and answers only when told
+    ///     to, always under the directory it was asked for.
+    /// </summary>
+    /// <remarks>
+    ///     Models the misbehaving implementation the guards exist for. A
+    ///     cooperative lister cannot produce a stale result — it observes the token
+    ///     and unwinds — so every test about "what happens when a walk the user
+    ///     abandoned answers anyway" needs this one instead. It is a test double
+    ///     for a broken port, not a port.
+    /// </remarks>
+    private sealed class StubbornLister : IDirectoryLister
     {
-        public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly Dictionary<string, TaskCompletionSource<bool>> _started = new(StringComparer.Ordinal);
+        private readonly TaskCompletionSource<bool> _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public CancellationToken Token { get; private set; }
+        public async Task StartedFor(string directory)
+        {
+            TaskCompletionSource<bool> signal;
+            lock (_started)
+            {
+                if (!_started.TryGetValue(directory, out signal!))
+                {
+                    signal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _started[directory] = signal;
+                }
+            }
+
+            await signal.Task;
+        }
+
+        /// <summary>Lets every stalled walk answer at once, late.</summary>
+        public void Release() => _release.TrySetResult(true);
 
         public async Task<Result<DirectoryListing>> ListAsync(string directory, CancellationToken cancellationToken = default)
         {
-            Token = cancellationToken;
-            Started.TrySetResult(true);
-            if (string.Equals(directory, gatedDirectory, StringComparison.Ordinal))
+            TaskCompletionSource<bool> signal;
+            lock (_started)
             {
-                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (!_started.TryGetValue(directory, out signal!))
+                {
+                    signal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _started[directory] = signal;
+                }
             }
 
-            return Result.Success(new DirectoryListing(directory, [Entry("one")]));
+            signal.TrySetResult(true);
+
+            // No WaitAsync(cancellationToken): that is the entire point.
+            await _release.Task.ConfigureAwait(false);
+
+            return Result.Success(new DirectoryListing(directory, [Entry(directory[^1..])]));
         }
     }
+
 }

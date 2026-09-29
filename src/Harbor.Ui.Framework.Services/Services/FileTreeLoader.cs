@@ -197,9 +197,12 @@ public sealed class FileTreeLoader : IFileTreeLoader, IDisposable
     /// </summary>
     private void StopPanelLoad(string panelId)
     {
-        CancellationTokenSource? cancelled = null;
+        CancellationTokenSource? cancelled;
         lock (_gate)
         {
+            // Remove rather than only cancel: the slot must be free for a future
+            // request, and a walk that is still unwinding must not be able to
+            // publish — Publish checks map identity, and it is no longer there.
             if (string.IsNullOrEmpty(panelId) || !_inFlight.Remove(panelId, out InFlight? existing))
             {
                 return;
@@ -212,9 +215,14 @@ public sealed class FileTreeLoader : IFileTreeLoader, IDisposable
     }
 
     /// <summary>
-    ///     Cancel every in-flight walk and release their sources. Safe to call more
-    ///     than once.
+    ///     Cancel every in-flight walk. Safe to call more than once.
     /// </summary>
+    /// <remarks>
+    ///     Cancel, not dispose: each walk disposes its own source when it unwinds
+    ///     (<see cref="Release" />), and disposing a source out from under a walk
+    ///     that is still holding its token is the race this avoids. The map is
+    ///     cleared here so no new walk starts and no walk can publish.
+    /// </remarks>
     public void Dispose()
     {
         CancellationTokenSource[] cancelled;
@@ -309,20 +317,21 @@ public sealed class FileTreeLoader : IFileTreeLoader, IDisposable
 
     private void Release(string panelId, InFlight flight)
     {
-        CancellationTokenSource? dispose = null;
         lock (_gate)
         {
             if (_inFlight.TryGetValue(panelId, out InFlight? current) && ReferenceEquals(current, flight))
             {
                 _inFlight.Remove(panelId);
-                dispose = flight.Cts;
             }
         }
 
-        // The source is disposed only when it is still ours. A superseded walk's
-        // source was cancelled by Request and is disposed there, once the walk
-        // that replaced it has taken the map slot.
-        dispose?.Dispose();
+        // Every walk disposes its OWN source, whether or not it still owned the
+        // map slot when it finished. The earlier shape — dispose only if still
+        // ours — leaked the source of every superseded walk, because by the time
+        // a superseded walk finishes the slot belongs to its replacement and the
+        // branch that would have disposed it is unreachable. Navigating a file
+        // tree is the common case, so "common" is where a leak is not affordable.
+        flight.Cts.Dispose();
     }
 
     private static void Cancel(CancellationTokenSource? cts)

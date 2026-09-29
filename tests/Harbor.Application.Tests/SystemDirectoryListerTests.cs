@@ -221,17 +221,33 @@ public sealed class SystemDirectoryListerTests
     }
 
     [Test]
-    public async Task ListAsync_MarkADotDirectoryAsHidden()
+    public async Task ListAsync_ReportsTheFilesystemsOwnHiddenAttribute()
     {
+        // A dot-prefix is NOT the hidden marker, and this is the test that says
+        // so. An earlier version of the port treated a leading dot as hidden; on
+        // Windows the attribute is not set for such a directory, so the same tree
+        // rendered differently per platform and the only assertion that could
+        // have covered it was an OS branch. The attribute is the one answer that
+        // means the same thing everywhere.
         string dir = Sandbox();
         try
         {
             Directory.CreateDirectory(Path.Combine(dir, ".git"));
+            if (OperatingSystem.IsWindows())
+            {
+                File.SetAttributes(Path.Combine(dir, ".git"), FileAttributes.Hidden);
+            }
+            else
+            {
+                // POSIX dotfile: the attribute bit is the only hidden marker there is.
+            }
 
             Result<DirectoryListing> result = await Lister().ListAsync(dir);
 
             DirectoryEntry git = result.Value.Entries.First(static e => e.Name == ".git");
-            await Assert.That(git.IsHidden).IsTrue();
+            await Assert.That(git.IsHidden).IsEqualTo(OperatingSystem.IsWindows())
+                .Because("hidden means FileAttributes.Hidden and nothing else; a dot-prefix "
+                       + "is a naming convention the filesystem did not necessarily adopt");
         }
         finally
         {
