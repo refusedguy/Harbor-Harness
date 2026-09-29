@@ -161,6 +161,9 @@ public sealed record UiState
                 AgentName = chat.AgentName,
                 IsAgentRunning = chat.IsAgentRunning,
                 WasRunning = chat.WasRunning,
+                // A clear-screen drops what was said, not what happened to the
+                // run: the status the reducer decided survives it (#687).
+                SessionStatus = chat.SessionStatus,
                 Sessions = chat.Sessions,
                 ActiveSessionId = chat.ActiveSessionId,
                 IsLoading = chat.IsLoading,

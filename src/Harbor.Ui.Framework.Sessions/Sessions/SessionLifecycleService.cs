@@ -201,8 +201,10 @@ public sealed class SessionLifecycleService : ISessionLifecycle
                 }
             }
 
+            // session.Status travels with the hydration — the core's own answer
+            // for this session, not one re-derived from the replayed lines (#687).
             ctx.Store.Dispatch(new ChatAppMsg.HydrateSession(
-                session.Model, session.ProviderId, session.Agent, lines.ToImmutable()));
+                session.Model, session.ProviderId, session.Agent, lines.ToImmutable(), session.Status));
         }
 
         RefreshGitInfo(session.Id, session.Directory);

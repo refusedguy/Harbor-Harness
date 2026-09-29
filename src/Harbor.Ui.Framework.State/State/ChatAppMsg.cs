@@ -52,11 +52,20 @@ public abstract record ChatAppMsg : AppMsg
     /// <param name="Provider">The session's provider id.</param>
     /// <param name="AgentName">The session's agent name.</param>
     /// <param name="Lines">The replayed history lines, oldest first.</param>
+    /// <param name="Status">
+    ///     The status the session already carries — <c>Session.Status</c>, as
+    ///     persisted by the core. Switching to a session reads the core's
+    ///     answer instead of re-deriving one from the replayed transcript,
+    ///     which is the same #687 defect on the switch path: a sub-agent run
+    ///     that <c>SubAgentRunner</c> stamped <c>Done</c> comes back as
+    ///     <c>Idle</c> if the UI asks what the last replayed line was.
+    /// </param>
     public sealed record HydrateSession(
         string Model,
         string Provider,
         string AgentName,
-        ImmutableArray<ChatLine> Lines) : ChatAppMsg;
+        ImmutableArray<ChatLine> Lines,
+        SessionStatus Status = SessionStatus.Idle) : ChatAppMsg;
 
     /// <summary>
     ///     Runtime identity for the status chrome (model / provider / agent).

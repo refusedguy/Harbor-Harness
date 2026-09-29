@@ -369,6 +369,7 @@ Concrete implementations of:
 | Infrastructure projects (Storage.*, Providers.*, Tools.Builtin) reference Domain only — never Application, never each other, never Presentation. | Architecture tests       |
 | Presentation projects (Tui.* renderers) reference Domain only — never Application, never Infrastructure, never each other. | Architecture tests       |
 | Presentation projects exercise no I/O capability of their own: no subprocess, no `System.IO.File`/`Directory`, no network, no reflection emit (§3 table, §5.6). | Architecture tests (`PresentationCapabilityRules`) |
+| A domain fact decided by the core is decided in ONE place, and the presentation layer reads it: no `SessionStatus`-returning method derives it from the transcript (#687), the `SessionStatus` label/brush table exists once (#663), the core classifies diagnostics (#674), money is priced in the core (#653). | Architecture tests (`SessionStatusSourceRule`, `SessionStatusTableRule`, `DiagnosticsClassificationRule`, `CostPricedInCoreRules`) |
 | `apps/Harbor.App.Cli` references everything — it is the Composition Root.                         | (by convention)          |
 | Concrete impl types (`AnthropicLlmClient`, `JsonlSessionStore`, …) are `new`'d only inside `HostBuilder.cs`. | Code review              |
 | `Program.cs` resolves services by interface from DI; it does not `new` Infrastructure types.       | Code review              |
@@ -597,6 +598,38 @@ constraint, so a typo'd or deleted assembly passes forever. Four tests close tha
 `PRESENTATION-MUST-NOT-USE-THE-NETWORK` and
 `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` have **empty** baselines: Presentation
 is clean on both today, so they run fully armed rather than being deferred with the rest.
+
+### 5.7 Single-source rules — a fact decided once, in the core
+
+The §5.6 rules ask *which capabilities* Presentation may use. These ask a different
+question: **is a domain fact decided in one place, or does every consumer reach its
+own verdict?** A second verdict is not a style difference — it disagrees with the first,
+and nothing in the type system objects.
+
+| Rule | Fact | Issue |
+|---|---|---|
+| `SessionStatusSourceRule` | a `SessionStatus` is decided on the transition that establishes it (`ChatAppReducer`, from the core's own `AgentErrorEvent` / `AgentEndEvent`), and no method returning one may read the transcript | [#687](https://github.com/refusedguy/Harbor-Harness/issues/687) |
+| `SessionStatusTableRule` | the `SessionStatus` → label / brush-key table exists in exactly one file (`StatusMappers`) | [#663](https://github.com/refusedguy/Harbor-Harness/issues/663) |
+| `DiagnosticsClassificationRule` | the detector patterns are declared once, in the core detector, and the LSP counts stay connected to state | [#674](https://github.com/refusedguy/Harbor-Harness/issues/674) |
+| `CostPricedInCoreRules` | money is priced by the core from the model that made the call; no renderer recomputes it | [#653](https://github.com/refusedguy/Harbor-Harness/issues/653) |
+
+**Mechanism.** Repository text scans over `src/` + `apps/` (`contrib/` is outside CI and
+outside support by owner decision, so it is neither scanned nor expected clean). These
+are rules about a table NOT existing in a second file and about a method's body, neither
+of which survives into metadata — a compiled check could not be landed before the fix it
+guards, and the whole point of writing the guard first is that it is red against the
+defect. Comments are stripped first (`SourceCommentStripper`, shared across these rules)
+so a file's own doc comment quoting the rule it violates is not graded as code.
+
+**Perimeters are derived, not re-typed.** `SessionStatusSourceRule` reads its Presentation
+set from `FullLayerMatrixTests.PresentationLayerAssemblies()` for the same reason §5.6
+does, so a new Presentation project is covered the moment it gets a matrix row.
+
+**Non-vacuity.** Each rule carries a liveness check (the scan really walked a checkout,
+the canonical file really exists, the rule table is non-empty) and a positive control that
+feeds the probe a synthetic violation and REQUIRES a hit, alongside snippets it must not
+report. A probe whose matchers stopped working reports nothing, and the rule goes green
+while enforcing nothing — which is the failure mode these rules exist to prevent.
 
 ---
 
