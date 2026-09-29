@@ -353,10 +353,14 @@ public class JsonlUnboundedAllocationTests
             GC.WaitForPendingFinalizers();
             GC.Collect();
 
-            long before = GC.GetTotalAllocatedBytes(precise: true);
+            // Per-thread for the same reason as the rewrite test: the
+            // process-wide counter bills this window for whatever other test
+            // classes are allocating in parallel, which is a different number
+            // on every run.
+            long before = GC.GetAllocatedBytesForCurrentThread();
             var read = await SessionFileReader.ParseMessagesFromDiskAsync(
                 path, sessionId, NullLogger.Instance, CancellationToken.None);
-            long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
             Console.WriteLine($"jsonl-460: read of a {fileBytes / MiB} MiB session allocated {allocated / MiB} MiB");
 
@@ -622,9 +626,14 @@ public class JsonlUnboundedAllocationTests
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        long before = GC.GetTotalAllocatedBytes(precise: true);
+        // Per-thread, not process-wide: TUnit runs test classes in parallel, and
+        // the process-wide counter happily bills this measurement for the 24 MiB
+        // string another class allocated while the window was open. That is not
+        // a hypothetical — it is what made this test read 11 MiB for an
+        // operation that allocates under a megabyte.
+        long before = GC.GetAllocatedBytesForCurrentThread();
         var updated = await store.UpdateAsync(renamed);
-        long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         if (!updated.IsSuccess)
         {
