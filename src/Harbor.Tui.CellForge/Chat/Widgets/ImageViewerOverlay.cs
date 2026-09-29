@@ -189,9 +189,12 @@ public sealed class ImageViewerOverlay
 
         // The viewer is opaque and fullscreen: blank the whole box first so no
         // chat cell survives underneath, THEN draw the frame on top. (Filling
-        // after the border would erase it.)
+        // after the border would erase it.) #553: the frame itself is the
+        // shared PanelChrome painter — this overlay keeps its rectilinear
+        // corners (BoxStyle.SquareFrame) and owns the surface blank, which is
+        // why the shared painter is told not to fill here.
         buffer.Fill(box, Cell.Blank);
-        DrawBox(buffer, box);
+        PanelChrome.PaintBorderBox(buffer, box, BoxStyle.SquareFrame);
 
         string header = $"{block.Name}  {block.Dimensions ?? block.MimeType}  zoom {_zoom}%";
         buffer.SetText(box.X + 1, box.Y + 1, Truncate(header, innerW),
@@ -282,23 +285,4 @@ public sealed class ImageViewerOverlay
 
     private static string Truncate(string text, int width) =>
         text.Length <= width ? text : text[..Math.Max(0, width)];
-
-    private static void DrawBox(ScreenBuffer buffer, Rect rect)
-    {
-        var border = new CellStyle(ChatPalette.Border);
-        for (int x = rect.X; x < rect.Right; x++)
-        {
-            buffer.SetRune(x, rect.Y, new System.Text.Rune('┌'), border);
-            buffer.SetRune(x, rect.Bottom - 1, new System.Text.Rune('└'), border);
-        }
-
-        for (int y = rect.Y; y < rect.Bottom; y++)
-        {
-            buffer.SetRune(rect.X, y, new System.Text.Rune('│'), border);
-            buffer.SetRune(rect.Right - 1, y, new System.Text.Rune('│'), border);
-        }
-
-        buffer.SetRune(rect.Right - 1, rect.Y, new System.Text.Rune('┐'), border);
-        buffer.SetRune(rect.Right - 1, rect.Bottom - 1, new System.Text.Rune('┘'), border);
-    }
 }

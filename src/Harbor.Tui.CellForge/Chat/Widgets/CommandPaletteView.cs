@@ -336,7 +336,7 @@ public sealed class CommandPaletteView
             return;
         }
 
-        FillBox(buffer, rect);
+        PanelChrome.PaintBorderBox(buffer, rect);
         int innerW = rect.Width - 2;
 
         var queryStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
@@ -442,30 +442,6 @@ public sealed class CommandPaletteView
         {
             int hintX = (rect.X + 1 + innerW) - hints.Length;
             buffer.SetText(hintX, rect.Bottom - 2, hints, ChatPalette.Dim);
-        }
-    }
-
-    private static void FillBox(ScreenBuffer buffer, Rect rect)
-    {
-        var fillStyle = new CellStyle(ChatPalette.Panel);
-        var borderStyle = new CellStyle(ChatPalette.Border);
-        buffer.Fill(rect, Cell.From(new Rune(' '), fillStyle));
-
-        int x1 = rect.X, y1 = rect.Y, x2 = rect.Right - 1, y2 = rect.Bottom - 1;
-        buffer.At(x1, y1) = Cell.From(new Rune('╭'), borderStyle);
-        buffer.At(x2, y1) = Cell.From(new Rune('╮'), borderStyle);
-        buffer.At(x1, y2) = Cell.From(new Rune('╰'), borderStyle);
-        buffer.At(x2, y2) = Cell.From(new Rune('╯'), borderStyle);
-        for (int x = x1 + 1; x < x2; x++)
-        {
-            buffer.At(x, y1) = Cell.From(new Rune('─'), borderStyle);
-            buffer.At(x, y2) = Cell.From(new Rune('─'), borderStyle);
-        }
-
-        for (int y = y1 + 1; y < y2; y++)
-        {
-            buffer.At(x1, y) = Cell.From(new Rune('│'), borderStyle);
-            buffer.At(x2, y) = Cell.From(new Rune('│'), borderStyle);
         }
     }
 

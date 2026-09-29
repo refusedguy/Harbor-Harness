@@ -1,3 +1,4 @@
+using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using TUnit.Core;
@@ -98,6 +99,9 @@ public class PanelChromeTests
         PanelChrome.PaintLeftRule(buffer, new Rect(0, 0, 0, 0));
         PanelChrome.PaintMessageSeparator(buffer, 0, 0, 0);
         PanelChrome.FillPanelBackground(buffer, new Rect(0, 0, 0, 0));
+        PanelChrome.PaintBorderBox(buffer, new Rect(0, 0, 0, 0));
+        PanelChrome.PaintBorderBox(buffer, new Rect(0, 0, 1, 1));
+        PanelChrome.PaintBorderBox(buffer, new Rect(0, 0, 0, 5), BoxStyle.SquareFrame);
         await Assert.That(true).IsTrue();
     }
 
@@ -220,6 +224,153 @@ public class PanelChromeTests
         await Assert.That(anyDimRule).IsTrue();
     }
 
+    // ── Border boxes (#553: seven private copies collapsed into one painter) ──
+
+    /// <summary>
+    /// Degenerate rects must not paint OUTSIDE themselves. Two of the seven
+    /// collapsed copies had dropped the <c>Width &lt; 2</c> guard, so a
+    /// squeezed pane painted corner glyphs into the neighbouring cell —
+    /// silent, because the neighbouring cell is somebody else's paint.
+    /// </summary>
+    [Test]
+    public async Task PaintBorderBox_DegenerateRect_PaintsNothingOutsideIt()
+    {
+        foreach (Rect rect in new[]
+                 {
+                     new Rect(0, 0, 1, 1),
+                     new Rect(0, 0, 0, 5),
+                     new Rect(3, 2, 1, 4),
+                     new Rect(2, 3, 5, 1),
+                 })
+        {
+            foreach (var style in new[] { BoxStyle.RoundedPanel, BoxStyle.SquareFrame })
+            {
+                var buffer = SentinelBuffer();
+                PanelChrome.PaintBorderBox(buffer, rect, style);
+                await AssertOutside(rect, buffer);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A real rect still gets a full frame — the guard is not a blanket skip.
+    /// The buffer is one cell larger than the box on every side, so the exact
+    /// art also proves the frame stayed inside it.
+    /// </summary>
+    [Test]
+    public async Task PaintBorderBox_Rect_FramesAllFourEdges()
+    {
+        var buffer = SentinelBuffer(8, 6);
+        PanelChrome.PaintBorderBox(buffer, new Rect(1, 1, 6, 4));
+
+        string[] rows = GridDump.Art(buffer).Split('\n');
+        await Assert.That(rows[0]).IsEqualTo("########");
+        await Assert.That(rows[1]).IsEqualTo("#╭────╮#");
+        await Assert.That(rows[2]).IsEqualTo("#│    │#");
+        await Assert.That(rows[3]).IsEqualTo("#│    │#");
+        await Assert.That(rows[4]).IsEqualTo("#╰────╯#");
+        await Assert.That(rows[5]).IsEqualTo("########");
+    }
+
+    /// <summary>Rectilinear corners are a parameter of the one painter, not a seventh copy.</summary>
+    [Test]
+    public async Task PaintBorderBox_SquareStyle_UsesRectilinearCorners()
+    {
+        var buffer = SentinelBuffer(8, 6);
+        PanelChrome.PaintBorderBox(buffer, new Rect(1, 1, 6, 4), BoxStyle.SquareFrame);
+
+        string[] rows = GridDump.Art(buffer).Split('\n');
+        await Assert.That(rows[0]).IsEqualTo("########");
+        await Assert.That(rows[1]).IsEqualTo("#┌────┐#");
+        await Assert.That(rows[2]).IsEqualTo("#│    │#");
+        await Assert.That(rows[3]).IsEqualTo("#│    │#");
+        await Assert.That(rows[4]).IsEqualTo("#└────┘#");
+        await Assert.That(rows[5]).IsEqualTo("########");
+    }
+
+    /// <summary>
+    /// The square viewer frame leaves the interior to its caller (the overlay
+    /// blanks its own surface first) — so the shared painter must not fill.
+    /// </summary>
+    [Test]
+    public async Task PaintBorderBox_SquareStyle_LeavesTheInteriorAlone()
+    {
+        var buffer = SentinelBuffer();
+        PanelChrome.PaintBorderBox(buffer, new Rect(1, 1, 6, 4), BoxStyle.SquareFrame);
+
+        await Assert.That(buffer.Get(3, 2).Rune).IsEqualTo((int)Sentinel);
+        await Assert.That(buffer.Get(2, 1).Rune).IsEqualTo((int)'─');
+        await Assert.That(buffer.Get(1, 2).Rune).IsEqualTo((int)'│');
+        await Assert.That(buffer.Get(1, 1).Style.Fg).IsEqualTo(ChatPalette.Border);
+    }
+
+    // ── Single-owner guard: no second box painter may be born here ──────────
+
+    /// <summary>
+    /// The census that started #553, kept as a test. Panel corners are spelled
+    /// in exactly one file in the CellForge chat layer; a new overlay that
+    /// wants a frame calls <c>PanelChrome.PaintBorderBox</c> instead of
+    /// copying the nearest private painter — which is how two of the seven
+    /// lost the degenerate-rect guard in the first place.
+    /// </summary>
+    [Test]
+    public async Task BoxCorners_AreSpelledInExactlyOneFile()
+    {
+        string widgets = Path.Combine(RepoRoot(), "src", "Harbor.Tui.CellForge");
+        var offenders = new List<string>();
+        foreach (string file in Directory.EnumerateFiles(widgets, "*.cs", SearchOption.AllDirectories))
+        {
+            string relative = Path.GetRelativePath(widgets, file);
+            if (relative.StartsWith("obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+                relative.StartsWith("bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            {
+                continue; // generated build output, not source
+            }
+
+            string text = File.ReadAllText(file);
+            if (!text.Contains('╭') && !text.Contains('╮') && !text.Contains('╰') && !text.Contains('╯'))
+            {
+                continue;
+            }
+
+            if (relative != Path.Combine("Chat", "Widgets", "PanelChrome.cs"))
+            {
+                offenders.Add(relative);
+            }
+        }
+
+        await Assert.That(string.Join(" ", offenders)).IsEqualTo(string.Empty);
+    }
+
+    /// <summary>Every overlay frame goes through the shared painter (7 call sites).</summary>
+    [Test]
+    public async Task EveryOverlayBox_GoesThroughPanelChrome()
+    {
+        string[] overlays =
+        [
+            "CommandPaletteView.cs",
+            "DialogOverlay.cs",
+            "DiffViewerOverlay.cs",
+            "FilePickerView.cs",
+            "ImageViewerOverlay.cs",
+            "SetupChecklistOverlay.cs",
+            "WhichKeyHelpOverlay.cs",
+        ];
+
+        var missing = new List<string>();
+        foreach (string file in overlays)
+        {
+            string text = File.ReadAllText(
+                Path.Combine(RepoRoot(), "src", "Harbor.Tui.CellForge", "Chat", "Widgets", file));
+            if (!text.Contains("PanelChrome.PaintBorderBox"))
+            {
+                missing.Add(file);
+            }
+        }
+
+        await Assert.That(string.Join(" ", missing)).IsEqualTo(string.Empty);
+    }
+
     [Test]
     public async Task Blocks_EmptyAndUnicode_PaintSeparatorsWithoutThrow()
     {
@@ -242,5 +393,63 @@ public class PanelChromeTests
         }
 
         await Assert.That(true).IsTrue();
+    }
+
+    // ── Box-paint helpers (#553) ─────────────────────────────────────────────
+
+    /// <summary>Marker cell pre-painted everywhere: whatever still reads
+    /// <see cref="Sentinel"/> was never written by the painter under test.</summary>
+    private const char Sentinel = '#';
+
+    /// <summary>Big enough for every degenerate rect in the sweep below.</summary>
+    private static ScreenBuffer SentinelBuffer() => SentinelBuffer(12, 8);
+
+    private static ScreenBuffer SentinelBuffer(int cols, int rows)
+    {
+        var buffer = new ScreenBuffer(cols, rows);
+        var cell = Cell.From(new Rune(Sentinel), new CellStyle(ChatPalette.Text));
+        buffer.FillAll(in cell);
+        return buffer;
+    }
+
+    /// <summary>
+    /// Fails listing every cell the painter touched outside
+    /// <paramref name="rect"/> — the exact failure #553 was filed for.
+    /// </summary>
+    private static async Task AssertOutside(Rect rect, ScreenBuffer buffer)
+    {
+        var strays = new List<string>();
+        for (int y = 0; y < buffer.Rows; y++)
+        {
+            for (int x = 0; x < buffer.Cols; x++)
+            {
+                bool inside = x >= rect.X && x < rect.Right && y >= rect.Y && y < rect.Bottom;
+                if (inside)
+                {
+                    continue;
+                }
+
+                int rune = buffer.Get(x, y).Rune;
+                if (rune != Sentinel)
+                {
+                    strays.Add("(" + x + "," + y + ")=" + (char)rune);
+                }
+            }
+        }
+
+        await Assert.That(string.Join(" ", strays)).IsEqualTo(string.Empty);
+    }
+
+    /// <summary>Walks up from the test binaries to the repo root (<c>Harbor.slnx</c>).</summary>
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
+        {
+            dir = dir.Parent;
+        }
+
+        return dir?.FullName
+               ?? throw new InvalidOperationException("repo root (Harbor.slnx) not found from " + AppContext.BaseDirectory);
     }
 }
