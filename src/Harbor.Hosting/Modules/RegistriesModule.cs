@@ -37,7 +37,20 @@ internal static class RegistriesModule
         ctx.Logger.LogInformation("Registering agents, tools, providers");
 
         var agentRegistry = ToolsCatalog.CreateAgentRegistry(ctx);
-        var mcpRegistry = ToolsCatalog.CreateMcpRegistry(ctx);
+
+        // #477: remote MCP transports are a registration seam. The resolver is
+        // built once from the builtins + whatever the host passed through
+        // HarborComposeOptions.McpTransports, handed to the registry (which
+        // both validates the config name and dispatches on it) and published
+        // into the container so plugins/hosts can enumerate the same set.
+        var mcpTransports = McpTransportResolver.Compose(ctx.Options.McpTransports);
+        foreach (IMcpTransportFactory mcpTransport in mcpTransports.Factories)
+            services.AddSingleton<IMcpTransportFactory>(mcpTransport);
+        services.AddSingleton(mcpTransports);
+        ctx.Logger.LogInformation(
+            "MCP transports registered: {Names}", string.Join(", ", mcpTransports.SupportedNames));
+
+        var mcpRegistry = ToolsCatalog.CreateMcpRegistry(ctx, mcpTransports);
         // Sub-agent runner: TaskTool is built EAGERLY here, but its real dependencies
         // (ISessionStore — registered later in AddHarborStorage; IAgentLoop — DI-built)
         // only exist inside the container. The deferred forwarder closes that gap: the

@@ -1532,8 +1532,34 @@ LLM  ──[tool: mcp, server="fs"]──>  McpToolTool  ──>  IMcpRegistry
 - `IMcpRegistry` — `src/Harbor.Abstractions/Tools/IMcpRegistry.cs`
 - `McpRegistry` (real impl, `IAsyncDisposable`) — `src/Harbor.Tools.Builtin/Tools/Mcp/McpRegistry.cs`
 - `McpProcessClient` / `McpJsonRpcTransport` / `ProcessTree` — subprocess lifecycle + transport
+- `IMcpTransportFactory` / `McpTransportResolver` — remote transport strategies
+  (`src/Harbor.Tools.Builtin/Tools/Mcp/McpTransportFactory.cs`); builtins are
+  `McpHttpTransportFactory` (`"http"`) and `McpSseTransportFactory` (`"sse"`)
 - `McpServersConfigLoader` / `McpServersConfig` — config discovery (below)
 - `McpToolAdapter` — wraps a single MCP tool as an `ITool` named `mcp_<server>_<tool>`
+
+### Remote transports
+
+The `transport` field of a remote (`url`) entry is resolved through
+`McpTransportResolver` — a frozen name → `IMcpTransportFactory` table, not a
+string comparison. Validation and dispatch read the *same* table, so a name
+nobody registered can never reach the call site:
+
+```jsonc
+{"mcpServers": {"cloud": { "url": "https://mcp.example.com/mcp", "transport": "http" }}}
+```
+
+- Supported out of the box: `http` (streamable HTTP, the default when the field
+  is absent or empty) and `sse` (legacy HTTP+SSE).
+- An unknown or blank name is a **hard rejection**: `IMcpRegistry.Register`
+  returns `Result.Failure` listing the accepted names, and the server is not
+  registered. There is no silent fallback to another transport.
+- Adding a transport kind is a registration, not an edit — implement
+  `IMcpTransportFactory` and pass it through `HarborComposeOptions.McpTransports`
+  (or a custom `McpTransportResolver` on the `McpRegistry` constructor). The
+  resolver and every factory are published into the container, so hosts and
+  plugins can enumerate the same set. Registering a name that shadows a builtin
+  throws at composition time.
 
 ### Registering a server
 

@@ -102,7 +102,7 @@ public sealed class McpServersConfigLoader
                     null,
                     new McpRemoteConfig(
                         Expand(cfg.Url),
-                        string.IsNullOrWhiteSpace(cfg.Transport) ? "http" : cfg.Transport,
+                        string.IsNullOrWhiteSpace(cfg.Transport) ? McpTransportNames.Http : cfg.Transport,
                         headers,
                         cfg.OAuth)));
                 continue;

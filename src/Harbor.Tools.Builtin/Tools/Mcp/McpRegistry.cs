@@ -8,7 +8,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Mcp;
 
-/// <summary>A remote MCP endpoint served over HTTP instead of a stdio subprocess.</summary>
+/// <summary>
+///     A remote MCP endpoint served over HTTP instead of a stdio subprocess.
+///     <paramref name="Transport" /> is a canonical
+///     <see cref="McpTransportResolver" /> name — never a raw user string, so
+///     the dispatch site cannot see a name that was not validated (#477).
+/// </summary>
 internal sealed record McpRemoteEndpoint(
     string Url,
     string Transport,
@@ -31,14 +36,27 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     private readonly ConcurrentDictionary<string, ServerEntry> _servers = new();
     private readonly ILogger<McpRegistry>? _logger;
 
+    // #477: transport selection is a registration seam, not a string ternary.
+    // The same table both validates the config name and builds the transport,
+    // so the two can never disagree.
+    private readonly McpTransportResolver _transports;
+
     // JSON-RPC request ids: InvokeAsync/InvokeRemoteAsync run concurrently
     // across servers, so the counter is advanced atomically ([G9] #196).
     private int _nextId;
     private bool _disposed;
 
-    public McpRegistry(ILogger<McpRegistry>? logger = null)
+    /// <summary>Create an empty MCP registry.</summary>
+    /// <param name="logger">Optional logger for registration and transport diagnostics.</param>
+    /// <param name="transports">
+    ///     Transport strategies. Null → <see cref="McpTransportResolver.Default" />
+    ///     (streamable HTTP + legacy SSE). Pass a resolver with extra factories to
+    ///     add a transport kind without editing this class (#477).
+    /// </param>
+    public McpRegistry(ILogger<McpRegistry>? logger = null, McpTransportResolver? transports = null)
     {
         _logger = logger;
+        _transports = transports ?? McpTransportResolver.Default;
     }
 
     /// <summary>
@@ -75,19 +93,30 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     }
 
     /// <summary>
-    ///     Register a remote MCP server reachable over HTTP (streamable HTTP, or the
-    ///     legacy HTTP+SSE transport when <paramref name="transport" /> is <c>"sse"</c>).
+    ///     Register a remote MCP server reachable over HTTP. The transport kind
+    ///     is resolved through <see cref="McpTransportResolver" />: any kind a
+    ///     registered <see cref="IMcpTransportFactory" /> claims is accepted,
+    ///     an unknown kind is rejected outright (#477).
     ///     Nothing is connected until the first call — transports connect lazily.
     /// </summary>
     /// <param name="name">Stable server name.</param>
     /// <param name="url">Absolute http(s) endpoint URL.</param>
-    /// <param name="transport">Transport kind: <c>"http"</c> or <c>"sse"</c>.</param>
+    /// <param name="transport">
+    ///     Transport kind — any name in <see cref="McpTransportResolver.SupportedNames" />
+    ///     (<c>"http"</c>/<c>"sse"</c> by default). Unknown names fail loudly
+    ///     rather than falling back to a default.
+    /// </param>
     /// <param name="headers">Extra headers (an explicit Authorization wins over OAuth).</param>
     /// <param name="oauth">Optional OAuth2 settings (else the HARBOR_MCP_OAUTH_TOKEN env fallback applies).</param>
+    /// <remarks>
+    ///     A two-argument <c>Register(name, value)</c> call binds to the stdio
+    ///     overload (a candidate that needs no default arguments wins), so a
+    ///     remote server must name its transport or come from <c>mcp.json</c>.
+    /// </remarks>
     public Result Register(
         string name,
         string url,
-        string transport = "http",
+        string transport = McpTransportNames.Http,
         IReadOnlyDictionary<string, string>? headers = null,
         McpOAuthConfig? oauth = null)
     {
@@ -96,11 +125,14 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             return Result.Failure($"Server url '{url}' is not a valid absolute http(s) URL.");
-        if (!string.Equals(transport, "http", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(transport, "sse", StringComparison.OrdinalIgnoreCase))
-            return Result.Failure($"MCP transport '{transport}' is not supported (expected 'http' or 'sse').");
 
-        return RegisterInternal(name, null, new McpRemoteEndpoint(url, transport.ToLowerInvariant(), headers, oauth));
+        // Validation and dispatch share one table (#477) — a name that is not
+        // registered here can never reach the transport call site.
+        Result<string> canonical = _transports.Canonicalize(transport);
+        if (canonical.IsFailure)
+            return Result.Failure(canonical.Error);
+
+        return RegisterInternal(name, null, new McpRemoteEndpoint(url, canonical.Value, headers, oauth));
     }
 
     private Result RegisterInternal(string name, McpServerStartInfo? startInfo, McpRemoteEndpoint? remote)
@@ -108,7 +140,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         if (_servers.ContainsKey(name))
             return Result.Failure($"MCP server '{name}' is already registered.");
 
-        _servers[name] = new ServerEntry(name, startInfo, remote);
+        _servers[name] = new ServerEntry(name, startInfo, remote, _transports);
         _logger?.LogInformation(
             "Registered MCP server: {Name} -> {Target}",
             name,
@@ -192,10 +224,12 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 if (value.TryGetProperty("url", out var urlEl) && urlEl.ValueKind == JsonValueKind.String)
                 {
                     // Remote form: {"url": "...", "transport": "http"|"sse", "headers": {...}, "auth": {...}}
+                    // "http" is only the default when the field is absent or not a
+                    // string; a wrong value is a hard rejection, never a fallback (#477).
                     string? transport =
                         value.TryGetProperty("transport", out var transportEl) && transportEl.ValueKind == JsonValueKind.String
                             ? transportEl.GetString()
-                            : "http";
+                            : McpTransportNames.Http;
 
                     Dictionary<string, string>? headers = null;
                     if (value.TryGetProperty("headers", out var headersEl) && headersEl.ValueKind == JsonValueKind.Object)
@@ -207,7 +241,8 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                     }
 
                     McpOAuthConfig? oauth = McpOAuthConfig.Parse(value);
-                    registration = Register(name, urlEl.GetString() ?? string.Empty, transport ?? "http", headers, oauth);
+                    registration = Register(
+                        name, urlEl.GetString() ?? string.Empty, transport ?? McpTransportNames.Http, headers, oauth);
                 }
                 else
                 {
@@ -369,10 +404,11 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         JsonElement args,
         CancellationToken cancellationToken)
     {
-        IMcpRemoteTransport? transport = entry.GetTransport(_logger);
-        if (transport is null)
-            return Result.Failure<string>($"MCP server '{server}' transport could not be created.");
+        Result<IMcpRemoteTransport> created = entry.GetTransport(_logger);
+        if (created.IsFailure)
+            return Result.Failure<string>($"MCP call to '{server}.{method}' failed: {created.Error}");
 
+        IMcpRemoteTransport transport = created.Value;
         try
         {
             int id = Interlocked.Increment(ref _nextId);
@@ -444,17 +480,23 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         private readonly string _name;
         private readonly McpServerStartInfo? _startInfo;
         private readonly McpRemoteEndpoint? _remote;
+        private readonly McpTransportResolver _transports;
         private readonly object _transportGate = new();
         private McpProcessClient? _process;
         private IMcpRemoteTransport? _transport;
         private McpOAuthHandler? _oauth;
         private volatile string? _instructions;
 
-        public ServerEntry(string name, McpServerStartInfo? startInfo, McpRemoteEndpoint? remote)
+        public ServerEntry(
+            string name,
+            McpServerStartInfo? startInfo,
+            McpRemoteEndpoint? remote,
+            McpTransportResolver transports)
         {
             _name = name;
             _startInfo = startInfo;
             _remote = remote;
+            _transports = transports;
         }
 
         public bool IsRemote => _remote is not null;
@@ -471,33 +513,51 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         /// <summary>
         ///     Lazily create the remote transport (first writer wins under the gate);
         ///     the instance is cached so streamable-HTTP session ids survive across calls.
+        ///     Dispatch goes through <see cref="McpTransportResolver" /> (#477) — a
+        ///     strategy per transport kind, not a string ternary. Nothing is
+        ///     substituted for a missing or failing factory: a name that was never
+        ///     registered, or a factory that refuses to build, is a
+        ///     <c>Failure</c> that names the cause.
         ///     OAuth: entries with an <c>auth</c> config get a per-server
         ///     <see cref="McpOAuthHandler" /> (token cache + refresh + login hint);
         ///     otherwise the legacy <c>HARBOR_MCP_OAUTH_TOKEN</c> environment
         ///     variable is attached as a Bearer token by the transports.
         /// </summary>
-        public IMcpRemoteTransport? GetTransport(ILogger? logger)
+        public Result<IMcpRemoteTransport> GetTransport(ILogger? logger)
         {
             if (_remote is null)
             {
-                return null;
+                return Result.Failure<IMcpRemoteTransport>(
+                    $"MCP server '{_name}' is not a registered remote server.");
             }
+
+            // Non-null local so the OAuth token lambda below captures a
+            // definitively non-null endpoint (nullable state does not cross the
+            // lambda boundary for fields).
+            McpRemoteEndpoint remote = _remote;
 
             lock (_transportGate)
             {
                 if (_transport is { } cached)
                 {
-                    return cached;
+                    return Result.Success(cached);
                 }
 
-                Uri endpoint = new(_remote.Url, UriKind.Absolute);
-                Func<CancellationToken, Task<string?>> oauthTokenProvider = _remote.OAuth is not null
-                    ? (ct => OAuthFor(_remote, logger).TryGetAccessTokenAsync(ct))
+                Uri endpoint = new(remote.Url, UriKind.Absolute);
+                Func<CancellationToken, Task<string?>> oauthTokenProvider = remote.OAuth is not null
+                    ? (ct => OAuthFor(remote, logger).TryGetAccessTokenAsync(ct))
                     : (_ => Task.FromResult(Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN")));
-                _transport = string.Equals(_remote.Transport, "sse", StringComparison.OrdinalIgnoreCase)
-                    ? new McpSseTransport(endpoint, _remote.Headers, oauthTokenProvider, logger)
-                    : new McpHttpTransport(endpoint, _remote.Headers, oauthTokenProvider, logger);
-                return _transport;
+
+                Result<IMcpRemoteTransport> created = _transports.Create(
+                    remote.Transport,
+                    new McpTransportRequest(endpoint, remote.Headers, oauthTokenProvider, logger));
+                if (created.IsFailure)
+                {
+                    return created;
+                }
+
+                _transport = created.Value;
+                return created;
             }
         }
 

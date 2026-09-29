@@ -27,7 +27,12 @@ public sealed class McpServerConfig
     [JsonPropertyName("url")]
     public string? Url { get; set; }
 
-    /// <summary>Remote transport: "http" (default) or "sse" (Harbor extension).</summary>
+    /// <summary>
+    ///     Remote transport kind — any name a registered
+    ///     <see cref="IMcpTransportFactory" /> claims (<c>"http"</c> / <c>"sse"</c>
+    ///     out of the box). An unknown name is rejected at registration, never
+    ///     defaulted to another transport (#477).
+    /// </summary>
     [JsonPropertyName("transport")]
     public string? Transport { get; set; }
 

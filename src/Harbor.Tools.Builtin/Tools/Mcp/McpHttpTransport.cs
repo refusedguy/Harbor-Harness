@@ -7,8 +7,13 @@ using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Mcp;
 
-/// <summary>Round-trip contract shared by the remote MCP transports (streamable HTTP and legacy SSE).</summary>
-internal interface IMcpRemoteTransport : IAsyncDisposable
+/// <summary>
+///     Round-trip contract shared by the remote MCP transports (streamable HTTP
+///     and legacy SSE). Public since #477 so a host can plug a third transport
+///     in through <see cref="IMcpTransportFactory" /> — it was internal, which
+///     made the existing seam unusable from outside this assembly.
+/// </summary>
+public interface IMcpRemoteTransport : IAsyncDisposable
 {
     /// <summary>Send one JSON-RPC request and return the matching response (caller disposes), or null when none arrived.</summary>
     Task<JsonDocument?> RoundTripAsync(
