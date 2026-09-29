@@ -51,30 +51,34 @@ namespace Harbor.App.Avalonia.Tests;
 ///     Issue #677: a view-model renders the config it was handed and writes back
 ///     exactly that — it chooses no default and mutates no process state.
 /// </summary>
-// KEYLESS on purpose, and this is the load-bearing detail.
+// ABOUT THE PROCESS ENVIRONMENT
+// ------------------------------
+// The obvious way to prove "Save does not write the process environment" is to
+// plant HARBOR_STORAGE / HARBOR_MODEL / HARBOR_LOGLEVEL / OLLAMA_HOST
+// process-wide and assert they come back. Do not. That is how the first version
+// of this file took 29 unrelated tests down: AppHostDiTests composes the real
+// container, StorageModule reads HARBOR_STORAGE once per composition, an unknown
+// backend id fails fast by contract, and a planted sentinel therefore poisons
+// every test that runs alongside — CI run 36566994637, job 109403142398,
+// "Unknown HARBOR_STORAGE: 'harbor-677-sentinel-1'".
 //
-// These tests plant HARBOR_STORAGE / HARBOR_MODEL / HARBOR_LOGLEVEL / OLLAMA_HOST
-// process-wide, because that is the only way to prove the settings VM does not
-// write them. A NAMED key would only serialise against other classes carrying the
-// SAME key — and every other class in this assembly is free to run alongside.
-// AppHostDiTests composes the real container, which reads HARBOR_STORAGE once per
-// composition, so it would pick up the sentinel and die with
-// "Unknown HARBOR_STORAGE: 'harbor-677-sentinel-1'" — 29 failures, on a
-// schedule that made it read as a flake rather than as a collision.
+// Restoring the real prior values in a `finally` fixes the AFTERMATH, not the
+// collision, and the collision is the part that fails. The only ways out were
+// (a) keyless [NotInParallel], which makes this one class hold the whole
+// assembly alone on every run forever, or (b) not writing process state at all.
 //
-// Keyless [NotInParallel] is the form that means "runs completely alone". The
-// cost is real and accepted: this class is slow, and holding the whole assembly
-// alone while it runs is the price of touching process state.
+// This file takes (b). The assertion is just as strong: the view-model's field
+// values are chosen so that each of the removed writes would have CHANGED its
+// variable, so a surviving write shows up as a snapshot difference — and a
+// first assertion fails loudly if the ambient environment ever makes that
+// snapshot unable to discriminate. A test that forbids writing the process
+// environment has no business writing it, even to prove that it doesn't.
 //
-// The finally-block also restores the REAL prior values, snapshotted before the
-// sentinels were planted — restoring the sentinels themselves is a self-restoring
-// write, which is precisely what this test claims to detect.
-[NotInParallel]
+// The class therefore joins the ordinary headless group, like every other class
+// that boots a HeadlessUnitTestSession.
+[NotInParallel("avalonia-headless")]
 public class ConfigDefaultsComeFromCoreTests
 {
-    /// <summary>Process-wide env names the old Save path wrote. #677 removed the writes.</summary>
-    private static readonly string[] ProcessEnvNames = ["HARBOR_MODEL", "HARBOR_STORAGE", "HARBOR_LOGLEVEL", "OLLAMA_HOST"];
-
     /// <summary>
     ///     A config where the user has chosen NOTHING: every field the settings
     ///     screen touches is empty, which is what a fresh install and a
@@ -192,64 +196,63 @@ public class ConfigDefaultsComeFromCoreTests
         }, commonStore, new RecordingAppStore(UnsetApp()));
     }
 
+    /// <summary>
+    ///     The process env must be byte-identical before and after a Save.
+    /// </summary>
+    /// <remarks>
+    ///     Writes nothing. See the class remarks for what that costs and why the
+    ///     obvious alternative is not available.
+    /// </remarks>
     [Test]
     public async Task Save_WritesNothingToTheProcessEnvironment()
     {
-        // Sentinel values, so "the VM left them alone" and "the VM wrote the same
-        // value back" are distinguishable — a self-restoring write would pass a
-        // compare-against-current check.
-        (string Name, string Value)[] sentinels =
-            [.. ProcessEnvNames.Select((name, i) => (Name: name, Value: $"harbor-677-sentinel-{i}"))];
+        const string provider = "cerebras";
+        const string model = "cerebras/model";
+        const string storage = "sqlite";
+        const string logLevel = "trace";
+        const string ollamaHost = "http://ollama.invalid:11434";
 
-        // Snapshot the REAL values BEFORE planting the sentinels. The previous
-        // version built `before` from the sentinels themselves, so the finally
-        // below restored the sentinels instead of the environment — and they
-        // outlived the test. HARBOR_STORAGE was read once per composition, so
-        // every later DI test in this assembly died on
-        // "Unknown HARBOR_STORAGE: 'harbor-677-sentinel-1'" — 29 failures that
-        // only appeared when a scheduling order put them after this test, which
-        // is why it looked like a flake and not like a leak.
-        //
-        // A null is a real, meaningful prior state: the variable was unset.
-        // Restoring "unset" therefore has to null it, not store an empty string.
-        Dictionary<string, string?> before = new(StringComparer.Ordinal);
-        foreach ((string name, string value) in sentinels)
+        // Exactly what the removed code would have written, per name.
+        var wouldHaveWritten = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            before[name] = Environment.GetEnvironmentVariable(name);
-            Environment.SetEnvironmentVariable(name, value);
-        }
+            ["HARBOR_MODEL"] = $"{provider}/{model}",
+            ["HARBOR_STORAGE"] = storage,
+            ["HARBOR_LOGLEVEL"] = logLevel,
+            ["OLLAMA_HOST"] = ollamaHost,
+        };
 
-        try
+        Dictionary<string, string?> before = wouldHaveWritten.Keys.ToDictionary(
+            n => n,
+            n => Environment.GetEnvironmentVariable(n),
+            StringComparer.Ordinal);
+
+        await Assert.That(before.Count(kv => before[kv.Key] != wouldHaveWritten[kv.Key])).IsGreaterThan(0)
+            .Because(
+                "The comparison below can only catch a write that would have CHANGED a variable. If every one of "
+                + "these four already held the value Save would have written, the test would pass for the wrong "
+                + "reason. Unset the offending variable, or give the view-model a different value to hold.");
+
+        await InAvaloniaSessionAsync(async vm =>
         {
-            await InAvaloniaSessionAsync(async vm =>
-            {
-                vm.DefaultProvider = "cerebras";
-                vm.DefaultModel = "cerebras/model";
-                vm.StorageBackend = "sqlite";
-                vm.LogLevel = "trace";
-                vm.OllamaHost = "http://ollama.invalid:11434";
+            vm.DefaultProvider = provider;
+            vm.DefaultModel = model;
+            vm.StorageBackend = storage;
+            vm.LogLevel = logLevel;
+            vm.OllamaHost = ollamaHost;
 
-                await vm.SaveCommand.ExecuteAsync(null);
+            await vm.SaveCommand.ExecuteAsync(null);
 
-                foreach ((string name, string value) in sentinels)
-                {
-                    await Assert.That(Environment.GetEnvironmentVariable(name)).IsEqualTo(value)
-                        .Because(
-                            name + " is process state, and #677 removed the write that used to overwrite it from "
-                            + "the settings screen. It is read once while AddHarbor composes (StorageModule, "
-                            + "ConfigurationModule, ProviderFactories), so the old write could not have changed the "
-                            + "running app — it only leaked the choice into every other component in the process, "
-                            + "and into every test that ran after it.");
-                }
-            }, new RecordingCommonStore(UnsetCommon()), new RecordingAppStore(UnsetApp()));
-        }
-        finally
-        {
             foreach ((string name, string? value) in before)
             {
-                Environment.SetEnvironmentVariable(name, value);
+                await Assert.That(Environment.GetEnvironmentVariable(name)).IsEqualTo(value)
+                    .Because(
+                        name + " is process state, and #677 removed the write that used to overwrite it from the "
+                        + "settings screen. It is read once while AddHarbor composes (StorageModule, "
+                        + "ConfigurationModule, ProviderFactories), so the old write could not have changed the "
+                        + "running app — it only leaked the choice into every other component in the process, and "
+                        + "into every test that ran after it.");
             }
-        }
+        }, new RecordingCommonStore(UnsetCommon()), new RecordingAppStore(UnsetApp()));
     }
 
     // ── the wizard has no storage step, so it writes no backend ───────────
