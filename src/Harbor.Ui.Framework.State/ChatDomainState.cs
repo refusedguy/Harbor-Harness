@@ -36,6 +36,30 @@ public sealed record ChatDomainState
     /// <summary>Human-readable status: idle / running / compacting / error.</summary>
     public string Status { get; init; } = "idle";
 
+    /// <summary>
+    ///     The session's status, as a DOMAIN FACT (#687). Distinct from
+    ///     <see cref="Status" />, which is the status-bar's own string and
+    ///     carries states that are not session states at all (<c>"compacting"</c>).
+    ///     <para>
+    ///         It is written by exactly one seam — <see cref="ChatAppReducer" />,
+    ///         on the transition that establishes it: the core publishes
+    ///         <c>AgentErrorEvent</c> for a failure, <c>AgentEndEvent</c> with
+    ///         <c>Cancelled</c> for an abort, and a clean <c>AgentEndEvent</c> for
+    ///         a finish. Nothing downstream re-derives it.
+    ///     </para>
+    ///     <para>
+    ///         Before #687 the presentation layer answered this question a second
+    ///         time by asking which role the transcript's LAST line had. That is a
+    ///         second opinion about a run the core already knows the end of, and
+    ///         the two do not have to agree: a run that ended in
+    ///         <c>AgentErrorEvent</c> can still be sitting on an assistant line,
+    ///         so the heuristic repainted failed runs green and overwrote the
+    ///         <see cref="Abstractions.Models.SessionStatus.Error" /> a lifecycle
+    ///         transition had just set.
+    ///     </para>
+    /// </summary>
+    public SessionStatus SessionStatus { get; init; } = SessionStatus.Idle;
+
     /// <summary>Running token/cost accounting for the status line.</summary>
     public CostSnapshot Cost { get; init; }
 

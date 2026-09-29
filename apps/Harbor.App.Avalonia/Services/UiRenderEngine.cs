@@ -261,6 +261,14 @@ public sealed class UiRenderEngine
         return resultText;
     }
 
+    /// <summary>
+    ///     The status the reducer decided for the active session — a read, not a
+    ///     verdict. Kept as a method so <c>ChatViewModel.RenderFrameTick</c> has
+    ///     one seam to call; see <c>ChatStreamingPresenter.DeriveStatus</c> for why
+    ///     the answer is not computed here (#687).
+    /// </summary>
+    /// <param name="state">The current UiState.</param>
+    /// <returns>The session's status.</returns>
     public SessionStatus DeriveStatus(UiState state)
     {
         return _presenter.DeriveStatus(state);

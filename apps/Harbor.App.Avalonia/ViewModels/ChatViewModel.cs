@@ -134,6 +134,11 @@ public sealed partial class ChatViewModel : ChatViewModelBase
 
         if (_sessionManager?.Active is { } activeSession)
         {
+            // The status the reducer decided for this run — published, not
+            // re-derived (#687). This is the last writer standing on the
+            // tracker's value, so anything that recomputed a verdict here (it
+            // used to read the transcript's last line's role) became a second
+            // opinion on a question the core had already answered.
             _sessionManager.SetStatus(activeSession.Id, _renderEngine.DeriveStatus(state));
             _sessionManager.NotifyMessageCount(activeSession.Id, state.Chat.Lines.Length);
         }

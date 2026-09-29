@@ -15,6 +15,13 @@ Two halves of the layering contract, both mechanically enforced:
    `System.IO.Directory`, network and reflection emit. Existing violations are
    held in an enforced `KnownViolations` baseline with a tracking issue per site —
    see ARCHITECTURE_LAYERS.md §3 and §5.6.
+3. **Single-source rules** — a domain fact decided in one place, not re-derived
+   per consumer: `SessionStatusSourceRule` (#687, a status is not re-derived from
+   the transcript), `SessionStatusTableRule` (#663, one label/brush table),
+   `DiagnosticsClassificationRule` (#674, the core classifies diagnostics),
+   `CostPricedInCoreRules` (#653, money is priced in the core). These are
+   repository text scans over `src/` + `apps/`, each with a liveness check and a
+   positive control.
 
 ## Run
 

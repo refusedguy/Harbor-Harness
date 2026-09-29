@@ -50,10 +50,22 @@ public static class ChatAppReducer
         ChatAppMsg.Agent a => new ReduceResult(Reduce(state, a.Event), new TuiEffect.None()),
         ChatAppMsg.AgentStarted => new ReduceResult(state with
         {
-            Chat = state.Chat with { Status = "running", IsAgentRunning = true }
+            Chat = state.Chat with
+            {
+                Status = "running",
+                IsAgentRunning = true,
+                SessionStatus = SessionStatus.Working
+            }
         }, new TuiEffect.None()),
         ChatAppMsg.AgentEnded ae => OnAgentEnded(state, ae),
-        ChatAppMsg.StatusChanged sc => ReduceResult.NoOp(state with { Chat = state.Chat with { Status = sc.Status } }),
+        ChatAppMsg.StatusChanged sc => ReduceResult.NoOp(state with
+        {
+            Chat = state.Chat with
+            {
+                Status = sc.Status,
+                SessionStatus = HostClosedRun(state.Chat, sc.Status)
+            }
+        }),
         ChatAppMsg.ConfigureRuntime cr => ReduceResult.NoOp(state with
         {
             Chat = state.Chat with { Model = cr.Model, Provider = cr.Provider, AgentName = cr.AgentName }
@@ -155,8 +167,9 @@ public static class ChatAppReducer
         CompactionCompletedEvent cc => OnCompactionCompleted(state, cc),
         AgentErrorEvent err => state
             .AddLine(ChatRole.Error, err.Message)
-            .WithStatus("error"),
-        AgentEndEvent => state with
+            .WithStatus("error")
+            .WithSessionStatus(SessionStatus.Error),
+        AgentEndEvent end => state with
         {
             Chat = state.Chat with
             {
@@ -169,7 +182,11 @@ public static class ChatAppReducer
                 IsStreaming = false,
                 Active = ActiveMessage.Empty,
                 PendingStreamText = ChunkedBuffer.Empty,
-                PendingStreamThink = ChunkedBuffer.Empty
+                PendingStreamThink = ChunkedBuffer.Empty,
+                // The core's own terminal fact, read once here (#687). The
+                // projection reads this field; it does not re-ask which role
+                // the transcript's last line had.
+                SessionStatus = CoreEndedRun(state.Chat, end.Cancelled)
             }
         },
         _ => state
@@ -188,7 +205,8 @@ public static class ChatAppReducer
             {
                 Status = "running",
                 IsAgentRunning = true,
-                WasRunning = state.Chat.IsAgentRunning
+                WasRunning = state.Chat.IsAgentRunning,
+                SessionStatus = SessionStatus.Working
             },
             Ui = state.Ui with { ScrollOffset = 0 }
         };
@@ -298,6 +316,7 @@ public static class ChatAppReducer
                 Status = "running",
                 IsAgentRunning = true,
                 IsStreaming = true,
+                SessionStatus = SessionStatus.Working,
                 Active = ActiveMessage.Empty,
                 PendingStreamText = ChunkedBuffer.Empty,
                 PendingStreamThink = ChunkedBuffer.Empty
@@ -465,6 +484,62 @@ public static class ChatAppReducer
     private static UiState WithStatus(this UiState state, string status) =>
         state with { Chat = state.Chat with { Status = status } };
 
+    /// <summary>
+    ///     The status a run the CORE closed out carries (#687). This is the one
+    ///     place that answer is produced, and everything it reads is the core's
+    ///     own statement about the run:
+    ///     <list type="bullet">
+    ///         <item>
+    ///             <c>AgentEndEvent.Cancelled</c> — the agent published the abort
+    ///             terminal (<c>AgentLoop</c> emits it on the cancel path).
+    ///         </item>
+    ///         <item>
+    ///             a preceding <c>AgentErrorEvent</c>, already folded into
+    ///             <c>Chat.Status</c> — a run that failed is not done, whatever
+    ///             role its last transcript line had.
+    ///         </item>
+    ///         <item>
+    ///             otherwise the run finished cleanly. "Finished" is the core's
+    ///             claim, not a count of assistant lines.
+    ///         </item>
+    ///     </list>
+    /// </summary>
+    /// <param name="chat">The chat state as of the terminal event.</param>
+    /// <param name="cancelled">Whether the terminal event reported a cancellation.</param>
+    private static SessionStatus CoreEndedRun(ChatDomainState chat, bool cancelled) =>
+        cancelled ? SessionStatus.Aborted
+        : chat.Status == "error" ? SessionStatus.Error
+        : SessionStatus.Done;
+
+    /// <summary>
+    ///     The status after a HOST-driven terminal message —
+    ///     <see cref="ChatAppMsg.AgentEnded" /> and
+    ///     <see cref="ChatAppMsg.StatusChanged" /> from <c>TuiEffectHost</c>
+    ///     (#687).
+    ///     <para>
+    ///         The host only ever DECIDES a failure. By the time its terminal
+    ///         message lands, a run that finished has already published
+    ///         <c>AgentEndEvent</c>, so treating the host's message as a second
+    ///         verdict would downgrade that <see cref="SessionStatus.Done" /> back
+    ///         to <see cref="SessionStatus.Idle" /> one message later. A run the
+    ///         host closes out while still marked working never reported a
+    ///         terminal at all, and <see cref="SessionStatus.Idle" /> — nothing
+    ///         running, nothing succeeded — is the honest reading of that.
+    ///     </para>
+    /// </summary>
+    /// <param name="chat">The chat state as of the host's message.</param>
+    /// <param name="reportedStatus">The status string the host reported, if any.</param>
+    private static SessionStatus HostClosedRun(ChatDomainState chat, string? reportedStatus) =>
+        string.Equals(reportedStatus, "error", StringComparison.OrdinalIgnoreCase)
+            ? SessionStatus.Error
+            : chat.SessionStatus == SessionStatus.Working
+                ? SessionStatus.Idle
+                : chat.SessionStatus;
+
+    /// <summary>Set the domain status alongside a status-string change (#687).</summary>
+    private static UiState WithSessionStatus(this UiState state, SessionStatus status) =>
+        state with { Chat = state.Chat with { SessionStatus = status } };
+
     // ── chat-owned message arms ────────────────────────────────────────────
 
     /// <summary>
@@ -483,6 +558,10 @@ public static class ChatAppReducer
                 Model = h.Model,
                 Provider = h.Provider,
                 AgentName = h.AgentName,
+                // The status the core persisted for this session, read rather
+                // than re-derived from the replayed lines (#687) — the switch
+                // path had the same defect the live path had.
+                SessionStatus = h.Status,
                 // The tab strip is workspace chrome, not transcript: hydrating a
                 // session (i.e. switching to it) must not close the open tabs.
                 TabStrip = state.Chat.TabStrip,
@@ -498,7 +577,9 @@ public static class ChatAppReducer
     ///     <see cref="ChatAppMsg.AgentEnded.Status" /> keeps a previously set
     ///     <c>"error"</c> status (so a failed run does not get repainted as a
     ///     clean finish by the host's finally block) and otherwise falls back to
-    ///     <c>"idle"</c>.
+    ///     <c>"idle"</c>. The domain status follows
+    ///     <see cref="HostClosedRun" /> — the host closes a run out, it does not
+    ///     re-judge it (#687).
     /// </summary>
     private static ReduceResult OnAgentEnded(UiState state, ChatAppMsg.AgentEnded msg)
     {
@@ -509,7 +590,10 @@ public static class ChatAppReducer
                 IsAgentRunning = false,
                 IsStreaming = false,
                 Active = ActiveMessage.Empty,
-                Status = msg.Status ?? (state.Chat.Status == "error" ? "error" : "idle")
+                Status = msg.Status ?? (state.Chat.Status == "error" ? "error" : "idle"),
+                SessionStatus = msg.Error is null
+                    ? HostClosedRun(state.Chat, msg.Status)
+                    : SessionStatus.Error
             }
         };
         return msg.Error is null

@@ -81,8 +81,11 @@ public sealed class SessionSwitcher
             }
         }
 
+        // The status travels with the hydration: it is the core's own answer
+        // for this session, and re-deriving one from the replayed lines is the
+        // #687 defect on the switch path.
         targetStore.Dispatch(new ChatAppMsg.HydrateSession(
-            session.Model, session.ProviderId, session.Agent, lines.ToImmutable()));
+            session.Model, session.ProviderId, session.Agent, lines.ToImmutable(), session.Status));
 
         _logger.LogInformation("Opened session {Id}, dir={Dir}, replayed {Count} messages",
             session.Id, session.Directory, messages.IsSuccess ? messages.Value.Count : 0);

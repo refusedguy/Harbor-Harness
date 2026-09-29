@@ -28,7 +28,7 @@ composition only.
 | `State/AppMsg.cs` | **Generic** message union: `KeyInput`, `InputText`, `Quit`, `Reset`, `Viewport`, `HistoryMeasured`, `ScrollResetToTail`, `ScrollClamp`, `TogglePanel`, `FocusPanel`, `CyclePanelFocus`, `ResizePanel`, `SeedPanels`, `SetPanelCursor`, `SetPanelDirectory`. |
 | `State/ChatAppMsg.cs` | **Harbor chat** arms (`AppMsg` subtype): `Agent`, `AgentStarted`, `AgentEnded`, `StatusChanged`, `AppendLine`, `HydrateSession`, `ConfigureRuntime`, `SyncSessions`. |
 | `State/AppReducer.cs` | **Generic** reducer: `Update(UiState, AppMsg, IAppReducerPlugin?)` + panel/scroll/input/focus helpers. Declares `ReduceResult` and the `IAppReducerPlugin` extension point. |
-| `State/ChatAppReducer.cs` | **Harbor chat** extension: `Reduce(UiState, AgentEvent)`, `Update(UiState, AppMsg)`, plus the `ChatAppReducerPlugin` adapter for `IAppReducerPlugin`. |
+| `State/ChatAppReducer.cs` | **Harbor chat** extension: `Reduce(UiState, AgentEvent)`, `Update(UiState, AppMsg)`, plus the `ChatAppReducerPlugin` adapter for `IAppReducerPlugin`. **The one place a `SessionStatus` is decided** (#687): `CoreEndedRun` reads the core's own terminal facts (`AgentEndEvent.Cancelled`, a preceding `AgentErrorEvent`) and `HostClosedRun` keeps `TuiEffectHost`'s close-out from re-judging a run the core already ended. Everything downstream reads `ChatDomainState.SessionStatus`. |
 | `State/UiStore.cs` | `UiStore` — the Elm-style store that owns state, dispatches messages, and runs `TuiEffect`s via `ITuiEffectRunner`. |
 | `AppState.cs` | Legacy flat app state (`Harbor.Ui.Framework.Reducers.AppReducer` / `AppStore`) kept only for the not-yet-migrated shell-chrome consumers. **Not** on the TEA read path. |
 | `State/ChatViewState.cs` | Chat transcript state: `Lines`, `ToolCalls` (each carries the shared `ToolCallState` lifecycle enum from `Harbor.Ui.Framework.Abstractions`, #567), `IsStreaming`, `IsThinking`, `StreamingBuffer`, `PendingStreaming`. |
@@ -52,6 +52,7 @@ composition only.
 - **`UiStore`**: `State`, `Dispatch(AppMsg)`, `Bind(UiEffectRunner)`, `Changed` events for state changes.
 - **`AppReducer.Update`**: generic pure reducer; the optional `IAppReducerPlugin` argument is the extension point (claim → generic → plugin post-fold, in that order).
 - **`ChatAppReducer.Update`**: the composed entry point used by `UiStore.Dispatch` = `AppReducer.Update` + the chat plugin.
+- **`ChatDomainState.SessionStatus`**: the domain status, decided on the transition that establishes it and read by the projection afterwards (#687). Distinct from `ChatDomainState.Status`, the status-bar's own string, which carries states that are not session states (`"compacting"`).
 - **`PanelRegistry`**: `Register`, `Unregister`, `GetVisible`, `GetVisibleByPlacement`, `GetState`, `GetSize`, `SetSize`, `Toggle`, `Focus`, `CycleFocus`.
 - **`IPanelProvider`**: `Id`, `Title`, `DefaultPlacement`, `DefaultSize`, `Build(ctx)`, `OnKey`.
 - **`AsyncFeed<T>` / `AsyncData<T>`**: async data primitives with status tracking.
