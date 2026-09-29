@@ -710,16 +710,26 @@ do. Production is not covered by that condition: `src`/`apps`/`contrib` keep CFE
 - **Hand-rolled `Result<T>` types are structurally invisible.** CFE0001 matches on the
   `CSharpFunctionalExtensions.Result` *symbol*. The shape #561 removed —
   `IPluginCompiler.CompilationResult.Value => _assembly ?? throw …` with
-  `Error => _error ?? string.Empty` — was invisible to it, and #588's `ModelBatch` still is.
+  `Error => _error ?? string.Empty` — was invisible to it, and so was #588's `ModelBatch`.
   **CFE0001 says nothing about either.** The companion backstop is
-  `tests/Harbor.Architecture.Tests/HandRolledResultShapeTests.cs`: a shipped type may declare
-  `IsSuccess`/`IsFailure` only by *delegating* to a real `Result`, and an `Error` member may never
-  be an `x ?? string.Empty` coalesce — that expression is what made "no failure" and "failure with
-  nothing to say" indistinguishable. Both rules are **preventive** now that #561 removed their
-  targets, so each carries a positive control that feeds the scanner the pre-#561 source and
-  requires it to be reported. `ThemeParseResult` (`src/Harbor.DesignSystem`) is the one
+  `tests/Harbor.Architecture.Tests/HandRolledResultShapeTests.cs`, which now carries three rules:
+  a shipped type may declare `IsSuccess`/`IsFailure` only by *delegating* to a real `Result`
+  (Rule 1, #561); an `Error` member may never be an `x ?? string.Empty` coalesce — that
+  expression is what made "no failure" and "failure with nothing to say" indistinguishable
+  (Rule 2, #561); and a **value-shaped** type (`struct` / `record struct`) may never carry a
+  nullable-string `Error` member unless it delegates (Rule 3, #588). Rule 3 exists because
+  `ModelBatch` slipped past the first two: it declared no flags at all, so its verdict was read
+  off the error's *nullness* at each call site — `batch.Error is not null`, the inverse of the
+  library's polarity — and a failure with an empty error was representable. #588 replaced it with
+  a real `Result<IReadOnlyList<ModelInfo>>` per provider task; the provider id for an error line
+  now comes from the fan-out's index, which is why `ProviderRegistry.GetAllModelsAsync` reads a
+  `.Value` only after an early return. `ThemeParseResult` (`src/Harbor.DesignSystem`) is the one
   allow-listed type; it is the same wart and remains deferred, as
-  `ResultFailureConversionTests` already documented.
+  `ResultFailureConversionTests` already documented. Rule 3 has one exemption of its own:
+  `EditTool.EditResult` (`bool Ok` next to a `string? Error`) is a fourth instance of the same
+  shape, found by Rule 3 while #588 was being fixed and deferred to #721 — it is a builtin tool,
+  not the providers perimeter #588 covers. `Rule3Exemptions_AreStillNeeded` fails the build if
+  that entry outlives the type, so the deferral cannot rot into a silent allow-list.
 - It only inspects `MethodDeclarationSyntax` bodies: a `.Value` in a constructor, a local function or
   an expression-bodied member is not modelled.
 - It ignores `?.Value`.
