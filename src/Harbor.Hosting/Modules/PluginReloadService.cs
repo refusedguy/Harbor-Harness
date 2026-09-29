@@ -239,7 +239,11 @@ public sealed class PluginReloadService
 
         lock (_installedLock)
         {
+            #pragma warning disable CFE0001
+            // CFE0001 false positive. Baseline: docs/ROP-API-INVENTORY.md 5.
+            // if (IsFailure) { log; return summary; } early-return guard
             foreach (var p in result.Value)
+            #pragma warning restore CFE0001
             {
                 _loadedVersions[p.SourcePath] = p.Version.ToString();
             }

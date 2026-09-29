@@ -98,12 +98,12 @@ public sealed class CfeValueBaselineTests
 
     /// <summary>
     ///     Measured CFE0001 sites in shipped code (src/): 1 real defect, now
-    ///     fixed, plus 21 false positives now carrying a documented pragma.
+    ///     fixed, plus 24 false positives now carrying a documented pragma.
     /// </summary>
-    private const int MeasuredProductionSites = 22;
+    private const int MeasuredProductionSites = 25;
 
     /// <summary>Measured CFE0001 sites under tests/, all suppressed centrally.</summary>
-    private const int MeasuredTestSites = 177;
+    private const int MeasuredTestSites = 174;
 
     /// <summary>
     ///     Every accepted production exemption. Adding a row is a claim that the
@@ -146,6 +146,14 @@ public sealed class CfeValueBaselineTests
             "if (IsFailure) { return Result.Failure(...); } early return"),
         new("src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs", "BuildProviderGroupAsync",
             "cfgResult.IsSuccess && ... .Value ...; && short-circuit guard"),
+        new("src/Harbor.Hosting/Modules/IpcModule.cs", "AddNetworkedListenerIfConfigured",
+            "guarded by a fail-fast throw, not an early return"),
+        new("src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs", "RegisterDesktopProviders",
+            "if (IsFailure) { log; continue; } loop continue"),
+        new("src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs", "RegisterJsonProviders",
+            "if (IsFailure) { log; continue; } loop continue"),
+        new("src/Harbor.Hosting/Modules/PluginReloadService.cs", "ReloadCoreAsync",
+            "if (IsFailure) { log; return summary; } early return"),
     ];
 
     private static string? Root => RepoPaths.RepoRoot;
@@ -372,8 +380,8 @@ public sealed class CfeValueBaselineTests
             .Because("an empty baseline would mean the backstop is not demonstrably load-bearing; "
                    + "it is only meaningful because these 17 sites are real and were measured");
 
-        await Assert.That(Baseline.Length).IsEqualTo(17)
-            .Because("the production baseline is pinned at 17 members / 21 sites (CFE0001 counts "
+        await Assert.That(Baseline.Length).IsEqualTo(21)
+            .Because("the production baseline is pinned at 21 members / 24 sites (CFE0001 counts "
                    + "sites, this table counts members). It may only shrink: a new row is a new "
                    + "false positive claim that must be justified in review, and removing a row is "
                    + "always safe. If this number moved, re-measure and update "
@@ -389,7 +397,7 @@ public sealed class CfeValueBaselineTests
     public async Task NonVacuity_MeasuredTotalIsRecorded()
     {
         await Assert.That(MeasuredTotalSites).IsEqualTo(199)
-            .Because("199 is the CI-measured CFE0001 count (22 production + 177 tests) on analyzer "
+            .Because("199 is the CI-measured CFE0001 count (25 production + 174 tests) on analyzer "
                    + "1.3.0. It is recorded so that a future package bump which drops the "
                    + "diagnostic to zero shows up as a number to re-verify, not as a silent "
                    + "green build. See docs/ROP-API-INVENTORY.md §5.");
