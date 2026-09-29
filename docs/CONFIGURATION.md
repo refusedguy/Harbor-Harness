@@ -90,7 +90,7 @@ live on `CommonConfig` itself (`CommonConfig.cs`):
 | `DefaultProvider` | `string` | `"anthropic"` | Default provider ID used on first launch. |
 | `DefaultModel` | `string` | `"claude-sonnet-4"` | Default full model ID. |
 | `DefaultAgent` | `string` | `"code"` | Default agent mode: `code` \| `plan` \| `explore`. |
-| `StorageBackend` | `string` | `"jsonl"` | `jsonl` \| `sqlite` \| `memory`. Env `HARBOR_STORAGE` overrides. |
+| `StorageBackend` | `string` | `""` | `jsonl` \| `sqlite` \| `memory`. `""` = not chosen: the app's composition preset decides (CLI `jsonl`, desktop `memory`). Env `HARBOR_STORAGE` overrides both. See [ADR-008](adr/ADR-008-storage-backend-composition-contract.md). |
 | `StoragePath` | `string` | `""` | Optional override for session dir. Empty = `~/.harbor/sessions/`. |
 | `LogLevel` | `string` | `"info"` | `trace` \| `debug` \| `info` \| `warning` \| `error`. |
 | `EnableFileLogging` | `bool` | `true` | Write rotating logs to `~/.harbor/logs/`. |

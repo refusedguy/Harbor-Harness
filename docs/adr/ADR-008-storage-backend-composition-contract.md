@@ -43,6 +43,38 @@
 - Композиционные тесты `tests/Harbor.Hosting.Tests` помечены
   `[NotInParallel]`: пин env-переменных — глобальное состояние процесса.
 
+## Дополнение (#677): «рябь нулевая» была неверна
+
+Пункт 1 решения утверждал, что ripple равен нулю, потому что «все потребители
+уже страхуются `IsNullOrEmpty → "jsonl"`». Страховались — но **записывали
+значение обратно**:
+
+- `ConfigStoreOnboardingPersister` писал `StorageBackend = "jsonl"`, если поле
+  было пустым;
+- `SettingsViewModel` подставлял `"jsonl"` и на чтении, и на сохранении, плюс
+  вызывал `Environment.SetEnvironmentVariable("HARBOR_STORAGE", …)` — то есть
+  перебивал пресет ещё и на уровне процесса.
+
+Итог: пустое значение не выживало цикл «визард → Settings → визард», и
+десктопный `memory` из `AppHost.cs:99` оставался недостижимым из UI. Сам ADR
+был прав, а защита была дырявой: `IsNullOrEmpty → "jsonl"` — это не «страховка
+потребителя», а подстановка ответа там, где вопрос не задавался.
+
+Пересмотрено (#677): UI не пишет это поле вовсе. `""` значит «не выбрано», и
+решает пресет композиции. Гарда:
+
+- `tests/Harbor.Architecture.Tests/UiConfigDefaultsRule.cs` — исходный запрет
+  на литеральный дефолт конфиг-поля и на `SetEnvironmentVariable` в
+  view-model;
+- `tests/Harbor.App.Avalonia.Tests/ConfigDefaultsComeFromCoreTests.cs` —
+  поведение: `""` доживает до файла, а Save не трогает окружение процесса.
+
+Известная дыра, названная честно: `CompositeConfig.EffectiveStorageBackend()`
+по-прежнему возвращает `"jsonl"` при пустом поле. Метод не вызывается нигде в
+продуктовом коде; слой `Harbor.Desktop.Abstractions` не видит
+`HarborComposeOptions`, поэтому значение пресета он взять не может. Отдельная
+задача — здесь не трогали.
+
 ## Верификация
 
 - `dotnet run --project tests/Harbor.Hosting.Tests` — 8/8.
