@@ -8,6 +8,7 @@ using AvaloniaEdit;
 using AvaloniaEdit.Highlighting;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views.Controls;
+using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
@@ -142,7 +143,20 @@ public partial class CodeEditorView : UserControl
 
         Vm.OpenInlineEdit(selectedText, start, end, caretTop);
 
-        _ = global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+        // #569: this used to be `_ = Dispatcher.UIThread.InvokeAsync(...)`.
+        // InvokeAsync returns a DispatcherOperation, not a Task, so it cannot be
+        // handed to TaskFireAndForget directly — awaiting it inside a local
+        // async method gives the helper the Task it needs, so a fault while
+        // positioning the overlay is reported instead of dropped. The key
+        // handler stays synchronous, so `e.Handled` is still set in time.
+        TaskFireAndForget.Forget(
+            PositionInlineEditOverlayAsync(caretTop),
+            ex => Logger.LogError(ex, "Positioning the inline-edit overlay failed"));
+    }
+
+    private async Task PositionInlineEditOverlayAsync(double caretTop)
+    {
+        await global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
         {
             if (InlineEditOverlay is null || Vm is null) return;
 

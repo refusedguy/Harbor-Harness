@@ -1,4 +1,5 @@
 using Harbor.App.Avalonia.Services;
+using Harbor.Abstractions.Tools;
 using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Commands;
 using Harbor.Ui.Framework.Navigation;
@@ -87,8 +88,19 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
     }
     private void NewSession() => _workspaceCommands.NewSession();
     private void BranchSession() => _workspaceCommands.BranchSession();
-    private void OpenFile() => _ = _workspaceCommands.OpenFileAsync();
-    private void SaveFile() => _ = _workspaceCommands.SaveFileAsync();
+
+    // #569: CommandResultViewModel holds an `Action`, so these two callbacks
+    // cannot await — the palette's command table is synchronous by contract.
+    // They used to discard the Task bare, which meant a Ctrl+O / Ctrl+S routed
+    // through the palette could fail with no log at all. TaskFireAndForget
+    // keeps the sync contract and still observes the fault.
+    private void OpenFile() => TaskFireAndForget.Forget(
+        _workspaceCommands.OpenFileAsync(),
+        ex => _logger.LogError(ex, "Palette open-file failed"));
+    private void SaveFile() => TaskFireAndForget.Forget(
+        _workspaceCommands.SaveFileAsync(),
+        ex => _logger.LogError(ex, "Palette save-file failed"));
+
     private void StopAgent() => _workspaceCommands.StopAgent();
     private void ClearChat() => _workspaceCommands.ClearChat();
     private void RefreshSessions() => _workspaceCommands.RefreshSessions();

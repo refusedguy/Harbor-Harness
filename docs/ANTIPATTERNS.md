@@ -303,26 +303,46 @@ a fault continuation.
 **What goes wrong.** Exceptions are silently swallowed (or, worse, surface as
 unobserved task exceptions later). State isn't updated. Hangs.
 
-**Right way.** `await` it. If you really must fire-and-forget, use
-`.ContinueWith(t => log(t.Exception), TaskContinuationOptions.OnlyOnFaulted)`.
+**Right way.** `await` it. When you genuinely cannot — a constructor, an
+Avalonia lifecycle override, a `[RelayCommand] void`, a key handler that must
+return `bool` before the base call — route it through
+`TaskFireAndForget.Forget(task, ex => _logger.LogError(ex, "…"))`
+(`Harbor.Abstractions.Tools`). That helper attaches an `OnlyOnFaulted`
+continuation, so the fault is observed and reported instead of dying at
+finalization.
+
+**The discard is not the point — the lost fault is.** A synchronous caller is
+not the defect; a `void` member whose body is a Task-returning call is worse
+than `_ =`, because the compiler accepts it silently and there is no `_ =` to
+grep for:
 
 ```csharp
 // ❌ WRONG — fire-and-forget, errors swallowed
 _ = _eventBus.PublishAsync(evt, ct);
 
+// ❌ ALSO WRONG, AND HARDER TO SEE — no `_ =` marker at all. The Task is
+// dropped on the floor and `rg '_ = '` cannot find this line.
+public void BranchSession() => _sessions.BranchCommand.ExecuteAsync(null);
+
 // ✅ RIGHT — await
 await _eventBus.PublishAsync(evt, ct).ConfigureAwait(false);
 
-// ✅ OK — fire-and-forget with fault handler
-_ = Task.Run(async () =>
-{
-    try { await SomeAsync(ct); }
-    catch (Exception ex) { _logger.LogError(ex, "Background task failed"); }
-});
+// ✅ OK — synchronous contract, fault observed and reported
+TaskFireAndForget.Forget(
+    _workspaceCommands.SaveFileAsync(),
+    ex => _logger.LogError(ex, "Ctrl+S save-file failed"));
 ```
 
-> **Harbor status:** `AgentLoop.ReportProgress` and `TuiEffectHost.Run` both
-> have fire-and-forget. See §FP-003, §FP-006.
+> **Harbor status (2026-09-29, #569):** the Avalonia desktop shell
+> (`apps/Harbor.App.Avalonia`) is converted and guarded by
+> `AvaloniaFireAndForgetRules` in `tests/Harbor.Architecture.Tests` — a
+> source-text rule with non-vacuity tests. The **Blazor shell is deliberately
+> out of scope** for that rule: `SettingsViewModel.SelectedTheme` still discards
+> `_theme.SetThemeAsync(value)` and `_toasts.InfoAsync(…)` bare. Policing a
+> perimeter nobody converted would be a guard that cries wolf, so widening
+> `GuardedProjects` is reserved for the commit that actually converts it.
+> `AgentLoop.ReportProgress` and `TuiEffectHost.Run` also still have
+> fire-and-forget. See §FP-003, §FP-006.
 
 ### 10. Mutating state in render path
 

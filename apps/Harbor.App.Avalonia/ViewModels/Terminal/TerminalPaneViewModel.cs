@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Harbor.Abstractions.Tools;
 using Harbor.Terminal.Pty;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
@@ -152,12 +153,15 @@ public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposabl
         _pty.OutputClosed -= OnOutputClosed;
         // PtyProcess is IAsyncDisposable; sync dispose sites (window close, pane close)
         // start the teardown and observe faults — never an unobserved fire-and-forget.
-        ILogger logger = _logger;
-        _ = _pty.DisposeAsync().AsTask().ContinueWith(
-            t => logger.LogWarning(t.Exception, "PTY dispose failed"),
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted,
-            TaskScheduler.Default);
+        //
+        // #569: this was already correct (hand-rolled ContinueWith + OnlyOnFaulted),
+        // and it was the reason the guard has no exemptions to grant — but it is
+        // now expressed through the shared helper so there is exactly ONE way to
+        // observe a fire-and-forget in this shell, instead of two spellings that
+        // a contributor has to choose between correctly.
+        TaskFireAndForget.Forget(
+            _pty.DisposeAsync().AsTask(),
+            ex => _logger.LogWarning(ex, "PTY dispose failed"));
     }
 }
 

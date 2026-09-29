@@ -108,10 +108,24 @@ public class AvaloniaFireAndForgetRules
     ///     actually present in the guarded tree is covered — see
     ///     <see cref="Detector_FiresOnEveryTaskShapePresentInTheGuardedTree" />.
     /// </remarks>
+    /// <remarks>
+    ///     <b>The outer <c>(?:…)</c> is load-bearing.</b> This pattern is an
+    ///     alternation, and both rules below concatenate it after a prefix. An
+    ///     ungrouped alternation splices at the TOP level, so
+    ///     <c>prefix + A|B|C</c> parses as <c>(prefix+A) | B | C</c> — and the
+    ///     rule then fires on <em>any</em> line containing <c>.AsTask(</c> or
+    ///     <c>.ContinueWith(</c>, discarding lines that have nothing to do with
+    ///     fire-and-forget. That is a false-positive machine, and it was caught
+    ///     by running the rule over the real tree after the conversion, not by
+    ///     inspection. <see cref="Detector_IgnoresTaskShapedCallsThatAreObserved" />
+    ///     pins it.
+    /// </remarks>
     private static readonly Regex TaskShapedCall = new(
-        @"(?:\w*Async|Task\.Run|Task\.Delay|Task\.WhenAll|Task\.Factory\.StartNew)\s*\("
+        @"(?:"
+        + @"(?:\w*Async|Task\.Run|Task\.Delay|Task\.WhenAll|Task\.Factory\.StartNew)\s*\("
         + @"|\.AsTask\s*\(\)"
-        + @"|\.ContinueWith\s*\(",
+        + @"|\.ContinueWith\s*\("
+        + @")",
         RegexOptions.Compiled);
 
     /// <summary>
@@ -134,6 +148,18 @@ public class AvaloniaFireAndForgetRules
     /// </summary>
     private static readonly Regex VoidMemberDroppingTask = new(
         @"\bvoid\s+[\w<>,\[\]?\. ]*\s+\w+\s*\([^)]*\)\s*=>\s*[^;{]*" + TaskShapedCall,
+        RegexOptions.Compiled);
+
+    /// <summary>
+    ///     The same implicit-discard shape for a <c>void</c> member with an EMPTY
+    ///     parameter list (<c>public void BranchSession() =&gt; …</c>). Kept as a
+    ///     separate pattern rather than loosening the one above, because
+    ///     <c>\([^)]*\)</c> already matches <c>()</c> — but only if the
+    ///     return-type/name separator below it is also allowed to be empty, and
+    ///     tightening that would start matching unrelated <c>void</c> members.
+    /// </summary>
+    private static readonly Regex VoidParameterlessMemberDroppingTask = new(
+        @"\bvoid\s+\w+\s*\(\s*\)\s*=>\s*[^;{]*" + TaskShapedCall,
         RegexOptions.Compiled);
 
     /// <summary>
@@ -270,12 +296,46 @@ public class AvaloniaFireAndForgetRules
         const string Implicit =
             "    public void BranchSession() => _sessions.BranchCommand.ExecuteAsync(null);";
 
-        await Assert.That(VoidMemberDroppingTask.IsMatch(Implicit)).IsTrue()
+        await Assert.That(DiscardedTaskExpression(Implicit)).IsNotNull()
             .Because("A void member whose body is a Task-shaped call drops that Task unobserved, and no `_ =` marks it.");
 
         const string ConformingVoid = "    public void ClearChat() => _chat.ClearCommand.Execute(null);";
-        await Assert.That(VoidMemberDroppingTask.IsMatch(ConformingVoid)).IsFalse()
+        await Assert.That(DiscardedTaskExpression(ConformingVoid)).IsNull()
             .Because("ICommand.Execute returns void — there is no Task to drop, so this must stay green.");
+    }
+
+    [Test]
+    public async Task Detector_IgnoresTaskShapedCallsThatAreObserved()
+    {
+        // REGRESSION FIXTURE — see the remark on TaskShapedCall.
+        //
+        // When the Task-shape alternation was first written it was NOT wrapped in
+        // a non-capturing group, so `prefix + A|B|C` parsed as `(prefix+A)|B|C`.
+        // The consequence: any line mentioning `.AsTask(` or `.ContinueWith(` was
+        // reported as an unobserved fire-and-forget, whether or not a Task was
+        // being discarded at all. This fixture is the line that exposed it —
+        // it is the argument to a helper, fully observed, and must stay green.
+        string[] alreadyObserved =
+        [
+            // The exact shape that failed: a Task handed to the helper, one line
+            // below the `Forget(` that observes it.
+            "            _pty.DisposeAsync().AsTask(),",
+            "            ex => _logger.LogWarning(ex, \"PTY dispose failed\"));",
+            // A continuation attached to a Task that is itself stored, not dropped.
+            "        var observed = source.ContinueWith(ApplyResult, TaskScheduler.Default);",
+            // An AsTask() whose Task is returned, not discarded.
+            "    public Task<Completion> FlushAsync() => _pipe.FlushAsync().AsTask();"
+        ];
+
+        foreach (string line in alreadyObserved)
+        {
+            await Assert.That(DiscardedTaskExpression(line)).IsNull()
+                .Because(
+                    "This line does not discard a Task. If the detector fires on it, the Task-shape alternation "
+                    + "has lost its non-capturing group and the rule matches on the mere PRESENCE of a Task-shaped "
+                    + "call rather than on a discard — which blocks correct code and gets deleted: "
+                    + line.Trim());
+        }
     }
 
     [Test]
@@ -318,7 +378,12 @@ public class AvaloniaFireAndForgetRules
             return explicitDiscard.Groups["rhs"].Value.Trim();
         }
 
-        return VoidMemberDroppingTask.IsMatch(line) ? line.Trim() : null;
+        if (VoidMemberDroppingTask.IsMatch(line) || VoidParameterlessMemberDroppingTask.IsMatch(line))
+        {
+            return line.Trim();
+        }
+
+        return null;
     }
 
     /// <summary>Every non-comment, non-blank source line of the guarded projects.</summary>

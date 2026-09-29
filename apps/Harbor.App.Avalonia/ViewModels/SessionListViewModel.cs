@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.Services;
@@ -28,7 +29,14 @@ public sealed partial class SessionListViewModel : ObservableObject
     partial void OnActiveSessionChanged(SessionItemViewModel? value)
     {
         if (value is null) return;
-        _ = OpenCommand.ExecuteAsync(value);
+
+        // #569: the [ObservableProperty] hook is `partial void` by contract, so
+        // it cannot await. OpenAsync's own catch turns a failure into a toast,
+        // but the Task was being discarded bare — if anything in the command
+        // pipeline itself threw, the fault died at finalization unseen.
+        TaskFireAndForget.Forget(
+            OpenCommand.ExecuteAsync(value),
+            ex => _logger.LogError(ex, "Selecting session {SessionId} failed", value.Id));
     }
 
     /// <summary>Construct the session list view-model.</summary>
@@ -58,7 +66,15 @@ public sealed partial class SessionListViewModel : ObservableObject
         _sessionManager.StatusChanged += OnSessionStatusChanged;
         _sessionManager.MessageCountChanged += OnSessionMessageCountChanged;
 
-        _ = RefreshAsync();
+        // #569: the constructor cannot await, so the initial load is started
+        // here by necessity — but it is STARTED, not abandoned. RefreshAsync's
+        // own catch already toasts and logs; routing through TaskFireAndForget
+        // means a fault raised outside that catch (the command wrapper, the
+        // dispatcher post) is still observed instead of dying at finalization.
+        // The task itself is unchanged: nothing here blocks construction.
+        TaskFireAndForget.Forget(
+            RefreshAsync(),
+            ex => _logger.LogError(ex, "Initial session-list load failed"));
     }
 
     /// <summary>All sessions visible in the sidebar.</summary>

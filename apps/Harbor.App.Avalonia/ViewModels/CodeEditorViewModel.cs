@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
 using Harbor.Abstractions.Lsp;
+using Harbor.Abstractions.Tools;
 using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
@@ -168,7 +169,12 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         }
         if (_lsp is not null && _lspOpened.Remove(tab.FilePath))
         {
-            _ = CloseWithLspAsync(tab.FilePath);
+            // #569: [RelayCommand] on a void method is synchronous by contract.
+            // The LSP close used to be discarded bare; CloseWithLspAsync has an
+            // internal catch, but a fault escaping it was unobservable.
+            TaskFireAndForget.Forget(
+                CloseWithLspAsync(tab.FilePath),
+                ex => _logger.LogWarning(ex, "LSP close dropped for {Path}", tab.FilePath));
         }
     }
 
@@ -182,7 +188,11 @@ public sealed partial class CodeEditorViewModel : ObservableObject
             && _lsp is not null
             && _lspOpened.Contains(tab.FilePath))
         {
-            _ = NotifyLspChangeAsync(tab.FilePath, tab.Content);
+            // #569: PropertyChanged is a synchronous callback — cannot await.
+            // Same reasoning as the close above.
+            TaskFireAndForget.Forget(
+                NotifyLspChangeAsync(tab.FilePath, tab.Content),
+                ex => _logger.LogWarning(ex, "LSP change notification dropped for {Path}", tab.FilePath));
         }
     }
 
@@ -191,17 +201,26 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     {
         if (_lsp is null || !_lsp.SupportsFile(filePath)) return;
         _lspOpened.Add(filePath);
-        _ = Task.Run(async () =>
-        {
-            try
+
+        // #569: the inner catch-all already handles LSP failures, but the
+        // Task.Run handle itself was discarded bare — so a fault raised outside
+        // that try (task scheduling itself, the continuation's own throw) was
+        // lost at finalization. TaskFireAndForget closes that gap; the internal
+        // catch stays, because it downgrades an expected LSP hiccup to a warning
+        // rather than an error.
+        TaskFireAndForget.Forget(
+            Task.Run(async () =>
             {
-                await _lsp.OpenFileAsync(filePath, content).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "LSP open failed for {Path}", filePath);
-            }
-        });
+                try
+                {
+                    await _lsp.OpenFileAsync(filePath, content).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "LSP open failed for {Path}", filePath);
+                }
+            }),
+            ex => _logger.LogWarning(ex, "LSP open task faulted for {Path}", filePath));
     }
 
     private async Task NotifyLspChangeAsync(string filePath, string content)
@@ -242,7 +261,13 @@ public sealed partial class CodeEditorViewModel : ObservableObject
             return;
         }
 
-        _ = ReadDiagnosticsAsync(tab.FilePath);
+        // #569: called from an LSP event handler, which is synchronous by
+        // contract. ReadDiagnosticsAsync catches internally and leaves the
+        // previous diagnostics in place; the fault sink here covers anything
+        // raised outside that catch.
+        TaskFireAndForget.Forget(
+            ReadDiagnosticsAsync(tab.FilePath),
+            ex => _logger.LogWarning(ex, "LSP diagnostics read faulted for {Path}", tab.FilePath));
     }
 
     private void SetDiagnostics(IReadOnlyList<LspDiagnostic> diagnostics)

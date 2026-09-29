@@ -195,7 +195,7 @@ public class AvaloniaWorkspaceCommandsTests
         var codeEditor = CreateCodeEditorViewModel();
         var effects = CreateTuiEffectHost();
 
-        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects);
+        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects, new FakeLogger<AvaloniaWorkspaceCommands>());
 
         sessionManager.NewSessionResult = Result.Success(new Session(
             "test-id", "proj", "/tmp", "Test", "agent", "model", "provider",
@@ -216,7 +216,7 @@ public class AvaloniaWorkspaceCommandsTests
         var codeEditor = CreateCodeEditorViewModel();
         var effects = CreateTuiEffectHost();
 
-        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects);
+        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects, new FakeLogger<AvaloniaWorkspaceCommands>());
 
         sessionManager.BranchResult = Result.Success(new Session(
             "branch-id", "proj", "/tmp", "Branch", "agent", "model", "provider",
@@ -236,7 +236,7 @@ public class AvaloniaWorkspaceCommandsTests
         var sessions = CreateSessionListViewModel();
         var effects = CreateTuiEffectHost();
 
-        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects);
+        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects, new FakeLogger<AvaloniaWorkspaceCommands>());
 
         await commands.OpenFileAsync();
 
@@ -252,7 +252,7 @@ public class AvaloniaWorkspaceCommandsTests
         var sessions = CreateSessionListViewModel();
         var effects = CreateTuiEffectHost();
 
-        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects);
+        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects, new FakeLogger<AvaloniaWorkspaceCommands>());
 
         var tempPath = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid()}.txt");
         codeEditor.ActiveTab = new EditorTabViewModel(tempPath, "test.txt", "txt", "hello world");
@@ -274,7 +274,7 @@ public class AvaloniaWorkspaceCommandsTests
         var codeEditor = CreateCodeEditorViewModel();
         var effects = CreateTuiEffectHost(agentRunner);
 
-        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects);
+        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects, new FakeLogger<AvaloniaWorkspaceCommands>());
 
         commands.StopAgent();
 
@@ -296,7 +296,7 @@ public class AvaloniaWorkspaceCommandsTests
         var codeEditor = CreateCodeEditorViewModel();
         var effects = CreateTuiEffectHost();
 
-        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects);
+        var commands = new AvaloniaWorkspaceCommands(chat, sessions, codeEditor, effects, new FakeLogger<AvaloniaWorkspaceCommands>());
 
         commands.ClearChat();
 
