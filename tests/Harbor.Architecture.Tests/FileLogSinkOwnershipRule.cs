@@ -444,7 +444,12 @@ public sealed class FileLogSinkOwnershipRule
                    + "fourth names DupSink only in a doc comment, and the fifth implements ILogger rather "
                    + "than ILoggerProvider. Scanned: " + string.Join(" | ", names));
 
-        await Assert.That(report.Declarations.Count(d => d.File == "apps/Harbor.App.B/Logging/Disposable.cs"))
+        // `.Where(...)` first so the `Count()` is unambiguously LINQ's — the
+        // `IReadOnlyList<T>.Count` property would otherwise sit between the
+        // receiver and the extension method.
+        await Assert.That(report.Declarations
+                             .Where(d => d.File == "apps/Harbor.App.B/Logging/Disposable.cs")
+                             .Count())
             .IsEqualTo(0)
             .Because("a type that implements IDisposable is not a logging provider, and counting it would "
                    + "make the duplicate rule fire on an unrelated same-name class");
