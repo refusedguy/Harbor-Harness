@@ -104,20 +104,86 @@ public class StatusBarViewModelTests
         await Assert.That(vm.Status).IsEqualTo("idle");
     }
 
+    /// <summary>
+    ///     #623/#641 — the ctx cell is context-window <em>occupancy</em>, not
+    ///     session-cumulative spend. <see cref="SessionMetadata.AddUsage" />
+    ///     accumulates <c>TokensInput</c> for the whole session, so
+    ///     <c>SessionStatsEvent.Metadata</c> is a running total; reading it as
+    ///     occupancy made the cell climb 30k → 60k → 90k → 120k → 150k while
+    ///     every request stayed 30k, pinning it at 100% by turn 4 on a 128k
+    ///     window. Occupancy is the prompt-token count of the request the
+    ///     provider just accepted (<c>StepFinishEvent.Usage.InputTokens</c>) —
+    ///     the same fix #630 landed for the CellForge ctx bar.
+    /// </summary>
     [Test]
-    public async Task ContextPct_Uses_Accumulated_Totals_Not_Last_Step()
+    public async Task ContextPct_Is_Last_Request_Size_Not_Cumulative_Spend()
     {
-        // #75 convergence pin: accumulated (3000+500)+(4000+600) = 8100 → 81%.
-        // Last-step-only would report 4000/10000 = 40%.
+        // Window and per-turn request size from the issue report. The window is
+        // small enough that the cumulative total blows past it by turn 4.
+        const int Window = 128_000;
+        const int RequestTokens = 30_000;
+
         var vm = new StatusBarViewModel();
-        vm.SetModel(new ModelInfo("m", "p", "M", 10_000, 4000, false, false, true, new Pricing(0, 0), string.Empty));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(3000, 500)), AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new StepFinishEvent(1, "stop", new Usage(4000, 600)), AssistantMessage.Empty("s1", "m2")));
-        await Assert.That(vm.TokensIn).IsEqualTo(7000);
-        await Assert.That(vm.TokensOut).IsEqualTo(1100);
-        await Assert.That(vm.ContextPct).IsEqualTo(ContextUsage.PercentUsed(7000, 1100, 10_000));
-        await Assert.That(vm.ContextPct).IsEqualTo(81);
-        await Assert.That(vm.Formatted).Contains("81%");
+        vm.SetModel(new ModelInfo("hy3", "kilocode", "Kilocode Hy3", Window, 4096, false, false, true, Pricing.Unknown, "openai"));
+
+        for (int turn = 1; turn <= 5; turn++)
+        {
+            // The request actually sent this turn: unchanged at 30k. This is
+            // the only event that carries the occupancy reading.
+            await vm.UpdateFromEventAsync(new MessageUpdateEvent(
+                new StepFinishEvent(0, "stop", new Usage(RequestTokens, 500)),
+                AssistantMessage.Empty("s1", "m")));
+
+            // Then the core publishes the session-cumulative spend — the running
+            // total that used to be rendered as occupancy (30k, 60k, …, 150k).
+            // The arm assigns TokensIn/TokensOut, so the last write wins.
+            await vm.UpdateFromEventAsync(new SessionStatsEvent(
+                "s1", new SessionMetadata(0.01m * turn, RequestTokens * turn, 500, 0, 0, 0, turn, null)));
+
+            // Occupancy is the request just sent, never the cumulative total.
+            await Assert.That(vm.ContextPct).IsEqualTo(ContextUsage.PercentUsed(RequestTokens, Window));
+        }
+
+        // 30k of 128k = 23%. The cumulative total (150k) exceeds the whole
+        // window, so the old reading saturated at 100%.
+        await Assert.That(vm.ContextPct).IsEqualTo(23);
+        await Assert.That(vm.Formatted).Contains("ctx: 30k/23%");
+
+        // The spend segments still track cumulative totals — only ctx moved.
+        await Assert.That(vm.TokensIn).IsEqualTo(150_000);
+        await Assert.That(vm.TokensOut).IsEqualTo(500);
+        await Assert.That(vm.Formatted).Contains("150000↑ 500↓");
+    }
+
+    /// <summary>
+    ///     The other half of the guard: a stats event alone must not move the
+    ///     occupancy reading (there was no request to measure), while the
+    ///     cumulative totals and the #653 core-owned cost must still land.
+    /// </summary>
+    [Test]
+    public async Task SessionStats_Alone_Does_Not_Move_Occupancy()
+    {
+        const int Window = 128_000;
+        const int RequestTokens = 30_000;
+
+        var vm = new StatusBarViewModel();
+        vm.SetModel(new ModelInfo("hy3", "kilocode", "Kilocode Hy3", Window, 4096, false, false, true, Pricing.Unknown, "openai"));
+        await vm.UpdateFromEventAsync(new MessageUpdateEvent(
+            new StepFinishEvent(0, "stop", new Usage(RequestTokens, 500)),
+            AssistantMessage.Empty("s1", "m")));
+
+        int occupancy = vm.ContextPct;
+        await vm.UpdateFromEventAsync(new SessionStatsEvent(
+            "s1", new SessionMetadata(1.5m, 150_000, 500, 0, 0, 0, 5, null)));
+
+        // A running total is not an occupancy reading.
+        await Assert.That(vm.ContextPct).IsEqualTo(occupancy);
+        await Assert.That(vm.ContextPct).IsEqualTo(23);
+
+        // #653: the core owns cost and the token totals — assign, never re-derive.
+        await Assert.That(vm.Cost).IsEqualTo(1.5m);
+        await Assert.That(vm.IsCostKnown).IsTrue();
+        await Assert.That(vm.TokensIn).IsEqualTo(150_000);
     }
 
     [Test]
