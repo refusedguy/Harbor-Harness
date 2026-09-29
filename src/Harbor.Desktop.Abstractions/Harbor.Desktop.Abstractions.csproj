@@ -44,6 +44,12 @@
     <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.Services\Harbor.Ui.Framework.Services.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.Sessions\Harbor.Ui.Framework.Sessions.csproj"/>
+    <!-- #679: the desktop DiffViewModel and DiffViewModelBase read the diff
+         algorithm and the diff-format parsers from the core
+         (Harbor.Ui.Framework.Rendering.Widgets) instead of each re-deriving a
+         diff by index and re-sniffing the format by string literal.
+         Presentation to Presentation, which conforms. -->
+    <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

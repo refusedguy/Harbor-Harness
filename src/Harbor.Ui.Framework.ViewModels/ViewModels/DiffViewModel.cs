@@ -1,22 +1,34 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Ui.Framework.Rendering.Widgets;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.ViewModels;
 /// <summary>
-///     Side-by-side diff view-model. Accepts two text inputs (left = before, right = after)
-///     and computes a simple line-by-line diff. Real production would use a proper diff
-///     algorithm (Myers) — this implementation is intentionally simple: same lines are
-///     "unchanged", differing lines are "modified", and length differences are "added"/"removed".
+///     Side-by-side diff view-model. Accepts two text inputs (left = before,
+///     right = after) and shows the difference between them.
 /// </summary>
 /// <remarks>
+///     <para>
+///         The diff itself is <b>computed by
+///         <see cref="Harbor.Ui.Framework.Rendering.Widgets.LineDiff" />, the
+///         headless diff engine in the renderer-agnostic layer</b>, and this
+///         view-model only projects what it returns. It used to walk
+///         <c>left[i]</c> against <c>right[i]</c> itself and call the mismatch
+///         a modification, which reported the tail of the file as rewritten as
+///         soon as a line was
+///         inserted anywhere above it (#679). The business rule "what changed"
+///         does not belong to a view-model; the view-model decides only what a
+///         row is <i>painted</i> as, via <see cref="DiffRowViewModel.Kind" />.
+///     </para>
 ///     <para>
 ///         <b>vm-dedup canon (audit 27-G):</b> canonical TEA-projection side-by-side
 ///         diff VM (<c>LeftText</c>/<c>RightText</c>/<c>Compute</c>/<c>Rows</c>), bound by
 ///         Avalonia <c>DiffView.axaml</c>. Not the same as the TUI
-///         <c>DiffPreviewViewModel</c> (event-driven diff list), the Desktop
-///         <c>DiffViewModel</c> (Before/After unified text) or the WPF hunk VM —
-///         same name, different logic; do not merge without a logic refactor.
+///         <c>DiffPreviewViewModel</c> (event-driven diff list) or the Desktop
+///         <c>DiffViewModel</c> (Before/After unified text) — the two now share
+///         one diff algorithm, but their view contracts still differ, so they
+///         stay separate types.
 ///     </para>
 /// </remarks>
 public sealed partial class DiffViewModel : ObservableObject
@@ -49,22 +61,30 @@ public sealed partial class DiffViewModel : ObservableObject
     private void Compute()
     {
         Rows.Clear();
-        string[] leftLines = LeftText.Replace("\r\n", "\n").Split('\n');
-        string[] rightLines = RightText.Replace("\r\n", "\n").Split('\n');
-        int max = Math.Max(leftLines.Length, rightLines.Length);
-        for (int i = 0; i < max; i++)
+        foreach (var row in LineDiff.ComputeSideBySide(LeftText, RightText))
         {
-            string l = i < leftLines.Length ? leftLines[i] : string.Empty;
-            string r = i < rightLines.Length ? rightLines[i] : string.Empty;
-            string kind;
-            if (i >= leftLines.Length) kind = "added";
-            else if (i >= rightLines.Length) kind = "removed";
-            else if (l == r) kind = "unchanged";
-            else kind = "modified";
-            Rows.Add(new DiffRowViewModel(i + 1, l, r, kind));
+            Rows.Add(new DiffRowViewModel(
+                row.LineNumber,
+                row.OldText ?? string.Empty,
+                row.NewText ?? string.Empty,
+                WireKind(row.Kind)));
         }
+
         _logger.LogInformation("Diff computed: {Rows} rows", Rows.Count);
     }
+
+    /// <summary>
+    ///     The row's kind as the wire value <see cref="DiffRowViewModel.BrushKey" />
+    ///     and the Avalonia view already speak. Presentation vocabulary, so it
+    ///     stays here: the diff kind itself is a core enum.
+    /// </summary>
+    private static string WireKind(SideBySideRowKind kind) => kind switch
+    {
+        SideBySideRowKind.Added => "added",
+        SideBySideRowKind.Removed => "removed",
+        SideBySideRowKind.Modified => "modified",
+        _ => "unchanged"
+    };
 }
 
 /// <summary>One diff row.</summary>

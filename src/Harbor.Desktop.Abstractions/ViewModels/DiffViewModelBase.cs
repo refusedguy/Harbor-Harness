@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.Logging;
 
@@ -51,22 +52,35 @@ public abstract partial class DiffViewModelBase : StoreSubscriberViewModel
         foreach (var line in state.Chat.Lines)
         {
             if (line.ToolCallId is null) continue;
-            var text = line.Text;
-            if (text.Length >= 6 && text[..4] == "+++ " && text.Contains('/'))
-                return text[4..].Trim();
-            if (text.Length >= 6 && text[..4] == "--- " && text.Contains('/'))
-                return text[4..].Trim();
+            if (UnifiedDiffParser.TryReadFilePath(line.Text) is { } path) return path;
         }
         return null;
     }
 
+    /// <summary>
+    ///     The tool output that carries a diff, recognised structurally: a
+    ///     context-diff block (a run of <c>"  "</c>/<c>"- "</c>/<c>"+ "</c>
+    ///     rows) or a real unified diff. Both readings come from the core's own
+    ///     parsers.
+    /// </summary>
+    /// <remarks>
+    ///     This used to keep any tool line CONTAINING <c>"diff"</c>,
+    ///     <c>"---"</c>, <c>"+++"</c> or <c>"@@"</c>, which is not what any of
+    ///     those mean: prose saying "the result is different", a markdown
+    ///     <c>---</c> rule and a <c>// --- section ---</c> comment all read as a
+    ///     diff, and the pane was then filled with the other tool's output
+    ///     (#679). A row is a row because of how it starts, and a block is a run
+    ///     of such rows — that decision belongs to the format's parser, not to a
+    ///     set of literals copied into a view-model.
+    /// </remarks>
     private static string ExtractDiffText(UiState state)
     {
         var sb = new System.Text.StringBuilder();
         foreach (var line in state.Chat.Lines)
         {
             if (line.ToolCallId is null) continue;
-            if (line.Text.Contains("diff") || line.Text.Contains("---") || line.Text.Contains("+++") || line.Text.Contains("@@"))
+            if (LineDiff.TryParseContextBlock(line.Text, out _)
+                || UnifiedDiffParser.LooksLikeDiff(line.Text))
                 sb.AppendLine(line.Text);
         }
         return sb.ToString();
