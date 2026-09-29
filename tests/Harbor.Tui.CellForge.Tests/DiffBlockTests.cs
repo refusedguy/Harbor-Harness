@@ -102,10 +102,44 @@ public class DiffBlockTests
         return false;
     }
 
+    /// <summary>One context/delete/add/context hunk, numbered from <paramref name="hunkStart"/>.</summary>
+    private static string DiffAt(int hunkStart) => $"""
+        --- a/src/app.cs
+        +++ b/src/app.cs
+        @@ -{hunkStart},4 +{hunkStart},4 @@ namespace App;
+         context line
+        -removed line
+        +added line
+         more context
+        """;
+
+    /// <summary>
+    /// #737: the body is painted at <c>Rect.X + GutterWidth</c>, so the gutter
+    /// is a fixed-size column and the number fields are what have to give,
+    /// never the width. The fields were <c>PadLeft(4)</c>, which only ever
+    /// grows — under 10 000 a row came out at exactly
+    /// <see cref="DiffBlock.GutterWidth"/> cells, and this test's old fixture
+    /// (rows 10..13) plus its sibling (rows 1..4) sat in that safe zone, so
+    /// the guard had never once run on the input that breaks it. From 10 005
+    /// up the gutter outgrew the constant and the body painted over the
+    /// numbers' trailing gap.
+    /// </summary>
+    /// <remarks>
+    /// Every number length is a case, not just the 5-digit one: a fix that
+    /// clamps the long rows while shifting the 2- and 3-digit alignment is
+    /// worse than the bug it closes.
+    /// </remarks>
     [Test]
-    public async Task Gutter_Alignment_IsFixedWidth()
+    [Arguments(1)]
+    [Arguments(9)]
+    [Arguments(12)]
+    [Arguments(123)]
+    [Arguments(1234)]
+    [Arguments(12345)]
+    [Arguments(100005)]
+    public async Task Gutter_Alignment_IsFixedWidth_AtEveryNumberLength(int hunkStart)
     {
-        var lines = UnifiedDiffParser.Parse(Sample);
+        var lines = UnifiedDiffParser.Parse(DiffAt(hunkStart));
         foreach (var dl in lines)
         {
             if (dl.Kind is DiffLineKind.Context or DiffLineKind.Add or DiffLineKind.Delete)
@@ -116,6 +150,52 @@ public class DiffBlockTests
             {
                 await Assert.That(DiffBlock.Gutter(dl)).IsEqualTo(new string(' ', DiffBlock.GutterWidth));
             }
+        }
+    }
+
+    /// <summary>
+    /// The same invariant in the form a reader sees it. Painted, a body row is
+    /// a number column, then the two-cell gap, then the sign — and the body
+    /// starts after the sign. On a 5-digit hunk the ungrown fields ate that
+    /// gap: the body was drawn at +11 regardless of how wide the gutter
+    /// actually was, so the numbers ran into it with no blank between them.
+    /// </summary>
+    [Test]
+    public async Task PaintedGutter_KeepsTheGapBeforeTheSign_OnFiveDigitHunks()
+    {
+        const int hunkStart = 10005;
+        var lines = UnifiedDiffParser.Parse(DiffAt(hunkStart));
+        var buffer = new ScreenBuffer(48, lines.Count);
+        new DiffBlock(DiffAt(hunkStart))
+            .Paint(new BlockPaintContext(buffer, new Rect(0, 0, 48, lines.Count), 0));
+
+        for (int y = 0; y < lines.Count; y++)
+        {
+            var dl = lines[y];
+            if (dl.Kind is DiffLineKind.HunkHeader or DiffLineKind.FileHeader)
+            {
+                continue; // headers carry their own markers, no sign column
+            }
+
+            for (int x = 0; x < DiffBlock.GutterWidth; x++)
+            {
+                char cell = (char)buffer.Get(x, y).Rune;
+                await Assert.That(cell == ' ' || char.IsAsciiDigit(cell))
+                    .IsTrue(); // anything else here is a body cell inside the gutter
+            }
+
+            for (int x = DiffBlock.GutterWidth - 2; x < DiffBlock.GutterWidth; x++)
+            {
+                await Assert.That((char)buffer.Get(x, y).Rune).IsEqualTo(' ');
+            }
+
+            char sign = dl.Kind switch
+            {
+                DiffLineKind.Add => '+',
+                DiffLineKind.Delete => '-',
+                _ => ' ',
+            };
+            await Assert.That((char)buffer.Get(DiffBlock.GutterWidth, y).Rune).IsEqualTo(sign);
         }
     }
 

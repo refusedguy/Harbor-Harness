@@ -404,15 +404,62 @@ public sealed class DiffBlock : ICollapsibleChatBlock
         _ => CellStyle.Plain,
     };
 
-    public const int GutterWidth = 11; // "1234 5678  "
+    /// <summary>
+    /// Gutter width in cells: two <see cref="NumberFieldCells"/>-wide number
+    /// fields, a <see cref="GutterGapCells"/>-cell gap, a
+    /// <see cref="GutterTailCells"/>-cell tail — <c>"1234 5678  "</c>. This
+    /// is the only place the width is written down (#737). <c>Paint</c>
+    /// positions the body from it, so the gutter has to be exactly this wide
+    /// for every row: the fields are derived from it, and a number that does
+    /// not fit gives up characters rather than taking them from the layout.
+    /// </summary>
+    public const int GutterWidth = 11;
+
+    /// <summary>Blank cells between the two number fields.</summary>
+    private const int GutterGapCells = 1;
+
+    /// <summary>Blank cells that end the gutter, before the sign column.</summary>
+    private const int GutterTailCells = 2;
+
+    /// <summary>Cells one line number occupies in the gutter.</summary>
+    internal const int NumberFieldCells = (GutterWidth - GutterGapCells - GutterTailCells) / 2;
+
+    private static readonly string GutterGap = new(' ', GutterGapCells);
+    private static readonly string GutterTail = new(' ', GutterTailCells);
+    private static readonly string BlankField = new(' ', NumberFieldCells);
+    private static readonly string BlankGutter = new(' ', GutterWidth);
 
     internal static string Gutter(DiffLine dl) => dl.Kind switch
     {
-        DiffLineKind.Add => $"{' ',4} {dl.NewNumberString()}  ",
-        DiffLineKind.Delete => $"{dl.OldNumberString()} {' ',4}  ",
-        DiffLineKind.Context => $"{dl.OldNumberString()} {dl.NewNumberString()}  ",
-        _ => new string(' ', GutterWidth),
+        DiffLineKind.Add => BlankField + GutterGap + dl.NewNumberString() + GutterTail,
+        DiffLineKind.Delete => dl.OldNumberString() + GutterGap + BlankField + GutterTail,
+        DiffLineKind.Context => dl.OldNumberString() + GutterGap + dl.NewNumberString() + GutterTail,
+        _ => BlankGutter,
     };
+
+    /// <summary>
+    /// One line number inside its <see cref="NumberFieldCells"/>-cell field:
+    /// right-aligned, and never wider. <c>PadLeft</c> on its own was the #737
+    /// bug — it left every number below 10 000 alone and let a 5-digit one
+    /// grow past the field, at which point the body, painted at a fixed
+    /// <see cref="GutterWidth"/>, landed on the numbers' trailing gap and the
+    /// block lost its own internal alignment. A number too wide for the field
+    /// keeps its low digits: those are the ones that locate the row, and the
+    /// alignment is worth more here than a file's digit count.
+    /// </summary>
+    internal static string NumberField(int no)
+    {
+        if (no <= 0)
+        {
+            return BlankField;
+        }
+
+        var digits = no.ToString(CultureInfo.InvariantCulture);
+        return digits.Length <= NumberFieldCells
+            ? digits.PadLeft(NumberFieldCells)
+            : digits[^NumberFieldCells..].ToString();
+    }
+
     public string RawText() => _diffText;
 
     private void EnsureParsed()
@@ -466,9 +513,7 @@ public sealed class DiffBlock : ICollapsibleChatBlock
 
 internal static class DiffNumberExtensions
 {
-    public static string OldNumberString(this DiffLine dl) =>
-        dl.OldNo > 0 ? dl.OldNo.ToString(CultureInfo.InvariantCulture).PadLeft(4) : new string(' ', 4);
+    public static string OldNumberString(this DiffLine dl) => DiffBlock.NumberField(dl.OldNo);
 
-    public static string NewNumberString(this DiffLine dl) =>
-        dl.NewNo > 0 ? dl.NewNo.ToString(CultureInfo.InvariantCulture).PadLeft(4) : new string(' ', 4);
+    public static string NewNumberString(this DiffLine dl) => DiffBlock.NumberField(dl.NewNo);
 }
