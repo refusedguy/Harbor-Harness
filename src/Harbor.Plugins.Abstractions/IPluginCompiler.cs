@@ -1,4 +1,3 @@
-using Microsoft.CodeAnalysis;
 namespace Harbor.Plugins.Abstractions;
 /// <summary>
 ///     Compiles a single <see cref="PluginScript" /> into a loaded
@@ -18,6 +17,19 @@ namespace Harbor.Plugins.Abstractions;
 ///         via <see cref="System.Reflection.Assembly.Load(byte[])" /> to avoid leaking
 ///         files on disk into the AppDomain's path-resolution graph.
 ///     </para>
+///     <para>
+///         Whether the assembly came from the on-disk cache is a property of the value —
+///         <see cref="CompiledPluginAssembly.FromCache" /> — not of the outcome, because
+///         "freshly compiled" and "loaded from cache" are both successes. The previous
+///         hand-rolled <c>CompilationResult</c> struct carried the same flag twice, and
+///         carried a third value: an <c>Error</c> member that returned
+///         <see cref="string.Empty" /> on a success, so <c>if (x.IsFailure) log(x.Error)</c>
+///         and <c>if (x.IsSuccess) log(x.Error)</c> both produced plausible output and a
+///         caller could not tell a real failure from an empty one. A
+///         <see cref="Result{T}" /> cannot represent that state: <c>Result.Failure&lt;T&gt;("")</c>
+///         throws <see cref="ArgumentNullException" />, and reading <c>Error</c> on a success
+///         throws <see cref="System.InvalidOperationException" />. See #561.
+///     </para>
 /// </remarks>
 public interface IPluginCompiler
 {
@@ -28,76 +40,11 @@ public interface IPluginCompiler
     /// <param name="ct">Cancellation token.</param>
     /// <returns>
     ///     Success with the loaded assembly + source hash, or failure with a
-    ///     human-readable error message. On failure, <see cref="CompilationResult.Diagnostics" />
-    ///     MAY carry the underlying Roslyn diagnostics (empty if not applicable).
+    ///     human-readable error message. The failure message IS the rendered form of the
+    ///     underlying Roslyn diagnostics — severity, file, line, column, code and text,
+    ///     one per line — because that string is what the host logs and surfaces. There is
+    ///     deliberately no second, structured channel for the same information: a member
+    ///     carrying it existed only for tests to read, and had no production reader at all.
     /// </returns>
-    public Task<CompilationResult> CompileAsync(PluginScript script, CancellationToken ct = default);
-}
-
-/// <summary>
-///     Result of an <see cref="IPluginCompiler.CompileAsync" /> call. Success carries a
-///     <see cref="CompiledPluginAssembly" />; failure carries an error string and (optionally)
-///     Roslyn diagnostics.
-/// </summary>
-public readonly record struct CompilationResult
-{
-    private readonly CompiledPluginAssembly? _assembly;
-    private readonly IReadOnlyList<Diagnostic>? _diagnostics;
-    private readonly string? _error;
-
-    private CompilationResult(
-        CompiledPluginAssembly? assembly,
-        string? error,
-        IReadOnlyList<Diagnostic>? diagnostics,
-        bool fromCache)
-    {
-        _assembly = assembly;
-        _error = error;
-        _diagnostics = diagnostics;
-        FromCache = fromCache;
-    }
-
-    /// <summary>Whether the compilation succeeded.</summary>
-    public bool IsSuccess => _assembly is not null;
-
-    /// <summary>Whether the compilation failed.</summary>
-    public bool IsFailure => _assembly is null;
-
-    /// <summary>The compiled assembly (only valid when <see cref="IsSuccess" />).</summary>
-    public CompiledPluginAssembly Value => _assembly ?? throw new InvalidOperationException("CompilationResult is failure.");
-
-    /// <summary>The error message (only valid when <see cref="IsFailure" />).</summary>
-    public string Error => _error ?? string.Empty;
-
-    /// <summary>
-    ///     Roslyn diagnostics emitted during compilation (warnings + errors). Empty on
-    ///     success-only paths or when the failure occurred before reaching the compiler.
-    /// </summary>
-    public IReadOnlyList<Diagnostic> Diagnostics => _diagnostics ?? Array.Empty<Diagnostic>();
-
-    /// <summary>
-    ///     <see langword="true" /> if the assembly was loaded from a cache rather than
-    ///     freshly compiled this call. Used by the host to populate
-    ///     <see cref="CompiledPlugin.LoadedFromCache" />.
-    /// </summary>
-    public bool FromCache
-    {
-        get;
-    }
-
-    /// <summary>Create a successful fresh-compile result.</summary>
-    public static CompilationResult Fresh(CompiledPluginAssembly asm) =>
-        new(asm, null, null, false);
-
-    /// <summary>Create a successful cache-hit result.</summary>
-    public static CompilationResult Cached(CompiledPluginAssembly asm) =>
-        new(asm, null, null, true);
-
-    /// <summary>Create a failed result with diagnostics.</summary>
-    public static CompilationResult Failure(string error, IReadOnlyList<Diagnostic> diagnostics) =>
-        new(null, error, diagnostics, false);
-
-    /// <summary>Create a failed result without diagnostics.</summary>
-    public static CompilationResult Failure(string error) =>
-        new(null, error, Array.Empty<Diagnostic>(), false);
+    public Task<Result<CompiledPluginAssembly>> CompileAsync(PluginScript script, CancellationToken ct = default);
 }

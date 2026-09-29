@@ -52,7 +52,7 @@ public sealed class CachingCompiler : IPluginCompiler
     }
 
     /// <inheritdoc />
-    public async Task<CompilationResult> CompileAsync(PluginScript script, CancellationToken ct = default)
+    public async Task<Result<CompiledPluginAssembly>> CompileAsync(PluginScript script, CancellationToken ct = default)
     {
         if (script is null)
             throw new ArgumentNullException(nameof(script));
@@ -74,7 +74,12 @@ public sealed class CachingCompiler : IPluginCompiler
                     ?? sandbox!.LoadFromPluginPath(cachePath);
 #pragma warning restore S3885
                 _logger.LogDebug("Cache hit for {Path} ({Hash})", script.Path, script.Hash);
-                return CompilationResult.Cached(new CompiledPluginAssembly(
+
+                // FromCache rides on the value, which is where it already lived:
+                // CompiledPluginAssembly.FromCache is what threads through to
+                // LoadedPlugin.LoadedFromCache. The hand-rolled CompilationResult carried a
+                // second copy of the same flag; #561 removed it.
+                return Result.Success(new CompiledPluginAssembly(
                     cachedAsm, script.Hash, script.Path, null, true, script.DeclaredCapabilities));
             }
             catch (Exception ex)
@@ -91,6 +96,10 @@ public sealed class CachingCompiler : IPluginCompiler
         // Persist the freshly compiled assembly bytes for next time. The inner compiler
         // supplies the PE image via CompiledPluginAssembly.AssemblyBytes; if it didn't
         // (e.g. a custom compiler that only loads from a path), persistence is skipped.
+#pragma warning disable CFE0001
+        // CFE0001: false positive — the `if (inner.IsFailure) return inner;` guard is an
+        // early return, a control-flow shape the analyzer does not model. The .Value is
+        // safe. Baseline: docs/ROP-API-INVENTORY.md §5.
         if (inner.Value.AssemblyBytes is { } bytes)
         {
             try
@@ -104,6 +113,7 @@ public sealed class CachingCompiler : IPluginCompiler
                 _logger.LogWarning(ex, "Failed to write plugin cache {Path}", cachePath);
             }
         }
+#pragma warning restore CFE0001
 
         return inner;
     }

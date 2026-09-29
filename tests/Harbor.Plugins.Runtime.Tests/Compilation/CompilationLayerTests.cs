@@ -24,17 +24,17 @@ public sealed class CompilationLayerTests
 
         var result = await compiler.CompileAsync(script).ConfigureAwait(false);
 
-        // Surface the actual error message if compilation fails — the
-        // bare `IsTrue` assertion gives "Expected to be true but found
-        // False" with no context, which makes Roslyn reference drift
-        // impossible to diagnose from CI logs.
-        if (result.IsFailure)
-        {
-            await Assert.That(result.Error).IsEqualTo(string.Empty);
-        }
-        await Assert.That(result.IsSuccess).IsTrue();
+        // Surface the actual error message if compilation fails — a bare
+        // `IsTrue()` gives "Expected to be true but found False" with no
+        // context, which makes Roslyn reference drift impossible to diagnose from
+        // CI logs. #561 also retired the `IsEqualTo(string.Empty)` trick this used
+        // to rely on: it only "worked" because a failure carried a non-empty error,
+        // which is exactly the ambiguity the hand-rolled result had and Result<T>
+        // does not.
+        await Assert.That(result.IsSuccess).IsTrue()
+            .Because(result.IsFailure ? $"compilation failed: {result.Error}" : "the sample should compile");
         await Assert.That(result.Value.Assembly).IsNotNull();
-        await Assert.That(result.FromCache).IsFalse();
+        await Assert.That(result.Value.FromCache).IsFalse();
     }
 
     /// <summary>
@@ -53,7 +53,14 @@ public sealed class CompilationLayerTests
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("compilation failed");
-        await Assert.That(result.Diagnostics.Count).IsGreaterThan(0);
+
+        // Since #561 there is no structured `Diagnostics` member: it had no
+        // production reader, and the diagnostics are rendered into this error
+        // string one per line as "  [Severity] path(line,col): CSxxxx — message".
+        // Asserting the rendered form is asserting what a plugin author actually
+        // sees, rather than a channel only tests read.
+        await Assert.That(result.Error).Contains("[Error]");
+        await Assert.That(result.Error).Contains("broken.cs(");
     }
 
     /// <summary>
@@ -77,7 +84,7 @@ public sealed class CompilationLayerTests
 
         var first = await caching.CompileAsync(script).ConfigureAwait(false);
         await Assert.That(first.IsSuccess).IsTrue();
-        await Assert.That(first.FromCache).IsFalse();
+        await Assert.That(first.Value.FromCache).IsFalse();
 
         // Cache file should exist now.
         string[] cacheFiles = Directory.GetFiles(fixture.CacheDir, "*.dll");
@@ -86,7 +93,7 @@ public sealed class CompilationLayerTests
         // Second compile — same hash → cache hit.
         var second = await caching.CompileAsync(script).ConfigureAwait(false);
         await Assert.That(second.IsSuccess).IsTrue();
-        await Assert.That(second.FromCache).IsTrue();
+        await Assert.That(second.Value.FromCache).IsTrue();
     }
 
     /// <summary>
@@ -109,6 +116,6 @@ public sealed class CompilationLayerTests
         var result = await caching.CompileAsync(script).ConfigureAwait(false);
 
         await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.FromCache).IsFalse();
+        await Assert.That(result.Value.FromCache).IsFalse();
     }
 }

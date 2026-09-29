@@ -626,7 +626,7 @@ where the risk is highest. 1.3.0 predates the `ResultValueWalker` rework (change
 
 ### 5.2 Measured baseline (CI, `dotnet build Harbor.slnx -c Release`, analyzer 1.3.0)
 
-**210 CFE0001 sites total: 36 in shipped code (src/ + apps/), 174 under `tests/`.**
+**211 CFE0001 sites total: 37 in shipped code (src/ + apps/), 174 under `tests/`.** (#561 moved one site out of production when it deleted `PluginCompilationResult`, and added two when the compiler contract became a real `Result<T>` — the `compiled.Value` read in `PluginHost.LoadAllAsync` and the `inner.Value.AssemblyBytes` read in `CachingCompiler.CompileAsync`, both false positives of the early-return guard shape, both carrying a documented pragma.)
 
 | area | sites | verdict |
 |---|---|---|
@@ -707,12 +707,18 @@ do. Production is not covered by that condition: `src`/`apps`/`contrib` keep CFE
   ever see it. The §5.2 counts are unaffected by #602: the sites it fixed were never counted,
   because the analyzer never saw them.
 - **Hand-rolled `Result<T>` types are structurally invisible.** CFE0001 matches on the
-  `CSharpFunctionalExtensions.Result` *symbol*. The defective shape in #561 —
+  `CSharpFunctionalExtensions.Result` *symbol*. The shape #561 removed —
   `IPluginCompiler.CompilationResult.Value => _assembly ?? throw …` with
-  `Error => _error ?? string.Empty` — is invisible to it, as is #588's `ModelBatch`. **CFE0001 says
-  nothing about those issues.** (Note `PluginCompilationResult` *is* flagged, but it is the
-  **correct** wrapper per #561; its `Value` is a documented pass-through guarded by its own
-  `IsSuccess` contract.)
+  `Error => _error ?? string.Empty` — was invisible to it, and #588's `ModelBatch` still is.
+  **CFE0001 says nothing about either.** The companion backstop is
+  `tests/Harbor.Architecture.Tests/HandRolledResultShapeTests.cs`: a shipped type may declare
+  `IsSuccess`/`IsFailure` only by *delegating* to a real `Result`, and an `Error` member may never
+  be an `x ?? string.Empty` coalesce — that expression is what made "no failure" and "failure with
+  nothing to say" indistinguishable. Both rules are **preventive** now that #561 removed their
+  targets, so each carries a positive control that feeds the scanner the pre-#561 source and
+  requires it to be reported. `ThemeParseResult` (`src/Harbor.DesignSystem`) is the one
+  allow-listed type; it is the same wart and remains deferred, as
+  `ResultFailureConversionTests` already documented.
 - It only inspects `MethodDeclarationSyntax` bodies: a `.Value` in a constructor, a local function or
   an expression-bodied member is not modelled.
 - It ignores `?.Value`.

@@ -48,8 +48,9 @@ public sealed class CsPluginLoaderTests
 
     /// <summary>
     ///     Test 2 — A .cs file with a syntax error fails to compile and the loader returns
-    ///     a <see cref="PluginCompilationResult" /> with <see cref="PluginCompilationResult.IsFailure" />
-    ///     = true and a non-empty error message.
+    ///     a failed <see cref="Result{CompiledPlugin}" /> with a non-empty error message.
+    ///     Since #561 the return type is the CSharpFunctionalExtensions shape its two
+    ///     siblings on <see cref="CsPluginLoader" /> already used.
     /// </summary>
     [Test]
     public async Task CompileAndLoad_SyntaxError_ReturnsFailureResult()

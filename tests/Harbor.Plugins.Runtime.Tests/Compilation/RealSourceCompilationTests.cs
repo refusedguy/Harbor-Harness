@@ -1,7 +1,7 @@
+using CSharpFunctionalExtensions;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
-using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Plugins.Runtime.Tests.Compilation;
@@ -40,24 +40,23 @@ public sealed class RealSourceCompilationTests
             fixture.CacheDir,
             NullLogger<CachingCompiler>.Instance);
 
-        CompilationResult first = await compiler.CompileAsync(scriptLoad.Value).ConfigureAwait(false);
-        if (first.IsFailure)
-        {
-            // Surface real diagnostics instead of a bare assert on CI drift.
-            await Assert.That(first.Error).IsEqualTo(string.Empty);
-        }
+        Result<CompiledPluginAssembly> first = await compiler.CompileAsync(scriptLoad.Value).ConfigureAwait(false);
 
-        await Assert.That(first.IsSuccess).IsTrue();
-        await Assert.That(first.FromCache).IsFalse();
+        // Surface the real diagnostics on CI drift instead of a bare assert. See
+        // CompilationLayerTests.Test1 for why the `IsEqualTo(string.Empty)` form
+        // this replaced is gone with the hand-rolled result (#561).
+        await Assert.That(first.IsSuccess).IsTrue()
+            .Because(first.IsFailure ? $"compilation failed: {first.Error}" : "the shipped sample should compile");
+        await Assert.That(first.Value.FromCache).IsFalse();
 
         // The compiled assembly really contains the shipped plugin type.
         var pluginType = first.Value.Assembly.GetType(
             "Harbor.Sample.HelloWorld.HelloWorldPlugin", throwOnError: false);
         await Assert.That(pluginType).IsNotNull();
 
-        CompilationResult second = await compiler.CompileAsync(scriptLoad.Value).ConfigureAwait(false);
+        Result<CompiledPluginAssembly> second = await compiler.CompileAsync(scriptLoad.Value).ConfigureAwait(false);
         await Assert.That(second.IsSuccess).IsTrue();
-        await Assert.That(second.FromCache).IsTrue();
+        await Assert.That(second.Value.FromCache).IsTrue();
 
         // A .dll artifact was persisted under the cache directory.
         string[] cacheFiles = Directory.GetFiles(fixture.CacheDir, "*.dll");
@@ -89,28 +88,23 @@ public sealed class RealSourceCompilationTests
 
         var compiler = new RoslynPluginCompiler(
             new PluginAssemblyReferences(NullLogger<PluginAssemblyReferences>.Instance));
-        CompilationResult result = await compiler.CompileAsync(script).ConfigureAwait(false);
+        Result<CompiledPluginAssembly> result = await compiler.CompileAsync(script).ConfigureAwait(false);
 
         await Assert.That(result.IsFailure).IsTrue();
 
-        // The unresolved-type error is diagnosed as CS0246 on the class line.
-        Diagnostic? cs0246 = result.Diagnostics.FirstOrDefault(d => d.Id == "CS0246");
-        await Assert.That(cs0246).IsNotNull();
-
-        // The diagnostic carries the 1-based line of the class declaration.
+        // The error string surfaced to users carries the diagnostic id AND the
+        // 1-based line of the class declaration — the same information the deleted
+        // structured `Diagnostic` member carried, read back out of the rendered
+        // form, which is the only channel there is now that the member is gone (#561).
         int expectedLine = FirstIdentifierLine(brokenSource, "IMissingPluginContract");
-        int reportedLine = cs0246!.Location.GetLineSpan().StartLinePosition.Line + 1;
-        await Assert.That(reportedLine).IsEqualTo(expectedLine);
-
-        // And the error string surfaced to users embeds that line number.
-        await Assert.That(result.Error).Contains($"({reportedLine},");
         await Assert.That(result.Error).Contains("CS0246");
+        await Assert.That(result.Error).Contains($"broken-hello-world.cs({expectedLine},");
     }
 
     /// <summary>
     ///     A circular base-class dependency (A : B, B : A) must fail GRACEFULLY:
-    ///     a clean <see cref="CompilationResult.IsFailure" /> with the CS0146
-    ///     diagnostic — no exception escaping the compiler.
+    ///     a clean failure result carrying the CS0146 diagnostic — no exception
+    ///     escaping the compiler.
     /// </summary>
     [Test]
     public async Task CircularBaseClassDependency_FailsGracefullyWithDiagnostic()
@@ -142,20 +136,29 @@ public sealed class RealSourceCompilationTests
 
         var compiler = new RoslynPluginCompiler(
             new PluginAssemblyReferences(NullLogger<PluginAssemblyReferences>.Instance));
-        CompilationResult result = await compiler.CompileAsync(script).ConfigureAwait(false);
+        Result<CompiledPluginAssembly> result = await compiler.CompileAsync(script).ConfigureAwait(false);
 
         await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Diagnostics.Count).IsGreaterThan(0);
-        await Assert.That(result.Diagnostics.Any(d => d.Id == "CS0146")).IsTrue();
 
-        // The error string embeds every CS0146 diagnostic's file(line,column)
-        // position — the graceful, actionable failure users see. Message text
-        // itself is locale-dependent, so only positions and ids are asserted.
-        foreach (Diagnostic diag in result.Diagnostics.Where(d => d.Id == "CS0146"))
-        {
-            int line = diag.Location.GetLineSpan().StartLinePosition.Line + 1;
-            await Assert.That(result.Error).Contains($"({line},");
-        }
+        // Message text is locale-dependent, so only the id and the
+        // file(line,column) position are asserted. Since #561 the diagnostics live
+        // in the error string the host surfaces, so the rendered form is what is
+        // checked — there is no structured member left to read them from.
+        await Assert.That(result.Error).Contains("CS0146");
+
+        // ...and the position is one of the two class declarations, which is what
+        // makes the failure actionable. The cycle fires once per class, so either
+        // line satisfies it; the previous version of this test never claimed which.
+        int lineA = FirstIdentifierLine(circularSource, "class CircularPluginA");
+        int lineB = FirstIdentifierLine(circularSource, "class CircularPluginB");
+        bool reportsAPosition =
+            result.Error.Contains($"circular.cs({lineA},", StringComparison.Ordinal)
+            || result.Error.Contains($"circular.cs({lineB},", StringComparison.Ordinal);
+
+        await Assert.That(reportsAPosition).IsTrue()
+            .Because(
+                $"the CS0146 cycle must be reported at one of the class declarations (lines {lineA} "
+                + $"or {lineB}); the error was: {result.Error}");
     }
 
     /// <summary>1-based line of the first occurrence of <paramref name="identifier" /> in the source.</summary>

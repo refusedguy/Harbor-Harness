@@ -94,14 +94,14 @@ public sealed class CfeValueBaselineTests
     ///     projects it finished, so "N violations" from a red build is a
     ///     LOWER BOUND, never the count.
     /// </remarks>
-    private const int MeasuredTotalSites = 210;
+    private const int MeasuredTotalSites = 211;
 
     /// <summary>
     ///     Measured CFE0001 sites in shipped code: 2 real defects (1 fixed, 1
     ///     baselined pending a product decision) plus 34 false positives now
     ///     carrying a documented pragma.
     /// </summary>
-    private const int MeasuredProductionSites = 36;
+    private const int MeasuredProductionSites = 37;
 
     /// <summary>Measured CFE0001 sites under tests/, all suppressed centrally.</summary>
     private const int MeasuredTestSites = 174;
@@ -139,8 +139,8 @@ public sealed class CfeValueBaselineTests
             "if (IsFailure) { return/continue; } else-branch access"),
         new("src/Harbor.Storage.Jsonl/SessionPorter.cs", "ImportAsync",
             "if (IsFailure) { skipped++; } else-branch access"),
-        new("src/Harbor.Plugins.Runtime/PluginCompilationResult.cs", "Value",
-            "Result-shaped wrapper whose Value is the documented pass-through"),
+        new("src/Harbor.Plugins.Compilation/CachingCompiler.cs", "CompileAsync",
+            "if (inner.IsFailure) return inner; early return"),
         new("src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs", "TestConnectionAsync",
             "ternary whose own condition is the IsSuccess guard"),
         new("src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs", "LoadAllAsync",
@@ -398,11 +398,15 @@ public sealed class CfeValueBaselineTests
                    + "it is only meaningful because these 17 sites are real and were measured");
 
         await Assert.That(Baseline.Length).IsEqualTo(29)
-            .Because("the shipped-code baseline is pinned at 29 members / 35 sites (CFE0001 counts "
+            .Because("the shipped-code baseline is pinned at 29 members / 36 sites (CFE0001 counts "
                    + "sites, this table counts members). It may only shrink: a new row is a new "
                    + "false positive claim that must be justified in review, and removing a row is "
                    + "always safe. If this number moved, re-measure and update "
-                   + "docs/ROP-API-INVENTORY.md §5 in the same commit.");
+                   + "docs/ROP-API-INVENTORY.md §5 in the same commit. #561 kept the member count "
+                   + "at 29 while adding a site: PluginCompilationResult.cs was deleted (-1 member, "
+                   + "-1 site), CachingCompiler.CompileAsync was added (+1 member, +1 site), and "
+                   + "PluginHost.LoadAllAsync gained a second site for `compiled.Value` (+0 member, "
+                   + "+1 site).");
     }
 
     /// <summary>
@@ -420,8 +424,8 @@ public sealed class CfeValueBaselineTests
         // re-measures and updates one side, this fails and forces the other.
         string inventory = ReadRepoFile("docs/ROP-API-INVENTORY.md");
 
-        await Assert.That(MeasuredTotalSites).IsEqualTo(210)
-            .Because("210 is the CI-measured CFE0001 count (36 shipped + 174 tests) on analyzer "
+        await Assert.That(MeasuredTotalSites).IsEqualTo(211)
+            .Because("211 is the CFE0001 count (37 shipped + 174 tests) on analyzer "
                    + "1.3.0. It is recorded so that a future package bump which drops the "
                    + "diagnostic to zero shows up as a number to re-verify, not as a silent "
                    + "green build. See docs/ROP-API-INVENTORY.md §5.");

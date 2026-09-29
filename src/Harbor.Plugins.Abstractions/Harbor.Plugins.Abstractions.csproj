@@ -13,13 +13,18 @@
       - PluginScript             (immutable wrapper around a single .cs source file)
       - CompiledPluginAssembly   (loaded assembly + source hash)
       - LoadedPlugin             (live IPlugin instance + metadata)
-      - CompilationResult        (result struct returned by IPluginCompiler)
 
     Dependency policy (Clean Architecture):
       - References Harbor.Abstractions (Domain) only — never Harbor.Application / Harbor.Registries.
       - References Harbor.Terminal.Abstractions for the panel/TUI-plugin contracts
         surfaced on IPluginLoadHost (registration sink).
-      - References Microsoft.CodeAnalysis for Diagnostic (compiler result).
+      - Microsoft.CodeAnalysis.CSharp is still referenced but no longer used: the only
+        Diagnostic in this project's API was the `IReadOnlyList<Diagnostic>` member of the
+        hand-rolled CompilationResult, which #561 deleted — the compiler contract now returns
+        Result<CompiledPluginAssembly> and renders diagnostics into the error string. The
+        PackageReference is left in place deliberately (this project is packable, so dropping a
+        transitive dependency is a packaging change that wants its own PR) but the reference is
+        dead weight and is a known follow-up.
 
     See docs/PLUGIN_SYSTEM.md and docs/ARCHITECTURE_LAYERS.md for the full
     layer diagram.

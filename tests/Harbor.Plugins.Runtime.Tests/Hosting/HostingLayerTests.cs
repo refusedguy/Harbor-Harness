@@ -156,8 +156,8 @@ public sealed class HostingLayerTests
     /// </summary>
     private sealed class InlineCompiler : IPluginCompiler
     {
-        public Task<CompilationResult> CompileAsync(PluginScript script, CancellationToken ct = default)
-            => Task.FromResult(CompilationResult.Failure("inline — never used"));
+        public Task<Result<CompiledPluginAssembly>> CompileAsync(PluginScript script, CancellationToken ct = default)
+            => Task.FromResult(Result.Failure<CompiledPluginAssembly>("inline — never used"));
     }
 
     private sealed class InlineRegistrar : IPluginRegistrar
