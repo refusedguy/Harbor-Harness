@@ -66,12 +66,25 @@ public sealed record TerminalUiState
 
     /// <summary>
     ///     Per-panel directory keyed by panel id (#360). Owns the file-tree
-    ///     current directory; the filesystem listing itself stays a
-    ///     provider-local cache (reducer must never do I/O). Missing or empty
-    ///     key = <see cref="Environment.CurrentDirectory"/>.
+    ///     current directory; the listing itself lives in
+    ///     <see cref="FileTrees" />. Missing or empty key = the process working
+    ///     directory - see <see cref="ResolvePanelDirectory" />, which is the
+    ///     only place that rule is written down.
     /// </summary>
     public ImmutableDictionary<string, string> PanelDirs { get; init; }
         = ImmutableDictionary<string, string>.Empty;
+
+    /// <summary>
+    ///     Per-panel file-tree listing keyed by panel id (#667). This is where
+    ///     the entries went when they stopped being a provider-local cache: the
+    ///     panel reads them here and the <c>FileTreeLoader</c> writes them here,
+    ///     so the render thread never has to touch the filesystem to have
+    ///     something to draw. Written by <c>AppMsg.SetFileTreePending</c> /
+    ///     <c>SetFileTreeLoaded</c> / <c>SetFileTreeFailed</c>, cleared by
+    ///     <c>AppMsg.InvalidateFileTree</c>. Missing key = nothing loaded yet.
+    /// </summary>
+    public ImmutableDictionary<string, FileTreeSnapshot> FileTrees { get; init; }
+        = ImmutableDictionary<string, FileTreeSnapshot>.Empty;
 
     /// <summary>
     ///     Id of the panel currently owning keyboard focus, or <see langword="null" />
@@ -91,6 +104,42 @@ public sealed record TerminalUiState
 
     /// <summary>Whether the user has requested to quit the interactive loop.</summary>
     public bool ShouldQuit { get; init; }
+
+    /// <summary>
+    ///     The concrete directory panel <paramref name="id" /> is pointed at: its
+    ///     <see cref="PanelDirs" /> entry, or the process working directory when
+    ///     the entry is missing or empty.
+    /// </summary>
+    /// <remarks>
+    ///     Deliberately the ONLY place that rule exists (#667). Before the
+    ///     file-tree listing moved into state, the panel and the loader each
+    ///     carried their own copy of
+    ///     <c>string.IsNullOrEmpty(stored) ? Environment.CurrentDirectory : stored</c>
+    ///     and the reducer's staleness check compared against a third shape -
+    ///     which is exactly the class of bug where the panel shows one directory
+    ///     and the loader is loading another. One function, three callers, no
+    ///     drift.
+    /// </remarks>
+    /// <param name="id">The panel id.</param>
+    /// <returns>The resolved directory, never empty.</returns>
+    public string ResolvePanelDirectory(string id)
+        => PanelDirs.TryGetValue(id, out string? stored) && !string.IsNullOrEmpty(stored)
+            ? stored
+            : Environment.CurrentDirectory;
+
+    /// <summary>
+    ///     The listing for <paramref name="id" /> when it describes
+    ///     <paramref name="directory" />, and <see cref="FileTreeSnapshot.None" />
+    ///     otherwise. The directory check is what stops a late-arriving result
+    ///     from painting a directory the user already navigated away from.
+    /// </summary>
+    /// <param name="id">The panel id.</param>
+    /// <param name="directory">The directory the view is currently pointed at.</param>
+    /// <returns>The matching snapshot, or the "nothing loaded" sentinel.</returns>
+    public FileTreeSnapshot FileTreeFor(string id, string directory)
+        => FileTrees.TryGetValue(id, out FileTreeSnapshot? snapshot) && snapshot.Covers(directory)
+            ? snapshot
+            : FileTreeSnapshot.None;
 
     public static readonly TerminalUiState Empty = new();
 

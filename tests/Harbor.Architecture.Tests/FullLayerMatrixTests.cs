@@ -249,6 +249,13 @@ public class FullLayerMatrixTests
         ["Harbor.Ui.Framework.Reducers"] = new(Layer.Presentation,
             [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State",
               "Harbor.Ui.Framework.Abstractions"]),
+        // #667: `FileTreeLoader` implements `IFileTreeLoader`, which lives beside
+        // `PanelServices` in the State assembly — so this row already permitted
+        // the edge and the reference is genuine, not a new permission. The
+        // direction is the point and it is the reason the split was done this
+        // way round: the INTERFACE is in State, the implementation in Services.
+        // Naming the concrete loader in `PanelServices` would have needed the
+        // reverse edge and a project cycle.
         ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Reducers"]),
         // #567: ToolCallViewModel.Status is a ToolCallState, so the view-models
@@ -469,6 +476,11 @@ public class FullLayerMatrixTests
             "Harbor.Application", "Harbor.Registries",
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
+            // #667: FileTreeLoader, registered in TuiModule. First direct edge
+            // from the composition root to Ui.Framework.Services; the reference
+            // is real (TuiModule names the type), so the IL gate would redden
+            // if this permission were dropped.
+            "Harbor.Ui.Framework.Services",
             // #450: "Harbor.Ui.Framework.Sessions" was removed here on the theory
             // that no file named the namespace, but the IL reference is real (the
             // IL gate caught the regression), so it is permitted again.

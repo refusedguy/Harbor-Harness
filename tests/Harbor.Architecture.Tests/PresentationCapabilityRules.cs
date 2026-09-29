@@ -535,21 +535,26 @@ public sealed class PresentationCapabilityRules
             // / Process.Start to run the jump-to-definition search.
             [NoSubprocess + " Harbor.Tui.CellForge.Panels.CellForgeJumpPalettePanel"] =
                 "https://github.com/refusedguy/Harbor-Harness/issues/538",
-            // #668 RESOLVED: the two JsonThemeLoader / ThemeFileWatcher rows are
-            // GONE — not re-baselined. Those two were a second implementation of
-            // theme loading sitting next to Harbor.DesignSystem's ThemeStore, and
-            // a baseline row is a permission rather than a fix: it would have
-            // said "this Presentation type may touch the filesystem" forever,
-            // after the duplicate was gone. They read through IThemeStore now,
-            // and ThemeStoreSeamRules is the port's own guard — it fails if a
-            // second implementer of that port appears.
-            // Chat/Panels/CellForgeFileTreePanel.cs:153,:230,:232,:240 for
-            // Directory, and :237,:242,:247 for FileInfo/FileAttributes — the
-            // NoFiles prefix matches those too, so this panel needs BOTH rows.
-            [NoFiles + " Harbor.Tui.CellForge.Panels.CellForgeFileTreePanel"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/538",
-            [NoDirectories + " Harbor.Tui.CellForge.Panels.CellForgeFileTreePanel"] =
-                "https://github.com/refusedguy/Harbor-Harness/issues/538",
+            // #668 RESOLVED: the JsonThemeLoader / ThemeFileWatcher rows are GONE
+            // — not re-baselined. Those two were a second implementation of theme
+            // loading sitting next to Harbor.DesignSystem's ThemeStore, and a
+            // baseline row is a permission rather than a fix: it would have said
+            // "this Presentation type may touch the filesystem" forever, after
+            // the duplicate was gone. They read through IThemeStore now, and
+            // ThemeStoreSeamRules is the port's own guard — it fails if a second
+            // implementer of that port appears.
+            //
+            // #667 RESOLVED: the two CellForgeFileTreePanel rows are GONE too, not
+            // re-baselined and not narrowed. The panel walked the working directory
+            // from `Build`; it now reads `UiState.Ui.FileTrees` and asks the
+            // `IFileTreeLoader` seam for a listing, with the walk itself behind the
+            // Domain `IDirectoryLister` port and implemented in
+            // `SystemDirectoryLister` (Harbor.Application). Both deletions were
+            // FORCED: `NonVacuity_GrandfatheredViolations_AreStillReal` fails the
+            // build on a stale row, and `ResolvedViolations_HaveNoHits` fails it if
+            // the file-tree capability ever comes back.
+            //
+            // The jump palette row above is untouched — a different defect, open.
         },
         ["Harbor.DesignSystem"] = new(StringComparer.Ordinal)
         {
@@ -639,6 +644,50 @@ public sealed class PresentationCapabilityRules
 
     /// <summary>Shared empty row set, so a lookup miss allocates nothing per assembly.</summary>
     private static readonly Dictionary<string, string> EmptyRows = new(StringComparer.Ordinal);
+
+    // ---------------------------------------------------------------------
+    // The RESOLVED list — violations that were tracked and are being deleted.
+    //
+    // WHY THIS LIST EXISTS, AND WHY IT IS NOT THE SAME THING AS DELETING THE ROW
+    // ------------------------------------------------------------------------
+    // Deleting a `KnownViolations` row is the last commit of a refactor, and by
+    // itself it is indistinguishable from "the author was tired". There is
+    // nothing in the baseline that says "this row was SUPPOSED to disappear" —
+    // only rows that say "this row is still fine". A regression that
+    // re-introduces `Directory.EnumerateDirectories` in the file-tree panel would
+    // therefore be re-grandfable by simply re-adding the row, and the only
+    // signal that it had already been paid for is a code reviewer's memory.
+    //
+    // So the promise is written down as data BEFORE the fix, in a list whose
+    // whole content is negative assertions. Each entry says: this (rule, type)
+    // pair must have NO hits, ever again. Landing it while the I/O is still
+    // there is deliberate — the test is RED BY CONSTRUCTION, and the red is the
+    // proof that the probe is looking at the real type rather than at nothing.
+    //
+    // This is the same discipline as `NonVacuity_GrandfatheredViolations_AreStillReal`
+    // applied in the other direction: that test stops a baseline row outliving
+    // its violation; this one stops a removed violation coming back.
+    //
+    // ANTI-TYPO, because a mistyped type name is silently vacuous
+    // -----------------------------------------------------------
+    // A row naming a type that does not exist can never fail, so a typo would
+    // turn the guard into a comment wearing a test's clothes. `ResolvedRows_AreWellFormed`
+    // therefore resolves every type name against the real assembly before any
+    // row is allowed to count as satisfied, and fails loudly on a miss.
+    // ---------------------------------------------------------------------
+
+    private static readonly (string Assembly, string RuleId, string TypeName)[] ResolvedViolations =
+    [
+        // #667: CellForgeFileTreePanel listed the working directory from
+        // `Build` — i.e. from inside a painted frame. Three layers were missing
+        // at once, and all three had to land for the type to lose the
+        // capability: the listing now lives in `UiState.Ui.FileTrees`, the walk
+        // lives behind the Domain `IDirectoryLister` port, and
+        // `FileTreeLoader` owns the CancellationTokenSource that can actually
+        // stop one. See docs/ARCHITECTURE_LAYERS.md §3.
+        ("Harbor.Tui.CellForge", NoFiles, "Harbor.Tui.CellForge.Panels.CellForgeFileTreePanel"),
+        ("Harbor.Tui.CellForge", NoDirectories, "Harbor.Tui.CellForge.Panels.CellForgeFileTreePanel"),
+    ];
 
     private static readonly Lazy<IReadOnlyDictionary<string, Assembly>> LoadedAssemblies =
         new(ArchitectureTestHelpers.LoadHarborAssemblies);
@@ -819,6 +868,98 @@ public sealed class PresentationCapabilityRules
             .Because("A baseline row that no longer matches reality is a lie: it lets a type be "
                    + "re-added under a renamed key with nobody noticing. "
                    + string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every row of the RESOLVED list must have zero hits. This is the
+    ///     negative twin of <see cref="NonVacuity_GrandfatheredViolations_AreStillReal" />:
+    ///     a grandf row has to keep matching reality, and a resolved row has to
+    ///     keep NOT matching it.
+    /// </summary>
+    /// <remarks>
+    ///     Landing it before the fix is the point — see
+    ///     <see cref="ResolvedViolations" />. The probe's sensitivity to these
+    ///     very two rules is pinned independently by
+    ///     <see cref="NonVacuity_Probe_ReadsRealIlFromThisTestAssembly" />, so a
+    ///     green result here means "no hits", not "no probe".
+    /// </remarks>
+    [Test]
+    public async Task ResolvedViolations_HaveNoHits()
+    {
+        var failures = new List<string>();
+
+        foreach ((string assemblyName, string ruleId, string typeName) in ResolvedViolations)
+        {
+            AssemblyScan scan = Probe(RequireLoaded(assemblyName));
+            var real = scan.Hits
+                .Where(hit => hit.RuleId == ruleId && hit.DeclaringType == typeName)
+                .Select(static hit => hit.Member)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(static member => member, StringComparer.Ordinal)
+                .ToList();
+
+            if (real.Count == 0)
+            {
+                continue;
+            }
+
+            failures.Add(
+                $"{assemblyName} / {ruleId} / {typeName}: this violation was RESOLVED — the "
+                + $"capability is back, in {string.Join(", ", real)}. Do not re-add a "
+                + "KnownViolations row for it; fix the code, or reopen the tracking issue "
+                + "and say why the resolution was wrong.");
+        }
+
+        await Assert.That(failures).IsEmpty()
+            .Because("A resolved capability that silently returns is a regression nobody asked "
+                   + "for, and the baseline is the only place it would hide. "
+                   + string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     The RESOLVED list is only as strong as its own well-formedness: a row
+    ///     naming a rule that does not exist, an assembly the layer matrix does
+    ///     not call Presentation, or a type name that does not exist can never
+    ///     fail, and would turn <see cref="ResolvedViolations_HaveNoHits" /> into
+    ///     a green comment. The type check is the important one — a renamed or
+    ///     misspelled CLR name is exactly the silent failure mode here.
+    /// </summary>
+    [Test]
+    public async Task ResolvedRows_AreWellFormed()
+    {
+        var failures = new List<string>();
+        var ruleIds = AllRules.Select(static rule => rule.Id).ToHashSet(StringComparer.Ordinal);
+        var presentation = FullLayerMatrixTests.PresentationLayerAssemblies().ToHashSet(StringComparer.Ordinal);
+
+        await Assert.That(ResolvedViolations.Length).IsGreaterThan(0)
+            .Because("an empty RESOLVED list is indistinguishable from a guard that was never "
+                   + "written; the section it guards must contain at least one row");
+
+        foreach ((string assemblyName, string ruleId, string typeName) in ResolvedViolations)
+        {
+            if (!ruleIds.Contains(ruleId))
+            {
+                failures.Add($"resolved row '{ruleId} {typeName}' names an unknown rule id");
+            }
+
+            if (!presentation.Contains(assemblyName))
+            {
+                failures.Add($"resolved row names assembly '{assemblyName}', which the layer "
+                    + "matrix does not classify as Presentation — the row would guard nothing");
+                continue;
+            }
+
+            Assembly asm = RequireLoaded(assemblyName);
+            if (asm.GetType(typeName) is null)
+            {
+                failures.Add($"resolved row names type '{typeName}', which does not exist in "
+                    + $"'{assemblyName}'. A typo here makes the row permanently vacuous — the "
+                    + "exact green-but-guarding-nothing shape this file was built to prevent.");
+            }
+        }
+
+        await Assert.That(failures).IsEmpty()
+            .Because(string.Join("\n", failures));
     }
 
     /// <summary>

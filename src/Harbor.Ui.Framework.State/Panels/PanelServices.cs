@@ -42,6 +42,15 @@ public sealed record PanelServices
     /// <summary>Panel registry, so help-style panels can list siblings; null disables the listing.</summary>
     public IPanelRegistry? PanelRegistry { get; init; }
 
+    /// <summary>
+    ///     File-tree listing loader (#667). A panel that wants to show a
+    ///     directory's contents asks this; it starts a cancellable walk off the
+    ///     render thread and publishes the result into the store. Null on a host
+    ///     that registered none, and the file-tree panel then shows nothing it
+    ///     has not been told — it never falls back to reading the disk itself.
+    /// </summary>
+    public IFileTreeLoader? FileTrees { get; init; }
+
     /// <summary>Log ring buffer behind the logs/diagnostics panels; null shows a placeholder.</summary>
     public IDiagnosticsPanel? Diagnostics { get; init; }
 
@@ -97,6 +106,7 @@ public sealed record PanelServices
         {
             Store = container.GetService(typeof(UiStore)) as UiStore,
             PanelRegistry = container.GetService(typeof(IPanelRegistry)) as IPanelRegistry,
+            FileTrees = container.GetService(typeof(IFileTreeLoader)) as IFileTreeLoader,
             Diagnostics = container.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel,
             SessionStore = container.GetService(typeof(ISessionStore)) as ISessionStore,
             Sessions = container.GetService(typeof(IPanelSessionGateway)) as IPanelSessionGateway,
