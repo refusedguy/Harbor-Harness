@@ -137,13 +137,13 @@ public class SessionNullRailwayTests
         var agent = new FakeAgent();
         var agents = new FakeAgentRegistry();
         var factory = new SessionFactory(agents, agent, sessionStore, new FakeLogger<SessionFactory>());
-        var switcher = new SessionSwitcher(agent, sessionStore, agents, new FakeLogger<SessionSwitcher>());
+        var switcher = new SessionSwitcher(agent, sessionStore, factory, new FakeLogger<SessionSwitcher>());
         var router = new SessionEventRouter();
         var status = new SessionStatusService(new SessionStatusTracker());
         var git = new SessionGitTracker();
         var factories = new SessionOptionalFactories(() => null, () => null, () => { });
         var lifecycle = new SessionLifecycleService(
-            router, factory, switcher, sessionStore, agent, agents, status, git,
+            router, factory, switcher, sessionStore, agent, status, git,
             new FakeChatViewBinder(), factories, new FakeLogger<SessionLifecycleService>());
         var manager = new SessionManager(router, lifecycle, status, git);
         return (manager, factory, sessionStore);

@@ -29,7 +29,6 @@ namespace Harbor.Ui.Framework.Sessions;
 public sealed class SessionLifecycleService : ISessionLifecycle
 {
     private readonly IAgent _agent;
-    private readonly IAgentRegistry _agents;
     private readonly IChatViewBinder _chatViewBinder;
     private readonly SessionFactory _factory;
     private readonly SessionOptionalFactories _factories;
@@ -47,7 +46,6 @@ public sealed class SessionLifecycleService : ISessionLifecycle
         SessionSwitcher switcher,
         ISessionStore sessionStore,
         IAgent agent,
-        IAgentRegistry agents,
         SessionStatusService status,
         SessionGitTracker gitTracker,
         IChatViewBinder chatViewBinder,
@@ -59,7 +57,6 @@ public sealed class SessionLifecycleService : ISessionLifecycle
         _switcher = switcher;
         _sessionStore = sessionStore;
         _agent = agent;
-        _agents = agents;
         _status = status;
         _gitTracker = gitTracker;
         _chatViewBinder = chatViewBinder;
@@ -192,8 +189,10 @@ public sealed class SessionLifecycleService : ISessionLifecycle
             // back to "whichever entry the registry enumerates first" is what #683 removed
             // from the sibling path; leaving it here would reopen the same hole one method
             // away.
-            var agentDef = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
-                           ?? _factory.ResolveDefaultAgentDefinition();
+            // #596: that sibling — SessionSwitcher.OpenAsync — was still hand-rolling this
+            // lookup with a `First()` fallback, so the two paths really did disagree. Both
+            // ask the factory now, which is the single answer.
+            var agentDef = _factory.ResolveAgentForSession(session.Agent);
             _agent.Initialize(session, agentDef);
             // #89: hydrate-then-swap — same single-AppMsg atomic replay as
             // SessionSwitcher.OpenAsync (see comment there).

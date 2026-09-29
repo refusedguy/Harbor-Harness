@@ -115,10 +115,8 @@ public sealed class SessionFactory
     /// <returns>The resolved <see cref="AgentDefinition" />.</returns>
     public async Task<AgentDefinition> ResolveAgentDefinitionAsync(string? agentName, string? providerId, string? modelId)
     {
-        var agentDef = agentName is null
-            ? ResolveDefaultAgentDefinition()
-            : _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == agentName)
-              ?? ResolveDefaultAgentDefinition();
+        // #596: this was the same lookup as ResolveAgentForSession, inlined a third time.
+        var agentDef = ResolveAgentForSession(agentName);
 
         (string? configProvider, string? configModel) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
         string provider = providerId ?? configProvider ?? agentDef.ProviderId;
@@ -150,6 +148,50 @@ public sealed class SessionFactory
         => _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == AgentName.Fallback)
            ?? _agents.GetAllAgents().FirstOrDefault()
            ?? throw new InvalidOperationException("No agents registered.");
+
+    /// <summary>
+    ///     The one place that answers "this session names agent <paramref name="agentName" />;
+    ///     what does it open on?" — the named agent when this host registers it, and
+    ///     <see cref="ResolveDefaultAgentDefinition" /> when it does not.
+    /// </summary>
+    /// <param name="agentName">
+    ///     The agent name recorded on the session. Blank is treated as absent, not as a
+    ///     name to look up: <see cref="AgentName.Create" /> rejects blank, and a session row
+    ///     with an empty agent column should open on the default rather than throw.
+    /// </param>
+    /// <returns>
+    ///     The named agent's definition, or the default one. A session recorded against an
+    ///     agent this host does not register — renamed, removed, or copied from another
+    ///     machine — still opens; it just opens on the agent the policy names rather than
+    ///     on whichever entry the registry happened to enumerate first.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    ///     No agents are registered at all. Same composition-root condition, and the same
+    ///     message, as <see cref="ResolveDefaultAgentDefinition" />.
+    /// </exception>
+    /// <remarks>
+    ///     #596: this was hand-rolled at each call site, and the copies had already
+    ///     diverged — <c>SessionSwitcher.OpenAsync</c> fell back to <c>First()</c>, so it
+    ///     disagreed with <c>SessionLifecycleService.OpenSessionAsync</c> (which #683 had
+    ///     already moved onto the default) and raised
+    ///     <c>"Sequence contains no elements"</c> where the rest of the slice raises
+    ///     <c>"No agents registered."</c>. One question, one answer, one diagnostic.
+    /// </remarks>
+    public AgentDefinition ResolveAgentForSession(string? agentName)
+    {
+        if (string.IsNullOrWhiteSpace(agentName))
+        {
+            return ResolveDefaultAgentDefinition();
+        }
+
+        // An unknown name is not an exceptional condition here — it is precisely the case
+        // this method exists to answer — so it is asked as a question, not thrown from.
+        // Read through the Result, not through a null.
+        Result<AgentDefinition> named = _agents.GetAgent(AgentName.Create(agentName));
+        return named.IsSuccess
+            ? named.Value
+            : ResolveDefaultAgentDefinition();
+    }
 
     /// <summary>
     ///     Create the default session if none exists yet. Reads the fresh
