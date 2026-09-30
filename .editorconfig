@@ -549,29 +549,49 @@ dotnet_diagnostic.ADP0001.severity = suggestion
 # the corresponding architecture test will fail with a clear list of the
 # forbidden references.
 # ============================================================================
-
-
-# Desktop apps: relax DI rules for process-lifetime singletons
-# (root provider, static IServiceProvider cache, transient VMs with process lifetime)
+# PATH-SCOPED SEVERITY OVERRIDES (#838)
+# ============================================================================
+# Everything above this line is tree-wide. This block is the ONE place where a
+# diagnostic's severity is a function of (rule x path) rather than of the rule
+# alone, and it is the reason docs/ANALYZERS.md read as though it were lying
+# about the build: the doc summarised the rule half of the severity model and
+# omitted this half, so `apps/Harbor.App.Avalonia/App.axaml.cs` —
+# `public static IServiceProvider Services { get; set; }`, the exact shape
+# DI006's own README puts in its "Problem" block — compiled clean while the
+# same document said a static container is a build error. It was never an
+# enforcement gap and never a hole in the rule. Read the two together.
+#
+# WHY THE DESKTOP ROOT IS RELAXED: an Avalonia composition root has to hand its
+# container to the XAML object graph, which cannot take constructor parameters,
+# so the static root provider IS the idiom there. The CLI root resolves through
+# DI and keeps DI006 at `warning`, and apps/Harbor.App.Cli is deliberately
+# absent from this list. That asymmetry is observed, not assumed: #837 planted a
+# static container in the CLI root and the build failed with `error DI006`
+# before a test ran, in the same session that found the Avalonia root's
+# equivalent compiling clean.
+#
+# SCOPE — the block is four rules deep and its reason covers fewer than four.
+# DI006 (static root provider) and DI014 (root provider not disposed) ARE the
+# process-lifetime singletons. DI008 is defensible for process-lifetime view
+# models. DI003 (CAPTIVE DEPENDENCY) is a lifetime-graph rule about a singleton
+# retaining a SCOPED service, which is not what this relaxation is for, and the
+# demotion covers the whole apps/Harbor.App.Avalonia tree rather than the app
+# root alone. Narrowing it was NOT attempted here: promoting DI003 back to
+# `error` needs one strict build to learn whether the desktop app actually has a
+# captive dependency, and #838 ran no build. Do not read this paragraph as an
+# endorsement of the breadth — it is a known gap, filed separately.
+#
+# THE THREE SIBLING BLOCKS ARE GONE (#838). `apps/Harbor.App.{Wpf,Maui,Blazor}`
+# carried identical four-rule relaxations, and none of those directories exists:
+# those composition roots live under contrib/, which is not in Harbor.slnx and
+# is not built by CI. They were inert configuration that read like live policy —
+# a re-added `Harbor.App.Blazor` would have inherited a four-rule DI relaxation
+# nobody chose for it, with no diagnostic anywhere to say so.
+# `AnalyzerSeverityScopeRules.PathScopedSections_ResolveToRealPaths` in
+# tests/Harbor.Architecture.Tests/ now fails if such a block reappears, and
+# `DiSeverityOverrides_AreScopedToExactlyTheDeclaredRoot` pins this one path as
+# the whole surface.
 [apps/Harbor.App.Avalonia/**.cs]
-dotnet_diagnostic.DI003.severity = suggestion
-dotnet_diagnostic.DI006.severity = suggestion
-dotnet_diagnostic.DI008.severity = suggestion
-dotnet_diagnostic.DI014.severity = suggestion
-
-[apps/Harbor.App.Wpf/**.cs]
-dotnet_diagnostic.DI003.severity = suggestion
-dotnet_diagnostic.DI006.severity = suggestion
-dotnet_diagnostic.DI008.severity = suggestion
-dotnet_diagnostic.DI014.severity = suggestion
-
-[apps/Harbor.App.Maui/**.cs]
-dotnet_diagnostic.DI003.severity = suggestion
-dotnet_diagnostic.DI006.severity = suggestion
-dotnet_diagnostic.DI008.severity = suggestion
-dotnet_diagnostic.DI014.severity = suggestion
-
-[apps/Harbor.App.Blazor/**.cs]
 dotnet_diagnostic.DI003.severity = suggestion
 dotnet_diagnostic.DI006.severity = suggestion
 dotnet_diagnostic.DI008.severity = suggestion

@@ -121,8 +121,10 @@
 // is caught anywhere repo-wide. It is not — and that is a decision, not a hole:
 //
 //   * Constructor parameter → DI011, set to `suggestion` with the reason written
-//     out at .editorconfig:494 ("IServiceProvider injection is intentional in
-//     HostBuilder.cs"). Deliberate.
+//     out in .editorconfig ("IServiceProvider injection is intentional in
+//     HostBuilder.cs"). Deliberate. Cited by rule and section rather than by line
+//     number: #838 added and removed lines in that file, and a line-number
+//     citation in a comment is a drift waiting to happen.
 //   * Static field or property → DI006, `warning`, so `TreatWarningsAsErrors`
 //     makes it a build error. Covered, and hard.
 //   * Instance field → no DI rule, BY THE ANALYZER'S OWN CONTRACT. DI006's own
