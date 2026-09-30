@@ -485,17 +485,36 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
     }
 
     /// <summary>
-    /// Route one key event. Handles press/repeat only, no modifiers, and only
-    /// while pending: Tab/Left/Right/digits switch tabs, Up/Down (j/k) move the
+    /// Route one key event. Handles press/repeat only and only while pending:
+    /// Tab/Left/Right/digits switch tabs, Up/Down (j/k) move the
     /// option cursor, Space toggles (or types on the custom row), printable
     /// chars + Backspace edit the custom answer, Enter submits. Escape is NOT
     /// consumed (host-owned). Returns true when the key was consumed.
+    /// <para>
+    /// Modifiers: command keys and runes on the option rows take none, but a
+    /// rune on the custom row is answer TEXT and takes <see cref="AcceptsTypedChar"/>
+    /// — <c>Ctrl|Meta|Alt</c> refused, <c>Shift</c> allowed (#785).
+    /// </para>
     /// </summary>
     public bool HandleKey(in KeyEvent key)
     {
         if (_submitted || _questions.Count == 0
-            || (key.EventType != KeyEventType.Press && key.EventType != KeyEventType.Repeat)
-            || key.Modifiers != KeyModifiers.None)
+            || (key.EventType != KeyEventType.Press && key.EventType != KeyEventType.Repeat))
+        {
+            return false;
+        }
+
+        // Two gates, because this widget is two widgets (#785). The custom row
+        // is a text buffer and takes the TYPING gate; every other key, and
+        // runes on the option rows, are commands and take the strict one.
+        if (key.Key != KeyCode.Char)
+        {
+            if (key.Modifiers != KeyModifiers.None)
+            {
+                return false;
+            }
+        }
+        else if (!AcceptsTypedChar(key))
         {
             return false;
         }
@@ -527,6 +546,34 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// The typing half of the modifier gate, and the reason this widget is not
+    /// one of the <c>!= KeyModifiers.None</c> sites (#785).
+    /// <para>
+    /// On the custom row every printable rune is answer text, so the gate is
+    /// the composer's (<c>ComposerController.cs:173</c>):
+    /// <c>Ctrl|Meta|Alt</c> are command modifiers and are refused, while
+    /// <c>Shift</c> is a case-shaper and passes — real encoders deliver a
+    /// capital as the capital rune PLUS <c>Shift</c>, so refusing the modifier
+    /// used to swallow the letter and left the answer untypable in capitals.
+    /// </para>
+    /// <para>
+    /// Off the custom row the same rune is navigation (digits jump tabs,
+    /// hjkl move, space toggles), so there the strict no-modifier gate still
+    /// applies and nothing changes. That is the whole of the split: a buffer
+    /// loses data when a rune is dropped, a command does not.
+    /// </para>
+    /// </summary>
+    private bool AcceptsTypedChar(in KeyEvent key)
+    {
+        if ((key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta | KeyModifiers.Alt)) != 0)
+        {
+            return false;
+        }
+
+        return OnCustomRow() || key.Modifiers == KeyModifiers.None;
     }
 
     private bool HandleChar(Rune c)
