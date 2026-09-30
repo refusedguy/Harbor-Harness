@@ -15,13 +15,20 @@ namespace Harbor.Tui.CellForge.Rendering;
 public sealed class PromptHistory
 {
     /// <summary>
-    /// MRU cap: mirrors <c>RecentItemsService</c> (<c>maxItems: 50</c>).
+    /// MRU cap, carried over from the old <c>RecentItemsService</c> this rail used
+    /// to name (<c>maxItems: 50</c>). That service was deleted in #535 — it
+    /// persisted to <c>~/.harbor/recent.json</c> from a Presentation assembly and
+    /// nothing ever constructed it — so the cap is stated as its own number rather
+    /// than as a reference to a removed type.
     /// In-memory only — no file persist (see TODO below).
     /// </summary>
     public const int DefaultCapacity = 50;
 
-    // TODO(CF-B-005): file persist like RecentItemsService (~/.harbor/recent.json).
-    // Currently the rail is per-session in-memory only; nothing is written to disk.
+    // TODO(CF-B-005): if this rail is ever persisted, it is NOT by writing a file
+    // from a Presentation assembly — a Domain port, an Infrastructure
+    // implementation beside Harbor.Storage.*, and a composition root that wires
+    // them, the shape #536 used for the theme store. Currently the rail is
+    // per-session in-memory only; nothing is written to disk.
     private readonly int _capacity;
     private readonly List<string> _entries = [];
 

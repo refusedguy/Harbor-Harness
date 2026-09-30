@@ -814,11 +814,6 @@
 | Harbor.Desktop.Shared/Services/MarkdownToPlainTextService.cs | 10 | class MarkdownToPlainTextService | YES | HIGH |
 | Harbor.Desktop.Shared/Services/MarkdownToPlainTextService.cs | 19 | public string ToPlainText(string markdown) | YES | MED |
 | Harbor.Desktop.Shared/Services/MarkdownToPlainTextService.cs | 29 | public string ToSummary(string markdown, int maxChars = 100) | YES | HIGH |
-| Harbor.Desktop.Shared/Services/RecentItemsService.cs | 7 | class RecentItemsService | YES | HIGH |
-| Harbor.Desktop.Shared/Services/RecentItemsService.cs | 43 | public static string DefaultPath() | YES | MED |
-| Harbor.Desktop.Shared/Services/RecentItemsService.cs | 50 | public void Add(string item) | YES | HIGH |
-| Harbor.Desktop.Shared/Services/RecentItemsService.cs | 66 | public void Remove(string item) | YES | HIGH |
-| Harbor.Desktop.Shared/Services/RecentItemsService.cs | 76 | public void Clear() | YES | HIGH |
 
 ## Project: Harbor.Diagnostics.Abstractions
 

@@ -2296,10 +2296,19 @@ Effort: S. Priority: P0.
 - **Pi:** Session selector remembers last 5
 - **Opencode:** Command palette has "Recently used" section
 
-**Harbor:** `RecentItemsService.cs` exists in `Harbor.Desktop.Shared/Services/`
-but is NOT used by the Avalonia command palette.
+**Harbor:** NOT PRESENT. `RecentItemsService.cs` shipped in
+`Harbor.Desktop.Shared/Services/` and was never constructed by anything — not
+by the Avalonia command palette, not by any other product, not by any test. It
+also owned persistence: it wrote `~/.harbor/recent.json` from a Presentation
+assembly, behind two rows of the capability baseline. **#535 removed it**, and
+`DesktopSharedTakesNoIoRules` now fails the build if `Harbor.Desktop.Shared`
+touches a disk or resolves the user's home directory again.
 
-**Action:** Wire `RecentItemsService` into `CommandPaletteViewModel`.
+**Action:** If this is wanted, add it as a feature rather than resurrecting the
+old type: a Domain port, an Infrastructure implementation beside
+`Harbor.Storage.*`, and a `CommandPaletteViewModel` that actually calls it. The
+gap is real — the palette has no MRU section today — but the honest cost is a
+caller, and the previous attempt shipped the state file without one.
 Effort: S. Priority: P0.
 
 ### 6.3 Collapsible tool calls
