@@ -55,11 +55,13 @@ internal enum StripState
 
 /// <summary>
 ///     Line-oriented comment stripper for the architecture test suite's source
-///     scans. It is a LINE scanner, not a whole-file one: a <c>/* … */</c>
-///     comment spanning several lines is handled by <see cref="StripAll" />,
-///     which carries the state across lines. <see cref="Strip" /> assumes each
-///     line starts in <see cref="StripState.Code" /> and is what a per-line
-///     caller wants.
+///     scans. It is a LINE scanner that can be made to span lines: a
+///     <c>/* … */</c> comment or a <c>@"…"</c> verbatim string that runs over
+///     several lines is carried from one to the next by <see cref="StripAll" />,
+///     which threads the <see cref="StripState" /> through every line.
+///     <see cref="Strip" /> is the per-line form and assumes each line starts in
+///     <see cref="StripState.Code" /> — use it only when the input really is one
+///     line at a time with no continuation, which for a source scan means never.
 /// </summary>
 internal static class SourceCommentStripper
 {
@@ -69,8 +71,26 @@ internal static class SourceCommentStripper
     /// </summary>
     internal static string Strip(string line)
     {
-        var output = new StringBuilder(line.Length);
         StripState state = StripState.Code;
+        return Strip(line, ref state);
+    }
+
+    /// <summary>
+    ///     Strips comments from one line, continuing from <paramref name="state" /> and
+    ///     leaving it where the line ended. <see cref="StripAll" /> threads one state
+    ///     through every line; <see cref="Strip" /> is the same code with a local that
+    ///     starts — and is discarded — in <see cref="StripState.Code" />.
+    /// </summary>
+    /// <remarks>
+    ///     Returning the state is the whole mechanism. The obvious alternative, asking
+    ///     afterwards whether the line left the lexer inside a block comment, cannot
+    ///     work: this method DELETES the comment characters, so the stripped text no
+    ///     longer contains the <c>/*</c> that would answer the question. That was #919,
+    ///     and it is why the counter it used is gone rather than fixed.
+    /// </remarks>
+    private static string Strip(string line, ref StripState state)
+    {
+        var output = new StringBuilder(line.Length);
 
         for (int i = 0; i < line.Length; i++)
         {
@@ -191,73 +211,31 @@ internal static class SourceCommentStripper
     }
 
     /// <summary>
-    ///     Strips comments across a whole file, carrying block-comment state from
-    ///     line to line. Returns one stripped line per input line, so line
-    ///     numbers still index the result — which is what the rules report.
+    ///     Strips comments across a whole file, carrying the lexer state from line to
+    ///     line. Returns one stripped line per input line, so line numbers still index
+    ///     the result — which is what the rules report.
     /// </summary>
+    /// <remarks>
+    ///     The state is carried, not recomputed. It was not always so, and the reason is
+    ///     worth keeping because the fix looks like a simplification and is not:
+    ///     <c>Strip</c> DELETES the comment characters, so no amount of inspecting the
+    ///     stripped line can recover whether it opened a block comment — the evidence is
+    ///     gone by then. The previous version tried anyway, counting <c>/*</c> against
+    ///     <c>*/</c> in text that had just had both removed, so the count was 0 on every
+    ///     input, <c>inBlockComment</c> was never set, and the branch that used it was
+    ///     unreachable. A multi-line <c>/* … */</c> therefore reached every rule as code.
+    ///     See <c>SourceCommentStripperTests</c> (#919).
+    /// </remarks>
     internal static string[] StripAll(IEnumerable<string> lines)
     {
         var result = new List<string>();
-        bool inBlockComment = false;
+        StripState state = StripState.Code;
 
         foreach (string line in lines)
         {
-            if (!inBlockComment)
-            {
-                string stripped = Strip(line);
-
-                // A line that opened a block comment and did not close it leaves
-                // the state machine inside BlockComment. Detect that by counting:
-                // a balanced line cannot still be open.
-                if (OpensUnterminatedBlockComment(stripped))
-                {
-                    inBlockComment = true;
-                }
-
-                result.Add(stripped);
-                continue;
-            }
-
-            int close = line.IndexOf("*/", StringComparison.Ordinal);
-            if (close < 0)
-            {
-                result.Add(string.Empty);
-                continue;
-            }
-
-            // The tail after */ is real code again — strip it on its own so a
-            // string that starts there is not misread as comment text.
-            inBlockComment = false;
-            result.Add(Strip(line[(close + 2)..]));
+            result.Add(Strip(line, ref state));
         }
 
         return [.. result];
-    }
-
-    /// <summary>
-    ///     Whether <paramref name="stripped" /> left the lexer inside a block
-    ///     comment. Determined by the <c>/*</c> and <c>*/</c> counts in code,
-    ///     which is exact because <see cref="Strip" /> has already removed every
-    ///     comment that was not the one in question.
-    /// </summary>
-    private static bool OpensUnterminatedBlockComment(string stripped)
-    {
-        int opens = 0;
-        int closes = 0;
-        for (int i = 0; i < stripped.Length; i++)
-        {
-            if (stripped[i] == '/' && i + 1 < stripped.Length && stripped[i + 1] == '*')
-            {
-                opens++;
-                i++;
-            }
-            else if (stripped[i] == '*' && i + 1 < stripped.Length && stripped[i + 1] == '/')
-            {
-                closes++;
-                i++;
-            }
-        }
-
-        return opens > closes;
     }
 }

@@ -192,23 +192,23 @@ public sealed class SessionForkPortSeamRules
     ///     <para>
     ///         <see cref="SourceScan.StripComments" /> and NOT
     ///         <c>SourceCommentStripper.StripAll</c>, which this file used first. The choice is
-    ///         load-bearing and the reason is a defect in the latter, read from its source and
+    ///         load-bearing and the reason was a defect in the latter, read from its source and
     ///         <b>not verified by a run</b>: <c>Strip</c> DELETES comment characters rather than
-    ///         blanking them, and <c>StripAll</c> then asks
+    ///         blanking them, and <c>StripAll</c> then asked
     ///         <c>OpensUnterminatedBlockComment</c> — which counts <c>/*</c> and <c>*/</c> — about
-    ///         the already-stripped line. The count is always zero, so <c>inBlockComment</c> is
-    ///         never set and a <c>/* … */</c> comment spanning several lines is NOT carried across
-    ///         lines: its interior is handed downstream as if it were code.
+    ///         the already-stripped line. The count was always zero, so <c>inBlockComment</c> was
+    ///         never set and a <c>/* … */</c> comment spanning several lines was NOT carried across
+    ///         lines: its interior was handed downstream as if it were code.
     ///     </para>
     ///     <para>
-    ///         For most rules that is harmless, and this file is not the one to fix it — the
-    ///         helper has other callers and the same "declare, do not fix" call #893 made about
-    ///         <c>SourceScan.IsBuildOutput</c>'s blind spots. Here it would be a FALSE POSITIVE
-    ///         source, because an interior line shaped <c>: ISessionForker</c> reads as a base
-    ///         list, so that case is planted as a non-vacuity control below and
-    ///         <c>SourceScan.StripComments</c> blanks the whole region while preserving newlines.
-    ///         The owner should know the <c>StripAll</c> defect exists; it is not this PR's to
-    ///         land.
+    ///         <b>That defect is fixed</b> — <c>StripAll</c> now threads the lexer state through
+    ///         every line instead of counting what it deleted, and
+    ///         <c>SourceCommentStripperTests</c> holds both shapes (#919). The choice of stripper
+    ///         here is unchanged and is still not a wash: this rule wants comments BLANKED rather
+    ///         than deleted, because it reads base-list continuations off the shape of the line,
+    ///         and <c>SourceScan.StripComments</c> blanks the whole region while preserving
+    ///         newlines. The starless block comment stays planted as a non-vacuity control below
+    ///         — the case that would have caught the wrong stripper, and that still would.
     ///     </para>
     /// </remarks>
     private static string[] StrippedLines(string source) =>
