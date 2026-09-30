@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using CSharpFunctionalExtensions;
 using Harbor.App.Avalonia.Navigation;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels.Board;
@@ -31,17 +32,6 @@ public sealed record ShellInfrastructure(
     IMessenger Messenger,
     ShellStatus ShellStatus);
 
-public class FileTreeNode
-{
-    public string Name { get; set; } = string.Empty;
-    public string FullPath { get; set; } = string.Empty;
-    public bool IsDirectory { get; set; }
-    public bool IsExpanded { get; set; }
-    public ObservableCollection<FileTreeNode> Children { get; } = new();
-    public string IconPath { get; set; } = string.Empty;
-    public string? GitStatus { get; set; }
-}
-
 public sealed partial class MainViewModel : StoreSubscriberViewModel
 {
     private static readonly Dictionary<string, string> OverlayIdToFlagProperty = new()
@@ -65,7 +55,10 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     private readonly IToastService _toasts;
     private readonly AvaloniaContentHost _contentHost;
     private readonly IMessenger _messenger;
+    private readonly ProjectFileTreeScanner _fileTreeScanner;
     private readonly ILogger _logger;
+    private readonly Lock _scanGate = new();
+    private CancellationTokenSource? _fileTreeScan;
     private bool _disposed;
     private DateTime? _runningStartTime;
     private decimal _displayCost;
@@ -228,6 +221,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         IContentHost contentHost,
         ShellInfrastructure shell,
         CommandPaletteViewModel commandPalette,
+        ProjectFileTreeScanner fileTreeScanner,
         IOverlayStack? overlayStack = null)
         : base(shell.Dispatcher, shell.Logger)
     {
@@ -245,6 +239,10 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         _commandPalette = commandPalette;
         _messenger = shell.Messenger;
         _logger = shell.Logger;
+        // #492: the file tree is no longer built here. This view-model asks the
+        // scanner, the scanner asks the Domain ports, and the only thing left in
+        // the view-model is "which scan owns the state right now".
+        _fileTreeScanner = fileTreeScanner;
 
         _overlayController.Register(OverlayIds.Palette, v => IsCommandPaletteOpen = v);
         _overlayController.Register(OverlayIds.Settings, v => IsSettingsOpen = v);
@@ -286,11 +284,11 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
 
         ProjectRootPath = Environment.CurrentDirectory;
 
-        // #569: the constructor cannot await. The scan itself is already
-        // catch-guarded inside RefreshFileTreeAsync (it logs and leaves the
-        // tree untouched), but the Task was being discarded bare, so a fault
-        // raised outside that try was lost. Started, not abandoned — and the
-        // file tree simply stays empty until the scan lands, exactly as before.
+        // #569: the constructor cannot await. RefreshFileTreeAsync observes its own
+        // failure (it logs and leaves the tree untouched), but the Task was being
+        // discarded bare, so a fault raised outside that guard was lost. Started,
+        // not abandoned — and the file tree simply stays empty until the scan
+        // lands, exactly as before.
         TaskFireAndForget.Forget(
             RefreshFileTreeAsync(),
             ex => _logger.LogError(ex, "Initial file-tree scan failed"));
@@ -514,103 +512,177 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         return $"{duration.Seconds}s";
     }
 
+    /// <summary>
+    ///     Re-scan <see cref="ProjectRootPath" /> and swap the sidebar's tree for
+    ///     the result.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>#492 — what this method no longer does.</b> It used to contain the
+    ///         walk itself: <c>Directory.GetDirectories</c> / <c>Directory.GetFiles</c>
+    ///         / <c>new DirectoryInfo</c>, a recursive <c>LoadDirectory</c> with a
+    ///         literal depth cap, a private ignore list and a private
+    ///         extension→icon <c>switch</c>, all inside a <c>Task.Run</c> with no
+    ///         cancellation and no budget. All of that is
+    ///         <see cref="ProjectFileTreeScanner" /> + the two Domain ports behind
+    ///         it. What remains here is the one thing only the view-model can do:
+    ///         decide whether the answer it was handed is still the answer the user
+    ///         is looking at.
+    ///     </para>
+    ///     <para>
+    ///         <b>Why there was a cancellation seam to add.</b> The old Task.Run
+    ///         had none, so pressing Refresh while a scan was running started a
+    ///         second one, both ran to completion, and whichever finished last won
+    ///         — including a scan for a root the user had already navigated away
+    ///         from. <see cref="ProjectRootPath" /> was also read TWICE inside the
+    ///         Task.Run while the UI thread could write it. Now a new request
+    ///         cancels the one in flight, the root is captured once per request, and
+    ///         a result is applied only if the scan that produced it is still the
+    ///         current one for the root the view is pointing at. That is the same
+    ///         staleness rule <c>FileTreeSnapshot.Covers</c> applies to the TUI
+    ///         sidebar (#667), applied to a collection instead of a store.
+    ///     </para>
+    ///     <para>
+    ///         <b>Threading.</b> The scan is I/O-bound and runs on thread-pool
+    ///         threads inside the port. The two mutations of
+    ///         <see cref="FileTree" /> below are NOT marshalled by hand: this
+    ///         method is entered on the UI thread (the shell command and the view's
+    ///         refresh button both call it there) and the <c>await</c> on the scan
+    ///         resumes on the captured Avalonia synchronization context, which is
+    ///         what keeps the bound <c>ObservableCollection</c> on the thread its
+    ///         bindings read it on. Deliberately no <c>ConfigureAwait(false)</c> on
+    ///         THAT await — it would move the mutation off the UI thread and break
+    ///         the binding rather than speed anything up.
+    ///     </para>
+    /// </remarks>
     [RelayCommand]
     public async Task RefreshFileTreeAsync()
     {
-        var nodes = new List<FileTreeNode>();
+        string root = ProjectRootPath;
+        CancellationTokenSource scan = new();
+        CancellationTokenSource? superseded;
 
-        await Task.Run(() =>
+        lock (_scanGate)
+        {
+            superseded = _fileTreeScan;
+            _fileTreeScan = scan;
+        }
+
+        // Outside the lock: cancelling runs continuations, and doing that under a
+        // lock is how a lock becomes a deadlock. The loser also disposes its own
+        // source, exactly as FileTreeLoader does (#667).
+        if (superseded is not null)
         {
             try
             {
-                var root = new FileTreeNode
-                {
-                    Name = new DirectoryInfo(ProjectRootPath).Name,
-                    FullPath = ProjectRootPath,
-                    IsDirectory = true,
-                    IsExpanded = true,
-                    IconPath = "folder"
-                };
-
-                LoadDirectory(root, ProjectRootPath, 0);
-                nodes.Add(root);
+                superseded.Cancel();
             }
-            catch (Exception ex)
+            catch (ObjectDisposedException)
             {
-                Logger.LogError(ex, "Failed to scan project root: {Path}", ProjectRootPath);
+                // It finished and released its own source between the swap and
+                // here. Losing a cancel race against your own completion is normal.
             }
-        });
-
-        FileTree.Clear();
-        foreach (var node in nodes)
-        {
-            FileTree.Add(node);
         }
-    }
-
-    private void LoadDirectory(FileTreeNode parent, string path, int depth)
-    {
-        if (depth > 3) return;
 
         try
         {
-            foreach (var dir in Directory.GetDirectories(path).OrderBy(d => d))
+            Result<FileTreeNode> scanned = await _fileTreeScanner.ScanAsync(root, scan.Token);
+
+            if (scanned.IsSuccess)
             {
-                var dirName = Path.GetFileName(dir);
-                if (IsIgnoredDirectory(dirName)) continue;
-
-                var dirNode = new FileTreeNode
+                if (IsCurrentScan(scan, root))
                 {
-                    Name = dirName,
-                    FullPath = dir,
-                    IsDirectory = true,
-                    IconPath = "folder",
-                    IsExpanded = depth < 1
-                };
+                    FileTree.Clear();
+                    FileTree.Add(scanned.Value);
+                }
+                else
+                {
+                    Logger.LogDebug(
+                        "Discarding a file-tree scan of {Path} that arrived after a newer one",
+                        root);
+                }
 
-                parent.Children.Add(dirNode);
-                LoadDirectory(dirNode, dir, depth + 1);
+                return;
             }
 
-            foreach (var file in Directory.GetFiles(path).OrderBy(f => f))
-            {
-                var ext = Path.GetExtension(file).ToLowerInvariant();
-                parent.Children.Add(new FileTreeNode
-                {
-                    Name = Path.GetFileName(file),
-                    FullPath = file,
-                    IsDirectory = false,
-                    IconPath = ext switch
-                    {
-                        ".cs" => "file-code",
-                        ".axaml" => "file-code",
-                        ".json" => "file-code",
-                        ".md" => "file-code",
-                        ".csproj" => "file-code",
-                        ".sln" or ".slnx" => "file-code",
-                        ".xml" or ".yaml" or ".yml" => "file-code",
-                        _ => "file"
-                    }
-                });
-            }
+            // Nothing to draw and a reason to draw it. The previous tree stays:
+            // replacing it with an empty collection is a lie about the project.
+            Logger.LogError("Failed to scan project root {Path}: {Reason}", root, scanned.Error);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (OperationCanceledException)
         {
-            // Best-effort file-tree scan: unreadable files/directories are skipped.
-            Logger.LogDebug(ex, "Skipping unreadable file-tree entry under: {Path}", path);
+            // Superseded, or the window is closing. Not an error: the newer scan
+            // owns the tree, and painting a failure for a walk nobody is waiting
+            // for any more is a lie the user would have to read.
+            Logger.LogDebug("File-tree scan of {Path} was superseded", root);
+        }
+        catch (Exception ex)
+        {
+            // The port already turns expected failures into results, so anything
+            // reaching here is a bug — but it is not allowed to take the shell
+            // down, and the previous tree is still the best thing to show.
+            Logger.LogError(ex, "File-tree scan of {Path} threw", root);
+        }
+        finally
+        {
+            // Every scan disposes its OWN source, whether or not it was still the
+            // current one when it finished. Disposing only when still ours leaked
+            // the source of every superseded scan, because by then the slot belongs
+            // to its replacement.
+            lock (_scanGate)
+            {
+                if (ReferenceEquals(_fileTreeScan, scan))
+                {
+                    _fileTreeScan = null;
+                }
+            }
+
+            scan.Dispose();
         }
     }
 
-    private static bool IsIgnoredDirectory(string name)
+    /// <summary>
+    ///     Whether <paramref name="scan" /> is still the request the sidebar is
+    ///     waiting for, and the root it was asked about is still the one on screen.
+    /// </summary>
+    /// <param name="scan">The source the in-flight scan is holding.</param>
+    /// <param name="root">The root that scan was started for.</param>
+    private bool IsCurrentScan(CancellationTokenSource scan, string root)
     {
-        return name.StartsWith('.')
-            || name is "bin" or "obj" or "node_modules" or ".git" or "packages";
+        lock (_scanGate)
+        {
+            return ReferenceEquals(_fileTreeScan, scan)
+                && string.Equals(ProjectRootPath, root, StringComparison.Ordinal);
+        }
     }
 
     public override void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+
+        // #492: a scan in flight belongs to a window that is going away. Cancelling
+        // it here is what stops the walk from finishing into a dead view-model; the
+        // scan disposes its own source when it unwinds, so this only cancels.
+        CancellationTokenSource? inFlight;
+        lock (_scanGate)
+        {
+            inFlight = _fileTreeScan;
+            _fileTreeScan = null;
+        }
+
+        if (inFlight is not null)
+        {
+            try
+            {
+                inFlight.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // It completed and released its source between the take and here.
+            }
+        }
+
         base.Dispose();
     }
 }

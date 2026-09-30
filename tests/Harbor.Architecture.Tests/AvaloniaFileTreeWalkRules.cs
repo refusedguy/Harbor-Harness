@@ -268,8 +268,9 @@ public class AvaloniaFileTreeWalkRules
             }
             """;
 
-        // `Path.*` is pure string handling over a path the port already produced;
-        // #667 made the same call for `Path.GetDirectoryName` in the TUI panel.
+        // Working out a file's extension and base name is pure string handling over
+        // a path the port already produced; #667 made the same call for
+        // GetDirectoryName in the TUI panel.
         const string pureStringPathWork = """
             public string Display(string fullPath)
             {

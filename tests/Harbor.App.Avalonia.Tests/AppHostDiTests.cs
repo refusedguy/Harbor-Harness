@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Filesystem;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
@@ -7,6 +8,7 @@ using Harbor.Abstractions.Tools;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Application.Filesystem;
 using Harbor.Application.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Ui.Framework.Services;
@@ -266,6 +268,25 @@ public class AppHostDiTests
     {
         await GetHostAsync();
         await Assert.That(Services.GetService<MainViewModel>()).IsNotNull();
+    }
+
+    /// <summary>
+    ///     #492: the desktop file tree goes through the two Domain ports, and this
+    ///     is the only place the composition root is stated — so it is the only
+    ///     place a missing registration can be seen. The view-model cannot be
+    ///     resolved without them, which is the stronger check; this one names the
+    ///     implementations so a swap to a different policy is a visible edit.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_WiresTheFileTreeToTheDomainPorts()
+    {
+        await GetHostAsync();
+
+        await Assert.That(Services.GetService<IDirectoryLister>())
+            .IsTypeOf<SystemDirectoryLister>();
+        await Assert.That(Services.GetService<IFileTreePolicy>())
+            .IsTypeOf<DefaultFileTreePolicy>();
+        await Assert.That(Services.GetService<ProjectFileTreeScanner>()).IsNotNull();
     }
 
     [Test]
