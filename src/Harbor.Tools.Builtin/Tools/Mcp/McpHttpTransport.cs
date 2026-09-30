@@ -123,7 +123,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
                     return Result.Success(Maybe<JsonDocument>.None);
                 }
 
-                if ((int)httpResponse.StatusCode >= 500 || httpResponse.StatusCode == HttpStatusCode.RequestTimeout)
+                if (IsTransientStatus(httpResponse.StatusCode))
                 {
                     string cause = $"server returned {(int)httpResponse.StatusCode}";
                     if (attempt >= TransientFailurePolicy.DefaultMaxAttempts)
@@ -190,6 +190,27 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         _client?.Dispose();
         return ValueTask.CompletedTask;
     }
+
+    /// <summary>
+    ///     Weights a refused HTTP response, while the response is still in hand
+    ///     (#714). Transient is exactly the set
+    ///     <see cref="McpSseTransport.AttemptFor" /> already retries — 5xx and
+    ///     408 — so the two transports cannot disagree about what a server
+    ///     hiccup is. Everything else (401/403/404, and 429, which both
+    ///     transports also treat as terminal) is an answer rather than a blip.
+    ///     <para>
+    ///         A named method, not an inline <c>if</c> in the loop above. Not for
+    ///         readability: the verdict is a duplicated answer, and
+    ///         <c>TransportRetryOwnershipRules</c> can only hold the two copies
+    ///         to each other if it can call both. <c>Assert_NoTransportDeclaresIts
+    ///         OwnRetryClassifier</c> matches <c>(Exception) -&gt; bool</c> and so
+    ///         cannot see this question at all — which is how the duplication
+    ///         outlived #572, whose rule was written for the exception-shaped
+    ///         half. A verdict with no name has nothing to compare against.
+    ///     </para>
+    /// </summary>
+    private static bool IsTransientStatus(HttpStatusCode status)
+        => (int)status >= 500 || status == HttpStatusCode.RequestTimeout;
 
     private static Task BackoffAsync(int attempt, CancellationToken cancellationToken)
         => Task.Delay(TransientFailurePolicy.BackoffDelay(attempt), cancellationToken);

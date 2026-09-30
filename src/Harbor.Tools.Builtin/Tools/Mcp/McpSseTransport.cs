@@ -273,15 +273,28 @@ public sealed class McpSseTransport : IMcpRemoteTransport
 
     /// <summary>
     ///     Weights a refused HTTP response. Transient is exactly the set
-    ///     <see cref="McpHttpTransport" /> already retries — 5xx and 408 — so the two
-    ///     transports cannot disagree about what a server hiccup is. Everything else
-    ///     (401/403/404, and 429, which both transports also treat as terminal) is an
-    ///     answer rather than a blip.
+    ///     <see cref="McpHttpTransport.IsTransientStatus" /> already retries — 5xx
+    ///     and 408 — so the two transports cannot disagree about what a server
+    ///     hiccup is. Everything else (401/403/404, and 429, which both transports
+    ///     also treat as terminal) is an answer rather than a blip.
     /// </summary>
     private static Attempt AttemptFor(HttpStatusCode status, Result<Maybe<JsonDocument>> failure)
-        => (int)status >= 500 || status == HttpStatusCode.RequestTimeout
+        => IsTransientStatus(status)
             ? Attempt.Transient(failure)
             : Attempt.Terminal(failure);
+
+    /// <summary>
+    ///     The same set <see cref="McpHttpTransport.IsTransientStatus" /> answers
+    ///     for, named so the two are comparable. <see cref="AttemptFor" /> asks
+    ///     this instead of restating the expression, so the duplication #822 left
+    ///     behind is one expression the two files both name — and
+    ///     <c>TransportRetryOwnershipRules</c> can hold the two to each other
+    ///     instead of a reader holding them in their head. Same shape as the
+    ///     exception-shaped half #572 already hoisted, on the side its rule could
+    ///     not reach.
+    /// </summary>
+    private static bool IsTransientStatus(HttpStatusCode status)
+        => (int)status >= 500 || status == HttpStatusCode.RequestTimeout;
 
     private void ApplyHeaders(HttpRequestMessage request, Maybe<string> oauthToken)
     {

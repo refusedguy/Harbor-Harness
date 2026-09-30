@@ -276,6 +276,151 @@ public class TransportRetryOwnershipRules
             + "question for the LLM path. A bare `is HttpRequestException` would retry a refused key three times.");
     }
 
+    /// <summary>
+    ///     The *status-shaped* half of #572's duplication, which
+    ///     <see cref="Assert_NoTransportDeclaresItsOwnRetryClassifier" /> cannot
+    ///     reach — that rule matches <c>(Exception) -&gt; bool</c>, and the status
+    ///     verdict has no exception to match.
+    ///     <para>
+    ///         Two copies of one question exist today. <c>McpSseTransport</c>
+    ///         weighs a status in <c>AttemptFor</c>; <c>McpHttpTransport</c> weighs
+    ///         the identical status <i>inline</i> in the retry loop of
+    ///         <c>TryRoundTripAsync</c>, spelled
+    ///         <c>(int)StatusCode &gt;= 500 || StatusCode == RequestTimeout</c>.
+    ///         #822 gave the SSE one a <c>Attempt</c> record to ride beside the
+    ///         <c>Result</c>; the streamable-HTTP one never needed one, because
+    ///         it decides while the response is still in hand — and that is the
+    ///         right place. What neither has is a <i>nameable</i> verdict, so
+    ///         nothing in this repository can ask whether the two agree.
+    ///     </para>
+    ///     <para>
+    ///         <b>Why this is not a typed failure.</b> #830 proposed a
+    ///         <c>Failure</c> subtype carrying the status so the verdict would
+    ///         survive the <c>Result</c> boundary. It cannot: the pinned
+    ///         CSharpFunctionalExtensions 3.7.0 has no <c>IFailure</c> type at
+    ///         all, <c>Result&lt;T&gt;</c> stores <c>private readonly string
+    ///         _error</c> and exposes <c>public string Error</c>, and the only
+    ///         <c>Failure&lt;T&gt;</c> overload takes a <see cref="string" />. The
+    ///         typed-error surface is <c>Result&lt;T, E&gt;</c> — a different
+    ///         arity — so carrying a status would mean re-declaring
+    ///         <c>IMcpRemoteTransport.TryRoundTripAsync</c> as
+    ///         <c>Result&lt;Maybe&lt;JsonDocument&gt;, T&gt;</c>, which is the
+    ///         #587 seam this same test project seals in
+    ///         <c>RemoteTransportResultRules</c>. And nothing wants it past the
+    ///         boundary: the seam's one production caller
+    ///         (<c>McpRegistry.InvokeRemoteAsync</c>) concatenates
+    ///         <c>roundTrip.Error</c> into a tool result and never branches on
+    ///         the status. The duplication this rule pins is a duplication of a
+    ///         <i>predicate</i>, and a predicate needs to be reachable, not
+    ///         transported.
+    ///     </para>
+    /// </summary>
+    [Test]
+    public async Task Assert_TheTransportsAgreeOnWhatAnHttpStatusIsWorth()
+    {
+        // Discovery, then the sweep. The sweep is impossible without a verdict to
+        // call on both sides, so the first rule below is also the guard's
+        // non-vacuity: an unnamed verdict cannot be silently skipped.
+        var verdicts = new List<(string Transport, MethodInfo Verdict)>();
+        var unnamed = new List<string>();
+
+        foreach (Type transport in ConcreteTransports())
+        {
+            MethodInfo? verdict = StatusVerdict(transport);
+            if (verdict is null)
+            {
+                unnamed.Add(transport.Name);
+                continue;
+            }
+
+            verdicts.Add((transport.Name, verdict));
+        }
+
+        await Assert.That(unnamed).IsEmpty().Because(
+            "a remote-MCP transport decides 'is this HTTP status worth another attempt?' somewhere no test can reach, so "
+            + "the answer cannot be compared against the other transports' and drifts silently. A verdict that is a bare "
+            + "`if` in the body of the retry loop, or a helper returning a transport-private Attempt record, is invisible "
+            + "here however correct it is — the duplication is then pinned by reading two files side by side, which is "
+            + "what #572 removed for the exception-shaped half. Give every transport a declared private static "
+            + "IsTransientStatus(HttpStatusCode) and let the retry logic ask it; the predicate stays where the response is "
+            + "in hand (#714), and this rule holds the copies to each other. Unnamed: "
+            + $"{Environment.NewLine}{string.Join(Environment.NewLine, unnamed)}");
+
+        await Assert.That(verdicts.Count).IsGreaterThanOrEqualTo(2).Because(
+            $"the comparison needs a verdict from every discovered transport, found {verdicts.Count}. Both builtin "
+            + "transports weigh a status; a set of one cannot disagree with itself.");
+
+        // Non-vacuity of the comparison itself. A predicate that answered the
+        // same thing for every code would satisfy an equality sweep while
+        // classifying nothing, so require the table to contain both verdicts.
+        HttpStatusCode[] statuses =
+        [
+            HttpStatusCode.OK,
+            HttpStatusCode.Accepted,
+            HttpStatusCode.BadRequest,
+            HttpStatusCode.Unauthorized,
+            HttpStatusCode.Forbidden,
+            HttpStatusCode.NotFound,
+            HttpStatusCode.RequestTimeout,
+            HttpStatusCode.TooManyRequests,
+            HttpStatusCode.InternalServerError,
+            HttpStatusCode.BadGateway,
+            HttpStatusCode.ServiceUnavailable,
+            HttpStatusCode.GatewayTimeout,
+        ];
+
+        MethodInfo reference = verdicts[0].Verdict;
+        string referenceName = verdicts[0].Transport;
+        bool[] referenceVerdicts = [.. statuses.Select(s => (bool)reference.Invoke(null, [s])!)];
+
+        await Assert.That(referenceVerdicts.Count(v => v)).IsGreaterThan(0).Because(
+            $"{referenceName}.{reference.Name} answers 'transient' to nothing in the table, so an equality sweep "
+            + "against it is green by construction. The table is the set of statuses that separate a blip from an answer.");
+
+        await Assert.That(referenceVerdicts.Count(v => !v)).IsGreaterThan(0).Because(
+            $"{referenceName}.{reference.Name} answers 'transient' to everything, including a 401 — which is the "
+            + "#714 regression: three attempts on a refused key, and three more chances for the provider to flag it.");
+
+        for (int i = 0; i < statuses.Length; i++)
+        {
+            foreach ((string transport, MethodInfo verdict) in verdicts)
+            {
+                bool actual = (bool)verdict.Invoke(null, [statuses[i]])!;
+                await Assert.That(actual).IsEqualTo(referenceVerdicts[i]).Because(
+                    $"{(int)statuses[i]} ({statuses[i]}) is worth retrying on {referenceName}.{reference.Name} "
+                    + $"({referenceVerdicts[i]}) and worth retrying on {transport}.{verdict.Name} ({actual}). One status, "
+                    + "one answer — a caller cannot tell which transport a 429 came from, so the two verdicts have to be "
+                    + "the same verdict. (429 is terminal here on BOTH transports by decision, and transient on the LLM "
+                    + "path by RetryPolicy.HttpClassifier; that split is documented and is not what this rule compares.)");
+            }
+        }
+    }
+
+    /// <summary>
+    ///     The status-classification predicate itself: a declared
+    ///     <c>(HttpStatusCode) -&gt; bool</c>. <see cref="DeclaredMembers" />
+    ///     restricts discovery to the type itself, so a base class cannot
+    ///     satisfy it.
+    /// </summary>
+    private static MethodInfo? StatusVerdict(Type transport)
+    {
+        foreach (MethodInfo method in transport.GetMethods(DeclaredMembers))
+        {
+            if (method.IsGenericMethodDefinition || method.ReturnType != typeof(bool))
+            {
+                continue;
+            }
+
+            ParameterInfo[] parameters = method.GetParameters();
+            if (parameters.Length == 1 && parameters[0].ParameterType == typeof(HttpStatusCode))
+            {
+                return method;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Every non-abstract class in the assembly that implements the transport seam.</summary>
     private static List<Type> ConcreteTransports()
     {
