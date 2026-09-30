@@ -315,19 +315,30 @@ public class ReplRunnerConfigLoadTests
         RecordingLogger? logger = null)
     {
         var authStore = new AuthStore(configStore);
+        var wizard = new OnboardingWizard(configStore, authStore);
+
+        // #486: the dispatcher is built by whoever would be the composition root.
+        // None of these tests dispatch a slash command — the fakes satisfy the
+        // dispatcher's required ctor params, which ReplRunner used to carry.
+        var slashes = new SlashCommandDispatcher(
+            NullLogger<SlashCommandDispatcher>.Instance,
+            new FakeToolRegistry(),
+            new FakeSessionStore(),
+            wizard,
+            new PermissionService(agentRegistry, NullLogger<PermissionService>.Instance));
+
         return new ReplRunner(
             logger ?? (ILogger<ReplRunner>)NullLogger<ReplRunner>.Instance,
             configStore,
             authStore,
-            new OnboardingWizard(configStore, authStore),
+            wizard,
             renderer,
             new FakeEventBus(),
             agent,
             new FakeSessionStore(),
             agentRegistry,
             new FakeProviderRegistry(new ScriptedLlmClient()),
-            new FakeToolRegistry(),
-            new PermissionService(agentRegistry, NullLogger<PermissionService>.Instance),
+            slashes,
             NullLoggerFactory.Instance,
             pluginReload: null,
             rendererPipeline: null,

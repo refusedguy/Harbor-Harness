@@ -193,19 +193,30 @@ public class LineReplExitWordTests
         IConfigStore configStore)
     {
         var authStore = new AuthStore(configStore);
+        var wizard = new OnboardingWizard(configStore, authStore);
+
+        // #486: the dispatcher is built by whoever would be the composition root.
+        // The line REPL never dispatches a slash command, so these fakes are here
+        // only because the dispatcher's collaborators are required ctor params.
+        var slashes = new SlashCommandDispatcher(
+            NullLogger<SlashCommandDispatcher>.Instance,
+            new FakeToolRegistry(),
+            new FakeSessionStore(),
+            wizard,
+            new PermissionService(agentRegistry, NullLogger<PermissionService>.Instance));
+
         return new ReplRunner(
             NullLogger<ReplRunner>.Instance,
             configStore,
             authStore,
-            new OnboardingWizard(configStore, authStore),
+            wizard,
             renderer,
             new FakeEventBus(),
             agent,
             new FakeSessionStore(),
             agentRegistry,
             new FakeProviderRegistry(new ScriptedLlmClient()),
-            new FakeToolRegistry(),
-            new PermissionService(agentRegistry, NullLogger<PermissionService>.Instance),
+            slashes,
             NullLoggerFactory.Instance,
             pluginReload: null,
             rendererPipeline: null,
